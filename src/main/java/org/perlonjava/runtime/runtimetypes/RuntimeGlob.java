@@ -1926,6 +1926,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         InheritanceResolver.invalidateCache();
 
         GlobalVariable.getGlobalFormatRef(snap.globName).dynamicRestoreState();
+        if (this instanceof RuntimeStashEntry
+                && snap.scalar == null && snap.array == null && snap.hash == null && snap.code == null
+                && !snap.ioWasVisible) {
+            GlobalVariable.globalFormatRefs.remove(snap.globName);
+        }
         // Restoring the other glob slots may mark the stash entry visible as a
         // side effect. Reapply the saved IO-slot visibility last so a deleted
         // standard handle does not leak back into the runtime's stash view.

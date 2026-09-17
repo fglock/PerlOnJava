@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore `local` compatibility for tied hash and array elements, sparse
+  arrays, magic stashes, implicit `$_` foreach aliases, and localized regex
+  captures on both execution backends.
+
 - Run Gradle builds without a persistent daemon so worker JVMs inherit the
   launcher's process priority.
 

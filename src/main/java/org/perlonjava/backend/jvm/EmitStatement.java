@@ -7,6 +7,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -420,6 +421,13 @@ public class EmitStatement {
         String currentPackage = emitterVisitor.ctx.symbolTable.getCurrentPackage();
         Boolean constantValue = ConstantFoldingVisitor.getConstantConditionValue(node.condition, currentPackage);
 
+        // Localization in a condition has expression scope.  Keep such
+        // conditions on the normal emission path so the temporary dynamic
+        // binding can be torn down immediately after boolean conversion.
+        if (FindDeclarationVisitor.containsLocalOrDefer(node.condition)) {
+            constantValue = null;
+        }
+
         // For "unless", invert the condition
         if (constantValue != null && "unless".equals(node.operator)) {
             constantValue = !constantValue;
@@ -502,6 +510,14 @@ public class EmitStatement {
             emitterVisitor.ctx.javaClassInfo.statementTokenIndex = token;
         }
         // Visit the condition node in scalar context
+        int conditionLocalLevel = -1;
+        if (FindDeclarationVisitor.containsLocalOrDefer(node.condition)) {
+            conditionLocalLevel = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
+                    "getLocalLevel", "()I", false);
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ISTORE, conditionLocalLevel);
+        }
         node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         emitterVisitor.ctx.javaClassInfo.statementTokenIndex = savedConditionStatementToken;
 
@@ -512,6 +528,15 @@ public class EmitStatement {
         // Convert the result to a boolean
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
                 EmitOperator.booleanConversionMethod(emitterVisitor, "getBoolean"), "()Z", false);
+
+        // A local used as an if condition is scoped to the condition
+        // expression, not to either branch of the if statement.
+        if (conditionLocalLevel != -1) {
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ILOAD, conditionLocalLevel);
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
+                    "popToLocalLevel", "(I)V", false);
+        }
 
         // Jump to the else label if the condition is false
         emitterVisitor.ctx.mv.visitJumpInsn(node.operator.equals("unless") ? Opcodes.IFNE : Opcodes.IFEQ, elseLabel);

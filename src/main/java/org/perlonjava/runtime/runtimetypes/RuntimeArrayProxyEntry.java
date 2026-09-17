@@ -15,6 +15,9 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
     private static Stack<RuntimeScalar> dynamicStateStack() {
         return PerlRuntime.current().executionState().arrayProxyStates;
     }
+    private static Stack<Integer> dynamicSavedSizeStack() {
+        return PerlRuntime.current().executionState().arrayProxySavedSizes;
+    }
 
     // Reference to the parent RuntimeArray
     private final RuntimeArray parent;
@@ -167,6 +170,7 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
     @Override
     public void dynamicSaveState() {
         dynamicStateStackInt().push(parent.elements.size());
+        dynamicSavedSizeStack().push(parent.elements.size());
         // Create a new RuntimeScalar to save the current state
         if (this.lvalue == null) {
             dynamicStateStack().push(null);
@@ -217,6 +221,19 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
                 this.blessId = previousState.blessId;
             }
             int previousSize = dynamicStateStackInt().pop();
+            dynamicSavedSizeStack().pop();
+            if (previousState == null && key >= previousSize) {
+                // Remove the localized hole itself while retaining values
+                // assigned to intervening indices during the scope.
+                if (key < parent.elements.size()) {
+                    parent.elements.set(key, null);
+                }
+                while (parent.elements.size() > previousSize
+                        && parent.elements.getLast() == null) {
+                    parent.elements.removeLast();
+                }
+                return;
+            }
             if (parent.elements.size() > previousSize) {
                 parent.notePackageRootMutation();
             }

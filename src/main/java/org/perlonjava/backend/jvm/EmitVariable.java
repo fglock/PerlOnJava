@@ -799,6 +799,17 @@ public class EmitVariable {
 
         boolean isLocalAssignment = left instanceof OperatorNode operatorNode && operatorNode.operator.equals("local");
 
+        boolean localCaptureAssignment = isLocalAssignment && left instanceof OperatorNode local
+                && local.operand instanceof OperatorNode sigil
+                && sigil.operator.equals("$")
+                && sigil.operand instanceof IdentifierNode id
+                && id.name.matches("[1-9]\\d*");
+        if (localCaptureAssignment) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/GlobalRuntimeScalar",
+                    "rejectReadonlyCaptureAssignment", "()V", false);
+        }
+
         switch (lvalueContext) {
             case RuntimeContextType.SCALAR:
                 if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("SET right side scalar");

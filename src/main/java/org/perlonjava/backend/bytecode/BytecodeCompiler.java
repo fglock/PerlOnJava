@@ -414,6 +414,7 @@ public class BytecodeCompiler implements Visitor {
      */
     private int localHashLvalueCompileDepth = 0;
     private int suppressLocalHashFetchForLocal = 0;
+    private boolean arraySliceLvalueCompile;
 
     // Track current calling context for subroutine calls
     int currentCallContext = RuntimeContextType.LIST; // Default to LIST
@@ -2253,7 +2254,8 @@ public class BytecodeCompiler implements Visitor {
      * Example: $ARGV[0] or $array[$i]
      */
     void handleArrayElementAccess(BinaryOperatorNode node, OperatorNode leftOp) {
-        handleArrayElementAccess(node, leftOp, Opcodes.ARRAY_GET);
+        handleArrayElementAccess(node, leftOp,
+                shouldEmitHashFetchForLocal() ? Opcodes.ARRAY_GET_FOR_LOCAL : Opcodes.ARRAY_GET);
     }
 
     /** Handle an array-element access that must retain the slot proxy. */
@@ -2465,12 +2467,22 @@ public class BytecodeCompiler implements Visitor {
 
         // Emit ARRAY_SLICE opcode
         int rd = allocateOutputRegister();
-        emit(Opcodes.ARRAY_SLICE);
+        emit(arraySliceLvalueCompile ? Opcodes.ARRAY_SLICE_LVALUE : Opcodes.ARRAY_SLICE);
         emitReg(rd);
         emitReg(arrayReg);
         emitReg(indicesListReg);
 
         lastResultReg = rd;
+    }
+
+    void handleArraySliceLvalue(BinaryOperatorNode node, OperatorNode leftOp) {
+        boolean saved = arraySliceLvalueCompile;
+        arraySliceLvalueCompile = true;
+        try {
+            handleArraySlice(node, leftOp);
+        } finally {
+            arraySliceLvalueCompile = saved;
+        }
     }
 
     /**
@@ -4512,6 +4524,22 @@ public class BytecodeCompiler implements Visitor {
                 return;
             }
 
+            // A reference dereference is not a valid local() target.  Emit
+            // Perl's diagnostic during compilation so eval STRING can catch
+            // it, rather than localizing a temporary dereference result.
+            if (isReferenceLocalizationTarget(node.operand)) {
+                throwCompilerException("Can't localize through a reference");
+                return;
+            }
+            if (node.operand instanceof ListNode localList) {
+                for (Node child : localList.elements) {
+                    if (isReferenceLocalizationTarget(child)) {
+                        throwCompilerException("Can't localize through a reference");
+                        return;
+                    }
+                }
+            }
+
             // local $x - temporarily localize a global variable
             // The operand will be OperatorNode("$", IdentifierNode("x"))
             if (node.operand instanceof OperatorNode sigilOp) {
@@ -4807,6 +4835,23 @@ public class BytecodeCompiler implements Visitor {
                 boolean foundBackslashInList = false;
 
                 for (Node element : listNode.elements) {
+                    // local($hash{key}) / local($array[index]) in a
+                    // localization list are scalar lvalues too.  Compile
+                    // the element through the local-aware proxy path instead
+                    // of silently dropping non-sigil list elements.
+                    if (element instanceof BinaryOperatorNode binaryElement) {
+                        beginLocalHashLvalueCompile();
+                        try {
+                            compileNode(binaryElement, -1, RuntimeContextType.SCALAR);
+                        } finally {
+                            endLocalHashLvalueCompile();
+                        }
+                        int elementReg = lastResultReg;
+                        emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                        emitReg(elementReg);
+                        varRegs.add(elementReg);
+                        continue;
+                    }
                     // Keep an `undef` placeholder in the reconstructed
                     // lvalue list so list assignment consumes its matching
                     // RHS item without binding it (local (undef, @a) = @a).
@@ -5153,6 +5198,14 @@ public class BytecodeCompiler implements Visitor {
             throwCompilerException("Unsupported local operand: " + node.operand.getClass().getSimpleName());
         }
         throwCompilerException("Unsupported variable declaration operator: " + op);
+    }
+
+    private static boolean isReferenceLocalizationTarget(Node operand) {
+        if (!(operand instanceof OperatorNode outer) || !"$@%".contains(outer.operator)) {
+            return false;
+        }
+        return outer.operand instanceof OperatorNode inner
+                && inner.operator.equals("$");
     }
 
     private int compileLocalOurListElement(OperatorNode localNode, OperatorNode variableNode) {
@@ -6138,7 +6191,8 @@ public class BytecodeCompiler implements Visitor {
     }
 
     private boolean shouldEmitHashFetchForLocal() {
-        return localHashLvalueCompileDepth > 0 && suppressLocalHashFetchForLocal == 0;
+        return (localHashLvalueCompileDepth > 0 || compilingForeachList)
+                && suppressLocalHashFetchForLocal == 0;
     }
 
     private int opcodeForHashElementGet() {
@@ -7050,7 +7104,15 @@ public class BytecodeCompiler implements Visitor {
         // This atomically saves getLocalLevel() into levelReg (pre-push), then calls makeLocal.
         // POP_LOCAL_LEVEL(levelReg) after the loop correctly restores $_ for any nesting depth.
         int levelReg = -1;
-        if (globalLoopVarName != null && referenceAliasedVariable == null) {
+        int savedGlobalTopicReg = -1;
+        boolean isImplicitGlobalTopic = "main::_".equals(globalLoopVarName);
+        if (globalLoopVarName != null && referenceAliasedVariable == null && isImplicitGlobalTopic) {
+            savedGlobalTopicReg = allocateRegister();
+            emit(Opcodes.LOAD_GLOBAL_SCALAR);
+            emitReg(savedGlobalTopicReg);
+            emit(addToStringPool(globalLoopVarName));
+        }
+        if (globalLoopVarName != null && referenceAliasedVariable == null && !isImplicitGlobalTopic) {
             levelReg = allocateRegister();
             int nameIdx = addToStringPool(globalLoopVarName);
             emit(Opcodes.LOCAL_SCALAR_SAVE_LEVEL);
@@ -7289,6 +7351,11 @@ public class BytecodeCompiler implements Visitor {
         if (levelReg >= 0) {
             emit(Opcodes.POP_LOCAL_LEVEL);
             emitReg(levelReg);
+        }
+        if (savedGlobalTopicReg >= 0) {
+            emit(Opcodes.RESTORE_FOREACH_GLOBAL_SCALAR);
+            emit(addToStringPool(globalLoopVarName));
+            emitReg(savedGlobalTopicReg);
         }
         if (savedLexicalLoopVarReg >= 0) {
             emit(Opcodes.ALIAS);
@@ -7720,6 +7787,14 @@ public class BytecodeCompiler implements Visitor {
         String currentPackage = symbolTable.getCurrentPackage();
         Boolean constantValue = ConstantFoldingVisitor.getConstantConditionValue(node.condition, currentPackage);
 
+        // A local used in an if condition is scoped to that expression. Keep
+        // it on the normal path so its dynamic binding can be restored before
+        // either branch is entered.
+        boolean conditionHasLocal = FindDeclarationVisitor.containsLocalOrDefer(node.condition);
+        if (conditionHasLocal) {
+            constantValue = null;
+        }
+
         // For "unless", invert the condition
         if (constantValue != null && "unless".equals(node.operator)) {
             constantValue = !constantValue;
@@ -7761,9 +7836,20 @@ public class BytecodeCompiler implements Visitor {
         if (annotatedStatementStart instanceof Integer token && token > 0) {
             statementTokenIndex = token;
         }
+        int conditionLocalLevelReg = -1;
+        if (conditionHasLocal) {
+            conditionLocalLevelReg = allocateRegister();
+            emit(Opcodes.GET_LOCAL_LEVEL);
+            emitReg(conditionLocalLevelReg);
+        }
         compileNode(node.condition, -1, RuntimeContextType.SCALAR);
         statementTokenIndex = savedConditionStatementToken;
         int condReg = lastResultReg;
+
+        if (conditionLocalLevelReg >= 0) {
+            emit(Opcodes.POP_LOCAL_LEVEL);
+            emitReg(conditionLocalLevelReg);
+        }
 
         // Mark position for forward jump to else/end
         int ifFalsePos = bytecode.size();

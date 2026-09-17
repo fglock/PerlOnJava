@@ -83,7 +83,7 @@ public class RuntimeTiedHashProxyEntry extends TiedVariableBase {
         }
         SavedState previous = dynamicStateStack.pop();
         if (previous.existed) {
-            TieHash.tiedStore(parent, key, previous.value);
+            TieHash.tiedStore(parent, key, new RuntimeScalar(previous.value));
         } else {
             TieHash.tiedDelete(parent, key);
         }

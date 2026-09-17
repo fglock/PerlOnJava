@@ -1551,6 +1551,10 @@ public class Opcodes {
      */
     public static final short FOREACH_GLOBAL_NEXT_OR_EXIT = 304;
 
+    /** Restore the package scalar saved around an implicit foreach topic alias. */
+    public static final short RESTORE_FOREACH_GLOBAL_SCALAR = 563;
+    public static final short REJECT_READONLY_CAPTURE_ASSIGNMENT = 564;
+
     /**
      * Unpack binary data into a list of scalars.
      * Format: UNPACK rd argsReg ctx
@@ -2553,6 +2557,11 @@ public class Opcodes {
 
     /** Native-IV post-decrement under lexical {@code use integer}. */
     public static final short INTEGER_POST_AUTODECREMENT = 559;
+
+    /** Array slice lvalue fetch for localized slice assignment. Format: ARRAY_SLICE_LVALUE rd arrayReg indicesReg. */
+    public static final short ARRAY_SLICE_LVALUE = 561;
+    /** Array element fetch that preserves tied-array lvalue semantics for local(). */
+    public static final short ARRAY_GET_FOR_LOCAL = 562;
 
     /**
      * Resolve a statically named CODE reference at runtime. This preserves the

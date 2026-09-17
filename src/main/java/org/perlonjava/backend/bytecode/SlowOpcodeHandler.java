@@ -807,6 +807,16 @@ public class SlowOpcodeHandler {
         return pc;
     }
 
+    /** ARRAY_SLICE_LVALUE: rd = array lvalue slice (indices). */
+    public static int executeArraySliceLvalue(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int arrayReg = bytecode[pc++];
+        int indicesReg = bytecode[pc++];
+        registers[rd] = ((RuntimeArray) registers[arrayReg])
+                .getLvalueSlice((RuntimeList) registers[indicesReg]);
+        return pc;
+    }
+
     /**
      * SLOW_REVERSE: rd = Operator.reverse(ctx, args...)
      * Format: [SLOW_REVERSE] [rd] [argsReg] [ctx]

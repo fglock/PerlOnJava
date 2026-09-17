@@ -130,6 +130,17 @@ public class RuntimeStash extends RuntimeHash {
         return get(keyScalar.toString());
     }
 
+    /** Stash elements are typeglobs, whose own dynamic state must be localized. */
+    @Override
+    public RuntimeScalar getForLocal(String key) {
+        return get(key);
+    }
+
+    @Override
+    public RuntimeScalar getForLocal(RuntimeScalar keyScalar) {
+        return get(keyScalar);
+    }
+
     /**
      * Checks if a key exists in the hash.
      *
@@ -137,7 +148,16 @@ public class RuntimeStash extends RuntimeHash {
      * @return A RuntimeScalar indicating whether the key exists.
      */
     public RuntimeScalar exists(RuntimeScalar key) {
-        return new RuntimeScalar(elements.containsKey(key.toString()));
+        String fullKey = namespace + key.toString();
+        RuntimeScalar entry = elements.get(key.toString());
+        boolean exists = (entry != null && entry.getDefinedBoolean())
+                || GlobalVariable.isGlobalVariableDefined(fullKey)
+                || GlobalVariable.globalArrays.containsKey(fullKey)
+                || GlobalVariable.globalHashes.containsKey(fullKey)
+                || GlobalVariable.globalCodeRefs.containsKey(fullKey)
+                || GlobalVariable.isVisibleGlobalIORef(fullKey)
+                || GlobalVariable.globalFormatRefs.containsKey(fullKey);
+        return new RuntimeScalar(exists);
     }
 
     /**

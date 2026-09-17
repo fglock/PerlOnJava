@@ -194,6 +194,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Fields to store the type and value of the scalar variable
     public volatile int type;
     public volatile Object value;
+    RuntimeArray localArrayOwner;
+    int localArrayIndex = -1;
+
+    void recordLocalArrayOwner(RuntimeArray owner, int index) {
+        localArrayOwner = owner;
+        localArrayIndex = index;
+    }
 
     /**
      * Original decimal text for high-precision numeric literals. Java stores
@@ -5095,6 +5102,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     @Override
     public void dynamicSaveState() {
+        RuntimeArray owner = localArrayOwner;
+        int ownerIndex = localArrayIndex;
+        boolean ownerSlot = owner != null && ownerIndex >= 0
+                && ownerIndex < owner.elements.size()
+                && owner.elements.get(ownerIndex) == this;
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        state.scalarLocalOwners.push(ownerSlot ? owner : null);
+        state.scalarLocalOwnerIndices.push(ownerSlot ? ownerIndex : -1);
+        state.scalarLocalOwnerSizes.push(ownerSlot ? owner.elements.size() : -1);
+        state.scalarLocalOwnerExisted.push(ownerSlot);
+        if (ownerSlot) owner.beginScalarLocalElement();
         // Create a new RuntimeScalar to save the current state
         RuntimeScalar currentState = new RuntimeScalar();
         // Copy the current type and value to the new state
@@ -5134,6 +5152,21 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (!dynamicStateStack.isEmpty()) {
             // Pop the most recent saved state from the stack
             RuntimeScalar previousState = dynamicStateStack.pop();
+            ExecutionRuntimeState executionState = PerlRuntime.current().executionState();
+            RuntimeArray owner = executionState.scalarLocalOwners.pop();
+            int ownerIndex = executionState.scalarLocalOwnerIndices.pop();
+            int ownerSize = executionState.scalarLocalOwnerSizes.pop();
+            boolean ownerExisted = executionState.scalarLocalOwnerExisted.pop();
+            if (owner != null && ownerExisted) {
+                for (int i = 0; i < owner.elements.size(); i++) {
+                    if (i != ownerIndex && owner.elements.get(i) == this) {
+                        // shift/unshift moved the localized SV. Detach the
+                        // current localized value before restoring this SV.
+                        owner.elements.set(i, new RuntimeScalar(this));
+                        break;
+                    }
+                }
+            }
             boolean referencedDuringLocal = this.referencedByScalarReference;
 
             RuntimeBase displacedBase = null;
@@ -5155,6 +5188,19 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             this.numericContextSeen = previousState.numericContextSeen;
             this.firstClassRegexScalar = previousState.firstClassRegexScalar;
             this.formatPictureTainted = previousState.formatPictureTainted;
+            if (owner != null) {
+                if (owner.scalarLocalContainerCleared()) {
+                    while (owner.elements.size() < ownerSize) owner.elements.add(null);
+                }
+                if (ownerExisted && ownerIndex < owner.elements.size()
+                        && owner.elements.get(ownerIndex) != this) {
+                    // Array mutations such as shift move the localized SV;
+                    // restore its original slot while retaining the moved
+                    // localized value at its current position.
+                    owner.elements.set(ownerIndex, this);
+                }
+                owner.endScalarLocalElement();
+            }
 
             releaseScalarReferenceContents(scalarReferenceContents);
 

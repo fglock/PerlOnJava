@@ -1327,6 +1327,13 @@ public class GlobalVariable {
         }
     }
 
+    /** Restore the global topic scalar after an implicit foreach alias. */
+    public static void restoreForeachGlobalVariable(String key, RuntimeScalar value) {
+        clearForeachGlobalAlias(key);
+        globalVariables.put(key, value);
+        invalidatePackageRootSnapshot();
+    }
+
     private static void retainForeachAlias(RuntimeScalar scalar) {
         if (scalar != null
                 && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
