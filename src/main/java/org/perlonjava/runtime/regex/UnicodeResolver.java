@@ -1470,7 +1470,10 @@ public class UnicodeResolver {
             }
             UnicodeSet generalCategory = resolvePerlBareGeneralCategory(property);
             if (generalCategory != null) {
-                return joniPropertyResult(generalCategory, true);
+                boolean unassigned = isPerlUnassignedGeneralCategory(generalCategory);
+                return joniPropertyResult(generalCategory,
+                        unassigned ? PERL_UNASSIGNED_WIDE_RANGES : null,
+                        true, unassigned);
             }
             UnicodeSet blockShortcut = resolvePerlBareBlockShortcut(property);
             if (blockShortcut != null) {
@@ -1604,15 +1607,20 @@ public class UnicodeResolver {
         }
         if (set == null) return null;
 
+        boolean unassignedGeneralCategory = isGeneralCategoryProperty(name)
+                && isPerlUnassignedGeneralCategory(set);
         long[] wideRanges = binaryAssignment != null
                 ? (binaryAssignment.value
                     ? new long[] {0}
                     : new long[] {1, 0x110000L, Long.MAX_VALUE})
                 : isPerlVerticalOrientationDefault(property)
                 ? new long[] {1, 0x110000L, Long.MAX_VALUE}
+                : unassignedGeneralCategory
+                ? PERL_UNASSIGNED_WIDE_RANGES
                 : null;
         return joniPropertyResult(set, wideRanges, caseFold,
-                binaryAssignment != null && !binaryAssignment.value);
+                (binaryAssignment != null && !binaryAssignment.value)
+                        || unassignedGeneralCategory);
     }
 
     private static CharacterPropertyResolver.Result unresolvedJoniUserProperty(
@@ -1746,6 +1754,14 @@ public class UnicodeResolver {
         return alias.equals("any") || alias.equals("unicode")
                 ? new long[] {0}
                 : null;
+    }
+
+    /** Perl categorizes every scalar above Unicode's ceiling as unassigned. */
+    private static final long[] PERL_UNASSIGNED_WIDE_RANGES =
+            {1, 0x110000L, Long.MAX_VALUE};
+
+    private static boolean isPerlUnassignedGeneralCategory(UnicodeSet set) {
+        return set.equals(PerlUnicodeGeneralCategoryData.resolve("Cn"));
     }
 
     /** Callback-free proof that a built-in spelling defines its wide domain. */
