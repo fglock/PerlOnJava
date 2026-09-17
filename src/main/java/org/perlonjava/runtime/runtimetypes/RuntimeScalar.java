@@ -36,6 +36,14 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  * scalar.
  */
 public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference, DynamicState {
+    /** Reject localizing a dereference whose source is an actual reference. */
+    public static void rejectLocalizeThroughReference(RuntimeScalar source) {
+        if (source != null && (source.type == RuntimeScalarType.UNDEF
+                || (source.type & RuntimeScalarType.REFERENCE_BIT) != 0)) {
+            throw new PerlCompilerException("Can't localize through a reference");
+        }
+    }
+
 
     /**
      * Deferred storage for a plain string being grown with repeated {@code .=}.
@@ -194,6 +202,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Fields to store the type and value of the scalar variable
     public volatile int type;
     public volatile Object value;
+    RuntimeArray localArrayOwner;
+    int localArrayIndex = -1;
+
+    void recordLocalArrayOwner(RuntimeArray owner, int index) {
+        localArrayOwner = owner;
+        localArrayIndex = index;
+    }
 
     /**
      * Original decimal text for high-precision numeric literals. Java stores
@@ -1820,6 +1835,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Types < TIED_SCALAR (0-8) never have REFERENCE_BIT (0x8000), so no
     // reference check is needed here — all reference types route to setLarge().
     public RuntimeScalar set(RuntimeScalar value) {
+        if (value != this) {
+            clearLastReadlineHandleIfGlobValue();
+        }
         boolean transferGrowingString = value != null && value != this
                 && value.transferableGrowingString;
         if (transferGrowingString) {
@@ -1976,8 +1994,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case TIED_SCALAR -> {
                 return this.tiedStore(value);
             }
-            case READONLY_SCALAR ->
-                    throw new PerlCompilerException("Modification of a read-only value attempted");
+            case READONLY_SCALAR -> {
+                if (this instanceof RuntimeScalarReadOnly readOnly) {
+                    readOnly.restoreForeachBeforeMutation();
+                }
+                throw new PerlCompilerException("Modification of a read-only value attempted");
+            }
         }
 
         // Reference types (or overwriting a reference) need refCount + IO tracking.
@@ -2498,10 +2520,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar set(int value) {
+        clearLastReadlineHandleIfGlobValue();
         if (this.type == TIED_SCALAR) {
             return this.tiedStore(new RuntimeScalar(value));
         }
         if (this.type == READONLY_SCALAR) {
+            if (this instanceof RuntimeScalarReadOnly readOnly) {
+                readOnly.restoreForeachBeforeMutation();
+            }
             throw new PerlCompilerException("Modification of a read-only value attempted");
         }
         this.type = RuntimeScalarType.INTEGER;
@@ -2593,11 +2619,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar set(String value) {
+        clearLastReadlineHandleIfGlobValue();
         growingString = null;
         if (this.type == TIED_SCALAR) {
             return this.tiedStore(new RuntimeScalar(value));
         }
         if (this.type == READONLY_SCALAR) {
+            if (this instanceof RuntimeScalarReadOnly readOnly) {
+                readOnly.restoreForeachBeforeMutation();
+            }
             throw new PerlCompilerException("Modification of a read-only value attempted");
         }
         if (value == null) {
@@ -2618,6 +2648,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     public RuntimeScalar set(RuntimeGlob value) {
         return set(new RuntimeScalar(value));
+    }
+
+    /** Clear Perl's implicit last-read handle when a scalar holding a glob is replaced. */
+    private void clearLastReadlineHandleIfGlobValue() {
+        if (!(value instanceof RuntimeGlob glob)) {
+            return;
+        }
+        RuntimeIO last = RuntimeIO.getLastAccessedHandle();
+        if (last != null && (glob.globName != null && glob.globName.equals(last.globName)
+                || glob.IO != null && glob.IO.value == last)) {
+            RuntimeIO.setLastAccessedHandle(null);
+        }
     }
 
     public RuntimeScalar set(RuntimeIO value) {
@@ -5095,6 +5137,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     @Override
     public void dynamicSaveState() {
+        RuntimeArray owner = localArrayOwner;
+        int ownerIndex = localArrayIndex;
+        boolean ownerSlot = owner != null && ownerIndex >= 0
+                && ownerIndex < owner.elements.size()
+                && owner.elements.get(ownerIndex) == this;
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        state.scalarLocalOwners.push(ownerSlot ? owner : null);
+        state.scalarLocalOwnerIndices.push(ownerSlot ? ownerIndex : -1);
+        state.scalarLocalOwnerSizes.push(ownerSlot ? owner.elements.size() : -1);
+        state.scalarLocalOwnerExisted.push(ownerSlot);
+        if (ownerSlot) owner.beginScalarLocalElement();
         // Create a new RuntimeScalar to save the current state
         RuntimeScalar currentState = new RuntimeScalar();
         // Copy the current type and value to the new state
@@ -5134,6 +5187,21 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (!dynamicStateStack.isEmpty()) {
             // Pop the most recent saved state from the stack
             RuntimeScalar previousState = dynamicStateStack.pop();
+            ExecutionRuntimeState executionState = PerlRuntime.current().executionState();
+            RuntimeArray owner = executionState.scalarLocalOwners.pop();
+            int ownerIndex = executionState.scalarLocalOwnerIndices.pop();
+            int ownerSize = executionState.scalarLocalOwnerSizes.pop();
+            boolean ownerExisted = executionState.scalarLocalOwnerExisted.pop();
+            if (owner != null && ownerExisted) {
+                for (int i = 0; i < owner.elements.size(); i++) {
+                    if (i != ownerIndex && owner.elements.get(i) == this) {
+                        // shift/unshift moved the localized SV. Detach the
+                        // current localized value before restoring this SV.
+                        owner.elements.set(i, new RuntimeScalar(this));
+                        break;
+                    }
+                }
+            }
             boolean referencedDuringLocal = this.referencedByScalarReference;
 
             RuntimeBase displacedBase = null;
@@ -5155,6 +5223,19 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             this.numericContextSeen = previousState.numericContextSeen;
             this.firstClassRegexScalar = previousState.firstClassRegexScalar;
             this.formatPictureTainted = previousState.formatPictureTainted;
+            if (owner != null) {
+                if (owner.scalarLocalContainerCleared()) {
+                    while (owner.elements.size() < ownerSize) owner.elements.add(null);
+                }
+                if (ownerExisted && ownerIndex < owner.elements.size()
+                        && owner.elements.get(ownerIndex) != this) {
+                    // Array mutations such as shift move the localized SV;
+                    // restore its original slot while retaining the moved
+                    // localized value at its current position.
+                    owner.elements.set(ownerIndex, this);
+                }
+                owner.endScalarLocalElement();
+            }
 
             releaseScalarReferenceContents(scalarReferenceContents);
 

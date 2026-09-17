@@ -78,6 +78,10 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         return GlobalVariable.getGlobalVariable(fullName);
     }
 
+    public static void rejectReadonlyCaptureAssignment() {
+        throw new PerlCompilerException("Modification of a read-only value attempted");
+    }
+
     @Override
     public void dynamicSaveState() {
         Stack<SavedGlobalState> localizedStack = localizedStack();

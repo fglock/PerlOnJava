@@ -1021,6 +1021,13 @@ public class Disassemble {
                         sb.append("ARRAY_GET_LVALUE r").append(rd).append(" = lvalue r")
                                 .append(arrayReg).append("[r").append(indexReg).append("]\n");
                         break;
+                    case Opcodes.ARRAY_GET_FOR_LOCAL:
+                        rd = interpretedCode.bytecode[pc++];
+                        arrayReg = interpretedCode.bytecode[pc++];
+                        indexReg = interpretedCode.bytecode[pc++];
+                        sb.append("ARRAY_GET_FOR_LOCAL r").append(rd).append(" = r").append(arrayReg)
+                                .append("[r").append(indexReg).append("]\n");
+                        break;
                     case Opcodes.ARRAY_SET:
                         rd = interpretedCode.bytecode[pc++];
                         arrayReg = interpretedCode.bytecode[pc++];
@@ -1735,6 +1742,19 @@ public class Disassemble {
                         rs = interpretedCode.bytecode[pc++];
                         sb.append("POP_LOCAL_LEVEL DynamicVariableManager.popToLocalLevel(r").append(rs).append(")\n");
                         break;
+                    case Opcodes.RESTORE_FOREACH_GLOBAL_SCALAR:
+                        nameIdx = interpretedCode.bytecode[pc++];
+                        rs = interpretedCode.bytecode[pc++];
+                        sb.append("RESTORE_FOREACH_GLOBAL_SCALAR ").append(interpretedCode.stringPool[nameIdx])
+                                .append(" from r").append(rs).append("\n");
+                        break;
+                    case Opcodes.REJECT_READONLY_CAPTURE_ASSIGNMENT:
+                        sb.append("REJECT_READONLY_CAPTURE_ASSIGNMENT\\n");
+                        break;
+                    case Opcodes.REJECT_LOCALIZE_REFERENCE:
+                        rs = interpretedCode.bytecode[pc++];
+                        sb.append("REJECT_LOCALIZE_REFERENCE r").append(rs).append("\\n");
+                        break;
                     case Opcodes.FOREACH_GLOBAL_NEXT_OR_EXIT: {
                         rd = interpretedCode.bytecode[pc++];
                         int fgIterReg = interpretedCode.bytecode[pc++];
@@ -2162,6 +2182,14 @@ public class Disassemble {
                         int asIndicesReg = interpretedCode.bytecode[pc++];
                         sb.append("ARRAY_SLICE r").append(rd).append(" = r").append(asArrayReg)
                                 .append("[r").append(asIndicesReg).append("]\n");
+                        break;
+                    }
+                    case Opcodes.ARRAY_SLICE_LVALUE: {
+                        rd = interpretedCode.bytecode[pc++];
+                        int aslArrayReg = interpretedCode.bytecode[pc++];
+                        int aslIndicesReg = interpretedCode.bytecode[pc++];
+                        sb.append("ARRAY_SLICE_LVALUE r").append(rd).append(" = r").append(aslArrayReg)
+                                .append("[r").append(aslIndicesReg).append("]\n");
                         break;
                     }
                     case Opcodes.ARRAY_SLICE_SET: {

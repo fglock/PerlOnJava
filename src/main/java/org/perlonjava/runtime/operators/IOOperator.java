@@ -1305,7 +1305,15 @@ public class IOOperator {
             throw new PerlCompilerException("sysread() is not supported on handles with :utf8 layer");
         }
 
-        RuntimeScalar target = args[1].scalar().scalarDeref();
+        RuntimeScalar argumentTarget = args[1].scalar();
+        RuntimeScalar target = argumentTarget.scalarDeref();
+        RuntimeScalar restored = GlobalVariable.restoreForeachAliasForIo(argumentTarget);
+        if (restored == null) {
+            restored = GlobalVariable.restoreForeachAliasForIo(target);
+        }
+        if (restored != null) {
+            target = restored;
+        }
         int length = args[2].scalar().getInt();
         int offset = 0;
 

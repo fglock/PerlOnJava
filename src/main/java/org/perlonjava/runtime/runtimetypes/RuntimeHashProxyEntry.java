@@ -200,8 +200,10 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
                 // (setFromList does elements.clear() which orphans the old lvalue).
                 RuntimeScalar target = parent.elements.get(key);
                 if (target == null) {
-                    target = new RuntimeScalar();
-                    parent.put(key, target);
+                    parent.put(key, new RuntimeScalar());
+                    // Environment hashes wrap values on insertion; restore
+                    // the scalar that is actually held by the map.
+                    target = parent.elements.get(key);
                 }
                 parent.markPackageRootedValue(target);
                 this.lvalue = target;

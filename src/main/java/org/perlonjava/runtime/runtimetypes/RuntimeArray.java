@@ -66,6 +66,18 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     // True only for a syntactic @array expansion at a subroutine call site.
     // `undef @array` must invalidate those cells as well as removing slots.
     private boolean elementSlotsAliasedIntoCallFrame;
+    private int activeScalarLocalElements;
+    private boolean scalarLocalContainerCleared;
+
+    void beginScalarLocalElement() { activeScalarLocalElements++; }
+    void markScalarLocalContainerCleared() {
+        if (activeScalarLocalElements > 0) scalarLocalContainerCleared = true;
+    }
+    boolean scalarLocalContainerCleared() { return scalarLocalContainerCleared; }
+    void endScalarLocalElement() {
+        if (activeScalarLocalElements > 0) activeScalarLocalElements--;
+        if (activeScalarLocalElements == 0) scalarLocalContainerCleared = false;
+    }
     // For mixed @_ arrays: elementsAliased remains true for caller aliases,
     // while mutating ops such as unshift can insert new counted elements that
     // this array must release during tail-call/scope cleanup.
@@ -979,20 +991,39 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     if (idx == self.elements.size() - 1) {
                         // Last element - actually remove it
                         self.elements.removeLast();
+                        while (!self.elements.isEmpty() && self.elements.getLast() == null) {
+                            self.elements.removeLast();
+                        }
                     } else {
                         self.elements.set(idx, null);
+                        while (!self.elements.isEmpty() && self.elements.getLast() == null) {
+                            self.elements.removeLast();
+                        }
                     }
                 }
             }
 
             @Override
             public void dynamicRestoreState() {
+                // undef @array can remove the container slots while one or
+                // more element locals are active. Restore the pre-local
+                // container shape first; nested local states then restore
+                // their individual slots, leaving untouched elements undef.
+                if (savedSize > 0 && self.elements.isEmpty()) {
+                    self.elements.addAll(Collections.nCopies(savedSize, null));
+                }
                 // A localized assignment beyond the old end temporarily grows
                 // the array. If that localized slot is still the tail, remove
                 // the growth as Perl does when the scope exits. Preserve later
                 // elements explicitly appended beyond it during the scope.
-                if (!existed && idx >= savedSize && self.elements.size() == idx + 1) {
-                    while (self.elements.size() > savedSize) {
+                if (!existed && idx >= savedSize) {
+                    // Remove the localized slot itself, but retain values
+                    // assigned to intervening slots during the scope.
+                    while (self.elements.size() > idx) {
+                        self.elements.removeLast();
+                    }
+                    while (self.elements.size() > savedSize
+                            && self.elements.getLast() == null) {
                         self.elements.removeLast();
                     }
                 }
@@ -1044,6 +1075,15 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return result;
     }
 
+    /** Return proxies for array slots in a slice, preserving lvalue identity. */
+    public RuntimeList getLvalueSlice(RuntimeList indices) {
+        RuntimeList result = new RuntimeList();
+        for (RuntimeScalar index : indices) {
+            result.elements.add(type == TIED_ARRAY ? getLocalLvalue(index) : getLvalue(index));
+        }
+        return result;
+    }
+
     /**
      * Gets a value at a specific index.
      *
@@ -1074,6 +1114,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             return new RuntimeArrayProxyEntry(RuntimeArray.this, index);
         }
 
+        element.recordLocalArrayOwner(this, index);
         return SharedPerlStorage.fetchedElement(this, element);
     }
 
@@ -1094,6 +1135,14 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     /** Scalar-index variant of {@link #getLvalue(int)}. */
     public RuntimeScalar getLvalue(RuntimeScalar index) {
         return getLvalue(index.getInt());
+    }
+
+    /** Lvalue for local element assignment; tied arrays must delete/localize first. */
+    public RuntimeScalar getLocalLvalue(RuntimeScalar index) {
+        if (type != TIED_ARRAY) return get(index);
+        deleteLocal(index);
+        RuntimeScalar fetched = get(index);
+        return fetched.value instanceof RuntimeTiedArrayProxyEntry proxy ? proxy : fetched;
     }
 
     /**
@@ -1155,6 +1204,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             return new RuntimeArrayProxyEntry(RuntimeArray.this, index);
         }
 
+        element.recordLocalArrayOwner(this, index);
         return SharedPerlStorage.fetchedElement(this, element);
     }
 
@@ -1867,6 +1917,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             return this;
         }
         notePackageRootMutation();
+        markScalarLocalContainerCleared();
         MortalList.deferDestroyForContainerClear(this.elements);
         if (elementSlotsAliasedIntoCallFrame) {
             for (RuntimeScalar element : this.elements) {

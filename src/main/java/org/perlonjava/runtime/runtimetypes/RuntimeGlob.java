@@ -738,6 +738,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case BOOLEAN:
             case VSTRING:
             case DUALVAR:
+                RuntimeIO lastReadline = RuntimeIO.getLastAccessedHandle();
+                if (lastReadline != null && this.globName != null
+                        && (this.globName.equals(lastReadline.globName)
+                            || (this.IO != null && this.IO.value == lastReadline))) {
+                    RuntimeIO.setLastAccessedHandle(null);
+                }
                 // Handle scalar value assignments to typeglobs
                 // This replaces the scalar slot of the typeglob.
                 // If the current scalar is read-only (e.g., aliased from a for-loop
@@ -1926,6 +1932,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         InheritanceResolver.invalidateCache();
 
         GlobalVariable.getGlobalFormatRef(snap.globName).dynamicRestoreState();
+        if (this instanceof RuntimeStashEntry
+                && snap.scalar == null && snap.array == null && snap.hash == null && snap.code == null
+                && !snap.ioWasVisible) {
+            GlobalVariable.globalFormatRefs.remove(snap.globName);
+        }
         // Restoring the other glob slots may mark the stash entry visible as a
         // side effect. Reapply the saved IO-slot visibility last so a deleted
         // standard handle does not leak back into the runtime's stash view.

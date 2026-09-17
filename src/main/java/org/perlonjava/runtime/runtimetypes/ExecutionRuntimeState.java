@@ -26,6 +26,11 @@ public final class ExecutionRuntimeState {
     final Stack<RuntimeScalar> hashProxyStates = new Stack<>();
     final Stack<Integer> arrayProxyIndexStates = new Stack<>();
     final Stack<RuntimeScalar> arrayProxyStates = new Stack<>();
+    final Stack<Integer> arrayProxySavedSizes = new Stack<>();
+    final Stack<RuntimeArray> scalarLocalOwners = new Stack<>();
+    final Stack<Integer> scalarLocalOwnerIndices = new Stack<>();
+    final Stack<Integer> scalarLocalOwnerSizes = new Stack<>();
+    final Stack<Boolean> scalarLocalOwnerExisted = new Stack<>();
     final Stack<Object> tiedHashProxyStates = new Stack<>();
     final Stack<Object> inputLineStates = new Stack<>();
     final Stack<Object> autoFlushStates = new Stack<>();

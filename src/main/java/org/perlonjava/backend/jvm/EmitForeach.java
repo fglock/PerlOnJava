@@ -329,8 +329,10 @@ public class EmitForeach {
         boolean isGlobalUnderscore = node.needsArrayOfAlias ||
                 (loopVariableIsGlobal && globalVarName != null &&
                         (globalVarName.equals("main::_") || globalVarName.endsWith("::_")));
-        boolean needLocalizeUnderscore = isStatementModifier && loopVariableIsGlobal && globalVarName != null &&
-                (globalVarName.equals("main::_") || globalVarName.endsWith("::_"));
+        // The iterator alias itself is the temporary localization for $_.
+        // Calling GlobalRuntimeScalar.makeLocal here would invoke STORE on a
+        // tied $_ before the first iterator value is installed.
+        boolean needLocalizeUnderscore = false;
 
         int savedLoopVarIndex = -1;
         boolean needSaveRestoreLexicalLoopVar = !isDeclaredInFor && !isReferenceAliasing
@@ -352,10 +354,12 @@ public class EmitForeach {
         }
 
         boolean needLocalizeGlobalLoopVar = !isDeclaredInFor && !isReferenceAliasing
-                && loopVariableIsGlobal && globalVarName != null && !isGlobalUnderscore;
+                && loopVariableIsGlobal && globalVarName != null && !isGlobalUnderscore
+                && !(globalVarName.equals("main::_") || globalVarName.endsWith("::_"));
 
         // Allocate variable to track dynamic variable stack level for localization
         int dynamicIndex = -1;
+        int savedGlobalUnderscoreIndex = -1;
         if (needLocalizeUnderscore || needLocalizeGlobalLoopVar) {
             dynamicIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -366,7 +370,8 @@ public class EmitForeach {
             mv.visitVarInsn(Opcodes.ISTORE, dynamicIndex);
         }
 
-        if (needLocalizeGlobalLoopVar) {
+        if (needLocalizeGlobalLoopVar && globalVarName != null
+                && !(globalVarName.equals("main::_") || globalVarName.endsWith("::_"))) {
             mv.visitLdcInsn(globalVarName);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/GlobalRuntimeScalar",
@@ -374,6 +379,21 @@ public class EmitForeach {
                     "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
             mv.visitInsn(Opcodes.POP);
+        }
+
+        // An implicit global $_ is dynamically aliased to each iterator item.
+        // Save the original slot so a tied $_ is restored after the loop rather
+        // than being left replaced by the last plain iterator scalar.
+        if (isGlobalUnderscore && loopVariableIsGlobal && !isReferenceAliasing
+                && !needLocalizeUnderscore && globalVarName != null) {
+            savedGlobalUnderscoreIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            mv.visitLdcInsn(globalVarName);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                    "getGlobalVariable",
+                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            mv.visitVarInsn(Opcodes.ASTORE, savedGlobalUnderscoreIndex);
         }
 
         Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx, node, mv, true);
@@ -386,7 +406,7 @@ public class EmitForeach {
             mv.visitVarInsn(Opcodes.ALOAD, node.preEvaluatedArrayIndex);
 
             // For statement modifiers, localize $_ ourselves
-            if (needLocalizeUnderscore) {
+            if (needLocalizeUnderscore && !isGlobalUnderscore) {
                 mv.visitLdcInsn(globalVarName);
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/GlobalRuntimeScalar",
@@ -409,7 +429,7 @@ public class EmitForeach {
             mv.visitVarInsn(Opcodes.ALOAD, preEvalListLocal);
 
             // For statement modifiers, localize $_ ourselves
-            if (needLocalizeUnderscore) {
+            if (needLocalizeUnderscore && !isGlobalUnderscore) {
                 mv.visitLdcInsn(globalVarName);
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/GlobalRuntimeScalar",
@@ -813,6 +833,16 @@ public class EmitForeach {
                     "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
                     "popToLocalLevel",
                     "(I)V",
+                    false);
+        }
+
+        if (savedGlobalUnderscoreIndex != -1) {
+            mv.visitLdcInsn(globalVarName);
+            mv.visitVarInsn(Opcodes.ALOAD, savedGlobalUnderscoreIndex);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                    "restoreForeachGlobalVariable",
+                    "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
                     false);
         }
 

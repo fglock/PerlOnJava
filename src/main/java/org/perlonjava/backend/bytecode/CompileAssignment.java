@@ -186,6 +186,13 @@ public class CompileAssignment {
     private static boolean handleLocalAssignment(BytecodeCompiler bc, BinaryOperatorNode node, OperatorNode leftOp, int rhsContext) {
         if (!leftOp.operator.equals("local")) return false;
         Node localOperand = leftOp.operand;
+        if (localOperand instanceof OperatorNode sigil
+                && sigil.operator.equals("$")
+                && sigil.operand instanceof IdentifierNode id
+                && id.name.matches("[1-9]\\d*")) {
+            bc.emit(Opcodes.REJECT_READONLY_CAPTURE_ASSIGNMENT);
+            return true;
+        }
         // General fallback for any BinaryOperatorNode lvalue (matches JVM backend behavior)
         // Handles: local $hash{key} = v, local $array[i] = v, local $obj->method->{key} = v, etc.
         if (localOperand instanceof BinaryOperatorNode binOp) {
@@ -365,9 +372,15 @@ public class CompileAssignment {
             // Handle: local $#array = value
             if (sigil.equals("$#")) {
                 int arrayReg = resolveArrayForDollarHash(bc, sigilOp);
-                // Save the array state so it's restored on scope exit
-                bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                // Localize the array length cell, not the whole array.  The
+                // latter clears the elements and loses their values while the
+                // temporary length is active.
+                int sizeReg = bc.allocateRegister();
+                bc.emit(Opcodes.ARRAY_LAST_INDEX_LVALUE);
+                bc.emitReg(sizeReg);
                 bc.emitReg(arrayReg);
+                bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                bc.emitReg(sizeReg);
                 // Compile the RHS value
                 bc.compileNode(node.right, -1, rhsContext);
                 int valueReg = bc.lastResultReg;
@@ -514,6 +527,43 @@ public class CompileAssignment {
             // emits nothing - a silent no-op assignment. Reproduced by:
             //     local ($h->{x}) = 99;   inside an eval-STRING-compiled sub
             if (element instanceof BinaryOperatorNode binOp) {
+                if (binOp.operator.equals("[")
+                        && binOp.left instanceof OperatorNode arraySliceOp
+                        && arraySliceOp.operator.equals("@")
+                        && binOp.right instanceof ArrayLiteralNode indices) {
+                    bc.compileNode(node.right, -1, RuntimeContextType.LIST);
+                    int valueListReg = bc.lastResultReg;
+                    bc.handleArraySliceLvalue(binOp, arraySliceOp);
+                    int targetListReg = bc.lastResultReg;
+                    for (int i = 0; i < indices.elements.size(); i++) {
+                        int indexReg = bc.allocateRegister();
+                        bc.emit(Opcodes.LOAD_INT);
+                        bc.emitReg(indexReg);
+                        bc.emit(i);
+                        int targetReg = bc.allocateRegister();
+                        bc.emit(Opcodes.ARRAY_GET);
+                        bc.emitReg(targetReg);
+                        bc.emitReg(targetListReg);
+                        bc.emitReg(indexReg);
+                        int valueReg = bc.allocateRegister();
+                        bc.emit(Opcodes.ARRAY_GET);
+                        bc.emitReg(valueReg);
+                        bc.emitReg(valueListReg);
+                        bc.emitReg(indexReg);
+                        bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                        bc.emitReg(targetReg);
+                        bc.emit(Opcodes.SET_SCALAR);
+                        bc.emitReg(targetReg);
+                        bc.emitReg(valueReg);
+                    }
+                    bc.lastResultReg = targetListReg;
+                    return true;
+                }
+                // The RHS must be evaluated before localizing an element. In
+                // particular, tied FETCH must see the pre-local value (as in
+                // `local($a[i]) = $a[i]`).
+                bc.compileNode(node.right, -1, rhsContext);
+                int valueReg = snapshotLocalScalarRhs(bc, bc.lastResultReg);
                 bc.beginLocalHashLvalueCompile();
                 try {
                     bc.compileNode(binOp, -1, rhsContext);
@@ -521,8 +571,6 @@ public class CompileAssignment {
                     bc.endLocalHashLvalueCompile();
                 }
                 int elemReg = bc.lastResultReg;
-                bc.compileNode(node.right, -1, rhsContext);
-                int valueReg = snapshotLocalScalarRhs(bc, bc.lastResultReg);
                 bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
                 bc.emitReg(elemReg);
                 bc.emit(Opcodes.SET_SCALAR);
@@ -636,8 +684,37 @@ public class CompileAssignment {
             } else if (element instanceof BinaryOperatorNode binOp) {
                 // Element is an lvalue expression (e.g. $h->{k}, $a[i], $obj->attr).
                 // Compile to get the element reference, localize it, and assign RHS[i].
-                bc.compileNode(binOp, -1, RuntimeContextType.SCALAR);
+                int lvalueListReg = -1;
+                if (binOp.operator.equals("[")
+                        && binOp.left instanceof OperatorNode arraySliceOp
+                        && arraySliceOp.operator.equals("@")) {
+                    bc.handleArraySliceLvalue(binOp, arraySliceOp);
+                    lvalueListReg = bc.lastResultReg;
+                } else if (binOp.operator.equals("[")
+                        && binOp.left instanceof OperatorNode arrayOp
+                        && arrayOp.operator.equals("$")
+                        && arrayOp.operand instanceof IdentifierNode) {
+                    bc.handleArrayElementLvalueAccess(binOp, arrayOp);
+                } else {
+                    bc.beginLocalHashLvalueCompile();
+                    try {
+                        bc.compileNode(binOp, -1, RuntimeContextType.SCALAR);
+                    } finally {
+                        bc.endLocalHashLvalueCompile();
+                    }
+                }
                 int elemLvalReg = bc.lastResultReg;
+                if (lvalueListReg >= 0) {
+                    int targetIndexReg = bc.allocateRegister();
+                    bc.emit(Opcodes.LOAD_INT);
+                    bc.emitReg(targetIndexReg);
+                    bc.emit(i);
+                    elemLvalReg = bc.allocateRegister();
+                    bc.emit(Opcodes.ARRAY_GET);
+                    bc.emitReg(elemLvalReg);
+                    bc.emitReg(lvalueListReg);
+                    bc.emitReg(targetIndexReg);
+                }
                 bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
                 bc.emitReg(elemLvalReg);
                 int idxReg = bc.allocateRegister();

@@ -1025,6 +1025,16 @@ public class BytecodeInterpreter {
                                 DynamicVariableManager.popToLocalLevel(savedLocalLevel + relativeLevel);
                             }
 
+                            case Opcodes.RESTORE_FOREACH_GLOBAL_SCALAR -> {
+                                int nameIdx = bytecode[pc++];
+                                int valueReg = bytecode[pc++];
+                                GlobalVariable.restoreForeachGlobalVariable(
+                                        code.stringPool[nameIdx], (RuntimeScalar) registers[valueReg]);
+                            }
+
+                            case Opcodes.REJECT_READONLY_CAPTURE_ASSIGNMENT ->
+                                    GlobalRuntimeScalar.rejectReadonlyCaptureAssignment();
+
                             case Opcodes.SAVE_REGEX_STATE -> {
                                 int rd = bytecode[pc++];
                                 registers[rd] = new RuntimeScalar(regexStateStack.size());
@@ -1069,9 +1079,6 @@ public class BytecodeInterpreter {
                                 if (iterator.hasNext()) {
                                     // See FOREACH_NEXT_OR_EXIT above for the rationale.
                                     RuntimeScalar element = iterator.next();
-                                    if (element instanceof RuntimeScalarReadOnly) {
-                                        element = new ReadOnlyAlias(element);
-                                    }
                                     registers[rd] = element;
                                     GlobalVariable.aliasForeachGlobalVariable(name, element);
                                     pc = bodyTarget;  // ABSOLUTE jump back to body start
@@ -1619,6 +1626,9 @@ public class BytecodeInterpreter {
 
                             case Opcodes.ARRAY_GET_LVALUE -> {
                                 pc = InlineOpcodeHandler.executeArrayGetLvalue(bytecode, pc, registers);
+                            }
+                            case Opcodes.ARRAY_GET_FOR_LOCAL -> {
+                                pc = InlineOpcodeHandler.executeArrayGetForLocal(bytecode, pc, registers);
                             }
 
                             case Opcodes.ARRAY_SET -> {
@@ -2751,7 +2761,8 @@ public class BytecodeInterpreter {
 
                             // Group 1-2: Dereferencing and Slicing (114-121)
                             case Opcodes.DEREF_ARRAY, Opcodes.DEREF_HASH, Opcodes.DEREF_HASH_NONSTRICT,
-                                 Opcodes.DEREF_ARRAY_NONSTRICT, Opcodes.ARRAY_SLICE, Opcodes.ARRAY_SLICE_SET,
+                                 Opcodes.DEREF_ARRAY_NONSTRICT, Opcodes.ARRAY_SLICE, Opcodes.ARRAY_SLICE_LVALUE,
+                                 Opcodes.ARRAY_SLICE_SET,
                                  Opcodes.HASH_SLICE, Opcodes.HASH_SLICE_SET, Opcodes.HASH_SLICE_DELETE,
                                  Opcodes.HASH_KEYVALUE_SLICE, Opcodes.LIST_SLICE_FROM -> {
                                 pc = executeSliceOps(opcode, bytecode, pc, registers, code);
@@ -3306,6 +3317,10 @@ public class BytecodeInterpreter {
                                 RuntimeList list = registers[listReg].getList();
                                 RuntimeList indices = registers[indicesReg].getList();
                                 registers[rd] = list.getSlice(indices);
+                            }
+
+                            case Opcodes.REJECT_LOCALIZE_REFERENCE -> {
+                                pc = SlowOpcodeHandler.executeRejectLocalizeReference(bytecode, pc, registers);
                             }
 
                             default -> {
@@ -3980,6 +3995,9 @@ public class BytecodeInterpreter {
             case Opcodes.ARRAY_SLICE -> {
                 return SlowOpcodeHandler.executeArraySlice(bytecode, pc, registers);
             }
+            case Opcodes.ARRAY_SLICE_LVALUE -> {
+                return SlowOpcodeHandler.executeArraySliceLvalue(bytecode, pc, registers);
+            }
             case Opcodes.ARRAY_SLICE_SET -> {
                 return SlowOpcodeHandler.executeArraySliceSet(bytecode, pc, registers);
             }
@@ -4350,6 +4368,9 @@ public class BytecodeInterpreter {
             }
             case Opcodes.DEREF_SCALAR_STRICT -> {
                 return SlowOpcodeHandler.executeDerefScalarStrict(bytecode, pc, registers);
+            }
+            case Opcodes.REJECT_LOCALIZE_REFERENCE -> {
+                return SlowOpcodeHandler.executeRejectLocalizeReference(bytecode, pc, registers);
             }
             case Opcodes.DEREF_SCALAR_NONSTRICT -> {
                 return SlowOpcodeHandler.executeDerefScalarNonStrict(bytecode, pc, registers, code);

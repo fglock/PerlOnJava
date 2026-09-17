@@ -578,6 +578,22 @@ public class InlineOpcodeHandler {
         return pc;
     }
 
+    /** Array fetch used by local(): retain a tied element proxy, otherwise fetch normally. */
+    public static int executeArrayGetForLocal(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int arrayReg = bytecode[pc++];
+        int indexReg = bytecode[pc++];
+        RuntimeBase arrayBase = registers[arrayReg];
+        RuntimeScalar idx = (RuntimeScalar) registers[indexReg];
+        if (arrayBase instanceof RuntimeScalar scalar) arrayBase = scalar.arrayDeref();
+        if (arrayBase instanceof RuntimeArray arr) {
+            registers[rd] = arr.type == RuntimeArray.TIED_ARRAY ? arr.getLocalLvalue(idx) : arr.get(idx);
+        } else {
+            throw new RuntimeException("ARRAY_GET_FOR_LOCAL: register " + arrayReg + " is not RuntimeArray");
+        }
+        return pc;
+    }
+
     /**
      * Array element store: array[index] = value, returns the lvalue (element)
      * Format: ARRAY_SET rd arrayReg indexReg valueReg

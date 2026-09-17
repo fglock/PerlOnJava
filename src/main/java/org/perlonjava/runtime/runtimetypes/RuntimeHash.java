@@ -989,6 +989,31 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     public RuntimeScalar deleteLocal(String key) {
+        if (type == TIED_HASH) {
+            RuntimeScalar tiedKey = new RuntimeScalar(key);
+            boolean tiedExisted = TieHash.tiedExists(this, tiedKey).getBoolean();
+            RuntimeScalar tiedSavedValue = tiedExisted
+                    ? new RuntimeScalar(TieHash.tiedFetch(this, tiedKey)) : null;
+            RuntimeScalar tiedReturnValue = tiedExisted
+                    ? new RuntimeScalar(tiedSavedValue) : new RuntimeScalar();
+            RuntimeHash self = this;
+            DynamicVariableManager.pushLocalVariable(new DynamicState() {
+                @Override
+                public void dynamicSaveState() {
+                    TieHash.tiedDelete(self, tiedKey);
+                }
+
+                @Override
+                public void dynamicRestoreState() {
+                    if (tiedExisted) {
+                        TieHash.tiedStore(self, tiedKey, new RuntimeScalar(tiedSavedValue));
+                    } else {
+                        TieHash.tiedDelete(self, tiedKey);
+                    }
+                }
+            });
+            return tiedReturnValue;
+        }
         boolean existed = elements.containsKey(key);
         RuntimeScalar savedValue = existed ? new RuntimeScalar(elements.get(key)) : null;
         RuntimeScalar returnValue = existed ? new RuntimeScalar(elements.get(key)) : new RuntimeScalar();

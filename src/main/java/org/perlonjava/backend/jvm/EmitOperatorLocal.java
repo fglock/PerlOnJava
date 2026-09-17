@@ -173,7 +173,15 @@ public class EmitOperatorLocal {
                     // This is \$var - extract the inner variable
                     varToLocalize = opNode.operand;
                 }
-                handleLocal(emitterVisitor.with(RuntimeContextType.VOID), new OperatorNode("local", varToLocalize, node.tokenIndex));
+                // A hash/array element in a local(...) list is still a scalar
+                // lvalue.  Emitting it as VOID makes LValueVisitor infer the
+                // surrounding list context and can select the list proxy path,
+                // which does not save a bare tied element correctly.
+                int childContext = varToLocalize instanceof BinaryOperatorNode
+                        ? RuntimeContextType.SCALAR
+                        : RuntimeContextType.VOID;
+                handleLocal(emitterVisitor.with(childContext),
+                        new OperatorNode("local", varToLocalize, node.tokenIndex));
             }
 
             // Return the list with references if isDeclaredReference is set
@@ -240,10 +248,12 @@ public class EmitOperatorLocal {
                     "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeGlob;",
                     false);
         } else {
+            emitLocalDereferenceCheck(emitterVisitor, varToLocal);
             // For direct hash element access (local $hash{key}), use getForLocal instead of get.
             // This ensures the proxy holds parent+key refs so restore survives hash reassignment.
             if (varToLocal instanceof BinaryOperatorNode binNode && binNode.operator.equals("{")
-                    && binNode.left instanceof OperatorNode sigNode && sigNode.operator.equals("$")
+                    && binNode.left instanceof OperatorNode sigNode
+                    && (sigNode.operator.equals("$") || sigNode.operator.equals("%"))
                     && sigNode.operand instanceof IdentifierNode) {
                 Dereference.handleHashElementOperator(emitterVisitor.with(lvalueContext), binNode, "getForLocal");
             } else if (varToLocal instanceof BinaryOperatorNode binNode && binNode.operator.equals("{")
@@ -289,4 +299,27 @@ public class EmitOperatorLocal {
         }
         EmitOperator.handleVoidContext(emitterVisitor);
     }
+
+    private static void emitLocalDereferenceCheck(EmitterVisitor emitterVisitor, Node operand) {
+        if (operand instanceof ListNode list) {
+            for (Node child : list.elements) {
+                emitLocalDereferenceCheck(emitterVisitor, child);
+            }
+            return;
+        }
+        if (!(operand instanceof OperatorNode outer) || !"$@%".contains(outer.operator)) {
+            return;
+        }
+        Node source = outer.operand;
+        if (!(source instanceof OperatorNode) && !(source instanceof BlockNode)) {
+            return;
+        }
+        source.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                "rejectLocalizeThroughReference",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
+                false);
+    }
+
 }
