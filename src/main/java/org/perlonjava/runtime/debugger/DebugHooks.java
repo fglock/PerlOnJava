@@ -219,7 +219,11 @@ public class DebugHooks {
 
         // Check for quit flag
         if (state.quit) {
-            System.exit(0);
+            // EOF from a non-interactive stdin ends the debugger command loop.
+            // Do not terminate the hosting JVM: Gradle test workers and other
+            // embedded callers must be allowed to finish normally. The
+            // explicit `q` command still exits through handleQuit().
+            return;
         }
 
         // Populate @DB::args with current frame's arguments

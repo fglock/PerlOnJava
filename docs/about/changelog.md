@@ -9,6 +9,8 @@ priorities and future plans.
 - Run Gradle builds without a persistent daemon so worker JVMs inherit the
   launcher's process priority.
 
+- Keep debugger EOF from terminating embedded Gradle test workers on Windows.
+
 - Avoid transient helper allocation while counting ordinary Perl UTF strings.
 
 - Reuse static literal regular-expression match wrappers per runtime and call
