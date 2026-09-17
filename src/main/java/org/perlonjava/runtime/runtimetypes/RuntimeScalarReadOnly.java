@@ -14,6 +14,22 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.UNDEF;
  */
 public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
 
+    private String foreachRestoreKey;
+    private RuntimeScalar foreachRestoreValue;
+
+    void installForeachRestore(String key, RuntimeScalar value) {
+        foreachRestoreKey = key;
+        foreachRestoreValue = value;
+    }
+
+    void restoreForeachBeforeMutation() {
+        if (foreachRestoreKey != null) {
+            GlobalVariable.restoreForeachGlobalVariable(foreachRestoreKey, foreachRestoreValue);
+            foreachRestoreKey = null;
+            foreachRestoreValue = null;
+        }
+    }
+
     // Immutable fields representing the scalar value
     final boolean b;
     final String s;

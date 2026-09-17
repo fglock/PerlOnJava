@@ -108,6 +108,12 @@ public class RuntimeIO extends RuntimeScalar {
     public static RuntimeIO getLastAccessedHandle() { return PerlRuntime.current().ioLastAccessedHandle; }
     public static void setLastAccessedHandle(RuntimeIO io) { PerlRuntime.current().ioLastAccessedHandle = io; }
     public static String getLastReadlineHandleName() { return PerlRuntime.current().ioLastReadlineHandleName; }
+
+    private boolean ioError;
+
+    public void markError() { ioError = true; }
+
+    public RuntimeScalar error() { return new RuntimeScalar(ioError); }
     public static void setLastReadlineHandleName(String name) { PerlRuntime.current().ioLastReadlineHandleName = name; }
     public static RuntimeIO getLastWrittenHandle() { return PerlRuntime.current().ioLastWrittenHandle; }
     public static void setLastWrittenHandle(RuntimeIO io) { PerlRuntime.current().ioLastWrittenHandle = io; }
@@ -1612,6 +1618,9 @@ public class RuntimeIO extends RuntimeScalar {
         unregisterFileno();
         ioHandle.flush();
         RuntimeScalar ret = ioHandle.close();
+        if (ioError) {
+            return scalarFalse;
+        }
         ioHandle = new ClosedIOHandle();
         // Reset line number to 0 on close, matching Perl 5 behavior.
         // This ensures $. becomes 0 and error messages don't include

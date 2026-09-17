@@ -502,6 +502,13 @@ public class SlowOpcodeHandler {
         return pc;
     }
 
+    public static int executeRejectLocalizeReference(
+            int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rs = bytecode[pc++];
+        RuntimeScalar.rejectLocalizeThroughReference(registers[rs].scalar());
+        return pc;
+    }
+
     /**
      * DEREF_SCALAR_NONSTRICT: rd = rs.scalarDerefNonStrict(pkg)
      * Format: DEREF_SCALAR_NONSTRICT rd rs pkgIdx

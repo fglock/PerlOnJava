@@ -4524,21 +4524,7 @@ public class BytecodeCompiler implements Visitor {
                 return;
             }
 
-            // A reference dereference is not a valid local() target.  Emit
-            // Perl's diagnostic during compilation so eval STRING can catch
-            // it, rather than localizing a temporary dereference result.
-            if (isReferenceLocalizationTarget(node.operand)) {
-                throwCompilerException("Can't localize through a reference");
-                return;
-            }
-            if (node.operand instanceof ListNode localList) {
-                for (Node child : localList.elements) {
-                    if (isReferenceLocalizationTarget(child)) {
-                        throwCompilerException("Can't localize through a reference");
-                        return;
-                    }
-                }
-            }
+            emitLocalReferenceChecks(node.operand);
 
             // local $x - temporarily localize a global variable
             // The operand will be OperatorNode("$", IdentifierNode("x"))
@@ -5206,6 +5192,19 @@ public class BytecodeCompiler implements Visitor {
         }
         return outer.operand instanceof OperatorNode inner
                 && inner.operator.equals("$");
+    }
+
+    private void emitLocalReferenceChecks(Node operand) {
+        if (operand instanceof ListNode list) {
+            for (Node child : list.elements) emitLocalReferenceChecks(child);
+            return;
+        }
+        if (operand instanceof OperatorNode outer && "$@%".contains(outer.operator)
+                && (outer.operand instanceof OperatorNode || outer.operand instanceof BlockNode)) {
+            compileNode(outer.operand, -1, RuntimeContextType.SCALAR);
+            emit(Opcodes.REJECT_LOCALIZE_REFERENCE);
+            emitReg(lastResultReg);
+        }
     }
 
     private int compileLocalOurListElement(OperatorNode localNode, OperatorNode variableNode) {

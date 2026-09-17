@@ -33,10 +33,18 @@ public class ReadOnlyAlias extends RuntimeScalarReadOnly {
 
     /** The original read-only scalar this aliases. Reads delegate to it. */
     private final RuntimeScalar src;
+    private final String restoreKey;
+    private final RuntimeScalar restoreValue;
 
     public ReadOnlyAlias(RuntimeScalar src) {
+        this(src, null, null);
+    }
+
+    public ReadOnlyAlias(RuntimeScalar src, String restoreKey, RuntimeScalar restoreValue) {
         super();
         this.src = src;
+        this.restoreKey = restoreKey;
+        this.restoreValue = restoreValue;
         this.type = src.type;
         this.value = src.value;
         this.blessId = src.blessId;
@@ -71,5 +79,53 @@ public class ReadOnlyAlias extends RuntimeScalarReadOnly {
     @Override
     public RuntimeScalar createReference() {
         return src.createReference();
+    }
+
+    @Override
+    void vivify() {
+        throw new PerlCompilerException("Modification of a read-only value attempted");
+    }
+
+    private void restoreBeforeMutation() {
+        if (restoreKey != null) {
+            GlobalVariable.restoreForeachGlobalVariable(restoreKey, restoreValue);
+        }
+    }
+
+    /** Restore a failed global foreach topic before an IO lvalue write. */
+    public RuntimeScalar restoreForIoWrite() {
+        restoreBeforeMutation();
+        return restoreValue;
+    }
+
+    @Override
+    public RuntimeScalar set(RuntimeScalar value) {
+        return super.set(value);
+    }
+
+    @Override
+    public RuntimeScalar set(String value) {
+        restoreBeforeMutation();
+        return super.set(value);
+    }
+
+    @Override
+    public RuntimeScalar set(int value) {
+        return super.set(value);
+    }
+
+    @Override
+    public RuntimeScalar set(long value) {
+        return super.set(value);
+    }
+
+    @Override
+    public RuntimeScalar set(java.math.BigInteger value) {
+        return super.set(value);
+    }
+
+    @Override
+    public RuntimeScalar set(boolean value) {
+        return super.set(value);
     }
 }

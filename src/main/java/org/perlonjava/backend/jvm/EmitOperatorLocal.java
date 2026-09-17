@@ -32,22 +32,6 @@ public class EmitOperatorLocal {
             return;
         }
 
-        // Perl rejects localization through a reference.  Keep this a
-        // compile-time diagnostic so eval STRING reports the same failure as
-        // the native interpreter instead of silently localizing a temporary
-        // dereference result (which also leaves later scopes unbalanced).
-        if (node.operand instanceof ListNode listNode) {
-            for (Node child : listNode.elements) {
-                if (isReferenceLocalizationTarget(child)) {
-                    throw new org.perlonjava.runtime.runtimetypes.PerlCompilerException(
-                            "Can't localize through a reference");
-                }
-            }
-        } else if (isReferenceLocalizationTarget(node.operand)) {
-            throw new org.perlonjava.runtime.runtimetypes.PerlCompilerException(
-                    "Can't localize through a reference");
-        }
-
         if (node.operand instanceof OperatorNode opNode && opNode.operator.equals("$")) {
             // Check if the variable is global or 'our' variable
             if (opNode.operand instanceof IdentifierNode idNode) {
@@ -264,6 +248,7 @@ public class EmitOperatorLocal {
                     "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeGlob;",
                     false);
         } else {
+            emitLocalDereferenceCheck(emitterVisitor, varToLocal);
             // For direct hash element access (local $hash{key}), use getForLocal instead of get.
             // This ensures the proxy holds parent+key refs so restore survives hash reassignment.
             if (varToLocal instanceof BinaryOperatorNode binNode && binNode.operator.equals("{")
@@ -315,11 +300,26 @@ public class EmitOperatorLocal {
         EmitOperator.handleVoidContext(emitterVisitor);
     }
 
-    private static boolean isReferenceLocalizationTarget(Node operand) {
-        if (!(operand instanceof OperatorNode outer) || !"$@%".contains(outer.operator)) {
-            return false;
+    private static void emitLocalDereferenceCheck(EmitterVisitor emitterVisitor, Node operand) {
+        if (operand instanceof ListNode list) {
+            for (Node child : list.elements) {
+                emitLocalDereferenceCheck(emitterVisitor, child);
+            }
+            return;
         }
-        return outer.operand instanceof OperatorNode inner
-                && inner.operator.equals("$");
+        if (!(operand instanceof OperatorNode outer) || !"$@%".contains(outer.operator)) {
+            return;
+        }
+        Node source = outer.operand;
+        if (!(source instanceof OperatorNode) && !(source instanceof BlockNode)) {
+            return;
+        }
+        source.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                "rejectLocalizeThroughReference",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
+                false);
     }
+
 }

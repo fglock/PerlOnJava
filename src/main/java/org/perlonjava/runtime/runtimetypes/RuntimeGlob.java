@@ -738,6 +738,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case BOOLEAN:
             case VSTRING:
             case DUALVAR:
+                RuntimeIO lastReadline = RuntimeIO.getLastAccessedHandle();
+                if (lastReadline != null && this.globName != null
+                        && (this.globName.equals(lastReadline.globName)
+                            || (this.IO != null && this.IO.value == lastReadline))) {
+                    RuntimeIO.setLastAccessedHandle(null);
+                }
                 // Handle scalar value assignments to typeglobs
                 // This replaces the scalar slot of the typeglob.
                 // If the current scalar is read-only (e.g., aliased from a for-loop

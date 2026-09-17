@@ -1257,6 +1257,13 @@ public class GlobalVariable {
 
     public static void aliasGlobalVariable(String key, RuntimeScalar var) {
         clearForeachGlobalAlias(key);
+        RuntimeScalar previous = globalVariables.get(key);
+        if (var instanceof RuntimeScalarReadOnly || var.type == RuntimeScalarType.READONLY_SCALAR) {
+            if (var instanceof RuntimeScalarReadOnly readOnly) {
+                readOnly.installForeachRestore(key, previous);
+            }
+            var = new ReadOnlyAlias(var, key, previous);
+        }
         markPackageGlobalRoot(var);
         globalVariables.put(key, var);
         invalidatePackageRootSnapshot();
@@ -1313,6 +1320,17 @@ public class GlobalVariable {
 
     public static void aliasForeachGlobalVariable(String key, RuntimeScalar var) {
         clearForeachGlobalAlias(key);
+        RuntimeScalar previous = globalVariables.get(key);
+        if (var instanceof RuntimeScalarReadOnly || var.type == RuntimeScalarType.READONLY_SCALAR) {
+            if (var instanceof RuntimeScalarReadOnly readOnly) {
+                readOnly.installForeachRestore(key, previous);
+            }
+            // A failed write to a read-only foreach item exits through eval
+            // before the normal loop teardown. Make that failure restore the
+            // original topic slot immediately, so later reads of $_ do not
+            // retain the failed alias.
+            var = new ReadOnlyAlias(var, key, previous);
+        }
         retainForeachAlias(var);
         foreachGlobalAliases().put(key, var);
         markPackageGlobalRoot(var);
@@ -1332,6 +1350,28 @@ public class GlobalVariable {
         clearForeachGlobalAlias(key);
         globalVariables.put(key, value);
         invalidatePackageRootSnapshot();
+    }
+
+    /** Restore a read-only implicit-foreach alias when an IO operator needs its lvalue. */
+    public static RuntimeScalar restoreForeachAliasForIo(RuntimeScalar target) {
+        for (RuntimeScalar alias : foreachGlobalAliases().values()) {
+            if (alias == target && alias instanceof ReadOnlyAlias readOnly) {
+                return readOnly.restoreForIoWrite();
+            }
+        }
+        if (target != null && target.type == RuntimeScalarType.READONLY_SCALAR) {
+            for (RuntimeScalar alias : foreachGlobalAliases().values()) {
+                if (alias instanceof ReadOnlyAlias readOnly) {
+                    return readOnly.restoreForIoWrite();
+                }
+            }
+            for (RuntimeScalar alias : globalVariables.values()) {
+                if (alias instanceof ReadOnlyAlias readOnly) {
+                    return readOnly.restoreForIoWrite();
+                }
+            }
+        }
+        return null;
     }
 
     private static void retainForeachAlias(RuntimeScalar scalar) {

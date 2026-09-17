@@ -1751,6 +1751,10 @@ public class Disassemble {
                     case Opcodes.REJECT_READONLY_CAPTURE_ASSIGNMENT:
                         sb.append("REJECT_READONLY_CAPTURE_ASSIGNMENT\\n");
                         break;
+                    case Opcodes.REJECT_LOCALIZE_REFERENCE:
+                        rs = interpretedCode.bytecode[pc++];
+                        sb.append("REJECT_LOCALIZE_REFERENCE r").append(rs).append("\\n");
+                        break;
                     case Opcodes.FOREACH_GLOBAL_NEXT_OR_EXIT: {
                         rd = interpretedCode.bytecode[pc++];
                         int fgIterReg = interpretedCode.bytecode[pc++];

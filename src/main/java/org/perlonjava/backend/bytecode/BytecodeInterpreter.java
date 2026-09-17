@@ -1079,9 +1079,6 @@ public class BytecodeInterpreter {
                                 if (iterator.hasNext()) {
                                     // See FOREACH_NEXT_OR_EXIT above for the rationale.
                                     RuntimeScalar element = iterator.next();
-                                    if (element instanceof RuntimeScalarReadOnly) {
-                                        element = new ReadOnlyAlias(element);
-                                    }
                                     registers[rd] = element;
                                     GlobalVariable.aliasForeachGlobalVariable(name, element);
                                     pc = bodyTarget;  // ABSOLUTE jump back to body start
@@ -3322,6 +3319,10 @@ public class BytecodeInterpreter {
                                 registers[rd] = list.getSlice(indices);
                             }
 
+                            case Opcodes.REJECT_LOCALIZE_REFERENCE -> {
+                                pc = SlowOpcodeHandler.executeRejectLocalizeReference(bytecode, pc, registers);
+                            }
+
                             default -> {
                                 int opcodeInt = opcode;
                                 throw new RuntimeException(
@@ -4367,6 +4368,9 @@ public class BytecodeInterpreter {
             }
             case Opcodes.DEREF_SCALAR_STRICT -> {
                 return SlowOpcodeHandler.executeDerefScalarStrict(bytecode, pc, registers);
+            }
+            case Opcodes.REJECT_LOCALIZE_REFERENCE -> {
+                return SlowOpcodeHandler.executeRejectLocalizeReference(bytecode, pc, registers);
             }
             case Opcodes.DEREF_SCALAR_NONSTRICT -> {
                 return SlowOpcodeHandler.executeDerefScalarNonStrict(bytecode, pc, registers, code);

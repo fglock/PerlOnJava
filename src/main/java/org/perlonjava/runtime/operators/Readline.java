@@ -17,7 +17,20 @@ public class Readline {
      * @return A RuntimeBase with the line(s).
      */
     public static RuntimeBase readline(RuntimeScalar fileHandle, int ctx) {
-        RuntimeIO fh = fileHandle.getRuntimeIO();
+        if (fileHandle == null || fileHandle.type == RuntimeScalarType.UNDEF) {
+            RuntimeIO.setLastAccessedHandle(null);
+        }
+        RuntimeIO fh;
+        if (fileHandle != null && fileHandle.isString()) {
+            String name = NameNormalizer.normalizeVariableName(fileHandle.toString(), "main");
+            if (GlobalVariable.getExistingGlobalIO(name) == null) {
+                WarnDie.warn(new RuntimeScalar("readline() on unopened filehandle"), new RuntimeScalar("\n"));
+                return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef;
+            }
+            fh = fileHandle.getRuntimeIO();
+        } else {
+            fh = fileHandle == null ? null : fileHandle.getRuntimeIO();
+        }
 
         if (fh == null) {
             // Check for <> overload before warning about unopened filehandle
@@ -69,10 +82,6 @@ public class Readline {
         RuntimeIO.flushFileHandles();
 
         // Check if the IO object is set up for reading
-        if (runtimeIO.ioHandle == null) {
-            throw new PerlCompilerException("readline is not supported for output streams");
-        }
-
         // Set this as the last accessed handle for $. (INPUT_LINE_NUMBER) special variable
         RuntimeIO.setLastAccessedHandle(runtimeIO);
 
@@ -129,20 +138,32 @@ public class Readline {
         }
 
         // Handle normal string separator mode
-        String sep = rsScalar.toString();
+        try {
+            if (runtimeIO.ioHandle == null) {
+                throw new PerlCompilerException("readline is not supported for output streams");
+            }
+            String sep = rsScalar.toString();
 
-        if (sep.isEmpty()) {
-            // Handle paragraph mode when $/ = '' (fallback if not InputRecordSeparator)
-            return readParagraphMode(runtimeIO);
-        }
+            if (sep.isEmpty()) {
+                // Handle paragraph mode when $/ = '' (fallback if not InputRecordSeparator)
+                return readParagraphMode(runtimeIO);
+            }
 
-        // Handle multi-character or single character separators
-        if (sep.length() == 1) {
-            // Single character separator (optimized path)
-            return readUntilCharacter(runtimeIO, sep.charAt(0));
-        } else {
-            // Multi-character separator
-            return readUntilString(runtimeIO, sep);
+            // Handle multi-character or single character separators
+            if (sep.length() == 1) {
+                // Single character separator (optimized path)
+                return readUntilCharacter(runtimeIO, sep.charAt(0));
+            } else {
+                // Multi-character separator
+                return readUntilString(runtimeIO, sep);
+            }
+        } catch (RuntimeException e) {
+            // Java NIO reports a write-only handle as NonReadableChannelException;
+            // Perl readline returns undef and records the failed read instead of
+            // leaking the Java exception to the script.
+            getGlobalVariable("main::!").set("Filehandle opened only for output");
+            runtimeIO.markError();
+            return externalUndef();
         }
     }
 
@@ -330,7 +351,15 @@ public class Readline {
         RuntimeScalar fileHandle = (RuntimeScalar) args.elements.getFirst();
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
-        RuntimeScalar scalar = ((RuntimeScalar) args.elements.get(1)).scalarDeref();
+        RuntimeScalar targetArgument = ((RuntimeScalar) args.elements.get(1));
+        RuntimeScalar scalar = targetArgument.scalarDeref();
+        RuntimeScalar restored = GlobalVariable.restoreForeachAliasForIo(targetArgument);
+        if (restored == null) {
+            restored = GlobalVariable.restoreForeachAliasForIo(scalar);
+        }
+        if (restored != null) {
+            scalar = restored;
+        }
         RuntimeScalar length = (RuntimeScalar) args.elements.get(2);
         RuntimeScalar offset = args.elements.size() > 3
                 ? (RuntimeScalar) args.elements.get(3)

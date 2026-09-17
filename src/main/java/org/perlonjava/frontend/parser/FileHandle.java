@@ -445,6 +445,10 @@ public class FileHandle {
             return false;
         }
 
-        return autovivifyUnknownBareword || name.matches("^[A-Z_][A-Z0-9_]*$");
+        // A qualified bareword in filehandle position is a package glob even
+        // when its name is lowercase (for example <foo::ARGV>).  It must not
+        // fall through as the diamond operator, which would read STDIN.
+        return autovivifyUnknownBareword || name.contains("::")
+                || name.matches("^[A-Z_][A-Z0-9_]*$");
     }
 }

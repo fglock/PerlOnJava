@@ -1555,6 +1555,9 @@ public class Opcodes {
     public static final short RESTORE_FOREACH_GLOBAL_SCALAR = 563;
     public static final short REJECT_READONLY_CAPTURE_ASSIGNMENT = 564;
 
+    /** Reject localizing through an actual reference; symbolic names remain valid. */
+    public static final short REJECT_LOCALIZE_REFERENCE = 565;
+
     /**
      * Unpack binary data into a list of scalars.
      * Format: UNPACK rd argsReg ctx

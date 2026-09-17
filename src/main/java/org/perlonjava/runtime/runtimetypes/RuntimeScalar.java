@@ -36,6 +36,14 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  * scalar.
  */
 public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference, DynamicState {
+    /** Reject localizing a dereference whose source is an actual reference. */
+    public static void rejectLocalizeThroughReference(RuntimeScalar source) {
+        if (source != null && (source.type == RuntimeScalarType.UNDEF
+                || (source.type & RuntimeScalarType.REFERENCE_BIT) != 0)) {
+            throw new PerlCompilerException("Can't localize through a reference");
+        }
+    }
+
 
     /**
      * Deferred storage for a plain string being grown with repeated {@code .=}.
@@ -1827,6 +1835,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Types < TIED_SCALAR (0-8) never have REFERENCE_BIT (0x8000), so no
     // reference check is needed here — all reference types route to setLarge().
     public RuntimeScalar set(RuntimeScalar value) {
+        if (value != this) {
+            clearLastReadlineHandleIfGlobValue();
+        }
         boolean transferGrowingString = value != null && value != this
                 && value.transferableGrowingString;
         if (transferGrowingString) {
@@ -1983,8 +1994,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case TIED_SCALAR -> {
                 return this.tiedStore(value);
             }
-            case READONLY_SCALAR ->
-                    throw new PerlCompilerException("Modification of a read-only value attempted");
+            case READONLY_SCALAR -> {
+                if (this instanceof RuntimeScalarReadOnly readOnly) {
+                    readOnly.restoreForeachBeforeMutation();
+                }
+                throw new PerlCompilerException("Modification of a read-only value attempted");
+            }
         }
 
         // Reference types (or overwriting a reference) need refCount + IO tracking.
@@ -2505,10 +2520,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar set(int value) {
+        clearLastReadlineHandleIfGlobValue();
         if (this.type == TIED_SCALAR) {
             return this.tiedStore(new RuntimeScalar(value));
         }
         if (this.type == READONLY_SCALAR) {
+            if (this instanceof RuntimeScalarReadOnly readOnly) {
+                readOnly.restoreForeachBeforeMutation();
+            }
             throw new PerlCompilerException("Modification of a read-only value attempted");
         }
         this.type = RuntimeScalarType.INTEGER;
@@ -2600,11 +2619,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar set(String value) {
+        clearLastReadlineHandleIfGlobValue();
         growingString = null;
         if (this.type == TIED_SCALAR) {
             return this.tiedStore(new RuntimeScalar(value));
         }
         if (this.type == READONLY_SCALAR) {
+            if (this instanceof RuntimeScalarReadOnly readOnly) {
+                readOnly.restoreForeachBeforeMutation();
+            }
             throw new PerlCompilerException("Modification of a read-only value attempted");
         }
         if (value == null) {
@@ -2625,6 +2648,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     public RuntimeScalar set(RuntimeGlob value) {
         return set(new RuntimeScalar(value));
+    }
+
+    /** Clear Perl's implicit last-read handle when a scalar holding a glob is replaced. */
+    private void clearLastReadlineHandleIfGlobValue() {
+        if (!(value instanceof RuntimeGlob glob)) {
+            return;
+        }
+        RuntimeIO last = RuntimeIO.getLastAccessedHandle();
+        if (last != null && (glob.globName != null && glob.globName.equals(last.globName)
+                || glob.IO != null && glob.IO.value == last)) {
+            RuntimeIO.setLastAccessedHandle(null);
+        }
     }
 
     public RuntimeScalar set(RuntimeIO value) {
