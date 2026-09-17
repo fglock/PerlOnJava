@@ -1804,10 +1804,7 @@ public class BytecodeInterpreter {
                                     // establishes mortal marks, warning/hint stacks, args-stack state,
                                     // and void-result cleanup. Bypassing it keeps scope temporaries alive
                                     // in large-code interpreter fallbacks (Net::LDAP ref-loop cleanup).
-                                    result = DebugHooks.dispatchSubroutine(codeRef, callArgs, context);
-                                    if (result != null) {
-                                        // DB::sub performed the complete call, commonly with goto.
-                                    } else if (shareArgs) {
+                                    if (shareArgs) {
                                         result = RuntimeCode.apply(codeRef, callArgs, context);
                                     } else {
                                         result = RuntimeCode.apply(codeRef, "", callArgs, context);

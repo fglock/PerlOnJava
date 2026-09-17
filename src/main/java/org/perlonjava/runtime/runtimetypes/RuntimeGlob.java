@@ -163,6 +163,17 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         RuntimeGlob copy = new RuntimeGlob(this.globName);
         copy.slotSnapshot = true;
         copy.IO = this.IO;  // Share the current IO reference
+        // A copied typeglob retains the CODE slot that was visible when it was
+        // copied.  This matters for `my $glob = *name; undef *name; &$glob`.
+        // Snapshot the container as well as its CV. `undef *name` clears the
+        // live container in place, so retaining that same RuntimeScalar would
+        // lose the captured code along with the stash entry.
+        // Take the visible stash slot first. getGlobalCodeRef() can return a
+        // compile-time pinned placeholder, whereas a copied typeglob must
+        // capture the CV that is presently installed in its stash.
+        RuntimeScalar visibleCode = GlobalVariable.globalCodeRefs.get(this.globName);
+        copy.codeSlot = new RuntimeScalar(visibleCode != null
+                ? visibleCode : GlobalVariable.getGlobalCodeRef(this.globName));
         copy.scalarSlot = GlobalVariable.globalVariables.get(this.globName);
         if (copy.scalarSlot == null) {
             copy.scalarSlot = new RuntimeScalar();
@@ -182,6 +193,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             copy.hashSlotAliasesNamedGlob = true;
         }
         return copy;
+    }
+
+    /** Returns the CODE slot captured by a detached typeglob copy, if any. */
+    public RuntimeScalar getSavedCodeSlot() {
+        return slotSnapshot ? codeSlot : null;
     }
 
     /**

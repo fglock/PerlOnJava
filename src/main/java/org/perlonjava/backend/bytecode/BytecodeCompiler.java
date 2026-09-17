@@ -1700,12 +1700,21 @@ public class BytecodeCompiler implements Visitor {
             // Emit DEBUG opcode for debugger support (only when -d flag is active)
             // Skip debug opcodes for internal/infrastructure nodes (marked with skipDebug)
             if (DebugState.isDebugMode() && stmtTokenIndex >= 0) {
-                boolean skipDebug = (stmt instanceof AbstractNode an && an.getBooleanAnnotation("skipDebug"));
+                boolean skipDebug = (stmt instanceof AbstractNode an && an.getBooleanAnnotation("skipDebug"))
+                        // Package changes and named-sub declarations are
+                        // compile-time declarations, not executable COPs.
+                        || (stmt instanceof OperatorNode op && op.operator.equals("package"));
                 if (!skipDebug) {
-                    // Use getLineNumberAccurate() because subroutine bodies may be compiled
-                    // lazily after the main script, making cached line numbers unreliable
-                    int lineNumber = errorUtil.getLineNumberAccurate(stmtTokenIndex);
-                    int fileIdx = addToStringPool(sourceName);
+                    // Preserve #line mappings.  Command-line -d/-M switches
+                    // prepend synthetic imports bracketed by #line directives;
+                    // the debugger must report the logical program COP, not
+                    // the physical line after those imports.
+                    int debugTokenIndex = statementTokenIndex >= 0
+                            ? statementTokenIndex
+                            : stmtTokenIndex;
+                    var sourceLocation = errorUtil.getSourceLocationAccurate(debugTokenIndex);
+                    int lineNumber = sourceLocation.lineNumber();
+                    int fileIdx = addToStringPool(sourceLocation.fileName());
                     // Capture variable registry for debugger expression evaluation
                     // Deduplicate: reuse previous registry if scope unchanged (common case)
                     Map<String, Integer> currentRegistry = symbolTable.getVisibleVariableRegistry();

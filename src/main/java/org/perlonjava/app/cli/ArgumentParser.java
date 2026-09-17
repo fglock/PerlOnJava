@@ -604,11 +604,10 @@ public class ArgumentParser {
                     break;
                 case 'd':
                     // Run under debugger
-                    parsedArgs.runUnderDebugger = true;
-                    parsedArgs.useInterpreter = true;  // Force interpreter mode for debugging
-                    DebugState.setDebugMode(true);       // Enable debug opcode emission
-                    DebugState.current().single = true;  // Start in single-step mode
-                    DebugHooks.initializeDebugVariables();  // Initialize $DB::single etc.
+                    index = handleDebuggerSwitch(parsedArgs, index, j, arg);
+                    if (j + 1 < arg.length() && arg.charAt(j + 1) == ':') {
+                        return index;
+                    }
                     break;
                 case 't':
                     // Enable taint warnings
@@ -1107,6 +1106,7 @@ public class ArgumentParser {
         String moduleName = null;
         String moduleArgs = null;
         boolean useNo = false;
+        boolean rawModuleArgs = false;
 
         if (j < arg.length() - 1) {
             moduleName = arg.substring(j + 1);
@@ -1123,9 +1123,34 @@ public class ArgumentParser {
             moduleName = moduleName.substring(1); // Remove the dash
         }
 
+        // perl accepts a module argument separated from the module name by
+        // whitespace when the complete -M switch is passed as one argv item
+        // (for example, "-Mless ++INC->{q-Devel/_.pm-}").  Keep treating the
+        // first word as the module for validation, and hand the remainder to
+        // its import method exactly like the established =argument spelling.
+        int whitespaceIndex = -1;
+        for (int i = 0; i < moduleName.length(); i++) {
+            if (Character.isWhitespace(moduleName.charAt(i))) {
+                whitespaceIndex = i;
+                break;
+            }
+        }
+        if (whitespaceIndex >= 0) {
+            String whitespaceArgs = moduleName.substring(whitespaceIndex).trim();
+            moduleName = moduleName.substring(0, whitespaceIndex);
+            if (!whitespaceArgs.isEmpty()) {
+                moduleArgs = whitespaceArgs;
+                rawModuleArgs = true;
+            }
+        }
+
         // Check for '=' to handle arguments
         int equalsIndex = moduleName.indexOf('=');
         if (equalsIndex != -1) {
+            if (moduleArgs != null) {
+                System.err.println("Invalid module arguments with -" + switchChar + " option");
+                System.exit(1);
+            }
             moduleArgs = moduleName.substring(equalsIndex + 1);
             moduleName = moduleName.substring(0, equalsIndex);
         }
@@ -1139,7 +1164,8 @@ public class ArgumentParser {
             System.exit(1);
         }
 
-        parsedArgs.moduleUseStatements.add(new ModuleUseStatement(switchChar, moduleName, moduleArgs, useNo));
+        parsedArgs.moduleUseStatements.add(new ModuleUseStatement(
+                switchChar, moduleName, moduleArgs, useNo, rawModuleArgs));
         return index;
     }
 
@@ -1604,6 +1630,39 @@ public class ArgumentParser {
     }
 
     /**
+     * Handles Perl's {@code -d} switch and its optional {@code :module} suffix.
+     * A module named there is loaded as {@code Devel::module}; a leading minus
+     * selects {@code no Devel::module}, matching Perl's debugger invocation.
+     */
+    private static int handleDebuggerSwitch(CompilerOptions parsedArgs, int index, int j, String arg) {
+        parsedArgs.runUnderDebugger = true;
+        parsedArgs.useInterpreter = true;
+        DebugState.setDebugMode(true);
+        DebugState.current().single = true;
+        DebugHooks.initializeDebugVariables();
+
+        if (j + 1 >= arg.length() || arg.charAt(j + 1) != ':') {
+            return index;
+        }
+
+        String specification = arg.substring(j + 2);
+        boolean useNo = specification.startsWith("-");
+        if (useNo) {
+            specification = specification.substring(1);
+        }
+        int equalsIndex = specification.indexOf('=');
+        String module = equalsIndex >= 0 ? specification.substring(0, equalsIndex) : specification;
+        String moduleArgs = equalsIndex >= 0 ? specification.substring(equalsIndex + 1) : null;
+        if (module.isEmpty() || !module.matches("[A-Za-z_]\\w*(?:::[A-Za-z_]\\w*)*")) {
+            System.err.println("Invalid debugger module " + module + " with -d option");
+            System.exit(1);
+        }
+        parsedArgs.moduleUseStatements.add(new ModuleUseStatement('M', "Devel::" + module,
+                moduleArgs, useNo));
+        return index;
+    }
+
+    /**
      * Handles debug flags specified with the -D switch.
      *
      * @param args       The command-line arguments.
@@ -1637,18 +1696,27 @@ public class ArgumentParser {
         String moduleName;
         String args;
         boolean useNo; // New field to indicate 'use' or 'no'
+        boolean rawArgs;
 
         ModuleUseStatement(char type, String moduleName, String args, boolean useNo) {
+            this(type, moduleName, args, useNo, false);
+        }
+
+        ModuleUseStatement(char type, String moduleName, String args, boolean useNo, boolean rawArgs) {
             this.type = type;
             this.moduleName = moduleName;
             this.args = args;
             this.useNo = useNo;
+            this.rawArgs = rawArgs;
         }
 
         @Override
         public String toString() {
             String useOrNo = useNo ? "no" : "use";
             if (args != null) {
+                if (rawArgs) {
+                    return useOrNo + " " + moduleName + " " + args + ";";
+                }
                 // Split the arguments by comma and wrap each in quotes
                 String[] splitArgs = args.split(",");
                 StringBuilder formattedArgs = new StringBuilder();

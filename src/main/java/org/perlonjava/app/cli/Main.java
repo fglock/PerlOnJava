@@ -8,6 +8,7 @@ import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlExitException;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
+import org.perlonjava.runtime.runtimetypes.RuntimeGlob;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 
@@ -129,6 +130,12 @@ public class Main {
 
         try {
             PerlLanguageProvider.executePerlCode(parsedArgs, true);
+
+            if (parsedArgs.runUnderDebugger
+                    && RuntimeGlob.isGlobAssigned("DB::DB")
+                    && !GlobalVariable.isGlobalCodeRefDefined("DB::DB")) {
+                System.err.println("No DB::DB routine defined");
+            }
 
             int requestedThreadExit = PerlRuntime.current().threadRegistry()
                     .requestedProcessExitOr(Integer.MIN_VALUE);

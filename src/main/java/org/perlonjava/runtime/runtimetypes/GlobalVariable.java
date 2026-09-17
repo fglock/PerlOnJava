@@ -69,6 +69,14 @@ public class GlobalVariable {
     // Used to detect when built-in operators have been globally overridden
     static final Map<String, Boolean> globalGlobs =
             new CurrentRuntimePlainMap<>(state -> state.operatorOverrideGlobs());
+
+    /** Record that a named typeglob exists, even if its runtime assignment is unreachable. */
+    public static void markGlobAssigned(String globName) {
+        if (globName != null && !globName.isEmpty()) {
+            globalGlobs.put(globName, true);
+        }
+    }
+
     // Regular expression for regex variables like $main::1
     static Pattern regexVariablePattern = Pattern.compile("^main::(\\d+)$");
     static long stashEnumerationVersion() {
@@ -2007,6 +2015,10 @@ public class GlobalVariable {
         // For defines, always resolve through stash aliases: `*Dst:: = *Src::`
         // followed by `sub Dst::foo {}` should install the sub in Src::foo.
         String resolvedKey = resolveAliasedFqn(key);
+        // A named sub declaration creates its typeglob even when it is only a
+        // forward declaration.  Debugger startup distinguishes that glob from
+        // a defined CODE slot (notably for `sub DB::DB;`).
+        markGlobAssigned(resolvedKey);
         RuntimeScalar ref = globalCodeRefs.get(resolvedKey);
         if (ref == null) {
             RuntimeScalar pinned = pinnedCodeRefs().get(resolvedKey);

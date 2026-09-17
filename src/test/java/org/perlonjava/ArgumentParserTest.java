@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.perlonjava.app.cli.ArgumentParser;
 import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.app.scriptengine.PerlLanguageProvider;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -75,5 +76,29 @@ public class ArgumentParserTest {
         assertTrue(options.rudimentarySwitchParsing);
         assertTrue(options.processOnly);
         assertTrue(options.code.startsWith("while (<>) {"));
+    }
+
+    @Test
+    void debuggerModuleSwitchLoadsTheRequestedDevelModule() {
+        CompilerOptions options;
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            options = ArgumentParser.parseArguments(new String[] {
+                    "-d:switchd=a,42", "-e", "print qq(ok\\n);"
+            });
+        }
+
+        assertTrue(options.runUnderDebugger);
+        assertTrue(options.useInterpreter);
+        assertTrue(options.code.contains("use Devel::switchd (\"a\", \"42\");"));
+    }
+
+    @Test
+    void moduleSwitchAcceptsAWhitespaceSeparatedModuleArgument() {
+        CompilerOptions options = ArgumentParser.parseArguments(new String[] {
+                "-Mless ++INC->{q-Devel/_.pm-}", "-e", "print qq(ok\\n);"
+        });
+
+        assertTrue(options.code.contains("use less ++INC->{q-Devel/_.pm-};"));
     }
 }

@@ -273,6 +273,11 @@ public class WarnDie {
     }
 
     public static RuntimeBase warn(RuntimeBase message, RuntimeScalar where, String fileName, int lineNumber) {
+        // PERL5DB is debugger bootstrap code; Perl emits its implicit warning
+        // without the eval-string source suffix in this special context.
+        if (org.perlonjava.runtime.debugger.DebugHooks.isExecutingPerl5db()) {
+            where = new RuntimeScalar("");
+        }
         RuntimeScalar sig = getGlobalHash("main::SIG").get("__WARN__");
 
         // If message is empty or just whitespace, handle special cases
