@@ -419,6 +419,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             // retaining async initial-result wrapping from master.
             RuntimeList result = BytecodeInterpreter.execute(
                     this, args, effectiveContext, this.subName);
+            result = RuntimeCode.handleEscapingLoopControl(
+                    result, generatedClassConstructor, classAdjustBlock);
             if (isSortComparator && result instanceof RuntimeControlFlowList flow) {
                 throw new PerlCompilerException("Can't \"goto\" out of a pseudo block at "
                         + flow.marker.fileName + " line " + flow.marker.lineNumber + ".\n");

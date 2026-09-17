@@ -281,7 +281,7 @@ public class EmitVariable {
         }
 
         // Variable not found and not allowed under strict
-        throw new PerlCompilerException(
+        throw PerlCompilerException.withSourceLocation(
                 tokenIndex,
                 "Global symbol \""
                         + sigil + varName

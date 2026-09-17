@@ -5691,10 +5691,14 @@ public class BytecodeCompiler implements Visitor {
                     int rd = allocateOutputRegister();
                     int nameIdx = addToStringPool(subName);
                     int cacheIdx = addToConstantPool(new RuntimeScalar());
+                    Object classMethod = node.getAnnotation("directClassMethod");
+                    int classNameIdx = classMethod instanceof String className
+                            ? addToStringPool(className) : -1;
                     emit(Opcodes.DIRECT_NAMED_CODE_CALL);
                     emitReg(rd);
                     emit(nameIdx);
                     emit(cacheIdx);
+                    emit(classNameIdx);
                     lastResultReg = rd;
                     return;
                 }
@@ -6494,6 +6498,12 @@ public class BytecodeCompiler implements Visitor {
         subCode.futureAsyncAwaitSub = node.getBooleanAnnotation("futureAsyncAwaitSub");
         subCode.futureAsyncAwaitFutureClass =
                 (String) node.getAnnotation("futureAsyncAwaitFutureClass");
+        subCode.generatedClassConstructor = node.getBooleanAnnotation("generatedClassConstructor")
+                || (node.block instanceof AbstractNode blockNode
+                && blockNode.getBooleanAnnotation("generatedClassConstructor"));
+        subCode.classAdjustBlock = node.getBooleanAnnotation("classAdjustBlock")
+                || (node.block instanceof AbstractNode blockNode
+                && blockNode.getBooleanAnnotation("classAdjustBlock"));
         copySignatureMetadata(subCode, node.block);
         attachDeparseSourceSpan(subCode, node);
 

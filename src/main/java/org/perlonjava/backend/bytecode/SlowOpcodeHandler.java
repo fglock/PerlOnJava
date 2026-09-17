@@ -1556,9 +1556,16 @@ public class SlowOpcodeHandler {
         int rd = bytecode[pc++];
         int nameIdx = bytecode[pc++];
         int cacheIdx = bytecode[pc++];
+        int classNameIdx = bytecode[pc++];
         RuntimeScalar cached = (RuntimeScalar) code.constants[cacheIdx];
-        registers[rd] = GlobalVariable.getGlobalCodeRefForDirectCall(
-                code.stringPool[nameIdx], cached);
+        String name = code.stringPool[nameIdx];
+        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRefForDirectCall(name, cached);
+        if (classNameIdx >= 0 && codeRef.value instanceof RuntimeCode runtimeCode) {
+            runtimeCode.isClassMethod = true;
+            runtimeCode.declaringClass = code.stringPool[classNameIdx];
+            runtimeCode.referenceOriginFqn = name;
+        }
+        registers[rd] = codeRef;
         return pc;
     }
 

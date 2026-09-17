@@ -50,6 +50,7 @@ public final class GlobalRuntimeState {
     private final Set<String> declaredGlobalHashes = new HashSet<>();
     private final Set<String> classNames = new HashSet<>();
     private final Map<String, Set<String>> classFields = new HashMap<>();
+    private final Map<String, Set<String>> classParameters = new HashMap<>();
     private final Map<String, String> classParents = new HashMap<>();
     private final Map<String, String> packageVersions = new HashMap<>();
     private CustomClassLoader generatedClassLoader =
@@ -168,9 +169,16 @@ public final class GlobalRuntimeState {
         return classNames;
     }
 
+
+
     /** Field declarations keyed by their owning Perl class. */
     public Map<String, Set<String>> classFields() {
         return classFields;
+    }
+
+    /** Constructor parameter names keyed by their declaring Perl class. */
+    public Map<String, Set<String>> classParameters() {
+        return classParameters;
     }
 
     /** Parent declarations used by the class-field parser. */

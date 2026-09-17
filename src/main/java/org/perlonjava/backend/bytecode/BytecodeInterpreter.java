@@ -1447,7 +1447,7 @@ public class BytecodeInterpreter {
                             // TYPE AND REFERENCE OPERATORS (opcodes 102-105) - Delegated
                             // =================================================================
 
-                            case Opcodes.DEFINED, Opcodes.DEFINED_CODE, Opcodes.DEFINED_CODE_DYNAMIC, Opcodes.DEFINED_GLOB, Opcodes.REF, Opcodes.BLESS, Opcodes.ISA, Opcodes.SMARTMATCH, Opcodes.PROTOTYPE,
+                            case Opcodes.DEFINED, Opcodes.DEFINED_CODE, Opcodes.DEFINED_CODE_DYNAMIC, Opcodes.DEFINED_GLOB, Opcodes.REF, Opcodes.BLESS, Opcodes.BLESS_CLASS_INSTANCE, Opcodes.ISA, Opcodes.SMARTMATCH, Opcodes.PROTOTYPE,
                                  Opcodes.QUOTE_REGEX, Opcodes.QUOTE_REGEX_O -> {
                                 pc = executeTypeOps(opcode, bytecode, pc, registers, code);
                             }
@@ -3892,6 +3892,15 @@ public class BytecodeInterpreter {
                 RuntimeScalar ref = registers[refReg].scalar();
                 RuntimeScalar pkg = registers[pkgReg].scalar();
                 registers[rd] = ReferenceOperators.bless(ref, pkg);
+                return pc;
+            }
+            case Opcodes.BLESS_CLASS_INSTANCE -> {
+                int rd = bytecode[pc++];
+                int refReg = bytecode[pc++];
+                int pkgReg = bytecode[pc++];
+                RuntimeScalar ref = registers[refReg].scalar();
+                RuntimeScalar pkg = registers[pkgReg].scalar();
+                registers[rd] = ReferenceOperators.blessClassInstance(ref, pkg);
                 return pc;
             }
             case Opcodes.ISA -> {

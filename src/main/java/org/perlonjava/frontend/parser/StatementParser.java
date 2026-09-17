@@ -1250,6 +1250,23 @@ public class StatementParser {
 
         // Register this as a Perl 5.38+ class for proper stringification
         if (isClass) {
+            if (GlobalVariable.existsGlobalArray(packageName + "::ISA")
+                    && !GlobalVariable.getGlobalArray(packageName + "::ISA").elements.isEmpty()) {
+                throw PerlCompilerException.withSourceLocation(parser.tokenIndex,
+                        "Cannot create class " + packageName + " as it already has a non-empty @ISA",
+                        parser.ctx.errorUtil);
+            }
+            if (ClassRegistry.isClass(packageName)) {
+                // An eval may catch an incomplete class body's parse error before
+                // this declaration parser can roll back the provisional registry
+                // entry. Such a class never finished method registration, so it
+                // has no constructor and may be replaced by a complete class.
+                if (GlobalVariable.existsGlobalCodeRef(packageName + "::new")) {
+                    throw PerlCompilerException.withSourceLocation(parser.tokenIndex,
+                            "Cannot reopen existing class \"" + packageName + "\"", parser.ctx.errorUtil);
+                }
+                ClassRegistry.unregisterClass(packageName);
+            }
             ClassRegistry.registerClass(packageName);
         }
 
@@ -1284,7 +1301,18 @@ public class StatementParser {
             parseClassAttributes(parser, packageNode);
         }
 
-        BlockNode block = parseOptionalPackageBlock(parser, nameNode, packageNode);
+        BlockNode block;
+        try {
+            block = parseOptionalPackageBlock(parser, nameNode, packageNode);
+        } catch (PerlCompilerException error) {
+            // A class must be visible while its body is parsed so direct method
+            // calls receive class semantics.  Do not leave that provisional
+            // registration behind if an incomplete class body fails to parse.
+            if (isClass) {
+                ClassRegistry.unregisterClass(packageName);
+            }
+            throw error;
+        }
         if (block != null) return block;
 
         StatementResolver.parseStatementTerminator(parser);
@@ -1309,7 +1337,7 @@ public class StatementParser {
             if (deferredMethods != null) {
                 for (SubroutineNode method : deferredMethods) {
                     SubroutineParser.handleNamedSubWithFilter(parser, method.name, method.prototype,
-                            method.attributes, (BlockNode) method.block, false, null);
+                            method.attributes, (BlockNode) method.block, false, "method");
                 }
             }
 
@@ -1381,6 +1409,12 @@ public class StatementParser {
 
                 // Store parent class in annotations
                 packageNode.setAnnotation("parentClass", parentClass);
+
+                if (!ClassRegistry.isClass(parentClass)) {
+                    throw PerlCompilerException.withSourceLocation(packageNode.getIndex(),
+                            "Class :isa attribute requires a class but \"" + parentClass + "\" is not one",
+                            parser.ctx.errorUtil);
+                }
 
                 // Register in FieldRegistry for field inheritance tracking
                 // We'll register this after we know the class name
@@ -1468,8 +1502,10 @@ public class StatementParser {
 
             // Set flag if we're entering a class block
             boolean wasInClassBlock = parser.isInClassBlock;
+            String previousClassName = parser.currentClassName;
             if (isClass) {
                 parser.isInClassBlock = true;
+                parser.currentClassName = nameNode.name;
             }
 
             BlockNode block;
@@ -1490,6 +1526,7 @@ public class StatementParser {
             } finally {
                 // Always restore the isInClassBlock flag
                 parser.isInClassBlock = wasInClassBlock;
+                parser.currentClassName = previousClassName;
             }
 
             // Mark as scoped so BytecodeCompiler emits PUSH_PACKAGE (not SET_PACKAGE)
@@ -1532,7 +1569,7 @@ public class StatementParser {
                 if (deferredMethods != null) {
                     for (SubroutineNode method : deferredMethods) {
                         SubroutineParser.handleNamedSubWithFilter(parser, method.name, method.prototype,
-                                method.attributes, (BlockNode) method.block, false, null);
+                                method.attributes, (BlockNode) method.block, false, "method");
                     }
                 }
 

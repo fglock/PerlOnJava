@@ -164,6 +164,8 @@ public class SpecialBlockParser {
                     block,
                     false,
                     parser.tokenIndex);
+            adjustSub.setAnnotation("classAdjustBlock", Boolean.TRUE);
+            block.setAnnotation("classAdjustBlock", Boolean.TRUE);
 
             // Store in parser's ADJUST blocks list
             parser.classAdjustBlocks.add(adjustSub);
@@ -493,6 +495,17 @@ public class SpecialBlockParser {
             }
             if (message == null) {
                 message = t.getClass().getSimpleName() + " during " + blockPhase;
+            }
+            if ("BEGIN".equals(blockPhase) && parser.currentClassName != null
+                    && message.contains("Can't locate object method \"new\" via package \""
+                    + parser.currentClassName + "\"")) {
+                ErrorMessageUtil.SourceLocation loc =
+                        parser.ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
+                String location = " at " + loc.fileName() + " line " + loc.lineNumber() + ".\n";
+                throw new PerlCompilerException(
+                        "Cannot create an object of incomplete class \"" + parser.currentClassName
+                                + "\"" + location
+                                + "BEGIN failed--compilation aborted" + location);
             }
             if (!message.endsWith("\n")) {
                 message += "\n";

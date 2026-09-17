@@ -1409,6 +1409,13 @@ public class Disassemble {
                         sb.append("BLESS r").append(rd).append(" = bless(r").append(refReg)
                                 .append(", r").append(packageReg).append(")\n");
                         break;
+                    case Opcodes.BLESS_CLASS_INSTANCE:
+                        rd = interpretedCode.bytecode[pc++];
+                        int classRefReg = interpretedCode.bytecode[pc++];
+                        int classPackageReg = interpretedCode.bytecode[pc++];
+                        sb.append("BLESS_CLASS_INSTANCE r").append(rd).append(" = bless(r").append(classRefReg)
+                                .append(", r").append(classPackageReg).append(")\n");
+                        break;
                     case Opcodes.ISA:
                         rd = interpretedCode.bytecode[pc++];
                         int objReg = interpretedCode.bytecode[pc++];
@@ -1987,9 +1994,14 @@ public class Disassemble {
                         int directCallRd = interpretedCode.bytecode[pc++];
                         int directCallNameIdx = interpretedCode.bytecode[pc++];
                         int directCallCacheIdx = interpretedCode.bytecode[pc++];
+                        int directCallClassNameIdx = interpretedCode.bytecode[pc++];
                         sb.append("DIRECT_NAMED_CODE_CALL r").append(directCallRd)
                                 .append(" = &").append(interpretedCode.stringPool[directCallNameIdx])
-                                .append(" cache=").append(directCallCacheIdx).append("\n");
+                                .append(" cache=").append(directCallCacheIdx);
+                        if (directCallClassNameIdx >= 0) {
+                            sb.append(" class=").append(interpretedCode.stringPool[directCallClassNameIdx]);
+                        }
+                        sb.append("\n");
                         break;
                     case Opcodes.PUSH_LABELED_BLOCK: {
                         int labelIdx = interpretedCode.bytecode[pc++];

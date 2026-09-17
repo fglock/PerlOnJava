@@ -7,6 +7,7 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlJavaUnimplementedException;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
@@ -83,9 +84,11 @@ public class CoreOperatorResolver {
             }
             case "__CLASS__" -> {
                 handleEmptyParentheses(parser);
-                // Return the compile-time package name
-                // TODO: Implement proper runtime class detection that works with field defaults
-                // and ADJUST blocks without causing symbol table errors
+                if (!parser.isInMethod && !parser.isInFieldInitializer) {
+                    throw PerlCompilerException.withSourceLocation(sourceIndex,
+                            "Cannot use __CLASS__ outside of a method or field initializer expression",
+                            parser.ctx.errorUtil);
+                }
                 yield new StringNode(parser.ctx.symbolTable.getCurrentPackage(), parser.tokenIndex);
             }
             case "__SUB__", "time", "times", "wait", "wantarray" -> {

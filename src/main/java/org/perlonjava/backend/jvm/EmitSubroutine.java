@@ -452,6 +452,24 @@ public class EmitSubroutine {
                         "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                         false);
             }
+            if (node.getBooleanAnnotation("generatedClassConstructor")
+                    || (node.block instanceof AbstractNode blockNode
+                    && blockNode.getBooleanAnnotation("generatedClassConstructor"))) {
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "markGeneratedClassConstructor",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
+            }
+            if (node.getBooleanAnnotation("classAdjustBlock")
+                    || (node.block instanceof AbstractNode blockNode
+                    && blockNode.getBooleanAnnotation("classAdjustBlock"))) {
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "markClassAdjustBlock",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
+            }
             if (node.getAnnotation("lexicalSubDisplayName") instanceof String lexicalName) {
                 mv.visitLdcInsn(lexicalName);
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
