@@ -320,6 +320,16 @@ public class Parser {
         Node ast;
         try {
             ast = ParseBlock.parseBlock(this);
+        } catch (PerlCompilerException | PerlParserException exception) {
+            // Recoverable diagnostics (such as strict vars) are normally
+            // reported after parsing.  If a later syntax error aborts parsing,
+            // retain those earlier diagnostics ahead of the terminal error,
+            // matching Perl's multi-error compile output.
+            if (!deferredDiagnostics.isEmpty()) {
+                throw new PerlCompilerException(
+                        String.join("", deferredDiagnostics) + exception.getMessage());
+            }
+            throw exception;
         } finally {
             compilationState.unitcheckQueueStack.get().pop();
         }
