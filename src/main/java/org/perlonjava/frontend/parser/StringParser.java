@@ -1186,6 +1186,10 @@ public class StringParser {
         if (runawayMultilineQuote != null) {
             throw runawayMultilineQuote;
         }
+        PerlCompilerException runawayMultilineRegex = runawayMultilineRegexDelimiterError(parser, rawStr, operator);
+        if (runawayMultilineRegex != null) {
+            throw runawayMultilineRegex;
+        }
         PerlCompilerException malformedAttributeQuote = malformedAttributeQuoteError(parser, rawStr);
         if (malformedAttributeQuote != null) {
             throw malformedAttributeQuote;
@@ -1281,6 +1285,66 @@ public class StringParser {
                 + "  (Might be a runaway multi-line " + delimiter + delimiter
                 + " string starting on line " + rawStr.sourceLine + ")\n";
         return new PerlCompilerException(message);
+    }
+
+    /**
+     * Perl diagnoses an unclosed character class that crosses a quote-like
+     * regex delimiter newline as a runaway delimiter before compiling the
+     * pattern.  Preserve that source-level diagnostic precedence.
+     */
+    private static PerlCompilerException runawayMultilineRegexDelimiterError(
+            Parser parser, ParsedString rawStr, String operator) {
+        if (!(operator.equals("m") || operator.equals("qr") || operator.equals("/"))
+                || rawStr.buffers.isEmpty()) {
+            return null;
+        }
+        String pattern = rawStr.buffers.getFirst();
+        int newline = pattern.indexOf('\n');
+        int openingBracket = pattern.lastIndexOf('[', newline);
+        if (newline < 0 || openingBracket < 0 || !hasUnclosedCharacterClass(pattern)) {
+            return null;
+        }
+
+        int sourceNewline = rawStr.index;
+        while (sourceNewline < rawStr.next
+                && parser.tokens.get(sourceNewline).type != LexerTokenType.NEWLINE) {
+            sourceNewline++;
+        }
+        if (sourceNewline >= rawStr.next) return null;
+        int afterNewline = sourceNewline + 1;
+        while (afterNewline < parser.tokens.size()
+                && parser.tokens.get(afterNewline).type == LexerTokenType.WHITESPACE) {
+            afterNewline++;
+        }
+        if (afterNewline >= parser.tokens.size()) return null;
+
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(afterNewline);
+        int previewEnd = Math.min(pattern.length(), newline + 3);
+        String near = pattern.substring(openingBracket, previewEnd);
+        String delimiter = Character.toString(rawStr.startDelim);
+        String message = "syntax error at " + location.fileName() + " line "
+                + location.lineNumber() + ", near \"" + near + "\"\n"
+                + "  (Might be a runaway multi-line " + delimiter + delimiter
+                + " string starting on line " + rawStr.sourceLine + ")\n";
+        return new PerlCompilerException(message);
+    }
+
+    private static boolean hasUnclosedCharacterClass(String pattern) {
+        boolean escaped = false;
+        boolean inClass = false;
+        for (int index = 0; index < pattern.length(); index++) {
+            char ch = pattern.charAt(index);
+            if (escaped) {
+                escaped = false;
+            } else if (ch == '\\') {
+                escaped = true;
+            } else if (ch == '[') {
+                inClass = true;
+            } else if (ch == ']') {
+                inClass = false;
+            }
+        }
+        return inClass;
     }
 
     /**
