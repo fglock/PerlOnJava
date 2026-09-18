@@ -639,6 +639,37 @@ public class Parser {
                             : value <= 0xFB ? 5
                             : value <= 0xFD ? 6
                             : value == 0xFE ? 7 : 13;
+                    int followingByte = -1;
+                    outer:
+                    for (int j = i; j < tokens.size(); j++) {
+                        String text = tokens.get(j).text;
+                        int start = j == i ? offset + 1 : 0;
+                        for (int k = start; k < text.length(); k++) {
+                            followingByte = text.charAt(k);
+                            break outer;
+                        }
+                    }
+                    if (followingByte >= 0
+                            && (followingByte < 0x80 || followingByte > 0xBF)) {
+                        String sequence = byteText + String.format("\\x%02x", followingByte);
+                        detail = "Malformed UTF-8 character: " + sequence
+                                + " (unexpected non-continuation byte 0x"
+                                + String.format("%02x", followingByte)
+                                + ", immediately after start byte 0x"
+                                + String.format("%02x", value)
+                                + "; need " + needed + " bytes, got 1)";
+                        String at = " at " + location.fileName() + " line "
+                                + location.lineNumber() + ".";
+                        String overlong = (value == 0xC0 || value == 0xC1)
+                                ? "\nMalformed UTF-8 character: " + byteText
+                                        + " (any UTF-8 sequence that starts with \"" + byteText
+                                        + "\" is overlong which can and should be represented with a different, shorter sequence)"
+                                : "";
+                        String supplementalDiagnostic = overlong.isEmpty()
+                                ? "" : overlong + at;
+                        throw new PerlCompilerException(detail + at + supplementalDiagnostic + "\n"
+                                + "Malformed UTF-8 character (fatal)" + at);
+                    }
                     int available = 1;
                     for (int j = i; j < tokens.size(); j++) {
                         String text = tokens.get(j).text;
