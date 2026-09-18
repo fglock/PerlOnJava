@@ -6,7 +6,7 @@ use B::Deparse;
 
 plan skip_all => 'PerlOnJava compiler-retained source extension'
     unless B::Deparse->can('_extract_source_visible_block');
-plan tests => 8;
+plan tests => 10;
 
 my $deparse = B::Deparse->new;
 my $one = $deparse->coderef2text(sub { 1 });
@@ -30,3 +30,13 @@ my $same_two = $deparse->coderef2text($same_line_two);
 like($same_one, qr/use warnings;\n    use strict;\n    5;/, 'source-visible anon sub finds first same-line body');
 like($same_two, qr/use warnings;\n    use strict;\n    6;/, 'source-visible anon sub finds second same-line body');
 isnt($same_one, $same_two, 'same-line anon sub bodies deparse distinctly');
+
+sub captured_closure {
+    my ($value) = @_;
+    return sub { $value };
+}
+
+my $captured_one = captured_closure(7);
+my $captured_two = captured_closure(8);
+is($captured_one->(), 7, 'first captured closure retains its value');
+is($captured_two->(), 8, 'second captured closure retains its value');

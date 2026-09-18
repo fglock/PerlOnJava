@@ -195,6 +195,27 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                            List<Map<String, OperatorNode>> evalSiteLexicalSubroutineBindings,
                            List<int[]> evalSitePragmaFlags,
                            String warningBitsString) {
+        this(bytecode, constants, stringPool, maxRegisters, capturedVars,
+                sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
+                strictOptions, featureFlags, warningFlags, compilePackage,
+                evalSiteRegistries, evalSiteLexicalSubroutineBindings, evalSitePragmaFlags,
+                warningBitsString, false, null);
+    }
+
+    private InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
+                            int maxRegisters, RuntimeBase[] capturedVars,
+                            String sourceName, int sourceLine,
+                            TreeMap<Integer, Integer> pcToTokenIndex,
+                            Map<String, Integer> variableRegistry,
+                            ErrorMessageUtil errorUtil,
+                            int strictOptions, int featureFlags, BitSet warningFlags,
+                            String compilePackage,
+                            List<Map<String, Integer>> evalSiteRegistries,
+                            List<Map<String, OperatorNode>> evalSiteLexicalSubroutineBindings,
+                            List<int[]> evalSitePragmaFlags,
+                            String warningBitsString,
+                            boolean reuseDeparseSourceText,
+                            String inheritedDeparseSourceText) {
         super(null, new java.util.ArrayList<>());
         this.bytecode = bytecode;
         this.constants = constants;
@@ -220,9 +241,11 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         }
         this.cvStartFile = sourceName;
         this.cvStartLine = sourceLine;
-        this.deparseSourceText = shouldKeepRuntimeDeparseSource(sourceName)
-                ? sourceTextFromErrorUtil(errorUtil)
-                : null;
+        this.deparseSourceText = reuseDeparseSourceText
+                ? inheritedDeparseSourceText
+                : shouldKeepRuntimeDeparseSource(sourceName)
+                        ? sourceTextFromErrorUtil(errorUtil)
+                        : null;
         int strictAll = Strict.HINT_STRICT_REFS | Strict.HINT_STRICT_SUBS | Strict.HINT_STRICT_VARS;
         if ((strictOptions & strictAll) == strictAll) {
             this.deparseFlags |= RuntimeCode.DEPARSE_FLAG_STRICT;
@@ -540,7 +563,9 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                 this.evalSiteRegistries,
                 this.evalSiteLexicalSubroutineBindings,
                 this.evalSitePragmaFlags,
-                this.warningBitsString
+                this.warningBitsString,
+                true,
+                this.deparseSourceText
         );
         copy.prototype = this.prototype;
         copy.isConstantCv = this.isConstantCv;

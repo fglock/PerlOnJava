@@ -13,6 +13,9 @@ priorities and future plans.
 - Classify scalars above Unicode's ceiling as `Cn`/`Unassigned` in regex
   properties, including Perl-compatible warnings and global matching.
 
+- Reuse interpreter deparse source text when cloning closures, substantially
+  improving closure-heavy JSON workloads.
+
 - Run Gradle builds without a persistent daemon so worker JVMs inherit the
   launcher's process priority.
 
