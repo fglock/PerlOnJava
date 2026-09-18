@@ -1331,20 +1331,21 @@ public class Variable {
         if (parser.tokenIndex < parser.tokens.size()) {
             var currentToken = parser.tokens.get(parser.tokenIndex);
             if (currentToken.text.equals("<")) {
-                // Look ahead to see if this is <<IDENTIFIER (heredoc) vs <...> (angle brackets)
-                if (parser.tokenIndex + 1 < parser.tokens.size()) {
-                    var nextToken = parser.tokens.get(parser.tokenIndex + 1);
-                    // If the next token after < is an identifier (not another <), this could be <<IDENTIFIER
-                    // We need to check if this pattern matches heredoc syntax
+                // Look ahead for <<IDENTIFIER. The lexer keeps the two angle
+                // brackets as separate tokens in this braced interpolation.
+                int identifierIndex = parser.tokenIndex + 1;
+                if (identifierIndex < parser.tokens.size()
+                        && parser.tokens.get(identifierIndex).text.equals("<")) {
+                    identifierIndex++;
+                }
+                if (identifierIndex < parser.tokens.size()) {
+                    var nextToken = parser.tokens.get(identifierIndex);
                     if (nextToken.type == LexerTokenType.IDENTIFIER) {
                         // This looks like <<IDENTIFIER - treat as heredoc in ${<<END} context
 
-                        // Skip the < token
-                        parser.tokenIndex++;
-
                         // Get the identifier
                         String identifier = nextToken.text;
-                        parser.tokenIndex++; // Skip identifier
+                        parser.tokenIndex = identifierIndex + 1;
 
                         // Create a heredoc node and add it to the queue for later processing
                         OperatorNode heredocNode = new OperatorNode("HEREDOC", null, parser.tokenIndex);
@@ -1354,7 +1355,10 @@ public class Variable {
 
                         // Consume the closing brace
                         if (!TokenUtils.peek(parser).text.equals("}")) {
-                            throw new PerlCompilerException(parser.tokenIndex, "Missing closing brace in variable interpolation", parser.ctx.errorUtil);
+                            throw PerlCompilerException.withSourceLocation(
+                                    currentToken.index,
+                                    "Can't find string terminator \"" + identifier + "\" anywhere before EOF",
+                                    parser.ctx.errorUtil);
                         }
                         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
