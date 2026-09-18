@@ -1125,8 +1125,11 @@ public class StringParser {
                     rawStr.endDelim,
                     ' ', ' '
             );
-            // searchNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, searchParsed, true, false);
-            searchNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, searchParsed, false, false, false);
+            // Transliteration lists use double-quoted escape rules but do not
+            // interpolate variables.  Preserving every escape here lets an
+            // invalid \\o reach range compilation instead of reporting Perl's
+            // braced-octal diagnostic at the source escape.
+            searchNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, searchParsed, true, false, false);
         }
 
         // Same logic for replacement list
@@ -1142,8 +1145,7 @@ public class StringParser {
                     rawStr.secondBufferEndDelim,
                     ' ', ' '
             );
-            // replacementNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, replaceParsed, true, false);
-            replacementNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, replaceParsed, false, false, false);
+            replacementNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, replaceParsed, true, false, false);
         }
 
         Node modifierNode = new StringNode(modifiers, rawStr.index);

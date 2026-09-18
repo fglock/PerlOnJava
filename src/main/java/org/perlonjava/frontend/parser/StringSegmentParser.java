@@ -1698,7 +1698,7 @@ public abstract class StringSegmentParser {
             }
 
             if (chr.isEmpty()) {
-                parser.throwError("Missing right brace on \\o{}");
+                throwOctalEscapeDiagnostic("Missing right brace on \\o{}");
             }
 
             // Skip trailing non-digits
@@ -1709,7 +1709,7 @@ public abstract class StringSegmentParser {
 
             TokenUtils.consumeChar(parser);
         } else {
-            parser.throwError("Missing braces on \\o{}");
+            throwOctalEscapeDiagnostic("Missing braces on \\o{}");
         }
 
         if (!octStr.isEmpty()) {
@@ -1950,6 +1950,13 @@ public abstract class StringSegmentParser {
                     + location.fileName() + " line " + location.lineNumber() + ".\n");
         }
         return codePoint.longValueExact();
+    }
+
+    /** Render braced-octal syntax failures as quoted-string diagnostics. */
+    private void throwOctalEscapeDiagnostic(String diagnostic) {
+        var location = ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
+        throw new PerlParserException(diagnostic + " at " + location.fileName()
+                + " line " + location.lineNumber() + ", within string\n");
     }
 
     private void throwMissingNamedCharacterBraceDiagnostic() {
