@@ -8,6 +8,7 @@ import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlJavaUnimplementedException;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.PerlParserException;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
@@ -140,6 +141,11 @@ public class CoreOperatorResolver {
             // JVM cannot safely dump its own process, but it must preserve the
             // observable failure for an unresolved computed label.
             case "dump" -> {
+                if (!coreQualified) {
+                    var location = parser.ctx.errorUtil.getSourceLocationAccurate(sourceIndex);
+                    throw new PerlParserException("dump() must be written as CORE::dump() as of Perl 5.30 at "
+                            + location.fileName() + " line " + location.lineNumber() + ".\n");
+                }
                 ListNode labels = ListParser.parseZeroOrMoreList(parser, 0,
                         false, true, false, false);
                 Node label = labels.elements.isEmpty()
