@@ -1182,6 +1182,10 @@ public class StringParser {
         rawStr = parseRawStrings(parser, parser.ctx, parser.tokens, parser.tokenIndex, stringParts, isRegex);
         parser.tokenIndex = rawStr.next;
 
+        PerlCompilerException runawayMultilineQuote = runawayMultilineQuoteError(parser, rawStr, operator);
+        if (runawayMultilineQuote != null) {
+            throw runawayMultilineQuote;
+        }
         PerlCompilerException malformedAttributeQuote = malformedAttributeQuoteError(parser, rawStr);
         if (malformedAttributeQuote != null) {
             throw malformedAttributeQuote;
@@ -1246,6 +1250,37 @@ public class StringParser {
             list.elements.add(new StringNode(rawStr.buffers.get(i), rawStr.index));
         }
         return new OperatorNode(operator, list, rawStr.index);
+    }
+
+    /**
+     * When a quote-like delimiter is repeated at the start of the next line,
+     * Perl treats the following word as evidence of a runaway quote instead of
+     * continuing with the ordinary missing-operator recovery.
+     */
+    private static PerlCompilerException runawayMultilineQuoteError(
+            Parser parser, ParsedString rawStr, String operator) {
+        if (!operator.equals("q") || rawStr.buffers.size() != 1
+                || !rawStr.buffers.get(0).equals("\n")) {
+            return null;
+        }
+        int next = rawStr.next;
+        while (next < parser.tokens.size()
+                && parser.tokens.get(next).type == LexerTokenType.WHITESPACE) {
+            next++;
+        }
+        if (next >= parser.tokens.size()
+                || parser.tokens.get(next).type != LexerTokenType.IDENTIFIER) {
+            return null;
+        }
+
+        LexerToken trailing = parser.tokens.get(next);
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(next);
+        String delimiter = Character.toString(rawStr.startDelim);
+        String message = "syntax error at " + location.fileName() + " line "
+                + location.lineNumber() + ", near \"" + delimiter + " " + trailing.text + "\"\n"
+                + "  (Might be a runaway multi-line " + delimiter + delimiter
+                + " string starting on line " + rawStr.sourceLine + ")\n";
+        return new PerlCompilerException(message);
     }
 
     /**
