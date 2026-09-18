@@ -79,7 +79,16 @@ public class ParseHeredoc {
         node.setAnnotation("delimiter", delimiter);
         if (identifier.isEmpty()) {
             // Consume identifier string using `q()`
-            Node identifierNode = parseRawString(parser, "q");
+            Node identifierNode;
+            try {
+                identifierNode = parseRawString(parser, "q");
+            } catch (PerlCompilerException e) {
+                if (e.getMessage() != null && e.getMessage().startsWith("Can't find string terminator")) {
+                    throw PerlCompilerException.withSourceLocation(parser.tokenIndex,
+                            "Unterminated delimiter for here document", parser.ctx.errorUtil);
+                }
+                throw e;
+            }
             if (identifierNode instanceof StringNode stringNode) {
                 identifier = stringNode.value;
             } else {

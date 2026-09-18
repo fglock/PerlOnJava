@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Improve Perl-compatible compiler diagnostics for unterminated quoted strings
+  and here-document delimiters.
+
 - Restore `local` compatibility for tied hash and array elements, sparse
   arrays, magic stashes, implicit `$_` foreach aliases (including early
   return), and localized regex captures on both execution backends.
