@@ -248,6 +248,10 @@ public class NumberParser {
      * Unified parsing method for special number formats (binary, octal, hex)
      */
     private static Node parseSpecialNumber(Parser parser, String initialPart, NumberFormat format) {
+        if (!containsDigitForFormat(initialPart, format)) {
+            deferNoDigitsForLiteral(parser, initialPart, format);
+            return new NumberNode("0", parser.tokenIndex);
+        }
         StringBuilder numberStr = new StringBuilder();
         boolean hasFractionalPart = false;
         String exponentStr = "";
@@ -433,6 +437,41 @@ public class NumberParser {
             parser.throwError("Invalid " + format.name + " number");
         }
         return null;
+    }
+
+    private static boolean containsDigitForFormat(String text, NumberFormat format) {
+        String digits = text.replace("_", "");
+        for (int index = 0; index < digits.length(); index++) {
+            if (format.digitValidator.test(Character.toString(digits.charAt(index)))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void deferNoDigitsForLiteral(Parser parser, String initialPart, NumberFormat format) {
+        int prefixIndex = Math.max(0, parser.tokenIndex - 2);
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(prefixIndex);
+        String prefix = format == HEX_FORMAT ? "0x" : format == BINARY_FORMAT ? "0b" : "0";
+        StringBuilder near = new StringBuilder(prefix).append(initialPart);
+        if (parser.tokenIndex < parser.tokens.size()) {
+            LexerToken next = parser.tokens.get(parser.tokenIndex);
+            if ((next.type == LexerTokenType.WHITESPACE && initialPart.isEmpty())
+                    || next.text.equals(";")) {
+                near.append(next.text);
+            }
+        }
+        parser.deferDiagnostic("No digits found for " + format.name + " literal at "
+                + location.fileName() + " line " + location.lineNumber() + ", near \""
+                + near + "\"\n");
+        while (parser.tokenIndex < parser.tokens.size()) {
+            LexerToken token = parser.tokens.get(parser.tokenIndex);
+            if (token.type == LexerTokenType.NEWLINE || token.type == LexerTokenType.EOF
+                    || token.text.equals(";")) {
+                return;
+            }
+            parser.tokenIndex++;
+        }
     }
 
     // Helper methods
