@@ -1356,10 +1356,14 @@ public class Variable {
 
                         // Consume the closing brace
                         if (!TokenUtils.peek(parser).text.equals("}")) {
+                            String message = "Can't find string terminator \"" + identifier
+                                    + "\" anywhere before EOF";
+                            if (parser.baseLineNumber > 0 && parser.baseSourceFileName != null) {
+                                throw new PerlCompilerException(message + " at " + parser.baseSourceFileName
+                                        + " line " + parser.sourceLineAt(heredocTokenIndex) + ".\n");
+                            }
                             throw PerlCompilerException.withSourceLocation(
-                                    heredocTokenIndex,
-                                    "Can't find string terminator \"" + identifier + "\" anywhere before EOF",
-                                    parser.ctx.errorUtil);
+                                    heredocTokenIndex, message, parser.ctx.errorUtil);
                         }
                         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
