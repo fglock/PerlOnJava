@@ -317,6 +317,12 @@ public class FormatParser {
      * @return FormatLine representing the parsed line
      */
     private static FormatLine parseFormatLine(Parser parser, String line, int tokenIndex) {
+        if (line.trim().equals(".//")) {
+            var location = parser.ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
+            throw new PerlCompilerException("syntax error at " + location.fileName()
+                    + " line " + location.lineNumber() + ", near \".\"\n");
+        }
+
         // Comment lines start with #
         if (line.trim().startsWith("#")) {
             String comment = line.trim().substring(1).trim();
