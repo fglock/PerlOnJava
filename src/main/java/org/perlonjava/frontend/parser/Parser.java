@@ -389,6 +389,11 @@ public class Parser {
         }
     }
 
+    /** Number of recoverable compile diagnostics accumulated so far. */
+    public int deferredDiagnosticCount() {
+        return deferredDiagnostics.size();
+    }
+
     /** Record a diagnostic whose source excerpt must end at a trailing comma. */
     public void deferErrorAtTokenWithoutTrailingCommaWhitespace(int index, String message) {
         String diagnostic = ctx.errorUtil.errorMessage(index, message);
