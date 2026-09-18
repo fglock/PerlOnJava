@@ -10,6 +10,9 @@ priorities and future plans.
   arrays, magic stashes, implicit `$_` foreach aliases (including early
   return), and localized regex captures on both execution backends.
 
+- Classify scalars above Unicode's ceiling as `Cn`/`Unassigned` in regex
+  properties, including Perl-compatible warnings and global matching.
+
 - Run Gradle builds without a persistent daemon so worker JVMs inherit the
   launcher's process priority.
 
