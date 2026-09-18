@@ -22,6 +22,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
+import org.perlonjava.runtime.runtimetypes.WarningFlags;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.regex.RegexMarkers;
 import org.perlonjava.runtime.regex.RegexQuoteMeta;
@@ -116,7 +117,10 @@ public class StringParser {
             }
             return extraPair;
         }
-        if (ctx.symbolTable.isWarningCategoryEnabled("deprecated::delimiter_will_be_paired")) {
+        // This compatibility notice is on by default in Perl.  A lexical
+        // `no warnings 'deprecated'` must still suppress it.
+        if (!WarningFlags.areWarningsForcedOff()
+                && !ctx.symbolTable.isWarningCategoryDisabled("deprecated::delimiter_will_be_paired")) {
             WarnDie.warn(new RuntimeScalar("Use of '" + delimiter + "' is deprecated as a string delimiter"),
                     new RuntimeScalar(ctx.errorUtil.warningLocation(0)));
         }
