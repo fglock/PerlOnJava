@@ -357,6 +357,11 @@ public class Parser {
         deferredDiagnostics.add(ctx.errorUtil.errorMessage(index, message));
     }
 
+    /** Record an already formatted recoverable diagnostic. */
+    public void deferDiagnostic(String diagnostic) {
+        deferredDiagnostics.add(diagnostic);
+    }
+
     /** Record a diagnostic whose source excerpt must end at a trailing comma. */
     public void deferErrorAtTokenWithoutTrailingCommaWhitespace(int index, String message) {
         String diagnostic = ctx.errorUtil.errorMessage(index, message);

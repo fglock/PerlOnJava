@@ -44,6 +44,23 @@ is($@,
    'leading comma in a signature is a syntax error');
 
 SKIP: {
+    skip 'Perl 5.40 changed this signature recovery diagnostic', 3 if $] < 5.040;
+    eval "#line 1 signature_slurpy_diagnostic_span.t\nsub bad_hash (\$#foo\na) { }";
+    is($@,
+       "'#' not allowed immediately following a sigil in a subroutine signature at signature_slurpy_diagnostic_span.t line 1, near \"(\$\"\n"
+       . "syntax error at signature_slurpy_diagnostic_span.t line 2, near \"a\"\n",
+       'a hash marker immediately after a signature sigil is recovered with both diagnostics');
+
+    for my $sigil ('@', '%') {
+        eval "#line 1 signature_slurpy_diagnostic_span.t\nsub bad_hash (${sigil}#foo\na) { }";
+        is($@,
+           "'#' not allowed immediately following a sigil in a subroutine signature at signature_slurpy_diagnostic_span.t line 1, near \"(${sigil}\"\n"
+           . "syntax error at signature_slurpy_diagnostic_span.t line 2, near \"a\"\n",
+           "a hash marker immediately after ${sigil} in a signature is recovered with both diagnostics");
+    }
+}
+
+SKIP: {
     skip 'named parameters require Perl 5.40', 9 if $] < 5.040;
 
     eval "#line 1 signature_slurpy_diagnostic_span.t\n"
@@ -76,12 +93,14 @@ SKIP: {
        "Mandatory parameter follows optional parameter at signature_slurpy_diagnostic_span.t line 1, near \":\$y) \"\n",
        'mandatory named parameters cannot follow optional positional ones');
 
-    sub named_missing (:$alpha, :$beta) { }
+    eval 'sub named_missing (:$alpha, :$beta) { }';
+    die $@ if $@;
     eval { named_missing() };
     like($@, qr/Missing required named parameters 'alpha', 'beta'/,
          'named signatures report all missing required parameters');
 
-    sub named_extra (:$alpha) { }
+    eval 'sub named_extra (:$alpha) { }';
+    die $@ if $@;
     eval { named_extra(alpha => 1, gamma => 2, delta => 3) };
     like($@, qr/Unrecognized named parameters 'gamma', 'delta'/,
          'named signatures report all unrecognized parameters');

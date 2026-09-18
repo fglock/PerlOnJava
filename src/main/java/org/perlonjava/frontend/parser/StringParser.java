@@ -15,8 +15,13 @@ import org.perlonjava.runtime.NamedCharacterExpansion;
 import org.perlonjava.runtime.NamedCharacterExpansionMap;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.GlobalContext;
+import org.perlonjava.runtime.runtimetypes.RuntimeHash;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.regex.RegexMarkers;
 import org.perlonjava.runtime.regex.RegexQuoteMeta;
@@ -1171,6 +1176,9 @@ public class StringParser {
         rawStr = parseRawStrings(parser, parser.ctx, parser.tokens, parser.tokenIndex, stringParts, isRegex);
         parser.tokenIndex = rawStr.next;
 
+        rejectClearedConstantHandler(parser, rawStr, operator);
+        rejectUndefinedStringConstantHandler(parser, rawStr, operator);
+
         switch (operator) {
             case "`":
             case "qx":
@@ -1228,6 +1236,57 @@ public class StringParser {
             list.elements.add(new StringNode(rawStr.buffers.get(i), rawStr.index));
         }
         return new OperatorNode(operator, list, rawStr.index);
+    }
+
+    /** Preserve Perl's compile-time failure when undef *^H clears a constant hook. */
+    private static void rejectClearedConstantHandler(Parser parser, ParsedString rawStr, String operator) {
+        String installed = switch (operator) {
+            case "q", "'", "qq", "\"", "tr", "y", "s" -> "q";
+            case "m", "qr", "/", "//", "/=" -> "qr";
+            default -> null;
+        };
+        if (installed == null || !HintHashRegistry.constantHandlerWasCleared(installed)) return;
+        String kind = switch (operator) {
+            case "q", "'" -> "q";
+            case "tr", "y" -> "tr";
+            case "s" -> "s";
+            case "m" -> "q";
+            default -> "qq";
+        };
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(rawStr.index);
+        String suffix = (operator.equals("q") || operator.equals("'"))
+                ? ", near \"'" + rawStr.buffers.getFirst() + "'\"\n"
+                : (installed.equals("qr") ? ", within pattern\n" : ", within string\n");
+        parser.deferDiagnostic("Constant(" + kind + ") unknown at " + location.fileName()
+                + " line " + location.lineNumber() + suffix);
+    }
+
+    /** Apply q constant hooks during parsing, as Perl requires. */
+    private static void rejectUndefinedStringConstantHandler(Parser parser, ParsedString rawStr, String operator) {
+        String kind = switch (operator) {
+            case "q", "'" -> "q";
+            case "qq", "\"" -> "qq";
+            case "tr", "y" -> "tr";
+            case "s" -> "s";
+            default -> null;
+        };
+        if (kind == null) return;
+        RuntimeHash hints = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
+        RuntimeScalar handler = hints == null ? null : hints.elements.get("q");
+        if (handler == null || (handler.type != RuntimeScalarType.CODE
+                && !(handler.type == RuntimeScalarType.REFERENCE && handler.value instanceof RuntimeScalar ref
+                && ref.type == RuntimeScalarType.CODE))) return;
+        RuntimeArray args = new RuntimeArray();
+        String value = rawStr.buffers.getFirst();
+        args.elements.add(new RuntimeScalar(value));
+        args.elements.add(new RuntimeScalar(value));
+        args.elements.add(new RuntimeScalar(kind));
+        RuntimeScalar result = RuntimeCode.apply(handler, args, RuntimeContextType.SCALAR).scalar();
+        if (result.type != RuntimeScalarType.UNDEF) return;
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(rawStr.index);
+        String suffix = (kind.equals("q")) ? ", near \"'" + value + "'\"\n" : ", within string\n";
+        parser.deferDiagnostic("Constant(" + kind + "): Call to &{$^H{q}} did not return a defined value at "
+                + location.fileName() + " line " + location.lineNumber() + suffix);
     }
 
     private static RuntimeScalar findGlobOverride(Parser parser) {

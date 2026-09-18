@@ -1205,11 +1205,23 @@ public class EmitSubroutine {
         mv.visitVarInsn(Opcodes.ALOAD, nameSlot);
         mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
         emitterVisitor.pushCallContext();   // Push call context to stack
+        String callerPackage = emitterVisitor.ctx.symbolTable.getCurrentPackage();
+        String callerFile = emitterVisitor.ctx.compilerOptions.fileName;
+        int callerLine = 0;
+        if (emitterVisitor.ctx.errorUtil != null && callSiteIndex > 0) {
+            var callerLocation = emitterVisitor.ctx.errorUtil
+                    .getSourceLocationAccurate(callSiteIndex);
+            callerFile = callerLocation.fileName();
+            callerLine = callerLocation.lineNumber();
+        }
+        mv.visitLdcInsn(callerPackage == null ? "main" : callerPackage);
+        mv.visitLdcInsn(callerFile == null ? "-e" : callerFile);
+        mv.visitLdcInsn(callerLine);
         mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                "apply",
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                "applyAtLocation",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;ILjava/lang/String;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                 false); // Generate an .apply() call
 
         if (pooledArgsArray) {
