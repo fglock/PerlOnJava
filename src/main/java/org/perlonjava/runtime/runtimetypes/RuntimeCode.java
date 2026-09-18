@@ -1190,6 +1190,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                                         boolean recyclableScalarResult) {
         if (result == null
                 || result instanceof RuntimeControlFlowList
+                // A void-context caller cannot observe or assign the return
+                // value. Keep the callee result intact for scope cleanup, but
+                // avoid manufacturing a separate scalar solely for discard.
+                || originalContext == RuntimeContextType.VOID
                 || !copyCapturedScalars
                 || originalContext == RuntimeContextType.LVALUE
                 || originalContext == RuntimeContextType.LVALUE_LIST) {
