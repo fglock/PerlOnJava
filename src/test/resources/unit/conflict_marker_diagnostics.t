@@ -17,4 +17,8 @@ for my $marker (map { $_ x 7 } qw(< = >)) {
     }
 }
 
+eval "<<<<<<< ours\nmy \$x;\n=======\nmy \$y;\n>>>>>>> theirs\n";
+like $@, qr{\AVersion control conflict marker at \(eval \d+\) line 1, near "<<<<<<<"\nVersion control conflict marker at \(eval \d+\) line 3, near "======="\nVersion control conflict marker at \(eval \d+\) line 5, near ">>>>>>>"\n\z},
+    'all conflict markers are diagnosed in source order';
+
 done_testing;
