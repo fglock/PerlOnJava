@@ -156,3 +156,22 @@ Keep the method recognizer deferred: next method work should begin with
 profiling and a design for a cost shared across ordinary methods, such as
 argument-frame allocation, cached dispatch, scalar-result handling, or hash
 access.
+
+## Current independent candidate: native-integer modulus
+
+Candidate commits `3a4dabb54` and `0cc1c3e32`, rebased onto current master
+`24f445be0`, bypass overload lookup and coercion only when both operands are
+plain, non-wide `INTEGER` scalars. Tied, overloaded, string, floating-point,
+and wide-integer operands retain the existing slow path.
+
+- System-Perl semantic tests and focused JVM/interpreter coverage were present
+  on the candidate; the full immutable gate passed at
+  `/tmp/make-native-integer-modulus-current-20260918.log`.
+- Seven-pair master/candidate production comparisons had matching checksums
+  and stabilized warmups: Numeric median +1.5% (`/tmp/perf-native-integer-modulus-numeric-7pair-20260918.json`),
+  Life median +2.9% (`/tmp/perf-native-integer-modulus-life-7pair-20260918.json`),
+  and unrelated String median +1.3%
+  (`/tmp/perf-native-integer-modulus-string-7pair-20260918.json`).
+- Decision: retain for focused delivery review. These are direct
+  master/candidate comparisons under intended production load, not a claim of
+  portfolio parity.
