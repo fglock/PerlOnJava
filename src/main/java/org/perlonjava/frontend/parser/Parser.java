@@ -380,6 +380,13 @@ public class Parser {
     /** Record an already formatted recoverable diagnostic. */
     public void deferDiagnostic(String diagnostic) {
         deferredDiagnostics.add(diagnostic);
+        // Perl stops after the tenth compile diagnostic, leaving this marker
+        // after the final reported error.  Deferred recovery errors must count
+        // toward that limit just like immediately-thrown parser errors.
+        if (deferredDiagnostics.size() == 10) {
+            String fileName = ctx.errorUtil.getSourceLocationAccurate(Math.max(0, tokenIndex - 1)).fileName();
+            deferredDiagnostics.add(fileName + " has too many errors.\n");
+        }
     }
 
     /** Record a diagnostic whose source excerpt must end at a trailing comma. */
