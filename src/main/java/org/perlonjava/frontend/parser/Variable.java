@@ -434,8 +434,15 @@ public class Variable {
         // Qualified names (Pkg::var) — always allowed
         if (varName.contains("::")) return;
 
-        // Regex capture variables ($1, $2, ...) but not $01, $02
-        if (ScalarUtils.isInteger(varName) && !varName.startsWith("0")) return;
+        // Numeric array/hash names and regex capture variables ($1, $2, ...)
+        // are exempt from strict vars.  In particular, @0 is valid as the
+        // indirect-method argument in `E { 0; readline @0 }`.
+        if (ScalarUtils.isInteger(varName)
+                && (!sigil.equals("$") || !varName.startsWith("0"))) return;
+
+        // A malformed sigil sequence has its own parser diagnostic; do not
+        // replace it with a strict-vars error while recovering the statement.
+        if (varName.startsWith("$") || varName.startsWith("@") || varName.startsWith("%")) return;
 
         // Sort variables $a and $b
         if (sigil.equals("$") && (varName.equals("a") || varName.equals("b"))) return;
@@ -519,12 +526,19 @@ public class Variable {
 
         if (existsGlobally) return;
 
-        // Undeclared variable under strict vars
-        throw PerlCompilerException.withSourceLocation(parser.tokenIndex,
-                "Global symbol \"" + sigil + varName
-                        + "\" requires explicit package name (did you forget to declare \"my "
-                        + sigil + varName + "\"?)",
-                parser.ctx.errorUtil);
+        // File-level parsing must continue after a strict-vars failure: Perl
+        // reports subsequent recoverable syntax diagnostics in the same
+        // compilation unit.  Lazy named subroutine bodies still need the
+        // immediate failure that prevents delayed compilation from hiding it.
+        String message = "Global symbol \"" + sigil + varName
+                + "\" requires explicit package name (did you forget to declare \"my "
+                + sigil + varName + "\"?)";
+        if (!lazySubroutinesOnly) {
+            parser.deferErrorAtToken(parser.tokenIndex, message);
+            return;
+        }
+        throw PerlCompilerException.withSourceLocation(
+                parser.tokenIndex, message, parser.ctx.errorUtil);
     }
 
     /**
