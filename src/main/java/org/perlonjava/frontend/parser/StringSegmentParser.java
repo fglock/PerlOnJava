@@ -1935,7 +1935,10 @@ public abstract class StringSegmentParser {
     }
 
     private void throwMissingNamedCharacterBraceDiagnostic() {
-        var location = ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
+        // The parser cursor has already advanced past the unterminated regex
+        // delimiter.  Attribute this lexical error to the regex source token
+        // itself, as Perl does for /\\N{/.
+        var location = ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
         String message = isRegex
                 ? "Missing right brace on \\N{} or unescaped left brace after \\N"
                 : "Missing right brace on \\N{}";
