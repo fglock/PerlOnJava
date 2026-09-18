@@ -300,11 +300,20 @@ public class Parser {
         // attempts to reduce the surrounding statement.  Doing this as a
         // lexical diagnostic is important for input such as "$_\n<<<<<<<":
         // the incomplete preceding expression must not mask the marker.
+        StringBuilder conflictDiagnostics = new StringBuilder();
         for (int i = 0; i < tokens.size(); i++) {
             if (tokens.get(i).type == LexerTokenType.CONFLICT_MARKER) {
-                throw new PerlCompilerException(i,
-                        "Version control conflict marker", ctx.errorUtil);
+                ErrorMessageUtil.SourceLocation location =
+                        ctx.errorUtil.getSourceLocationAccurate(i);
+                conflictDiagnostics.append("Version control conflict marker at ")
+                        .append(location.fileName()).append(" line ")
+                        .append(location.lineNumber()).append(", near \"")
+                        .append(tokens.get(i).text.substring(0, 7))
+                        .append("\"\n");
             }
+        }
+        if (!conflictDiagnostics.isEmpty()) {
+            throw new PerlParserException(conflictDiagnostics.toString());
         }
         if (tokens.get(tokenIndex).text.equals("=")) {
             // looks like pod: insert a newline to trigger pod parsing
