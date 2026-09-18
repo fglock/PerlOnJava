@@ -162,15 +162,13 @@ public class StringParser {
                             "Can't find string terminator \"" + identifier + "\" anywhere before EOF",
                             ctx.errorUtil);
                 }
-                boolean extraPairedDelimiter = EXTRA_QUOTE_PAIR.containsKey(startDelim)
-                        || EXTRA_QUOTE_PAIR.containsKey(endDelim);
                 String errorMsg = isRegex
                         ? "Search pattern not terminated"
                         : "Can't find string terminator "
                         + (markerDelimiter != null ? "\".\""
-                        : (extraPairedDelimiter ? "\"" + endDelim + "\"" : endDelim))
+                        : "\"" + endDelim + "\"")
                         + " anywhere before EOF";
-                throw new PerlCompilerException(tokPos, errorMsg, ctx.errorUtil);
+                throw PerlCompilerException.withSourceLocation(index, errorMsg, ctx.errorUtil);
             }
 
             // A beyond-Unicode quote delimiter is represented by one internal
