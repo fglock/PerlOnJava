@@ -4,11 +4,17 @@ import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.WarningFlags;
+import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.perlmodule.Warnings;
 
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 
 public class ScalarBackedIO implements IOHandle {
+    private static final String NON_BYTE_SCALAR_MESSAGE =
+            "Strings with code points over 0xFF may not be mapped into in-memory file handles\n";
     private final RuntimeScalar backingScalar;
     private int position = 0;
     private boolean isEOF = false;
@@ -45,6 +51,10 @@ public class ScalarBackedIO implements IOHandle {
         }
 
         String content = backingScalar.toString();
+        if (!isByteMappable(content)) {
+            reportNonByteScalar();
+            return RuntimeScalarCache.scalarUndef;
+        }
         byte[] contentBytes = content.getBytes(StandardCharsets.ISO_8859_1);
 
         if (position >= contentBytes.length) {
@@ -77,6 +87,10 @@ public class ScalarBackedIO implements IOHandle {
         }
 
         String currentContent = backingScalar.toString();
+        if (!isByteMappable(currentContent)) {
+            reportNonByteScalar();
+            return RuntimeScalarCache.scalarFalse;
+        }
         byte[] currentBytes = currentContent.getBytes(StandardCharsets.ISO_8859_1);
 
         if (appendMode) {
@@ -88,8 +102,9 @@ public class ScalarBackedIO implements IOHandle {
         int newLength = Math.max(position + newBytes.length, currentBytes.length);
         byte[] resultBytes = new byte[newLength];
 
-        // Copy existing content
-        System.arraycopy(currentBytes, 0, resultBytes, 0, Math.min(position, currentBytes.length));
+        // Preserve all existing bytes.  In particular, a seek beyond EOF leaves a
+        // gap which PerlIO::scalar fills with NULs on the following write.
+        System.arraycopy(currentBytes, 0, resultBytes, 0, currentBytes.length);
 
         // Write new content at position
         System.arraycopy(newBytes, 0, resultBytes, position, newBytes.length);
@@ -139,9 +154,6 @@ public class ScalarBackedIO implements IOHandle {
      */
     @Override
     public RuntimeScalar seek(long pos, int whence) {
-        String content = backingScalar.toString();
-        int contentLength = content.getBytes(StandardCharsets.ISO_8859_1).length;
-
         long newPosition;
 
         switch (whence) {
@@ -152,16 +164,25 @@ public class ScalarBackedIO implements IOHandle {
                 newPosition = position + pos;
                 break;
             case SEEK_END: // from end
+                // SEEK_END is the sole form which needs the current scalar
+                // length. SEEK_SET/CUR must not FETCH a tied scalar merely to
+                // move its file position.
+                int contentLength = backingScalar.toString().getBytes(StandardCharsets.ISO_8859_1).length;
                 newPosition = contentLength + pos;
                 break;
             default:
                 return RuntimeIO.handleIOError("Invalid whence value: " + whence);
         }
 
-        // Clamp position to valid range [0, contentLength]
-        position = (int) Math.max(0, Math.min(newPosition, contentLength));
+        if (newPosition < 0 || newPosition > Integer.MAX_VALUE) {
+            GlobalVariable.getGlobalVariable("main::!").set(22); // EINVAL
+            return RuntimeScalarCache.scalarFalse;
+        }
 
-        isEOF = position >= contentLength;
+        // Perl permits seeking past EOF.  The gap is materialized as NUL bytes
+        // only if a subsequent write reaches it.
+        position = (int) newPosition;
+        isEOF = false;
         return RuntimeScalarCache.scalarTrue;
     }
 
@@ -285,5 +306,17 @@ public class ScalarBackedIO implements IOHandle {
             String currentContent = backingScalar.toString();
             position = currentContent.getBytes(StandardCharsets.ISO_8859_1).length;
         }
+    }
+
+    /** Whether a Perl scalar can be represented by PerlIO::scalar's byte buffer. */
+    public static boolean isByteMappable(String value) {
+        return value.codePoints().noneMatch(codePoint -> codePoint > 0xFF);
+    }
+
+    /** Report the EINVAL/warnings::utf8 contract shared by open, read and write. */
+    public static void reportNonByteScalar() {
+        GlobalVariable.getGlobalVariable("main::!").set(22); // EINVAL
+        WarnDie.warnWithCategory(new RuntimeScalar(NON_BYTE_SCALAR_MESSAGE),
+                new RuntimeScalar(""), "utf8");
     }
 }

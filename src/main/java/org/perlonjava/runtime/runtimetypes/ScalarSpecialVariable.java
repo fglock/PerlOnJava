@@ -58,6 +58,11 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         this.position = position;
     }
 
+    /** Whether this proxy is a numbered regex capture such as $1 or $99. */
+    public boolean isNumberedCapture() {
+        return variableId == Id.CAPTURE;
+    }
+
     /**
      * Throws an exception as this variable represents a constant item
      * and cannot be modified.

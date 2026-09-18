@@ -2424,6 +2424,11 @@ public class BytecodeInterpreter {
                                 pc = OpcodeHandlerExtended.executeReadline(bytecode, pc, registers);
                             }
 
+                            case Opcodes.SET_LAST_READLINE_HANDLE_NAME -> {
+                                int nameIndex = bytecode[pc++];
+                                RuntimeIO.setLastReadlineHandleName(code.stringPool[nameIndex]);
+                            }
+
                             case Opcodes.MATCH_REGEX -> {
                                 // Match regex
                                 // Format: MATCH_REGEX rd stringReg regexReg ctx bytesMode targetNameIndex

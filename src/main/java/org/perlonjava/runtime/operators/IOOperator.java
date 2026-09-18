@@ -658,6 +658,22 @@ public class IOOperator {
         // For array/hash elements like $fh0[0], this is the actual lvalue that can be modified
         // We assert it's a RuntimeScalar rather than calling .scalar() which would create a copy
         RuntimeScalar fileHandle = (RuntimeScalar) args[0];
+        String openTargetSource = RuntimeIO.getLastReadlineHandleName();
+        // The compiler uses this one-shot channel to preserve the source
+        // spelling of open's first argument.  Do not let it leak into a
+        // later, unrelated open/readline operation.
+        RuntimeIO.setLastReadlineHandleName(null);
+        // Numbered capture variables are readonly aliases.  Unlike a numeric
+        // literal used as a one-argument handle name, an attempt to install an
+        // IO slot into one must report Perl's normal readonly-lvalue error.
+        if (fileHandle.type == RuntimeScalarType.READONLY_SCALAR
+                || fileHandle instanceof RuntimeScalarReadOnly
+                || fileHandle instanceof ScalarSpecialVariable specialVariable
+                        && specialVariable.isNumberedCapture()
+                || openTargetSource != null && openTargetSource.matches("\\$[0-9]+")
+                || fileHandle == scalarUndef) {
+            throw new PerlCompilerException("Modification of a read-only value attempted");
+        }
         if (args.length < 2) {
             // 1-argument open: open FILEHANDLE
             // Per Perl semantics, the global scalar variable of the same name as the
@@ -958,9 +974,41 @@ public class IOOperator {
             RuntimeScalar assignedHandle = fileHandle.set(newGlob);
             RuntimeScalar.retainUnstashedIoForDurableSlot(assignedHandle);
         }
+        String aggregateName = aggregateHandleName(fileHandle);
+        if (aggregateName != null) {
+            fh.setDiagnosticReadlineHandleName(aggregateName);
+        } else {
+            String diagnosticName = normalizeAggregateHandleName(openTargetSource);
+            if (diagnosticName != null) {
+                fh.setDiagnosticReadlineHandleName(diagnosticName);
+            }
+        }
         long pid = fh.getPid();
         if (pid > 0) return new RuntimeScalar(pid);
         return scalarTrue;
+    }
+
+    private static String aggregateHandleName(RuntimeScalar fileHandle) {
+        RuntimeBase aggregate = fileHandle instanceof RuntimeArrayProxyEntry arrayEntry
+                ? arrayEntry.getParent()
+                : fileHandle instanceof RuntimeHashProxyEntry hashEntry ? hashEntry.getParent() : null;
+        if (aggregate == null) return null;
+        String name = RuntimeCode.findActiveLexicalName(aggregate);
+        if (name == null) name = GlobalVariable.findGlobalAggregateName(aggregate);
+        if (name == null || name.length() < 2) return null;
+        return "$" + name.substring(1) + (aggregate instanceof RuntimeArray ? "[...]" : "{...}");
+    }
+
+    private static String normalizeAggregateHandleName(String sourceName) {
+        if (sourceName == null) return null;
+        int array = sourceName.indexOf('[');
+        int hash = sourceName.indexOf('{');
+        int delimiter = array >= 0 ? array : hash;
+        if (delimiter < 0) return null;
+        String base = sourceName.substring(0, delimiter);
+        if (base.startsWith("@") || base.startsWith("%")) base = "$" + base.substring(1);
+        if (!base.startsWith("$")) return null;
+        return base + (array >= 0 && (hash < 0 || array < hash) ? "[...]" : "{...}");
     }
 
     /**

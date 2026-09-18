@@ -71,6 +71,7 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  * @see RuntimeScalarReference
  */
 public class RuntimeIO extends RuntimeScalar {
+    private static final ThreadLocal<RuntimeIO> lastReadlineHandle = new ThreadLocal<>();
 
     // Platform-specific ENOTEMPTY (only errno that differs across platforms in handleIOException)
     private static final int ENOTEMPTY;
@@ -108,13 +109,21 @@ public class RuntimeIO extends RuntimeScalar {
     public static RuntimeIO getLastAccessedHandle() { return PerlRuntime.current().ioLastAccessedHandle; }
     public static void setLastAccessedHandle(RuntimeIO io) { PerlRuntime.current().ioLastAccessedHandle = io; }
     public static String getLastReadlineHandleName() { return PerlRuntime.current().ioLastReadlineHandleName; }
+    public static RuntimeIO getLastReadlineHandle() { return lastReadlineHandle.get(); }
+    public static void setLastReadlineHandle(RuntimeIO io) { lastReadlineHandle.set(io); }
 
     private boolean ioError;
+    // An anonymous lexical handle has no glob name.  Preserve the source
+    // expression used for its most recent readline so later warn/die context
+    // can still name it after statement-temporary cleanup.
+    private String diagnosticReadlineHandleName;
 
     public void markError() { ioError = true; }
 
     public RuntimeScalar error() { return new RuntimeScalar(ioError); }
     public static void setLastReadlineHandleName(String name) { PerlRuntime.current().ioLastReadlineHandleName = name; }
+    public String getDiagnosticReadlineHandleName() { return diagnosticReadlineHandleName; }
+    public void setDiagnosticReadlineHandleName(String name) { diagnosticReadlineHandleName = name; }
     public static RuntimeIO getLastWrittenHandle() { return PerlRuntime.current().ioLastWrittenHandle; }
     public static void setLastWrittenHandle(RuntimeIO io) { PerlRuntime.current().ioLastWrittenHandle = io; }
     public static RuntimeIO getSelectedHandle() { return PerlRuntime.current().ioSelectedHandle; }
@@ -791,6 +800,14 @@ public class RuntimeIO extends RuntimeScalar {
         mode = normalizeOpenMode(mode);
         RuntimeIO fh = new RuntimeIO();
         try {
+            if (mode.equals(">>>")) {
+                WarnDie.warn(new RuntimeScalar("Invalid separator character '>' in PerlIO layer spec"),
+                        new RuntimeScalar(""));
+                throw new PerlCompilerException("Unknown open() mode '>>>'");
+            }
+            if (mode.equals(":c")) {
+                throw new PerlCompilerException("Unknown open() mode ':c'");
+            }
             String ioLayers = "";
             // Check if mode contains IO layers (indicated by ':')
             int colonIndex = mode.indexOf(':');
@@ -963,10 +980,10 @@ public class RuntimeIO extends RuntimeScalar {
         }
 
         // Handle different modes
-        if (mode.equals(">") || mode.equals(">>")) {
+        if (mode.equals(">") || mode.equals(">>") || mode.equals("+<") || mode.equals("+>")) {
             // Check if the scalar is read-only before attempting write operations
             try {
-                if (mode.equals(">")) {
+                if (mode.equals(">") || mode.equals("+>")) {
                     // Truncate for write mode - this will throw if read-only
                     // Match Perl behavior: if scalar was undef, keep it undef;
                     // if it was defined, truncate to empty string
@@ -976,8 +993,10 @@ public class RuntimeIO extends RuntimeScalar {
                         // Still need to check read-only for undef scalars
                         targetScalar.set(new RuntimeScalar());
                     }
-                } else if (mode.equals(">>")) {
-                    // For append mode, test if scalar is writable by setting it to itself
+                } else if (mode.equals("+<")) {
+                    // Read/write and append modes need a writable referent too.
+                    // Besides enforcing that rule, this preserves tie FETCH/STORE
+                    // side effects at open time.
                     targetScalar.set(targetScalar.toString());
                 }
             } catch (RuntimeException e) {
@@ -985,17 +1004,31 @@ public class RuntimeIO extends RuntimeScalar {
                     // Handle read-only scalar gracefully
                     // Set $! to EACCES (13) - Permission denied
                     GlobalVariable.getGlobalVariable("main::!").set(13);
-                    // Issue warning if $^W is set (lexical warning support for runtime is TODO)
-                    // $^W is stored as main::W (W is ASCII 87, so 87 - 'A' + 1 = 23)
-                    if (GlobalVariable.getGlobalVariable("main::" + Character.toString('W' - 'A' + 1)).getBoolean()) {
-                        WarnDie.warn(new RuntimeScalar("Modification of a read-only value attempted"), new RuntimeScalar(""));
-                    }
+                    // A scalar handle write is in the lexical "layer"
+                    // warning category.  Honour both dynamic $^W and the
+                    // compile-time warning bit used by `use warnings 'layer'`.
+                    // $^W is stored as main::W (W is ASCII 87, so 87 - 'A' + 1 = 23).
+                    WarnDie.warnWithCategory(new RuntimeScalar("Modification of a read-only value attempted"),
+                            new RuntimeScalar(""), "layer");
                     return null;
                 }
                 throw e; // Re-throw if it's a different error
             }
+        } else if (mode.equals("<")) {
+            // Opening PerlIO::scalar reads a magical referent once, even when
+            // no subsequent read is issued.  This also establishes the normal
+            // tied-scalar FETCH side effect without warning for an undef value.
+            targetScalar.toString();
         }
-        // For "<" (read) mode, no special handling needed
+
+        // Avoid a second FETCH for tied scalar referents.  Plain scalar
+        // values are directly available here; tied values are validated by
+        // ScalarBackedIO at their actual read/write operation.
+        if (targetScalar.value instanceof String value
+                && !ScalarBackedIO.isByteMappable(value)) {
+            ScalarBackedIO.reportNonByteScalar();
+            return null;
+        }
 
         // Create ScalarBackedIO
         ScalarBackedIO scalarIO = new ScalarBackedIO(targetScalar);
@@ -1407,10 +1440,14 @@ public class RuntimeIO extends RuntimeScalar {
                     && !WarningFlags.isWarningSuppressedAtRuntime("syscalls")) {
                 String display = fileName.replace("\0", "\\0");
                 WarnDie.warn(
-                        new RuntimeScalar("Invalid \\\\0 character in pathname for " + opName + ": " + display),
+                        new RuntimeScalar("Invalid \\0 character in pathname for " + opName + ": " + display),
                         new RuntimeScalar("")
                 );
             }
+            // Perl rejects an embedded NUL before calling the OS.  Its file
+            // operation contract still exposes ENOENT for the failed pathname
+            // (including when several invalid names are supplied).
+            getGlobalVariable("main::!").set(2);
             return null;
         }
         return s;
@@ -1431,10 +1468,11 @@ public class RuntimeIO extends RuntimeScalar {
                     && !WarningFlags.isWarningSuppressedAtRuntime("syscalls")) {
                 String display = pattern.replace("\0", "\\0");
                 WarnDie.warn(
-                        new RuntimeScalar("Invalid \\\\0 character in pattern for glob: " + display),
+                        new RuntimeScalar("Invalid \\0 character in pattern for glob: " + display),
                         new RuntimeScalar("")
                 );
             }
+            getGlobalVariable("main::!").set(2);
             return null;
         }
         return s;
@@ -1626,6 +1664,9 @@ public class RuntimeIO extends RuntimeScalar {
         // This ensures $. becomes 0 and error messages don't include
         // stale filehandle context after close.
         currentLineNumber = 0;
+        if (getLastReadlineHandle() == this) {
+            setLastReadlineHandle(null);
+        }
         return ret;
     }
 

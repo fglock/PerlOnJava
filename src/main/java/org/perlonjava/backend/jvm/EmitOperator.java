@@ -397,6 +397,15 @@ public class EmitOperator {
                 index++;
             }
 
+            String openTargetName = node.operator.equals("open") && !operand.elements.isEmpty()
+                    ? openTargetName(operand.elements.getFirst()) : null;
+            if (openTargetName != null) {
+                mv.visitLdcInsn(openTargetName);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeIO",
+                        "setLastReadlineHandleName", "(Ljava/lang/String;)V", false);
+            }
+
             emitterVisitor.pushCallContext();
             mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
 
@@ -424,6 +433,24 @@ public class EmitOperator {
                 emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
             }
         }
+    }
+
+    private static String openTargetName(Node node) {
+        if (node instanceof OperatorNode wrapper && wrapper.operator.equals("scalar")) {
+            node = wrapper.operand;
+        }
+        if (node instanceof BinaryOperatorNode element
+                && (element.operator.equals("[") || element.operator.equals("{"))
+                && element.left instanceof OperatorNode scalar
+                && scalar.operator.equals("$")
+                && scalar.operand instanceof IdentifierNode identifier) {
+            return "$" + identifier.name + (element.operator.equals("[") ? "[...]" : "{...}");
+        }
+        if (node instanceof OperatorNode scalar && scalar.operator.equals("$")
+                && scalar.operand instanceof IdentifierNode identifier) {
+            return "$" + identifier.name;
+        }
+        return null;
     }
 
     // Handle an operator that was parsed using a Perl prototype.
