@@ -1329,6 +1329,7 @@ public class Variable {
         // Check for heredoc constructs like ${<<END} which should evaluate to empty string
         // The challenge is distinguishing ${<<END} from ${<...>} where $< is a special variable
         if (parser.tokenIndex < parser.tokens.size()) {
+            int heredocTokenIndex = parser.tokenIndex;
             var currentToken = parser.tokens.get(parser.tokenIndex);
             if (currentToken.text.equals("<")) {
                 // Look ahead for <<IDENTIFIER. The lexer keeps the two angle
@@ -1356,7 +1357,7 @@ public class Variable {
                         // Consume the closing brace
                         if (!TokenUtils.peek(parser).text.equals("}")) {
                             throw PerlCompilerException.withSourceLocation(
-                                    currentToken.index,
+                                    heredocTokenIndex,
                                     "Can't find string terminator \"" + identifier + "\" anywhere before EOF",
                                     parser.ctx.errorUtil);
                         }
