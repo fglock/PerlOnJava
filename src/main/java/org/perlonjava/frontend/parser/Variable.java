@@ -534,7 +534,10 @@ public class Variable {
                 + "\" requires explicit package name (did you forget to declare \"my "
                 + sigil + varName + "\"?)";
         if (!lazySubroutinesOnly) {
-            parser.deferErrorAtToken(parser.tokenIndex, message);
+            ErrorMessageUtil.SourceLocation location = parser.ctx.errorUtil
+                    .getSourceLocationAccurate(parser.tokenIndex);
+            parser.deferDiagnostic(message + " at " + location.fileName()
+                    + " line " + location.lineNumber() + ".\n");
             return;
         }
         throw PerlCompilerException.withSourceLocation(
