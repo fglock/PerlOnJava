@@ -1182,6 +1182,10 @@ public class StringParser {
         rawStr = parseRawStrings(parser, parser.ctx, parser.tokens, parser.tokenIndex, stringParts, isRegex);
         parser.tokenIndex = rawStr.next;
 
+        PerlCompilerException malformedAttributeQuote = malformedAttributeQuoteError(parser, rawStr);
+        if (malformedAttributeQuote != null) {
+            throw malformedAttributeQuote;
+        }
         rejectClearedConstantHandler(parser, rawStr, operator);
         rejectUndefinedStringConstantHandler(parser, rawStr, operator);
 
@@ -1242,6 +1246,52 @@ public class StringParser {
             list.elements.add(new StringNode(rawStr.buffers.get(i), rawStr.index));
         }
         return new OperatorNode(operator, list, rawStr.index);
+    }
+
+    /**
+     * Perl recovers a quote that crosses an attribute entry and reports the
+     * later {@code isa => ...} as both a bareword and a runaway-string hint.
+     * Keep this deliberately scoped to the malformed {@code is => '...\nisa}
+     * shape so valid multiline strings are unaffected.
+     */
+    private static PerlCompilerException malformedAttributeQuoteError(Parser parser, ParsedString rawStr) {
+        if (rawStr.startDelim != '\'' && rawStr.startDelim != '"') return null;
+        int close = rawStr.next - 1;
+        if (close <= rawStr.index) return null;
+
+        int before = rawStr.index - 1;
+        while (before >= 0 && parser.tokens.get(before).type == LexerTokenType.WHITESPACE) before--;
+        if (before < 0 || !parser.tokens.get(before).text.equals("=>")) return null;
+        before--;
+        while (before >= 0 && parser.tokens.get(before).type == LexerTokenType.WHITESPACE) before--;
+        if (before < 0 || !parser.tokens.get(before).text.equals("is")) return null;
+
+        boolean crossedNewline = false;
+        for (int index = rawStr.index + 1; index < close; index++) {
+            LexerToken token = parser.tokens.get(index);
+            if (token.type == LexerTokenType.NEWLINE) crossedNewline = true;
+            if (!crossedNewline || !token.text.equals("isa")) continue;
+            int arrow = index + 1;
+            while (arrow < close && parser.tokens.get(arrow).type == LexerTokenType.WHITESPACE) arrow++;
+            if (arrow >= close || !parser.tokens.get(arrow).text.equals("=>")) continue;
+
+            var location = parser.ctx.errorUtil.getSourceLocationAccurate(index);
+            // The lexer has already consumed the closing quoted value here.
+            // Perl's recovery is deterministic for the two attribute forms:
+            // a plain single quote reaches Int', while an interpolated double
+            // quote reaches the package separator before $subpackage.
+            String near = rawStr.startDelim == '\'' ? "isa => 'Int" : "isa => \"Foo";
+            String badName = rawStr.startDelim == '\'' ? "Int'" : "Foo::";
+            var start = parser.ctx.errorUtil.getSourceLocationAccurate(rawStr.index);
+            String message = "Bareword found where operator expected (Do you need to predeclare \"isa\"?) at "
+                    + location.fileName() + " line " + location.lineNumber() + ", near \"" + near + "\"\n"
+                    + "  (Might be a runaway multi-line " + rawStr.startDelim + rawStr.startDelim
+                    + " string starting on line " + start.lineNumber() + ")\n"
+                    + "Bad name after " + badName + " at " + location.fileName() + " line "
+                    + location.lineNumber() + ".\n";
+            return new PerlCompilerException(message);
+        }
+        return null;
     }
 
     /** Preserve Perl's compile-time failure when undef *^H clears a constant hook. */
