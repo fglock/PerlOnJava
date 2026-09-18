@@ -662,16 +662,23 @@ public class IdentifierParser {
 
         // Track if we're at the start of the identifier
         boolean isFirstToken = true;
+        boolean apostrophePackageSeparator = parser.ctx.symbolTable
+                .isFeatureCategoryEnabled("apostrophe_as_package_separator");
 
         // A leading quote is the deprecated package separator before the first
         // component, not an empty `main` package component.  Thus
         // `sub 'Hello'_he_said` declares `Hello::_he_said`.
-        if (isFirstToken && token.text.equals("'")) {
+        if (isFirstToken && token.text.equals("'") && apostrophePackageSeparator) {
             parser.tokenIndex++;
             token = parser.tokens.get(parser.tokenIndex);
             nextToken = parser.tokens.get(parser.tokenIndex + 1);
             isFirstToken = false;  // We've consumed the leading '
             // Continue to parse the rest
+        } else if (isFirstToken && token.text.equals("'")) {
+            // With the compatibility feature disabled, leave the quote for
+            // ordinary expression parsing.  It may begin a quote, rather
+            // than silently manufacturing a legacy package component.
+            return null;
         }
 
         // Numbers are not allowed at the very beginning (unless after a leading ' or ::)
@@ -689,6 +696,9 @@ public class IdentifierParser {
 
             // Handle single quote as package separator in subroutine names
             if (token.text.equals("'") && variableName.length() > 0) {
+                if (!apostrophePackageSeparator) {
+                    return variableName.toString();
+                }
                 // Check if next token can continue the identifier
                 if (nextToken.type == LexerTokenType.IDENTIFIER || nextToken.type == LexerTokenType.NUMBER) {
                     // Convert ' to :: for internal representation
@@ -743,6 +753,10 @@ public class IdentifierParser {
                 }
 
                 if (nextToken.text.equals("'")) {
+                    if (!apostrophePackageSeparator) {
+                        parser.tokenIndex++;
+                        return variableName.toString();
+                    }
                     // Look ahead to see what follows the '
                     LexerToken afterQuote = parser.tokens.get(parser.tokenIndex + 2);
                     if (afterQuote.type == LexerTokenType.IDENTIFIER || afterQuote.type == LexerTokenType.NUMBER) {
