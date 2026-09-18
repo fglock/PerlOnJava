@@ -373,6 +373,20 @@ public class SignatureParser {
     private String malformedSeparatorExcerpt() {
         int end = parser.tokenIndex;
         String unexpected = parser.tokens.get(end).text;
+        // A compound assignment after a signature parameter is rejected as
+        // one operator, but Perl's diagnostic includes the first token of the
+        // attempted default expression too: `($a += 1`.
+        if (unexpected.endsWith("=")) {
+            int expressionStart = end + 1;
+            while (expressionStart < parser.tokens.size()
+                    && parser.tokens.get(expressionStart).type == LexerTokenType.WHITESPACE) {
+                expressionStart++;
+            }
+            if (expressionStart < parser.tokens.size()
+                    && parser.tokens.get(expressionStart).type != LexerTokenType.EOF) {
+                end = expressionStart;
+            }
+        }
         if (";".equals(unexpected) && end + 1 < parser.tokens.size()
                 && parser.tokens.get(end + 1).type == LexerTokenType.WHITESPACE) {
             end++;
