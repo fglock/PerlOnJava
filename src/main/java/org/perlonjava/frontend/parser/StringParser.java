@@ -807,6 +807,14 @@ public class StringParser {
                     literalSyntaxValidated = true;
                 } catch (PerlCompilerException exception) {
                     String message = exception.getMessage();
+                    if (message != null && message.startsWith("Unknown charname ''")
+                            && literalSyntax.contains("\\N{}")
+                            && literalSource.contains("(?{})")) {
+                        var location = ctx.errorUtil.getSourceLocationAccurate(rawStr.index);
+                        throw new PerlCompilerException("Unknown charname '' at "
+                                + location.fileName() + " line " + location.lineNumber()
+                                + ", near \"{})\"\n");
+                    }
                     // The final literal compilation has the source map needed
                     // to attach Perl's one #line-aware location.  Deferring a
                     // U+ overflow avoids adding this parser pass's physical
