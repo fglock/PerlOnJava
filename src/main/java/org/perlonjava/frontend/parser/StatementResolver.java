@@ -94,6 +94,14 @@ public class StatementResolver {
                         parser.tokenIndex = currentIndex;
                         yield SpecialBlockParser.parseSpecialBlock(parser);
                     }
+                    // A diamond after a special block name is parsed as an
+                    // attempted declaration, not an ordinary subroutine call.
+                    // Preserve Perl's dedicated diagnostic instead of allowing
+                    // the diamond parser to report a generic syntax error.
+                    if (!"ADJUST".equals(token.text) && peek(parser).text.equals("<")) {
+                        parser.throwCleanError(currentIndex,
+                                "Illegal declaration of subroutine " + token.text);
+                    }
                     // Not a special block, backtrack
                     parser.tokenIndex = currentIndex;
                     yield null;
