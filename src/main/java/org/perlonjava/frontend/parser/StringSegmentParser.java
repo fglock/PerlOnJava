@@ -1634,8 +1634,7 @@ public abstract class StringSegmentParser {
             try {
                 String hs = hexStr.toString();
                 BigInteger bi = new BigInteger(hs, 16);
-                long hexUv =
-                        bi.and(BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE)).longValue();
+                long hexUv = checkedEscapeCodePoint(bi);
                 if (Long.compareUnsigned(hexUv, 0x10FFFFL) > 0) {
                     appendToCurrentSegment(PerlUtfString.encodeBeyondUnicode(hexUv));
                 } else if (hexUv >= 0xD800L && hexUv <= 0xDFFFL) {
@@ -1715,10 +1714,12 @@ public abstract class StringSegmentParser {
 
         if (!octStr.isEmpty()) {
             try {
-                var octValue = Integer.parseInt(octStr.toString(), 8);
+                long octValue = checkedEscapeCodePoint(new BigInteger(octStr.toString(), 8));
                 var result = octValue <= 0xFFFF
                         ? String.valueOf((char) octValue)
-                        : new String(Character.toChars(octValue));
+                        : octValue > 0x10FFFFL
+                                ? PerlUtfString.encodeBeyondUnicode(octValue)
+                                : new String(Character.toChars((int) octValue));
                 appendToCurrentSegment(result);
             } catch (NumberFormatException e) {
                 // Invalid hex sequence, treat as literal
@@ -1932,6 +1933,23 @@ public abstract class StringSegmentParser {
         return diagnostic != null
                 && diagnostic.startsWith("Use of code point 0x")
                 && diagnostic.contains("the permissible max is 0x7FFFFFFFFFFFFFFF");
+    }
+
+    /**
+     * Perl's braced numeric escapes accept code points through signed IV max,
+     * including values beyond Unicode.  Do not truncate an overlarge value to
+     * a Java long: that would silently turn an invalid escape into another
+     * character instead of its required compile-time diagnostic.
+     */
+    private long checkedEscapeCodePoint(BigInteger codePoint) {
+        if (codePoint.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
+            var location = ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
+            throw new PerlParserException("Use of code point 0x"
+                    + codePoint.toString(16).toUpperCase(java.util.Locale.ROOT)
+                    + " is not allowed; the permissible max is 0x7FFFFFFFFFFFFFFF at "
+                    + location.fileName() + " line " + location.lineNumber() + ".\n");
+        }
+        return codePoint.longValueExact();
     }
 
     private void throwMissingNamedCharacterBraceDiagnostic() {
