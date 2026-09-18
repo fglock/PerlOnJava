@@ -6,6 +6,7 @@ import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.astnode.AbstractNode;
 import org.perlonjava.frontend.astnode.FormatNode;
 import org.perlonjava.frontend.astnode.Node;
+import org.perlonjava.frontend.astnode.NumberNode;
 import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
@@ -425,6 +426,12 @@ public class Parser {
                 break; // Exit the loop if we're done parsing.
             }
 
+            PerlParserException adjacentBaseLiteralError =
+                    adjacentIncompleteBaseLiteralError(left, token);
+            if (adjacentBaseLiteralError != null) {
+                throw adjacentBaseLiteralError;
+            }
+
             // Get the precedence of the current token.
             int tokenPrecedence = getPrecedence(token.text);
 
@@ -493,6 +500,74 @@ public class Parser {
 
         // Return the root node of the constructed expression tree.
         return left;
+    }
+
+    /**
+     * A second numeric term normally ends the current expression before
+     * infix parsing is entered.  Retain Perl's three diagnostics when that
+     * term begins an incomplete base literal, rather than letting the
+     * statement parser reduce it to a generic syntax error.
+     */
+    private PerlParserException adjacentIncompleteBaseLiteralError(Node left, LexerToken token) {
+        if (!(left instanceof NumberNode) || token.type != LexerTokenType.NUMBER
+                || !"0".equals(token.text) || tokenIndex + 1 >= tokens.size()) {
+            return null;
+        }
+
+        LexerToken prefixToken = tokens.get(tokenIndex + 1);
+        if (prefixToken.type != LexerTokenType.IDENTIFIER || prefixToken.text.isEmpty()) {
+            return null;
+        }
+        char prefixChar = Character.toLowerCase(prefixToken.text.charAt(0));
+        String kind = switch (prefixChar) {
+            case 'x' -> "hexadecimal";
+            case 'b' -> "binary";
+            case 'o' -> "octal";
+            default -> null;
+        };
+        if (kind == null || hasBaseLiteralDigit(prefixToken.text.substring(1), prefixChar)) {
+            return null;
+        }
+
+        int previous = tokenIndex - 1;
+        while (previous >= 0 && tokens.get(previous).type == LexerTokenType.WHITESPACE) {
+            previous--;
+        }
+        if (previous < 0 || tokens.get(previous).type != LexerTokenType.NUMBER
+                || previous == tokenIndex - 1) {
+            return null;
+        }
+
+        String literal = TokenUtils.toText(tokens, tokenIndex, tokenIndex + 1);
+        String near = TokenUtils.toText(tokens, previous, tokenIndex + 1);
+        String noDigitsNear = near;
+        if (tokenIndex + 2 < tokens.size()) {
+            LexerToken trailing = tokens.get(tokenIndex + 2);
+            if (trailing.type != LexerTokenType.EOF && trailing.type != LexerTokenType.NEWLINE) {
+                noDigitsNear += trailing.text;
+            }
+        }
+
+        ErrorMessageUtil.SourceLocation location = ctx.errorUtil.getSourceLocationAccurate(previous);
+        String at = " at " + location.fileName() + " line " + location.lineNumber();
+        String message = "Number found where operator expected (Missing operator before \""
+                + literal + "\"?)" + at + ", near \"" + near + "\"\n"
+                + "No digits found for " + kind + " literal" + at + ", near \""
+                + noDigitsNear + "\"\n"
+                + "syntax error" + at + ", near \"" + near + "\"\n"
+                + "Execution of " + location.fileName()
+                + " aborted due to compilation errors.\n";
+        return new PerlParserException(message);
+    }
+
+    private static boolean hasBaseLiteralDigit(String text, char prefix) {
+        String expression = switch (prefix) {
+            case 'x' -> "[0-9a-fA-F_]";
+            case 'b' -> "[01_]";
+            case 'o' -> "[0-7_]";
+            default -> "";
+        };
+        return text.matches(expression + "*") && !text.replace("_", "").isEmpty();
     }
 
     public void throwError(String message) {
