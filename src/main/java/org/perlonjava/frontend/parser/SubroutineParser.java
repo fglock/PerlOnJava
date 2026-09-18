@@ -971,7 +971,17 @@ public class SubroutineParser {
                 // If the signatures feature is not enabled, we just parse the prototype as a string.
                 // If a prototype exists, we parse it using 'parseRawString' method which handles it like the 'q()' operator.
                 // This means it will take everything inside the parentheses as a literal string.
-                prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
+                int prototypeStartIndex = parser.tokenIndex;
+                try {
+                    prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
+                } catch (PerlCompilerException e) {
+                    if (e.getMessage() != null && e.getMessage().contains("Can't find string terminator")) {
+                        var location = parser.ctx.errorUtil.getSourceLocationAccurate(prototypeStartIndex);
+                        throw new PerlParserException("Prototype not terminated at " + location.fileName()
+                                + " line " + location.lineNumber() + ".\n");
+                    }
+                    throw e;
+                }
 
                 // Validate prototype - certain characters are not allowed
                 if (prototype.contains("<>") || prototype.contains("__FILE__")) {
