@@ -632,6 +632,12 @@ public class Variable {
                         return operand;
                     }
                 }
+            } catch (PerlCompilerException e) {
+                // Preserve the primary parser diagnostic (for example a
+                // malformed regex within a subscript expression).  Wrapping
+                // it here loses both its source ownership and useful near
+                // excerpt.
+                throw e;
             } catch (Exception e) {
                 // If parsing fails, throw a more informative error
                 throw new PerlCompilerException(parser.tokenIndex, "syntax error: Unterminated array or hash access", parser.ctx.errorUtil);
@@ -737,6 +743,8 @@ public class Variable {
                         Node result = null;
                         try {
                             result = ParseInfix.parseInfixOperation(parser, operand, 0);
+                        } catch (PerlCompilerException e) {
+                            throw e;
                         } catch (Exception e) {
                             parser.tokenIndex = savedIndex;
                             throw new PerlCompilerException(parser.tokenIndex, "syntax error: Unterminated array access", parser.ctx.errorUtil);

@@ -1182,6 +1182,20 @@ public class StringParser {
         rawStr = parseRawStrings(parser, parser.ctx, parser.tokens, parser.tokenIndex, stringParts, isRegex);
         parser.tokenIndex = rawStr.next;
 
+        // A bracket-delimited regex followed by a second closing bracket is
+        // not an array access after a complete regex.  Perl owns the error at
+        // the complete quote-like construct, including that final bracket.
+        if (operator.equals("m") && rawStr.startDelim == '['
+                && parser.tokenIndex < parser.tokens.size()
+                && parser.tokens.get(parser.tokenIndex).text.equals("]")) {
+            var location = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
+            String pattern = rawStr.buffers.getFirst();
+            String message = "syntax error at " + location.fileName() + " line "
+                    + location.lineNumber() + ", near \"m[" + pattern + "]]\"\n"
+                    + "Execution of " + location.fileName() + " aborted due to compilation errors.\n";
+            throw new PerlCompilerException(message);
+        }
+
         PerlCompilerException runawayMultilineQuote = runawayMultilineQuoteError(parser, rawStr, operator);
         if (runawayMultilineQuote != null) {
             throw runawayMultilineQuote;

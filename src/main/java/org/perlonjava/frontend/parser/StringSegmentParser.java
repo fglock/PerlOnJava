@@ -503,6 +503,12 @@ public abstract class StringSegmentParser {
                 } else if (!postfixDerefFollows || postfixDerefInterpolationEnabled) {
                     operand = parseArrayHashAccess(parser, operand, isRegex);
                 }
+            } catch (PerlCompilerException e) {
+                // Do not replace a nested parser's primary diagnostic with a
+                // generic interpolation-access error.  In particular, eval
+                // of a malformed regex in a subscript must retain the regex
+                // location and excerpt.
+                throw e;
             } catch (Exception e) {
                 if (isRegex && e.getMessage() != null
                         && e.getMessage().contains("Unterminated array")) {
