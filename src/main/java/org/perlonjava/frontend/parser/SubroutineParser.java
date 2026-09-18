@@ -41,6 +41,32 @@ public class SubroutineParser {
     private static final Semaphore semaphore = new Semaphore(1);
 
     /**
+     * With apostrophe package separators disabled, a leading quote after
+     * {@code sub} starts an expression rather than a package component.
+     */
+    private static void throwDisabledLeadingApostropheSubError(Parser parser) {
+        int quoteIndex = parser.tokenIndex;
+        int firstNameIndex = quoteIndex + 1;
+        int closingQuoteIndex = firstNameIndex + 1;
+        int trailingNameIndex = closingQuoteIndex + 1;
+        if (trailingNameIndex >= parser.tokens.size()
+                || parser.tokens.get(firstNameIndex).type != LexerTokenType.IDENTIFIER
+                || !parser.tokens.get(closingQuoteIndex).text.equals("'")
+                || parser.tokens.get(trailingNameIndex).type != LexerTokenType.IDENTIFIER) {
+            return;
+        }
+
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(quoteIndex);
+        String firstName = parser.tokens.get(firstNameIndex).text;
+        String trailingName = parser.tokens.get(trailingNameIndex).text;
+        String at = " at " + location.fileName() + " line " + location.lineNumber();
+        String message = "Bareword found where operator expected (Missing operator before \""
+                + trailingName + "\"?)" + at + ", near \"'" + firstName + "'" + trailingName + "\"\n"
+                + "Illegal declaration of anonymous subroutine" + at + ", near \"sub '" + firstName + "'\"\n";
+        throw new PerlCompilerException(message);
+    }
+
+    /**
      * Parses a subroutine call.
      *
      * @param parser The parser object
@@ -854,6 +880,11 @@ public class SubroutineParser {
             // 'parseSubroutineIdentifier' is called to handle cases where the subroutine name might be complex
             // (e.g., namespaced, fully qualified names). It may return null if no valid name is found.
             subName = IdentifierParser.parseSubroutineIdentifier(parser);
+
+            if (subName == null && peek(parser).text.equals("'")
+                    && !parser.ctx.symbolTable.isFeatureCategoryEnabled("apostrophe_as_package_separator")) {
+                throwDisabledLeadingApostropheSubError(parser);
+            }
 
             // Mark named subroutines as non-packages in packageExistsCache immediately
             // This helps indirect object detection distinguish subs from packages.

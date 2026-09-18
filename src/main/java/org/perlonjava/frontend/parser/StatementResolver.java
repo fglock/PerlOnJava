@@ -909,6 +909,10 @@ public class StatementResolver {
                             || nextToken.text.equals("'")
                             || nextToken.text.equals("::")) {
                         // Accept legacy package separator ' and leading :: like sub names
+                        if (nextToken.text.equals("'")
+                                && !parser.ctx.symbolTable.isFeatureCategoryEnabled("apostrophe_as_package_separator")) {
+                            throwDisabledLeadingApostropheFormatError(parser);
+                        }
                         formatName = IdentifierParser.parseSubroutineIdentifier(parser);
                     }
 
@@ -1710,5 +1714,35 @@ public class StatementResolver {
 
         // No 'my' declaration, use simple short-circuit
         return new BinaryOperatorNode(operator, modifierExpression, expression, tokenIndex);
+    }
+
+    /** Report Perl's recovery diagnostic for a disabled apostrophe format name. */
+    private static void throwDisabledLeadingApostropheFormatError(Parser parser) {
+        int quoteIndex = parser.tokenIndex;
+        int lineStart = quoteIndex;
+        while (lineStart < parser.tokens.size() && parser.tokens.get(lineStart).type != LexerTokenType.NEWLINE) {
+            lineStart++;
+        }
+        if (lineStart >= parser.tokens.size()) {
+            return;
+        }
+        lineStart = Whitespace.skipWhitespace(parser, lineStart + 1, parser.tokens);
+        int end = lineStart;
+        while (end < parser.tokens.size() && !parser.tokens.get(end).text.equals("'")) {
+            end++;
+        }
+        if (end >= parser.tokens.size()) {
+            return;
+        }
+        StringBuilder near = new StringBuilder();
+        for (int i = lineStart; i <= end; i++) {
+            near.append(parser.tokens.get(i).text);
+        }
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(lineStart);
+        var start = parser.ctx.errorUtil.getSourceLocationAccurate(quoteIndex);
+        String message = "syntax error at " + location.fileName() + " line " + location.lineNumber()
+                + ", near \"" + near + "\"\n"
+                + "  (Might be a runaway multi-line '' string starting on line " + start.lineNumber() + ")\n";
+        throw new PerlCompilerException(message);
     }
 }

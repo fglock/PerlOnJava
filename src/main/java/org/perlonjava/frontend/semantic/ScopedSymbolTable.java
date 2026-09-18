@@ -153,6 +153,13 @@ public class ScopedSymbolTable {
         if (sayBit != null) {
             defaultFeatures |= (1 << sayBit);
         }
+        // This compatibility feature belongs to Perl's default bundle.  Its
+        // bit must be present even when the rest of the current-version
+        // bundle remains opt-in, so `no feature` can disable it lexically.
+        Integer apostropheSeparatorBit = featureBitPositions.get("apostrophe_as_package_separator");
+        if (apostropheSeparatorBit != null) {
+            defaultFeatures |= (1 << apostropheSeparatorBit);
+        }
         featureFlagsStack.push(defaultFeatures);
         postderefQqStack.push(false);
         enhancedXxStack.push(false);
