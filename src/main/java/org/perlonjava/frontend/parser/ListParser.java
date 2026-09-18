@@ -62,6 +62,16 @@ public class ListParser {
             expr = new ListNode(parseList(parser, ")", 0), parser.tokenIndex);
             if (expr.elements.size() > 1) {
                 if (tooManyArgsForBuiltin != null) {
+                    if (tooManyArgsForBuiltin.equals("undef")) {
+                        int closeIndex = Math.max(0, parser.tokenIndex - 1);
+                        int argumentIndex = Math.max(0, closeIndex - 1);
+                        var location = parser.ctx.errorUtil.getSourceLocationAccurate(closeIndex);
+                        String near = TokenUtils.toText(parser.tokens, argumentIndex, closeIndex);
+                        parser.deferDiagnostic("Too many arguments for undef operator at "
+                                + location.fileName() + " line " + location.lineNumber()
+                                + ", near \"" + near + "\"\n");
+                        return expr;
+                    }
                     parser.throwError("Too many arguments for " + tooManyArgsForBuiltin);
                 } else {
                     parser.throwError("syntax error");
