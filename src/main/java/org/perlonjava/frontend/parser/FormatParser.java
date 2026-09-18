@@ -184,6 +184,14 @@ public class FormatParser {
         }
 
         if (!foundTerminator) {
+            if (!templateLines.isEmpty()
+                    && templateLines.getFirst().content.trim().startsWith("@")
+                    && templateLines.getLast().content.trim().startsWith("for(")) {
+                var location = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
+                throw new PerlCompilerException("syntax error at " + location.fileName()
+                        + " line " + location.lineNumber() + ", \nExecution of "
+                        + location.fileName() + " aborted due to compilation errors.\n");
+            }
             throw new PerlCompilerException(parser.tokenIndex,
                     "Format not terminated", parser.ctx.errorUtil);
         }
