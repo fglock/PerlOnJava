@@ -162,11 +162,11 @@ public class StringParser {
                             "Can't find string terminator \"" + identifier + "\" anywhere before EOF",
                             ctx.errorUtil);
                 }
+                String delimiterDescription = markerDelimiter != null ? "\".\""
+                        : endDelim == '"' ? "'\"'" : "\"" + endDelim + "\"";
                 String errorMsg = isRegex
                         ? "Search pattern not terminated"
-                        : "Can't find string terminator "
-                        + (markerDelimiter != null ? "\".\""
-                        : "\"" + endDelim + "\"")
+                        : "Can't find string terminator " + delimiterDescription
                         + " anywhere before EOF";
                 throw PerlCompilerException.withSourceLocation(index, errorMsg, ctx.errorUtil);
             }
