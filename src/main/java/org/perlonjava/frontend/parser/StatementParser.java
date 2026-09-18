@@ -192,6 +192,18 @@ public class StatementParser {
 
         validateDeclaredReferenceForeachVariables(parser, varNode);
 
+        // A foreach iterator may be a scalar, an aggregate, or a declared
+        // reference, but never a typeglob.  Parsing `our *name` as a normal
+        // declaration leaves the later loop-header parser with an unrelated
+        // syntax error.  Perl diagnoses the missing scalar sigil instead.
+        if (varNode instanceof OperatorNode declaration
+                && (declaration.operator.equals("my") || declaration.operator.equals("our")
+                    || declaration.operator.equals("state"))
+                && declaration.operand instanceof OperatorNode target
+                && target.operator.equals("*")) {
+            parser.throwCleanError("Missing $ on loop variable");
+        }
+
         // If we didn't parse a loop variable, Perl expects the '(' of the for(..) header next.
         // When something else appears (e.g. a bare identifier), perl5 reports:
         //   Missing $ on loop variable ...
