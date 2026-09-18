@@ -553,6 +553,13 @@ public class ParseInfix {
                         && (token.text.equals("e") || token.text.equals("E"))) {
                     throwMissingOperatorBeforeIncompleteDecimalExponent(parser, number, token, operatorIndex);
                 }
+                if (token.type == LexerTokenType.IDENTIFIER
+                        && !ParserTables.INFIX_OP.contains(token.text)) {
+                    NumberNode concatenatedNumber = rightmostConcatenatedNumber(left);
+                    if (concatenatedNumber != null) {
+                        throwMissingOperatorBeforeBareword(parser, concatenatedNumber, token, operatorIndex);
+                    }
+                }
                 // `00my sub\0` reaches infix parsing after the numeric literal.
                 // Perl nevertheless diagnoses the incomplete lexical-sub
                 // declaration, rather than reporting a generic infix syntax
@@ -688,6 +695,28 @@ public class ParseInfix {
                 + marker.text + "\"?)" + at
                 + "syntax error" + at
                 + "Execution of " + location.fileName() + " aborted due to compilation errors.\n";
+        throw new PerlParserException(message);
+    }
+
+    private static NumberNode rightmostConcatenatedNumber(Node node) {
+        if (node instanceof NumberNode number) {
+            return number;
+        }
+        if (node instanceof BinaryOperatorNode binary && binary.operator.equals(".")) {
+            return rightmostConcatenatedNumber(binary.right);
+        }
+        return null;
+    }
+
+    private static void throwMissingOperatorBeforeBareword(Parser parser, NumberNode left,
+                                                           LexerToken bareword, int barewordIndex) {
+        ErrorMessageUtil.SourceLocation location =
+                parser.ctx.errorUtil.getSourceLocationAccurate(barewordIndex);
+        String near = left.value + bareword.text;
+        String at = " at " + location.fileName() + " line " + location.lineNumber()
+                + ", near \"" + near + "\"\n";
+        String message = "Bareword found where operator expected (Missing operator before \""
+                + bareword.text + "\"?)" + at + "syntax error" + at;
         throw new PerlParserException(message);
     }
 
