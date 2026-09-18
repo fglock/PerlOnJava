@@ -395,6 +395,9 @@ public abstract class StringSegmentParser {
                         operand = Variable.parseBracedVariable(parser, sigil, true,
                                 isRegex ? "pattern" : "string");
                     } catch (PerlCompilerException e) {
+                        if (e.getMessage().startsWith("Can't find string terminator")) {
+                            throw e;
+                        }
                         // Extract the core error message, removing any existing "Syntax error in braced variable:" prefix
                         String coreMessage = e.getMessage();
                         if (coreMessage.startsWith("Syntax error in braced variable: ")) {
@@ -411,6 +414,9 @@ public abstract class StringSegmentParser {
                     operand = Variable.parseBracedVariable(parser, sigil, true,
                             isRegex ? "pattern" : "string");
                 } catch (PerlCompilerException e) {
+                    if (e.getMessage().startsWith("Can't find string terminator")) {
+                        throw e;
+                    }
                     // Extract the core error message, removing any existing "Syntax error in braced variable:" prefix
                     String coreMessage = e.getMessage();
                     if (coreMessage.startsWith("Syntax error in braced variable: ")) {
