@@ -300,9 +300,11 @@ public class Variable {
                 }
             }
 
-            // Check strict vars at parse time — catches undeclared variables in
-            // lazily-compiled named sub bodies that would otherwise be missed
-            checkStrictVarsAtParseTime(parser, sigil, varName);
+            // Diagnose undeclared strict variables while parsing.  This must
+            // also cover file-level code: a later syntax error prevents code
+            // generation, which otherwise hides Perl's earlier strict-vars
+            // diagnostic.
+            checkStrictVarsAtParseTime(parser, sigil, varName, false);
 
             SymbolTable.SymbolEntry lexicalExport = getLexicalExportEntry(parser, sigil, varName);
             if (lexicalExport != null) {
