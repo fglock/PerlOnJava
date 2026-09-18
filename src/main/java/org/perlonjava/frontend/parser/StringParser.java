@@ -1252,17 +1252,24 @@ public class StringParser {
             default -> null;
         };
         if (installed == null || !HintHashRegistry.constantHandlerWasCleared(installed)) return;
-        String kind = switch (operator) {
-            // A cleared q hook is reported as q for every string form that
-            // would have consulted that hook, including double-quoted strings.
-            case "q", "'", "qq", "\"" -> "q";
-            case "tr", "y" -> "tr";
-            case "s" -> "s";
-            default -> "q";
-        };
+        boolean tooManyPriorDiagnostics = parser.deferredDiagnosticCount() >= 9;
+        // Perl reduces this final double-quoted diagnostic before its
+        // ten-error cap when the cleared q hook follows nine errors.
+        String kind;
+        if ((operator.equals("qq") || operator.equals("\""))
+                && installed.equals("q") && tooManyPriorDiagnostics) {
+            kind = "q";
+        } else {
+            kind = switch (operator) {
+                case "q", "'", "m" -> "q";
+                case "tr", "y" -> "tr";
+                case "s" -> "s";
+                default -> "qq";
+            };
+        }
         var location = parser.ctx.errorUtil.getSourceLocationAccurate(rawStr.index);
         String suffix = (operator.equals("q") || operator.equals("'")
-                || operator.equals("qq") || operator.equals("\""))
+                || ((operator.equals("qq") || operator.equals("\"")) && kind.equals("q")))
                 ? ", near \"" + operator + rawStr.buffers.getFirst() + operator + "\"\n"
                 : (installed.equals("qr") ? ", within pattern\n" : ", within string\n");
         parser.deferDiagnostic("Constant(" + kind + ") unknown at " + location.fileName()
