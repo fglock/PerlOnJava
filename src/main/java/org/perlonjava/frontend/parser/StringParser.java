@@ -95,7 +95,9 @@ public class StringParser {
      */
     private static final Map<Character, Character> EXTRA_QUOTE_PAIR = Map.of(
             '\u00ab', '\u00bb',
-            '\u00bb', '\u00ab'
+            '\u00bb', '\u00ab',
+            '\u300a', '\u300b',
+            '\u300b', '\u300a'
     );
 
     private static Character pairedDelimiter(EmitterContext ctx, char delimiter) {
