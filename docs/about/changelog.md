@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Avoid scalar-return copy allocation when a void-context caller discards the
+  value, while retaining normal scalar and lvalue return behavior.
+
 - Restore `local` compatibility for tied hash and array elements, sparse
   arrays, magic stashes, implicit `$_` foreach aliases (including early
   return), and localized regex captures on both execution backends.
