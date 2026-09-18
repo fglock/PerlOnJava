@@ -37,9 +37,12 @@ public final class PerlThreadRegistry {
         if (threads.get(thread.id()) != thread) return;
         // Publish the retained terminal record before withdrawing the active
         // record. Readers of getKnown() must never observe a gap between the
-        // two maps while a child completes, joins, or detaches.
+        // two maps while a child completes, joins, or detaches.  A completed
+        // detached child can race its detach caller here; both paths may
+        // publish the same terminal record, but the losing active-map removal
+        // must never remove that retained record.
         terminalThreads.put(thread.id(), thread);
-        if (!threads.remove(thread.id(), thread)) terminalThreads.remove(thread.id(), thread);
+        threads.remove(thread.id(), thread);
     }
 
     public PerlThreadControlBlock get(long id) {
