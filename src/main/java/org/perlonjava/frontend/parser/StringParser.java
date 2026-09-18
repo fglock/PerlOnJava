@@ -1253,15 +1253,17 @@ public class StringParser {
         };
         if (installed == null || !HintHashRegistry.constantHandlerWasCleared(installed)) return;
         String kind = switch (operator) {
-            case "q", "'" -> "q";
+            // A cleared q hook is reported as q for every string form that
+            // would have consulted that hook, including double-quoted strings.
+            case "q", "'", "qq", "\"" -> "q";
             case "tr", "y" -> "tr";
             case "s" -> "s";
-            case "m" -> "q";
-            default -> "qq";
+            default -> "q";
         };
         var location = parser.ctx.errorUtil.getSourceLocationAccurate(rawStr.index);
-        String suffix = (operator.equals("q") || operator.equals("'"))
-                ? ", near \"'" + rawStr.buffers.getFirst() + "'\"\n"
+        String suffix = (operator.equals("q") || operator.equals("'")
+                || operator.equals("qq") || operator.equals("\""))
+                ? ", near \"" + operator + rawStr.buffers.getFirst() + operator + "\"\n"
                 : (installed.equals("qr") ? ", within pattern\n" : ", within string\n");
         parser.deferDiagnostic("Constant(" + kind + ") unknown at " + location.fileName()
                 + " line " + location.lineNumber() + suffix);
