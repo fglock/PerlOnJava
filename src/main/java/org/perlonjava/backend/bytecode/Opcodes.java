@@ -2574,10 +2574,10 @@ public class Opcodes {
     public static final short FOREACH_DEREF_HASH = 568;
 
     /** Synthetic class constructor blessing. Format: BLESS_CLASS_INSTANCE rd refReg packageReg. */
-    public static final short BLESS_CLASS_INSTANCE = 569;
+    public static final short BLESS_CLASS_INSTANCE = 570;
 
     /** Record a readline handle's source spelling for $. diagnostics. Format: nameStringIdx. */
-    public static final short SET_LAST_READLINE_HANDLE_NAME = 569;
+    public static final short SET_LAST_READLINE_HANDLE_NAME = 571;
 
     /**
      * Resolve a statically named CODE reference at runtime. This preserves the
