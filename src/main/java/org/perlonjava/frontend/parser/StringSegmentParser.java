@@ -396,6 +396,11 @@ public abstract class StringSegmentParser {
                                 isRegex ? "pattern" : "string");
                     } catch (PerlCompilerException e) {
                         if (e.getMessage().startsWith("Can't find string terminator")) {
+                            PerlCompilerException outerSyntaxError =
+                                    malformedNestedQuoteLikeInterpolationError();
+                            if (outerSyntaxError != null) {
+                                throw outerSyntaxError;
+                            }
                             throw e;
                         }
                         // Extract the core error message, removing any existing "Syntax error in braced variable:" prefix
@@ -415,6 +420,11 @@ public abstract class StringSegmentParser {
                             isRegex ? "pattern" : "string");
                 } catch (PerlCompilerException e) {
                     if (e.getMessage().startsWith("Can't find string terminator")) {
+                        PerlCompilerException outerSyntaxError =
+                                malformedNestedQuoteLikeInterpolationError();
+                        if (outerSyntaxError != null) {
+                            throw outerSyntaxError;
+                        }
                         throw e;
                     }
                     // Extract the core error message, removing any existing "Syntax error in braced variable:" prefix
@@ -1320,6 +1330,41 @@ public abstract class StringSegmentParser {
      */
     public void setOriginalStringContent(String content) {
         this.originalStringContent = content;
+    }
+
+    /**
+     * A quote-like expression in a braced interpolation is parsed using the
+     * nested string token stream.  If that expression chooses a delimiter
+     * which is never closed, its low-level error has no useful connection to
+     * the outer source.  Perl instead reports a syntax error at the enclosing
+     * quote, retaining the delimiter pair that makes the malformed expression
+     * apparent (for example {@code "})"} in {@code qr!@{s{0})(?{!}).
+     */
+    private PerlCompilerException malformedNestedQuoteLikeInterpolationError() {
+        int interpolation = originalStringContent.indexOf("@{");
+        if (interpolation < 0) {
+            return null;
+        }
+        int closingBrace = originalStringContent.indexOf('}', interpolation + 2);
+        if (closingBrace < 0 || closingBrace + 1 >= originalStringContent.length()
+                || originalStringContent.charAt(closingBrace + 1) != ')') {
+            return null;
+        }
+
+        String excerpt;
+        if (isRegex) {
+            excerpt = originalStringContent.substring(closingBrace, closingBrace + 2);
+        } else if (closingBrace + 2 < originalStringContent.length()
+                && originalStringContent.charAt(closingBrace + 2) == '(') {
+            excerpt = originalStringContent.substring(closingBrace + 1, closingBrace + 3);
+        } else {
+            return null;
+        }
+
+        var location = ctx.errorUtil.getSourceLocationAccurate(originalTokenOffset);
+        return new PerlCompilerException("syntax error at " + location.fileName() + " line "
+                + location.lineNumber() + ", near \"" + excerpt + "\"\nExecution of "
+                + location.fileName() + " aborted due to compilation errors.\n");
     }
 
     /**
