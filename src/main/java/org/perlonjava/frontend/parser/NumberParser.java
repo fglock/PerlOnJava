@@ -249,6 +249,11 @@ public class NumberParser {
      */
     private static Node parseSpecialNumber(Parser parser, String initialPart, NumberFormat format) {
         if (!containsDigitForFormat(initialPart, format)) {
+            PerlParserException adjacentNumberError =
+                    missingOperatorBeforeIncompleteBaseLiteral(parser, format);
+            if (adjacentNumberError != null) {
+                throw adjacentNumberError;
+            }
             deferNoDigitsForLiteral(parser, initialPart, format);
             return new NumberNode("0", parser.tokenIndex);
         }
@@ -472,6 +477,52 @@ public class NumberParser {
             }
             parser.tokenIndex++;
         }
+    }
+
+    /**
+     * A base-literal prefix immediately after another number is not a second
+     * expression: Perl diagnoses the missing operator first, then preserves
+     * the incomplete-literal diagnostic.  Do this before generic recovery
+     * consumes the trailing token, which would otherwise lose the shared
+     * {@code "0 0x"} source excerpt.
+     */
+    private static PerlParserException missingOperatorBeforeIncompleteBaseLiteral(
+            Parser parser, NumberFormat format) {
+        int literalStart = parser.tokenIndex - 2;
+        if (literalStart <= 0 || literalStart >= parser.tokens.size()
+                || parser.tokens.get(literalStart).type != LexerTokenType.NUMBER) {
+            return null;
+        }
+
+        int previous = literalStart - 1;
+        while (previous >= 0 && parser.tokens.get(previous).type == LexerTokenType.WHITESPACE) {
+            previous--;
+        }
+        if (previous < 0 || parser.tokens.get(previous).type != LexerTokenType.NUMBER
+                || previous == literalStart - 1) {
+            return null;
+        }
+
+        String literal = TokenUtils.toText(parser.tokens, literalStart, parser.tokenIndex - 1);
+        String near = TokenUtils.toText(parser.tokens, previous, parser.tokenIndex - 1);
+        String noDigitsNear = near;
+        if (parser.tokenIndex < parser.tokens.size()) {
+            LexerToken trailing = parser.tokens.get(parser.tokenIndex);
+            if (trailing.type != LexerTokenType.EOF && trailing.type != LexerTokenType.NEWLINE) {
+                noDigitsNear += trailing.text;
+            }
+        }
+
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(previous);
+        String at = " at " + location.fileName() + " line " + location.lineNumber();
+        String message = "Number found where operator expected (Missing operator before \""
+                + literal + "\"?)" + at + ", near \"" + near + "\"\n"
+                + "No digits found for " + format.name + " literal" + at + ", near \""
+                + noDigitsNear + "\"\n"
+                + "syntax error" + at + ", near \"" + near + "\"\n"
+                + "Execution of " + location.fileName()
+                + " aborted due to compilation errors.\n";
+        return new PerlParserException(message);
     }
 
     // Helper methods
