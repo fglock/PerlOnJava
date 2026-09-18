@@ -101,7 +101,7 @@ public class StringParser {
             '\u300b', '\u300a'
     );
 
-    private static Character pairedDelimiter(EmitterContext ctx, char delimiter) {
+    private static Character pairedDelimiter(EmitterContext ctx, char delimiter, int delimiterIndex) {
         Character builtinPair = QUOTE_PAIR.get(delimiter);
         if (builtinPair != null) {
             return builtinPair;
@@ -113,7 +113,7 @@ public class StringParser {
         if (ctx.symbolTable.isFeatureCategoryEnabled("extra_paired_delimiters")) {
             if (ctx.symbolTable.isWarningCategoryEnabled("experimental::extra_paired_delimiters")) {
                 WarnDie.warn(new RuntimeScalar("Use of '" + delimiter + "' is experimental as a string delimiter"),
-                        new RuntimeScalar(ctx.errorUtil.warningLocation(0)));
+                        new RuntimeScalar(ctx.errorUtil.warningLocation(delimiterIndex)));
             }
             return extraPair;
         }
@@ -122,7 +122,7 @@ public class StringParser {
         if (!WarningFlags.areWarningsForcedOff()
                 && !ctx.symbolTable.isWarningCategoryDisabled("deprecated::delimiter_will_be_paired")) {
             WarnDie.warn(new RuntimeScalar("Use of '" + delimiter + "' is deprecated as a string delimiter"),
-                    new RuntimeScalar(ctx.errorUtil.warningLocation(0)));
+                    new RuntimeScalar(ctx.errorUtil.warningLocation(delimiterIndex)));
         }
         return null;
     }
@@ -259,7 +259,7 @@ public class StringParser {
                     case START:
                         startDelim = ch;
                         endDelim = startDelim;
-                        Character pairedDelimiter = pairedDelimiter(ctx, startDelim);
+                        Character pairedDelimiter = pairedDelimiter(ctx, startDelim, tokPos);
                         if (pairedDelimiter != null) {  // Check if the delimiter is a pair
                             isPair = true;
                             endDelim = pairedDelimiter;
