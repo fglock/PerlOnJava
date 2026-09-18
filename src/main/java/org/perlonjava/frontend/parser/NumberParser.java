@@ -442,13 +442,23 @@ public class NumberParser {
     public static void checkNumberExponent(Parser parser, StringBuilder number) {
         String exponentPart = parser.tokens.get(parser.tokenIndex).text;
         if (exponentPart.startsWith("e") || exponentPart.startsWith("E")) {
-            TokenUtils.consume(parser);
             int index = 1;
             for (; index < exponentPart.length(); index++) {
                 if (!Character.isDigit(exponentPart.charAt(index)) && exponentPart.charAt(index) != '_') {
                     parser.throwError("Malformed number");
                 }
             }
+
+            // The lexer splits a decimal exponent into an identifier token for
+            // its `e` and separate sign/number tokens.  Do not consume a bare
+            // `e` unless it is followed by a complete exponent: leaving it in
+            // place lets the ordinary parser identify it as the bareword in
+            // malformed input such as `1e--5`.
+            if (index == 1 && !hasDecimalExponentTail(parser)) {
+                return;
+            }
+
+            TokenUtils.consume(parser);
             number.append(cleanUnderscores(exponentPart));
 
             if (index == 1) {
@@ -458,6 +468,20 @@ public class NumberParser {
                 number.append(cleanUnderscores(TokenUtils.consume(parser, LexerTokenType.NUMBER).text));
             }
         }
+    }
+
+    private static boolean hasDecimalExponentTail(Parser parser) {
+        int nextIndex = parser.tokenIndex + 1;
+        if (nextIndex >= parser.tokens.size()) {
+            return false;
+        }
+        LexerToken next = parser.tokens.get(nextIndex);
+        if (next.type == LexerTokenType.NUMBER) {
+            return true;
+        }
+        return (next.text.equals("-") || next.text.equals("+"))
+                && nextIndex + 1 < parser.tokens.size()
+                && parser.tokens.get(nextIndex + 1).type == LexerTokenType.NUMBER;
     }
 
     private static String checkHexExponent(Parser parser) {
