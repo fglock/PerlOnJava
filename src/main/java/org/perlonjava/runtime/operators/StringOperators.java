@@ -637,12 +637,7 @@ public class StringOperators {
             }
         }
         if (safe) {
-            byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
-            byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
-            byte[] out = new byte[aBytes.length + bBytes.length];
-            System.arraycopy(aBytes, 0, out, 0, aBytes.length);
-            System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
-            return propagateTaint(new RuntimeScalar(out), aResolved, bResolved);
+            return propagateTaint(byteStringConcat(aStr, bStr), aResolved, bResolved);
         }
 
         return propagateTaint(new RuntimeScalar(aStr + bStr), aResolved, bResolved);
@@ -727,15 +722,16 @@ public class StringOperators {
             }
         }
         if (safe) {
-            byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
-            byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
-            byte[] out = new byte[aBytes.length + bBytes.length];
-            System.arraycopy(aBytes, 0, out, 0, aBytes.length);
-            System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
-            return propagateTaint(new RuntimeScalar(out), aResolved, bResolved);
+            return propagateTaint(byteStringConcat(aStr, bStr), aResolved, bResolved);
         }
 
         return propagateTaint(new RuntimeScalar(aStr + bStr), aResolved, bResolved);
+    }
+
+    private static RuntimeScalar byteStringConcat(String a, String b) {
+        RuntimeScalar result = new RuntimeScalar(a + b);
+        result.type = RuntimeScalarType.BYTE_STRING;
+        return result;
     }
 
     public static RuntimeScalar chompScalar(RuntimeScalar runtimeScalar) {
