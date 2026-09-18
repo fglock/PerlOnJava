@@ -637,6 +637,12 @@ public class OperatorParser {
             }
         }
 
+        String nestedDeclaration = findNestedDeclaration(operand);
+        if (nestedDeclaration != null) {
+            parser.throwCleanError("Can't redeclare \"" + nestedDeclaration
+                    + "\" in \"" + operator + "\"");
+        }
+
         // Add variables to the scope
         if (operand instanceof ListNode listNode) { // my ($a, $b)  our ($a, $b)
             // process each item of the list; then returns the list
@@ -811,6 +817,24 @@ public class OperatorParser {
         }
 
         return decl;
+    }
+
+    /** A declaration list cannot contain another my/our/state declaration. */
+    private static String findNestedDeclaration(Node node) {
+        if (node instanceof OperatorNode operatorNode) {
+            if (operatorNode.operator.equals("my") || operatorNode.operator.equals("our")
+                    || operatorNode.operator.equals("state")) {
+                return operatorNode.operator;
+            }
+            return null;
+        }
+        if (node instanceof ListNode listNode) {
+            for (Node element : listNode.elements) {
+                String nested = findNestedDeclaration(element);
+                if (nested != null) return nested;
+            }
+        }
+        return null;
     }
 
     private static void throwDeclarationEofError(Parser parser, String message) {
