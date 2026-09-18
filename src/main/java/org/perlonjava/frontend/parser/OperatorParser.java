@@ -637,10 +637,14 @@ public class OperatorParser {
             }
         }
 
-        String nestedDeclaration = findNestedDeclaration(operand);
+        OperatorNode nestedDeclaration = findNestedDeclaration(operand);
         if (nestedDeclaration != null) {
-            parser.throwCleanError("Can't redeclare \"" + nestedDeclaration
-                    + "\" in \"" + operator + "\"");
+            ErrorMessageUtil.SourceLocation location =
+                    parser.ctx.errorUtil.getSourceLocationAccurate(nestedDeclaration.tokenIndex);
+            throw new PerlParserException("Can't redeclare \"" + nestedDeclaration.operator
+                    + "\" in \"" + operator + "\" at " + location.fileName()
+                    + " line " + location.lineNumber() + ", near \""
+                    + nestedDeclarationContext(parser, nestedDeclaration) + "\"");
         }
 
         // Add variables to the scope
@@ -820,21 +824,50 @@ public class OperatorParser {
     }
 
     /** A declaration list cannot contain another my/our/state declaration. */
-    private static String findNestedDeclaration(Node node) {
+    private static OperatorNode findNestedDeclaration(Node node) {
         if (node instanceof OperatorNode operatorNode) {
             if (operatorNode.operator.equals("my") || operatorNode.operator.equals("our")
                     || operatorNode.operator.equals("state")) {
-                return operatorNode.operator;
+                return operatorNode;
             }
             return null;
         }
         if (node instanceof ListNode listNode) {
             for (Node element : listNode.elements) {
-                String nested = findNestedDeclaration(element);
+                OperatorNode nested = findNestedDeclaration(element);
                 if (nested != null) return nested;
             }
         }
         return null;
+    }
+
+    /**
+     * Perl includes the punctuation immediately preceding a nested declaration
+     * in its diagnostic, such as {@code (our} or {@code , our}.
+     */
+    private static String nestedDeclarationContext(Parser parser, OperatorNode declaration) {
+        // Declaration nodes retain the parser position immediately after the
+        // declaration keyword.  Locate the keyword itself before collecting
+        // the preceding punctuation and its intervening whitespace.
+        int declarationIndex = Math.min(declaration.tokenIndex, parser.tokens.size() - 1);
+        while (declarationIndex >= 0
+                && !declaration.operator.equals(parser.tokens.get(declarationIndex).text)) {
+            declarationIndex--;
+        }
+        if (declarationIndex < 0) {
+            return declaration.operator;
+        }
+
+        int contextStart = declarationIndex - 1;
+        while (contextStart >= 0
+                && parser.tokens.get(contextStart).type == WHITESPACE) {
+            contextStart--;
+        }
+        StringBuilder context = new StringBuilder();
+        for (int index = Math.max(0, contextStart); index <= declarationIndex; index++) {
+            context.append(parser.tokens.get(index).text);
+        }
+        return context.toString();
     }
 
     private static void throwDeclarationEofError(Parser parser, String message) {
