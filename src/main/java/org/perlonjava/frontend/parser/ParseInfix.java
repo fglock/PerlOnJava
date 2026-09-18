@@ -551,6 +551,10 @@ public class ParseInfix {
                         && (token.text.equals("$") || token.text.equals("$#") || token.text.equals("@"))) {
                     throwMissingOperatorBeforeSigil(parser, number, token, operatorIndex);
                 }
+                if (left instanceof NumberNode number
+                        && (token.text.equals("e") || token.text.equals("E"))) {
+                    throwMissingOperatorBeforeIncompleteDecimalExponent(parser, number, token, operatorIndex);
+                }
                 // `00my sub\0` reaches infix parsing after the numeric literal.
                 // Perl nevertheless diagnoses the incomplete lexical-sub
                 // declaration, rather than reporting a generic infix syntax
@@ -665,6 +669,27 @@ public class ParseInfix {
         String message = kind + " found where operator expected (Missing operator before \""
                 + suffix + "\"?)" + at + near + "\"\n"
                 + "syntax error" + at + syntaxNear + "\"\n";
+        throw new PerlParserException(message);
+    }
+
+    /**
+     * A bare exponent marker after a decimal literal is not part of the
+     * literal unless a complete exponent follows.  Perl diagnoses the marker
+     * as a bareword and points at the literal-plus-marker pair.
+     */
+    private static void throwMissingOperatorBeforeIncompleteDecimalExponent(Parser parser,
+                                                                              NumberNode left,
+                                                                              LexerToken marker,
+                                                                              int markerIndex) {
+        ErrorMessageUtil.SourceLocation location =
+                parser.ctx.errorUtil.getSourceLocationAccurate(markerIndex);
+        String near = left.value + marker.text;
+        String at = " at " + location.fileName() + " line " + location.lineNumber()
+                + ", near \"" + near + "\"\n";
+        String message = "Bareword found where operator expected (Missing operator before \""
+                + marker.text + "\"?)" + at
+                + "syntax error" + at
+                + "Execution of " + location.fileName() + " aborted due to compilation errors.\n";
         throw new PerlParserException(message);
     }
 
