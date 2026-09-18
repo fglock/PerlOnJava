@@ -2566,6 +2566,9 @@ public class Opcodes {
     /** Array element fetch that preserves tied-array lvalue semantics for local(). */
     public static final short ARRAY_GET_FOR_LOCAL = 562;
 
+    /** Record a readline handle's source spelling for $. diagnostics. Format: nameStringIdx. */
+    public static final short SET_LAST_READLINE_HANDLE_NAME = 566;
+
     /**
      * Resolve a statically named CODE reference at runtime. This preserves the
      * current CV snapshot while allowing an earlier runtime glob assignment in

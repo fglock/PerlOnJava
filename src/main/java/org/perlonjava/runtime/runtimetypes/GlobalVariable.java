@@ -1223,6 +1223,17 @@ public class GlobalVariable {
         return null;
     }
 
+    /** Return the Perl spelling for an exact global aggregate cell. */
+    public static String findGlobalAggregateName(RuntimeBase aggregate) {
+        for (Map.Entry<String, RuntimeArray> entry : globalArrays.entrySet()) {
+            if (entry.getValue() == aggregate) return "@" + entry.getKey().replaceFirst("^main::", "");
+        }
+        for (Map.Entry<String, RuntimeHash> entry : globalHashes.entrySet()) {
+            if (entry.getValue() == aggregate) return "%" + entry.getKey().replaceFirst("^main::", "");
+        }
+        return null;
+    }
+
     private static void tagGeneratedLexicalSubStorage(String key, RuntimeScalar scalar) {
         if (scalar == null || scalar.lexicalSubName != null) {
             return;

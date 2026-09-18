@@ -868,6 +868,11 @@ public class Disassemble {
                         int readCtx = interpretedCode.bytecode[pc++];
                         sb.append("READLINE r").append(rd).append(" = readline(r").append(fhReg).append(", ctx=").append(readCtx).append(")\n");
                         break;
+                    case Opcodes.SET_LAST_READLINE_HANDLE_NAME:
+                        int handleNameIndex = interpretedCode.bytecode[pc++];
+                        sb.append("SET_LAST_READLINE_HANDLE_NAME ")
+                                .append(interpretedCode.stringPool[handleNameIndex]).append("\n");
+                        break;
                     case Opcodes.MATCH_REGEX:
                         rd = interpretedCode.bytecode[pc++];
                         int strReg = interpretedCode.bytecode[pc++];

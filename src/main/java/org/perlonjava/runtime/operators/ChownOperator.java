@@ -42,8 +42,15 @@ public class ChownOperator {
             // before taking this no-op fast path.
             for (int i = 2; i < args.length; i++) {
                 for (RuntimeScalar fileArg : args[i]) {
-                    RuntimeScalar.checkTaint(
-                            RuntimeScalar.dereferenceAndFetchOnce(fileArg), "chown");
+                    RuntimeScalar pathArg = RuntimeScalar.dereferenceAndFetchOnce(fileArg);
+                    RuntimeScalar.checkTaint(pathArg, "chown");
+                    if (pathArg.type != RuntimeScalarType.GLOB
+                            && pathArg.type != RuntimeScalarType.GLOBREFERENCE) {
+                        Path path = RuntimeIO.resolvePath(pathArg.toString(), "chown");
+                        if (path == null || !Files.exists(path)) {
+                            GlobalVariable.getGlobalVariable("main::!").set(2); // ENOENT
+                        }
+                    }
                 }
             }
             return new RuntimeScalar(0);

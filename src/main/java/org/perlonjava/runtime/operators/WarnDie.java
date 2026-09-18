@@ -329,6 +329,20 @@ public class WarnDie {
                         whereStr = getPerlLocationFromStack();
                     }
                     out += whereStr;
+                    if (sig.getDefinedBoolean() && !isReservedSigString(sig)) {
+                        RuntimeIO lastRead = RuntimeIO.getLastReadlineHandle();
+                        String diagnosticName = lastRead == null ? null : lastRead.getDiagnosticReadlineHandleName();
+                        // Only a source-level lexical filehandle expression retains
+                        // readline context for a subsequent custom warning handler.
+                        // Named handles such as DATA are used internally while loading
+                        // source and must not decorate unrelated warnings.
+                        if (diagnosticName != null && diagnosticName.startsWith("$")) {
+                            String filehandleContext = getFilehandleContext();
+                            if (filehandleContext != null && !filehandleContext.isEmpty()) {
+                                out += filehandleContext;
+                            }
+                        }
+                    }
                     // Add period and newline if location info was added
                     if (!whereStr.isEmpty()) {
                         out += ".\n";
@@ -815,8 +829,14 @@ public class WarnDie {
      * @return String with filehandle context (including leading ", "), or null if no context
      */
     public static String getFilehandleContext() {
-        if (RuntimeIO.getLastAccessedHandle() != null && RuntimeIO.getLastAccessedHandle().currentLineNumber > 0) {
-            String handleName = findFilehandleName(RuntimeIO.getLastAccessedHandle());
+        RuntimeIO handle = RuntimeIO.getLastAccessedHandle();
+        boolean usingRetainedReadlineHandle = false;
+        if (handle == null || handle.currentLineNumber == 0) {
+            handle = RuntimeIO.getLastReadlineHandle();
+            usingRetainedReadlineHandle = handle != null;
+        }
+        if (handle != null && handle.currentLineNumber > 0) {
+            String handleName = findFilehandleName(handle);
             if (handleName != null) {
                 // Perl 5 uses "line" only when $/ is exactly "\n".
                 // Everything else (undef, "", custom separator, ref) uses "chunk".
@@ -829,7 +849,11 @@ public class WarnDie {
                 } catch (Exception ignored) {
                     // Default to "chunk" if we can't read $/
                 }
-                return ", <" + handleName + "> " + unit + " " + RuntimeIO.getLastAccessedHandle().currentLineNumber;
+                String context = ", <" + handleName + "> " + unit + " " + handle.currentLineNumber;
+                if (usingRetainedReadlineHandle) {
+                    RuntimeIO.setLastReadlineHandle(null);
+                }
+                return context;
             }
         }
         return null;
@@ -854,6 +878,9 @@ public class WarnDie {
                 name = name.substring(colonIdx + 2);
             }
             return name;
+        }
+        if (handle.getDiagnosticReadlineHandleName() != null) {
+            return handle.getDiagnosticReadlineHandleName();
         }
         // Fall back to the variable name set during the last readline (e.g., "$f")
         return RuntimeIO.getLastReadlineHandleName();

@@ -450,6 +450,11 @@ public class CompileOperator {
             bc.throwCompilerException("open requires arguments");
             return;
         }
+        String fileHandleName = openTargetName(argsList.elements.getFirst());
+        if (fileHandleName != null) {
+            bc.emit(Opcodes.SET_LAST_READLINE_HANDLE_NAME);
+            bc.emit(bc.addToStringPool(fileHandleName));
+        }
         int argsReg = bc.allocateRegister();
         bc.emit(Opcodes.NEW_ARRAY);
         bc.emitReg(argsReg);
@@ -490,6 +495,24 @@ public class CompileOperator {
         bc.emit(Opcodes.SCOPE_EXIT_CLEANUP_ARRAY);
         bc.emitReg(argsReg);
         bc.lastResultReg = rd;
+    }
+
+    private static String openTargetName(Node node) {
+        if (node instanceof OperatorNode wrapper && wrapper.operator.equals("scalar")) {
+            node = wrapper.operand;
+        }
+        if (node instanceof BinaryOperatorNode element
+                && (element.operator.equals("[") || element.operator.equals("{"))
+                && element.left instanceof OperatorNode scalar
+                && scalar.operator.equals("$")
+                && scalar.operand instanceof IdentifierNode identifier) {
+            return "$" + identifier.name + (element.operator.equals("[") ? "[...]" : "{...}");
+        }
+        if (node instanceof OperatorNode scalar && scalar.operator.equals("$")
+                && scalar.operand instanceof IdentifierNode identifier) {
+            return "$" + identifier.name;
+        }
+        return null;
     }
 
     private static void visitSubstr(BytecodeCompiler bc, OperatorNode node) {

@@ -37,6 +37,9 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
         // Note: this.type is RuntimeScalarType.UNDEF
     }
 
+    /** Parent aggregate, used for diagnostics that retain an element's identity. */
+    public RuntimeArray getParent() { return parent; }
+
     @Override
     public RuntimeScalar set(RuntimeScalar value) {
         if (parent.threadShared) SharedPerlStorage.validateStoredValue(value);

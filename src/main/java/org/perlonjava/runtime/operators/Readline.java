@@ -17,6 +17,10 @@ public class Readline {
      * @return A RuntimeBase with the line(s).
      */
     public static RuntimeBase readline(RuntimeScalar fileHandle, int ctx) {
+        // Resolving a lexical/aggregate element can retire statement-temporary
+        // diagnostic state. Save the compiler-provided source spelling before
+        // that resolution and attach it to the resulting IO below.
+        String sourceName = RuntimeIO.getLastReadlineHandleName();
         if (fileHandle == null || fileHandle.type == RuntimeScalarType.UNDEF) {
             RuntimeIO.setLastAccessedHandle(null);
         }
@@ -59,6 +63,17 @@ public class Readline {
             return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef;
         }
 
+        if (sourceName != null && (fh.getDiagnosticReadlineHandleName() == null
+                || !(fh.getDiagnosticReadlineHandleName().contains("[")
+                || fh.getDiagnosticReadlineHandleName().contains("{")))) {
+            fh.setDiagnosticReadlineHandleName(sourceName);
+        }
+        // Perl's delayed warn/die filehandle context follows a scalar readline.
+        // A list read is consumed as a scoped aggregate and must not leave
+        // context after its lexical handle is released.
+        RuntimeIO.setLastReadlineHandle(
+                ctx == RuntimeContextType.LIST ? null : fh);
+
         if (fh instanceof TieHandle tieHandle) {
             return TieHandle.tiedReadline(tieHandle, ctx);
         }
@@ -70,6 +85,7 @@ public class Readline {
             while ((line = readline(fh)).type != RuntimeScalarType.UNDEF) {
                 lines.elements.add(line);
             }
+            RuntimeIO.setLastReadlineHandle(null);
             return lines;
         } else {
             // Handle SCALAR context (original behavior)
@@ -84,6 +100,7 @@ public class Readline {
         // Check if the IO object is set up for reading
         // Set this as the last accessed handle for $. (INPUT_LINE_NUMBER) special variable
         RuntimeIO.setLastAccessedHandle(runtimeIO);
+        RuntimeIO.setLastReadlineHandle(runtimeIO);
 
         // Get the input record separator (equivalent to Perl's $/)
         RuntimeScalar rsScalar = getGlobalVariable("main::/");

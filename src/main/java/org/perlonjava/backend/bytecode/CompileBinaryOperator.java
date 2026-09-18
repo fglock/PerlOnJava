@@ -787,6 +787,16 @@ public class CompileBinaryOperator {
         bytecodeCompiler.compileNode(node.left, -1, leftCtx);
         int rs1 = bytecodeCompiler.lastResultReg;
 
+        // Anonymous lexical and aggregate-element handles have no globName,
+        // but Perl includes their source spelling in $.-context diagnostics.
+        if (node.operator.equals("readline")) {
+            Object handleName = node.getAnnotation("handleName");
+            if (handleName instanceof String name) {
+                bytecodeCompiler.emit(Opcodes.SET_LAST_READLINE_HANDLE_NAME);
+                bytecodeCompiler.emit(bytecodeCompiler.addToStringPool(name));
+            }
+        }
+
         int rightCtx;
         if (isListOp) {
             rightCtx = RuntimeContextType.LIST;

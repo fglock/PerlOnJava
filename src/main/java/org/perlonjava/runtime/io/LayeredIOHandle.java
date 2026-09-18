@@ -510,7 +510,7 @@ public class LayeredIOHandle implements IOHandle {
                     ViaLayer layer = new ViaLayer(className, currentLowerHandle(), currentMode());
                     activeLayers.add(layer);
                 } else {
-                    throw new IllegalArgumentException("Unknown layer: " + layerSpec);
+                    throw new IllegalArgumentException("Unknown PerlIO layer \"" + layerSpec + "\"");
                 }
             }
         }
