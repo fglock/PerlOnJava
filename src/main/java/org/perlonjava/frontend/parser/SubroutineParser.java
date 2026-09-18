@@ -492,6 +492,12 @@ public class SubroutineParser {
                 return parseIndirectMethodCall(parser, nameNode);
             }
             LexerToken nextTok = peek(parser);
+            // An unresolved bareword followed by a number is not an
+            // unparenthesized call. Perl diagnoses the missing infix operator
+            // before it can become a runtime undefined-subroutine call.
+            if (nextTok.type == LexerTokenType.NUMBER) {
+                throwNumberAfterBarewordDiagnostic(parser, sourceSubName, currentIndex, nextTok);
+            }
             boolean terminator = nextTok.text.equals(";")
                     || nextTok.text.equals("}")
                     || nextTok.text.equals(")")
@@ -739,6 +745,18 @@ public class SubroutineParser {
             // Restore the previous subroutine context
             parser.ctx.symbolTable.setCurrentSubroutine(previousSubroutine);
         }
+    }
+
+    private static void throwNumberAfterBarewordDiagnostic(Parser parser, String subName,
+                                                            int subNameIndex, LexerToken number) {
+        ErrorMessageUtil.SourceLocation location =
+                parser.ctx.errorUtil.getSourceLocationAccurate(subNameIndex);
+        String near = subName + " " + number.text;
+        String at = " at " + location.fileName() + " line " + location.lineNumber()
+                + ", near \"" + near + "\"\n";
+        throw new PerlParserException(
+                "Number found where operator expected (Do you need to predeclare \""
+                        + subName + "\"?)" + at + "syntax error" + at);
     }
 
     private static boolean isValidIndirectMethod(String subName) {

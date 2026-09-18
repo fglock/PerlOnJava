@@ -6184,6 +6184,40 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     // Method to apply (execute) a subroutine reference using native array for parameters
+    /**
+     * Invoke a generated direct call while retaining its source location for
+     * signature validation.  Named-signature validation happens before the
+     * callee body has entered a normal Perl frame, so {@code caller()} alone
+     * cannot otherwise identify the Perl call site for its diagnostic.
+     *
+     * <p>The synthetic frame is deliberately limited to signature-bearing
+     * callees.  Installing one for every call changes observable {@code caller}
+     * results in ordinary subroutines.</p>
+     */
+    public static RuntimeList applyAtLocation(RuntimeScalar runtimeScalar, String subroutineName,
+                                              RuntimeBase[] args, int callContext,
+                                              String callerPackage, String callerFile,
+                                              int callerLine) {
+        RuntimeScalar resolved = resolveDirectCallTarget(runtimeScalar, subroutineName);
+        RuntimeScalar target = resolved;
+        while (target != null && target.type == RuntimeScalarType.READONLY_SCALAR) {
+            target = (RuntimeScalar) target.value;
+        }
+        if (target == null || target.type != RuntimeScalarType.CODE
+                || !(target.value instanceof RuntimeCode code)
+                || (code.signatureNamedParams.isEmpty()
+                && !"%".equals(code.signatureSlurpySigil))) {
+            return apply(resolved, subroutineName, args, callContext);
+        }
+
+        pushSyntheticCallerFrame(callerPackage, callerFile, callerLine, "(signature)");
+        try {
+            return apply(resolved, subroutineName, args, callContext);
+        } finally {
+            popSyntheticCallerFrame();
+        }
+    }
+
     public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeBase[] args, int callContext) {
         runtimeScalar = resolveDirectCallTarget(runtimeScalar, subroutineName);
 

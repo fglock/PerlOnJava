@@ -264,7 +264,8 @@ public abstract class StringSegmentParser {
     protected Node prepareStringSegment(Node node) {
         if (isRegex && node instanceof StringNode stringNode) {
             return ConstantOverloadParser.wrapRegexSegment(
-                    stringNode, stringNode.value, tokenIndex,
+                    parser, stringNode, stringNode.value, tokenIndex,
+                    interpolateVariable ? "qq" : "q",
                     ctx.symbolTable.isStrictOptionEnabled(
                             org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8)
                             || ctx.compilerOptions.isUnicodeSource);

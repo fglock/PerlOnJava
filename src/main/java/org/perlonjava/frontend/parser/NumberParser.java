@@ -13,7 +13,11 @@ import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.runtimetypes.GlobalContext;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.PerlParserException;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
@@ -71,12 +75,12 @@ public class NumberParser {
                                                 String category, int tokenIndex) {
         RuntimeHash hh = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
         if (hh == null || hh.elements.isEmpty()) {
-            rejectClearedConstantHandler(parser, originalText, category);
+            rejectClearedConstantHandler(parser, originalText, category, tokenIndex);
             return literal;
         }
         RuntimeScalar handler = hh.elements.get(category);
         if (handler == null) {
-            rejectClearedConstantHandler(parser, originalText, category);
+            rejectClearedConstantHandler(parser, originalText, category, tokenIndex);
             return literal;
         }
         // Accept both a CODE scalar (rare) and a CODE reference (normal).
@@ -88,36 +92,46 @@ public class NumberParser {
             return literal;
         }
 
-        // Stash the handler into a uniquely-named package global so it
-        // remains reachable at runtime (unlike %^H, which is cleared).
+        // Perl applies :constant handlers while compiling the literal.  Keep
+        // the category out of %^H while the callback runs so eval STRING in
+        // the callback cannot recursively re-enter the same handler.
+        RuntimeScalar saved = hh.elements.remove(category);
+        RuntimeScalar result;
+        try {
+            RuntimeArray callArgs = new RuntimeArray();
+            callArgs.elements.add(new RuntimeScalar(originalText));
+            callArgs.elements.add(new RuntimeScalar(originalText));
+            callArgs.elements.add(new RuntimeScalar(category));
+            result = RuntimeCode.apply(handler, callArgs, RuntimeContextType.SCALAR).scalar();
+        } finally {
+            if (saved != null) hh.elements.put(category, saved);
+        }
+        if (result.type == RuntimeScalarType.UNDEF) {
+            var location = parser.ctx.errorUtil.getSourceLocationAccurate(Math.max(0, tokenIndex - 1));
+            parser.deferDiagnostic("Constant(" + originalText + "): Call to &{$^H{" + category
+                    + "}} did not return a defined value at " + location.fileName()
+                    + " line " + location.lineNumber() + ", at end of line\n");
+            return literal;
+        }
+
+        // Retain the compile-time result in a synthetic global for emitted
+        // bytecode; %^H itself is cleared before execution.
         int id = CONSTANT_HANDLER_COUNTER.incrementAndGet();
         String varName = "overload::__poj_const_handler_" + id;
-        GlobalVariable.getGlobalVariable(varName).set(handler);
+        GlobalVariable.getGlobalVariable(varName).set(result);
 
-        // Emit  overload::__poj_const_call($handler, $text, $literal, $category)
-        // rather than a direct $handler->($text, $literal, $category) call.
-        // The helper temporarily removes %^H{$category} for the duration of
-        // the handler's execution so that patterns like
-        //     sub { return eval $_[0] }
-        // in `overload::constant float => ...` don't infinite-recurse when
-        // the handler's body reparses the original source text.
+        // Emit the captured scalar result.
         OperatorNode handlerVar = new OperatorNode("$",
                 new IdentifierNode(varName, tokenIndex), tokenIndex);
-        ListNode args = new ListNode(tokenIndex);
-        args.elements.add(handlerVar);
-        args.elements.add(new StringNode(originalText, tokenIndex));
-        args.elements.add(literal);
-        args.elements.add(new StringNode(category, tokenIndex));
-        return new BinaryOperatorNode("(",
-                new OperatorNode("&",
-                        new IdentifierNode("overload::__poj_const_call", tokenIndex),
-                        tokenIndex),
-                args, tokenIndex);
+        return handlerVar;
     }
 
-    private static void rejectClearedConstantHandler(Parser parser, String originalText, String category) {
+    private static void rejectClearedConstantHandler(Parser parser, String originalText, String category,
+                                                     int tokenIndex) {
         if (HintHashRegistry.constantHandlerWasCleared(category)) {
-            parser.throwError("Constant(" + originalText + ") unknown");
+            var location = parser.ctx.errorUtil.getSourceLocationAccurate(Math.max(0, tokenIndex - 1));
+            throw new PerlParserException("Constant(" + originalText + ") unknown at "
+                    + location.fileName() + " line " + location.lineNumber() + ", at end of line\n");
         }
     }
 

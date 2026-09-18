@@ -52,6 +52,7 @@ public class SignatureParser {
     private String namedArgsHashName = null; // Track the hash name for named parameters
     private String subroutineName = null; // Optional subroutine name for error messages
     private boolean isMethod = false; // True if parsing method signature (has implicit $self)
+    private int signatureOpenParenIndex;
 
     private SignatureParser(Parser parser) {
         this.parser = parser;
@@ -104,6 +105,8 @@ public class SignatureParser {
     }
 
     private ListNode parse() {
+        peekToken();
+        signatureOpenParenIndex = parser.tokenIndex;
         consumeOpenParen();
 
         // Handle empty signature
@@ -135,7 +138,7 @@ public class SignatureParser {
                 if (next.text.equals("$") || next.text.equals("@") || next.text.equals("%")) {
                     parser.throwError("syntax error");
                 }
-                parser.throwError("Expected ',' or ')' in signature prototype");
+                throwMalformedSeparator();
             }
         }
 
@@ -156,7 +159,12 @@ public class SignatureParser {
         LexerToken sigilToken = consumeToken();
         String sigil = sigilToken.text;
 
-        validateSigil(sigil);
+        boolean immediatelyFollowedByHash = parser.tokenIndex < parser.tokens.size()
+                && "#".equals(parser.tokens.get(parser.tokenIndex).text);
+        if (validateSigil(sigil, paramStartIndex, isNamed, immediatelyFollowedByHash)) {
+            recoverImmediateHashAfterSigil(paramStartIndex);
+            return;
+        }
 
         if (!isNamed && hasNamedParameter) {
             parser.throwError(paramStartIndex, "Positional parameter follows named parameter");
@@ -178,7 +186,7 @@ public class SignatureParser {
 
         // Named parameters cannot be slurpy
         if (isNamed && isSlurpy) {
-            parser.throwError("Named parameters cannot be slurpy");
+            throwNamedSlurpyParameterError(sigil);
         }
 
         // Parse parameter name (if present)
@@ -188,7 +196,10 @@ public class SignatureParser {
         }
 
         if (paramName != null && paramName.equals("_")) {
-            parser.throwError(paramStartIndex, "Can't use global " + sigil + "_ in subroutine signature");
+            var location = parser.ctx.errorUtil.getSourceLocationAccurate(signatureOpenParenIndex);
+            throw new PerlCompilerException("Can't use global " + sigil + "_ in subroutine signature at "
+                    + location.fileName() + " line " + location.lineNumber() + ", near \"("
+                    + sigil + "_\"\n");
         }
 
         if (isNamed && paramName != null && namedParameterNames.contains(paramName)) {
@@ -207,7 +218,7 @@ public class SignatureParser {
                 && !afterParam.text.equals("=") && !afterParam.text.equals("//=") && !afterParam.text.equals("||=")
                 && !afterParam.text.equals("$") && !afterParam.text.equals("@") && !afterParam.text.equals("%")) {
             if (afterParam.type == LexerTokenType.OPERATOR) {
-                parser.throwError("Illegal operator following parameter in a subroutine signature");
+                throwMalformedSeparator();
             }
         }
 
@@ -264,23 +275,168 @@ public class SignatureParser {
         return index;
     }
 
-    private void validateSigil(String sigil) {
-        // Check for $# which is tokenized as a single token
-        if (sigil.equals("$#")) {
-            parser.throwError("'#' not allowed immediately following a sigil in a subroutine signature");
+    private boolean validateSigil(String sigil, int paramStartIndex, boolean isNamed,
+                                  boolean immediatelyFollowedByHash) {
+        // The lexer may combine a sigil and an immediately following '#'
+        // (for example, "$#") into one token.  Diagnose all three sigils at
+        // the preceding open-paren context, which is the source position Perl
+        // reports.  Keep parsing so the following line receives its ordinary
+        // recovered syntax diagnostic too.
+        if (sigil.length() == 2 && sigil.charAt(1) == '#'
+                && (sigil.charAt(0) == '$' || sigil.charAt(0) == '@' || sigil.charAt(0) == '%')) {
+            deferImmediateHashAfterSigilDiagnostic(paramStartIndex, sigil.charAt(0));
+            return true;
         }
 
         if (!sigil.equals("$") && !sigil.equals("@") && !sigil.equals("%")) {
-            parser.throwError("A signature parameter must start with '$', '@' or '%'");
+            recoverInvalidParameterStart(paramStartIndex, isNamed, sigil);
+            return true;
         }
 
         // Check for double sigil or invalid character after sigil
+        // Check the raw following token before peekToken() has a chance to
+        // interpret '#' as a comment and skip past its terminating newline.
+        // The recovery below needs that newline to emit Perl's second syntax
+        // error for the first token on the next line.
+        if (immediatelyFollowedByHash) {
+            deferImmediateHashAfterSigilDiagnostic(paramStartIndex, sigil.charAt(0));
+            return true;
+        }
         LexerToken next = peekToken();
         if (next.text.equals("$") || next.text.equals("@") || next.text.equals("%")) {
-            parser.throwError("Illegal character following sigil in a subroutine signature");
+            throwDoubleSigilError(sigil, next.text);
+        }
+        if (next.type == LexerTokenType.NUMBER) {
+            var location = parser.ctx.errorUtil.getSourceLocationAccurate(signatureOpenParenIndex);
+            throw new PerlCompilerException("Illegal operator following parameter in a subroutine signature at "
+                    + location.fileName() + " line " + location.lineNumber() + ", near \"("
+                    + sigil + next.text + "\"\n");
         }
         if (next.text.equals("#")) {
-            parser.throwError("'#' not allowed immediately following a sigil in a subroutine signature");
+            deferImmediateHashAfterSigilDiagnostic(paramStartIndex, sigil.charAt(0));
+            return true;
+        }
+        return false;
+    }
+
+    private void throwDoubleSigilError(String sigil, String followingSigil) {
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(signatureOpenParenIndex);
+        String closing = parser.tokenIndex + 1 < parser.tokens.size()
+                ? parser.tokens.get(parser.tokenIndex + 1).text : "";
+        String trailingWhitespace = parser.tokenIndex + 2 < parser.tokens.size()
+                && parser.tokens.get(parser.tokenIndex + 2).type == LexerTokenType.WHITESPACE
+                ? parser.tokens.get(parser.tokenIndex + 2).text : "";
+        throw new PerlCompilerException("Illegal character following sigil in a subroutine signature at "
+                + location.fileName() + " line " + location.lineNumber() + ", near \"("
+                + sigil + "\"\nsyntax error at " + location.fileName() + " line "
+                + location.lineNumber() + ", near \"" + sigil + followingSigil + closing
+                + trailingWhitespace + "\"\n");
+    }
+
+    private void recoverInvalidParameterStart(int paramStartIndex, boolean isNamed, String token) {
+        int contextStart = previousSignificantToken(paramStartIndex);
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(contextStart);
+        String message = isNamed
+                ? "A named signature parameter must start with '$'"
+                : "A signature parameter must start with '$', '@' or '%'";
+        throw new PerlCompilerException(message + " at " + location.fileName() + " line "
+                + location.lineNumber() + ", near \"" + signatureExcerpt(contextStart, true) + "\"\n"
+                + "syntax error at " + location.fileName() + " line "
+                + location.lineNumber() + ", near \"" + signatureExcerpt(contextStart, false) + "\"\n");
+    }
+
+    private String signatureExcerpt(int start, boolean onlyFirstCharacterOfLastToken) {
+        StringBuilder excerpt = new StringBuilder();
+        int end = parser.tokenIndex - 1;
+        for (int i = start; i <= end; i++) {
+            LexerToken token = parser.tokens.get(i);
+            if (i == end && onlyFirstCharacterOfLastToken) {
+                excerpt.append(token.text.charAt(0));
+            } else {
+                excerpt.append(token.text);
+            }
+        }
+        return excerpt.toString();
+    }
+
+    private void throwMalformedSeparator() {
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(signatureOpenParenIndex);
+        String excerpt = malformedSeparatorExcerpt();
+        String diagnostic = "Illegal operator following parameter in a subroutine signature at "
+                + location.fileName() + " line " + location.lineNumber() + ", near \""
+                + excerpt + "\"\n"
+                + "syntax error at " + location.fileName() + " line " + location.lineNumber()
+                + ", near \"" + excerpt + "\"\n";
+        throw new PerlCompilerException(diagnostic);
+    }
+
+    private String malformedSeparatorExcerpt() {
+        int end = parser.tokenIndex;
+        String unexpected = parser.tokens.get(end).text;
+        if (";".equals(unexpected) && end + 1 < parser.tokens.size()
+                && parser.tokens.get(end + 1).type == LexerTokenType.WHITESPACE) {
+            end++;
+        }
+        if ("{".equals(unexpected)) {
+            while (end + 1 < parser.tokens.size() && !"}".equals(parser.tokens.get(end).text)) {
+                end++;
+            }
+        }
+        StringBuilder excerpt = new StringBuilder();
+        for (int i = signatureOpenParenIndex; i <= end; i++) {
+            LexerToken token = parser.tokens.get(i);
+            excerpt.append(token.text);
+            if (":".equals(unexpected) && i == end) {
+                break;
+            }
+        }
+        return excerpt.toString();
+    }
+
+    private void throwNamedSlurpyParameterError(String sigil) {
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(signatureOpenParenIndex);
+        String name = parser.tokenIndex < parser.tokens.size() ? parser.tokens.get(parser.tokenIndex).text : "";
+        throw new PerlCompilerException("A named signature parameter must start with '$' at "
+                + location.fileName() + " line " + location.lineNumber() + ", near \"(:" + sigil + "\"\n"
+                + "syntax error at " + location.fileName() + " line " + location.lineNumber()
+                + ", near \":" + sigil + name + "\"\n");
+    }
+
+    private void deferImmediateHashAfterSigilDiagnostic(int paramStartIndex, char sigil) {
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(
+                previousSignificantToken(paramStartIndex));
+        parser.deferDiagnostic("'#' not allowed immediately following a sigil in a subroutine signature at "
+                + location.fileName() + " line " + location.lineNumber()
+                + ", near \"(" + sigil + "\"\n");
+    }
+
+    /**
+     * Perl recovers from {@code $#foo} in a signature until the closing
+     * parenthesis, producing a second syntax error at the next line.  Do the
+     * same without installing an invalid lexical such as {@code $#foo}.
+     */
+    private void recoverImmediateHashAfterSigil(int paramStartIndex) {
+        int syntaxIndex = -1;
+        boolean afterNewline = false;
+        for (int i = parser.tokenIndex; i < parser.tokens.size(); i++) {
+            LexerToken token = parser.tokens.get(i);
+            if (token.type == LexerTokenType.NEWLINE) {
+                afterNewline = true;
+                continue;
+            }
+            if (afterNewline && token.type != LexerTokenType.WHITESPACE) {
+                syntaxIndex = i;
+                break;
+            }
+        }
+        if (syntaxIndex >= 0) {
+            var location = parser.ctx.errorUtil.getSourceLocationAccurate(syntaxIndex);
+            parser.deferDiagnostic("syntax error at " + location.fileName() + " line "
+                    + location.lineNumber() + ", near \""
+                    + parser.tokens.get(syntaxIndex).text + "\"\n");
+        }
+        while (!peekToken().text.equals(")") && peekToken().type != LexerTokenType.EOF) {
+            consumeToken();
         }
     }
 

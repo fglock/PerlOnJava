@@ -374,9 +374,38 @@ public class StatementResolver {
                         consume(parser); // consume "sub"
                         LexerToken nameToken = peek(parser);
 
+                        // A lexical/package-qualified declaration without a
+                        // name is distinct from an anonymous sub expression.
+                        // Preserve Perl's declaration-specific diagnostic for
+                        // `my sub;`, `our sub;`, and `state sub;`.
+                        if (nameToken.text.equals(";") || nameToken.type == LexerTokenType.EOF) {
+                            parser.throwCleanError("Missing name in \"" + declaration + " sub\"");
+                        }
+
                         if (nameToken.type == LexerTokenType.IDENTIFIER) {
                             String subName = consume(parser).text;
                             int subNameIndex = parser.tokenIndex - 1; // Save the token index of the sub name
+
+                            int qualifiedStart = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+                            if (qualifiedStart < parser.tokens.size()
+                                    && parser.tokens.get(qualifiedStart).text.equals("::")) {
+                                int end = qualifiedStart;
+                                StringBuilder qualified = new StringBuilder(subName);
+                                while (end + 1 < parser.tokens.size()
+                                        && parser.tokens.get(end).text.equals("::")
+                                        && parser.tokens.get(end + 1).type == LexerTokenType.IDENTIFIER) {
+                                    qualified.append("::").append(parser.tokens.get(end + 1).text);
+                                    end += 2;
+                                }
+                                var location = parser.ctx.errorUtil.getSourceLocationAccurate(subNameIndex);
+                                String diagnostic = declaration.equals("our")
+                                        ? "No package name allowed for subroutine &" + qualified + " in \"our\""
+                                        : "\"" + declaration + "\" subroutine &" + qualified
+                                                + " can't be in a package";
+                                parser.deferDiagnostic(diagnostic + " at " + location.fileName()
+                                        + " line " + location.lineNumber() + ", near \""
+                                        + declaration + " sub " + qualified + "\"\n");
+                            }
 
                             if (declaration.equals("our")) {
                                 // our sub works like our var - it creates a package sub AND a lexical alias

@@ -547,6 +547,10 @@ public class ParseInfix {
                 // Handle postfix increment/decrement
                 return new OperatorNode(token.text + "postfix", left, parser.tokenIndex);
             default:
+                if (left instanceof NumberNode number
+                        && (token.text.equals("$") || token.text.equals("$#") || token.text.equals("@"))) {
+                    throwMissingOperatorBeforeSigil(parser, number, token, operatorIndex);
+                }
                 // `00my sub\0` reaches infix parsing after the numeric literal.
                 // Perl nevertheless diagnoses the incomplete lexical-sub
                 // declaration, rather than reporting a generic infix syntax
@@ -621,6 +625,47 @@ public class ParseInfix {
                 }
                 throw new PerlCompilerException(Math.max(0, errorIndex), "syntax error", parser.ctx.errorUtil);
         }
+    }
+
+    /**
+     * Perl reports a missing operator before a sigil that immediately follows
+     * a numeric literal.  The general fallback used to emit only the trailing
+     * syntax error, losing both the term kind and the source fragment.
+     */
+    private static void throwMissingOperatorBeforeSigil(Parser parser, NumberNode left,
+                                                        LexerToken sigil, int sigilIndex) {
+        String suffix = sigil.text;
+        String kind = sigil.text.equals("$") ? "Scalar" : "Array";
+        int cursor = parser.tokenIndex;
+
+        if (sigil.text.equals("$#")) {
+            kind = "Array length";
+        } else if (sigil.text.equals("$") && cursor < parser.tokens.size()
+                && parser.tokens.get(cursor).text.equals("#")) {
+            suffix += "#";
+            kind = "Array length";
+            cursor++;
+        }
+        if (cursor < parser.tokens.size()) {
+            LexerToken following = parser.tokens.get(cursor);
+            if (following.text.equals("{") || following.type == LexerTokenType.IDENTIFIER) {
+                suffix += following.text;
+            }
+        }
+
+        ErrorMessageUtil.SourceLocation location =
+                parser.ctx.errorUtil.getSourceLocationAccurate(left.getIndex());
+        String near = left.value + suffix;
+        String syntaxNear = switch (suffix) {
+            case "@foo" -> near + "\n";
+            default -> left.value + (suffix.startsWith("$#") ? "$#" : sigil.text);
+        };
+        String at = " at " + location.fileName() + " line " + location.lineNumber()
+                + ", near \"";
+        String message = kind + " found where operator expected (Missing operator before \""
+                + suffix + "\"?)" + at + near + "\"\n"
+                + "syntax error" + at + syntaxNear + "\"\n";
+        throw new PerlParserException(message);
     }
 
     /**
