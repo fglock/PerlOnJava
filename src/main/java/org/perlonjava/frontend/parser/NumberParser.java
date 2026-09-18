@@ -275,6 +275,7 @@ public class NumberParser {
             TokenUtils.consume(parser); // consume '.'
 
             StringBuilder fractionalPart = new StringBuilder();
+            boolean invalidFractionalDigit = false;
 
             while (parser.tokenIndex < parser.tokens.size()) {
                 String currentToken = parser.tokens.get(parser.tokenIndex).text;
@@ -282,7 +283,13 @@ public class NumberParser {
                 if (parser.tokens.get(parser.tokenIndex).type == LexerTokenType.NUMBER) {
                     String digitStr = cleanUnderscores(TokenUtils.consume(parser).text);
                     if (!format.digitValidator.test(digitStr)) {
-                        parser.throwError("Invalid " + format.name + " digit in fractional part");
+                        // A non-base digit means this was not a base-specific
+                        // floating literal after all.  Perl leaves the dot for
+                        // the ordinary concatenation parser (for example,
+                        // `07.8p0` is `07 . 8p0`), which then diagnoses the
+                        // trailing bareword.
+                        invalidFractionalDigit = true;
+                        break;
                     }
                     fractionalPart.append(digitStr);
                 } else if (parser.tokens.get(parser.tokenIndex).type == LexerTokenType.IDENTIFIER) {
@@ -318,7 +325,10 @@ public class NumberParser {
                     break;
                 }
             }
-            if (format == HEX_FORMAT && exponentStr.isEmpty()) {
+            if (invalidFractionalDigit) {
+                parser.tokenIndex = beforeFractionalPart;
+                hasFractionalPart = false;
+            } else if (format == HEX_FORMAT && exponentStr.isEmpty()) {
                 if (numberStr.isEmpty()) {
                     parser.throwError("Invalid hexadecimal number");
                 }
