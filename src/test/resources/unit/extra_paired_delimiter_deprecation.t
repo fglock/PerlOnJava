@@ -12,6 +12,8 @@ my @warnings;
 
 like($warnings[0], qr{\AUse of '《' is deprecated as a string delimiter},
      'the future paired delimiter emits the deprecation warning');
+like($warnings[0], qr{ at \(eval \d+\) line 2\.\n\z},
+     'the compatibility warning belongs to the delimiter source line');
 
 @warnings = ();
 {
