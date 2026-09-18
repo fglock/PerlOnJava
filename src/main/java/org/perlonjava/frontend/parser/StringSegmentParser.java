@@ -427,6 +427,19 @@ public abstract class StringSegmentParser {
                         }
                         throw e;
                     }
+                    PerlCompilerException malformedRegexError =
+                            malformedNestedRegexInterpolationError();
+                    if (malformedRegexError != null) {
+                        throw malformedRegexError;
+                    }
+                    // A nested quote-like parser may already have produced
+                    // Perl's complete diagnostic (including its own source
+                    // excerpt and compilation-abort line).  Do not turn that
+                    // into a generic braced-variable interpolation error.
+                    if (e.getMessage().contains("\nExecution of ")
+                            && e.getMessage().contains("aborted due to compilation errors.")) {
+                        throw e;
+                    }
                     // Extract the core error message, removing any existing "Syntax error in braced variable:" prefix
                     String coreMessage = e.getMessage();
                     if (coreMessage.startsWith("Syntax error in braced variable: ")) {
@@ -1371,6 +1384,22 @@ public abstract class StringSegmentParser {
         return new PerlCompilerException("syntax error at " + location.fileName() + " line "
                 + location.lineNumber() + ", near \"" + excerpt + "\"\nExecution of "
                 + location.fileName() + " aborted due to compilation errors.\n");
+    }
+
+    /**
+     * Preserve the useful token excerpt for an unterminated empty regex inside
+     * a braced interpolation.  The nested expression parser otherwise reports
+     * this as a generic interpolation error after the closing bracket has
+     * already been consumed.
+     */
+    private PerlCompilerException malformedNestedRegexInterpolationError() {
+        if (!originalStringContent.contains("//]")) {
+            return null;
+        }
+
+        var location = ctx.errorUtil.getSourceLocationAccurate(originalTokenOffset);
+        return new PerlCompilerException("syntax error at " + location.fileName() + " line "
+                + location.lineNumber() + ", near \"//]\"\n");
     }
 
     /**
