@@ -1113,6 +1113,17 @@ public class OperatorParser {
     }
 
     private static boolean isDeleteExistsTarget(Node argument) {
+        if (argument instanceof ListNode list && list.elements.size() == 1) {
+            return isDeleteExistsTarget(list.elements.getFirst());
+        }
+        if (argument instanceof BlockNode block && block.elements.size() == 1) {
+            return isDeleteExistsTarget(block.elements.getFirst());
+        }
+        // A leading + is a Perl parse disambiguator, not part of the
+        // lvalue target: exists +($ref // 0)->{key} is valid.
+        if (argument instanceof OperatorNode unaryPlus && unaryPlus.operator.equals("+")) {
+            return isDeleteExistsTarget(unaryPlus.operand);
+        }
         if (argument instanceof OperatorNode operatorNode && operatorNode.operator.equals("&")) {
             return true;
         }
