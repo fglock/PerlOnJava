@@ -422,17 +422,24 @@ public class OperatorParser {
         if (allDigits) return true;
 
         // Single non-identifier character: $!, $/, $@, $;, and Unicode punctuation
-        // such as $¶ are all global-only. Character.isLetterOrDigit recognizes
-        // Unicode letters and digits, so valid Unicode identifiers remain lexicalizable.
-        if (name.length() == 1) {
-            char c = name.charAt(0);
-            if (!Character.isLetterOrDigit(c) && c != '_') return true;
+        // such as $¶ are all global-only.  Inspect a Unicode code point rather
+        // than a UTF-16 code unit so Letter_Number identifiers (for example
+        // U+216B) are not mistaken for punctuation.
+        if (name.codePointCount(0, name.length()) == 1) {
+            int codePoint = name.codePointAt(0);
+            if (codePoint != '_' && !Character.isUnicodeIdentifierStart(codePoint)
+                    && !isNewerPerlXidStart(codePoint)) return true;
         }
 
         // Control character prefix (caret variables like $^W stored as chr(23))
         if (name.charAt(0) < 32) return true;
 
         return false;
+    }
+
+    private static boolean isNewerPerlXidStart(int cp) {
+        return cp == 0x088F || cp == 0x0C5C || cp == 0x0CDC
+                || cp == 0xA7CE || cp == 0xA7CF || cp == 0xA7D2 || cp == 0xA7D4 || cp == 0xA7F1;
     }
 
     /**
