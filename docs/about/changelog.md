@@ -29,6 +29,9 @@ priorities and future plans.
 - Avoid arbitrary-precision allocation for ordinary native-integer unsigned
   shifts while retaining the existing wide-integer fallback.
 
+- Avoid redundant active-runtime lookups while binding and restoring implicit
+  global `$_` `foreach` aliases.
+
 - Restore lexical-sub debugger dispatch and `glob` fallback behavior after an
   undefined `CORE::GLOBAL::glob` slot on both execution backends.
 
