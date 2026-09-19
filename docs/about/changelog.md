@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Avoid redundant modular masking of already unsigned 64-bit bitwise values,
+  improving general bitwise-heavy workloads such as Life.
+
 - Restore `local` compatibility for tied hash and array elements, sparse
   arrays, magic stashes, implicit `$_` foreach aliases (including early
   return), and localized regex captures on both execution backends.
