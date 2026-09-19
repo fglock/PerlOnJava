@@ -166,7 +166,10 @@ public class SignatureParser {
             return;
         }
 
-        if (!isNamed && hasNamedParameter) {
+        // A slurpy array or hash is permitted after named parameters to
+        // collect their unrecognized arguments.  Only a later ordinary
+        // positional scalar is forbidden.
+        if (!isNamed && hasNamedParameter && sigil.equals("$")) {
             parser.throwError(paramStartIndex, "Positional parameter follows named parameter");
         }
 
