@@ -3514,7 +3514,7 @@ public class BytecodeCompiler implements Visitor {
                     if (beginId != null) {
                         // BEGIN-captured variable: use RETRIEVE_BEGIN_* (destructive removal from global storage)
                         int persistId = beginId;
-                        int reg = allocateRegister();
+                        int reg = op.equals("state") ? allocateStateVariableRegister() : allocateRegister();
                         int nameIdx = addToStringPool(varName);
 
                         switch (sigil) {
@@ -3568,7 +3568,7 @@ public class BytecodeCompiler implements Visitor {
                         // State variable without initializer: use STATE_INIT_* (non-destructive)
                         // This preserves the variable across subroutine calls
                         int persistId = sigilOp.id;
-                        int reg = allocateRegister();
+                        int reg = allocateStateVariableRegister();
                         int nameIdx = addToStringPool(varName);
 
                         // Allocate a register for the undef/empty initial value
@@ -3945,7 +3945,7 @@ public class BytecodeCompiler implements Visitor {
                             Integer beginId2 = RuntimeCode.evalBeginIds().get(sigilOp);
                             if (beginId2 != null || op.equals("state")) {
                                 int persistId = beginId2 != null ? beginId2 : sigilOp.id;
-                                int reg = allocateRegister();
+                                int reg = op.equals("state") ? allocateStateVariableRegister() : allocateRegister();
                                 int nameIdx = addToStringPool(varName);
 
                                 switch (sigil) {
@@ -6033,6 +6033,17 @@ public class BytecodeCompiler implements Visitor {
             maxRegisterEverUsed = reg;
         }
         return reg;
+    }
+
+    /**
+     * Allocate storage for a state lexical without reusing a temporary from
+     * an earlier statement. A goto may skip the declaration and a later redo
+     * can then read that lexical before its declaration executes; it must see
+     * an uninitialized state cell, never a stale condition temporary.
+     */
+    int allocateStateVariableRegister() {
+        nextRegister = Math.max(nextRegister, maxRegisterEverUsed + 1);
+        return allocateRegister();
     }
 
     /**

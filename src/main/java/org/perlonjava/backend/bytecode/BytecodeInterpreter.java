@@ -2820,7 +2820,8 @@ public class BytecodeInterpreter {
                             case Opcodes.RETRIEVE_BEGIN_SCALAR, Opcodes.RETRIEVE_BEGIN_ARRAY,
                                  Opcodes.RETRIEVE_BEGIN_HASH, Opcodes.LOCAL_SCALAR, Opcodes.LOCAL_ARRAY,
                                  Opcodes.LOCAL_HASH, Opcodes.STATE_INIT_SCALAR, Opcodes.STATE_INIT_ARRAY,
-                                 Opcodes.STATE_INIT_HASH -> {
+                                 Opcodes.STATE_INIT_HASH, Opcodes.STATE_RETRIEVE_SCALAR,
+                                 Opcodes.STATE_IS_INITIALIZED, Opcodes.STATE_MARK_INITIALIZED -> {
                                 pc = executeScopeOps(opcode, bytecode, pc, registers, code);
                             }
 
@@ -4193,6 +4194,32 @@ public class BytecodeInterpreter {
                     stateHash.setFromList(((RuntimeBase) registers[valueReg]).getList());
                     StateVariable.markInitializedStateVariable(codeRef, varName, persistId);
                 }
+                return pc;
+            }
+            case Opcodes.STATE_RETRIEVE_SCALAR -> {
+                int rd = bytecode[pc++];
+                int nameIdx = bytecode[pc++];
+                int persistId = bytecode[pc++];
+                String varName = code.stringPool[nameIdx];
+                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
+                registers[rd] = StateVariable.retrieveStateScalar(codeRef, varName, persistId);
+                return pc;
+            }
+            case Opcodes.STATE_IS_INITIALIZED -> {
+                int rd = bytecode[pc++];
+                int nameIdx = bytecode[pc++];
+                int persistId = bytecode[pc++];
+                String varName = code.stringPool[nameIdx];
+                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
+                registers[rd] = StateVariable.isInitializedStateVariable(codeRef, varName, persistId);
+                return pc;
+            }
+            case Opcodes.STATE_MARK_INITIALIZED -> {
+                int nameIdx = bytecode[pc++];
+                int persistId = bytecode[pc++];
+                String varName = code.stringPool[nameIdx];
+                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
+                StateVariable.markInitializedStateVariable(codeRef, varName, persistId);
                 return pc;
             }
             default -> throw new RuntimeException("Unknown scope opcode: " + opcode);

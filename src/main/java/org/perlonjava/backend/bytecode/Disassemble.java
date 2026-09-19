@@ -2895,6 +2895,31 @@ public class Disassemble {
                                 .append(", name=").append(stName).append(", persist=").append(stPersist).append("\n");
                         break;
                     }
+                    case Opcodes.STATE_RETRIEVE_SCALAR: {
+                        int stateRd = interpretedCode.bytecode[pc++];
+                        int stateName = interpretedCode.bytecode[pc++];
+                        int statePersist = interpretedCode.bytecode[pc++];
+                        sb.append("STATE_RETRIEVE_SCALAR r").append(stateRd)
+                                .append(", name=").append(stateName)
+                                .append(", persist=").append(statePersist).append("\n");
+                        break;
+                    }
+                    case Opcodes.STATE_IS_INITIALIZED: {
+                        int stateRd = interpretedCode.bytecode[pc++];
+                        int stateName = interpretedCode.bytecode[pc++];
+                        int statePersist = interpretedCode.bytecode[pc++];
+                        sb.append("STATE_IS_INITIALIZED r").append(stateRd)
+                                .append(", name=").append(stateName)
+                                .append(", persist=").append(statePersist).append("\n");
+                        break;
+                    }
+                    case Opcodes.STATE_MARK_INITIALIZED: {
+                        int stateName = interpretedCode.bytecode[pc++];
+                        int statePersist = interpretedCode.bytecode[pc++];
+                        sb.append("STATE_MARK_INITIALIZED name=").append(stateName)
+                                .append(", persist=").append(statePersist).append("\n");
+                        break;
+                    }
                     case Opcodes.SMARTMATCH: {
                         int smRd = interpretedCode.bytecode[pc++];
                         int smRs1 = interpretedCode.bytecode[pc++];

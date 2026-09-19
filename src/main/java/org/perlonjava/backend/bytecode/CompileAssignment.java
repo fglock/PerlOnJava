@@ -794,7 +794,9 @@ public class CompileAssignment {
                             if (beginIdObj != null) {
                                 int beginId = beginIdObj;
                                 int nameIdx = bytecodeCompiler.addToStringPool(varName);
-                                int reg = bytecodeCompiler.allocateRegister();
+                                int reg = leftOp.operator.equals("state")
+                                        ? bytecodeCompiler.allocateStateVariableRegister()
+                                        : bytecodeCompiler.allocateRegister();
 
                                 bytecodeCompiler.emitWithToken(Opcodes.RETRIEVE_BEGIN_SCALAR, node.getIndex());
                                 bytecodeCompiler.emitReg(reg);
@@ -822,24 +824,39 @@ public class CompileAssignment {
                             }
 
                             if (leftOp.operator.equals("state")) {
-                                // State variable without BEGIN id: use conditional initialization
-                                // STATE_INIT_SCALAR handles both retrieval (non-destructive) and
-                                // conditional first-time initialization
+                                // State initialization is lazy: Perl does not evaluate the
+                                // RHS after the first successful initialization. Retrieve and
+                                // test the persistent cell before compiling that RHS so a
+                                // `redo` after a skipped declaration cannot repeat its side
+                                // effects.
                                 int persistId = sigilOp.id;
                                 int nameIdx = bytecodeCompiler.addToStringPool(varName);
-                                int reg = bytecodeCompiler.allocateRegister();
+                                int reg = bytecodeCompiler.allocateStateVariableRegister();
+                                int initializedReg = bytecodeCompiler.allocateRegister();
 
-                                // Compile RHS (value to conditionally assign)
-                                bytecodeCompiler.compileNode(node.right, -1, rhsContext);
-                                int valueReg = bytecodeCompiler.lastResultReg;
-
-                                // STATE_INIT_SCALAR: retrieves persistent variable and
-                                // only assigns if not yet initialized
-                                bytecodeCompiler.emitWithToken(Opcodes.STATE_INIT_SCALAR, node.getIndex());
+                                bytecodeCompiler.emitWithToken(Opcodes.STATE_RETRIEVE_SCALAR, node.getIndex());
                                 bytecodeCompiler.emitReg(reg);
-                                bytecodeCompiler.emitReg(valueReg);
                                 bytecodeCompiler.emit(nameIdx);
                                 bytecodeCompiler.emit(persistId);
+                                bytecodeCompiler.emit(Opcodes.STATE_IS_INITIALIZED);
+                                bytecodeCompiler.emitReg(initializedReg);
+                                bytecodeCompiler.emit(nameIdx);
+                                bytecodeCompiler.emit(persistId);
+
+                                bytecodeCompiler.emit(bytecodeCompiler.gotoIfTrueOpcode());
+                                bytecodeCompiler.emitReg(initializedReg);
+                                int initializedJump = bytecodeCompiler.bytecode.size();
+                                bytecodeCompiler.emitInt(0);
+
+                                bytecodeCompiler.compileNode(node.right, -1, rhsContext);
+                                int valueReg = bytecodeCompiler.lastResultReg;
+                                bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+                                bytecodeCompiler.emitReg(reg);
+                                bytecodeCompiler.emitReg(valueReg);
+                                bytecodeCompiler.emit(Opcodes.STATE_MARK_INITIALIZED);
+                                bytecodeCompiler.emit(nameIdx);
+                                bytecodeCompiler.emit(persistId);
+                                bytecodeCompiler.patchIntOffset(initializedJump, bytecodeCompiler.bytecode.size());
                                 bytecodeCompiler.emitActiveLexicalBinding(reg, varName);
 
                                 bytecodeCompiler.registerVariable(varName, reg);

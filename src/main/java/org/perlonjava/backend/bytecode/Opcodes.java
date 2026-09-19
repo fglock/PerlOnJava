@@ -2074,6 +2074,15 @@ public class Opcodes {
      */
     public static final short STATE_INIT_HASH = 399;
 
+    /** Retrieve a persistent state scalar without initializing it. Format: rd name_idx persist_id. */
+    public static final short STATE_RETRIEVE_SCALAR = 572;
+
+    /** Read a persistent state scalar's initialization flag. Format: rd name_idx persist_id. */
+    public static final short STATE_IS_INITIALIZED = 573;
+
+    /** Mark a persistent state scalar initialized. Format: name_idx persist_id. */
+    public static final short STATE_MARK_INITIALIZED = 574;
+
     // Smartmatch operator (~~)
     // Format: SMARTMATCH rd rs1 rs2
     // Effect: rd = CompareOperators.smartmatch(rs1, rs2)
