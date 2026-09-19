@@ -74,6 +74,7 @@ public class UnpackState {
     private boolean characterMode;
     private ByteBuffer buffer;
     private ByteOrder currentByteOrder = ByteOrder.LITTLE_ENDIAN; // Default to little-endian
+    private int strictSlashGroupDepth;
 
     public UnpackState(String dataString, boolean startsWithU) {
         this(dataString, startsWithU, false);
@@ -194,6 +195,23 @@ public class UnpackState {
     public void popGroupBase() {
         if (!groupCharBase.isEmpty()) groupCharBase.pop();
         if (!groupByteBase.isEmpty()) groupByteBase.pop();
+    }
+
+    /**
+     * A finite repeated group must not silently accept a missing later
+     * length/code pair.  Nested unpack calls use this scope to distinguish
+     * that truncated structure from an ordinary template ending at EOF.
+     */
+    public void pushStrictSlashGroup() {
+        strictSlashGroupDepth++;
+    }
+
+    public void popStrictSlashGroup() {
+        strictSlashGroupDepth--;
+    }
+
+    public boolean isInStrictSlashGroup() {
+        return strictSlashGroupDepth > 0;
     }
 
     /**

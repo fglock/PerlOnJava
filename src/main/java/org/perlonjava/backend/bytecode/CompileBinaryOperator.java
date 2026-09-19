@@ -768,11 +768,12 @@ public class CompileBinaryOperator {
             default -> false;
         };
         int outerCtx = bytecodeCompiler.currentCallContext;
-        // The repeat operator preserves list context on its left operand:
-        // `(($expr) x 4)` repeats values, while scalar-context x repeats the
-        // resulting string. All other ordinary binary operands are scalar.
+        // Only a syntactic list on the left of x gets list context. A call
+        // such as f() x 4 repeats its scalar result even inside an argument list.
+        // Match EmitOperator.handleRepeat in the JVM backend.
         int leftCtx = switch (node.operator) {
-            case "x" -> outerCtx;
+            case "x" -> node.left instanceof ListNode && outerCtx != RuntimeContextType.SCALAR
+                    ? RuntimeContextType.LIST : RuntimeContextType.SCALAR;
             // Preserve the actual scalar slot: bless may publish metadata through
             // a threads::shared scalar and must not operate on a temporary copy.
             case "bless" -> isDirectScalarLvalue(node.left)

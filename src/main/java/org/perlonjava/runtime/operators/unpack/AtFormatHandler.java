@@ -16,8 +16,9 @@ public class AtFormatHandler implements FormatHandler {
         // DEBUG: Current position before setPosition: " +
         // (state.isCharacterMode() ? state.getCurrentCodePointIndex() : state.getBuffer().position())
 
-        // Set absolute position
-        state.setPosition(count);
+        // @ is absolute within the current group repetition, or within the
+        // whole string when no group is active.
+        state.setRelativePosition(count);
 
         // DEBUG: Current position after setPosition: " +
         // (state.isCharacterMode() ? state.getCurrentCodePointIndex() : state.getBuffer().position())

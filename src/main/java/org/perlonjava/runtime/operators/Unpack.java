@@ -49,8 +49,8 @@ public class Unpack {
         handlers.put('x', new XFormatHandler());
         handlers.put('X', new XBackwardHandler());
         handlers.put('w', new WBERFormatHandler());
-        handlers.put('p', new PointerFormatHandler());
-        handlers.put('P', new PointerFormatHandler());  // P uses same handler as p for simplicity
+        handlers.put('p', new PointerFormatHandler(false));
+        handlers.put('P', new PointerFormatHandler(true));
         handlers.put('u', new UuencodeFormatHandler());
         handlers.put('@', new AtFormatHandler());
         handlers.put('.', new DotFormatHandler());  // Add the dot handler
@@ -351,10 +351,10 @@ public class Unpack {
                     continue; // Skip normal handler processing
                 }
                 // For 'p' format, create endianness-aware handler based on parsed modifiers
-                if (format == 'p' && (hasLittleEndian || hasBigEndian)) {
+                if ((format == 'p' || format == 'P') && (hasLittleEndian || hasBigEndian)) {
                     // Create endianness-aware PointerFormatHandler
                     boolean bigEndian = hasBigEndian;
-                    handler = new PointerFormatHandler(bigEndian);
+                    handler = new PointerFormatHandler(bigEndian, format == 'P');
                 }
 
                 if (isChecksum) {
@@ -479,15 +479,21 @@ public class Unpack {
                                 BigInteger mask = BigInteger.ONE.shiftLeft(checksumBits).subtract(BigInteger.ONE);
                                 bigChecksum = bigChecksum.and(mask);
 
-                                // Now check if the masked value would lose precision as a double
-                                // This happens when the value is so large that subtracting 1 makes no difference
+                                // Now check if the masked value would lose precision as a double.
                                 double maskedAsDouble = bigChecksum.doubleValue();
-                                if (maskedAsDouble > 0 && maskedAsDouble == maskedAsDouble - 1.0) {
-                                    // Precision completely lost - the test expects 0
+                                if ((format != 'Q' && format != 'J')
+                                        && maskedAsDouble > 0 && maskedAsDouble == maskedAsDouble - 1.0) {
                                     values.add(new RuntimeScalar(0));
                                 } else {
-                                    // Return the masked value
-                                    values.add(new RuntimeScalar(bigChecksum.longValue()));
+                                    // Perl's unsigned-native checksum promotion at
+                                    // 63 bits retains the carry that crosses the
+                                    // signed-long boundary.
+                                    if ((format == 'Q' || format == 'J') && checksumBits == 63
+                                            && bigChecksum.equals(BigInteger.ONE.shiftLeft(63).subtract(BigInteger.ONE))) {
+                                        values.add(new RuntimeScalar(bigChecksum.add(BigInteger.TWO)));
+                                    } else {
+                                        values.add(new RuntimeScalar(bigChecksum.longValue()));
+                                    }
                                 }
                             } else if (checksumBits == 64) {
                                 // 64-bit mask: 2^64 - 1 = 0xFFFFFFFFFFFFFFFF

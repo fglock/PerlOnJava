@@ -279,6 +279,7 @@ my $startperl = $is_windows
     longsize => '8',
     ptrsize => '8',
     doublesize => '8',
+    longdblsize => '8',
     nvsize => '8',
     uvsize => '8',
     sizesize => '8',

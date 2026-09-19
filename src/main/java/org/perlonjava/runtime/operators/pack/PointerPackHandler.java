@@ -2,6 +2,7 @@ package org.perlonjava.runtime.operators.pack;
 
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.operators.WarnDie;
 
 import java.util.List;
 
@@ -80,6 +81,12 @@ public class PointerPackHandler implements PackFormatHandler {
 
             // Check if value is defined (not undef)
             if (value.getDefinedBoolean()) {
+                // Perl warns for p because it retains only an address; a value
+                // used for that pointer may be released at the statement boundary.
+                if (format == 'p') {
+                    WarnDie.warn(new RuntimeScalar("Attempt to pack pointer to temporary value"),
+                            new RuntimeScalar(""));
+                }
                 String str = value.toString();
                 // Use hashCode as a unique identifier, but as a long for 64-bit pointer
                 ptr = Integer.toUnsignedLong(str.hashCode());

@@ -172,6 +172,9 @@ public class UnpackGroupProcessor {
 
             // Push group baseline for this repetition
             state.pushGroupBase();
+            if (groupRepeatCount > 1) {
+                state.pushStrictSlashGroup();
+            }
 
             try {
                 // Call unpack recursively with the group template
@@ -180,6 +183,9 @@ public class UnpackGroupProcessor {
                 // Add all unpacked values to the output
                 values.addAll(groupResult.elements);
             } finally {
+                if (groupRepeatCount > 1) {
+                    state.popStrictSlashGroup();
+                }
                 // Always pop group baseline, even if an exception occurs
                 state.popGroupBase();
             }
@@ -378,10 +384,17 @@ public class UnpackGroupProcessor {
                     if (slashPos != -1) {
                         // First, unpack the numeric format to get the count
                         FormatHandler handler = Unpack.getHandler(format, startsWithU);
+                        int valuesBeforeCount = values.size();
                         handler.unpack(state, values, 1, false);  // Always unpack just one for the count
 
+                        if (values.size() == valuesBeforeCount) {
+                            throw new PerlCompilerException("length/code after end of string");
+                        }
                         // Get the count value
                         RuntimeBase lastValue = values.getLast();
+                        if (!lastValue.toString().trim().matches("[+-]?\\d+")) {
+                            throw new PerlCompilerException("length/code after end of string");
+                        }
                         int slashCount = ((RuntimeScalar) lastValue).getInt();
                         values.removeLast(); // Remove the count value
 
@@ -430,6 +443,10 @@ public class UnpackGroupProcessor {
                             // Unpack the format with the count
                             // DEBUG: Unpacking format '" + stringFormat + "' " + slashCount + " times
                             // Always use slashCount in slash constructs, never "all remaining"
+                            int available = state.remainingBytes();
+                            if (available < slashCount) {
+                                throw new PerlCompilerException("length/code after end of string");
+                            }
                             formatHandler.unpack(state, values, slashCount, false);
 
                             continue;
@@ -488,6 +505,10 @@ public class UnpackGroupProcessor {
                         // Unpack the string with the count from the previous numeric value
                         // Always use slashCount in slash constructs, never "all remaining"
                         FormatHandler stringHandler = Unpack.getHandler(stringFormat, startsWithU);
+                        int available = state.remainingBytes();
+                        if (available < slashCount) {
+                            throw new PerlCompilerException("length/code after end of string");
+                        }
                         stringHandler.unpack(state, values, slashCount, false);
 
                         continue;
