@@ -19,6 +19,23 @@ import java.util.Locale;
  * from a list of tokens, excluding the sigil (e.g., $, @, %).
  */
 public class IdentifierParser {
+    private static boolean isPerlIdentifierStart(int codePoint) {
+        return codePoint == '_' || UCharacter.hasBinaryProperty(codePoint, UProperty.XID_START)
+                || isNewerPerlXidStart(codePoint);
+    }
+
+    private static boolean isNewerPerlXidStart(int cp) {
+        return cp == 0x088F || cp == 0x0C5C || cp == 0x0CDC || cp == 0x1885 || cp == 0x1886
+                || cp == 0x2118 || cp == 0x212E || cp == 0x3007 || cp == 0x3038 || cp == 0x3039 || cp == 0x303A
+                || cp == 0xA7CE || cp == 0xA7CF || cp == 0xA7D2 || cp == 0xA7D4 || cp == 0xA7F1
+                || (cp >= 0x16EE && cp <= 0x16F0)
+                || (cp >= 0x2160 && cp <= 0x217F)
+                || (cp >= 0x2180 && cp <= 0x2182)
+                || (cp >= 0x2185 && cp <= 0x2188)
+                || (cp >= 0x3021 && cp <= 0x3029)
+                || (cp >= 0xA6E6 && cp <= 0xA6EF);
+    }
+
 
     private static boolean isIdentifierTooLong(StringBuilder variableName, boolean isTypeglob) {
         // perl5_t/t/comp/parser.t builds boundary cases using UTF-8 byte length.
@@ -321,7 +338,7 @@ public class IdentifierParser {
                     Long.compareUnsigned(cpL, 0x10FFFFL) > 0 || (cpL >= 0xD800L && cpL <= 0xDFFFL);
             int cp = (int) cpL;
             boolean valid =
-                    !invalidPlane && (cp == '_' || UCharacter.hasBinaryProperty(cp, UProperty.XID_START));
+                    !invalidPlane && isPerlIdentifierStart(cp);
 
             // Under 'no utf8', Perl allows many non-ASCII bytes as length-1 variables.
             // Only enforce XID_START there for multi-character identifiers.
@@ -393,7 +410,7 @@ public class IdentifierParser {
                         Long.compareUnsigned(cpL, 0x10FFFFL) > 0 || (cpL >= 0xD800L && cpL <= 0xDFFFL);
                 int cp = (int) cpL;
                 boolean valid =
-                        !invalidPlane && (cp == '_' || UCharacter.hasBinaryProperty(cp, UProperty.XID_START));
+                        !invalidPlane && isPerlIdentifierStart(cp);
 
                 boolean mustValidateStart = utf8Enabled || id.length() > 1;
 
