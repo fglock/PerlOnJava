@@ -1114,6 +1114,9 @@ public class StringParser {
         String replacementList = rawStr.buffers.get(1);
         String modifiers = rawStr.buffers.get(2);
 
+        rejectNamedSequencesInTransliteration(searchList);
+        rejectNamedSequencesInTransliteration(replacementList);
+
         Node searchNode;
         Node replacementNode;
 
@@ -1165,6 +1168,22 @@ public class StringParser {
 
         ListNode list = new ListNode(elements, rawStr.index);
         return new OperatorNode(operator, list, rawStr.index);
+    }
+
+    /** Perl rejects Unicode named sequences in either side of tr/// before
+     * expanding the double-quoted escape into its multiple code points. */
+    private static void rejectNamedSequencesInTransliteration(String list) {
+        for (int start = list.indexOf("\\\\N{"); start >= 0; ) {
+            int nameStart = start + 3;
+            int end = list.indexOf('}', nameStart);
+            if (end < 0) return;
+            String name = list.substring(nameStart, end).trim();
+            if (org.perlonjava.runtime.regex.PerlUnicodeNamedSequenceData.isNamedSequence(name)) {
+                throw new PerlCompilerException("\\\\N{" + name
+                        + "} must not be a named sequence in transliteration operator");
+            }
+            start = list.indexOf("\\\\N{", end + 1);
+        }
     }
 
     public static Node parseRawString(Parser parser, String operator) {
