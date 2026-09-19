@@ -3931,6 +3931,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 || (regex.regexFlags.taintResults() && inputTainted);
         boolean destructiveReplacement = !regex.regexFlags.isNonDestructive();
 
+        if (!destructiveReplacement && ctx == RuntimeContextType.VOID) {
+            Warnings.emitCategoryWarning(
+                    "void", "Useless use of non-destructive substitution (s///r)");
+        }
+
         // Don't reset state().globalMatcher here - only reset it if we actually find a match
         // This preserves capture variables from previous matches when substitution doesn't match
 
