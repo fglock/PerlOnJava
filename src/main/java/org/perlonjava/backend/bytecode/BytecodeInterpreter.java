@@ -31,10 +31,15 @@ public class BytecodeInterpreter {
 
     /** A loop-entry restriction belongs to the resolved destination, not to
      * every unrelated label with the same spelling elsewhere in the frame. */
-    private static boolean jumpsIntoUnenteredLoopBody(InterpretedCode code, String label, int targetPc) {
+    private static boolean jumpsIntoUnenteredLoopBody(InterpretedCode code, String label, int targetPc,
+                                                       int sourcePc) {
         if (code.gotoLabelLoopRanges == null) return false;
         int[] range = code.gotoLabelLoopRanges.get(label);
-        return range != null && targetPc >= range[0] && targetPc < range[1];
+        // A computed goto may target a label in the current foreach body. Its
+        // iterator and control-block state are already active in that case;
+        // only an entry from outside the range is forbidden.
+        return range != null && targetPc >= range[0] && targetPc < range[1]
+                && (sourcePc < range[0] || sourcePc >= range[1]);
     }
 
     private static void rejectGotoIntoGiven(InterpretedCode code, String label) {
@@ -740,19 +745,13 @@ public class BytecodeInterpreter {
                                     throw new PerlCompilerException("goto must have label");
                                 }
                                 rejectGotoIntoGiven(code, labelName);
-                                // Parser-attached statement labels can be classified as
-                                // loop-body labels before they acquire an executable PC.
-                                // Check that classification first: falling through to the
-                                // ordinary missing-label path loses Perl's required
-                                // foreach-entry diagnostic.
-                                if (code.gotoLabelsInsideLoop != null
-                                        && code.gotoLabelsInsideLoop.contains(labelName)) {
-                                    throw new PerlCompilerException(
-                                            "Can't \"goto\" into the middle of a foreach loop");
-                                }
                                 if (code.gotoLabelPcs != null) {
                                     Integer targetPc = code.gotoLabelPcs.get(labelName);
                                     if (targetPc != null) {
+                                        if (jumpsIntoUnenteredLoopBody(code, labelName, targetPc, pc)) {
+                                            throw new PerlCompilerException(
+                                                    "Can't \"goto\" into the middle of a foreach loop");
+                                        }
                                         if (code.gotoLabelsInsideConstruct != null
                                                 && code.gotoLabelsInsideConstruct.contains(labelName)) {
                                             throw new PerlCompilerException(
@@ -762,6 +761,15 @@ public class BytecodeInterpreter {
                                         pc = targetPc;
                                         break;
                                     }
+                                }
+                                // Parser-attached statement labels can be classified as
+                                // loop-body labels before they acquire an executable PC.
+                                // Preserve the foreach-entry diagnostic when no target PC
+                                // is available to establish that this jump is already inside.
+                                if (code.gotoLabelsInsideLoop != null
+                                        && code.gotoLabelsInsideLoop.contains(labelName)) {
+                                    throw new PerlCompilerException(
+                                            "Can't \"goto\" into the middle of a foreach loop");
                                 }
                                 if (code.isSortComparator) {
                                     throw new PerlCompilerException(
@@ -1902,7 +1910,7 @@ public class BytecodeInterpreter {
                                             // This applies equally to a marker from eval STRING and one
                                             // from eval BLOCK (the latter has no evalScope tag).
                                             if (jumpsIntoUnenteredLoopBody(code,
-                                                    flow.getControlFlowLabel(), targetPc)) {
+                                                    flow.getControlFlowLabel(), targetPc, pc)) {
                                                 throw new PerlCompilerException(
                                                         "Can't \"goto\" into the middle of a foreach loop");
                                             }
@@ -2064,7 +2072,7 @@ public class BytecodeInterpreter {
                                             // See the equivalent marker handoff above: eval BLOCK markers
                                             // carry no evalScope, but cannot safely enter a loop either.
                                             if (jumpsIntoUnenteredLoopBody(code,
-                                                    flow.getControlFlowLabel(), targetPc)) {
+                                                    flow.getControlFlowLabel(), targetPc, pc)) {
                                                 throw new PerlCompilerException(
                                                         "Can't \"goto\" into the middle of a foreach loop");
                                             }
@@ -2871,7 +2879,7 @@ public class BytecodeInterpreter {
                                     Integer targetPc = code.gotoLabelPcs.get(flow.getControlFlowLabel());
                                     if (targetPc != null) {
                                         if (jumpsIntoUnenteredLoopBody(code,
-                                                flow.getControlFlowLabel(), targetPc)) {
+                                                flow.getControlFlowLabel(), targetPc, pc)) {
                                             throw new PerlCompilerException(
                                                     "Can't \"goto\" into the middle of a foreach loop");
                                         }
