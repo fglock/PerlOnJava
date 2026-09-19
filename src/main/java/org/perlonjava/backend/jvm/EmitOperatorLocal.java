@@ -46,10 +46,14 @@ public class EmitOperatorLocal {
                 // must catch it rather than abort compilation of the outer
                 // program.  Match the interpreter's REJECT_LOCALIZE_REFERENCE
                 // opcode by evaluating the reference and rejecting it here.
+                var location = emitterVisitor.ctx.errorUtil
+                        .getSourceLocationAccurate(node.tokenIndex);
+                mv.visitLdcInsn("Can't localize through a reference at "
+                        + location.fileName() + " line " + location.lineNumber() + ".\n");
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
                         "rejectLocalizeThroughReference",
-                        "()V",
+                        "(Ljava/lang/String;)V",
                         false);
                 // The helper always throws, but retain a formal scalar result
                 // on the unreachable normal-flow path for ASM frame merging.
