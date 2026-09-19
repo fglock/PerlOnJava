@@ -48,6 +48,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         throw new PerlCompilerException("Can't localize through a reference");
     }
 
+    /** Reject localization with a source location captured by the JVM emitter. */
+    public static void rejectLocalizeThroughReference(String message) {
+        throw new PerlCompilerException(message);
+    }
+
 
     /**
      * Deferred storage for a plain string being grown with repeated {@code .=}.
