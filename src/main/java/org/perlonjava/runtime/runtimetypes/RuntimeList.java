@@ -582,54 +582,8 @@ public class RuntimeList extends RuntimeBase {
     public RuntimeArray setFromList(RuntimeList value) {
         // Fast path: LHS is all simple scalars, RHS is a single RuntimeArray
         // This handles the common case: my ($a, $b) = @_
-        if (value.elements.size() == 1 && value.elements.get(0) instanceof RuntimeArray rhsArray) {
-            boolean allSimpleScalars = true;
-            for (RuntimeBase elem : elements) {
-                if (!(elem instanceof RuntimeScalar) || elem instanceof RuntimeScalarReadOnly) {
-                    allSimpleScalars = false;
-                    break;
-                }
-            }
-            if (allSimpleScalars) {
-                // Suppress MortalList.flush() during LHS assignments, matching
-                // the slow path below. Without this, a blessed return value
-                // (e.g., Holler->new()) passed as an argument following a
-                // reference-typed arg can fire DESTROY mid-assignment when
-                // an earlier lhs.set() triggers setLargeRefCounted → flush()
-                // before the blessed value's own lhs.set() captures it.
-                // Repros: t/tt_leak.t tests 5, 9 (TT stash updates with
-                // blessed temps as values).
-                boolean wasFlushing = MortalList.suppressFlush(true);
-                try {
-                    List<RuntimeScalar> rhsElements = rhsArray.elements;
-                    int rhsSize = rhsElements.size();
-                    int lhsSize = elements.size();
-
-                    // Copy RHS values first to handle aliasing (e.g., ($a,$b) = ($b,$a))
-                    RuntimeScalar[] rhsValues = new RuntimeScalar[Math.min(lhsSize, rhsSize)];
-                    for (int i = 0; i < rhsValues.length; i++) {
-                        RuntimeScalar elem = rhsElements.get(i);
-                        // Handle null elements (from delete $array[i])
-                        rhsValues[i] = (elem == null) ? new RuntimeScalar() : new RuntimeScalar(elem);
-                    }
-
-                    RuntimeArray result = new RuntimeArray(lhsSize);
-                    result.scalarContextSize = rhsSize;
-                    for (int i = 0; i < lhsSize; i++) {
-                        RuntimeScalar lhs = (RuntimeScalar) elements.get(i);
-                        if (i < rhsValues.length) {
-                            lhs.set(rhsValues[i]);
-                        } else {
-                            lhs.set(new RuntimeScalar());
-                        }
-                        result.elements.add(lhs);
-                    }
-                    return result;
-                } finally {
-                    MortalList.suppressFlush(wasFlushing);
-                }
-            }
-        }
+        RuntimeArray simpleRhs = simpleScalarListAssignmentRhs(value);
+        if (simpleRhs != null) return assignSimpleScalarList(simpleRhs, true);
 
         boolean hasUndefPlaceholderLhs = false;
         for (RuntimeBase elem : elements) {
@@ -801,6 +755,62 @@ public class RuntimeList extends RuntimeBase {
         MortalList.suppressFlush(wasFlushing);
 
         return result;
+    }
+
+    @Override
+    public void setFromListVoid(RuntimeList value) {
+        RuntimeArray simpleRhs = simpleScalarListAssignmentRhs(value);
+        if (simpleRhs != null) {
+            assignSimpleScalarList(simpleRhs, false);
+            return;
+        }
+        setFromList(value);
+    }
+
+    private RuntimeArray simpleScalarListAssignmentRhs(RuntimeList value) {
+        if (value.elements.size() != 1 || !(value.elements.get(0) instanceof RuntimeArray rhsArray)) {
+            return null;
+        }
+        for (RuntimeBase elem : elements) {
+            if (!(elem instanceof RuntimeScalar) || elem instanceof RuntimeScalarReadOnly) {
+                return null;
+            }
+        }
+        return rhsArray;
+    }
+
+    private RuntimeArray assignSimpleScalarList(RuntimeArray rhsArray, boolean materializeResult) {
+        // Suppress MortalList.flush() during LHS assignments, matching the slow
+        // path below. A blessed return value passed beside a reference-typed
+        // argument must remain alive until every LHS slot captures it.
+        boolean wasFlushing = MortalList.suppressFlush(true);
+        try {
+            List<RuntimeScalar> rhsElements = rhsArray.elements;
+            int rhsSize = rhsElements.size();
+            int lhsSize = elements.size();
+
+            // Copy RHS values first to handle aliasing (e.g., ($a,$b) = ($b,$a)).
+            RuntimeScalar[] rhsValues = new RuntimeScalar[Math.min(lhsSize, rhsSize)];
+            for (int i = 0; i < rhsValues.length; i++) {
+                RuntimeScalar elem = rhsElements.get(i);
+                rhsValues[i] = (elem == null) ? new RuntimeScalar() : new RuntimeScalar(elem);
+            }
+
+            RuntimeArray result = materializeResult ? new RuntimeArray(lhsSize) : null;
+            if (result != null) result.scalarContextSize = rhsSize;
+            for (int i = 0; i < lhsSize; i++) {
+                RuntimeScalar lhs = (RuntimeScalar) elements.get(i);
+                if (i < rhsValues.length) {
+                    lhs.set(rhsValues[i]);
+                } else {
+                    lhs.set(new RuntimeScalar());
+                }
+                if (result != null) result.elements.add(lhs);
+            }
+            return result;
+        } finally {
+            MortalList.suppressFlush(wasFlushing);
+        }
     }
 
     /**

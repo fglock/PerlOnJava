@@ -918,6 +918,15 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public abstract RuntimeArray setFromList(RuntimeList list);
 
     /**
+     * Sets this value from a list when the Perl assignment result is discarded.
+     * Subclasses may avoid materializing that result while retaining assignment
+     * side effects. The default preserves ordinary assignment semantics.
+     */
+    public void setFromListVoid(RuntimeList list) {
+        setFromList(list);
+    }
+
+    /**
      * Retrieves the result of keys() as a RuntimeArray instance.
      *
      * @return a RuntimeArray object representing the keys

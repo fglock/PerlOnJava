@@ -1117,7 +1117,17 @@ public class EmitVariable {
                 // The my operator needs to be processed to create the variables first.
                 node.left.accept(emitterVisitor.with(RuntimeContextType.LVALUE_LIST));   // emit the variable (target)
                 mv.visitVarInsn(Opcodes.ALOAD, rhsListSlot);                      // reload RHS list
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "setFromList", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
+                boolean discardResult = emitterVisitor.ctx.contextType == RuntimeContextType.VOID;
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                        discardResult ? "setFromListVoid" : "setFromList",
+                        discardResult ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)V"
+                                : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
+                        false);
+                // The shared void-context epilogue consumes one stack value.
+                // Keep its existing stack contract without materializing a
+                // RuntimeArray assignment result.
+                if (discardResult) mv.visitInsn(Opcodes.ACONST_NULL);
 
                 if (pooledRhsList) {
                     ctx.javaClassInfo.releaseSpillSlot();
@@ -1127,7 +1137,7 @@ public class EmitVariable {
                     // caller's context. RuntimeArray.scalar() uses the RHS
                     // element count recorded by setFromList().
                     emitRuntimeContextConversion(emitterVisitor, "@");
-                } else {
+                } else if (!discardResult) {
                     EmitOperator.handleScalarContext(emitterVisitor, node);
                 }
                 break;
