@@ -26,6 +26,9 @@ priorities and future plans.
 - Reuse static literal regular-expression match wrappers per runtime and call
   site, reducing recurring pattern-resolution and compilation overhead.
 
+- Avoid arbitrary-precision allocation for ordinary native-integer unsigned
+  shifts while retaining the existing wide-integer fallback.
+
 - Restore lexical-sub debugger dispatch and `glob` fallback behavior after an
   undefined `CORE::GLOBAL::glob` slot on both execution backends.
 
