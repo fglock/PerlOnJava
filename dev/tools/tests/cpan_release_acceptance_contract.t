@@ -16,7 +16,7 @@ open my $tf, '<', $tester or die "Cannot read $tester: $!";
 my $tester_text = do { local $/; <$tf> };
 close $tf;
 
-my @modules = qw(PPR Catalyst Mojolicious Image::ExifTool DateTime Template DBIx::Class);
+my @modules = qw(PPR Catalyst Mojolicious Image::ExifTool DateTime Template DBIx::Class Excel::Writer::XLSX);
 like($make_text, qr/^test-cpan-release-acceptance: build$/m,
     'release acceptance target builds before testing');
 like($make_text, qr/--modules "\$\$modules".*--jobs 8 --strict-exit/s,

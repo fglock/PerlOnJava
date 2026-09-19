@@ -376,7 +376,7 @@ endif
 test-cpan-release-acceptance: build
 	@mkdir -p build/reports
 	@log="build/reports/cpan-release-acceptance.log"; \
-	modules='PPR,Catalyst,Mojolicious,Image::ExifTool,DateTime,Template,DBIx::Class'; \
+	modules='PPR,Catalyst,Mojolicious,Image::ExifTool,DateTime,Template,DBIx::Class,Excel::Writer::XLSX'; \
 	echo "CPAN release acceptance log: $$log"; \
 	echo "Selected modules: $$modules" > "$$log"; \
 	echo "Commit: $$(git rev-parse --short HEAD)" >> "$$log"; \

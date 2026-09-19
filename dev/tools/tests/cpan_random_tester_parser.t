@@ -263,7 +263,15 @@ is(pass_percentage(8833, 8277), '51.6',
     'pass percentage excludes skipped and standard-Perl-failed modules');
 is(pass_percentage(0, 0), '0.0', 'empty pass/fail denominator is stable');
 
-my %slow = ('Image::ExifTool' => 3600);
+my %slow = (
+    'Excel::Writer::XLSX' => 7200,
+    'Image::ExifTool' => 3600,
+);
+is_deeply(
+    [effective_timeout_limits('Excel::Writer::XLSX', 120, 600, 300, \%slow)],
+    [7200, 7800],
+    'Excel::Writer::XLSX keeps its extended soft limit and idle grace',
+);
 is_deeply(
     [effective_timeout_limits('Image::ExifTool', 120, 600, 300, \%slow)],
     [3600, 4200],
