@@ -188,9 +188,13 @@ public class EmitOperatorNode {
                 EmitOperatorLocal.handleLocal(emitterVisitor, node);
             }
             case "\\" -> EmitOperator.handleCreateReference(emitterVisitor, node);
-            case "$#" -> EmitOperator.handleArrayUnaryBuiltin(emitterVisitor,
-                    new OperatorNode("$#", new OperatorNode("@", node.operand, node.tokenIndex), node.tokenIndex),
-                    "indexLastElem");
+            case "$#" -> {
+                if (!EmitVariable.emitPrivateNativeArrayLastIndex(emitterVisitor, node)) {
+                    EmitOperator.handleArrayUnaryBuiltin(emitterVisitor,
+                            new OperatorNode("$#", new OperatorNode("@", node.operand, node.tokenIndex), node.tokenIndex),
+                            "indexLastElem");
+                }
+            }
             case "system", "exec" -> EmitOperator.handleSystemBuiltin(emitterVisitor, node);
 
             // Error handling

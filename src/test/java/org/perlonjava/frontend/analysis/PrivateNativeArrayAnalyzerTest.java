@@ -75,6 +75,18 @@ class PrivateNativeArrayAnalyzerTest {
     }
 
     @Test
+    void permitsAnUnrelatedClosureAfterOneWayMaterialization() {
+        OperatorNode declaration = declaration("grid");
+        PrivateNativeArrayAnalyzer.analyze(block(
+                new BinaryOperatorNode("=", declaration, emptyArray(), 0),
+                new BinaryOperatorNode("=", element("grid", 0), new NumberNode("1", 0), 0),
+                new OperatorNode("\\", element("grid", 0), 0),
+                new SubroutineNode(null, null, List.of(), block(), false, 0)));
+
+        assertEquals(Boolean.TRUE, declaration.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_ARRAY));
+    }
+
+    @Test
     void rejectsNestedClosureEvenWhenItDoesNotMentionTheArray() {
         OperatorNode declaration = declaration("grid");
         PrivateNativeArrayAnalyzer.analyze(block(
@@ -145,6 +157,25 @@ class PrivateNativeArrayAnalyzerTest {
                 loop("i", new BinaryOperatorNode("^", element("grid", scalar("i")), new NumberNode("17", 0), 0))));
 
         assertEquals(Boolean.TRUE, declaration.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_ARRAY));
+    }
+
+    @Test
+    void acceptsACompleteCarrierLoopBoundedByItsPrivateLastIndex() {
+        OperatorNode declaration = declaration("grid");
+        OperatorNode lastIndex = new OperatorNode("$#", new IdentifierNode("grid", 0), 0);
+        OperatorNode index = scalar("i");
+        PrivateNativeArrayAnalyzer.analyze(block(
+                new BinaryOperatorNode("=", declaration, emptyArray(), 0),
+                loop("i", new BinaryOperatorNode("^", scalar("i"), new NumberNode("7", 0), 0)),
+                new For1Node(null, true, new OperatorNode("my", scalar("i"), 0),
+                        new BinaryOperatorNode("..", new NumberNode("0", 0), lastIndex, 0),
+                        block(new BinaryOperatorNode("=", element("grid", index),
+                                new BinaryOperatorNode("^", element("grid", scalar("i")), new NumberNode("17", 0), 0), 0)),
+                        null, 0)));
+
+        assertEquals(Boolean.TRUE, declaration.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_ARRAY));
+        assertEquals(Boolean.TRUE, lastIndex.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_LAST_INDEX));
+        assertEquals(Boolean.TRUE, index.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_LOOP_INDEX));
     }
 
     private static For1Node loop(String indexName, Node expression) {

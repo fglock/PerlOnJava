@@ -51,6 +51,15 @@ public final class PrivateNativeArrayCarrier {
         return materialized == null ? length : materialized.countElements();
     }
 
+    /**
+     * Return Perl's {@code $#array} while the carrier is private.  An empty
+     * array has last index {@code -1}; callers need not materialize an
+     * ordinary array merely to form a bounded range.
+     */
+    public int lastIndex() {
+        return length() - 1;
+    }
+
     public boolean isMaterialized() {
         return materialized != null;
     }

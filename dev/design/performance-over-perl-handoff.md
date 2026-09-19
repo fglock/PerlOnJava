@@ -62,6 +62,18 @@ necessary prerequisite for Life's fresh `@next`, but dynamic bounds and its
 whole-lifecycle source/destination proof remain unimplemented; do not
 benchmark it alone.
 
+The 2026-09-20 native-array checkpoint safely admits one dynamic bound:
+`0 .. $#array` for a direct self-update after a complete literal-bounded
+initializer, provided no later direct write could have extended the proven
+prefix. It uses the carrier's private `lastIndex` before materialization and
+the existing ordinary-array operation afterwards. System Perl, JVM, and
+interpreter pass the permanent standalone oracle; the JVM disassembly confirms
+the carrier `setWord`/`lastIndex`/`wordAt`/`setWord` sequence before the final
+materialization, and the final immutable full `make` gate passed in 3m 43s at
+`/tmp/make_private_native_array_last_index_oracle_20260920.log`. This is a
+general semantic checkpoint, not a retained performance result; do not run a
+portfolio until selection reaches a representative Life-shaped loop.
+
 The native-array effort is now at a safe code checkpoint: commit `d863f4a09`
 adds phase-one, compiler-inert proof scaffolding and its five Java unit tests.
 It recognizes only `my @a = ()`-equivalent empty declarations followed by

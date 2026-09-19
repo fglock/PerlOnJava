@@ -1586,6 +1586,45 @@ public class EmitVariable {
         }
     }
 
+    static boolean emitPrivateNativeArrayLastIndex(EmitterVisitor emitterVisitor, OperatorNode node) {
+        if (!Boolean.TRUE.equals(node.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_LAST_INDEX))) {
+            return false;
+        }
+        Node operand = unwrapSingletonList(node.operand);
+        String name = operand instanceof IdentifierNode identifier ? identifier.name
+                : operand instanceof OperatorNode array && "@".equals(array.operator)
+                && array.operand instanceof IdentifierNode identifier ? identifier.name : null;
+        if (name == null) return false;
+        int arraySlot = lexicalSlot(emitterVisitor.ctx, "@", name);
+        int carrierSlot = emitterVisitor.ctx.javaClassInfo.privateNativeArrayCarrierSlot(arraySlot);
+        if (carrierSlot < 0) return false;
+
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        Label ordinary = new Label();
+        Label done = new Label();
+        mv.visitVarInsn(Opcodes.ALOAD, carrierSlot);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/runtimetypes/PrivateNativeArrayCarrier",
+                "isMaterialized", "()Z", false);
+        mv.visitJumpInsn(Opcodes.IFNE, ordinary);
+        mv.visitVarInsn(Opcodes.ALOAD, carrierSlot);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/runtimetypes/PrivateNativeArrayCarrier",
+                "lastIndex", "()I", false);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache",
+                "getScalarInt", "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        mv.visitJumpInsn(Opcodes.GOTO, done);
+
+        mv.visitLabel(ordinary);
+        emitLexicalArray(emitterVisitor, name);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeArray",
+                "indexLastElem", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        mv.visitLabel(done);
+        return true;
+    }
+
     private static void emitLexicalArray(EmitterVisitor emitterVisitor, String name) {
         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, lexicalSlot(emitterVisitor.ctx, "@", name));
     }

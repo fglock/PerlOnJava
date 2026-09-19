@@ -25,6 +25,16 @@ is($generated[0], 22, 'bounded loop reads an earlier complete initializer');
 is($generated[31], 9, 'bounded loop reads every initialized carrier element');
 is(scalar @generated, 32, 'bounded loop retains native array length after materialization');
 
+my @last_index_generated = ();
+for my $i (0 .. 31) {
+    $last_index_generated[$i] = $i ^ 7;
+}
+for my $i (0 .. $#last_index_generated) {
+    $last_index_generated[$i] = $last_index_generated[$i] ^ 17;
+}
+is($last_index_generated[0], 22, 'private last-index loop retains initialized first element');
+is($last_index_generated[31], 9, 'private last-index loop retains initialized final element');
+
 my @bare;
 $bare[0] = 55;
 is($bare[0], 55, 'bare fresh declaration materializes correctly');

@@ -34,6 +34,8 @@ public final class PrivateNativeArrayAnalyzer {
     public static final String PRIVATE_NATIVE_ARRAY = "privateNativeArray";
     /** A scalar occurrence proven to be a bounded native-array loop index. */
     public static final String PRIVATE_NATIVE_LOOP_INDEX = "privateNativeLoopIndex";
+    /** A {@code $#array} read proven not to observe a private carrier. */
+    public static final String PRIVATE_NATIVE_LAST_INDEX = "privateNativeLastIndex";
 
     private PrivateNativeArrayAnalyzer() {
     }
@@ -70,14 +72,18 @@ public final class PrivateNativeArrayAnalyzer {
         boolean hasNativeOperation = false;
         for (Node statement : block.elements) {
             LoopInitialization loopInitialization = !materialized && statement instanceof For1Node loop
-                    ? nativeLoopInitialization(loop, candidate, initializedThrough) : null;
+                    ? nativeLoopInitialization(loop, candidate, initializedThrough,
+                    maxInitializedIndex(initializedIndexes)) : null;
             if (loopInitialization != null) {
                 hasNativeOperation = true;
                 initializedThrough = Math.max(initializedThrough, loopInitialization.lastIndex());
                 continue;
             }
-            if (containsUnsupportedLifetimeBoundary(statement)) return false;
+            // Materialization is one-way: the ordinary lexical slot is now
+            // authoritative, so later callbacks, closures, or dynamic code
+            // cannot observe the retired carrier.
             if (materialized) continue;
+            if (containsUnsupportedLifetimeBoundary(statement)) return false;
             if (isSafe(statement, candidate, true, initializedIndexes)) {
                 hasNativeOperation |= directArrayElementIndex(
                         statement instanceof BinaryOperatorNode assignment ? assignment.left : null,
@@ -104,16 +110,16 @@ public final class PrivateNativeArrayAnalyzer {
      * iteration is independent and no back-edge initialization fact is needed.
      */
     private static LoopInitialization nativeLoopInitialization(For1Node loop, String candidate,
-                                                               int initializedThrough) {
+                                                               int initializedThrough, int maxInitializedIndex) {
         String indexName = loopIndexName(loop.variable);
-        Integer lastIndex = zeroBasedLiteralRangeEnd(loop.list);
-        if (indexName == null || loop.continueBlock != null || lastIndex == null) return null;
+        LoopRange range = zeroBasedLoopRange(loop.list, candidate, initializedThrough, maxInitializedIndex);
+        if (indexName == null || loop.continueBlock != null || range == null) return null;
         if (!(loop.body instanceof BlockNode body) || body.elements.isEmpty()) return null;
         List<OperatorNode> indexOccurrences = new ArrayList<>();
         for (Node statement : body.elements) {
             if (!(statement instanceof BinaryOperatorNode assignment) || !"=".equals(assignment.operator)
                     || !isLoopArrayElement(assignment.left, candidate, indexName, indexOccurrences)
-                    || !isLoopNativeWordExpression(assignment.right, candidate, indexName, lastIndex,
+                    || !isLoopNativeWordExpression(assignment.right, candidate, indexName, range.lastIndex,
                     initializedThrough, indexOccurrences)) {
                 return null;
             }
@@ -121,7 +127,10 @@ public final class PrivateNativeArrayAnalyzer {
         for (OperatorNode occurrence : indexOccurrences) {
             occurrence.setAnnotation(PRIVATE_NATIVE_LOOP_INDEX, Boolean.TRUE);
         }
-        return new LoopInitialization(lastIndex);
+        if (range.privateLastIndex != null) {
+            range.privateLastIndex.setAnnotation(PRIVATE_NATIVE_LAST_INDEX, Boolean.TRUE);
+        }
+        return new LoopInitialization(range.lastIndex);
     }
 
     private static String loopIndexName(Node node) {
@@ -131,11 +140,35 @@ public final class PrivateNativeArrayAnalyzer {
         return identifier.name;
     }
 
-    private static Integer zeroBasedLiteralRangeEnd(Node node) {
+    private static LoopRange zeroBasedLoopRange(Node node, String candidate, int initializedThrough,
+                                                int maxInitializedIndex) {
         node = unwrapSingletonList(node);
         if (!(node instanceof BinaryOperatorNode range) || !"..".equals(range.operator)
                 || literalIndex(range.left) == null || literalIndex(range.left) != 0) return null;
-        return literalIndex(range.right);
+        Integer literalEnd = literalIndex(range.right);
+        if (literalEnd != null) return new LoopRange(literalEnd, null);
+        OperatorNode lastIndex = privateLastIndex(range.right, candidate);
+        // A complete preceding 0..N initializer is the only fact that makes
+        // $#array an initialized native-read boundary.  A direct write past N
+        // could make $#array expose a hole, so reject it before codegen.
+        if (lastIndex == null || initializedThrough < 0 || maxInitializedIndex > initializedThrough) return null;
+        return new LoopRange(initializedThrough, lastIndex);
+    }
+
+    private static OperatorNode privateLastIndex(Node node, String candidate) {
+        node = unwrapSingletonList(node);
+        if (!(node instanceof OperatorNode lastIndex) || !"$#".equals(lastIndex.operator)) return null;
+        Node operand = unwrapSingletonList(lastIndex.operand);
+        if (operand instanceof IdentifierNode identifier && candidate.equals(identifier.name)) return lastIndex;
+        if (operand instanceof OperatorNode array && "@".equals(array.operator)
+                && array.operand instanceof IdentifierNode identifier && candidate.equals(identifier.name)) return lastIndex;
+        return null;
+    }
+
+    private static int maxInitializedIndex(Set<Integer> initializedIndexes) {
+        int max = -1;
+        for (int index : initializedIndexes) max = Math.max(max, index);
+        return max;
     }
 
     private static boolean isLoopArrayElement(Node node, String candidate, String indexName,
@@ -386,6 +419,9 @@ public final class PrivateNativeArrayAnalyzer {
     }
 
     private record ArrayDeclaration(String name, OperatorNode node) {
+    }
+
+    private record LoopRange(int lastIndex, OperatorNode privateLastIndex) {
     }
 
     private record LoopInitialization(int lastIndex) {

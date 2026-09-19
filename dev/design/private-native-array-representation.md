@@ -100,7 +100,7 @@ replayed.
 
 ## Progress tracking
 
-### Current status: phases 1--2 complete for a narrow write-only-loop JVM subset (2026-09-15)
+### Current status: phases 1--2 complete for a narrow bounded-loop JVM subset (2026-09-20)
 
 Commit `d863f4a09` adds `PrivateNativeArrayAnalyzer` and five focused Java
 tests. It is intentionally compiler-inert. The analyzer annotates only the
@@ -178,14 +178,33 @@ is `/tmp/prove-private-native-array-bare-perl-20260915.log`,
 `/tmp/make-private-native-array-bare-20260915.log` (4m 02s). It is a
 prerequisite for `@next`, not a Life performance result.
 
+The 2026-09-20 checkpoint extends the same proof to a later self-update
+bounded by `0 .. $#array`. It accepts that dynamic upper bound only after a
+complete earlier literal-bounded initializer establishes every element in the
+carrier and only when no subsequent direct write can have extended the known
+prefix. The JVM emitter uses `PrivateNativeArrayCarrier.lastIndex()` while the
+carrier remains private, then permanently falls back to
+`RuntimeArray.indexLastElem` after materialization. The focused standalone
+oracle passes on system Perl, JVM, and interpreter at
+`/tmp/prove_private_native_array_last_index_standalone_perl_20260920.log`,
+`/tmp/jperl_private_native_array_last_index_standalone_jvm_20260920.log`, and
+`/tmp/jperl_private_native_array_last_index_standalone_interpreter_20260920.log`.
+Its JVM disassembly records `setWord`, `lastIndex`, `wordAt`, `setWord`, and
+the final materialization in that order at
+`/tmp/jperl_private_native_array_last_index_standalone_disassemble_20260920.log`.
+The immutable full `make` gate passed in 3m 43s at
+`/tmp/make_private_native_array_last_index_oracle_20260920.log`. This remains
+generic infrastructure, not a Life measurement or a portfolio result.
+
 ### Exact resume steps
 
 1. Inspect active benchmark/test processes and their worktrees; wait for all
    children before modifying a checkout. Do not restart completed artifacts.
 2. Generalize the initialized-prefix fact into a per-iteration/range lattice
-   with exact materialization joins before accepting dynamic bounds, another
-   source array, or nested loops. Preserve deny-by-default fallback and add
-   focused rejection coverage before accepting each control-flow form.
+   with exact materialization joins before accepting another source array or
+   nested loops. Preserve the completed-initializer and no-extension guards
+   for dynamic bounds, the deny-by-default fallback, and focused rejection
+   coverage before accepting each control-flow form.
 3. Cover materialization through aliases, callbacks, exceptions, early return,
    and closure rejection with system-Perl-validated tests before widening
    selection beyond the current straight-line subset.

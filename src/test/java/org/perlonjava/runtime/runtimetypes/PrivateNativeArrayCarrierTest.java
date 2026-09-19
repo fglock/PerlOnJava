@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -42,5 +43,15 @@ class PrivateNativeArrayCarrierTest {
 
         assertSame(array, carrier.materialize());
         assertThrows(IllegalStateException.class, () -> carrier.setWord(0, 7));
+    }
+
+    @Test
+    void exposesPerlLastIndexWithoutMaterializing() {
+        PrivateNativeArrayCarrier carrier = new PrivateNativeArrayCarrier();
+        assertEquals(-1, carrier.lastIndex());
+
+        carrier.setWord(2, 7);
+        assertEquals(2, carrier.lastIndex());
+        assertFalse(carrier.isMaterialized());
     }
 }
