@@ -8226,8 +8226,13 @@ public class BytecodeCompiler implements Visitor {
     @Override
     public void visit(LabelNode node) {
         int pc = bytecode.size();
-        GotoLabelTarget target = gotoLabelTargetsByToken.get(node.getIndex());
-        if (target == null) target = resolveStaticGotoTarget(node.label);
+        // The active lexical scope may contain a target created after a
+        // folding pass cloned this block.  Bind that scope's target here so
+        // its pending static gotos receive this PC; otherwise their initial
+        // zero placeholder jumps to the program start.  Prefer the scope over
+        // the prepass's token table, whose owner can be the pre-fold clone.
+        GotoLabelTarget target = resolveStaticGotoTarget(node.label);
+        if (target == null) target = gotoLabelTargetsByToken.get(node.getIndex());
         if (target == null) {
             target = new GotoLabelTarget(node.label, node.getIndex(), false, false, null);
         }
