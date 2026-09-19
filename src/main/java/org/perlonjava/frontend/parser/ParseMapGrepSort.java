@@ -186,7 +186,7 @@ public class ParseMapGrepSort {
             // The feature-gated all/any keywords require a literal block;
             // unlike map and grep they do not accept a unary callback.
             if ((token.text.equals("all") || token.text.equals("any"))
-                    && !peek(parser).text.equals("{")) {
+                    && !startsAllAnyLiteralBlock(parser)) {
                 parser.throwErrorAtToken(currentIndex - 2, "syntax error");
             }
             // Handle 'map' keyword as a Binary operator with a Code and List operands
@@ -237,5 +237,25 @@ public class ParseMapGrepSort {
             block = subNode;
         }
         return new BinaryOperatorNode(token.text, block, operand, parser.tokenIndex);
+    }
+
+    /**
+     * all/any require a literal block, but Perl permits that block and list
+     * to be wrapped in invocation parentheses: {@code any( { ... } @list)}.
+     */
+    private static boolean startsAllAnyLiteralBlock(Parser parser) {
+        int index = parser.tokenIndex;
+        while (index < parser.tokens.size()
+                && parser.tokens.get(index).type == LexerTokenType.WHITESPACE) {
+            index++;
+        }
+        if (index < parser.tokens.size() && parser.tokens.get(index).text.equals("(")) {
+            index++;
+            while (index < parser.tokens.size()
+                    && parser.tokens.get(index).type == LexerTokenType.WHITESPACE) {
+                index++;
+            }
+        }
+        return index < parser.tokens.size() && parser.tokens.get(index).text.equals("{");
     }
 }
