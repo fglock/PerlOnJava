@@ -232,7 +232,21 @@ public class BytecodeCompiler implements Visitor {
 
     private void pushGotoLabelScope(BlockNode block) {
         Map<String, GotoLabelTarget> scope = new LinkedHashMap<>();
-        for (String name : block.labels) scope.put(name, new GotoLabelTarget(name, -1, false, false, block));
+        // Reuse the predeclared targets, rather than inventing a second target
+        // for the same source label.  Static goto resolution must first choose
+        // the nearest lexical block; a global source-position heuristic sends
+        // a goto back into an inner loop when labels share a name.
+        for (Map.Entry<String, List<GotoLabelTarget>> entry : gotoLabelTargetsByName.entrySet()) {
+            for (GotoLabelTarget target : entry.getValue()) {
+                if (target.owner == block) {
+                    scope.putIfAbsent(entry.getKey(), target);
+                    break;
+                }
+            }
+        }
+        for (String name : block.labels) {
+            scope.putIfAbsent(name, new GotoLabelTarget(name, -1, false, false, block));
+        }
         gotoLabelScopes.push(scope);
         gotoLabelBlockScopes.push(block);
     }
@@ -251,6 +265,8 @@ public class BytecodeCompiler implements Visitor {
     }
 
     GotoLabelTarget resolveStaticGotoTarget(String name, int sourceTokenIndex) {
+        GotoLabelTarget scoped = resolveStaticGotoTarget(name);
+        if (scoped != null) return scoped;
         List<GotoLabelTarget> candidates = gotoLabelTargetsByName.get(name);
         if (candidates == null || candidates.isEmpty()) return resolveStaticGotoTarget(name);
         GotoLabelTarget result = null;
