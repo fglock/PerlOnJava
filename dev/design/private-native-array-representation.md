@@ -196,15 +196,27 @@ The immutable full `make` gate passed in 3m 43s at
 `/tmp/make_private_native_array_last_index_oracle_20260920.log`. This remains
 generic infrastructure, not a Life measurement or a portfolio result.
 
+The next 2026-09-20 increment permits a fresh private destination to consume
+a distinct ordinary lexical array through the existing side-effect-free
+native-word subset. Each ordinary source cell is checked for an unshared native
+integer; a failed check materializes the destination and evaluates the original
+assignment normally. The focused oracle passes on system Perl, JVM, and
+interpreter, and its immutable full `make` gate passed in 4m 23s at
+`/tmp/make_private_native_array_ordinary_source_20260920.log`. A minimal JVM
+disassembly records `RuntimeArray.nativeIntegerElement`, carrier `setWord`,
+and the materialization fallback at
+`/tmp/jperl_private_native_array_ordinary_source_minimal_disassemble_20260920.log`.
+This does not yet accept scalar temporaries, ownership transfer, or closures.
+
 ### Exact resume steps
 
 1. Inspect active benchmark/test processes and their worktrees; wait for all
    children before modifying a checkout. Do not restart completed artifacts.
 2. Generalize the initialized-prefix fact into a per-iteration/range lattice
-   with exact materialization joins before accepting another source array or
-   nested loops. Preserve the completed-initializer and no-extension guards
-   for dynamic bounds, the deny-by-default fallback, and focused rejection
-   coverage before accepting each control-flow form.
+   with exact materialization joins before accepting scalar temporaries,
+   ownership transfer, or nested loops. Preserve the completed-initializer,
+   ordinary-source guards, and deny-by-default fallback, and add focused
+   rejection coverage before accepting each control-flow form.
 3. Cover materialization through aliases, callbacks, exceptions, early return,
    and closure rejection with system-Perl-validated tests before widening
    selection beyond the current straight-line subset.

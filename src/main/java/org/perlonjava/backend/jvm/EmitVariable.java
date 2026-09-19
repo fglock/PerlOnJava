@@ -1401,7 +1401,20 @@ public class EmitVariable {
         if (target == null) return false;
         int targetArraySlot = lexicalSlot(emitterVisitor.ctx, "@", target.name);
         int carrierSlot = emitterVisitor.ctx.javaClassInfo.privateNativeArrayCarrierSlot(targetArraySlot);
-        if (carrierSlot < 0 || !isPrivateNativeWordExpression(emitterVisitor.ctx, assignment.right)) return false;
+        if (carrierSlot < 0) return false;
+        boolean privateOnly = isPrivateNativeWordExpression(emitterVisitor.ctx, assignment.right);
+        NativeWordAssignmentPlan ordinarySourcePlan = privateOnly ? null
+                : nativeWordAssignmentPlan(emitterVisitor.ctx, assignment);
+        if (!privateOnly && ordinarySourcePlan == null) return false;
+        if (!privateOnly) {
+            // The mixed path below reads ordinary RuntimeArray elements. A
+            // second live carrier must take the normal expression path, which
+            // materializes both lexical arrays before observing either one.
+            for (WordArrayElement source : ordinarySourcePlan.arraySources) {
+                if (emitterVisitor.ctx.javaClassInfo.privateNativeArrayCarrierSlot(
+                        lexicalSlot(emitterVisitor.ctx, "@", source.name)) >= 0) return false;
+            }
+        }
 
         MethodVisitor mv = emitterVisitor.ctx.mv;
         Label ordinary = new Label();
@@ -1412,13 +1425,47 @@ public class EmitVariable {
                 "isMaterialized", "()Z", false);
         mv.visitJumpInsn(Opcodes.IFNE, ordinary);
 
-        mv.visitVarInsn(Opcodes.ALOAD, carrierSlot);
-        emitNativeWordIndex(emitterVisitor, target.index);
-        emitPrivateNativeWordExpression(emitterVisitor, assignment.right);
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                "org/perlonjava/runtime/runtimetypes/PrivateNativeArrayCarrier",
-                "setWord", "(IJ)V", false);
-        mv.visitJumpInsn(Opcodes.GOTO, done);
+        if (!privateOnly) {
+            Label materialize = new Label();
+            Set<String> scalarGuards = new LinkedHashSet<>(ordinarySourcePlan.scalarSources);
+            scalarGuards.addAll(ordinarySourcePlan.indexScalars);
+            for (String name : scalarGuards) {
+                mv.visitVarInsn(Opcodes.ALOAD, lexicalSlot(emitterVisitor.ctx, "$", name));
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                        "isPlainUntaintedNativeInteger", "()Z", false);
+                mv.visitJumpInsn(Opcodes.IFEQ, materialize);
+            }
+            for (WordArrayElement source : ordinarySourcePlan.arraySources) {
+                emitLexicalArray(emitterVisitor, source.name);
+                emitNativeWordIndex(emitterVisitor, source.index);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeArray",
+                        "isPlainUnsharedNativeIntegerElement", "(I)Z", false);
+                mv.visitJumpInsn(Opcodes.IFEQ, materialize);
+            }
+
+            mv.visitVarInsn(Opcodes.ALOAD, carrierSlot);
+            emitNativeWordIndex(emitterVisitor, target.index);
+            emitNativeWordExpression(emitterVisitor, assignment.right);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/PrivateNativeArrayCarrier",
+                    "setWord", "(IJ)V", false);
+            mv.visitJumpInsn(Opcodes.GOTO, done);
+
+            mv.visitLabel(materialize);
+            emitPrivateNativeArrayMaterialization(emitterVisitor, carrierSlot, targetArraySlot);
+            mv.visitJumpInsn(Opcodes.GOTO, ordinary);
+        } else {
+
+            mv.visitVarInsn(Opcodes.ALOAD, carrierSlot);
+            emitNativeWordIndex(emitterVisitor, target.index);
+            emitPrivateNativeWordExpression(emitterVisitor, assignment.right);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/PrivateNativeArrayCarrier",
+                    "setWord", "(IJ)V", false);
+            mv.visitJumpInsn(Opcodes.GOTO, done);
+        }
 
         mv.visitLabel(ordinary);
         assignment.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
@@ -1429,6 +1476,16 @@ public class EmitVariable {
         }
         mv.visitLabel(done);
         return true;
+    }
+
+    private static void emitPrivateNativeArrayMaterialization(EmitterVisitor emitterVisitor,
+                                                               int carrierSlot, int arraySlot) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        mv.visitVarInsn(Opcodes.ALOAD, carrierSlot);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/runtimetypes/PrivateNativeArrayCarrier",
+                "materialize", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
+        mv.visitVarInsn(Opcodes.ASTORE, arraySlot);
     }
 
     private static boolean isPrivateNativeWordExpression(EmitterContext ctx, Node node) {

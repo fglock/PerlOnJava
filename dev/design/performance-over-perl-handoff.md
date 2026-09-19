@@ -74,6 +74,16 @@ materialization, and the final immutable full `make` gate passed in 3m 43s at
 general semantic checkpoint, not a retained performance result; do not run a
 portfolio until selection reaches a representative Life-shaped loop.
 
+The following 2026-09-20 increment admits a distinct ordinary lexical array
+as a guarded native-word source for a fresh private destination. A non-native
+or shared source element materializes the destination and takes the original
+ordinary assignment; no source representation is assumed. Its full gate
+passed in 4m 23s at
+`/tmp/make_private_native_array_ordinary_source_20260920.log`, and minimal
+JVM bytecode confirms `nativeIntegerElement` to carrier `setWord` reachability.
+It is still not sufficient for Life: its inner loop retains scalar temporaries
+and the outer iteration transfers array ownership inside a closure.
+
 The native-array effort is now at a safe code checkpoint: commit `d863f4a09`
 adds phase-one, compiler-inert proof scaffolding and its five Java unit tests.
 It recognizes only `my @a = ()`-equivalent empty declarations followed by

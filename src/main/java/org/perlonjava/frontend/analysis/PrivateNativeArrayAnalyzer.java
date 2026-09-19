@@ -197,6 +197,12 @@ public final class PrivateNativeArrayAnalyzer {
         }
         if (initializedThrough >= lastIndex
                 && isLoopArrayElement(node, candidate, indexName, indexOccurrences)) return true;
+        // A distinct lexical array may supply a native-word input to a private
+        // destination. The emitter guards that ordinary source at runtime and
+        // materializes the destination before the unchanged path on a miss.
+        // Keep the carrier's own reads on the initialized-prefix path above:
+        // accepting them here would turn a hole into a zero word.
+        if (isLoopOrdinaryArrayElement(node, candidate, indexName)) return true;
         if (!(node instanceof BinaryOperatorNode binary)) return false;
         return switch (binary.operator) {
             case "&", "|", "^" -> isLoopNativeWordExpression(binary.left, candidate, indexName, lastIndex,
@@ -220,6 +226,28 @@ public final class PrivateNativeArrayAnalyzer {
             return scalar;
         }
         return null;
+    }
+
+    private static boolean isLoopOrdinaryArrayElement(Node node, String candidate, String indexName) {
+        node = unwrapSingletonList(node);
+        if (!(node instanceof BinaryOperatorNode element) || !"[".equals(element.operator)
+                || !(element.left instanceof OperatorNode scalar) || !"$".equals(scalar.operator)
+                || !(scalar.operand instanceof IdentifierNode identifier)
+                || candidate.equals(identifier.name)) return false;
+        return isLoopNativeIndexExpression(element.right, indexName);
+    }
+
+    /** Match the side-effect-free integer-index subset emitted by EmitVariable. */
+    private static boolean isLoopNativeIndexExpression(Node node, String indexName) {
+        node = unwrapSingletonList(node);
+        if (literalIndex(node) != null || loopIndex(node, indexName) != null) return true;
+        if (node instanceof OperatorNode array && "@".equals(array.operator)
+                && array.operand instanceof IdentifierNode) return true;
+        if (!(node instanceof BinaryOperatorNode binary)
+                || !("+".equals(binary.operator) || "-".equals(binary.operator)
+                || "%".equals(binary.operator))) return false;
+        return isLoopNativeIndexExpression(binary.left, indexName)
+                && isLoopNativeIndexExpression(binary.right, indexName);
     }
 
     private static boolean containsUnsupportedLifetimeBoundary(Node node) {
