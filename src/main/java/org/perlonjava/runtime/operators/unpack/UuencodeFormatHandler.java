@@ -30,19 +30,23 @@ public class UuencodeFormatHandler implements FormatHandler {
                 break; // End of uuencoded data
             }
 
+            // Trailing spaces may have been stripped from a uuencoded line.
+            // Missing sextets are zero; a newline must never become payload
+            // or let this line consume characters from the following line.
+            java.util.ArrayList<Integer> line = new java.util.ArrayList<>();
+            while (state.hasMoreCodePoints()) {
+                int ch = state.nextCodePoint();
+                if (ch == '\n' || ch == '\r') break;
+                line.add((ch - 32) & 0x3F);
+            }
+            int column = 0;
             // Decode groups of 4 characters to 3 bytes
             int bytesDecoded = 0;
-            while (bytesDecoded < lineLength && state.hasMoreCodePoints()) {
-                int c1 = state.hasMoreCodePoints() ? state.nextCodePoint() : 0;
-                int c2 = state.hasMoreCodePoints() ? state.nextCodePoint() : 0;
-                int c3 = state.hasMoreCodePoints() ? state.nextCodePoint() : 0;
-                int c4 = state.hasMoreCodePoints() ? state.nextCodePoint() : 0;
-
-                // Convert from printable (backtick becomes 0)
-                c1 = (c1 == 96) ? 0 : (c1 - 32) & 0x3F;
-                c2 = (c2 == 96) ? 0 : (c2 - 32) & 0x3F;
-                c3 = (c3 == 96) ? 0 : (c3 - 32) & 0x3F;
-                c4 = (c4 == 96) ? 0 : (c4 - 32) & 0x3F;
+            while (bytesDecoded < lineLength) {
+                int c1 = column < line.size() ? line.get(column++) : 0;
+                int c2 = column < line.size() ? line.get(column++) : 0;
+                int c3 = column < line.size() ? line.get(column++) : 0;
+                int c4 = column < line.size() ? line.get(column++) : 0;
 
                 // Decode to bytes
                 if (bytesDecoded < lineLength) {
@@ -59,13 +63,6 @@ public class UuencodeFormatHandler implements FormatHandler {
                 }
             }
 
-            // Skip to next line
-            while (state.hasMoreCodePoints()) {
-                int ch = state.nextCodePoint();
-                if (ch == '\n' || ch == '\r') {
-                    break;
-                }
-            }
         }
 
         result.add(new RuntimeScalar(decoded.toByteArray()));

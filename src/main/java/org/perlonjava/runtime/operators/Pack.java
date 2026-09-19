@@ -61,6 +61,7 @@ public class Pack {
      * Set to true to debug pack template processing.
      */
     private static final boolean TRACE_PACK = false;
+    private static final ThreadLocal<Boolean> commaWarningEmitted = ThreadLocal.withInitial(() -> false);
     private static final ThreadLocal<Stack<Integer>> groupBaseStack = ThreadLocal.withInitial(() -> {
         Stack<Integer> stack = new Stack<>();
         stack.push(0);
@@ -248,6 +249,8 @@ public class Pack {
             return RuntimeScalarCache.scalarEmptyString;
         }
 
+        commaWarningEmitted.set(false);
+        try {
         RuntimeScalar templateScalar = RuntimeScalar.fetchTiedOnce(args.getFirst());
         String template = templateScalar.toString();
 
@@ -275,7 +278,8 @@ public class Pack {
         PackBuffer output = new PackBuffer();
         int valueIndex = 0;
 
-        PackResult result = packInto(template, values, valueIndex, output, false, false);
+        PackResult result = packInto(template, values, valueIndex, output, false, false,
+                !template.stripLeading().startsWith("U"));
 
         boolean shouldUpgrade = result.utf8ModeUsed() || !result.byteModeUsed()
                 && (result.hasUnicodeInNormalMode() || output.hasUnicodeCharacters());
@@ -289,10 +293,20 @@ public class Pack {
             }
         }
         return packed;
+        } finally {
+            commaWarningEmitted.remove();
+        }
     }
 
     public static PackResult packInto(String template, List<RuntimeScalar> values, int startValueIndex,
                                       PackBuffer output, boolean initialByteMode, boolean initialHasUnicode) {
+        return packInto(template, values, startValueIndex, output, initialByteMode, initialHasUnicode,
+                initialByteMode);
+    }
+
+    public static PackResult packInto(String template, List<RuntimeScalar> values, int startValueIndex,
+                                      PackBuffer output, boolean initialByteMode, boolean initialHasUnicode,
+                                      boolean unicodeByteMode) {
         int valueIndex = startValueIndex;
         PackBuffer destinationOutput = output;
         PackBuffer utf8SegmentOutput = null;
@@ -351,11 +365,13 @@ public class Pack {
 
             // Handle commas - ignored for Perl compatibility but emit warning
             if (format == ',') {
-                // Emit warning like Perl does
-                WarnDie.warn(
-                        new RuntimeScalar("Invalid type ',' in pack"),
-                        RuntimeScalarCache.scalarEmptyString
-                );
+                if (!commaWarningEmitted.get()) {
+                    WarnDie.warn(
+                            new RuntimeScalar("Invalid type ',' in pack"),
+                            RuntimeScalarCache.scalarEmptyString
+                    );
+                    commaWarningEmitted.set(true);
+                }
                 continue;
             }
 
@@ -388,11 +404,13 @@ public class Pack {
                         valueIndex,
                         byteMode,
                         byteModeUsed,
-                        hasUnicodeInNormalMode
+                        hasUnicodeInNormalMode,
+                        unicodeByteMode
                 );
                 i = result.position();
                 valueIndex = result.valueIndex();
-                byteMode = result.byteMode();
+                // Mode switches are scoped to the group. Its output may still
+                // upgrade the result, but subsequent directives use our mode.
                 byteModeUsed = result.byteModeUsed();
                 hasUnicodeInNormalMode = result.hasUnicodeInNormalMode();
                 if (TRACE_PACK) {
@@ -410,6 +428,7 @@ public class Pack {
                     utf8SegmentOutput = null;
                 }
                 byteMode = true;        // C0 switches to byte mode
+                unicodeByteMode = true;
                 byteModeUsed = true;    // Mark that byte mode was used
                 utf8StringMode = false; // C0 disables UTF-8 byte decoding semantics for a/A/Z
                 i++; // Skip the '0'
@@ -420,6 +439,7 @@ public class Pack {
                     output = utf8SegmentOutput;
                 }
                 byteMode = false;       // U0 switches to normal mode
+                unicodeByteMode = false;
                 utf8StringMode = true;  // U0 enables UTF-8 byte decoding semantics for a/A/Z
                 utf8ModeUsed = true;
                 hasUnicodeInNormalMode = true;
@@ -529,11 +549,11 @@ public class Pack {
                             output = destinationOutput;
                             utf8SegmentOutput = null;
                         }
-                        if (!byteMode) {
+                        if (!unicodeByteMode) {
                             // `pack "U*"` is UTF-8 flagged even for an empty list.
                             hasUnicodeInNormalMode = true;
                         }
-                        hasUnicodeInNormalMode = PackHelper.handleUnicode(values, valueIndex, count, byteMode, hasUnicodeInNormalMode, output);
+                        hasUnicodeInNormalMode = PackHelper.handleUnicode(values, valueIndex, count, unicodeByteMode, hasUnicodeInNormalMode, output);
                         valueIndex += count;
                         if (resumeUtf8Segment) {
                             utf8SegmentOutput = new PackBuffer();

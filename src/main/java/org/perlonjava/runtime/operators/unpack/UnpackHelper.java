@@ -111,6 +111,10 @@ public class UnpackHelper {
                 // Only unpack if slashCount > 0 (if count was 0 due to insufficient data, don't unpack)
                 // Always use slashCount in slash constructs, never "all remaining"
                 if (slashCount > 0) {
+                    int available = state.remainingBytes();
+                    if (available < slashCount) {
+                        throw new PerlCompilerException("length/code after end of string");
+                    }
                     formatHandler.unpack(state, values, slashCount, false);
                 }
 
@@ -134,6 +138,8 @@ public class UnpackHelper {
                     slashCount = 0;
                 }
                 values.removeLast(); // Remove the count value
+            } else if (state.isInStrictSlashGroup()) {
+                throw new PerlCompilerException("length/code after end of string");
             }
             // DEBUG: Got slash count: " + slashCount
 

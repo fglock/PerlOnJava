@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Improve `pack`/`unpack` compatibility for UUencoding, scoped Unicode modes,
+  pointer strings, and native unsigned integers; correct interpreter string
+  repetition for function calls in list context.
+
 - Extend CPAN release acceptance coverage to Excel::Writer::XLSX with a timeout suitable for its large test suite.
 
 - Complete `tr///` compatibility for extended Unicode and surrogate scalars,

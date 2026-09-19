@@ -14,11 +14,18 @@ public class PackWriter {
      * @param str    The string to uuencode.
      */
     public static void writeUuencodedString(PackBuffer output, String str) {
-        byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
+        writeUuencodedString(output, str, 45);
+    }
+
+    /** Write uuencode lines using Perl's requested (and already validated) width. */
+    public static void writeUuencodedString(PackBuffer output, String str, int lineWidth) {
+        // A Java String is also the storage for Perl byte strings, whose
+        // U+0000..U+00FF code units are octets rather than UTF-8 text.
+        byte[] bytes = str.getBytes(StandardCharsets.ISO_8859_1);
         int length = bytes.length;
 
-        for (int lineStart = 0; lineStart < length; lineStart += 45) {
-            int lineLength = Math.min(45, length - lineStart);
+        for (int lineStart = 0; lineStart < length; lineStart += lineWidth) {
+            int lineLength = Math.min(lineWidth, length - lineStart);
             output.write((lineLength & 0x3F) + 32);
 
             for (int i = lineStart; i < lineStart + lineLength; i += 3) {
@@ -31,10 +38,10 @@ public class PackWriter {
                 int c3 = ((b2 << 2) | (b3 >> 6)) & 0x3F;
                 int c4 = b3 & 0x3F;
 
-                output.write(c1 + 32);
-                output.write(c2 + 32);
-                output.write(c3 + 32);
-                output.write(c4 + 32);
+                output.write(c1 == 0 ? '`' : c1 + 32);
+                output.write(c2 == 0 ? '`' : c2 + 32);
+                output.write(c3 == 0 ? '`' : c3 + 32);
+                output.write(c4 == 0 ? '`' : c4 + 32);
             }
 
             output.write('\n');

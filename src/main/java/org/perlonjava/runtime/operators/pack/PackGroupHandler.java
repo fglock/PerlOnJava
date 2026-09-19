@@ -55,7 +55,8 @@ public class PackGroupHandler {
      */
     public static GroupResult handleGroup(String template, int openPos, List<RuntimeScalar> values,
                                           PackBuffer output, int valueIndex,
-                                          boolean byteMode, boolean byteModeUsed, boolean hasUnicodeInNormalMode) {
+                                          boolean byteMode, boolean byteModeUsed, boolean hasUnicodeInNormalMode,
+                                          boolean unicodeByteMode) {
         /**
          * Track recursion depth to prevent stack overflow from deeply nested groups.
          *
@@ -86,7 +87,7 @@ public class PackGroupHandler {
         nestingDepth.set(currentDepth);
 
         try {
-            return handleGroupInternal(template, openPos, values, output, valueIndex, byteMode, byteModeUsed, hasUnicodeInNormalMode);
+            return handleGroupInternal(template, openPos, values, output, valueIndex, byteMode, byteModeUsed, hasUnicodeInNormalMode, unicodeByteMode);
         } finally {
             // Always decrement depth when exiting, even if an exception occurred
             nestingDepth.set(currentDepth - 1);
@@ -95,7 +96,8 @@ public class PackGroupHandler {
 
     private static GroupResult handleGroupInternal(String template, int openPos, List<RuntimeScalar> values,
                                                    PackBuffer output, int valueIndex,
-                                                   boolean byteMode, boolean byteModeUsed, boolean hasUnicodeInNormalMode) {
+                                                   boolean byteMode, boolean byteModeUsed, boolean hasUnicodeInNormalMode,
+                                                   boolean unicodeByteMode) {
         // Find matching closing parenthesis
         int closePos = PackHelper.findMatchingParen(template, openPos);
         if (closePos == -1) {
@@ -157,9 +159,8 @@ public class PackGroupHandler {
                         String remainingContent = groupContent.substring(xPos);
 
                         // Pack directly into the parent buffer
-                        Pack.PackResult result = Pack.packInto(remainingContent, values, valueIndex, output, byteMode, hasUnicodeInNormalMode);
+                        Pack.PackResult result = Pack.packInto(remainingContent, values, valueIndex, output, byteMode, hasUnicodeInNormalMode, unicodeByteMode);
                         valueIndex = result.valueIndex();
-                        byteMode = result.byteMode();
                         byteModeUsed = byteModeUsed || result.byteModeUsed();
                         hasUnicodeInNormalMode = result.hasUnicodeInNormalMode();
                     }
@@ -186,9 +187,8 @@ public class PackGroupHandler {
 
                     // Pack directly into the parent buffer instead of creating a new buffer.
                     // This allows '.' and '@' inside groups to operate on the parent buffer's position.
-                    Pack.PackResult result = Pack.packInto(effectiveContent, values, valueIndex, output, byteMode, hasUnicodeInNormalMode);
+                    Pack.PackResult result = Pack.packInto(effectiveContent, values, valueIndex, output, byteMode, hasUnicodeInNormalMode, unicodeByteMode);
                     valueIndex = result.valueIndex();
-                    byteMode = result.byteMode();
                     byteModeUsed = byteModeUsed || result.byteModeUsed();
                     hasUnicodeInNormalMode = result.hasUnicodeInNormalMode();
                 }

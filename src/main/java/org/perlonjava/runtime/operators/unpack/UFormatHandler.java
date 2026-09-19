@@ -57,14 +57,23 @@ public class UFormatHandler implements FormatHandler {
             // U path).
             boolean readCodePoints = startsWithU || !state.isCharacterMode();
             if (readCodePoints) {
+                // In U0 mode a preceding byte directive (notably C/ with a
+                // zero length prefix) advances only the byte cursor.  Bring
+                // the code-point cursor to that byte boundary before reading
+                // U, then restore U0 byte mode for the following directive.
+                boolean restoreByteMode = !state.isCharacterMode();
+                if (restoreByteMode) {
+                    state.switchToCharacterMode();
+                }
                 if (!state.hasMoreCodePoints()) {
+                    if (restoreByteMode) state.switchToByteMode();
                     break;
                 }
                 int cp = state.nextCodePoint();
                 output.add(new RuntimeScalar(cp));
                 // Keep the byte buffer in sync so subsequent mode
                 // switches don't rewind us to the start.
-                if (!state.isCharacterMode()) {
+                if (restoreByteMode) {
                     ByteBuffer buf = state.getBuffer();
                     if (buf != null) {
                         // `originalBytes` layout mirrors what
@@ -81,14 +90,27 @@ public class UFormatHandler implements FormatHandler {
                         int newPos = Math.min(buf.position() + advance, buf.limit());
                         buf.position(newPos);
                     }
+                    state.switchToByteMode();
                 }
             } else {
+                // Numeric/string directives before U can have advanced the
+                // character cursor without materialising the byte buffer.
+                // UTF-8 decoding must begin at that logical position, not at
+                // byte zero (notably aC/UU after a zero length prefix).
+                boolean wasCharacterMode = state.isCharacterMode();
+                if (wasCharacterMode) {
+                    state.switchToByteMode();
+                }
                 ByteBuffer buffer = state.getBuffer();
                 if (!buffer.hasRemaining()) {
+                    if (wasCharacterMode) state.switchToCharacterMode();
                     break; // Just stop unpacking
                 }
                 long codePoint = readUTF8Character(buffer);
                 output.add(new RuntimeScalar(codePoint));
+                if (wasCharacterMode) {
+                    state.switchToCharacterMode();
+                }
             }
         }
     }
