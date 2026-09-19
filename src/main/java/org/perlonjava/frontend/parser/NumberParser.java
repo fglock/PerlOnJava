@@ -248,7 +248,8 @@ public class NumberParser {
      * Unified parsing method for special number formats (binary, octal, hex)
      */
     private static Node parseSpecialNumber(Parser parser, String initialPart, NumberFormat format) {
-        if (!containsDigitForFormat(initialPart, format)) {
+        if (!containsDigitForFormat(initialPart, format)
+                && !hasLeadingFractionalDigit(parser, format)) {
             PerlParserException adjacentNumberError =
                     missingOperatorBeforeIncompleteBaseLiteral(parser, format);
             if (adjacentNumberError != null) {
@@ -452,6 +453,21 @@ public class NumberParser {
             }
         }
         return false;
+    }
+
+    /**
+     * A hexadecimal float may omit the integer portion (for example
+     * {@code 0x.8p0}).  At this point the prefix has been consumed, so its
+     * digit is in the fraction rather than {@code initialPart}; do not
+     * mistake that valid form for an incomplete {@code 0x} literal.
+     */
+    private static boolean hasLeadingFractionalDigit(Parser parser, NumberFormat format) {
+        if (format != HEX_FORMAT || parser.tokenIndex + 1 >= parser.tokens.size()
+                || !parser.tokens.get(parser.tokenIndex).text.equals(".")) {
+            return false;
+        }
+        String fractionalStart = parser.tokens.get(parser.tokenIndex + 1).text;
+        return containsDigitForFormat(fractionalStart, format);
     }
 
     private static void deferNoDigitsForLiteral(Parser parser, String initialPart, NumberFormat format) {
