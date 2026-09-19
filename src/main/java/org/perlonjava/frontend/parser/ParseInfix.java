@@ -60,7 +60,13 @@ public class ParseInfix {
         if (entry == null || !(entry.ast() instanceof OperatorNode declared)) return;
         Object typeValue = declared.getAnnotation("varType");
         if (!(typeValue instanceof String typeName)) return;
-        RuntimeHash fields = GlobalVariable.getGlobalHash(typeName + "::FIELDS");
+        String fieldsName = typeName + "::FIELDS";
+        // A forward declaration such as `sub FIELDS;` does not create the
+        // legacy fields hash. Avoid auto-vivifying an empty %FIELDS merely
+        // while parsing a hash dereference, which would falsely reject every
+        // key as an unknown class field.
+        if (!GlobalVariable.existsGlobalHash(fieldsName)) return;
+        RuntimeHash fields = GlobalVariable.getGlobalHash(fieldsName);
         for (Node key : keys.elements) {
             String name = key instanceof StringNode string ? string.value
                     : key instanceof IdentifierNode id ? id.name : null;
