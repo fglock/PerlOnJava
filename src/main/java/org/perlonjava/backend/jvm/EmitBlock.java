@@ -216,35 +216,40 @@ public class EmitBlock {
 
     /** Labels in binary/list operands use Perl's more specific diagnostic. */
     private static void collectBinaryOrListExpressionLabels(Node node, Set<String> out) {
-        collectBinaryOrListExpressionLabels(node, out, false);
+        collectBinaryOrListExpressionLabels(node, out, false, false);
     }
 
     private static void collectBinaryOrListExpressionLabels(Node node, Set<String> out,
-            boolean expressionOperand) {
+            boolean expressionOperand, boolean fieldInitializer) {
         if (node == null) return;
+        if (node instanceof AbstractNode abstractNode) {
+            fieldInitializer |= abstractNode.getBooleanAnnotation("fieldInitializer");
+        }
         if (node instanceof BlockNode block) {
-            if (expressionOperand) out.addAll(block.labels);
+            if (expressionOperand && !fieldInitializer) out.addAll(block.labels);
             for (Node child : block.elements) {
-                collectBinaryOrListExpressionLabels(child, out, false);
+                collectBinaryOrListExpressionLabels(child, out, false, fieldInitializer);
             }
             return;
         }
         if (node instanceof SubroutineNode subroutine) {
-            collectBinaryOrListExpressionLabels(subroutine.block, out, expressionOperand);
+            collectBinaryOrListExpressionLabels(subroutine.block, out, expressionOperand, fieldInitializer);
             return;
         }
         if (node instanceof BinaryOperatorNode binary) {
-            collectBinaryOrListExpressionLabels(binary.left, out, true);
-            collectBinaryOrListExpressionLabels(binary.right, out, true);
+            collectBinaryOrListExpressionLabels(binary.left, out, true, fieldInitializer);
+            collectBinaryOrListExpressionLabels(binary.right, out, true, fieldInitializer);
             return;
         }
         if (node instanceof ListNode list) {
-            for (Node child : list.elements) collectBinaryOrListExpressionLabels(child, out, true);
+            for (Node child : list.elements) {
+                collectBinaryOrListExpressionLabels(child, out, true, fieldInitializer);
+            }
             return;
         }
         if (node instanceof OperatorNode operator
                 && (operator.operator.equals("map") || operator.operator.equals("grep"))) {
-            collectBinaryOrListExpressionLabels(operator.operand, out, true);
+            collectBinaryOrListExpressionLabels(operator.operand, out, true, fieldInitializer);
         }
     }
 
