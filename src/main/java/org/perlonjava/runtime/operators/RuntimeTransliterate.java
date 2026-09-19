@@ -17,13 +17,13 @@ import java.util.*;
 public class RuntimeTransliterate {
 
     // Mapping from source characters to target characters
-    private Map<Integer, Integer> translationMap;
+    private Map<Long, Long> translationMap;
 
     // Set of characters to delete
-    private Set<Integer> deleteSet;
+    private Set<Long> deleteSet;
 
     // Set of characters that are part of the search pattern
-    private Set<Integer> searchSet;
+    private Set<Long> searchSet;
 
     // Modifier flags
     private boolean complement;
@@ -32,7 +32,7 @@ public class RuntimeTransliterate {
     private boolean returnOriginal;
 
     // For complement mode, we need to know the replacement pattern
-    private List<Integer> replacementChars;
+    private List<Long> replacementChars;
 
     /**
      * Compiles a RuntimeTransliterate object from a pattern string with optional modifiers.
@@ -50,21 +50,20 @@ public class RuntimeTransliterate {
         String input = originalString.toString();
         StringBuilder result = new StringBuilder();
         int count = 0;
-        Integer lastChar = null;
+        Long lastChar = null;
         boolean lastCharWasTransliterated = false;  // Track if last char came from transliteration
 
         // For complement mode, we need to track replacement index
-        Map<Integer, Integer> complementMap = new HashMap<>();
+        Map<Long, Long> complementMap = new HashMap<>();
         int replacementIndex = 0;
 
-        for (int i = 0; i < input.length(); i++) {
-            int codePoint = input.codePointAt(i);
-
-            // Handle surrogate pairs for Unicode - only skip if it's a valid supplementary code point
-            // codePointAt() already combines surrogate pairs, so we just need to skip the second char unit
-            if (Character.isSupplementaryCodePoint(codePoint)) {
-                i++; // Skip the low surrogate of a valid surrogate pair
-            }
+        for (int i = 0; i < input.length();) {
+            // PerlUtfString also recognizes the internal representation used for
+            // surrogate scalars.  Treat it as one character; iterating Java UTF-16
+            // units here turns \x{d800} into eight unrelated characters.
+            PerlUtfString.PerlStep step = PerlUtfString.readOnePerlLogical(input, i);
+            long codePoint = step.codePoint();
+            i = step.nextJavaIndex();
 
             boolean matched = false;
 
@@ -93,15 +92,15 @@ public class RuntimeTransliterate {
                         }
                         lastChar = codePoint;
                     } else {
-                        Integer mappedChar = null;
+                        Long mappedChar = null;
 
                         // Check if this is the common case of search range 0x00-0xFF
                         if (isRange0x00_0xFF(searchSet)) {
                             // Calculate position relative to first char after range
-                            int position = codePoint - 0x100;
+                            long position = codePoint - 0x100;
                             if (position >= 0) {
                                 // Use position as index with wraparound
-                                int index = position % replacementChars.size();
+                                int index = (int) (position % replacementChars.size());
                                 mappedChar = replacementChars.get(index);
                             } else {
                                 // This shouldn't happen for chars matching complement
@@ -142,7 +141,7 @@ public class RuntimeTransliterate {
                         // Character should be deleted - DON'T change lastChar!
                         // We need to preserve it for squashing logic
                     } else if (translationMap.containsKey(codePoint)) {
-                        int mappedChar = translationMap.get(codePoint);
+                        long mappedChar = translationMap.get(codePoint);
                         // Handle squash duplicates - only squash if the last char was also transliterated
                         if (!squashDuplicates || lastChar == null || !lastCharWasTransliterated || !lastChar.equals(mappedChar)) {
                             appendCodePoint(result, mappedChar);
@@ -181,14 +180,10 @@ public class RuntimeTransliterate {
             return rv;
         }
 
-        // Determine if we need to call set() which will trigger read-only error if applicable
-        // We must call set() if:
-        // 1. The string actually changed, OR
-        // 2. It's an empty string AND we have a replacement operation (not just counting)
-        boolean hasReplacement = !replacementChars.isEmpty() || deleteUnmatched;
-        boolean needsSet = !input.equals(resultString) || (input.isEmpty() && hasReplacement);
-
-        if (needsSet) {
+        // Identity operations count without assigning: assignment would vivify
+        // missing elements and destroy references even though no change is possible.
+        // Conversely a modifying operation assigns even when nothing matched.
+        if (modifiesTarget()) {
             // Preserve BYTE_STRING type: tr/// on a byte string should produce a byte string
             boolean wasByteString = originalString.type == RuntimeScalarType.BYTE_STRING;
             originalString.set(resultString);
@@ -201,11 +196,25 @@ public class RuntimeTransliterate {
         return new RuntimeScalar(count);
     }
 
-    private boolean isRange0x00_0xFF(Set<Integer> searchSet) {
+    /** Whether this compiled operation requires a writable target. */
+    public boolean modifiesTarget() {
+        if (returnOriginal) return false;
+        if (complement) {
+            return squashDuplicates || deleteUnmatched || !replacementChars.isEmpty();
+        }
+        if (!deleteSet.isEmpty()) return true;
+        if (squashDuplicates && !searchSet.isEmpty()) return true;
+        for (Map.Entry<Long, Long> mapping : translationMap.entrySet()) {
+            if (!mapping.getKey().equals(mapping.getValue())) return true;
+        }
+        return false;
+    }
+
+    private boolean isRange0x00_0xFF(Set<Long> searchSet) {
         // Check if searchSet contains exactly the range 0x00-0xFF
         if (searchSet.size() != 256) return false;
         for (int i = 0; i <= 0xFF; i++) {
-            if (!searchSet.contains(i)) return false;
+            if (!searchSet.contains((long) i)) return false;
         }
         return true;
     }
@@ -221,8 +230,8 @@ public class RuntimeTransliterate {
         returnOriginal = modifiers.contains("r");
 
         // Expand ranges and escapes
-        List<Integer> searchChars = expandRangesAndEscapes(search);
-        List<Integer> replaceChars = expandRangesAndEscapes(replace);
+        List<Long> searchChars = expandRangesAndEscapes(search);
+        List<Long> replaceChars = expandRangesAndEscapes(replace);
 
         // Initialize data structures
         translationMap = new HashMap<>();
@@ -239,7 +248,7 @@ public class RuntimeTransliterate {
     /**
      * Sets up the translation map for normal (non-complement) mode.
      */
-    private void setupNormalMapping(List<Integer> searchChars, List<Integer> replaceChars) {
+    private void setupNormalMapping(List<Long> searchChars, List<Long> replaceChars) {
         int searchLen = searchChars.size();
         int replaceLen = replaceChars.size();
 
@@ -247,7 +256,7 @@ public class RuntimeTransliterate {
         int mappingIndex = 0;
 
         for (int i = 0; i < searchLen; i++) {
-            int searchChar = searchChars.get(i);
+            long searchChar = searchChars.get(i);
 
             // Skip if already mapped (character appeared earlier in search pattern)
             if (translationMap.containsKey(searchChar) || deleteSet.contains(searchChar)) {
@@ -275,13 +284,13 @@ public class RuntimeTransliterate {
      * Expands character ranges and escape sequences in the input string.
      * Returns a list of Unicode code points.
      */
-    private List<Integer> expandRangesAndEscapes(String input) {
-        List<Integer> expanded = new ArrayList<>();
+    private List<Long> expandRangesAndEscapes(String input) {
+        List<Long> expanded = new ArrayList<>();
 
         int i = 0;
         while (i < input.length()) {
             // Parse the current character
-            List<Integer> currentChar = new ArrayList<>();
+            List<Long> currentChar = new ArrayList<>();
             int consumed = parseCharAt(input, i, currentChar);
 
             if (consumed == 0 || currentChar.isEmpty()) {
@@ -295,7 +304,7 @@ public class RuntimeTransliterate {
                     nextPos + 1 < input.length()) {
 
                 // This might be a range - parse the character after the dash
-                List<Integer> endChar = new ArrayList<>();
+                List<Long> endChar = new ArrayList<>();
                 int endConsumed = parseCharAt(input, nextPos + 1, endChar);
 
                 if (endConsumed > 0 && !endChar.isEmpty()) {
@@ -311,8 +320,8 @@ public class RuntimeTransliterate {
                     }
 
                     // We have a valid range
-                    int start = currentChar.get(0);
-                    int end = endChar.get(0);
+                    long start = currentChar.get(0);
+                    long end = endChar.get(0);
 
                     // Validate range
                     if (start > end) {
@@ -323,7 +332,7 @@ public class RuntimeTransliterate {
                     }
 
                     // Add the range
-                    for (int c = start; c <= end; c++) {
+                    for (long c = start; c <= end; c++) {
                         expanded.add(c);
                     }
 
@@ -345,11 +354,11 @@ public class RuntimeTransliterate {
      * Formats a character for error messages.
      * Printable characters are shown as-is, non-printable as \x{XXXX}.
      */
-    private String formatCharForError(int codePoint) {
+    private String formatCharForError(long codePoint) {
         // Check if the character is printable ASCII or a common printable character
         // Basic printable ASCII range (excluding control characters)
         if (codePoint >= 0x20 && codePoint <= 0x7E) {
-            return new String(Character.toChars(codePoint));
+            return new String(Character.toChars((int) codePoint));
         }
 
         // Format as \x{XXXX} with appropriate padding
@@ -364,7 +373,7 @@ public class RuntimeTransliterate {
      * Parses a character at the given position, handling escape sequences.
      * Returns the number of characters consumed.
      */
-    private int parseCharAt(String input, int pos, List<Integer> result) {
+    private int parseCharAt(String input, int pos, List<Long> result) {
         if (pos >= input.length()) {
             return 0;
         }
@@ -375,25 +384,25 @@ public class RuntimeTransliterate {
             char next = input.charAt(pos + 1);
             switch (next) {
                 case 'n':
-                    result.add((int) '\n');
+                    result.add((long) '\n');
                     return 2;
                 case 't':
-                    result.add((int) '\t');
+                    result.add((long) '\t');
                     return 2;
                 case 'r':
-                    result.add((int) '\r');
+                    result.add((long) '\r');
                     return 2;
                 case 'f':
-                    result.add((int) '\f');
+                    result.add((long) '\f');
                     return 2;
                 case 'b':
-                    result.add((int) '\b');
+                    result.add((long) '\b');
                     return 2;
                 case 'a':
-                    result.add(0x07);
+                    result.add(0x07L);
                     return 2; // Bell character
                 case 'e':
-                    result.add(0x1B);
+                    result.add(0x1BL);
                     return 2; // Escape character
                 case '0':
                 case '1':
@@ -407,9 +416,18 @@ public class RuntimeTransliterate {
                     return 1 + parseOctalSequence(input, pos + 1, result);
                 case 'x':
                     return 2 + parseHexSequence(input, pos + 2, result);
+                case 'c':
+                    // Transliteration source keeps escape syntax intact so
+                    // ranges can be expanded here. Perl's \cX is X xor 0x40.
+                    if (pos + 2 < input.length()) {
+                        result.add((long) (input.charAt(pos + 2) ^ 0x40));
+                        return 3;
+                    }
+                    result.add((long) 'c');
+                    return 2;
                 case '-':
                     // Escaped dash
-                    result.add((int) '-');
+                    result.add((long) '-');
                     return 2;
                 case 'N':
                     if (pos + 2 < input.length() && input.charAt(pos + 2) == '{') {
@@ -425,7 +443,7 @@ public class RuntimeTransliterate {
                             // Try to resolve the Unicode character name
                             try {
                                 int codePoint = UnicodeResolver.getCodePointFromName(content);
-                                result.add(codePoint);
+                                result.add((long) codePoint);
                                 return closePos - pos + 1;
                             } catch (IllegalArgumentException e) {
                                 // Check if it's a named sequence (multi-character)
@@ -446,17 +464,18 @@ public class RuntimeTransliterate {
                             throw new RuntimeException("Unknown charname ''");
                         }
                     }
-                    result.add((int) 'N');
+                    result.add((long) 'N');
                     return 2;
                 default:
                     // Other escaped character
-                    result.add((int) next);
+                    result.add((long) next);
                     return 2;
             }
         } else {
             // Regular character
-            result.add((int) ch);
-            return 1;
+            PerlUtfString.PerlStep step = PerlUtfString.readOnePerlLogical(input, pos);
+            result.add(step.codePoint());
+            return step.nextJavaIndex() - pos;
         }
     }
 
@@ -464,7 +483,7 @@ public class RuntimeTransliterate {
      * Parses octal escape sequences (\0, \77, \377, etc.).
      * Returns the number of characters consumed (not including the initial backslash).
      */
-    private int parseOctalSequence(String input, int start, List<Integer> result) {
+    private int parseOctalSequence(String input, int start, List<Long> result) {
         int value = 0;
         int digits = 0;
         int pos = start;
@@ -487,7 +506,7 @@ public class RuntimeTransliterate {
             value = 0377;
         }
 
-        result.add(value);
+        result.add((long) value);
         return digits;
     }
 
@@ -495,9 +514,9 @@ public class RuntimeTransliterate {
      * Parses hexadecimal escape sequences (\xNN or \x{NNNN}).
      * Returns the number of additional characters consumed (after \x).
      */
-    private int parseHexSequence(String input, int start, List<Integer> result) {
+    private int parseHexSequence(String input, int start, List<Long> result) {
         if (start >= input.length()) {
-            result.add((int) 'x'); // Invalid sequence, treat as literal 'x'
+            result.add((long) 'x'); // Invalid sequence, treat as literal 'x'
             return -2; // Back up to just after '\'
         }
 
@@ -509,7 +528,7 @@ public class RuntimeTransliterate {
                 if (isValidHexString(hexStr)) {
                     try {
                         int value = Integer.parseInt(hexStr, 16);
-                        result.add(value);
+                        result.add((long) value);
                         return end - start + 1; // Consumed {NNNN}
                     } catch (NumberFormatException e) {
                         // Fall through to error case
@@ -523,13 +542,13 @@ public class RuntimeTransliterate {
                     isHexDigit(input.charAt(start + 1))) {
                 String hexStr = input.substring(start, start + 2);
                 int value = Integer.parseInt(hexStr, 16);
-                result.add(value);
+                result.add((long) value);
                 return 2; // Consumed NN
             }
         }
 
         // Invalid sequence - treat \x as literal characters
-        result.add((int) 'x');
+        result.add((long) 'x');
         return -2; // Back up to just after '\'
     }
 
@@ -556,7 +575,13 @@ public class RuntimeTransliterate {
     /**
      * Appends a Unicode code point to the StringBuilder.
      */
-    private void appendCodePoint(StringBuilder sb, int codePoint) {
-        sb.appendCodePoint(codePoint);
+    private void appendCodePoint(StringBuilder sb, long codePoint) {
+        if (codePoint > 0x10FFFFL) {
+            sb.append(PerlUtfString.encodeBeyondUnicode(codePoint));
+        } else if (codePoint >= 0xD800L && codePoint <= 0xDFFFL) {
+            sb.append(PerlUtfString.encodeSurrogate(codePoint));
+        } else {
+            sb.appendCodePoint((int) codePoint);
+        }
     }
 }

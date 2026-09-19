@@ -1461,7 +1461,25 @@ public class OperatorParser {
             // stop before any "," at the same precedence level.
             operand = ListNode.makeList(parser.parseExpression(parser.getPrecedence(",") + 1));
         }
+        if (containsTransliteration(operand)) {
+            parser.throwError("Can't modify transliteration (tr///) in " + token.text);
+        }
         return new OperatorNode(token.text, operand, currentIndex);
+    }
+
+    private static boolean containsTransliteration(Node node) {
+        if (node instanceof OperatorNode operator) {
+            if (operator.operator.equals("tr") || operator.operator.equals("transliterate")) return true;
+            return false;
+        }
+        if (node instanceof BinaryOperatorNode binary) {
+            return (binary.operator.equals("=~") || binary.operator.equals("!~"))
+                    && containsTransliteration(binary.right);
+        }
+        if (node instanceof ListNode list) {
+            for (Node element : list.elements) if (containsTransliteration(element)) return true;
+        }
+        return false;
     }
 
     static OperatorNode parseDieWarn(Parser parser, LexerToken token, int currentIndex) {
