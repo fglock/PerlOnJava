@@ -325,11 +325,7 @@ public class ClassTransformer {
             if (!isRequiredParameterField(field)) {
                 continue;
             }
-            String fieldName = (String) field.getAnnotation("name");
-            String paramName = (String) field.getAnnotation("attr:param");
-            if (paramName == null || paramName.isEmpty()) {
-                paramName = fieldName;
-            }
+            String paramName = parameterName(field);
 
             OperatorNode argsVar = new OperatorNode("$", new IdentifierNode("args", 0), 0);
             HashLiteralNode parameterKey = new HashLiteralNode(List.of(new StringNode(paramName, 0)), 0);
@@ -498,6 +494,16 @@ public class ClassTransformer {
                 && !field.getBooleanAnnotation("hasDefault");
     }
 
+    /** Return the external constructor parameter name for a :param field. */
+    private static String parameterName(OperatorNode field) {
+        String explicitName = (String) field.getAnnotation("attr:param");
+        if (explicitName != null && !explicitName.isEmpty()) {
+            return explicitName;
+        }
+        String fieldName = (String) field.getAnnotation("name");
+        return fieldName.startsWith("_") ? fieldName.substring(1) : fieldName;
+    }
+
     /**
      * Generate field initialization code for the constructor.
      */
@@ -506,8 +512,8 @@ public class ClassTransformer {
         String name = (String) field.getAnnotation("name");
         String paramName = (String) field.getAnnotation("attr:param");
         boolean hasParam = paramName != null;
-        if (paramName == null || paramName.isEmpty()) {
-            paramName = name;
+        if (hasParam) {
+            paramName = parameterName(field);
         }
         boolean hasDefault = field.getBooleanAnnotation("hasDefault");
         String defaultOperator = (String) field.getAnnotation("defaultOperator"); // =, //=, or ||=
