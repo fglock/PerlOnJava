@@ -5977,6 +5977,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
     /** Warn when loop control crosses a subroutine boundary, as Perl does. */
     private static void warnOnEscapingLoopControl(RuntimeControlFlowList flow) {
+        if (flow.suppressEscapingLoopControlWarning()) {
+            return;
+        }
         if (!Warnings.warningManager.isWarningEnabled("exiting")) {
             return;
         }

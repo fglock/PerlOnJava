@@ -1,5 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.runtime.perlmodule.Warnings;
+
 /**
  * A specialized RuntimeList that carries control flow information.
  * This is returned by control flow statements (last/next/redo/goto/goto &NAME)
@@ -21,6 +23,13 @@ public class RuntimeControlFlowList extends RuntimeList {
     public final RuntimeBase returnValue;
     /** True when this loop-control marker escaped a class ADJUST block. */
     private boolean classAdjustOrigin;
+    /**
+     * A localized false {@code $^W} suppresses the warning that Perl would
+     * otherwise issue when this marker crosses a subroutine boundary.  Capture
+     * it while the marker is created: the {@code local} scope is unwound before
+     * the caller dispatches the marker.
+     */
+    private final boolean suppressEscapingLoopControlWarning;
 
     /**
      * Constructor for control flow (last/next/redo/goto).
@@ -40,6 +49,8 @@ public class RuntimeControlFlowList extends RuntimeList {
         super();
         this.marker = new ControlFlowMarker(type, label, fileName, lineNumber, evalScope);
         this.returnValue = null;
+        this.suppressEscapingLoopControlWarning = Warnings.isWarnFlagLocalized()
+                && !Warnings.isWarnFlagSet();
         if (DEBUG_TAILCALL) {
             System.err.println("[DEBUG-0a] RuntimeControlFlowList constructor (type,label): type=" + type +
                     ", label=" + label + " @ " + fileName + ":" + lineNumber);
@@ -78,6 +89,7 @@ public class RuntimeControlFlowList extends RuntimeList {
         this.marker = new ControlFlowMarker(retainTailCallCodeRef(codeRef), args, fileName, lineNumber,
                 namedTarget, evalScope);
         this.returnValue = null;
+        this.suppressEscapingLoopControlWarning = false;
         if (DEBUG_TAILCALL) {
             System.err.println("[DEBUG-0b] RuntimeControlFlowList constructor (codeRef,args): codeRef=" + codeRef +
                     ", args.size=" + (args != null ? args.size() : "null") +
@@ -104,6 +116,7 @@ public class RuntimeControlFlowList extends RuntimeList {
         super();
         this.marker = new ControlFlowMarker(ControlFlowType.RETURN, null, fileName, lineNumber);
         this.returnValue = returnValue;
+        this.suppressEscapingLoopControlWarning = false;
     }
 
     /**
@@ -121,6 +134,10 @@ public class RuntimeControlFlowList extends RuntimeList {
 
     public boolean hasClassAdjustOrigin() {
         return classAdjustOrigin;
+    }
+
+    public boolean suppressEscapingLoopControlWarning() {
+        return suppressEscapingLoopControlWarning;
     }
 
     /**
