@@ -421,12 +421,12 @@ public class OperatorParser {
         }
         if (allDigits) return true;
 
-        // Single ASCII non-alphanumeric, non-underscore character: $!, $/, $@, $;, etc.
-        // Only check ASCII range — Unicode characters (>= 128) may be valid identifiers
-        // even if Java's Character.isLetterOrDigit() doesn't recognize them.
+        // Single non-identifier character: $!, $/, $@, $;, and Unicode punctuation
+        // such as $¶ are all global-only. Character.isLetterOrDigit recognizes
+        // Unicode letters and digits, so valid Unicode identifiers remain lexicalizable.
         if (name.length() == 1) {
             char c = name.charAt(0);
-            if (c < 128 && !Character.isLetterOrDigit(c) && c != '_') return true;
+            if (!Character.isLetterOrDigit(c) && c != '_') return true;
         }
 
         // Control character prefix (caret variables like $^W stored as chr(23))
@@ -450,7 +450,8 @@ public class OperatorParser {
         return name;
     }
 
-    private static void addVariableToScope(EmitterContext ctx, String operator, OperatorNode node) {
+    private static void addVariableToScope(EmitterContext ctx, String operator, OperatorNode node,
+            int declarationSourceIndex) {
         String sigil = node.operator;
         if ("$@%".contains(sigil)) {
             // not "undef"
@@ -464,7 +465,7 @@ public class OperatorParser {
                 if ((operator.equals("my") || operator.equals("state"))
                         && isGlobalOnlyVariable(name)) {
                     throw new PerlCompilerException(
-                            node.getIndex(),
+                            declarationSourceIndex,
                             "Can't use global " + sigil + formatVarNameForDisplay(name)
                                     + " in \"" + operator + "\"",
                             ctx.errorUtil
@@ -541,7 +542,8 @@ public class OperatorParser {
         }
     }
 
-    static OperatorNode parseVariableDeclaration(Parser parser, String operator, int currentIndex) {
+    static OperatorNode parseVariableDeclaration(Parser parser, String operator, int currentIndex,
+            int declarationSourceIndex) {
 
         String varType = null;
         if (peek(parser).type == IDENTIFIER) {
@@ -620,6 +622,31 @@ public class OperatorParser {
         parser.parsingDeclaration = savedParsingDeclaration;
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseVariableDeclaration " + operator + ": " + operand + " (ref=" + isDeclaredReference + ")");
 
+        // A declaration list may only contain declaration targets.  Keep the
+        // two special forms Perl diagnoses explicitly from falling through to
+        // the generic emitter's "Not implemented" error.
+        if (operand instanceof ListNode listNode && listNode.elements.size() == 1) {
+            Node declared = listNode.elements.getFirst();
+            if (declared instanceof TernaryOperatorNode) {
+                throwDeclarationEofError(parser,
+                        "Can't declare conditional expression in \"" + operator + "\"");
+            }
+            if (declared instanceof BlockNode block && block.getBooleanAnnotation("blockIsDoBlock")) {
+                throwDeclarationEofError(parser,
+                        "Can't declare do block in \"" + operator + "\"");
+            }
+        }
+
+        OperatorNode nestedDeclaration = findNestedDeclaration(operand);
+        if (nestedDeclaration != null) {
+            ErrorMessageUtil.SourceLocation location =
+                    parser.ctx.errorUtil.getSourceLocationAccurate(nestedDeclaration.tokenIndex);
+            throw new PerlParserException("Can't redeclare \"" + nestedDeclaration.operator
+                    + "\" in \"" + operator + "\" at " + location.fileName()
+                    + " line " + location.lineNumber() + ", near \""
+                    + nestedDeclarationContext(parser, nestedDeclaration) + "\"");
+        }
+
         // Add variables to the scope
         if (operand instanceof ListNode listNode) { // my ($a, $b)  our ($a, $b)
             // process each item of the list; then returns the list
@@ -629,6 +656,12 @@ public class OperatorParser {
             for (int i = 0; i < listNode.elements.size(); i++) {
                 Node element = listNode.elements.get(i);
                 if (element instanceof OperatorNode operandNode) {
+                    if (operator.equals("state") && operandNode.id == 0) {
+                        // Parenthesized declarations keep their targets in a
+                        // ListNode. Give each target the same persistent id
+                        // assigned to a direct `state $var` declaration.
+                        operandNode.id = EmitterMethodCreator.classCounter.getAndIncrement();
+                    }
                     // Check if this element is a reference operator (backslash)
                     // This handles cases like my(\$x) where the backslash is inside the parentheses
                     if (operandNode.operator.equals("\\") && operandNode.operand instanceof OperatorNode varNode) {
@@ -666,7 +699,7 @@ public class OperatorParser {
                         }
                         scalarVarNode.setAnnotation("isDeclaredReference", true);
                         scalarVarNode.setAnnotation("declaredReferenceOriginalSigil", varNode.operator);
-                        addVariableToScope(parser.ctx, operator, scalarVarNode);
+                        addVariableToScope(parser.ctx, operator, scalarVarNode, declarationSourceIndex);
                         // Also mark the original nodes
                         varNode.setAnnotation("isDeclaredReference", true);
                         operandNode.setAnnotation("isDeclaredReference", true);
@@ -678,7 +711,7 @@ public class OperatorParser {
                         if (isDeclaredReference) {
                             operandNode.setAnnotation("isDeclaredReference", true);
                         }
-                        addVariableToScope(parser.ctx, operator, operandNode);
+                        addVariableToScope(parser.ctx, operator, operandNode, declarationSourceIndex);
                         transformedElements.add(element);
                     }
                 } else {
@@ -703,7 +736,7 @@ public class OperatorParser {
             if (isDeclaredReference) {
                 operandNode.setAnnotation("isDeclaredReference", true);
             }
-            addVariableToScope(parser.ctx, operator, operandNode);
+            addVariableToScope(parser.ctx, operator, operandNode, declarationSourceIndex);
         }
 
         OperatorNode decl = new OperatorNode(operator, operand, currentIndex);
@@ -715,6 +748,20 @@ public class OperatorParser {
         }
         if (varType != null) {
             decl.setAnnotation("varType", varType);
+            // Typed lexicals retain their type on the declaration target as
+            // well as on the wrapping `my` node.  Later postfix parsing (for
+            // example $obj->{field} and @obj{...}) resolves the lexical via
+            // the symbol table and therefore cannot recover metadata kept
+            // solely on the declaration wrapper.
+            if (operand instanceof OperatorNode operandNode) {
+                operandNode.setAnnotation("varType", varType);
+            } else if (operand instanceof ListNode listNode) {
+                for (Node element : listNode.elements) {
+                    if (element instanceof OperatorNode elementNode) {
+                        elementNode.setAnnotation("varType", varType);
+                    }
+                }
+            }
         }
 
         // Initialize a list to store any attributes the declaration might have.
@@ -782,6 +829,73 @@ public class OperatorParser {
         return decl;
     }
 
+    /** A declaration list cannot contain another my/our/state declaration. */
+    private static OperatorNode findNestedDeclaration(Node node) {
+        if (node instanceof OperatorNode operatorNode) {
+            if (operatorNode.operator.equals("my") || operatorNode.operator.equals("our")
+                    || operatorNode.operator.equals("state")) {
+                return operatorNode;
+            }
+            return null;
+        }
+        if (node instanceof ListNode listNode) {
+            for (Node element : listNode.elements) {
+                OperatorNode nested = findNestedDeclaration(element);
+                if (nested != null) return nested;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Perl includes the punctuation immediately preceding a nested declaration
+     * in its diagnostic, such as {@code (our} or {@code , our}.
+     */
+    private static String nestedDeclarationContext(Parser parser, OperatorNode declaration) {
+        // Declaration nodes retain the parser position immediately after the
+        // declaration keyword.  Locate the keyword itself before collecting
+        // the preceding punctuation and its intervening whitespace.
+        int declarationIndex = Math.min(declaration.tokenIndex, parser.tokens.size() - 1);
+        while (declarationIndex >= 0
+                && !declaration.operator.equals(parser.tokens.get(declarationIndex).text)) {
+            declarationIndex--;
+        }
+        if (declarationIndex < 0) {
+            return declaration.operator;
+        }
+
+        int contextStart = declarationIndex - 1;
+        while (contextStart >= 0
+                && parser.tokens.get(contextStart).type == WHITESPACE) {
+            contextStart--;
+        }
+        StringBuilder context = new StringBuilder();
+        for (int index = Math.max(0, contextStart); index <= declarationIndex; index++) {
+            context.append(parser.tokens.get(index).text);
+        }
+        return context.toString();
+    }
+
+    private static void throwDeclarationEofError(Parser parser, String message) {
+        int locationIndex = parser.tokenIndex;
+        if (locationIndex > 0 && locationIndex < parser.tokens.size()
+                && parser.tokens.get(locationIndex).type == NEWLINE) {
+            // Parsing stops on the terminator token; use the last token of the
+            // declaration rather than the next physical source line.
+            locationIndex--;
+        } else if (locationIndex > 1 && locationIndex < parser.tokens.size()
+                && parser.tokens.get(locationIndex).type == EOF
+                && parser.tokens.get(locationIndex - 1).type == NEWLINE) {
+            // The core-test harness writes a trailing newline.  Attribute an
+            // EOF declaration error to the physical line that contains the
+            // declaration, as Perl does.
+            locationIndex -= 2;
+        }
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(locationIndex);
+        throw new PerlParserException(message + " at " + location.fileName()
+                + " line " + location.lineNumber() + ", at EOF");
+    }
+
     /**
      * Check if a variable in a my/our/state declaration is actually a dereference.
      * E.g., "our ${""}", "my $$foo" — Perl 5 errors with:
@@ -813,6 +927,7 @@ public class OperatorParser {
         Node operand;
         // Handle operators with one optional argument
         String text = token.text;
+        int argumentIndex = parser.tokenIndex;
         operand = ListParser.parseZeroOrOneList(parser, 0, text);
         if (((ListNode) operand).elements.isEmpty()) {
             switch (text) {
@@ -851,6 +966,18 @@ public class OperatorParser {
                     // create `$_` variable
                     operand = ParserNodeUtils.scalarUnderscore(parser);
                     break;
+            }
+        }
+        if ((text.equals("pop") || text.equals("shift")) && operand instanceof ListNode listNode
+                && !listNode.elements.isEmpty()) {
+            Node argument = listNode.elements.getFirst();
+            if (!(argument instanceof OperatorNode operatorNode && operatorNode.operator.equals("@"))) {
+                String kind = arrayOperationArgumentKind(parser, argument);
+                String message = "Type of arg 1 to " + text + " must be array (not " + kind + ")";
+                if (kind.equals("constant item")) {
+                    parser.throwError(argumentIndex, message);
+                }
+                parser.deferErrorAtToken(argumentIndex, message);
             }
         }
         return new OperatorNode(text, operand, parser.tokenIndex);
@@ -901,6 +1028,7 @@ public class OperatorParser {
             int operandPrecedence = operator.equals("scalar")
                     ? parser.getPrecedence("isa") + 1
                     : parser.getPrecedence("=~");
+            int argumentIndex = parser.tokenIndex;
             operand = parser.parseExpression(operandPrecedence);
             // Check if operand is null (no argument provided)
             if (operand == null) {
@@ -910,6 +1038,10 @@ public class OperatorParser {
             // but values/keys/each need single operand check
             if (!operator.equals("scalar")) {
                 operand = ensureOneOperand(parser, token, operand);
+                if (operand instanceof IdentifierNode) {
+                    parser.throwError(argumentIndex,
+                            "Type of arg 1 to " + operator + " must be hash or array (not constant item)");
+                }
             }
         } else {
             operand = ParsePrimary.parsePrimary(parser);
@@ -958,9 +1090,55 @@ public class OperatorParser {
         // Handle &{string} patterns for delete/exists operators (no transformation, direct handling)
         if (operand instanceof ListNode listNode) {
             transformCodeRefPatterns(parser, listNode, token.text);
+            if (listNode.elements.size() == 1) {
+                Node argument = listNode.elements.getFirst();
+                if (operatorNameIsInvalidExistsSubroutineCall(token.text, argument)) {
+                    // At end of input the cursor sits after the synthetic newline;
+                    // anchor this diagnostic at the closing call parenthesis.
+                    parser.throwCleanError(Math.max(0, parser.tokenIndex - 2),
+                            "exists argument is not a subroutine name");
+                }
+                if (!isDeleteExistsTarget(argument)) {
+                    String requirement = token.text.equals("exists")
+                            ? "a HASH or ARRAY element or a subroutine"
+                            : "a HASH or ARRAY element or slice";
+                    parser.throwCleanError(token.text + " argument is not " + requirement);
+                }
+            }
         }
 
         return new OperatorNode(token.text, operand, currentIndex);
+    }
+
+    private static boolean operatorNameIsInvalidExistsSubroutineCall(String operator, Node argument) {
+        return operator.equals("exists")
+                && argument instanceof BinaryOperatorNode call
+                && call.operator.equals("(")
+                && call.left instanceof OperatorNode callee
+                && callee.operator.equals("&");
+    }
+
+    private static boolean isDeleteExistsTarget(Node argument) {
+        if (argument instanceof ListNode list && list.elements.size() == 1) {
+            return isDeleteExistsTarget(list.elements.getFirst());
+        }
+        if (argument instanceof BlockNode block && block.elements.size() == 1) {
+            return isDeleteExistsTarget(block.elements.getFirst());
+        }
+        // A leading + is a Perl parse disambiguator, not part of the
+        // lvalue target: exists +($ref // 0)->{key} is valid.
+        if (argument instanceof OperatorNode unaryPlus && unaryPlus.operator.equals("+")) {
+            return isDeleteExistsTarget(unaryPlus.operand);
+        }
+        if (argument instanceof OperatorNode operatorNode && operatorNode.operator.equals("&")) {
+            return true;
+        }
+        if (argument instanceof BinaryOperatorNode binaryOperatorNode) {
+            return binaryOperatorNode.operator.equals("{")
+                    || binaryOperatorNode.operator.equals("[")
+                    || binaryOperatorNode.operator.equals("->");
+        }
+        return false;
     }
 
     static BinaryOperatorNode parseBless(Parser parser, int currentIndex) {
@@ -1250,12 +1428,19 @@ public class OperatorParser {
         return new BinaryOperatorNode(token.text, separator, operand, currentIndex);
     }
 
-    static BinaryOperatorNode parseJoin(Parser parser, LexerToken token, String operatorName, int currentIndex) {
+    static BinaryOperatorNode parseJoin(Parser parser, LexerToken token, String operatorName, int currentIndex,
+            int sourceIndex) {
         Node separator;
         ListNode operand;
+        if (TokenUtils.peek(parser).text.equals(",")) {
+            parser.throwError(sourceIndex, "Not enough arguments for " + operatorName + " or string");
+        }
         int firstArgIndex = parser.tokenIndex;
         // Handle operators with a RuntimeList operand
         operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
+        if (operand.elements.isEmpty()) {
+            parser.throwError(sourceIndex, "Not enough arguments for " + operatorName + " or string");
+        }
         separator = operand.elements.removeFirst();
 
         if (token.text.equals("push") || token.text.equals("unshift")) {
@@ -1276,17 +1461,50 @@ public class OperatorParser {
             if (!(op instanceof OperatorNode operatorNode && operatorNode.operator.equals("@"))) {
                 // Perl 5.24+: pushing/unshifting onto scalar variable or expression is forbidden
                 // But literals get a different error message
-                if (op instanceof OperatorNode || op instanceof BinaryOperatorNode) {
+                String argumentKind = arrayOperationArgumentKind(parser, op);
+                if (argumentKind.equals("constant item")
+                        && (op instanceof OperatorNode || op instanceof BinaryOperatorNode)) {
                     parser.throwError(firstArgIndex, "Experimental " + operatorName + " on scalar is now forbidden");
                 }
-                parser.throwError(firstArgIndex, "Type of arg 1 to " + operatorName + " must be array (not constant item)");
+                // Perl points prototype-style push/unshift diagnostics at the
+                // value being inserted for aggregate and glob operands.
+                int errorIndex = argumentKind.equals("constant item")
+                        ? firstArgIndex : Math.max(0, parser.tokenIndex - 1);
+                String message = "Type of arg 1 to " + operatorName
+                        + " must be array (not " + argumentKind + ")";
+                if (argumentKind.equals("constant item")) {
+                    parser.throwError(errorIndex, message);
+                }
+                parser.deferErrorAtToken(errorIndex, message);
             }
         }
 
         return new BinaryOperatorNode(token.text, separator, operand, currentIndex);
     }
 
+    /** Return Perl's diagnostic category for a non-array array-operation operand. */
+    private static String arrayOperationArgumentKind(Parser parser, Node operand) {
+        if (!(operand instanceof OperatorNode operatorNode)) {
+            return "constant item";
+        }
+        if (operatorNode.operator.equals("*") || operatorNode.operator.equals("glob")) {
+            return "ref-to-glob cast";
+        }
+        if (operatorNode.operator.equals("%") && operatorNode.operand instanceof IdentifierNode identifier) {
+            var entry = parser.ctx.symbolTable.getSymbolEntry("%" + identifier.name);
+            if (entry != null && (entry.decl().equals("my") || entry.decl().equals("state"))) {
+                return "private hash";
+            }
+            return "hash dereference";
+        }
+        return "constant item";
+    }
+
     static OperatorNode parseLast(Parser parser, LexerToken token, int currentIndex) {
+        if (parser.isInFieldInitializer && token.text.equals("last")) {
+            throw PerlCompilerException.withSourceLocation(currentIndex,
+                    "Can't \"last\" out of field initialiser expression", parser.ctx.errorUtil);
+        }
         int savedIndex = parser.tokenIndex;
         LexerToken next = TokenUtils.peek(parser);
 
@@ -1328,8 +1546,44 @@ public class OperatorParser {
             list.elements.add(expr);
             return new OperatorNode("return", list, currentIndex);
         }
+        rejectIndirectMapArgumentToReturn(parser);
         operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
         return new OperatorNode("return", operand, currentIndex);
+    }
+
+    /**
+     * Perl rejects {@code return NAME map ...} as an attempted indirect
+     * argument; return has no filehandle/indirect-object form. Detect it
+     * before normal list parsing reaches map and reports a generic error.
+     */
+    private static void rejectIndirectMapArgumentToReturn(Parser parser) {
+        int nameIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+        if (nameIndex >= parser.tokens.size() || parser.tokens.get(nameIndex).type != IDENTIFIER
+                || isReturnStatementModifier(parser.tokens.get(nameIndex).text)) {
+            return;
+        }
+        int mapIndex = Whitespace.skipWhitespace(parser, nameIndex + 1, parser.tokens);
+        if (mapIndex >= parser.tokens.size()
+                || !parser.tokens.get(mapIndex).text.equals("map")) {
+            return;
+        }
+
+        int argumentEnd = mapIndex;
+        for (int i = mapIndex + 1; i < parser.tokens.size(); i++) {
+            LexerToken token = parser.tokens.get(i);
+            if (token.type == NEWLINE || token.type == EOF || token.text.equals(";")) {
+                parser.throwError(argumentEnd, "Missing comma after first argument to return");
+            }
+            if (token.type != WHITESPACE) {
+                argumentEnd = i;
+            }
+        }
+    }
+
+    private static boolean isReturnStatementModifier(String token) {
+        return token.equals("if") || token.equals("unless") || token.equals("while")
+                || token.equals("until") || token.equals("for") || token.equals("foreach")
+                || token.equals("when");
     }
 
     static OperatorNode parseGoto(Parser parser, int currentIndex) {

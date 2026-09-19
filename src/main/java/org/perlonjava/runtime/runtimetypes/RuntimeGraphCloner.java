@@ -813,6 +813,7 @@ public class RuntimeGraphCloner {
         target.tainted = source.tainted;
         target.globalCodeRefFqn = source.globalCodeRefFqn;
         target.lexicalSubName = source.lexicalSubName;
+        target.lexicalDisplayName = source.lexicalDisplayName;
         target.lexicalSubPackageName = source.lexicalSubPackageName;
         target.lexicalSubPackageCodeDefinedAtDeclaration =
                 source.lexicalSubPackageCodeDefinedAtDeclaration;

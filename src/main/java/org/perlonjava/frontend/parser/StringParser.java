@@ -15,8 +15,14 @@ import org.perlonjava.runtime.NamedCharacterExpansion;
 import org.perlonjava.runtime.NamedCharacterExpansionMap;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.GlobalContext;
+import org.perlonjava.runtime.runtimetypes.RuntimeHash;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
+import org.perlonjava.runtime.runtimetypes.WarningFlags;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.regex.RegexMarkers;
 import org.perlonjava.runtime.regex.RegexQuoteMeta;
@@ -90,10 +96,12 @@ public class StringParser {
      */
     private static final Map<Character, Character> EXTRA_QUOTE_PAIR = Map.of(
             '\u00ab', '\u00bb',
-            '\u00bb', '\u00ab'
+            '\u00bb', '\u00ab',
+            '\u300a', '\u300b',
+            '\u300b', '\u300a'
     );
 
-    private static Character pairedDelimiter(EmitterContext ctx, char delimiter) {
+    private static Character pairedDelimiter(EmitterContext ctx, char delimiter, int delimiterIndex) {
         Character builtinPair = QUOTE_PAIR.get(delimiter);
         if (builtinPair != null) {
             return builtinPair;
@@ -105,13 +113,16 @@ public class StringParser {
         if (ctx.symbolTable.isFeatureCategoryEnabled("extra_paired_delimiters")) {
             if (ctx.symbolTable.isWarningCategoryEnabled("experimental::extra_paired_delimiters")) {
                 WarnDie.warn(new RuntimeScalar("Use of '" + delimiter + "' is experimental as a string delimiter"),
-                        new RuntimeScalar(ctx.errorUtil.warningLocation(0)));
+                        new RuntimeScalar(ctx.errorUtil.warningLocation(delimiterIndex)));
             }
             return extraPair;
         }
-        if (ctx.symbolTable.isWarningCategoryEnabled("deprecated::delimiter_will_be_paired")) {
+        // This compatibility notice is on by default in Perl.  A lexical
+        // `no warnings 'deprecated'` must still suppress it.
+        if (!WarningFlags.areWarningsForcedOff()
+                && !ctx.symbolTable.isWarningCategoryDisabled("deprecated::delimiter_will_be_paired")) {
             WarnDie.warn(new RuntimeScalar("Use of '" + delimiter + "' is deprecated as a string delimiter"),
-                    new RuntimeScalar(ctx.errorUtil.warningLocation(0)));
+                    new RuntimeScalar(ctx.errorUtil.warningLocation(delimiterIndex)));
         }
         return null;
     }
@@ -157,15 +168,13 @@ public class StringParser {
                             "Can't find string terminator \"" + identifier + "\" anywhere before EOF",
                             ctx.errorUtil);
                 }
-                boolean extraPairedDelimiter = EXTRA_QUOTE_PAIR.containsKey(startDelim)
-                        || EXTRA_QUOTE_PAIR.containsKey(endDelim);
+                String delimiterDescription = markerDelimiter != null ? "\".\""
+                        : endDelim == '"' ? "'\"'" : "\"" + endDelim + "\"";
                 String errorMsg = isRegex
                         ? "Search pattern not terminated"
-                        : "Can't find string terminator "
-                        + (markerDelimiter != null ? "\".\""
-                        : (extraPairedDelimiter ? "\"" + endDelim + "\"" : endDelim))
+                        : "Can't find string terminator " + delimiterDescription
                         + " anywhere before EOF";
-                throw new PerlCompilerException(tokPos, errorMsg, ctx.errorUtil);
+                throw PerlCompilerException.withSourceLocation(index, errorMsg, ctx.errorUtil);
             }
 
             // A beyond-Unicode quote delimiter is represented by one internal
@@ -250,7 +259,7 @@ public class StringParser {
                     case START:
                         startDelim = ch;
                         endDelim = startDelim;
-                        Character pairedDelimiter = pairedDelimiter(ctx, startDelim);
+                        Character pairedDelimiter = pairedDelimiter(ctx, startDelim, tokPos);
                         if (pairedDelimiter != null) {  // Check if the delimiter is a pair
                             isPair = true;
                             endDelim = pairedDelimiter;
@@ -798,8 +807,24 @@ public class StringParser {
                     literalSyntaxValidated = true;
                 } catch (PerlCompilerException exception) {
                     String message = exception.getMessage();
+                    if (message != null && message.startsWith("Unknown charname ''")
+                            && literalSyntax.contains("\\N{}")
+                            && literalSource.contains("(?{})")) {
+                        var location = ctx.errorUtil.getSourceLocationAccurate(rawStr.index);
+                        throw new PerlCompilerException("Unknown charname '' at "
+                                + location.fileName() + " line " + location.lineNumber()
+                                + ", near \"{})\"\n");
+                    }
+                    // The final literal compilation has the source map needed
+                    // to attach Perl's one #line-aware location.  Deferring a
+                    // U+ overflow avoids adding this parser pass's physical
+                    // source location before that compilation.
+                    if (shouldDeferRegexDiagnostic(message)) {
+                        literalSyntaxValidated = false;
+                    } else {
                     throw PerlCompilerException.withSourceLocation(
                             rawStr.index, message, ctx.errorUtil);
+                    }
                 }
             }
         }
@@ -870,6 +895,21 @@ public class StringParser {
             operand.setAnnotation(LEXICAL_NAMED_CHARACTER_CALLABLE_IDENTITY,
                     new NamedCharacterExpansionMap.CallableIdentity(translator.toString()));
         }
+    }
+
+    /** Whether a regex U+ overflow must be rendered at final compilation. */
+    public static boolean isUPlusOverflowRegexDiagnostic(String message) {
+        return message != null
+                && message.startsWith("Use of code point 0x")
+                && message.contains("the permissible max is 0x7FFFFFFFFFFFFFFF")
+                && message.contains("; marked by <-- HERE in m/");
+    }
+
+    /** Diagnostics whose final compilation is responsible for #line-aware location. */
+    public static boolean shouldDeferRegexDiagnostic(String message) {
+        return isUPlusOverflowRegexDiagnostic(message)
+                || (message != null
+                && message.startsWith("Too many nested open parens in regex; marked by"));
     }
 
     /** Validate a constant regex operand and retain any custom lexical results on its AST. */
@@ -1093,8 +1133,11 @@ public class StringParser {
                     rawStr.endDelim,
                     ' ', ' '
             );
-            // searchNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, searchParsed, true, false);
-            searchNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, searchParsed, false, false, false);
+            // Transliteration lists use double-quoted escape rules but do not
+            // interpolate variables.  Preserving every escape here lets an
+            // invalid \\o reach range compilation instead of reporting Perl's
+            // braced-octal diagnostic at the source escape.
+            searchNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, searchParsed, true, false, false);
         }
 
         // Same logic for replacement list
@@ -1110,8 +1153,7 @@ public class StringParser {
                     rawStr.secondBufferEndDelim,
                     ' ', ' '
             );
-            // replacementNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, replaceParsed, true, false);
-            replacementNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, replaceParsed, false, false, false);
+            replacementNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, replaceParsed, true, false, false);
         }
 
         Node modifierNode = new StringNode(modifiers, rawStr.index);
@@ -1147,6 +1189,35 @@ public class StringParser {
         };
         rawStr = parseRawStrings(parser, parser.ctx, parser.tokens, parser.tokenIndex, stringParts, isRegex);
         parser.tokenIndex = rawStr.next;
+
+        // A bracket-delimited regex followed by a second closing bracket is
+        // not an array access after a complete regex.  Perl owns the error at
+        // the complete quote-like construct, including that final bracket.
+        if (operator.equals("m") && rawStr.startDelim == '['
+                && parser.tokenIndex < parser.tokens.size()
+                && parser.tokens.get(parser.tokenIndex).text.equals("]")) {
+            var location = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
+            String pattern = rawStr.buffers.getFirst();
+            String message = "syntax error at " + location.fileName() + " line "
+                    + location.lineNumber() + ", near \"m[" + pattern + "]]\"\n"
+                    + "Execution of " + location.fileName() + " aborted due to compilation errors.\n";
+            throw new PerlCompilerException(message);
+        }
+
+        PerlCompilerException runawayMultilineQuote = runawayMultilineQuoteError(parser, rawStr, operator);
+        if (runawayMultilineQuote != null) {
+            throw runawayMultilineQuote;
+        }
+        PerlCompilerException runawayMultilineRegex = runawayMultilineRegexDelimiterError(parser, rawStr, operator);
+        if (runawayMultilineRegex != null) {
+            throw runawayMultilineRegex;
+        }
+        PerlCompilerException malformedAttributeQuote = malformedAttributeQuoteError(parser, rawStr);
+        if (malformedAttributeQuote != null) {
+            throw malformedAttributeQuote;
+        }
+        rejectClearedConstantHandler(parser, rawStr, operator);
+        rejectUndefinedStringConstantHandler(parser, rawStr, operator);
 
         switch (operator) {
             case "`":
@@ -1205,6 +1276,203 @@ public class StringParser {
             list.elements.add(new StringNode(rawStr.buffers.get(i), rawStr.index));
         }
         return new OperatorNode(operator, list, rawStr.index);
+    }
+
+    /**
+     * When a quote-like delimiter is repeated at the start of the next line,
+     * Perl treats the following word as evidence of a runaway quote instead of
+     * continuing with the ordinary missing-operator recovery.
+     */
+    private static PerlCompilerException runawayMultilineQuoteError(
+            Parser parser, ParsedString rawStr, String operator) {
+        if (!operator.equals("q") || rawStr.buffers.size() != 1
+                || !rawStr.buffers.get(0).equals("\n")) {
+            return null;
+        }
+        int next = rawStr.next;
+        while (next < parser.tokens.size()
+                && parser.tokens.get(next).type == LexerTokenType.WHITESPACE) {
+            next++;
+        }
+        if (next >= parser.tokens.size()
+                || parser.tokens.get(next).type != LexerTokenType.IDENTIFIER) {
+            return null;
+        }
+
+        LexerToken trailing = parser.tokens.get(next);
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(next);
+        String delimiter = Character.toString(rawStr.startDelim);
+        String message = "syntax error at " + location.fileName() + " line "
+                + location.lineNumber() + ", near \"" + delimiter + " " + trailing.text + "\"\n"
+                + "  (Might be a runaway multi-line " + delimiter + delimiter
+                + " string starting on line " + rawStr.sourceLine + ")\n";
+        return new PerlCompilerException(message);
+    }
+
+    /**
+     * Perl diagnoses an unclosed character class that crosses a quote-like
+     * regex delimiter newline as a runaway delimiter before compiling the
+     * pattern.  Preserve that source-level diagnostic precedence.
+     */
+    private static PerlCompilerException runawayMultilineRegexDelimiterError(
+            Parser parser, ParsedString rawStr, String operator) {
+        if (!(operator.equals("m") || operator.equals("qr") || operator.equals("/"))
+                || rawStr.buffers.isEmpty()) {
+            return null;
+        }
+        String pattern = rawStr.buffers.getFirst();
+        int newline = pattern.indexOf('\n');
+        int openingBracket = pattern.lastIndexOf('[', newline);
+        if (newline < 0 || openingBracket < 0 || !hasUnclosedCharacterClass(pattern)) {
+            return null;
+        }
+
+        int sourceNewline = rawStr.index;
+        while (sourceNewline < rawStr.next
+                && parser.tokens.get(sourceNewline).type != LexerTokenType.NEWLINE) {
+            sourceNewline++;
+        }
+        if (sourceNewline >= rawStr.next) return null;
+        int afterNewline = sourceNewline + 1;
+        while (afterNewline < parser.tokens.size()
+                && parser.tokens.get(afterNewline).type == LexerTokenType.WHITESPACE) {
+            afterNewline++;
+        }
+        if (afterNewline >= parser.tokens.size()) return null;
+
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(afterNewline);
+        int previewEnd = Math.min(pattern.length(), newline + 3);
+        String near = pattern.substring(openingBracket, previewEnd);
+        String delimiter = Character.toString(rawStr.startDelim);
+        String message = "syntax error at " + location.fileName() + " line "
+                + location.lineNumber() + ", near \"" + near + "\"\n"
+                + "  (Might be a runaway multi-line " + delimiter + delimiter
+                + " string starting on line " + rawStr.sourceLine + ")\n";
+        return new PerlCompilerException(message);
+    }
+
+    private static boolean hasUnclosedCharacterClass(String pattern) {
+        boolean escaped = false;
+        boolean inClass = false;
+        for (int index = 0; index < pattern.length(); index++) {
+            char ch = pattern.charAt(index);
+            if (escaped) {
+                escaped = false;
+            } else if (ch == '\\') {
+                escaped = true;
+            } else if (ch == '[') {
+                inClass = true;
+            } else if (ch == ']') {
+                inClass = false;
+            }
+        }
+        return inClass;
+    }
+
+    /**
+     * Perl recovers a quote that crosses an attribute entry and reports the
+     * later {@code isa => ...} as both a bareword and a runaway-string hint.
+     * Keep this deliberately scoped to the malformed {@code is => '...\nisa}
+     * shape so valid multiline strings are unaffected.
+     */
+    private static PerlCompilerException malformedAttributeQuoteError(Parser parser, ParsedString rawStr) {
+        if (rawStr.startDelim != '\'' && rawStr.startDelim != '"') return null;
+        int close = rawStr.next - 1;
+        if (close <= rawStr.index) return null;
+
+        int before = rawStr.index - 1;
+        while (before >= 0 && parser.tokens.get(before).type == LexerTokenType.WHITESPACE) before--;
+        if (before < 0 || !parser.tokens.get(before).text.equals("=>")) return null;
+        before--;
+        while (before >= 0 && parser.tokens.get(before).type == LexerTokenType.WHITESPACE) before--;
+        if (before < 0 || !parser.tokens.get(before).text.equals("is")) return null;
+
+        boolean crossedNewline = false;
+        for (int index = rawStr.index + 1; index < close; index++) {
+            LexerToken token = parser.tokens.get(index);
+            if (token.type == LexerTokenType.NEWLINE) crossedNewline = true;
+            if (!crossedNewline || !token.text.equals("isa")) continue;
+            int arrow = index + 1;
+            while (arrow < close && parser.tokens.get(arrow).type == LexerTokenType.WHITESPACE) arrow++;
+            if (arrow >= close || !parser.tokens.get(arrow).text.equals("=>")) continue;
+
+            var location = parser.ctx.errorUtil.getSourceLocationAccurate(index);
+            // The lexer has already consumed the closing quoted value here.
+            // Perl's recovery is deterministic for the two attribute forms:
+            // a plain single quote reaches Int', while an interpolated double
+            // quote reaches the package separator before $subpackage.
+            String near = rawStr.startDelim == '\'' ? "isa => 'Int" : "isa => \"Foo";
+            String badName = rawStr.startDelim == '\'' ? "Int'" : "Foo::";
+            var start = parser.ctx.errorUtil.getSourceLocationAccurate(rawStr.index);
+            String message = "Bareword found where operator expected (Do you need to predeclare \"isa\"?) at "
+                    + location.fileName() + " line " + location.lineNumber() + ", near \"" + near + "\"\n"
+                    + "  (Might be a runaway multi-line " + rawStr.startDelim + rawStr.startDelim
+                    + " string starting on line " + start.lineNumber() + ")\n"
+                    + "Bad name after " + badName + " at " + location.fileName() + " line "
+                    + location.lineNumber() + ".\n";
+            return new PerlCompilerException(message);
+        }
+        return null;
+    }
+
+    /** Preserve Perl's compile-time failure when undef *^H clears a constant hook. */
+    private static void rejectClearedConstantHandler(Parser parser, ParsedString rawStr, String operator) {
+        String installed = switch (operator) {
+            case "q", "'", "qq", "\"", "tr", "y", "s" -> "q";
+            case "m", "qr", "/", "//", "/=" -> "qr";
+            default -> null;
+        };
+        if (installed == null || !HintHashRegistry.constantHandlerWasCleared(installed)) return;
+        boolean tooManyPriorDiagnostics = parser.deferredDiagnosticCount() >= 9;
+        // Perl reduces this final double-quoted diagnostic before its
+        // ten-error cap when the cleared q hook follows nine errors.
+        String kind;
+        if ((operator.equals("qq") || operator.equals("\""))
+                && installed.equals("q") && tooManyPriorDiagnostics) {
+            kind = "q";
+        } else {
+            kind = switch (operator) {
+                case "q", "'", "m" -> "q";
+                case "tr", "y" -> "tr";
+                case "s" -> "s";
+                default -> "qq";
+            };
+        }
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(rawStr.index);
+        String suffix = (operator.equals("q") || operator.equals("'")
+                || ((operator.equals("qq") || operator.equals("\"")) && kind.equals("q")))
+                ? ", near \"" + operator + rawStr.buffers.getFirst() + operator + "\"\n"
+                : (installed.equals("qr") ? ", within pattern\n" : ", within string\n");
+        parser.deferDiagnostic("Constant(" + kind + ") unknown at " + location.fileName()
+                + " line " + location.lineNumber() + suffix);
+    }
+
+    /** Apply q constant hooks during parsing, as Perl requires. */
+    private static void rejectUndefinedStringConstantHandler(Parser parser, ParsedString rawStr, String operator) {
+        String kind = switch (operator) {
+            case "q", "'" -> "q";
+            case "qq", "\"" -> "qq";
+            case "tr", "y" -> "tr";
+            case "s" -> "s";
+            default -> null;
+        };
+        if (kind == null) return;
+        RuntimeHash hints = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
+        RuntimeScalar handler = hints == null ? null : hints.elements.get("q");
+        if (handler == null || (handler.type != RuntimeScalarType.CODE
+                && !(handler.type == RuntimeScalarType.REFERENCE && handler.value instanceof RuntimeScalar ref
+                && ref.type == RuntimeScalarType.CODE))) return;
+        RuntimeArray args = new RuntimeArray();
+        String value = rawStr.buffers.getFirst();
+        args.elements.add(new RuntimeScalar(value));
+        args.elements.add(new RuntimeScalar(value));
+        args.elements.add(new RuntimeScalar(kind));
+        RuntimeScalar result = RuntimeCode.apply(handler, args, RuntimeContextType.SCALAR).scalar();
+        if (result.type != RuntimeScalarType.UNDEF) return;
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(rawStr.index);
+        String suffix = (kind.equals("q")) ? ", near \"'" + value + "'\"\n" : ", within string\n";
+        parser.deferDiagnostic("Constant(" + kind + "): Call to &{$^H{q}} did not return a defined value at "
+                + location.fileName() + " line " + location.lineNumber() + suffix);
     }
 
     private static RuntimeScalar findGlobOverride(Parser parser) {

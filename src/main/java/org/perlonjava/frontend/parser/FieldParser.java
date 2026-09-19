@@ -82,6 +82,12 @@ public class FieldParser {
                     "Expected field name after sigil", parser.ctx.errorUtil);
         }
         String fieldName = token.text;
+        if ("$_".equals(sigil + fieldName)) {
+            var location = parser.ctx.errorUtil.getSourceLocationAccurate(index);
+            throw new PerlCompilerException("Can't use global $_ in \"field\" at "
+                    + location.fileName() + " line " + location.lineNumber()
+                    + ", near \"field $_\"\n");
+        }
         TokenUtils.consume(parser);
 
         // Create a placeholder node with field information as annotations
@@ -130,14 +136,16 @@ public class FieldParser {
                 // earlier fields (for example `field $two = $one + 1`) become
                 // accesses through $self rather than package globals.
                 int initializerScope = parser.ctx.symbolTable.enterScope();
-                parser.ctx.symbolTable.addVariable("$self", "my", null);
                 boolean wasInMethod = parser.isInMethod;
+                boolean wasInFieldInitializer = parser.isInFieldInitializer;
                 parser.isInMethod = true;
+                parser.isInFieldInitializer = true;
                 Node defaultValue;
                 try {
                     defaultValue = parser.parseExpression(parser.getPrecedence(","));
                 } finally {
                     parser.isInMethod = wasInMethod;
+                    parser.isInFieldInitializer = wasInFieldInitializer;
                     parser.ctx.symbolTable.exitScope(initializerScope);
                 }
                 if (defaultValue instanceof AbstractNode) {

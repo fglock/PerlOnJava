@@ -7,6 +7,8 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlJavaUnimplementedException;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.PerlParserException;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
@@ -83,9 +85,11 @@ public class CoreOperatorResolver {
             }
             case "__CLASS__" -> {
                 handleEmptyParentheses(parser);
-                // Return the compile-time package name
-                // TODO: Implement proper runtime class detection that works with field defaults
-                // and ADJUST blocks without causing symbol table errors
+                if (!parser.isInMethod && !parser.isInFieldInitializer) {
+                    throw PerlCompilerException.withSourceLocation(sourceIndex,
+                            "Cannot use __CLASS__ outside of a method or field initializer expression",
+                            parser.ctx.errorUtil);
+                }
                 yield new StringNode(parser.ctx.symbolTable.getCurrentPackage(), parser.tokenIndex);
             }
             case "__SUB__", "time", "times", "wait", "wantarray" -> {
@@ -105,7 +109,7 @@ public class CoreOperatorResolver {
             case "bless" -> OperatorParser.parseBless(parser, currentIndex);
             case "split" -> OperatorParser.parseSplit(parser, token, currentIndex);
             case "push", "unshift", "join", "sprintf" ->
-                    OperatorParser.parseJoin(parser, token, operatorName, currentIndex);
+                    OperatorParser.parseJoin(parser, token, operatorName, currentIndex, sourceIndex);
             case "sort" -> ParseMapGrepSort.parseSort(parser, token);
             case "map", "grep", "all", "any" -> ParseMapGrepSort.parseMapGrep(parser, token);
             case "pack" -> OperatorParser.parsePack(parser, token, currentIndex);
@@ -120,7 +124,8 @@ public class CoreOperatorResolver {
             case "delete", "exists" -> OperatorParser.parseDelete(parser, token, currentIndex);
             case "defined" -> OperatorParser.parseDefined(parser, token, currentIndex);
             case "scalar", "values", "keys", "each" -> OperatorParser.parseKeys(parser, token, currentIndex);
-            case "our", "state", "my" -> OperatorParser.parseVariableDeclaration(parser, token.text, currentIndex);
+            case "our", "state", "my" ->
+                    OperatorParser.parseVariableDeclaration(parser, token.text, currentIndex, sourceIndex);
             case "local" -> OperatorParser.parseLocal(parser, token, currentIndex);
             case "last", "next", "redo" -> OperatorParser.parseLast(parser, token, currentIndex);
             case "goto" -> OperatorParser.parseGoto(parser, currentIndex);
@@ -132,10 +137,25 @@ public class CoreOperatorResolver {
             case "method" -> parseAnonymousMethodExpression(parser, startIndex);
             case "q", "qq", "qx", "qw", "qr", "tr", "y", "s", "m" ->
                     OperatorParser.parseSpecialQuoted(parser, token, startIndex);
-            // CORE::dump is an obsolete process/core-dump primitive. Parse it
-            // as a harmless false value so legacy modules can compile guarded
-            // diagnostics without terminating the JVM.
-            case "dump" -> new NumberNode("0", parser.tokenIndex);
+            // Perl's dump LABEL first resolves LABEL as a runtime value.  The
+            // JVM cannot safely dump its own process, but it must preserve the
+            // observable failure for an unresolved computed label.
+            case "dump" -> {
+                if (!coreQualified) {
+                    var location = parser.ctx.errorUtil.getSourceLocationAccurate(sourceIndex);
+                    throw new PerlParserException("dump() must be written as CORE::dump() as of Perl 5.30 at "
+                            + location.fileName() + " line " + location.lineNumber() + ".\n");
+                }
+                ListNode labels = ListParser.parseZeroOrMoreList(parser, 0,
+                        false, true, false, false);
+                Node label = labels.elements.isEmpty()
+                        ? new StringNode("", currentIndex)
+                        : labels.elements.getFirst();
+                ListNode message = new ListNode(currentIndex);
+                message.elements.add(new BinaryOperatorNode(".",
+                        new StringNode("Can't find label ", currentIndex), label, currentIndex));
+                yield OperatorParser.dieWarnNode(parser, "die", message, currentIndex);
+            }
             case "dbmclose", "dbmopen" ->
                     throw new PerlJavaUnimplementedException(parser.tokenIndex, "Not implemented: operator: " + token.text, parser.ctx.errorUtil);
             case "format" ->

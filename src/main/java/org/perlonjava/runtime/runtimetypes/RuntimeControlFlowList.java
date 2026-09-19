@@ -19,6 +19,8 @@ public class RuntimeControlFlowList extends RuntimeList {
      * Null for all other control flow types.
      */
     public final RuntimeBase returnValue;
+    /** True when this loop-control marker escaped a class ADJUST block. */
+    private boolean classAdjustOrigin;
 
     /**
      * Constructor for control flow (last/next/redo/goto).
@@ -111,6 +113,14 @@ public class RuntimeControlFlowList extends RuntimeList {
      */
     public RuntimeBase getReturnValue() {
         return returnValue;
+    }
+
+    public void markClassAdjustOrigin() {
+        classAdjustOrigin = true;
+    }
+
+    public boolean hasClassAdjustOrigin() {
+        return classAdjustOrigin;
     }
 
     /**

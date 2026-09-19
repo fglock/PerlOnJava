@@ -89,7 +89,7 @@ public class EmitBinaryOperatorNode {
             // Binary operators
             case "%", "&", "&.", "binary&", "*", "**", "+", "-", "/",
                  "<<", "<=>", ">>", "^", "^.", "binary^", "|", "|.", "binary|",
-                 "bless", "cmp", "isa", "~~" -> {
+                 "bless", "blessClassInstance", "cmp", "isa", "~~" -> {
                     // Check if uninitialized warnings are enabled at compile time
                     // Use warn variant for zero-overhead when warnings disabled
                     boolean warnUninit = emitterVisitor.ctx.symbolTable.isWarningCategoryEnabled("uninitialized");

@@ -121,16 +121,12 @@ public class EmitControlFlow {
         
         // Check if we're inside a defer block - control flow out of defer is prohibited
         if (ctx.javaClassInfo.isInDeferBlock) {
-            throw new PerlCompilerException(node.tokenIndex, 
-                    "Can't \"" + operator + "\" out of a \"defer\" block",
-                    ctx.errorUtil);
+            throwControlFlowBlockError(ctx, node, operator, "defer");
         }
         
         // Check if we're inside a finally block - control flow out of finally is prohibited
         if (ctx.javaClassInfo.finallyBlockDepth > 0) {
-            throw new PerlCompilerException(node.tokenIndex, 
-                    "Can't \"" + operator + "\" out of a \"finally\" block",
-                    ctx.errorUtil);
+            throwControlFlowBlockError(ctx, node, operator, "finally");
         }
 
         // Initialize label string for labeled loops
@@ -176,6 +172,14 @@ public class EmitControlFlow {
         }
 
         if (loopLabels == null) {
+            // A CV is a control-flow boundary: last/next/redo in an ordinary
+            // sub cannot target its caller's loop. Eval blocks are the one
+            // exception, because their markers are caught by the enclosing
+            // eval machinery and may target its lexical caller.
+            if (ctx.javaClassInfo.isSmartmatchPredicate) {
+                throw PerlCompilerException.withSourceLocation(node.tokenIndex,
+                        "Can't \"" + operator + "\" outside a loop block", ctx.errorUtil);
+            }
             // Non-local control flow: return tagged RuntimeControlFlowList
             if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(next): Non-local control flow for " + operator + " " + labelStr);
 
@@ -305,16 +309,12 @@ public class EmitControlFlow {
 
         // Check if we're inside a defer block - return out of defer is prohibited
         if (ctx.javaClassInfo.isInDeferBlock) {
-            throw new PerlCompilerException(node.tokenIndex, 
-                    "Can't \"return\" out of a \"defer\" block",
-                    ctx.errorUtil);
+            throwControlFlowBlockError(ctx, node, "return", "defer");
         }
         
         // Check if we're inside a finally block - return out of finally is prohibited
         if (ctx.javaClassInfo.finallyBlockDepth > 0) {
-            throw new PerlCompilerException(node.tokenIndex, 
-                    "Can't \"return\" out of a \"finally\" block",
-                    ctx.errorUtil);
+            throwControlFlowBlockError(ctx, node, "return", "finally");
         }
 
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(return) in context " + emitterVisitor.ctx.contextType);
@@ -668,16 +668,12 @@ public class EmitControlFlow {
 
         // Check if we're inside a defer block - goto out of defer is prohibited
         if (ctx.javaClassInfo.isInDeferBlock) {
-            throw new PerlCompilerException(node.tokenIndex, 
-                    "Can't \"goto\" out of a \"defer\" block",
-                    ctx.errorUtil);
+            throwControlFlowBlockError(ctx, node, "goto", "defer");
         }
         
         // Check if we're inside a finally block - goto out of finally is prohibited
         if (ctx.javaClassInfo.finallyBlockDepth > 0) {
-            throw new PerlCompilerException(node.tokenIndex, 
-                    "Can't \"goto\" out of a \"finally\" block",
-                    ctx.errorUtil);
+            throwControlFlowBlockError(ctx, node, "goto", "finally");
         }
 
         // Parse the goto argument
@@ -781,14 +777,33 @@ public class EmitControlFlow {
                     "Dynamic goto EXPR requires interpreter fallback", ctx.errorUtil);
         }
 
-        if (ctx.javaClassInfo.gotoLabelsInsideConstruct.contains(labelName)) {
-            String fileName = ctx.compilerOptions.fileName != null
-                    ? ctx.compilerOptions.fileName : "(eval)";
-            int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(node.tokenIndex) : 0;
+        boolean gotoIntoGiven = ctx.javaClassInfo.gotoLabelsInsideGiven.contains(labelName)
+                && !node.getBooleanAnnotation("insideGivenBlock");
+        boolean gotoIntoBinaryOrListExpression = ctx.javaClassInfo
+                .gotoLabelsInsideBinaryOrListExpression.contains(labelName);
+        if (gotoIntoGiven || gotoIntoBinaryOrListExpression
+                || ctx.javaClassInfo.gotoLabelsInsideConstruct.contains(labelName)) {
+            if (gotoIntoGiven) {
+                // Perl reports the destination label's location.  Raise at
+                // compile time so an eval preserves that source location,
+                // rather than a synthetic instruction in the enclosing file.
+                Integer targetToken = ctx.javaClassInfo.gotoGivenLabelTokenIndices.get(labelName);
+                throw PerlCompilerException.withSourceLocation(
+                        targetToken != null ? targetToken : node.tokenIndex,
+                        "Can't \"goto\" into a \"given\" block", ctx.errorUtil);
+            }
+            String errorMessage = gotoIntoBinaryOrListExpression
+                    ? "Can't \"goto\" into a binary or list expression"
+                    : "Use of \"goto\" to jump into a construct is no longer permitted";
+            var location = ctx.errorUtil != null
+                    ? ctx.errorUtil.getSourceLocationAccurate(node.tokenIndex) : null;
+            String fileName = location != null ? location.fileName()
+                    : (ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
+            int lineNumber = location != null ? location.lineNumber() : 0;
             ctx.mv.visitTypeInsn(Opcodes.NEW,
                     "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
             ctx.mv.visitInsn(Opcodes.DUP);
-            ctx.mv.visitLdcInsn("Use of \"goto\" to jump into a construct is no longer permitted");
+            ctx.mv.visitLdcInsn(errorMessage);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
                     "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "<init>",
                     "(Ljava/lang/String;)V", false);
@@ -815,14 +830,22 @@ public class EmitControlFlow {
         // For static label, check if it's local
         GotoLabels targetLabel = ctx.javaClassInfo.findGotoLabelsByName(labelName);
         if (targetLabel == null) {
-            if (ctx.javaClassInfo.isInEvalBlock
-                    && ctx.javaClassInfo.gotoLabelsInsideLoop.contains(labelName)) {
-                // This is a run-time eval failure, not a source parse error:
-                // emit die so the surrounding eval catches it and sets $@.
-                String fileName = ctx.compilerOptions.fileName != null
-                        ? ctx.compilerOptions.fileName : "(eval)";
-                int lineNumber = ctx.errorUtil != null
-                        ? ctx.errorUtil.getLineNumber(node.tokenIndex) : 0;
+            if (ctx.javaClassInfo.isSmartmatchPredicate) {
+                throw PerlCompilerException.withSourceLocation(node.tokenIndex,
+                        "Can't find label " + labelName, ctx.errorUtil);
+            }
+            if (ctx.javaClassInfo.gotoLabelsInsideLoop.contains(labelName)) {
+                // A label in a foreach body is not a valid destination from
+                // outside that body: its iterator/control-block setup has not
+                // run. This applies equally to source-level and eval gotos.
+                // Emit die so an enclosing eval can still catch it and set $@.
+                Integer destinationToken = ctx.javaClassInfo.gotoLoopLabelTokenIndices.get(labelName);
+                int locationToken = destinationToken != null ? destinationToken : node.tokenIndex;
+                var location = ctx.errorUtil != null
+                        ? ctx.errorUtil.getSourceLocationAccurate(locationToken) : null;
+                String fileName = location != null ? location.fileName()
+                        : (ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
+                int lineNumber = location != null ? location.lineNumber() : 0;
                 ctx.mv.visitTypeInsn(Opcodes.NEW,
                         "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
                 ctx.mv.visitInsn(Opcodes.DUP);
@@ -880,5 +903,13 @@ public class EmitControlFlow {
 
         // Emit the goto instruction
         ctx.mv.visitJumpInsn(Opcodes.GOTO, targetLabel.gotoLabel);
+    }
+
+    private static void throwControlFlowBlockError(EmitterContext ctx, OperatorNode node,
+            String operator, String blockType) {
+        var location = ctx.errorUtil.getSourceLocationAccurate(node.tokenIndex);
+        throw new PerlCompilerException("Can't \"" + operator + "\" out of a \""
+                + blockType + "\" block at " + location.fileName() + " line "
+                + location.lineNumber() + ".\n");
     }
 }

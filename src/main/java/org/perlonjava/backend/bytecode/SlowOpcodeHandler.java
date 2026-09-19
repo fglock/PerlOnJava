@@ -509,6 +509,27 @@ public class SlowOpcodeHandler {
         return pc;
     }
 
+    public static int executeForeachDerefScalar(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        registers[rd] = registers[rs].scalar().foreachScalarReference();
+        return pc;
+    }
+
+    public static int executeForeachDerefArray(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        registers[rd] = registers[rs].scalar().foreachArrayReference();
+        return pc;
+    }
+
+    public static int executeForeachDerefHash(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        registers[rd] = registers[rs].scalar().foreachHashReference();
+        return pc;
+    }
+
     /**
      * DEREF_SCALAR_NONSTRICT: rd = rs.scalarDerefNonStrict(pkg)
      * Format: DEREF_SCALAR_NONSTRICT rd rs pkgIdx
@@ -1535,9 +1556,25 @@ public class SlowOpcodeHandler {
         int rd = bytecode[pc++];
         int nameIdx = bytecode[pc++];
         int cacheIdx = bytecode[pc++];
+        int classNameIdx = bytecode[pc++];
+        int labelIdx = bytecode[pc++];
         RuntimeScalar cached = (RuntimeScalar) code.constants[cacheIdx];
-        registers[rd] = GlobalVariable.getGlobalCodeRefForDirectCall(
-                code.stringPool[nameIdx], cached);
+        String name = code.stringPool[nameIdx];
+        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRefForDirectCall(name, cached);
+        // The normal RuntimeCode.apply path owns ordinary direct-call errors.
+        // Preflight only labelled statements, where the diagnostic needs the
+        // parser-provided "close to label" hint.  A goto &name also reuses this
+        // lookup opcode while constructing its tail-call marker, and must defer
+        // its undefined-target diagnostic to that marker's resolver.
+        if (labelIdx >= 0) {
+            RuntimeCode.throwIfDirectCallUndefined(codeRef, name, code.stringPool[labelIdx]);
+        }
+        if (classNameIdx >= 0 && codeRef.value instanceof RuntimeCode runtimeCode) {
+            runtimeCode.isClassMethod = true;
+            runtimeCode.declaringClass = code.stringPool[classNameIdx];
+            runtimeCode.referenceOriginFqn = name;
+        }
+        registers[rd] = codeRef;
         return pc;
     }
 

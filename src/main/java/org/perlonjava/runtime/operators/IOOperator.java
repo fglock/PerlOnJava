@@ -674,6 +674,11 @@ public class IOOperator {
                 || fileHandle == scalarUndef) {
             throw new PerlCompilerException("Modification of a read-only value attempted");
         }
+        RuntimeIO existingHandle = fileHandle.getRuntimeIO();
+        if (existingHandle != null && existingHandle.directoryIO != null) {
+            throw new PerlCompilerException("Cannot open " + filehandleName(fileHandle)
+                    + " as a filehandle: it is already open as a dirhandle");
+        }
         if (args.length < 2) {
             // 1-argument open: open FILEHANDLE
             // Per Perl semantics, the global scalar variable of the same name as the
@@ -1009,6 +1014,21 @@ public class IOOperator {
         if (base.startsWith("@") || base.startsWith("%")) base = "$" + base.substring(1);
         if (!base.startsWith("$")) return null;
         return base + (array >= 0 && (hash < 0 || array < hash) ? "[...]" : "{...}");
+    }
+    private static String filehandleName(RuntimeScalar handle) {
+        RuntimeIO io = handle.getRuntimeIO();
+        String name = io != null ? io.globName : null;
+        if (name == null && handle.value instanceof RuntimeGlob glob) {
+            name = glob.globName;
+        }
+        if (name == null) {
+            name = handle.lexicalDisplayName;
+        }
+        if (name == null || name.isEmpty()) {
+            return "$fh";
+        }
+        int separator = name.lastIndexOf("::");
+        return separator >= 0 ? name.substring(separator + 2) : name;
     }
 
     /**
@@ -1350,7 +1370,7 @@ public class IOOperator {
 
         // Check for :utf8 layer
         if (hasUtf8Layer(fh)) {
-            throw new PerlCompilerException("sysread() is not supported on handles with :utf8 layer");
+            throw new PerlCompilerException("sysread() isn't allowed on :utf8 handles");
         }
 
         RuntimeScalar argumentTarget = args[1].scalar();
@@ -1497,7 +1517,7 @@ public class IOOperator {
 
         // Check for :utf8 layer
         if (hasUtf8Layer(fh)) {
-            throw new PerlCompilerException("syswrite() is not supported on handles with :utf8 layer");
+            throw new PerlCompilerException("syswrite() isn't allowed on :utf8 handles");
         }
 
         String data = args[1].scalar().toString();

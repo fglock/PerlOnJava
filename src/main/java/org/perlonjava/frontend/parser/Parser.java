@@ -6,6 +6,7 @@ import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.astnode.AbstractNode;
 import org.perlonjava.frontend.astnode.FormatNode;
 import org.perlonjava.frontend.astnode.Node;
+import org.perlonjava.frontend.astnode.NumberNode;
 import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
@@ -97,6 +98,7 @@ public class Parser {
     private final List<FormatNode> formatNodes = new ArrayList<>();
     // List to store completed format nodes after template parsing.
     private final List<FormatNode> completedFormatNodes = new ArrayList<>();
+    private final List<String> deferredDiagnostics = new ArrayList<>();
     // Current index in the token list.
     public int tokenIndex = 0;
     // Flags to indicate special parsing states.
@@ -105,6 +107,9 @@ public class Parser {
     // sub declared here must be instantiated when the loop body runs so its
     // closure captures the iteration's localized lexical cell.
     public int parsingRuntimeLoopBodyDepth = 0;
+    // Nesting depth of given blocks currently being parsed. `when` and
+    // `default` are only valid within a topicalizer.
+    public int parsingGivenDepth = 0;
     public boolean parsingTakeReference = false;
     // Format argument lines are parsed by a short-lived child parser.  Record
     // the lexical sub it resolved so the detached RuntimeFormat can retain
@@ -141,8 +146,12 @@ public class Parser {
     public boolean isTopLevelScript = false;
     // Are we parsing inside a class block?
     public boolean isInClassBlock = false;
+    /** Name of the class whose body is currently being parsed, if any. */
+    public String currentClassName = null;
     // Are we parsing inside a method?
     public boolean isInMethod = false;
+    /** True while parsing a class field initializer expression. */
+    public boolean isInFieldInitializer = false;
     // Are we parsing inside a braced dereference like %{...} or @{...}?
     // When true, inner {} should default to hash constructor, not block.
     public boolean insideBracedDereference = false;
@@ -292,11 +301,20 @@ public class Parser {
         // attempts to reduce the surrounding statement.  Doing this as a
         // lexical diagnostic is important for input such as "$_\n<<<<<<<":
         // the incomplete preceding expression must not mask the marker.
+        StringBuilder conflictDiagnostics = new StringBuilder();
         for (int i = 0; i < tokens.size(); i++) {
             if (tokens.get(i).type == LexerTokenType.CONFLICT_MARKER) {
-                throw new PerlCompilerException(i,
-                        "Version control conflict marker", ctx.errorUtil);
+                ErrorMessageUtil.SourceLocation location =
+                        ctx.errorUtil.getSourceLocationAccurate(i);
+                conflictDiagnostics.append("Version control conflict marker at ")
+                        .append(location.fileName()).append(" line ")
+                        .append(location.lineNumber()).append(", near \"")
+                        .append(tokens.get(i).text.substring(0, 7))
+                        .append("\"\n");
             }
+        }
+        if (!conflictDiagnostics.isEmpty()) {
+            throw new PerlParserException(conflictDiagnostics.toString());
         }
         if (tokens.get(tokenIndex).text.equals("=")) {
             // looks like pod: insert a newline to trigger pod parsing
@@ -312,6 +330,16 @@ public class Parser {
         Node ast;
         try {
             ast = ParseBlock.parseBlock(this);
+        } catch (PerlCompilerException | PerlParserException exception) {
+            // Recoverable diagnostics (such as strict vars) are normally
+            // reported after parsing.  If a later syntax error aborts parsing,
+            // retain those earlier diagnostics ahead of the terminal error,
+            // matching Perl's multi-error compile output.
+            if (!deferredDiagnostics.isEmpty()) {
+                throw new PerlCompilerException(
+                        String.join("", deferredDiagnostics) + exception.getMessage());
+            }
+            throw exception;
         } finally {
             compilationState.unitcheckQueueStack.get().pop();
         }
@@ -338,7 +366,38 @@ public class Parser {
         if (!getHeredocNodes().isEmpty()) {
             ParseHeredoc.heredocError(this);
         }
+        if (!deferredDiagnostics.isEmpty()) {
+            throw new PerlCompilerException(String.join("", deferredDiagnostics));
+        }
         return ast;
+    }
+
+    /** Record a parse-time diagnostic after consuming a recoverable statement. */
+    public void deferErrorAtToken(int index, String message) {
+        deferredDiagnostics.add(ctx.errorUtil.errorMessage(index, message));
+    }
+
+    /** Record an already formatted recoverable diagnostic. */
+    public void deferDiagnostic(String diagnostic) {
+        deferredDiagnostics.add(diagnostic);
+        // Perl stops after the tenth compile diagnostic, leaving this marker
+        // after the final reported error.  Deferred recovery errors must count
+        // toward that limit just like immediately-thrown parser errors.
+        if (deferredDiagnostics.size() == 10) {
+            String fileName = ctx.errorUtil.getSourceLocationAccurate(Math.max(0, tokenIndex - 1)).fileName();
+            deferredDiagnostics.add(fileName + " has too many errors.\n");
+        }
+    }
+
+    /** Number of recoverable compile diagnostics accumulated so far. */
+    public int deferredDiagnosticCount() {
+        return deferredDiagnostics.size();
+    }
+
+    /** Record a diagnostic whose source excerpt must end at a trailing comma. */
+    public void deferErrorAtTokenWithoutTrailingCommaWhitespace(int index, String message) {
+        String diagnostic = ctx.errorUtil.errorMessage(index, message);
+        deferredDiagnostics.add(diagnostic.replace(", \"\n", ",\"\n"));
     }
 
     /**
@@ -377,6 +436,12 @@ public class Parser {
             // Check if we have reached the end of the input (EOF) or a terminator (like `;`).
             if (isExpressionTerminator(token)) {
                 break; // Exit the loop if we're done parsing.
+            }
+
+            PerlParserException adjacentBaseLiteralError =
+                    adjacentIncompleteBaseLiteralError(left, token);
+            if (adjacentBaseLiteralError != null) {
+                throw adjacentBaseLiteralError;
             }
 
             // Get the precedence of the current token.
@@ -449,6 +514,74 @@ public class Parser {
         return left;
     }
 
+    /**
+     * A second numeric term normally ends the current expression before
+     * infix parsing is entered.  Retain Perl's three diagnostics when that
+     * term begins an incomplete base literal, rather than letting the
+     * statement parser reduce it to a generic syntax error.
+     */
+    private PerlParserException adjacentIncompleteBaseLiteralError(Node left, LexerToken token) {
+        if (!(left instanceof NumberNode) || token.type != LexerTokenType.NUMBER
+                || !"0".equals(token.text) || tokenIndex + 1 >= tokens.size()) {
+            return null;
+        }
+
+        LexerToken prefixToken = tokens.get(tokenIndex + 1);
+        if (prefixToken.type != LexerTokenType.IDENTIFIER || prefixToken.text.isEmpty()) {
+            return null;
+        }
+        char prefixChar = Character.toLowerCase(prefixToken.text.charAt(0));
+        String kind = switch (prefixChar) {
+            case 'x' -> "hexadecimal";
+            case 'b' -> "binary";
+            case 'o' -> "octal";
+            default -> null;
+        };
+        if (kind == null || hasBaseLiteralDigit(prefixToken.text.substring(1), prefixChar)) {
+            return null;
+        }
+
+        int previous = tokenIndex - 1;
+        while (previous >= 0 && tokens.get(previous).type == LexerTokenType.WHITESPACE) {
+            previous--;
+        }
+        if (previous < 0 || tokens.get(previous).type != LexerTokenType.NUMBER
+                || previous == tokenIndex - 1) {
+            return null;
+        }
+
+        String literal = TokenUtils.toText(tokens, tokenIndex, tokenIndex + 1);
+        String near = TokenUtils.toText(tokens, previous, tokenIndex + 1);
+        String noDigitsNear = near;
+        if (tokenIndex + 2 < tokens.size()) {
+            LexerToken trailing = tokens.get(tokenIndex + 2);
+            if (trailing.type != LexerTokenType.EOF && trailing.type != LexerTokenType.NEWLINE) {
+                noDigitsNear += trailing.text;
+            }
+        }
+
+        ErrorMessageUtil.SourceLocation location = ctx.errorUtil.getSourceLocationAccurate(previous);
+        String at = " at " + location.fileName() + " line " + location.lineNumber();
+        String message = "Number found where operator expected (Missing operator before \""
+                + literal + "\"?)" + at + ", near \"" + near + "\"\n"
+                + "No digits found for " + kind + " literal" + at + ", near \""
+                + noDigitsNear + "\"\n"
+                + "syntax error" + at + ", near \"" + near + "\"\n"
+                + "Execution of " + location.fileName()
+                + " aborted due to compilation errors.\n";
+        return new PerlParserException(message);
+    }
+
+    private static boolean hasBaseLiteralDigit(String text, char prefix) {
+        String expression = switch (prefix) {
+            case 'x' -> "[0-9a-fA-F_]";
+            case 'b' -> "[01_]";
+            case 'o' -> "[0-7_]";
+            default -> "";
+        };
+        return text.matches(expression + "*") && !text.replace("_", "").isEmpty();
+    }
+
     public void throwError(String message) {
         int errorIndex = this.tokenIndex;
         if (errorIndex > 1 && tokens.get(errorIndex - 1).type == LexerTokenType.NEWLINE) {
@@ -459,6 +592,14 @@ public class Parser {
 
     public void throwError(int index, String message) {
         throw new PerlCompilerException(index, message, this.ctx.errorUtil);
+    }
+
+    /**
+     * Throws an error anchored at the supplied source token without the
+     * normal newline rewind used for parser-cursor diagnostics.
+     */
+    public void throwErrorAtToken(int index, String message) {
+        throw new PerlCompilerException(this.ctx.errorUtil.errorMessageAtToken(index, message));
     }
 
     /**
@@ -498,6 +639,37 @@ public class Parser {
                             : value <= 0xFB ? 5
                             : value <= 0xFD ? 6
                             : value == 0xFE ? 7 : 13;
+                    int followingByte = -1;
+                    outer:
+                    for (int j = i; j < tokens.size(); j++) {
+                        String text = tokens.get(j).text;
+                        int start = j == i ? offset + 1 : 0;
+                        for (int k = start; k < text.length(); k++) {
+                            followingByte = text.charAt(k);
+                            break outer;
+                        }
+                    }
+                    if (followingByte >= 0
+                            && (followingByte < 0x80 || followingByte > 0xBF)) {
+                        String sequence = byteText + String.format("\\x%02x", followingByte);
+                        detail = "Malformed UTF-8 character: " + sequence
+                                + " (unexpected non-continuation byte 0x"
+                                + String.format("%02x", followingByte)
+                                + ", immediately after start byte 0x"
+                                + String.format("%02x", value)
+                                + "; need " + needed + " bytes, got 1)";
+                        String at = " at " + location.fileName() + " line "
+                                + location.lineNumber() + ".";
+                        String overlong = (value == 0xC0 || value == 0xC1)
+                                ? "\nMalformed UTF-8 character: " + byteText
+                                        + " (any UTF-8 sequence that starts with \"" + byteText
+                                        + "\" is overlong which can and should be represented with a different, shorter sequence)"
+                                : "";
+                        String supplementalDiagnostic = overlong.isEmpty()
+                                ? "" : overlong + at;
+                        throw new PerlCompilerException(detail + at + supplementalDiagnostic + "\n"
+                                + "Malformed UTF-8 character (fatal)" + at);
+                    }
                     int available = 1;
                     for (int j = i; j < tokens.size(); j++) {
                         String text = tokens.get(j).text;
@@ -530,7 +702,11 @@ public class Parser {
      * without additional context or stack traces.
      */
     public void throwCleanError(String message) {
-        ErrorMessageUtil.SourceLocation loc = this.ctx.errorUtil.getSourceLocationAccurate(this.tokenIndex);
+        throwCleanError(this.tokenIndex, message);
+    }
+
+    public void throwCleanError(int index, String message) {
+        ErrorMessageUtil.SourceLocation loc = this.ctx.errorUtil.getSourceLocationAccurate(index);
         String cleanMessage = message + " at " + loc.fileName() + " line " + loc.lineNumber() + ".";
         throw new PerlParserException(cleanMessage);
     }

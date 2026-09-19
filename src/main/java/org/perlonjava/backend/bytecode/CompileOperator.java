@@ -1271,9 +1271,15 @@ public class CompileOperator {
                                     expansions);
                         }
                     } catch (PerlCompilerException exception) {
-                        throw PerlCompilerException.withSourceLocation(
-                                node.tokenIndex, exception.getMessage(),
-                                bytecodeCompiler.errorUtil);
+                        // Let the runtime regex compiler render a U+ overflow
+                        // at evaluation time.  The bytecode compiler's source
+                        // map predates #line remapping inside eval strings.
+                        if (!StringParser.shouldDeferRegexDiagnostic(
+                                exception.getMessage())) {
+                            throw PerlCompilerException.withSourceLocation(
+                                    node.tokenIndex, exception.getMessage(),
+                                    bytecodeCompiler.errorUtil);
+                        }
                     }
                 }
                 boolean needsCallsiteCache = false;
@@ -2115,6 +2121,15 @@ public class CompileOperator {
             labelStr = "\u0000invalid-goto-into-foreach:" + labelStr;
             staticTarget = null;
         }
+        if (staticTarget != null && staticTarget.owner != null
+                && staticTarget.owner.getBooleanAnnotation("givenBlock")
+                && !node.getBooleanAnnotation("insideGivenBlock")) {
+            // A raw PC jump into `given` skips its topicalizer and control
+            // block setup.  Static gotos normally bypass GOTO_DYNAMIC, so
+            // reject this at the resolved target just as the dynamic path
+            // does at runtime.
+            bc.throwCompilerException("Can't \"goto\" into a \"given\" block", node.getIndex());
+        }
         if (staticTarget != null) {
             // Static gotos bind to the nearest containing block, never to the
             // final entry of the name-only dynamic map.
@@ -2128,6 +2143,9 @@ public class CompileOperator {
             }
             bc.lastResultReg = -1;
             return;
+        }
+        if (bc.isSmartmatchPredicate) {
+            bc.throwCleanCompilerException("Can't find label " + labelStr, node.getIndex());
         }
         // Always use the resolver instead of emitting a raw PC jump.  A PC is
         // only valid after all enclosing construct prologues have run; raw

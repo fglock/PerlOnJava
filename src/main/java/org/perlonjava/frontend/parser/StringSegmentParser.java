@@ -264,7 +264,8 @@ public abstract class StringSegmentParser {
     protected Node prepareStringSegment(Node node) {
         if (isRegex && node instanceof StringNode stringNode) {
             return ConstantOverloadParser.wrapRegexSegment(
-                    stringNode, stringNode.value, tokenIndex,
+                    parser, stringNode, stringNode.value, tokenIndex,
+                    interpolateVariable ? "qq" : "q",
                     ctx.symbolTable.isStrictOptionEnabled(
                             org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8)
                             || ctx.compilerOptions.isUnicodeSource);
@@ -394,6 +395,14 @@ public abstract class StringSegmentParser {
                         operand = Variable.parseBracedVariable(parser, sigil, true,
                                 isRegex ? "pattern" : "string");
                     } catch (PerlCompilerException e) {
+                        if (e.getMessage().startsWith("Can't find string terminator")) {
+                            PerlCompilerException outerSyntaxError =
+                                    malformedNestedQuoteLikeInterpolationError();
+                            if (outerSyntaxError != null) {
+                                throw outerSyntaxError;
+                            }
+                            throw e;
+                        }
                         // Extract the core error message, removing any existing "Syntax error in braced variable:" prefix
                         String coreMessage = e.getMessage();
                         if (coreMessage.startsWith("Syntax error in braced variable: ")) {
@@ -410,6 +419,27 @@ public abstract class StringSegmentParser {
                     operand = Variable.parseBracedVariable(parser, sigil, true,
                             isRegex ? "pattern" : "string");
                 } catch (PerlCompilerException e) {
+                    if (e.getMessage().startsWith("Can't find string terminator")) {
+                        PerlCompilerException outerSyntaxError =
+                                malformedNestedQuoteLikeInterpolationError();
+                        if (outerSyntaxError != null) {
+                            throw outerSyntaxError;
+                        }
+                        throw e;
+                    }
+                    PerlCompilerException malformedRegexError =
+                            malformedNestedRegexInterpolationError();
+                    if (malformedRegexError != null) {
+                        throw malformedRegexError;
+                    }
+                    // A nested quote-like parser may already have produced
+                    // Perl's complete diagnostic (including its own source
+                    // excerpt and compilation-abort line).  Do not turn that
+                    // into a generic braced-variable interpolation error.
+                    if (e.getMessage().contains("\nExecution of ")
+                            && e.getMessage().contains("aborted due to compilation errors.")) {
+                        throw e;
+                    }
                     // Extract the core error message, removing any existing "Syntax error in braced variable:" prefix
                     String coreMessage = e.getMessage();
                     if (coreMessage.startsWith("Syntax error in braced variable: ")) {
@@ -486,6 +516,12 @@ public abstract class StringSegmentParser {
                 } else if (!postfixDerefFollows || postfixDerefInterpolationEnabled) {
                     operand = parseArrayHashAccess(parser, operand, isRegex);
                 }
+            } catch (PerlCompilerException e) {
+                // Do not replace a nested parser's primary diagnostic with a
+                // generic interpolation-access error.  In particular, eval
+                // of a malformed regex in a subscript must retain the regex
+                // location and excerpt.
+                throw e;
             } catch (Exception e) {
                 if (isRegex && e.getMessage() != null
                         && e.getMessage().contains("Unterminated array")) {
@@ -1316,6 +1352,57 @@ public abstract class StringSegmentParser {
     }
 
     /**
+     * A quote-like expression in a braced interpolation is parsed using the
+     * nested string token stream.  If that expression chooses a delimiter
+     * which is never closed, its low-level error has no useful connection to
+     * the outer source.  Perl instead reports a syntax error at the enclosing
+     * quote, retaining the delimiter pair that makes the malformed expression
+     * apparent (for example {@code "})"} in {@code qr!@{s{0})(?{!}).
+     */
+    private PerlCompilerException malformedNestedQuoteLikeInterpolationError() {
+        int interpolation = originalStringContent.indexOf("@{");
+        if (interpolation < 0) {
+            return null;
+        }
+        int closingBrace = originalStringContent.indexOf('}', interpolation + 2);
+        if (closingBrace < 0 || closingBrace + 1 >= originalStringContent.length()
+                || originalStringContent.charAt(closingBrace + 1) != ')') {
+            return null;
+        }
+
+        String excerpt;
+        if (isRegex) {
+            excerpt = originalStringContent.substring(closingBrace, closingBrace + 2);
+        } else if (closingBrace + 2 < originalStringContent.length()
+                && originalStringContent.charAt(closingBrace + 2) == '(') {
+            excerpt = originalStringContent.substring(closingBrace + 1, closingBrace + 3);
+        } else {
+            return null;
+        }
+
+        var location = ctx.errorUtil.getSourceLocationAccurate(originalTokenOffset);
+        return new PerlCompilerException("syntax error at " + location.fileName() + " line "
+                + location.lineNumber() + ", near \"" + excerpt + "\"\nExecution of "
+                + location.fileName() + " aborted due to compilation errors.\n");
+    }
+
+    /**
+     * Preserve the useful token excerpt for an unterminated empty regex inside
+     * a braced interpolation.  The nested expression parser otherwise reports
+     * this as a generic interpolation error after the closing bracket has
+     * already been consumed.
+     */
+    private PerlCompilerException malformedNestedRegexInterpolationError() {
+        if (!originalStringContent.contains("//]")) {
+            return null;
+        }
+
+        var location = ctx.errorUtil.getSourceLocationAccurate(originalTokenOffset);
+        return new PerlCompilerException("syntax error at " + location.fileName() + " line "
+                + location.lineNumber() + ", near \"//]\"\n");
+    }
+
+    /**
      * Creates and throws an offset-aware error with correct context.
      * Matches Perl's actual error format for string interpolation errors.
      * Based on Test::More analysis: string errors are single line, no stack traces, no "near" context.
@@ -1627,8 +1714,7 @@ public abstract class StringSegmentParser {
             try {
                 String hs = hexStr.toString();
                 BigInteger bi = new BigInteger(hs, 16);
-                long hexUv =
-                        bi.and(BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE)).longValue();
+                long hexUv = checkedEscapeCodePoint(bi);
                 if (Long.compareUnsigned(hexUv, 0x10FFFFL) > 0) {
                     appendToCurrentSegment(PerlUtfString.encodeBeyondUnicode(hexUv));
                 } else if (hexUv >= 0xD800L && hexUv <= 0xDFFFL) {
@@ -1692,7 +1778,7 @@ public abstract class StringSegmentParser {
             }
 
             if (chr.isEmpty()) {
-                parser.throwError("Missing right brace on \\o{}");
+                throwOctalEscapeDiagnostic("Missing right brace on \\o{}");
             }
 
             // Skip trailing non-digits
@@ -1703,15 +1789,17 @@ public abstract class StringSegmentParser {
 
             TokenUtils.consumeChar(parser);
         } else {
-            parser.throwError("Missing braces on \\o{}");
+            throwOctalEscapeDiagnostic("Missing braces on \\o{}");
         }
 
         if (!octStr.isEmpty()) {
             try {
-                var octValue = Integer.parseInt(octStr.toString(), 8);
+                long octValue = checkedEscapeCodePoint(new BigInteger(octStr.toString(), 8));
                 var result = octValue <= 0xFFFF
                         ? String.valueOf((char) octValue)
-                        : new String(Character.toChars(octValue));
+                        : octValue > 0x10FFFFL
+                                ? PerlUtfString.encodeBeyondUnicode(octValue)
+                                : new String(Character.toChars((int) octValue));
                 appendToCurrentSegment(result);
             } catch (NumberFormatException e) {
                 // Invalid hex sequence, treat as literal
@@ -1807,8 +1895,16 @@ public abstract class StringSegmentParser {
                         throwNamedSequenceExtendedClassDiagnostic(expansion.sequence());
                     }
                     if (!expansion.resolved()) {
+                        String diagnostic = expansion.diagnostic();
+                        // A U+ value beyond Perl's signed-long ceiling is a
+                        // regex-parser diagnostic: it marks the closing brace
+                        // in the complete pattern.  Preserve the raw message
+                        // here so RuntimeRegex can render that source-aware
+                        // form instead of attaching a generic string-parser
+                        // location.
                         appendToCurrentSegment(RegexMarkers.literalDiagnostic(
-                                namedCharacterDiagnostic(expansion.diagnostic())));
+                                isUPlusOverflowDiagnostic(diagnostic)
+                                        ? diagnostic : namedCharacterDiagnostic(diagnostic)));
                     }
                 }
                 appendToCurrentSegment("\\N{" + name + "}");
@@ -1913,8 +2009,41 @@ public abstract class StringSegmentParser {
                 + ", within " + (isRegex ? "pattern" : "string");
     }
 
+    private boolean isUPlusOverflowDiagnostic(String diagnostic) {
+        return diagnostic != null
+                && diagnostic.startsWith("Use of code point 0x")
+                && diagnostic.contains("the permissible max is 0x7FFFFFFFFFFFFFFF");
+    }
+
+    /**
+     * Perl's braced numeric escapes accept code points through signed IV max,
+     * including values beyond Unicode.  Do not truncate an overlarge value to
+     * a Java long: that would silently turn an invalid escape into another
+     * character instead of its required compile-time diagnostic.
+     */
+    private long checkedEscapeCodePoint(BigInteger codePoint) {
+        if (codePoint.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
+            var location = ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
+            throw new PerlParserException("Use of code point 0x"
+                    + codePoint.toString(16).toUpperCase(java.util.Locale.ROOT)
+                    + " is not allowed; the permissible max is 0x7FFFFFFFFFFFFFFF at "
+                    + location.fileName() + " line " + location.lineNumber() + ".\n");
+        }
+        return codePoint.longValueExact();
+    }
+
+    /** Render braced-octal syntax failures as quoted-string diagnostics. */
+    private void throwOctalEscapeDiagnostic(String diagnostic) {
+        var location = ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
+        throw new PerlParserException(diagnostic + " at " + location.fileName()
+                + " line " + location.lineNumber() + ", within string\n");
+    }
+
     private void throwMissingNamedCharacterBraceDiagnostic() {
-        var location = ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
+        // The parser cursor has already advanced past the unterminated regex
+        // delimiter.  Attribute this lexical error to the regex source token
+        // itself, as Perl does for /\\N{/.
+        var location = ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
         String message = isRegex
                 ? "Missing right brace on \\N{} or unescaped left brace after \\N"
                 : "Missing right brace on \\N{}";

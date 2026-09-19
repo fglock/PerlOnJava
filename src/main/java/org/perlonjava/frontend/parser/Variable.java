@@ -239,6 +239,33 @@ public class Variable {
 
             String localVar = sigil + varName;
 
+            // Fields are lexically visible while their class body is parsed,
+            // including within nested class declarations.  They are not,
+            // however, ordinary lexicals: Perl permits them only in methods,
+            // ADJUST blocks, and field initializers of their own class (or a
+            // subclass).  Diagnose an attempted use before ordinary strict
+            // variable handling can turn it into a package global.
+            SymbolTable.SymbolEntry fieldEntry = parser.ctx.symbolTable.getSymbolEntry("field:" + varName);
+            SymbolTable.SymbolEntry variableEntry = parser.ctx.symbolTable.getSymbolEntry(localVar);
+            boolean isUnshadowedField = fieldEntry != null
+                    && "field".equals(fieldEntry.decl())
+                    && (variableEntry == null || "field".equals(variableEntry.decl()));
+            if (isUnshadowedField) {
+                String fieldOwner = fieldEntry.perlPackage();
+                String currentClass = parser.ctx.symbolTable.getCurrentPackage();
+                if (!parser.isInMethod) {
+                    throw PerlCompilerException.withSourceLocation(startIndex,
+                            "Field " + sigil + varName + " is not accessible outside a method",
+                            parser.ctx.errorUtil);
+                }
+                if (!FieldRegistry.isClassOrAncestor(currentClass, fieldOwner)) {
+                    throw PerlCompilerException.withSourceLocation(startIndex,
+                            "Field " + sigil + varName + " of \"" + fieldOwner
+                                    + "\" is not accessible in a method of \"" + currentClass + "\"",
+                            parser.ctx.errorUtil);
+                }
+            }
+
             // Check if this is a field (in current or parent class) and not a locally declared variable
             // Note: We check if the variable is NOT defined locally (only in current scope)
             // but we DO check for fields in all scopes (fields are in parent scope)
@@ -273,9 +300,11 @@ public class Variable {
                 }
             }
 
-            // Check strict vars at parse time — catches undeclared variables in
-            // lazily-compiled named sub bodies that would otherwise be missed
-            checkStrictVarsAtParseTime(parser, sigil, varName);
+            // Diagnose undeclared strict variables while parsing.  This must
+            // also cover file-level code: a later syntax error prevents code
+            // generation, which otherwise hides Perl's earlier strict-vars
+            // diagnostic.
+            checkStrictVarsAtParseTime(parser, sigil, varName, false);
 
             SymbolTable.SymbolEntry lexicalExport = getLexicalExportEntry(parser, sigil, varName);
             if (lexicalExport != null) {
@@ -378,9 +407,9 @@ public class Variable {
         // compile time for them.  All other contexts (file-level, anonymous
         // subs, eval STRING) are handled correctly by the code-generation check.
         if (lazySubroutinesOnly) {
-            if (!parser.ctx.symbolTable.isInSubroutineBody()) return;
+            if (!parser.ctx.symbolTable.isInSubroutineBody() && !parser.isInFieldInitializer) return;
             String currentSub = parser.ctx.symbolTable.getCurrentSubroutine();
-            if (currentSub == null || currentSub.isEmpty()) return;
+            if (!parser.isInFieldInitializer && (currentSub == null || currentSub.isEmpty())) return;
         }
 
         // Check if strict vars is enabled in the current scope
@@ -405,8 +434,15 @@ public class Variable {
         // Qualified names (Pkg::var) — always allowed
         if (varName.contains("::")) return;
 
-        // Regex capture variables ($1, $2, ...) but not $01, $02
-        if (ScalarUtils.isInteger(varName) && !varName.startsWith("0")) return;
+        // Numeric array/hash names and regex capture variables ($1, $2, ...)
+        // are exempt from strict vars.  In particular, @0 is valid as the
+        // indirect-method argument in `E { 0; readline @0 }`.
+        if (ScalarUtils.isInteger(varName)
+                && (!sigil.equals("$") || !varName.startsWith("0"))) return;
+
+        // A malformed sigil sequence has its own parser diagnostic; do not
+        // replace it with a strict-vars error while recovering the statement.
+        if (varName.startsWith("$") || varName.startsWith("@") || varName.startsWith("%")) return;
 
         // Sort variables $a and $b
         if (sigil.equals("$") && (varName.equals("a") || varName.equals("b"))) return;
@@ -490,12 +526,22 @@ public class Variable {
 
         if (existsGlobally) return;
 
-        // Undeclared variable under strict vars
-        throw new PerlCompilerException(parser.tokenIndex,
-                "Global symbol \"" + sigil + varName
-                        + "\" requires explicit package name (did you forget to declare \"my "
-                        + sigil + varName + "\"?)",
-                parser.ctx.errorUtil);
+        // File-level parsing must continue after a strict-vars failure: Perl
+        // reports subsequent recoverable syntax diagnostics in the same
+        // compilation unit.  Lazy named subroutine bodies still need the
+        // immediate failure that prevents delayed compilation from hiding it.
+        String message = "Global symbol \"" + sigil + varName
+                + "\" requires explicit package name (did you forget to declare \"my "
+                + sigil + varName + "\"?)";
+        if (!lazySubroutinesOnly) {
+            ErrorMessageUtil.SourceLocation location = parser.ctx.errorUtil
+                    .getSourceLocationAccurate(parser.tokenIndex);
+            parser.deferDiagnostic(message + " at " + location.fileName()
+                    + " line " + location.lineNumber() + ".\n");
+            return;
+        }
+        throw PerlCompilerException.withSourceLocation(
+                parser.tokenIndex, message, parser.ctx.errorUtil);
     }
 
     /**
@@ -586,6 +632,12 @@ public class Variable {
                         return operand;
                     }
                 }
+            } catch (PerlCompilerException e) {
+                // Preserve the primary parser diagnostic (for example a
+                // malformed regex within a subscript expression).  Wrapping
+                // it here loses both its source ownership and useful near
+                // excerpt.
+                throw e;
             } catch (Exception e) {
                 // If parsing fails, throw a more informative error
                 throw new PerlCompilerException(parser.tokenIndex, "syntax error: Unterminated array or hash access", parser.ctx.errorUtil);
@@ -691,6 +743,8 @@ public class Variable {
                         Node result = null;
                         try {
                             result = ParseInfix.parseInfixOperation(parser, operand, 0);
+                        } catch (PerlCompilerException e) {
+                            throw e;
                         } catch (Exception e) {
                             parser.tokenIndex = savedIndex;
                             throw new PerlCompilerException(parser.tokenIndex, "syntax error: Unterminated array access", parser.ctx.errorUtil);
@@ -1044,6 +1098,19 @@ public class Variable {
         int startLineNumber = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex - 1); // Save line number before peek() side effects
         TokenUtils.consume(parser); // Consume the '{'
 
+        // `$#` and `$*` stopped being special variables in Perl 5.30.  The
+        // unbraced forms are rejected by ParsePrimary/parseVariable, but the
+        // braced spelling used to bypass that check.  In particular `${#}`
+        // fell through into the generic braced-expression parser and could
+        // run past EOF.  Keep the check here, before interpreting the brace
+        // contents as either a symbolic variable name or an expression.
+        if ("$".equals(sigil) && isRemovedPunctuationVariable(parser, "#")) {
+            parser.throwCleanError("$# is no longer supported as of Perl 5.30");
+        }
+        if ("$".equals(sigil) && isRemovedPunctuationVariable(parser, "*")) {
+            parser.throwCleanError("$* is no longer supported as of Perl 5.30");
+        }
+
         // Files with malformed UTF-8 are represented byte-for-byte until a
         // parser context consumes them.  A raw non-ASCII byte cannot start a
         // name inside a braced aggregate dereference such as @{\xD7}; reject
@@ -1270,22 +1337,24 @@ public class Variable {
         // Check for heredoc constructs like ${<<END} which should evaluate to empty string
         // The challenge is distinguishing ${<<END} from ${<...>} where $< is a special variable
         if (parser.tokenIndex < parser.tokens.size()) {
+            int heredocTokenIndex = parser.tokenIndex;
             var currentToken = parser.tokens.get(parser.tokenIndex);
             if (currentToken.text.equals("<")) {
-                // Look ahead to see if this is <<IDENTIFIER (heredoc) vs <...> (angle brackets)
-                if (parser.tokenIndex + 1 < parser.tokens.size()) {
-                    var nextToken = parser.tokens.get(parser.tokenIndex + 1);
-                    // If the next token after < is an identifier (not another <), this could be <<IDENTIFIER
-                    // We need to check if this pattern matches heredoc syntax
+                // Look ahead for <<IDENTIFIER. The lexer keeps the two angle
+                // brackets as separate tokens in this braced interpolation.
+                int identifierIndex = parser.tokenIndex + 1;
+                if (identifierIndex < parser.tokens.size()
+                        && parser.tokens.get(identifierIndex).text.equals("<")) {
+                    identifierIndex++;
+                }
+                if (identifierIndex < parser.tokens.size()) {
+                    var nextToken = parser.tokens.get(identifierIndex);
                     if (nextToken.type == LexerTokenType.IDENTIFIER) {
                         // This looks like <<IDENTIFIER - treat as heredoc in ${<<END} context
 
-                        // Skip the < token
-                        parser.tokenIndex++;
-
                         // Get the identifier
                         String identifier = nextToken.text;
-                        parser.tokenIndex++; // Skip identifier
+                        parser.tokenIndex = identifierIndex + 1;
 
                         // Create a heredoc node and add it to the queue for later processing
                         OperatorNode heredocNode = new OperatorNode("HEREDOC", null, parser.tokenIndex);
@@ -1295,7 +1364,14 @@ public class Variable {
 
                         // Consume the closing brace
                         if (!TokenUtils.peek(parser).text.equals("}")) {
-                            throw new PerlCompilerException(parser.tokenIndex, "Missing closing brace in variable interpolation", parser.ctx.errorUtil);
+                            String message = "Can't find string terminator \"" + identifier
+                                    + "\" anywhere before EOF";
+                            if (parser.baseLineNumber > 0 && parser.baseSourceFileName != null) {
+                                throw new PerlCompilerException(message + " at " + parser.baseSourceFileName
+                                        + " line " + parser.sourceLineAt(heredocTokenIndex) + ".\n");
+                            }
+                            throw PerlCompilerException.withSourceLocation(
+                                    heredocTokenIndex, message, parser.ctx.errorUtil);
                         }
                         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
@@ -1382,6 +1458,52 @@ public class Variable {
             parser.insideBracedDereference = savedInsideBracedDereference;
             parser.parsingTakeReference = savedParsingTakeReference;
         }
+    }
+
+    /**
+     * True when the just-opened braced scalar contains one of the removed
+     * punctuation variables, either directly (`${#}`) or as its symbolic
+     * quoted name (`${"#"}`).  Do not match a general expression: these
+     * spellings are deliberately restricted to a single punctuation token.
+     */
+    private static boolean isRemovedPunctuationVariable(Parser parser, String punctuation) {
+        // Do not use Whitespace.skipWhitespace here: it treats `#` as the
+        // beginning of a source comment, which is exactly the punctuation we
+        // need to recognize in `${#}`.
+        int index = skipLiteralWhitespace(parser, parser.tokenIndex);
+        if (index >= parser.tokens.size()) {
+            return false;
+        }
+        if (punctuation.equals(parser.tokens.get(index).text)) {
+            index = skipLiteralWhitespace(parser, index + 1);
+            return index < parser.tokens.size() && "}".equals(parser.tokens.get(index).text);
+        }
+
+        String quote = parser.tokens.get(index).text;
+        if (!"'".equals(quote) && !"\"".equals(quote)) {
+            return false;
+        }
+        int valueIndex = index + 1;
+        if (valueIndex >= parser.tokens.size() || !punctuation.equals(parser.tokens.get(valueIndex).text)) {
+            return false;
+        }
+        int closeQuoteIndex = valueIndex + 1;
+        if (closeQuoteIndex >= parser.tokens.size() || !quote.equals(parser.tokens.get(closeQuoteIndex).text)) {
+            return false;
+        }
+        int closeBraceIndex = skipLiteralWhitespace(parser, closeQuoteIndex + 1);
+        return closeBraceIndex < parser.tokens.size() && "}".equals(parser.tokens.get(closeBraceIndex).text);
+    }
+
+    private static int skipLiteralWhitespace(Parser parser, int index) {
+        while (index < parser.tokens.size()) {
+            LexerTokenType type = parser.tokens.get(index).type;
+            if (type != LexerTokenType.WHITESPACE && type != LexerTokenType.NEWLINE) {
+                break;
+            }
+            index++;
+        }
+        return index;
     }
 
     private static boolean hasMalformedBracedInterpolation(Parser parser, int start) {

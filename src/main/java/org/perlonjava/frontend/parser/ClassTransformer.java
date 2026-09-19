@@ -2,6 +2,7 @@ package org.perlonjava.frontend.parser;
 
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
@@ -132,7 +133,13 @@ public class ClassTransformer {
                 Node isaAssignment = generateIsaAssignment(className, parentClass);
                 block.elements.add(isaAssignment);
             }
+            // Perl classes expose @ISA for introspection but do not permit it
+            // to be altered after the declaration (including classes without
+            // a :isa attribute).
+            block.elements.add(generateReadonlyIsa(className));
         }
+
+        validateParameterNames(fields, className, parser);
 
         // Transform user-defined methods but DEFER their registration
         // They'll be registered AFTER scope exit in StatementParser
@@ -162,12 +169,22 @@ public class ClassTransformer {
         List<SubroutineNode> deferredAccessors = new ArrayList<>();
         for (OperatorNode field : fields) {
             if (field.getAnnotation("attr:reader") != null) {
+                String readerName = (String) field.getAnnotation("attr:reader");
+                validateGeneratedMethodName(parser, field,
+                        readerName == null || readerName.isEmpty()
+                                ? defaultAccessorName((String) field.getAnnotation("name")) : readerName);
                 SubroutineNode reader = generateReaderMethod(field, className);
                 block.elements.add(reader);
                 deferredAccessors.add(reader);
             }
 
             if (field.getAnnotation("attr:writer") != null) {
+                if (!"$".equals(field.getAnnotation("sigil"))) {
+                    throw PerlCompilerException.withSourceLocation(field.getIndex(),
+                            "Cannot apply a :writer attribute to a non-scalar field",
+                            parser.ctx.errorUtil);
+                }
+                validateGeneratedMethodName(parser, field, (String) field.getAnnotation("attr:writer"));
                 SubroutineNode writer = generateWriterMethod(field);
                 block.elements.add(writer);
                 deferredAccessors.add(writer);
@@ -201,6 +218,52 @@ public class ClassTransformer {
         return block;
     }
 
+    private static void validateGeneratedMethodName(Parser parser, OperatorNode field, String name) {
+        if (name == null || name.isEmpty()) {
+            return;
+        }
+        if (!isValidMethodIdentifier(name)) {
+            throw PerlCompilerException.withSourceLocation(field.getIndex(),
+                    "\"" + name + "\" is not a valid name for a generated method",
+                    parser.ctx.errorUtil);
+        }
+    }
+
+    private static void validateParameterNames(List<OperatorNode> fields, String className, Parser parser) {
+        java.util.Set<String> names = FieldRegistry.getParameterNamesInHierarchy(className);
+        for (OperatorNode field : fields) {
+            String parameter = (String) field.getAnnotation("attr:param");
+            if (parameter == null) {
+                continue;
+            }
+            if (parameter.isEmpty()) {
+                parameter = (String) field.getAnnotation("name");
+            }
+            if (!names.add(parameter)) {
+                throw PerlCompilerException.withSourceLocation(field.getIndex(),
+                        "Cannot assign :param(" + parameter + ") to field "
+                                + field.getAnnotation("sigil") + field.getAnnotation("name")
+                                + " because that name is already in use", parser.ctx.errorUtil);
+            }
+            FieldRegistry.registerParameterName(className, parameter);
+        }
+    }
+
+    private static boolean isValidMethodIdentifier(String name) {
+        if (name.isEmpty()
+                || (name.codePointAt(0) != '_' && !Character.isUnicodeIdentifierStart(name.codePointAt(0)))) {
+            return false;
+        }
+        for (int offset = Character.charCount(name.codePointAt(0)); offset < name.length();) {
+            int codePoint = name.codePointAt(offset);
+            if (codePoint != '_' && !Character.isUnicodeIdentifierPart(codePoint)) {
+                return false;
+            }
+            offset += Character.charCount(codePoint);
+        }
+        return true;
+    }
+
     /**
      * Generate a constructor (new) method from field declarations.
      * <p>
@@ -231,6 +294,7 @@ public class ClassTransformer {
     private static SubroutineNode generateConstructor(List<OperatorNode> fields, String className, List<Node> adjustNodes) {
         List<Node> bodyElements = new ArrayList<>();
         BlockNode body = new BlockNode(bodyElements, 0);
+        body.setAnnotation("generatedClassConstructor", Boolean.TRUE);
 
         // MINIMAL CONSTRUCTOR - Start with just bless {} and return
         // We'll add statements back one by one to identify the bytecode issue
@@ -288,7 +352,10 @@ public class ClassTransformer {
             ListNode emptyList = new ListNode(0);
             HashLiteralNode emptyHash = new HashLiteralNode(emptyList.elements, 0);
             OperatorNode classVar = new OperatorNode("$", new IdentifierNode("class", 0), 0);
-            selfValue = new BinaryOperatorNode("bless", emptyHash, classVar, 0);
+            // Use a distinct internal operator rather than an annotation: generated
+            // subroutines are cloned before JVM emission and node annotations do not
+            // survive that route.
+            selfValue = new BinaryOperatorNode("blessClassInstance", emptyHash, classVar, 0);
         }
 
         // my $self = <selfValue>;
@@ -403,6 +470,7 @@ public class ClassTransformer {
                 false,      // isAnonymous
                 0           // tokenIndex
         );
+        constructor.setAnnotation("generatedClassConstructor", Boolean.TRUE);
 
         return constructor;
     }
@@ -459,6 +527,7 @@ public class ClassTransformer {
         BinaryOperatorNode selfField = new BinaryOperatorNode("->", selfVar, hashSubscript, 0);
 
         Node value;
+        Node parameterAccess = null;
         if (hasParam) {
             // $args{paramname} // default_or_undef
             // Use correct structure: %args becomes $args in hash access
@@ -467,6 +536,7 @@ public class ClassTransformer {
             argKeyList.add(new StringNode(paramName, 0));
             HashLiteralNode argHashSubscript = new HashLiteralNode(argKeyList, 0);
             BinaryOperatorNode argsAccess = new BinaryOperatorNode("{", argsVar, argHashSubscript, 0);
+            parameterAccess = argsAccess;
 
             if (hasDefault) {
                 // Handle different default operators:
@@ -474,11 +544,19 @@ public class ClassTransformer {
                 // //= means use default only if param is undefined
                 // ||= means use default only if param is false/empty
                 if ("=".equals(defaultOperator)) {
-                    // Standard default - use // operator (defined-or)
+                    // `=` defaults a missing parameter, but preserves an
+                    // explicitly supplied undef. Defined-or cannot make that
+                    // distinction, so test existence of the named hash entry.
+                    OperatorNode exists = new OperatorNode("exists",
+                            new ListNode(List.of(argsAccess), 0), 0);
+                    value = new TernaryOperatorNode("?", exists, argsAccess, defaultValue, 0);
+                } else if ("//=".equals(defaultOperator)) {
+                    // The parameter hash entry may be an undef proxy. Resolve
+                    // its definedness before assigning it to the object field.
                     value = new BinaryOperatorNode("//", argsAccess, defaultValue, 0);
+                } else if ("||=".equals(defaultOperator)) {
+                    value = new BinaryOperatorNode("||", argsAccess, defaultValue, 0);
                 } else {
-                    // For //= and ||=, the value itself acts as the default
-                    // We'll handle this differently below
                     value = argsAccess;
                 }
             } else if ("@".equals(sigil)) {
@@ -511,9 +589,22 @@ public class ClassTransformer {
         }
 
         // Handle different assignment operators for field initialization
-        if (hasDefault && "//=".equals(defaultOperator)) {
-            // For //= operator: $self->{field} //= default
-            // This assigns the default only if the field is undefined
+        if (hasParam && hasDefault && "||=".equals(defaultOperator)) {
+            // Preserve ||= as an lvalue operation.  Its argument may be a
+            // hash-entry proxy whose truth value must be resolved after it is
+            // installed in the object field.
+            List<Node> statements = new ArrayList<>();
+            BinaryOperatorNode parameterAssignment = new BinaryOperatorNode("=", selfField, parameterAccess, 0);
+            parameterAssignment.setAnnotation("fieldInitializer", true);
+            statements.add(parameterAssignment);
+            BinaryOperatorNode initialization = new BinaryOperatorNode("||=", selfField, defaultValue, 0);
+            initialization.setAnnotation("fieldInitializer", true);
+            statements.add(initialization);
+            BlockNode initializationBlock = new BlockNode(statements, 0);
+            initializationBlock.setAnnotation("fieldInitializer", true);
+            return initializationBlock;
+        } else if (hasDefault && "//=".equals(defaultOperator) && !hasParam) {
+            // For non-parameter fields: $self->{field} //= default
             BinaryOperatorNode initialization = new BinaryOperatorNode("//=", selfField, defaultValue, 0);
             initialization.setAnnotation("fieldInitializer", true);
             return initialization;
@@ -587,10 +678,13 @@ public class ClassTransformer {
      * This modifies the method in place.
      */
     private static void transformMethod(SubroutineNode method, List<OperatorNode> fields) {
-        if (method.getBooleanAnnotation("methodSelfInjected")) {
+        if (method.block == null || !(method.block instanceof BlockNode methodBody)) {
             return;
         }
-        if (method.block == null || !(method.block instanceof BlockNode methodBody)) {
+
+        methodBody.setAnnotation("isClassMethod", true);
+
+        if (method.getBooleanAnnotation("methodSelfInjected")) {
             return;
         }
 
@@ -718,6 +812,19 @@ public class ClassTransformer {
 
         // Create assignment: @ISA = ('ParentClass')
         return new BinaryOperatorNode("=", isaArray, parentListNode, 0);
+    }
+
+    /** Seal a class's inheritance list after its generated {@code :isa} assignment. */
+    private static Node generateReadonlyIsa(String className) {
+        OperatorNode isaArray = new OperatorNode("@",
+                new IdentifierNode(className + "::ISA", 0), 0);
+        OperatorNode isaReference = new OperatorNode("\\", isaArray, 0);
+        ListNode args = new ListNode(0);
+        args.elements.add(isaReference);
+        args.elements.add(new NumberNode("1", 0));
+        OperatorNode call = new OperatorNode("&",
+                new IdentifierNode("Internals::SvREADONLY", 0), 0);
+        return new BinaryOperatorNode("(", call, args, 0);
     }
 
     /**

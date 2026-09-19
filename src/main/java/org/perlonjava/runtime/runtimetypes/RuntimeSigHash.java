@@ -3,6 +3,9 @@ package org.perlonjava.runtime.runtimetypes;
 import java.util.List;
 import java.util.Set;
 
+import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.perlmodule.Warnings;
+
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 
 /**
@@ -89,6 +92,46 @@ public class RuntimeSigHash extends RuntimeHash {
         }
     }
 
+    /** Reject assignments to names that are neither OS signals nor Perl hooks. */
+    @Override
+    public void put(String key, RuntimeScalar value) {
+        if (!KNOWN_SIGNALS.contains(key)) {
+            String visibleKey = key.replace("\0", "\\0");
+            int nulIndex = key.indexOf('\0');
+            String baseSignal = nulIndex >= 0 ? key.substring(0, nulIndex) : key;
+            // A malformed OS signal name is a Perl warning, routed through
+            // __WARN__, rather than an exception.  Signal hooks (which begin
+            // with an underscore) retain the distinct "No such hook" error.
+            if (!baseSignal.startsWith("_") && (nulIndex >= 0 || !KNOWN_SIGNALS.contains(baseSignal))) {
+                if (Warnings.warningManager.isWarningEnabled("signal")) {
+                    WarnDie.warn(new RuntimeScalar("No such signal: SIG" + visibleKey), new RuntimeScalar());
+                }
+                return;
+            }
+            // Perl renders embedded NUL bytes in an unknown hook name as the
+            // visible `\\0` spelling rather than letting a raw NUL leak into
+            // the diagnostic stream.
+            throw new PerlCompilerException("No such hook: " + visibleKey);
+        }
+        super.put(key, value);
+    }
+
+    /** A malformed OS signal is warned about and must not vivify a %SIG slot. */
+    private RuntimeScalar malformedSignalSink(String key) {
+        int nulIndex = key.indexOf('\0');
+        String baseSignal = nulIndex >= 0 ? key.substring(0, nulIndex) : key;
+        if (baseSignal.startsWith("_") || (nulIndex < 0 && KNOWN_SIGNALS.contains(baseSignal))) {
+            return null;
+        }
+        if (Warnings.warningManager.isWarningEnabled("signal")) {
+            WarnDie.warn(new RuntimeScalar("No such signal: SIG" + key.replace("\0", "\\0")),
+                    new RuntimeScalar());
+        }
+        // HASH_SET writes through its returned lvalue.  A detached scalar makes
+        // that write a no-op for %SIG, matching Perl's rejected signal slot.
+        return new RuntimeScalar();
+    }
+
     /**
      * Get an element by key, auto-qualifying string handler values for known signals.
      */
@@ -96,6 +139,10 @@ public class RuntimeSigHash extends RuntimeHash {
     public RuntimeScalar get(String key) {
         if (type == TIED_HASH) {
             return get(new RuntimeScalar(key));
+        }
+        RuntimeScalar malformedSignal = malformedSignalSink(key);
+        if (malformedSignal != null) {
+            return malformedSignal;
         }
         var value = elements.get(key);
         if (value != null) {
@@ -113,6 +160,10 @@ public class RuntimeSigHash extends RuntimeHash {
         return switch (this.type) {
             case PLAIN_HASH, AUTOVIVIFY_HASH -> {
                 String key = keyScalar.toString();
+                RuntimeScalar malformedSignal = malformedSignalSink(key);
+                if (malformedSignal != null) {
+                    yield malformedSignal;
+                }
                 var value = elements.get(key);
                 if (value != null) {
                     qualifyIfNeeded(key, value);

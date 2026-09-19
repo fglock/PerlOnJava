@@ -62,6 +62,16 @@ public class ListParser {
             expr = new ListNode(parseList(parser, ")", 0), parser.tokenIndex);
             if (expr.elements.size() > 1) {
                 if (tooManyArgsForBuiltin != null) {
+                    if (tooManyArgsForBuiltin.equals("undef")) {
+                        int closeIndex = Math.max(0, parser.tokenIndex - 1);
+                        int argumentIndex = Math.max(0, closeIndex - 1);
+                        var location = parser.ctx.errorUtil.getSourceLocationAccurate(closeIndex);
+                        String near = TokenUtils.toText(parser.tokens, argumentIndex, closeIndex);
+                        parser.deferDiagnostic("Too many arguments for undef operator at "
+                                + location.fileName() + " line " + location.lineNumber()
+                                + ", near \"" + near + "\"\n");
+                        return expr;
+                    }
                     parser.throwError("Too many arguments for " + tooManyArgsForBuiltin);
                 } else {
                     parser.throwError("syntax error");
@@ -334,6 +344,11 @@ public class ListParser {
      * @throws PerlCompilerException If the syntax is incorrect or the minimum number of items is not met.
      */
     static List<Node> parseList(Parser parser, String close, int minItems) {
+        return parseList(parser, close, minItems, -1);
+    }
+
+    /** Parse a delimited list, optionally retaining its opening token for diagnostics. */
+    static List<Node> parseList(Parser parser, String close, int minItems, int openingTokenIndex) {
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseList start");
         ListNode expr;
 
@@ -344,11 +359,28 @@ public class ListParser {
             TokenUtils.consume(parser);
             expr = new ListNode(parser.tokenIndex);
         } else {
-            expr = ListNode.makeList(parser.parseExpression(0));
+            try {
+                expr = ListNode.makeList(parser.parseExpression(0));
+            } catch (PerlCompilerException error) {
+                int previousToken = parser.tokenIndex - 1;
+                if (openingTokenIndex >= 0 && previousToken >= 0
+                        && ((close.equals("]") && tokensText(parser, previousToken).equals("}"))
+                            || (close.equals("}") && tokensText(parser, previousToken).equals("]")))) {
+                    throw new PerlCompilerException(
+                            parser.ctx.errorUtil.errorMessageIncludingDelimiter(openingTokenIndex, "syntax error"));
+                }
+                throw error;
+            }
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseList end at " + TokenUtils.peek(parser));
 
             // Check for closing delimiter with better error message for hash/array literals
             LexerToken closingToken = TokenUtils.peek(parser);
+            if (openingTokenIndex >= 0 && closingToken.type == LexerTokenType.OPERATOR
+                    && ((close.equals("]") && closingToken.text.equals("}"))
+                        || (close.equals("}") && closingToken.text.equals("]")))) {
+                throw new PerlCompilerException(
+                        parser.ctx.errorUtil.errorMessageIncludingDelimiter(openingTokenIndex, "syntax error"));
+            }
             if (closingToken.type == LexerTokenType.EOF && (close.equals("}") || close.equals("]"))) {
                 String fileName = parser.ctx.errorUtil.getFileName();
                 int lineNum = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex);
@@ -367,6 +399,10 @@ public class ListParser {
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseList end");
 
         return expr.elements;
+    }
+
+    private static String tokensText(Parser parser, int index) {
+        return parser.tokens.get(index).text;
     }
 
     /**

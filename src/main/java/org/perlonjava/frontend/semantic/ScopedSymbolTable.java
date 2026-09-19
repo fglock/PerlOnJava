@@ -114,6 +114,9 @@ public class ScopedSymbolTable {
     // execute ownership without baking a particular engine's bit layout into
     // the AST.
     private final Stack<Integer> regexDebugFlagsStack = new Stack<>();
+    // `use VERSION` is lexical: a second declaration in the same scope is
+    // rejected, while an inner block gets its own declaration state.
+    private final Stack<String> useVersionStack = new Stack<>();
     // A stack to manage nested scopes of symbol tables.
     private final Stack<SymbolTable> symbolTableStack = new Stack<>();
     private final Stack<PackageInfo> packageStack = new Stack<>();
@@ -150,6 +153,13 @@ public class ScopedSymbolTable {
         if (sayBit != null) {
             defaultFeatures |= (1 << sayBit);
         }
+        // This compatibility feature belongs to Perl's default bundle.  Its
+        // bit must be present even when the rest of the current-version
+        // bundle remains opt-in, so `no feature` can disable it lexically.
+        Integer apostropheSeparatorBit = featureBitPositions.get("apostrophe_as_package_separator");
+        if (apostropheSeparatorBit != null) {
+            defaultFeatures |= (1 << apostropheSeparatorBit);
+        }
         featureFlagsStack.push(defaultFeatures);
         postderefQqStack.push(false);
         enhancedXxStack.push(false);
@@ -157,6 +167,7 @@ public class ScopedSymbolTable {
         strictOptionsStack.push(0);
         regexModifierStack.push("");
         regexDebugFlagsStack.push(0);
+        useVersionStack.push(null);
         // Initialize the package name
         packageStack.push(new PackageInfo("main", false, null));
         // Initialize the subroutine stack with empty string (no subroutine)
@@ -235,6 +246,7 @@ public class ScopedSymbolTable {
         strictOptionsStack.push(strictOptionsStack.peek());
         regexModifierStack.push(regexModifierStack.peek());
         regexDebugFlagsStack.push(regexDebugFlagsStack.peek());
+        useVersionStack.push(null);
 
         // Return the current size of the symbol table stack as the scope index
         return symbolTableStack.size() - 1;
@@ -278,6 +290,7 @@ public class ScopedSymbolTable {
             strictOptionsStack.pop();
             regexModifierStack.pop();
             regexDebugFlagsStack.pop();
+            useVersionStack.pop();
         }
         // Propagate the child scope's index to the parent to prevent slot reuse.
         // This ensures that local variable slots allocated inside conditional branches
@@ -286,6 +299,14 @@ public class ScopedSymbolTable {
         if (symbolTableStack.peek().index < childIndex) {
             symbolTableStack.peek().index = childIndex;
         }
+    }
+
+    public String getUseVersion() {
+        return useVersionStack.peek();
+    }
+
+    public void setUseVersion(String version) {
+        useVersionStack.set(useVersionStack.size() - 1, version);
     }
 
     /**

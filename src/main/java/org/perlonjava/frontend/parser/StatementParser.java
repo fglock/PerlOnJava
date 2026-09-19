@@ -46,6 +46,21 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  * use declarations, and package declarations.
  */
 public class StatementParser {
+    /** Mark the source-side subtree synthesized into a given block.  Backends
+     * need this provenance to distinguish a legal internal goto from a jump
+     * which enters the block and skips topicalizer setup. */
+    private static void markInsideGiven(Node node) {
+        if (node == null) return;
+        node.setAnnotation("insideGivenBlock", true);
+        if (node instanceof BlockNode block) { for (Node child : block.elements) markInsideGiven(child); return; }
+        if (node instanceof ListNode list) { for (Node child : list.elements) markInsideGiven(child); return; }
+        if (node instanceof ArrayLiteralNode array) { for (Node child : array.elements) markInsideGiven(child); return; }
+        if (node instanceof HashLiteralNode hash) { for (Node child : hash.elements) markInsideGiven(child); return; }
+        if (node instanceof OperatorNode op) { markInsideGiven(op.operand); return; }
+        if (node instanceof BinaryOperatorNode binary) { markInsideGiven(binary.left); markInsideGiven(binary.right); return; }
+        if (node instanceof IfNode conditional) { markInsideGiven(conditional.condition); markInsideGiven(conditional.thenBranch); markInsideGiven(conditional.elseBranch); return; }
+        if (node instanceof TernaryOperatorNode ternary) { markInsideGiven(ternary.condition); markInsideGiven(ternary.trueExpr); markInsideGiven(ternary.falseExpr); }
+    }
     private static Stack<BitSet> cloneBitSetStack(Stack<BitSet> source) {
         Stack<BitSet> copy = new Stack<>();
         for (BitSet flags : source) {
@@ -138,7 +153,7 @@ public class StatementParser {
             int declIndex = parser.tokenIndex;
             parser.parsingForLoopVariable = true;
             TokenUtils.consume(parser, LexerTokenType.IDENTIFIER);
-            varNode = OperatorParser.parseVariableDeclaration(parser, token.text, declIndex);
+            varNode = OperatorParser.parseVariableDeclaration(parser, token.text, declIndex, declIndex);
             parser.parsingForLoopVariable = false;
         } else if (token.type == LexerTokenType.IDENTIFIER && token.text.equals("CORE")
                 && parser.tokens.get(parser.tokenIndex).text.equals("CORE")
@@ -153,7 +168,7 @@ public class StatementParser {
                 int declIndex = parser.tokenIndex;
                 parser.parsingForLoopVariable = true;
                 TokenUtils.consume(parser, LexerTokenType.IDENTIFIER);
-                varNode = OperatorParser.parseVariableDeclaration(parser, coreOp.text, declIndex);
+                varNode = OperatorParser.parseVariableDeclaration(parser, coreOp.text, declIndex, declIndex);
                 parser.parsingForLoopVariable = false;
             } else {
                 parser.parsingForLoopVariable = true;
@@ -173,6 +188,20 @@ public class StatementParser {
             Node operand = ParsePrimary.parsePrimary(parser);
             parser.parsingForLoopVariable = false;
             varNode = new OperatorNode("\\", operand, parser.tokenIndex);
+        }
+
+        validateDeclaredReferenceForeachVariables(parser, varNode);
+
+        // A foreach iterator may be a scalar, an aggregate, or a declared
+        // reference, but never a typeglob.  Parsing `our *name` as a normal
+        // declaration leaves the later loop-header parser with an unrelated
+        // syntax error.  Perl diagnoses the missing scalar sigil instead.
+        if (varNode instanceof OperatorNode declaration
+                && (declaration.operator.equals("my") || declaration.operator.equals("our")
+                    || declaration.operator.equals("state"))
+                && declaration.operand instanceof OperatorNode target
+                && target.operator.equals("*")) {
+            parser.throwCleanError("Missing $ on loop variable");
         }
 
         // If we didn't parse a loop variable, Perl expects the '(' of the for(..) header next.
@@ -217,6 +246,36 @@ public class StatementParser {
             an.setAnnotation("postBlockHintHashId", HintHashRegistry.snapshotCurrentHintHash());
         }
         return node;
+    }
+
+    /**
+     * Perl limits foreach iterator declarations to 256 variables when any
+     * declaration is a declared reference, and permits a declared-reference
+     * iterator only among the first 24 variables.
+     */
+    private static void validateDeclaredReferenceForeachVariables(Parser parser, Node variable) {
+        if (!(variable instanceof OperatorNode declaration)
+                || !(declaration.operator.equals("my")
+                || declaration.operator.equals("our")
+                || declaration.operator.equals("state"))
+                || !(declaration.operand instanceof ListNode variables)) {
+            return;
+        }
+
+        int declaredReferenceIndex = -1;
+        for (int i = 0; i < variables.elements.size(); i++) {
+            Node item = variables.elements.get(i);
+            if (item instanceof AbstractNode annotated
+                    && annotated.getBooleanAnnotation("isDeclaredReference")) {
+                declaredReferenceIndex = i;
+                if (i >= 24) {
+                    parser.throwCleanError("Cannot use declared reference iterator variables in foreach loop past the 24th variable");
+                }
+            }
+        }
+        if (declaredReferenceIndex >= 0 && variables.elements.size() > 256) {
+            parser.throwCleanError("Cannot use more than 256 iterator variables on a foreach loop if any are declared refs");
+        }
     }
 
     /**
@@ -445,6 +504,17 @@ public class StatementParser {
         // Parse the catch block
         TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "catch"
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
+        LexerToken catchToken = TokenUtils.peek(parser);
+        if (catchToken.type == LexerTokenType.IDENTIFIER
+                && (catchToken.text.equals("my") || catchToken.text.equals("our")
+                || catchToken.text.equals("state"))) {
+            var location = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
+            String near = "(" + catchToken.text;
+            String at = " at " + location.fileName() + " line " + location.lineNumber();
+            throw new PerlParserException("Can't redeclare catch variable as \""
+                    + catchToken.text + "\"" + at + ", near \"" + near + "\"\n"
+                    + "syntax error" + at + ", near \"" + near + " \"\n");
+        }
         // Suppress strict vars check for the catch variable — catch ($e) implicitly
         // declares $e as a lexical variable, similar to my $e.
         boolean savedParsingDeclaration = parser.parsingDeclaration;
@@ -562,6 +632,9 @@ public class StatementParser {
      */
     public static Node parseWhenStatement(Parser parser) {
         int index = parser.tokenIndex;
+        if (parser.parsingGivenDepth == 0) {
+            parser.throwCleanError(index, "Can't \"when\" outside a topicalizer");
+        }
         TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "when"
 
         // Parse the when condition (can be parenthesized or not)
@@ -596,6 +669,11 @@ public class StatementParser {
         if (whenResult == null) {
             whenResult = new OperatorNode("undef", new ListNode(index), index);
         }
+        // The final expression is moved to the synthetic last annotation and
+        // is therefore no longer reachable from the enclosing given block by
+        // ordinary tree traversal.  Preserve its lexical provenance for goto
+        // entry validation in the backends.
+        whenResult.setAnnotation("insideGivenBlock", true);
         OperatorNode implicitLast = new OperatorNode("last", new ListNode(index), index);
         implicitLast.setAnnotation("implicitGivenLast", true);
         // Store the value out-of-band so generic visitors never mistake it for
@@ -661,6 +739,10 @@ public class StatementParser {
      * @return A BlockNode representing the default block
      */
     public static Node parseDefaultStatement(Parser parser) {
+        int index = parser.tokenIndex;
+        if (parser.parsingGivenDepth == 0) {
+            parser.throwCleanError(index, "Can't \"default\" outside a topicalizer");
+        }
         TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "default"
 
         // Parse the default block
@@ -701,7 +783,13 @@ public class StatementParser {
 
         // Parse the entire block content as a normal block
         // This handles regular statements as well as when/default
-        BlockNode blockContent = ParseBlock.parseBlock(parser);
+        parser.parsingGivenDepth++;
+        BlockNode blockContent;
+        try {
+            blockContent = ParseBlock.parseBlock(parser);
+        } finally {
+            parser.parsingGivenDepth--;
+        }
 
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
@@ -723,9 +811,11 @@ public class StatementParser {
                 index));
 
         // Add all the statements from the block
+        markInsideGiven(blockContent);
         statements.addAll(blockContent.elements);
 
         BlockNode givenBlock = new BlockNode(statements, index, parser);
+        givenBlock.setAnnotation("givenBlock", true);
         // Mark as a loop block so that the implicit `last` emitted by each
         // when-clause breaks out of this given-block instead of escaping
         // to an outer loop or the program top level.
@@ -825,6 +915,7 @@ public class StatementParser {
                                 Configuration.getPerlVersionVString(),
                                 versionScalar,
                                 "Perl");
+                        rejectRepeatedUseVersion(parser, versionScalar);
                     }
 
                     if (!isNoDeclaration) {
@@ -1138,6 +1229,33 @@ public class StatementParser {
         return result;
     }
 
+    private static void rejectRepeatedUseVersion(Parser parser, RuntimeScalar version) {
+        String requested = normalizeVersion(version);
+        String previous = parser.ctx.symbolTable.getUseVersion();
+        if (previous != null) {
+            String message;
+            if (versionAtLeast(requested, 5, 39)) {
+                message = "use VERSION of 5.39 or above is not permitted while another use VERSION is in scope";
+            } else if (versionAtLeast(previous, 5, 39)) {
+                message = "use VERSION is not permitted while another use VERSION of 5.39 or above is in scope";
+            } else if (versionAtLeast(previous, 5, 11) && !versionAtLeast(requested, 5, 11)) {
+                message = "Downgrading a use VERSION declaration to below v5.11 is not permitted";
+            } else {
+                message = "Changing use VERSION while another use VERSION is in scope is not permitted";
+            }
+            var loc = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
+            throw new PerlParserException(message + " at " + loc.fileName() + " line " + loc.lineNumber() + ".");
+        }
+        parser.ctx.symbolTable.setUseVersion(requested);
+    }
+
+    private static boolean versionAtLeast(String version, int major, int minor) {
+        String[] parts = version.split("\\.");
+        int actualMajor = Integer.parseInt(parts[0]);
+        int actualMinor = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
+        return actualMajor > major || (actualMajor == major && actualMinor >= minor);
+    }
+
     /**
      * Parses a package declaration.
      *
@@ -1177,6 +1295,23 @@ public class StatementParser {
 
         // Register this as a Perl 5.38+ class for proper stringification
         if (isClass) {
+            if (GlobalVariable.existsGlobalArray(packageName + "::ISA")
+                    && !GlobalVariable.getGlobalArray(packageName + "::ISA").elements.isEmpty()) {
+                throw PerlCompilerException.withSourceLocation(parser.tokenIndex,
+                        "Cannot create class " + packageName + " as it already has a non-empty @ISA",
+                        parser.ctx.errorUtil);
+            }
+            if (ClassRegistry.isClass(packageName)) {
+                // An eval may catch an incomplete class body's parse error before
+                // this declaration parser can roll back the provisional registry
+                // entry. Such a class never finished method registration, so it
+                // has no constructor and may be replaced by a complete class.
+                if (GlobalVariable.existsGlobalCodeRef(packageName + "::new")) {
+                    throw PerlCompilerException.withSourceLocation(parser.tokenIndex,
+                            "Cannot reopen existing class \"" + packageName + "\"", parser.ctx.errorUtil);
+                }
+                ClassRegistry.unregisterClass(packageName);
+            }
             ClassRegistry.registerClass(packageName);
         }
 
@@ -1211,7 +1346,18 @@ public class StatementParser {
             parseClassAttributes(parser, packageNode);
         }
 
-        BlockNode block = parseOptionalPackageBlock(parser, nameNode, packageNode);
+        BlockNode block;
+        try {
+            block = parseOptionalPackageBlock(parser, nameNode, packageNode);
+        } catch (PerlCompilerException error) {
+            // A class must be visible while its body is parsed so direct method
+            // calls receive class semantics.  Do not leave that provisional
+            // registration behind if an incomplete class body fails to parse.
+            if (isClass) {
+                ClassRegistry.unregisterClass(packageName);
+            }
+            throw error;
+        }
         if (block != null) return block;
 
         StatementResolver.parseStatementTerminator(parser);
@@ -1236,7 +1382,7 @@ public class StatementParser {
             if (deferredMethods != null) {
                 for (SubroutineNode method : deferredMethods) {
                     SubroutineParser.handleNamedSubWithFilter(parser, method.name, method.prototype,
-                            method.attributes, (BlockNode) method.block, false, null);
+                            method.attributes, (BlockNode) method.block, false, "method");
                 }
             }
 
@@ -1308,6 +1454,12 @@ public class StatementParser {
 
                 // Store parent class in annotations
                 packageNode.setAnnotation("parentClass", parentClass);
+
+                if (!ClassRegistry.isClass(parentClass)) {
+                    throw PerlCompilerException.withSourceLocation(packageNode.getIndex(),
+                            "Class :isa attribute requires a class but \"" + parentClass + "\" is not one",
+                            parser.ctx.errorUtil);
+                }
 
                 // Register in FieldRegistry for field inheritance tracking
                 // We'll register this after we know the class name
@@ -1395,8 +1547,10 @@ public class StatementParser {
 
             // Set flag if we're entering a class block
             boolean wasInClassBlock = parser.isInClassBlock;
+            String previousClassName = parser.currentClassName;
             if (isClass) {
                 parser.isInClassBlock = true;
+                parser.currentClassName = nameNode.name;
             }
 
             BlockNode block;
@@ -1417,6 +1571,7 @@ public class StatementParser {
             } finally {
                 // Always restore the isInClassBlock flag
                 parser.isInClassBlock = wasInClassBlock;
+                parser.currentClassName = previousClassName;
             }
 
             // Mark as scoped so BytecodeCompiler emits PUSH_PACKAGE (not SET_PACKAGE)
@@ -1459,7 +1614,7 @@ public class StatementParser {
                 if (deferredMethods != null) {
                     for (SubroutineNode method : deferredMethods) {
                         SubroutineParser.handleNamedSubWithFilter(parser, method.name, method.prototype,
-                                method.attributes, (BlockNode) method.block, false, null);
+                                method.attributes, (BlockNode) method.block, false, "method");
                     }
                 }
 

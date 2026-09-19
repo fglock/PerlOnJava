@@ -9,6 +9,7 @@ import org.perlonjava.frontend.astnode.StringNode;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.PerlParserException;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -74,16 +75,25 @@ public class ParseHeredoc {
             identifier = tokenText;
             TokenUtils.consume(parser);
         } else {
-            throw new PerlCompilerException(parser.tokenIndex, "Use of bare << to mean <<\"\" is forbidden", parser.ctx.errorUtil);
+            throwBareHeredocDiagnostic(parser);
         }
         node.setAnnotation("delimiter", delimiter);
         if (identifier.isEmpty()) {
             // Consume identifier string using `q()`
-            Node identifierNode = parseRawString(parser, "q");
+            Node identifierNode;
+            try {
+                identifierNode = parseRawString(parser, "q");
+            } catch (PerlCompilerException e) {
+                if (e.getMessage() != null && e.getMessage().startsWith("Can't find string terminator")) {
+                    throw PerlCompilerException.withSourceLocation(parser.tokenIndex,
+                            "Unterminated delimiter for here document", parser.ctx.errorUtil);
+                }
+                throw e;
+            }
             if (identifierNode instanceof StringNode stringNode) {
                 identifier = stringNode.value;
             } else {
-                throw new PerlCompilerException(parser.tokenIndex, "Use of bare << to mean <<\"\" is forbidden", parser.ctx.errorUtil);
+                throwBareHeredocDiagnostic(parser);
             }
         }
         node.setAnnotation("identifier", identifier);
@@ -107,6 +117,13 @@ public class ParseHeredoc {
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Heredoc " + node);
         parser.getHeredocNodes().add(node);
         return node;
+    }
+
+    /** Perl reports a bare heredoc marker without a generic parser excerpt. */
+    private static void throwBareHeredocDiagnostic(Parser parser) {
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
+        throw new PerlParserException("Use of bare << to mean <<\"\" is forbidden at "
+                + location.fileName() + " line " + location.lineNumber() + ".\n");
     }
 
     static void heredocError(Parser parser) {

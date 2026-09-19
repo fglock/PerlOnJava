@@ -313,6 +313,7 @@ public class PerlScriptExecutionTest extends PerlRuntimeTestBase {
      */
     private void executeTest(String filename) {
         // Load the Perl script as an InputStream
+        URL resourceUrl = getClass().getClassLoader().getResource(filename);
         InputStream inputStream = getClass().getClassLoader().getResourceAsStream(filename);
         assertNotNull(inputStream, "Resource file not found: " + filename);
 
@@ -329,7 +330,9 @@ public class PerlScriptExecutionTest extends PerlRuntimeTestBase {
             }
             CompilerOptions options = new CompilerOptions();
             options.code = content; // Set the code to be executed
-            options.fileName = filename; // Set the filename for reference
+            options.fileName = resourceUrl != null && resourceUrl.getProtocol().equals("file")
+                    ? Paths.get(resourceUrl.toURI()).toString()
+                    : filename;
 
             // Add the path to the Perl modules
             RuntimeArray.push(options.inc, new RuntimeScalar("src/main/perl/lib"));

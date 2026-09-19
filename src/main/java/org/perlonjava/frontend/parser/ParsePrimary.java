@@ -340,11 +340,11 @@ public class ParsePrimary {
 
             case "{":
                 // Curly braces create anonymous hash references
-                return new HashLiteralNode(ListParser.parseList(parser, "}", 0), parser.tokenIndex);
+                return new HashLiteralNode(ListParser.parseList(parser, "}", 0, parser.tokenIndex - 1), parser.tokenIndex);
 
             case "[":
                 // Square brackets create anonymous array references
-                return new ArrayLiteralNode(ListParser.parseList(parser, "]", 0), parser.tokenIndex);
+                return new ArrayLiteralNode(ListParser.parseList(parser, "]", 0, parser.tokenIndex - 1), parser.tokenIndex);
 
             case ".":
                 // Dot at the beginning of a primary expression is a fractional number (.5)

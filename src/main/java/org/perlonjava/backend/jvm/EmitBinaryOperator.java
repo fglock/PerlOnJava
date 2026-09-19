@@ -11,6 +11,7 @@ import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.astnode.NumberNode;
 import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.astnode.StringNode;
+import org.perlonjava.frontend.astnode.SubroutineNode;
 import org.perlonjava.runtime.operators.OperatorHandler;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
@@ -79,6 +80,9 @@ public class EmitBinaryOperator {
         }
 
         var right = node.right;
+        if (node.operator.equals("~~") && right instanceof SubroutineNode subroutine) {
+            subroutine.setAnnotation("smartmatchPredicate", true);
+        }
 
         // Special case for `isa` - left side can be bareword
         if (node.operator.equals("isa") && right instanceof IdentifierNode identifierNode) {

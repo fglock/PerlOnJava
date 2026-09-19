@@ -264,6 +264,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         // Misc
         put("isa", "isa", "org/perlonjava/runtime/operators/ReferenceOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("bless", "bless", "org/perlonjava/runtime/operators/ReferenceOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+        put("blessClassInstance", "blessClassInstance", "org/perlonjava/runtime/operators/ReferenceOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("ref", "ref", "org/perlonjava/runtime/operators/ReferenceOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
 
         put("caller", "callerWithSub", "org/perlonjava/runtime/runtimetypes/RuntimeCode", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;");
