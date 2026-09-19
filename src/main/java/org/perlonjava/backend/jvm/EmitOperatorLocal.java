@@ -42,8 +42,23 @@ public class EmitOperatorLocal {
             }
             if (dereferenceOperand instanceof OperatorNode dereference
                     && dereference.operator.equals("\\")) {
-                throw PerlCompilerException.withSourceLocation(node.getIndex(),
-                        "Can't localize through a reference", emitterVisitor.ctx.errorUtil);
+                // This error is runtime-visible: `eval { local %{$ref} }`
+                // must catch it rather than abort compilation of the outer
+                // program.  Match the interpreter's REJECT_LOCALIZE_REFERENCE
+                // opcode by evaluating the reference and rejecting it here.
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                        "rejectLocalizeThroughReference",
+                        "()V",
+                        false);
+                // The helper always throws, but retain a formal scalar result
+                // on the unreachable normal-flow path for ASM frame merging.
+                mv.visitFieldInsn(Opcodes.GETSTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache",
+                        "scalarUndef",
+                        "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+                EmitOperator.handleVoidContext(emitterVisitor);
+                return;
             }
         }
 
