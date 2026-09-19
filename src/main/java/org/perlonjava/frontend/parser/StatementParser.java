@@ -1351,7 +1351,7 @@ public class StatementParser {
 
         // Parse class attributes (e.g., :isa(ParentClass))
         if (isClass) {
-            parseClassAttributes(parser, packageNode);
+            parseClassAttributes(parser, packageNode, packageName);
         }
 
         BlockNode block;
@@ -1426,7 +1426,7 @@ public class StatementParser {
      * @param parser      The Parser instance
      * @param packageNode The OperatorNode representing the class declaration
      */
-    private static void parseClassAttributes(Parser parser, OperatorNode packageNode) {
+    private static void parseClassAttributes(Parser parser, OperatorNode packageNode, String className) {
         LexerToken token = TokenUtils.peek(parser);
 
         // Check for :isa attribute
@@ -1462,6 +1462,16 @@ public class StatementParser {
 
                 // Store parent class in annotations
                 packageNode.setAnnotation("parentClass", parentClass);
+
+                // A class declared as a nested package loads its enclosing
+                // class before validating :isa.  Perl does this while loading
+                // `A/B.pm` for `class A::B :isa(A)`, so A need not have been
+                // explicitly used by the child module.
+                if (!ClassRegistry.isClass(parentClass)
+                        && className.startsWith(parentClass + "::")) {
+                    ModuleOperators.require(new RuntimeScalar(
+                            NameNormalizer.moduleToFilename(parentClass)));
+                }
 
                 if (!ClassRegistry.isClass(parentClass)) {
                     throw PerlCompilerException.withSourceLocation(packageNode.getIndex(),
