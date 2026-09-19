@@ -56,6 +56,17 @@ public class BitwiseOperators {
         return unsignedResult(value.shiftRight((int) shift));
     }
 
+    /**
+     * Shift an ordinary native integer as a Perl unsigned value.  Java long
+     * overflow supplies the required low 64-bit truncation; unsignedResult
+     * retains a BigInteger only when the resulting UV cannot be represented
+     * as a non-negative signed long.
+     */
+    private static RuntimeScalar nativeUnsignedShift(long value, long shift, boolean left) {
+        if (shift >= 64) return RuntimeScalarCache.scalarZero;
+        return unsignedResult(left ? value << (int) shift : value >>> (int) shift);
+    }
+
     private static BigInteger exactInteger(RuntimeScalar scalar) {
         return scalar.type == RuntimeScalarType.INTEGER && scalar.value instanceof BigInteger
                 ? (BigInteger) scalar.value : null;
@@ -525,13 +536,12 @@ public class BitwiseOperators {
         // Fast path: both INTEGER with non-negative shift within Java's 64-bit word.
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
-        if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER
-                && exactInteger(arg2) == null) {
+        if (hasNativeInteger(runtimeScalar) && hasNativeInteger(arg2)) {
             long shift = arg2.getLong();
             if (shift >= 0) {
-                return unsignedShiftLeft(unsignedValue(runtimeScalar), shift);
+                return nativeUnsignedShift(((Number) runtimeScalar.value).longValue(), shift, true);
             } else if (shift != Long.MIN_VALUE) {
-                return unsignedShiftRight(unsignedValue(runtimeScalar), -shift);
+                return nativeUnsignedShift(((Number) runtimeScalar.value).longValue(), -shift, false);
             }
             return RuntimeScalarCache.scalarZero;
         }
@@ -616,13 +626,12 @@ public class BitwiseOperators {
         // Fast path: both INTEGER with non-negative shift within Java's 64-bit word.
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
-        if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER
-                && exactInteger(arg2) == null) {
+        if (hasNativeInteger(runtimeScalar) && hasNativeInteger(arg2)) {
             long shift = arg2.getLong();
             if (shift >= 0) {
-                return unsignedShiftRight(unsignedValue(runtimeScalar), shift);
+                return nativeUnsignedShift(((Number) runtimeScalar.value).longValue(), shift, false);
             } else if (shift != Long.MIN_VALUE) {
-                return unsignedShiftLeft(unsignedValue(runtimeScalar), -shift);
+                return nativeUnsignedShift(((Number) runtimeScalar.value).longValue(), -shift, true);
             }
             return RuntimeScalarCache.scalarZero;
         }
