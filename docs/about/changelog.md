@@ -29,6 +29,9 @@ priorities and future plans.
 - Avoid arbitrary-precision allocation for ordinary native-integer unsigned
   shifts while retaining the existing wide-integer fallback.
 
+- Avoid materializing discarded simple list-assignment values for ordinary
+  scalar argument binding while retaining the observable result path.
+
 - Avoid redundant active-runtime lookups while binding and restoring implicit
   global `$_` `foreach` aliases.
 
