@@ -527,6 +527,7 @@ public class ClassTransformer {
         BinaryOperatorNode selfField = new BinaryOperatorNode("->", selfVar, hashSubscript, 0);
 
         Node value;
+        Node parameterAccess = null;
         if (hasParam) {
             // $args{paramname} // default_or_undef
             // Use correct structure: %args becomes $args in hash access
@@ -535,6 +536,7 @@ public class ClassTransformer {
             argKeyList.add(new StringNode(paramName, 0));
             HashLiteralNode argHashSubscript = new HashLiteralNode(argKeyList, 0);
             BinaryOperatorNode argsAccess = new BinaryOperatorNode("{", argsVar, argHashSubscript, 0);
+            parameterAccess = argsAccess;
 
             if (hasDefault) {
                 // Handle different default operators:
@@ -542,11 +544,19 @@ public class ClassTransformer {
                 // //= means use default only if param is undefined
                 // ||= means use default only if param is false/empty
                 if ("=".equals(defaultOperator)) {
-                    // Standard default - use // operator (defined-or)
+                    // `=` defaults a missing parameter, but preserves an
+                    // explicitly supplied undef. Defined-or cannot make that
+                    // distinction, so test existence of the named hash entry.
+                    OperatorNode exists = new OperatorNode("exists",
+                            new ListNode(List.of(argsAccess), 0), 0);
+                    value = new TernaryOperatorNode("?", exists, argsAccess, defaultValue, 0);
+                } else if ("//=".equals(defaultOperator)) {
+                    // The parameter hash entry may be an undef proxy. Resolve
+                    // its definedness before assigning it to the object field.
                     value = new BinaryOperatorNode("//", argsAccess, defaultValue, 0);
+                } else if ("||=".equals(defaultOperator)) {
+                    value = new BinaryOperatorNode("||", argsAccess, defaultValue, 0);
                 } else {
-                    // For //= and ||=, the value itself acts as the default
-                    // We'll handle this differently below
                     value = argsAccess;
                 }
             } else if ("@".equals(sigil)) {
@@ -579,9 +589,22 @@ public class ClassTransformer {
         }
 
         // Handle different assignment operators for field initialization
-        if (hasDefault && "//=".equals(defaultOperator)) {
-            // For //= operator: $self->{field} //= default
-            // This assigns the default only if the field is undefined
+        if (hasParam && hasDefault && "||=".equals(defaultOperator)) {
+            // Preserve ||= as an lvalue operation.  Its argument may be a
+            // hash-entry proxy whose truth value must be resolved after it is
+            // installed in the object field.
+            List<Node> statements = new ArrayList<>();
+            BinaryOperatorNode parameterAssignment = new BinaryOperatorNode("=", selfField, parameterAccess, 0);
+            parameterAssignment.setAnnotation("fieldInitializer", true);
+            statements.add(parameterAssignment);
+            BinaryOperatorNode initialization = new BinaryOperatorNode("||=", selfField, defaultValue, 0);
+            initialization.setAnnotation("fieldInitializer", true);
+            statements.add(initialization);
+            BlockNode initializationBlock = new BlockNode(statements, 0);
+            initializationBlock.setAnnotation("fieldInitializer", true);
+            return initializationBlock;
+        } else if (hasDefault && "//=".equals(defaultOperator) && !hasParam) {
+            // For non-parameter fields: $self->{field} //= default
             BinaryOperatorNode initialization = new BinaryOperatorNode("//=", selfField, defaultValue, 0);
             initialization.setAnnotation("fieldInitializer", true);
             return initialization;
