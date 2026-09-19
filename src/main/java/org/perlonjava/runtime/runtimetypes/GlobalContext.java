@@ -136,7 +136,10 @@ public class GlobalContext {
             GlobalVariable.globalVariables.put("main::\\", ors);
         }
         GlobalVariable.getGlobalVariable("main::$").set(ForkOpenState.initialProcessId());
-        GlobalVariable.getGlobalVariable("main::?");
+        // Perl starts with a successful child status. Leaving this as undef
+        // makes numeric loop conditions see a nonzero value and changes
+        // control flow before the first child process is run.
+        GlobalVariable.getGlobalVariable("main::?").set(0);
         // Only set $0 if it hasn't been set yet - prevents overwriting during re-entrant calls
         // (e.g., when require() is called during module initialization)
         if (!GlobalVariable.globalVariables.containsKey("main::0")) {
