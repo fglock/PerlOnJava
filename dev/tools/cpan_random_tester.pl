@@ -84,8 +84,9 @@ my $MAX_CAPTURE_BYTES   = 1_000_000; # keep only this much child output in memor
 # cap is extended when necessary so every exception gets its full soft timeout
 # plus the configured idle grace period.
 my %MODULE_TIMEOUT_SECONDS = (
-    'DBIx::Class'     => 3600,
-    'Image::ExifTool' => 3600,
+    'DBIx::Class'        => 3600,
+    'Excel::Writer::XLSX' => 7200,
+    'Image::ExifTool'    => 3600,
 );
 
 # CPAN package index
@@ -2207,7 +2208,7 @@ Behavior:
   - Targets are randomly chosen from modules that haven't passed yet
     (or from --modules if specified).
   - Dependencies discovered during a run are recorded too (PASS/FAIL).
-  - A few heavy targets (e.g. DBIx::Class) have a higher per-module timeout in the script.
+  - A few heavy targets (e.g. DBIx::Class and Excel::Writer::XLSX) have a higher per-module timeout in the script.
     Their effective hard cap is also extended to include the configured idle
     grace period, so a smaller global --max-runtime does not cancel the exception.
   - Long targets are not killed merely for crossing --timeout if their output

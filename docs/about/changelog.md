@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Extend CPAN release acceptance coverage to Excel::Writer::XLSX with a timeout suitable for its large test suite.
+
 - Restore `local` compatibility for tied hash and array elements, sparse
   arrays, magic stashes, implicit `$_` foreach aliases (including early
   return), and localized regex captures on both execution backends.
