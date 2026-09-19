@@ -1231,7 +1231,22 @@ public class StringParser {
             case "/":
             case "//":
             case "/=":
-                return parseRegexMatch(parser.ctx, operator, rawStr, parser);
+                try {
+                    return parseRegexMatch(parser.ctx, operator, rawStr, parser);
+                } catch (PerlCompilerException e) {
+                    if (e.getMessage() != null
+                            && e.getMessage().startsWith("Missing right curly or square bracket")
+                            && e.getMessage().contains("at end of line")) {
+                        var location = parser.ctx.errorUtil.getSourceLocationAccurate(rawStr.index);
+                        throw new PerlCompilerException("Missing right curly or square bracket at "
+                                + location.fileName() + " line " + location.lineNumber() + ", within pattern\n"
+                                + "syntax error at " + location.fileName() + " line "
+                                + location.lineNumber() + ", at EOF\n"
+                                + "Execution of " + location.fileName()
+                                + " aborted due to compilation errors.\n");
+                    }
+                    throw e;
+                }
             case "s":
                 return parseRegexReplace(parser.ctx, rawStr, parser);
             case "\"":
