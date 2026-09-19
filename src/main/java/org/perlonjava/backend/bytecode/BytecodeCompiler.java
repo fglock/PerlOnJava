@@ -2980,6 +2980,19 @@ public class BytecodeCompiler implements Visitor {
         int targetReg;
         Node left = scalarizeSingleElementSliceLvalue(node.left);
 
+        // Match the JVM backend: a parenthesized single-target state
+        // declaration is a scalar lvalue for logical assignment, not a list
+        // target.  Keeping the ListNode would assign to a temporary list and
+        // leave the state scalar undef on every call.
+        if (left instanceof OperatorNode declaration
+                && "state".equals(declaration.operator)
+                && declaration.operand instanceof ListNode list
+                && list.elements.size() == 1
+                && list.elements.getFirst() instanceof OperatorNode target
+                && "$@%".contains(target.operator)) {
+            left = new OperatorNode("state", target, declaration.tokenIndex);
+        }
+
         if (left instanceof ListNode listNode && listNode.elements.size() == 1) {
             compileNode(listNode.elements.get(0), -1, RuntimeContextType.LVALUE);
             return lastResultReg;
@@ -3016,7 +3029,7 @@ public class BytecodeCompiler implements Visitor {
                 }
             } else {
                 // Other operator (not simple variable) - compile as lvalue expression
-                compileNode(node.left, -1, RuntimeContextType.LVALUE);
+                compileNode(left, -1, RuntimeContextType.LVALUE);
                 targetReg = lastResultReg;
             }
         } else {

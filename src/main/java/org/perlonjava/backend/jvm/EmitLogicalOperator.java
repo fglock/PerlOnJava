@@ -164,6 +164,19 @@ public class EmitLogicalOperator {
     }
 
     private static Node scalarizeSingleElementSliceLvalue(Node left) {
+        // `state ($value) //= ...` has a declaration ListNode around a single
+        // scalar target.  Logical assignment is scalar here, just as it is for
+        // `state $value //= ...`; retaining the list makes the assignment write
+        // to a temporary RuntimeList instead of the persistent scalar.
+        if (left instanceof OperatorNode declaration
+                && "state".equals(declaration.operator)
+                && declaration.operand instanceof ListNode list
+                && list.elements.size() == 1
+                && list.elements.getFirst() instanceof OperatorNode target
+                && "$@%".contains(target.operator)) {
+            return new OperatorNode("state", target, declaration.tokenIndex);
+        }
+
         // Parentheses are represented as a one-element ListNode in some nested
         // expression shapes.  Perl still treats ($scalar) as the scalar lvalue;
         // emitting the list node directly leaves a RuntimeList on the stack and

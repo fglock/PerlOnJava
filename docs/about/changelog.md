@@ -116,7 +116,8 @@ priorities and future plans.
   closure capture, and experimental `@_` warnings.
 
 - Preserve state-variable initialization across `goto` loops after nested
-  closure compilation.
+  closure compilation and parenthesized logical defaults on both execution
+  backends.
 
 - Preserve async Future ownership across interpreter suspension and resume.
 
