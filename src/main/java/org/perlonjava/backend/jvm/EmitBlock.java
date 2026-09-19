@@ -31,6 +31,15 @@ public class EmitBlock {
                     out.add(sigilNode);
                 }
             }
+            if ("state".equals(op.operator) && op.operand instanceof ListNode listNode) {
+                for (Node element : listNode.elements) {
+                    if (element instanceof OperatorNode sigilNode
+                            && sigilNode.operand instanceof IdentifierNode
+                            && "$@%".contains(sigilNode.operator)) {
+                        out.add(sigilNode);
+                    }
+                }
+            }
             collectStateDeclSigilNodes(op.operand, out);
             return;
         }

@@ -656,6 +656,12 @@ public class OperatorParser {
             for (int i = 0; i < listNode.elements.size(); i++) {
                 Node element = listNode.elements.get(i);
                 if (element instanceof OperatorNode operandNode) {
+                    if (operator.equals("state") && operandNode.id == 0) {
+                        // Parenthesized declarations keep their targets in a
+                        // ListNode. Give each target the same persistent id
+                        // assigned to a direct `state $var` declaration.
+                        operandNode.id = EmitterMethodCreator.classCounter.getAndIncrement();
+                    }
                     // Check if this element is a reference operator (backslash)
                     // This handles cases like my(\$x) where the backslash is inside the parentheses
                     if (operandNode.operator.equals("\\") && operandNode.operand instanceof OperatorNode varNode) {
