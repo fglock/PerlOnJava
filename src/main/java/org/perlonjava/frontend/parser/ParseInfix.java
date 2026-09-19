@@ -561,13 +561,6 @@ public class ParseInfix {
                         && (token.text.equals("e") || token.text.equals("E"))) {
                     throwMissingOperatorBeforeIncompleteDecimalExponent(parser, number, token, operatorIndex);
                 }
-                if (token.type == LexerTokenType.IDENTIFIER
-                        && !ParserTables.INFIX_OP.contains(token.text)) {
-                    NumberNode concatenatedNumber = rightmostConcatenatedNumber(left);
-                    if (concatenatedNumber != null) {
-                        throwMissingOperatorBeforeBareword(parser, concatenatedNumber, token, operatorIndex);
-                    }
-                }
                 // `00my sub\0` reaches infix parsing after the numeric literal.
                 // Perl nevertheless diagnoses the incomplete lexical-sub
                 // declaration, rather than reporting a generic infix syntax
@@ -591,6 +584,13 @@ public class ParseInfix {
                         if (nulName) {
                             parser.throwCleanError("Missing name in \"my sub\"");
                         }
+                    }
+                }
+                if (token.type == LexerTokenType.IDENTIFIER
+                        && !ParserTables.INFIX_OP.contains(token.text)) {
+                    NumberNode concatenatedNumber = rightmostConcatenatedNumber(left);
+                    if (concatenatedNumber != null) {
+                        throwMissingOperatorBeforeBareword(parser, concatenatedNumber, token, operatorIndex);
                     }
                 }
                 // Special check: if this is an IDENTIFIER that's a quote-like operator, it's not an infix operator
