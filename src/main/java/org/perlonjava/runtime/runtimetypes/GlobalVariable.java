@@ -1330,8 +1330,11 @@ public class GlobalVariable {
     }
 
     public static void aliasForeachGlobalVariable(String key, RuntimeScalar var) {
-        clearForeachGlobalAlias(key);
-        RuntimeScalar previous = globalVariables.get(key);
+        GlobalRuntimeState state = globalState();
+        Map<String, RuntimeScalar> aliases = state.foreachScalarAliases();
+        clearForeachGlobalAlias(aliases, key);
+        Map<String, RuntimeScalar> scalars = state.scalarValues();
+        RuntimeScalar previous = scalars.get(key);
         if (var instanceof RuntimeScalarReadOnly || var.type == RuntimeScalarType.READONLY_SCALAR) {
             if (var instanceof RuntimeScalarReadOnly readOnly) {
                 readOnly.installForeachRestore(key, previous);
@@ -1343,14 +1346,18 @@ public class GlobalVariable {
             var = new ReadOnlyAlias(var, key, previous);
         }
         retainForeachAlias(var);
-        foreachGlobalAliases().put(key, var);
+        aliases.put(key, var);
         markPackageGlobalRoot(var);
-        globalVariables.put(key, var);
+        scalars.put(key, var);
         invalidatePackageRootSnapshot();
     }
 
     public static void clearForeachGlobalAlias(String key) {
-        RuntimeScalar previous = foreachGlobalAliases().remove(key);
+        clearForeachGlobalAlias(globalState().foreachScalarAliases(), key);
+    }
+
+    private static void clearForeachGlobalAlias(Map<String, RuntimeScalar> aliases, String key) {
+        RuntimeScalar previous = aliases.remove(key);
         if (previous != null) {
             releaseForeachAlias(previous);
         }
@@ -1358,8 +1365,9 @@ public class GlobalVariable {
 
     /** Restore the global topic scalar after an implicit foreach alias. */
     public static void restoreForeachGlobalVariable(String key, RuntimeScalar value) {
-        clearForeachGlobalAlias(key);
-        globalVariables.put(key, value);
+        GlobalRuntimeState state = globalState();
+        clearForeachGlobalAlias(state.foreachScalarAliases(), key);
+        state.scalarValues().put(key, value);
         invalidatePackageRootSnapshot();
     }
 
