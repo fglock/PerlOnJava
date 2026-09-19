@@ -93,7 +93,10 @@ public class RuntimeSigHash extends RuntimeHash {
     @Override
     public void put(String key, RuntimeScalar value) {
         if (!KNOWN_SIGNALS.contains(key)) {
-            throw new PerlCompilerException("No such hook: " + key);
+            // Perl renders embedded NUL bytes in an unknown hook name as the
+            // visible `\\0` spelling rather than letting a raw NUL leak into
+            // the diagnostic stream.
+            throw new PerlCompilerException("No such hook: " + key.replace("\0", "\\0"));
         }
         super.put(key, value);
     }
