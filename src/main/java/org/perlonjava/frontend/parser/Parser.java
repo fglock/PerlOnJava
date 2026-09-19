@@ -642,6 +642,9 @@ public class Parser {
                     int followingByte = -1;
                     outer:
                     for (int j = i; j < tokens.size(); j++) {
+                        if (tokens.get(j).type == LexerTokenType.EOF) {
+                            break;
+                        }
                         String text = tokens.get(j).text;
                         int start = j == i ? offset + 1 : 0;
                         for (int k = start; k < text.length(); k++) {
