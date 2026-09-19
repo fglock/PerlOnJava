@@ -1,0 +1,21 @@
+use strict;
+use warnings;
+use Test::More;
+
+my @array;
+my %hash;
+eval '$array[-1] =~ tr/N/N/';
+is($@, '', 'identity transliteration permits a missing negative array element');
+eval '$array[1] =~ tr/N/N/';
+is($@, '', 'identity transliteration permits a missing positive array element');
+is(scalar @array, 0, 'identity transliteration does not extend an array');
+eval '$hash{missing} =~ tr/N/N/';
+is($@, '', 'identity transliteration permits a missing hash element');
+is(scalar keys %hash, 0, 'identity transliteration does not insert a hash key');
+my $reference = \ 'NN';
+my $count = $reference =~ tr/N/N/;
+is(ref $reference, 'SCALAR', 'identity transliteration preserves references');
+my $value = 'NN';
+is($value =~ tr/N/N/, 2, 'identity transliteration still counts matches');
+is($value, 'NN', 'identity transliteration preserves its input');
+done_testing();

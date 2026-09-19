@@ -3,11 +3,13 @@ package org.perlonjava.frontend.parser;
 import org.perlonjava.app.cli.CompilerOptions;
 
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
+import org.perlonjava.frontend.analysis.RegexLiteralAnalyzer;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.operators.RuntimeTransliterate;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.ErrorMessageUtil;
@@ -661,6 +663,21 @@ public class ParseInfix {
                     || regexOperator.operator.equals("transliterate"))) {
             return;
         }
+        if (!regexOperator.operator.equals("replaceRegex")
+                && regexOperator.operand instanceof ListNode args
+                && args.elements.size() >= 3) {
+            String search = RegexLiteralAnalyzer.constantString(args.elements.get(0));
+            String replacement = RegexLiteralAnalyzer.constantString(args.elements.get(1));
+            String flags = RegexLiteralAnalyzer.constantString(args.elements.get(2));
+            if (search != null && replacement != null && flags != null) {
+                RuntimeTransliterate operation = new RuntimeTransliterate();
+                operation.compileTransliteration(search, replacement, flags);
+                if (!operation.modifiesTarget()) return;
+                if (left instanceof StringNode || left instanceof NumberNode) {
+                    parser.throwError("Can't modify constant item in transliteration (tr///)");
+                }
+            }
+        }
         if (!(left instanceof OperatorNode aggregate)
                 || !(aggregate.operator.equals("@") || aggregate.operator.equals("%"))
                 || !(aggregate.operand instanceof IdentifierNode identifier)) {
@@ -671,7 +688,11 @@ public class ParseInfix {
         var entry = parser.ctx.symbolTable.getSymbolEntry(
                 aggregate.operator + identifier.name);
         boolean lexical = entry != null
-                && ("my".equals(entry.decl()) || "state".equals(entry.decl()));
+                && ("my".equals(entry.decl()) || "state".equals(entry.decl())
+                    // eval STRING exposes captured lexicals through internal
+                    // package aliases, without changing their Perl identity.
+                    || (entry.perlPackage() != null
+                        && entry.perlPackage().startsWith("PerlOnJava::_BEGIN_")));
         parser.throwError("Can't modify " + (lexical ? "private " : "")
                 + kind + (lexical ? "" : " dereference")
                 + " in " + (regexOperator.operator.equals("replaceRegex")

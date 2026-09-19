@@ -8,6 +8,9 @@ priorities and future plans.
 
 - Extend CPAN release acceptance coverage to Excel::Writer::XLSX with a timeout suitable for its large test suite.
 
+- Complete `tr///` compatibility for extended Unicode and surrogate scalars,
+  identity lvalues, and `chop`/`chomp` diagnostics on both execution backends.
+
 - Restore `local` compatibility for tied hash and array elements, sparse
   arrays, magic stashes, implicit `$_` foreach aliases (including early
   return), and localized regex captures on both execution backends.
