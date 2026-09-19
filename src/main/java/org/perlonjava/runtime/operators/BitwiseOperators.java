@@ -17,10 +17,20 @@ public class BitwiseOperators {
     private static final BigInteger UV_MASK = BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE);
 
     private static BigInteger unsignedValue(RuntimeScalar scalar) {
-        return scalar.getBigint().and(UV_MASK);
+        BigInteger value = scalar.getBigint();
+        // Numeric bitwise operations are modulo 2^64.  Their own results are
+        // already stored in that range, so avoid rebuilding BigInteger's
+        // backing array just to apply the same mask on the next operation.
+        if (value.signum() >= 0 && value.bitLength() <= 64) {
+            return value;
+        }
+        return value.and(UV_MASK);
     }
 
     private static RuntimeScalar unsignedResult(BigInteger value) {
+        if (value.signum() >= 0 && value.bitLength() <= 64) {
+            return new RuntimeScalar(value);
+        }
         return new RuntimeScalar(value.and(UV_MASK));
     }
 
