@@ -4588,20 +4588,6 @@ public class BytecodeCompiler implements Visitor {
             if (node.operand instanceof OperatorNode sigilOp) {
                 String sigil = sigilOp.operator;
 
-                // Perl localizes symbol-table entries, not containers reached
-                // through a reference.  In particular, `local %{$ref}` and
-                // `local @{$ref}` must fail instead of mutating that referred
-                // container for the dynamic scope.
-                Node localizedOperand = sigilOp.operand;
-                if (localizedOperand instanceof BlockNode block && block.elements.size() == 1) {
-                    localizedOperand = block.elements.getFirst();
-                }
-                if ((sigil.equals("@") || sigil.equals("%"))
-                        && localizedOperand instanceof OperatorNode deref
-                        && deref.operator.equals("\\")) {
-                    throwCleanCompilerException("Can't localize through a reference", node.getIndex());
-                }
-
                 if (sigil.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                     String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
 
