@@ -1356,6 +1356,13 @@ public class PrototypeArgs {
             Node refNode = new OperatorNode("\\", referenceArg, referenceArg.getIndex());
             // References are evaluated in SCALAR context
             refNode.setAnnotation("context", "SCALAR");
+            // Perl's tied/untie prototypes inspect a missing aggregate element
+            // without creating it.  tie itself remains an lvalue operation and
+            // must retain normal autovivification.
+            String prototypeOperator = parser.ctx.symbolTable.getCurrentSubroutine();
+            if ("tied".equals(prototypeOperator) || "untie".equals(prototypeOperator)) {
+                refNode.setAnnotation("nonVivifyingReference", Boolean.TRUE);
+            }
             args.elements.add(refNode);
         }
 

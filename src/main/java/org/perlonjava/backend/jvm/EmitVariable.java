@@ -337,7 +337,9 @@ public class EmitVariable {
         // which has vivification side effects. In Perl, `*{"PKG::name"}` in void
         // context still vivifies the glob entry in the stash. Package::Stash::PP
         // relies on this for its `local *__ANON__:: = $namespace; *{"__ANON__::$name"};` pattern.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID && !sigil.equals("*")) {
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID
+                && !sigil.equals("*")
+                && node.operand instanceof IdentifierNode) {
             return;
         }
         MethodVisitor mv = emitterVisitor.ctx.mv;
@@ -509,6 +511,9 @@ public class EmitVariable {
                 } else if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME) {
                     emitRuntimeContextConversion(emitterVisitor, sigil);
                 }
+                if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                    mv.visitInsn(Opcodes.POP);
+                }
                 return;
             case "%":
                 // `%$a`
@@ -527,6 +532,9 @@ public class EmitVariable {
                 } else if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME) {
                     emitRuntimeContextConversion(emitterVisitor, sigil);
                 }
+                if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                    mv.visitInsn(Opcodes.POP);
+                }
                 return;
             case "$":
                 // `$$a`
@@ -539,6 +547,9 @@ public class EmitVariable {
                     node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     emitterVisitor.pushCurrentPackage();
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "scalarDerefNonStrict", "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                }
+                if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                    mv.visitInsn(Opcodes.POP);
                 }
                 return;
             case "*":

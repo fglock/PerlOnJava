@@ -115,7 +115,7 @@ public class EmitOperatorNode {
             }
             case "binary~" -> EmitOperator.handleUnaryDefaultCase(node, "binary~", emitterVisitor);
             case "~." -> EmitOperator.handleUnaryDefaultCase(node, "~.", emitterVisitor);
-            case "!", "not" -> EmitOperator.handleUnaryDefaultCase(node, "not", emitterVisitor);
+            case "!", "not" -> EmitOperator.handleLogicalNot(node, emitterVisitor);
             case "int" -> EmitOperator.handleUnaryDefaultCase(node, "int", emitterVisitor);
 
             // Auto-increment/decrement operators

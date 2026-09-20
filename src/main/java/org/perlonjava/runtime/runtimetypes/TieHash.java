@@ -173,6 +173,13 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
             return RuntimeCode.apply(scalarMethod, new RuntimeArray(tieHash.getSelf()), RuntimeContextType.SCALAR).getFirst();
         }
 
+        // With no SCALAR method, an in-progress each() traversal already has
+        // a current key and therefore proves that the hash is non-empty.
+        // Do not restart it through FIRSTKEY for a boolean `%hash`.
+        if (hash.hasActiveIterator()) {
+            return RuntimeScalarCache.scalarOne;
+        }
+
         RuntimeScalar firstKey = tiedFirstKey(hash);
         return firstKey.getDefinedBoolean() ? RuntimeScalarCache.scalarOne : RuntimeScalarCache.scalarEmptyString;
     }
@@ -181,7 +188,10 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
      * Clears all keys from a tied hash (delegates to CLEAR).
      */
     public static RuntimeScalar tiedClear(RuntimeHash hash) {
-        return tieCall(hash, "CLEAR");
+        RuntimeScalar result = tieCall(hash, "CLEAR");
+        // CLEAR invalidates any key retained by an incomplete each() traversal.
+        hash.resetIterator();
+        return result;
     }
 
     /**

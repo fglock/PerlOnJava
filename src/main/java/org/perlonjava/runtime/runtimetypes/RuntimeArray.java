@@ -959,14 +959,19 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             DynamicVariableManager.pushLocalVariable(new DynamicState() {
                 @Override
                 public void dynamicSaveState() {
-                    TieArray.tiedDelete(self, tiedIndex);
+                    if (tiedExisted) {
+                        TieArray.tiedDelete(self, tiedIndex);
+                    }
                 }
 
                 @Override
                 public void dynamicRestoreState() {
                     if (tiedExisted) {
                         TieArray.tiedStore(self, tiedIndex, tiedSavedValue);
-                    } else {
+                    } else if (TieArray.tiedExists(self, tiedIndex).getBoolean()) {
+                        // A missing localized slot needs removing only if its
+                        // dynamic scope subsequently stored a value.  Avoid a
+                        // spurious DELETE for an untouched missing slot.
                         TieArray.tiedDelete(self, tiedIndex);
                     }
                 }

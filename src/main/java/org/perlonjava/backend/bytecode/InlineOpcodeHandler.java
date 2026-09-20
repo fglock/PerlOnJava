@@ -1438,6 +1438,15 @@ public class InlineOpcodeHandler {
         return pc;
     }
 
+    /** Create a scalar reference while preserving a missing aggregate proxy. */
+    public static int executeCreateRefNoVivify(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        RuntimeBase value = registers[rs];
+        registers[rd] = value == null ? RuntimeScalarCache.scalarUndef : value.createReferenceNoVivify();
+        return pc;
+    }
+
     public static int executeDeref(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];

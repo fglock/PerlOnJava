@@ -610,6 +610,37 @@ public class CompileOperator {
         bc.lastResultReg = rd;
     }
 
+    /**
+     * `keys %tied` in boolean context uses the hash scalar operation, which
+     * dispatches SCALAR when supplied. It is not the ordinary scalar-count
+     * form of keys, which iterates FIRSTKEY/NEXTKEY.
+     */
+    private static void emitLogicalNot(BytecodeCompiler bc, OperatorNode node, short opcode) {
+        Node logicalOperand = node.operand;
+        if (logicalOperand instanceof ListNode list && list.elements.size() == 1) {
+            logicalOperand = list.elements.getFirst();
+        }
+        if (logicalOperand instanceof OperatorNode operand && "keys".equals(operand.operator)) {
+            if (operand.operand == null) {
+                bc.throwCompilerException("keys requires a hash argument");
+                return;
+            }
+            bc.compileNode(operand.operand, -1, RuntimeContextType.LIST);
+            int hashReg = bc.lastResultReg;
+            int scalarReg = bc.allocateOutputRegister();
+            bc.emit(Opcodes.ARRAY_SIZE);
+            bc.emitReg(scalarReg);
+            bc.emitReg(hashReg);
+            int rd = bc.allocateOutputRegister();
+            bc.emit(opcode);
+            bc.emitReg(rd);
+            bc.emitReg(scalarReg);
+            bc.lastResultReg = rd;
+            return;
+        }
+        emitSimpleUnaryScalar(bc, node, opcode);
+    }
+
     private static void visitDieWarn(BytecodeCompiler bc, OperatorNode node, String op) {
         short opcode = op.equals("die") ? Opcodes.DIE : Opcodes.WARN;
         int msgReg;
@@ -934,7 +965,7 @@ public class CompileOperator {
             case "$", "@", "%", "*", "&", "\\" -> { bytecodeCompiler.compileVariableReference(node, op); return; }
 
             // Simple unary ops (dispatchOperator)
-            case "not", "!" -> emitSimpleUnaryScalar(bytecodeCompiler, node,
+            case "not", "!" -> emitLogicalNot(bytecodeCompiler, node,
                     bytecodeCompiler.isNoOverloadingEnabled() ? Opcodes.NOT_NO_OVERLOAD : Opcodes.NOT);
             case "~" -> {
                 Object integerAnnotation = node.getAnnotation("useInteger");

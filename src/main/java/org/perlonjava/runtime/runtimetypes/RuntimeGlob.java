@@ -195,6 +195,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         return copy;
     }
 
+    /** True when this glob was copied as a snapshot rather than used as a live handle. */
+    public boolean isSlotSnapshot() {
+        return slotSnapshot;
+    }
+
     /** Returns the CODE slot captured by a detached typeglob copy, if any. */
     public RuntimeScalar getSavedCodeSlot() {
         return slotSnapshot ? codeSlot : null;

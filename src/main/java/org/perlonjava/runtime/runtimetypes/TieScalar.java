@@ -23,6 +23,9 @@ public class TieScalar extends TiedVariableBase {
      */
     private final RuntimeScalar previousValue;
 
+    /** The scalar slot carrying this magic; needed when FETCH unties it. */
+    private final RuntimeScalar owner;
+
     /**
      * Reentrancy guard: true while we are already inside a FETCH/STORE
      * dispatch for this tied scalar. Matches Perl's "while magic is
@@ -41,8 +44,14 @@ public class TieScalar extends TiedVariableBase {
      * @param self          the blessed object returned by TIESCALAR
      */
     public TieScalar(String tiedPackage, RuntimeScalar previousValue, RuntimeScalar self) {
+        this(tiedPackage, previousValue, self, null);
+    }
+
+    public TieScalar(String tiedPackage, RuntimeScalar previousValue, RuntimeScalar self,
+                     RuntimeScalar owner) {
         super(self, tiedPackage);
         this.previousValue = previousValue;
+        this.owner = owner;
     }
 
     /**
@@ -82,6 +91,13 @@ public class TieScalar extends TiedVariableBase {
             // Cache the FETCH result so untie restores it (matches Perl 5 SV caching)
             previousValue.type = result.type;
             previousValue.value = result.value;
+            // FETCH may untie its own scalar.  untie installs a snapshot of
+            // previousValue before this call returns, so update that now-plain
+            // slot with FETCH's result as Perl does.
+            if (owner != null && owner.value != this) {
+                owner.type = result.type;
+                owner.value = result.value;
+            }
             return result;
         } finally {
             inMagic = false;

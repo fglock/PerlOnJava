@@ -7,6 +7,7 @@ import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.DualVar;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
@@ -276,6 +277,22 @@ public class Builtin extends PerlModuleBase {
         }
     }
 
+    /**
+     * Install explicitly requested builtin exports as lexical subs.  Unlike an
+     * ordinary Exporter import, builtin exports remain visible after a package
+     * declaration in the same lexical scope.  Keep weaken unprototyped here:
+     * it accepts declaration expressions such as {@code weaken(my $x = \\%h)},
+     * which a normal {@code ($)} prototype would reject in this parser.
+     */
+    public static void importLexically(ScopedSymbolTable scope, RuntimeList requested) {
+        if (scope == null || requested == null) return;
+        for (RuntimeBase requestedName : requested.elements) {
+            String name = requestedName.toString();
+            if (!"weaken".equals(name)) continue;
+            exportLexicalSub(scope, name, GlobalVariable.getGlobalCodeRef("builtin::" + name), false);
+        }
+    }
+
     private static synchronized int nextLexicalExportId() {
         return lexicalExportCounter++;
     }
@@ -323,6 +340,11 @@ public class Builtin extends PerlModuleBase {
     }
 
     private static void exportLexicalSub(ScopedSymbolTable scope, String subName, RuntimeScalar symbol) {
+        exportLexicalSub(scope, subName, symbol, true);
+    }
+
+    private static void exportLexicalSub(
+            ScopedSymbolTable scope, String subName, RuntimeScalar symbol, boolean retainPrototype) {
         if (subName.isEmpty()) {
             throw new PerlCompilerException("Missing name in export_lexically");
         }
@@ -352,7 +374,7 @@ public class Builtin extends PerlModuleBase {
                 -1);
         marker.setAnnotation("hiddenVarName", hiddenVarName);
         marker.setAnnotation("declaringPackage", currentPackage);
-        if (codeScalar.value instanceof RuntimeCode code && code.prototype != null) {
+        if (retainPrototype && codeScalar.value instanceof RuntimeCode code && code.prototype != null) {
             marker.setAnnotation("prototype", code.prototype);
         }
 

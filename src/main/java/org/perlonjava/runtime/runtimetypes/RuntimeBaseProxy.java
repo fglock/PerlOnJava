@@ -15,6 +15,20 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
     // The underlying scalar value that this proxy represents.
     RuntimeScalar lvalue;
 
+    /** Whether this proxy already denotes an existing aggregate element. */
+    public boolean hasLvalue() {
+        return lvalue != null;
+    }
+
+    /**
+     * Resolves the backing slot without applying its scalar dereference magic.
+     * Callers such as tied()/untie() need the slot itself, not a FETCH result.
+     */
+    public RuntimeScalar resolveLvalue() {
+        vivify();
+        return lvalue;
+    }
+
     /**
      * "Blesses" a Perl reference into an object by associating it with a class name.
      * This method is used to convert a Perl reference into an object of a specified class.

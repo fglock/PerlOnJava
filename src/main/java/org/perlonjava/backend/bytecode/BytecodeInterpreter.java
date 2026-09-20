@@ -2533,6 +2533,10 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeCreateRef(bytecode, pc, registers);
                             }
 
+                            case Opcodes.CREATE_REF_NO_VIVIFY -> {
+                                pc = InlineOpcodeHandler.executeCreateRefNoVivify(bytecode, pc, registers);
+                            }
+
                             case Opcodes.DEREF -> {
                                 pc = InlineOpcodeHandler.executeDeref(bytecode, pc, registers);
                             }

@@ -883,6 +883,15 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public abstract RuntimeScalar createReference();
 
     /**
+     * Creates a reference for an operation that only inspects its target.
+     * Aggregate element proxies override this so {@code tied $hash{missing}}
+     * and {@code untie $hash{missing}} do not materialize a hash slot.
+     */
+    public RuntimeScalar createReferenceNoVivify() {
+        return createReference();
+    }
+
+    /**
      * Creates a reference and tracks refCounts for contained elements.
      * Used for anonymous array/hash construction ([...], {...}) where elements
      * need refCount tracking to prevent premature destruction of referents.

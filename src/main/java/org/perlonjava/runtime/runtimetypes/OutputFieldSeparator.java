@@ -57,42 +57,53 @@ public class OutputFieldSeparator extends RuntimeScalar {
     @Override
     public RuntimeScalar set(RuntimeScalar value) {
         super.set(value);
-        state().outputFieldSeparator = this.toString();
+        updateInternalOFSIfUntied();
         return this;
     }
 
     @Override
     public RuntimeScalar set(String value) {
         super.set(value);
-        state().outputFieldSeparator = this.toString();
+        updateInternalOFSIfUntied();
         return this;
     }
 
     @Override
     public RuntimeScalar set(int value) {
         super.set(value);
-        state().outputFieldSeparator = this.toString();
+        updateInternalOFSIfUntied();
         return this;
     }
 
     @Override
     public RuntimeScalar set(long value) {
         super.set(value);
-        state().outputFieldSeparator = this.toString();
+        updateInternalOFSIfUntied();
         return this;
     }
 
     @Override
     public RuntimeScalar set(boolean value) {
         super.set(value);
-        state().outputFieldSeparator = this.toString();
+        updateInternalOFSIfUntied();
         return this;
     }
 
     @Override
     public RuntimeScalar set(Object value) {
         super.set(value);
-        state().outputFieldSeparator = this.toString();
+        updateInternalOFSIfUntied();
         return this;
+    }
+
+    /**
+     * A tied $, obtains its separator directly through FETCH for every gap in
+     * a print argument list.  Stringifying this object after STORE would add
+     * an erroneous FETCH merely to refresh the ordinary untied cache.
+     */
+    private void updateInternalOFSIfUntied() {
+        if (type != RuntimeScalarType.TIED_SCALAR) {
+            state().outputFieldSeparator = this.toString();
+        }
     }
 }
