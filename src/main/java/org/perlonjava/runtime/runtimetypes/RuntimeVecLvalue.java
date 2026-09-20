@@ -31,8 +31,7 @@ public class RuntimeVecLvalue extends RuntimeBaseProxy {
         this.lvalue = parent;
         this.offset = offset;
         this.bits = bits;
-        this.type = value.type;
-        this.value = value.value;
+        copyPayloadFrom(value);
     }
 
     /**
@@ -62,8 +61,7 @@ public class RuntimeVecLvalue extends RuntimeBaseProxy {
     @Override
     public RuntimeScalar set(RuntimeScalar value) {
         // Update the local type and value
-        this.type = value.type;
-        this.value = value.value;
+        copyPayloadFrom(value);
 
         try {
             // Create arguments for Vec.set method

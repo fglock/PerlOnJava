@@ -80,8 +80,7 @@ public class TieScalar extends TiedVariableBase {
         try {
             RuntimeScalar result = tieCall("FETCH");
             // Cache the FETCH result so untie restores it (matches Perl 5 SV caching)
-            previousValue.type = result.type;
-            previousValue.value = result.value;
+            previousValue.copyPayloadFrom(result);
             return result;
         } finally {
             inMagic = false;
@@ -106,8 +105,7 @@ public class TieScalar extends TiedVariableBase {
             // scalar sees the value being assigned.  Old tie classes use this
             // to keep a tied hash element and its owner object in sync.
             RuntimeScalar backingValue = new RuntimeScalar(v);
-            previousValue.type = backingValue.type;
-            previousValue.value = backingValue.value;
+            previousValue.copyPayloadFrom(backingValue);
             return tieCall("STORE", v);
         } finally {
             inMagic = false;

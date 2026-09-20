@@ -51,8 +51,7 @@ public class RuntimeTiedArrayProxyEntry extends TiedVariableBase {
         }
         // Always fetch the current value from the tied object
         RuntimeScalar fetchedValue = TieArray.tiedFetch(parent, key);
-        this.type = fetchedValue.type;
-        this.value = fetchedValue.value;
+        copyPayloadFrom(fetchedValue);
     }
 
     /**

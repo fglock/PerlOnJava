@@ -114,8 +114,7 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
     @Override
     void vivify() {
         RuntimeScalar fetchedValue = tiedFetch();
-        this.type = fetchedValue.type;
-        this.value = fetchedValue.value;
+        copyPayloadFrom(fetchedValue);
         this.blessId = fetchedValue.blessId;
     }
 

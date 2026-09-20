@@ -48,8 +48,7 @@ public class RuntimeTiedHashProxyEntry extends TiedVariableBase {
     void vivify() {
         // Always fetch the current value from the tied object
         RuntimeScalar fetchedValue = TieHash.tiedFetch(parent, key);
-        this.type = fetchedValue.type;
-        this.value = fetchedValue.value;
+        copyPayloadFrom(fetchedValue);
     }
 
     /**

@@ -240,8 +240,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                         localVar.value = null;
                         localVar.blessId = 0;
                     } else {
-                        localVar.type = saved.originalVariable.type;
-                        localVar.value = saved.originalVariable.value;
+                        localVar.copyPayloadFrom(saved.originalVariable);
                         localVar.blessId = saved.originalVariable.blessId;
                     }
                     localVar.refCountOwned = false;
@@ -282,8 +281,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                     return;
                 }
                 RuntimeScalar activeState = suspended.value;
-                activeVariable.type = activeState.type;
-                activeVariable.value = activeState.value;
+                activeVariable.copyPayloadFrom(activeState);
                 activeVariable.blessId = activeState.blessId;
                 activeVariable.ownsScalarReferenceContents = activeState.ownsScalarReferenceContents;
                 activeVariable.referencedByScalarReference = activeState.referencedByScalarReference;

@@ -207,8 +207,7 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
                 this.lvalue.set(previousState);
                 this.lvalue.blessId = previousState.blessId;
                 // Sync proxy state
-                this.type = this.lvalue.type;
-                this.value = this.lvalue.value;
+                copyPayloadFrom(this.lvalue);
                 this.blessId = previousState.blessId;
             }
         }
