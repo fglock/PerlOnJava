@@ -3738,46 +3738,22 @@ public class BytecodeCompiler implements Visitor {
                                     && sigilOp.operand instanceof OperatorNode varNode
                                     && "$@%".contains(varNode.operator)
                                     && varNode.operand instanceof IdentifierNode idNode) {
-                                String baseName = idNode.name;
-
-                                // Declare the scalar reference variable $name
-                                String scalarName = "$" + baseName;
-                                int scalarReg = addVariable(scalarName, op);
-                                emit(Opcodes.LOAD_UNDEF);
-                                emitReg(scalarReg);
-
-                                // Allocate/initialize the underlying storage and create a reference to it
-                                int declaredReg;
-                                if ("$".equals(varNode.operator)) {
-                                    declaredReg = allocateRegister();
-                                    emit(Opcodes.LOAD_UNDEF);
-                                    emitReg(declaredReg);
-                                } else {
-                                    String declaredVarName = varNode.operator + baseName;
-                                    declaredReg = addVariable(declaredVarName, op);
-                                    if ("@".equals(varNode.operator)) {
-                                        emit(Opcodes.NEW_ARRAY);
-                                        emitReg(declaredReg);
-                                    } else {
-                                        emit(Opcodes.NEW_HASH);
-                                        emitReg(declaredReg);
-                                    }
+                                // Parenthesized `my (\\$x)` is the same
+                                // declaration-and-reference sequence as the
+                                // direct `my \\$x` form.  Reuse that lowering
+                                // rather than approximating it with a fresh
+                                // hidden slot, which lost one reference level.
+                                OperatorNode innerDeclaration = new OperatorNode(op, varNode, node.getIndex());
+                                innerDeclaration.setAnnotation("isDeclaredReference", true);
+                                if (node.annotations != null && node.annotations.containsKey("attributes")) {
+                                    innerDeclaration.setAnnotation("attributes", node.annotations.get("attributes"));
                                 }
-
-                                int refReg = allocateRegister();
+                                innerDeclaration.accept(this);
+                                int outerRefReg = allocateRegister();
                                 emit(Opcodes.CREATE_REF);
-                                emitReg(refReg);
-                                emitReg(declaredReg);
-                                emit(Opcodes.SET_SCALAR);
-                                emitReg(scalarReg);
-                                emitReg(refReg);
-
-                                // Return a reference to $name (ref-to-ref semantics)
-                                int scalarRefReg = allocateRegister();
-                                emit(Opcodes.CREATE_REF);
-                                emitReg(scalarRefReg);
-                                emitReg(scalarReg);
-                                varRegs.add(scalarRefReg);
+                                emitReg(outerRefReg);
+                                emitReg(lastResultReg);
+                                varRegs.add(outerRefReg);
                                 wrapWithRef.add(false);
                                 continue;
                             }
@@ -3795,6 +3771,9 @@ public class BytecodeCompiler implements Visitor {
                                 OperatorNode innerMy = new OperatorNode("my", innerBackslash, node.getIndex());
                                 if (node.annotations != null && Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"))) {
                                     innerMy.setAnnotation("isDeclaredReference", true);
+                                }
+                                if (node.annotations != null && node.annotations.containsKey("attributes")) {
+                                    innerMy.setAnnotation("attributes", node.annotations.get("attributes"));
                                 }
                                 innerMy.accept(this);
 
@@ -3850,6 +3829,7 @@ public class BytecodeCompiler implements Visitor {
                                             emit(Opcodes.CREATE_REF);
                                             emitReg(refReg);
                                             emitReg(declaredReg);
+                                            emitVarAttrsIfNeeded(node, declaredReg, originalSigil);
                                             varRegs.add(refReg);
                                             wrapWithRef.add(false);
                                         }
@@ -3884,6 +3864,13 @@ public class BytecodeCompiler implements Visitor {
                                     emit(Opcodes.CREATE_REF);
                                     emitReg(refReg);
                                     emitReg(reg);
+                                    // The attribute belongs to the enclosing
+                                    // parenthesized declaration, while this
+                                    // branch creates its declared-reference
+                                    // slot directly.  Dispatch it here just
+                                    // as the ordinary list-declaration path
+                                    // does for `my ($x) : Attr`.
+                                    emitVarAttrsIfNeeded(node, reg, originalSigil);
                                     varRegs.add(refReg);
                                     wrapWithRef.add(false);
                                 }
@@ -3926,6 +3913,13 @@ public class BytecodeCompiler implements Visitor {
                                         emitReg(declaredReg);
                                     }
                                 }
+
+                                // The parser rewrites `my (\$x) : Attr` to
+                                // an annotated scalar list element.  The
+                                // attribute nevertheless belongs to the
+                                // original declared slot ($/@/%), not to the
+                                // rewrite's scalar carrier.
+                                emitVarAttrsIfNeeded(node, declaredReg, originalSigil);
 
                                 // Set $name to a reference to the underlying variable
                                 int refReg = allocateRegister();
@@ -4275,10 +4269,20 @@ public class BytecodeCompiler implements Visitor {
                             Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
 
                     if (isDeclaredReference) {
-                        // This is our \\$x which means: create a declared reference and then take a reference to it
-                        // The operand is \$x, so we recursively compile it
-                        sigilOp.accept(this);
-                        // The result is now in lastResultReg
+                        // Establish the package alias first, then return a
+                        // reference to that declared reference.  Emitting the
+                        // bare backslash skipped the declaration entirely.
+                        OperatorNode innerOur = new OperatorNode(op, sigilOp.operand, node.getIndex());
+                        innerOur.setAnnotation("isDeclaredReference", true);
+                        innerOur.setAnnotation("ourPackage", getCurrentPackage());
+                        innerOur.accept(this);
+                        if (currentCallContext != RuntimeContextType.VOID && lastResultReg != -1) {
+                            int refReg = allocateRegister();
+                            emit(Opcodes.CREATE_REF);
+                            emitReg(refReg);
+                            emitReg(lastResultReg);
+                            lastResultReg = refReg;
+                        }
                         return;
                     }
                 }
@@ -4308,6 +4312,30 @@ public class BytecodeCompiler implements Visitor {
                     }
                     if (element instanceof OperatorNode sigilOp) {
                         String sigil = sigilOp.operator;
+
+                        // The parser represents parenthesized `our (\\$x)`
+                        // as one declared-reference backslash annotated with
+                        // its original doubled sigil.  Lower it exactly like
+                        // direct `our \\$x`: declare the package alias, then
+                        // take the outer reference.
+                        Object elementOriginalSigilObj = sigilOp.annotations != null
+                                ? sigilOp.annotations.get("declaredReferenceOriginalSigil")
+                                : null;
+                        if (sigil.equals("\\") && "\\".equals(elementOriginalSigilObj)
+                                && sigilOp.getBooleanAnnotation("isDeclaredReference")
+                                && sigilOp.operand instanceof OperatorNode varNode
+                                && "$@%".contains(varNode.operator)) {
+                            OperatorNode innerOur = new OperatorNode("our", varNode, node.getIndex());
+                            innerOur.setAnnotation("isDeclaredReference", true);
+                            innerOur.setAnnotation("ourPackage", getCurrentPackage());
+                            innerOur.accept(this);
+                            int outerRefReg = allocateRegister();
+                            emit(Opcodes.CREATE_REF);
+                            emitReg(outerRefReg);
+                            emitReg(lastResultReg);
+                            varRegs.add(outerRefReg);
+                            continue;
+                        }
 
                         // Parser may rewrite element-level declared refs like \$h/\@h/\%h into a scalar $h
                         // with annotations (isDeclaredReference + declaredReferenceOriginalSigil).
@@ -4696,12 +4724,7 @@ public class BytecodeCompiler implements Visitor {
                             emit(Opcodes.CREATE_REF);
                             emitReg(refReg1);
                             emitReg(regIdx);
-
-                            int refReg2 = allocateRegister();
-                            emit(Opcodes.CREATE_REF);
-                            emitReg(refReg2);
-                            emitReg(refReg1);
-                            lastResultReg = refReg2;
+                            lastResultReg = refReg1;
                         } else {
                             lastResultReg = regIdx;
                         }
@@ -4737,12 +4760,7 @@ public class BytecodeCompiler implements Visitor {
                         emit(Opcodes.CREATE_REF);
                         emitReg(refReg1);
                         emitReg(rd);
-
-                        int refReg2 = allocateRegister();
-                        emit(Opcodes.CREATE_REF);
-                        emitReg(refReg2);
-                        emitReg(refReg1);
-                        lastResultReg = refReg2;
+                        lastResultReg = refReg1;
                     } else {
                         lastResultReg = rd;
                     }
@@ -4794,8 +4812,14 @@ public class BytecodeCompiler implements Visitor {
 
                             // Check if the backslash operator itself has isDeclaredReference annotation
                             // which indicates this is \\$x (double backslash)
-                            boolean backslashIsDeclaredRef = sigilOp.annotations != null &&
-                                    Boolean.TRUE.equals(sigilOp.annotations.get("isDeclaredReference"));
+                            // In `local \\$x`, parseLocal consumes the first
+                            // backslash and records declared-reference status on
+                            // the local node.  Parenthesized forms retain it on
+                            // the backslash operand.  Both spellings need the
+                            // second reference.
+                            boolean backslashIsDeclaredRef = isDeclaredReference
+                                    || (sigilOp.annotations != null
+                                    && Boolean.TRUE.equals(sigilOp.annotations.get("isDeclaredReference")));
 
                             if (backslashIsDeclaredRef) {
                                 // Double backslash: create second reference
@@ -4906,6 +4930,29 @@ public class BytecodeCompiler implements Visitor {
                     return;
                 }
             } else if (node.operand instanceof ListNode listNode) {
+                // The parser retains an extra list/backslash layer for
+                // `local (\\$x)`.  It is semantically identical to direct
+                // `local \\$x`, whose lowering already preserves the
+                // localized referent after scope teardown.  Normalize this
+                // singleton spelling to the direct form instead of building
+                // a temporary RuntimeList that scalar assignment cannot
+                // consume as the doubled reference.
+                if (listNode.elements.size() == 1
+                        && listNode.elements.getFirst() instanceof OperatorNode outerBackslash
+                        && outerBackslash.operator.equals("\\")
+                        && outerBackslash.operand instanceof OperatorNode innerBackslash
+                        && innerBackslash.operator.equals("\\")
+                        && innerBackslash.operand instanceof OperatorNode variable
+                        && "$@%".contains(variable.operator)) {
+                    OperatorNode directBackslash = new OperatorNode(
+                            "\\", variable, outerBackslash.getIndex());
+                    OperatorNode directLocal = new OperatorNode(
+                            "local", directBackslash, node.getIndex());
+                    directLocal.setAnnotation("isDeclaredReference", true);
+                    directLocal.accept(this);
+                    return;
+                }
+
                 // local ($x, $y) - list of localized global variables
                 List<Integer> varRegs = new ArrayList<>();
 
@@ -5011,9 +5058,12 @@ public class BytecodeCompiler implements Visitor {
 
                         // Handle backslash operator: local (\$x) or local (\($x, $y))
                         if (sigil.equals("\\")) {
-                            // Check if backslash itself has isDeclaredReference (indicates \\$ in source)
-                            boolean backslashIsDeclaredRef = sigilOp.annotations != null &&
-                                    Boolean.TRUE.equals(sigilOp.annotations.get("isDeclaredReference"));
+                            // The declared-reference annotation is present on
+                            // both \$x and \\$x inside a local list.  The
+                            // nested backslash is the structural distinction
+                            // that identifies the doubled spelling.
+                            boolean backslashIsDeclaredRef = sigilOp.operand instanceof OperatorNode operandOp
+                                    && operandOp.operator.equals("\\");
 
                             if (backslashIsDeclaredRef) {
                                 // Double backslash: local (\\$x)
@@ -5058,16 +5108,33 @@ public class BytecodeCompiler implements Visitor {
                                     emitReg(refReg2);
                                     emitReg(refReg1);
 
+                                    // `local (\\$x)` is a declaration-list
+                                    // expression, but when it is its sole
+                                    // element in scalar context Perl returns
+                                    // the doubled reference itself.  Keeping
+                                    // it only inside a RuntimeList made the
+                                    // scalar assignment path yield undef.
+                                    if (listNode.elements.size() == 1) {
+                                        lastResultReg = refReg2;
+                                        return;
+                                    }
                                     varRegs.add(refReg2);
                                 }
                                 continue;
                             }
 
-                            // Single backslash
-                            foundBackslashInList = true;
+                            // A single declared-reference element in a
+                            // parenthesized local list is already a reference
+                            // in the result.  Do not set foundBackslashInList
+                            // here: that final-list path references *every*
+                            // element, which turns \local (\$f, $g) into
+                            // (\\\$f, \\$g) rather than Perl's
+                            // (\\$f, \$g).  Nested \($x, $y) remains a
+                            // whole-list declared-reference form below.
 
                             // Check if it's a nested list
                             if (sigilOp.operand instanceof ListNode nestedList) {
+                                foundBackslashInList = true;
                                 for (Node nestedElement : nestedList.elements) {
                                     if (nestedElement instanceof OperatorNode nestedVarNode &&
                                             "$@%".contains(nestedVarNode.operator) &&
@@ -5128,7 +5195,11 @@ public class BytecodeCompiler implements Visitor {
                                     emit(nameIdx);
                                 }
 
-                                varRegs.add(rd);
+                                int refReg = allocateRegister();
+                                emit(Opcodes.CREATE_REF);
+                                emitReg(refReg);
+                                emitReg(rd);
+                                varRegs.add(refReg);
                             }
                             continue;
                         }
@@ -7170,11 +7241,24 @@ public class BytecodeCompiler implements Visitor {
             referenceAliasedVariable = sigilOp;
         }
         if (referenceAliasedVariable == null && node.variable instanceof OperatorNode declaration
-                && declaration.operator.equals("my")
+                && (declaration.operator.equals("my")
+                || declaration.operator.equals("state")
+                || declaration.operator.equals("our"))
                 && declaration.getBooleanAnnotation("isDeclaredReference")
                 && declaration.operand instanceof OperatorNode sigilOp
                 && (sigilOp.operator.equals("$") || sigilOp.operator.equals("@") || sigilOp.operator.equals("%"))) {
             referenceAliasedVariable = sigilOp;
+        }
+        // A declared-reference `our` iterator aliases a package slot for the
+        // duration of the loop.  The leading declaration hid its sigil from
+        // the earlier global-loop detection, which made the iterator update a
+        // throw-away register while the body read the package variable.
+        if (referenceAliasedVariable != null && globalLoopVarName == null
+                && node.variable instanceof OperatorNode declaration
+                && declaration.operator.equals("our")
+                && referenceAliasedVariable.operand instanceof IdentifierNode idNode) {
+            globalLoopVarName = NameNormalizer.normalizeVariableName(
+                    idNode.name, getCurrentPackage());
         }
         if (globalLoopVarName == null && node.variable instanceof OperatorNode declaration
                 && declaration.operator.equals("my")
@@ -7195,7 +7279,22 @@ public class BytecodeCompiler implements Visitor {
         }
         if (referenceAliasedVariable != null
                 && referenceAliasedVariable.operand instanceof IdentifierNode idNode) {
-            varReg = getVariableRegister(referenceAliasedVariable.operator + idNode.name);
+            // A declaration such as `for state \\@x` has already allocated a
+            // persistent scalar slot while parsing its declared-reference
+            // wrapper.  The iterator, however, must receive the dereferenced
+            // ARRAY/HASH (or scalar referent) itself.  Reusing that wrapper
+            // slot makes FOREACH_DEREF_* cast a RuntimeScalar to an aggregate.
+            // A freshly bound loop register is also the correct temporary for
+            // declared `our` aliases; the package slot is updated explicitly
+            // below with ALIAS_GLOBAL_*.
+            if (node.variable instanceof OperatorNode declaration
+                    && (declaration.operator.equals("my")
+                    || declaration.operator.equals("state")
+                    || declaration.operator.equals("our"))) {
+                varReg = allocateRegister();
+            } else {
+                varReg = getVariableRegister(referenceAliasedVariable.operator + idNode.name);
+            }
         }
         if (!multiVarRegs.isEmpty()) {
             varReg = multiVarRegs.get(0);
@@ -7283,11 +7382,16 @@ public class BytecodeCompiler implements Visitor {
         // Step 4: Enter new scope for loop variable
         enterScope();
 
-        // Step 5: If we have a named lexical loop variable, add it to the scope now
+        // Step 5: If we have a named lexical loop variable, add it to the scope now.
+        // Declared-reference iterators retain their original sigil: `for my
+        // \\@x` and `for my \\%x` must make @x/%x visible in the loop body,
+        // rather than falling through to an unrelated package variable.
         if (node.variable != null && node.variable instanceof OperatorNode varOp2) {
-            if (varOp2.operator.equals("my") && varOp2.operand instanceof OperatorNode sigilOp) {
-                if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
-                    String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
+            if ((varOp2.operator.equals("my") || varOp2.operator.equals("state"))
+                    && varOp2.operand instanceof OperatorNode sigilOp) {
+                if ((sigilOp.operator.equals("$") || sigilOp.operator.equals("@") || sigilOp.operator.equals("%"))
+                        && sigilOp.operand instanceof IdentifierNode) {
+                    String varName = sigilOp.operator + ((IdentifierNode) sigilOp.operand).name;
                     registerVariable(varName, varReg);
                 }
             }
