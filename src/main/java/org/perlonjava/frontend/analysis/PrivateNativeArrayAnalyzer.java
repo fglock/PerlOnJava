@@ -116,14 +116,26 @@ public final class PrivateNativeArrayAnalyzer {
         if (indexName == null || loop.continueBlock != null || range == null) return null;
         if (!(loop.body instanceof BlockNode body) || body.elements.isEmpty()) return null;
         List<OperatorNode> indexOccurrences = new ArrayList<>();
-        for (Node statement : body.elements) {
-            if (!(statement instanceof BinaryOperatorNode assignment) || !"=".equals(assignment.operator)
+        Set<String> temporaryNames = new LinkedHashSet<>();
+        boolean wroteCandidate = false;
+        for (int position = 0; position < body.elements.size(); position++) {
+            Node statement = body.elements.get(position);
+            if (!(statement instanceof BinaryOperatorNode assignment) || !"=".equals(assignment.operator)) return null;
+            String temporary = loopTemporaryName(assignment.left);
+            if (temporary != null && !wroteCandidate) {
+                if (temporaryNames.contains(temporary)
+                        || !isLoopNativeWordExpression(assignment.right, candidate, indexName, range.lastIndex,
+                        initializedThrough, temporaryNames, indexOccurrences)) return null;
+                temporaryNames.add(temporary);
+                continue;
+            }
+            if (position != body.elements.size() - 1 || wroteCandidate
                     || !isLoopArrayElement(assignment.left, candidate, indexName, indexOccurrences)
                     || !isLoopNativeWordExpression(assignment.right, candidate, indexName, range.lastIndex,
-                    initializedThrough, indexOccurrences)) {
-                return null;
-            }
+                    initializedThrough, temporaryNames, indexOccurrences)) return null;
+            wroteCandidate = true;
         }
+        if (!wroteCandidate) return null;
         for (OperatorNode occurrence : indexOccurrences) {
             occurrence.setAnnotation(PRIVATE_NATIVE_LOOP_INDEX, Boolean.TRUE);
         }
@@ -187,6 +199,7 @@ public final class PrivateNativeArrayAnalyzer {
 
     private static boolean isLoopNativeWordExpression(Node node, String candidate, String indexName, int lastIndex,
                                                       int initializedThrough,
+                                                      Set<String> temporaryNames,
                                                       List<OperatorNode> indexOccurrences) {
         node = unwrapSingletonList(node);
         if (node instanceof NumberNode) return true;
@@ -195,6 +208,7 @@ public final class PrivateNativeArrayAnalyzer {
             indexOccurrences.add(index);
             return true;
         }
+        if (isLoopTemporary(node, temporaryNames)) return true;
         if (initializedThrough >= lastIndex
                 && isLoopArrayElement(node, candidate, indexName, indexOccurrences)) return true;
         // A distinct lexical array may supply a native-word input to a private
@@ -206,14 +220,29 @@ public final class PrivateNativeArrayAnalyzer {
         if (!(node instanceof BinaryOperatorNode binary)) return false;
         return switch (binary.operator) {
             case "&", "|", "^" -> isLoopNativeWordExpression(binary.left, candidate, indexName, lastIndex,
-                    initializedThrough, indexOccurrences)
+                    initializedThrough, temporaryNames, indexOccurrences)
                     && isLoopNativeWordExpression(binary.right, candidate, indexName, lastIndex,
-                    initializedThrough, indexOccurrences);
+                    initializedThrough, temporaryNames, indexOccurrences);
             case "<<", ">>" -> isLoopNativeWordExpression(binary.left, candidate, indexName, lastIndex,
-                    initializedThrough, indexOccurrences)
+                    initializedThrough, temporaryNames, indexOccurrences)
                     && binary.right instanceof NumberNode;
             default -> false;
         };
+    }
+
+    private static String loopTemporaryName(Node node) {
+        node = unwrapSingletonList(node);
+        if (!(node instanceof OperatorNode my) || !"my".equals(my.operator)
+                || !(my.operand instanceof OperatorNode scalar) || !"$".equals(scalar.operator)
+                || !(scalar.operand instanceof IdentifierNode identifier)) return null;
+        return identifier.name;
+    }
+
+    private static boolean isLoopTemporary(Node node, Set<String> temporaryNames) {
+        node = unwrapSingletonList(node);
+        return node instanceof OperatorNode scalar && "$".equals(scalar.operator)
+                && scalar.operand instanceof IdentifierNode identifier
+                && temporaryNames.contains(identifier.name);
     }
 
     private static OperatorNode loopIndex(Node node, String indexName) {
@@ -240,6 +269,9 @@ public final class PrivateNativeArrayAnalyzer {
     /** Match the side-effect-free integer-index subset emitted by EmitVariable. */
     private static boolean isLoopNativeIndexExpression(Node node, String indexName) {
         node = unwrapSingletonList(node);
+        if (node instanceof ArrayLiteralNode indexes && indexes.elements.size() == 1) {
+            node = unwrapSingletonList(indexes.elements.getFirst());
+        }
         if (literalIndex(node) != null || loopIndex(node, indexName) != null) return true;
         if (node instanceof OperatorNode array && "@".equals(array.operator)
                 && array.operand instanceof IdentifierNode) return true;

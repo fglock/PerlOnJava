@@ -84,6 +84,16 @@ JVM bytecode confirms `nativeIntegerElement` to carrier `setWord` reachability.
 It is still not sufficient for Life: its inner loop retains scalar temporaries
 and the outer iteration transfers array ownership inside a closure.
 
+The next 2026-09-20 increment accepts ordered loop-local scalar temporaries
+whose values come from the same guarded native-word subset, followed by one
+private destination write. This makes the direct three-neighbour computation
+shape bytecode-reachable without treating the temporary cells themselves as a
+special representation. The system-Perl/JVM/interpreter oracle and immutable
+full gate pass; the gate completed in 4m 09s at
+`/tmp/make_private_native_array_loop_temporaries_retry_20260920.log` and
+minimal disassembly records carrier `setWord`. Ownership transfer and closure
+capture remain required before this can select the representative Life kernel.
+
 The native-array effort is now at a safe code checkpoint: commit `d863f4a09`
 adds phase-one, compiler-inert proof scaffolding and its five Java unit tests.
 It recognizes only `my @a = ()`-equivalent empty declarations followed by

@@ -208,13 +208,28 @@ and the materialization fallback at
 `/tmp/jperl_private_native_array_ordinary_source_minimal_disassemble_20260920.log`.
 This does not yet accept scalar temporaries, ownership transfer, or closures.
 
+The latest 2026-09-20 checkpoint accepts ordered loop-local `my` scalar
+temporaries when each is a side-effect-free native-word expression and the
+final statement is the sole private destination write. The temporary values
+remain ordinary scalar cells; the final raw store retains the existing guards
+and materializes before the original assignment on a miss. The system-Perl,
+JVM, and interpreter oracle logs are
+`/tmp/prove_private_native_array_loop_temporaries_perl_20260920.log`,
+`/tmp/jperl_private_native_array_loop_temporaries_jvm_retry_20260920.log`, and
+`/tmp/jperl_private_native_array_loop_temporaries_interpreter_retry_20260920.log`.
+The immutable full gate passed in 4m 09s at
+`/tmp/make_private_native_array_loop_temporaries_retry_20260920.log`; minimal
+JVM disassembly confirms carrier `setWord` reachability at
+`/tmp/jperl_private_native_array_loop_temporaries_disassemble_retry_20260920.log`.
+It still does not prove array ownership transfer or closure-spanning state.
+
 ### Exact resume steps
 
 1. Inspect active benchmark/test processes and their worktrees; wait for all
    children before modifying a checkout. Do not restart completed artifacts.
 2. Generalize the initialized-prefix fact into a per-iteration/range lattice
-   with exact materialization joins before accepting scalar temporaries,
-   ownership transfer, or nested loops. Preserve the completed-initializer,
+   with exact materialization joins before accepting ownership transfer or
+   nested loops. Preserve the ordered-temporary, completed-initializer,
    ordinary-source guards, and deny-by-default fallback, and add focused
    rejection coverage before accepting each control-flow form.
 3. Cover materialization through aliases, callbacks, exceptions, early return,
