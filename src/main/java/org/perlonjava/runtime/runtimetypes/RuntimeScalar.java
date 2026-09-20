@@ -697,8 +697,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (scalar.type == STRING || scalar.type == BYTE_STRING) {
             scalar.materializeGrowingString();
         }
-        this.type = scalar.type;
-        this.value = scalar.value;
+        // Copying is an observation boundary.  A deferred loop payload has a
+        // boxed sentinel in value, so snapshot its active integer instead.
+        if (scalar.hasPrimitiveFlowInteger()) {
+            setIntegerValue(scalar.fixedWidthIntegerPayload());
+        } else {
+            this.type = scalar.type;
+            this.value = scalar.value;
+        }
         this.utf8UncheckedOctets = scalar.utf8UncheckedOctets;
         this.tainted = scalar.tainted;
         this.numericLiteralText = scalar.numericLiteralText;
@@ -786,8 +792,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.value = v;
             }
             case RuntimeScalar scalar -> {
-                this.type = scalar.type;
-                this.value = scalar.value;
+                // A scalar copy is an observation boundary.  Snapshot a
+                // deferred integer as an ordinary INTEGER value instead of
+                // copying its harmless boxed sentinel.
+                if (scalar.hasPrimitiveFlowInteger()) {
+                    setIntegerValue(scalar.fixedWidthIntegerPayload());
+                } else {
+                    this.type = scalar.type;
+                    this.value = scalar.value;
+                }
                 this.utf8UncheckedOctets = scalar.utf8UncheckedOctets;
                 this.tainted = scalar.tainted;
                 this.numericLiteralText = scalar.numericLiteralText;
@@ -958,6 +971,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     private void setIntegerValue(long integerValue) {
+        // This is the canonical ordinary INTEGER write.  It must retire a
+        // deferred loop payload before publishing the replacement value, or
+        // later fixed-width readers would continue to see the stale payload.
+        clearPrimitiveFlowInteger();
         this.type = RuntimeScalarType.INTEGER;
         if (integerValue >= Integer.MIN_VALUE && integerValue <= Integer.MAX_VALUE) {
             this.value = Integer.valueOf((int) integerValue);
@@ -1440,7 +1457,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Inlineable fast path for getBoolean()
     public boolean getBoolean() {
         if (type == INTEGER) {
-            if (primitiveFlowInteger) return primitiveFlowIntegerValue != 0;
+            if (hasFixedWidthIntegerPayload()) return fixedWidthIntegerPayload() != 0;
             return ((Number) value).longValue() != 0;
         }
         return getBooleanLarge();
@@ -1450,7 +1467,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     @Override
     public boolean getBooleanNoOverload() {
         return switch (type) {
-            case INTEGER -> ((Number) value).longValue() != 0;
+            case INTEGER -> hasFixedWidthIntegerPayload()
+                    ? fixedWidthIntegerPayload() != 0 : ((Number) value).longValue() != 0;
             case DOUBLE -> (double) value != 0.0;
             case STRING, BYTE_STRING -> {
                 String s = materializeGrowingString();
@@ -4411,7 +4429,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     setIntegerValue(integerValue.add(BigInteger.ONE));
                     break;
                 }
-                long integerValue = ((Number) this.value).longValue();
+                long integerValue = fixedWidthIntegerPayload();
                 if (integerValue == Long.MAX_VALUE) {
                     this.type = RuntimeScalarType.DOUBLE;
                     this.value = (double) integerValue + 1;
@@ -4541,8 +4559,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 return old;
             }
         }
-        if (this.type == INTEGER && !(this.value instanceof BigInteger)) {
-            long integerValue = ((Number) this.value).longValue();
+        if (hasFixedWidthIntegerPayload() && !(this.value instanceof Double)) {
+            long integerValue = fixedWidthIntegerPayload();
             if (integerValue < Long.MAX_VALUE) {
                 setIntegerValue(integerValue + 1);
                 return new RuntimeScalar(integerValue).propagateTaint(this);
@@ -4573,7 +4591,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     setIntegerValue(integerValue.add(BigInteger.ONE));
                     break;
                 }
-                long integerValue = ((Number) this.value).longValue();
+                long integerValue = fixedWidthIntegerPayload();
                 if (integerValue == Long.MAX_VALUE) {
                     this.type = RuntimeScalarType.DOUBLE;
                     this.value = (double) integerValue + 1;
@@ -4703,7 +4721,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     setIntegerValue(integerValue.subtract(BigInteger.ONE));
                     break;
                 }
-                long integerValue = ((Number) this.value).longValue();
+                long integerValue = fixedWidthIntegerPayload();
                 if (integerValue == Long.MIN_VALUE) {
                     this.type = RuntimeScalarType.DOUBLE;
                     this.value = (double) integerValue - 1;
@@ -4841,7 +4859,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     setIntegerValue(integerValue.subtract(BigInteger.ONE));
                     break;
                 }
-                long integerValue = ((Number) this.value).longValue();
+                long integerValue = fixedWidthIntegerPayload();
                 if (integerValue == Long.MIN_VALUE) {
                     this.type = RuntimeScalarType.DOUBLE;
                     this.value = (double) integerValue - 1;
