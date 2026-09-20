@@ -744,6 +744,28 @@ String remains below parity and needs a new ownership model, but the active
 candidate-selection slot moves to the non-overlapping Joni search/match body
 until such a String proof exists.
 
+### 4. Method: reject the existing two-slot specialization as a new lever (2026-09-20)
+
+The source/JAR-matched one-pair Method JFR diagnostic at
+`/tmp/perf-method-jfr-current-20260920/20260920T064655Z/portfolio.json`
+completed with checksum `4352`; its 33-second recording contains 263 execution
+and 9,566 allocation samples. Its 0.91787x Perl window-median ratio is
+diagnostic only: one JFR-instrumented pair under production load is not
+throughput evidence.
+
+The call-layer collector confirms that generic call setup is small in this
+workload (about 0.146--0.154 microseconds for the two hot call categories).
+The large costs are in their bodies: the named-argument path reports 24.5 KB
+exclusive allocation per invocation, while the shared-argument path reports
+1.56 KB exclusive and 42.5 KB inclusive allocation. JFR samples include
+`RuntimeCode.invokeCallable`, cached dispatch, `RuntimeScalar.getLong`,
+`HashMap.getNode`, and `ThreadLocal.get`, but sampled `RuntimeScalar`
+allocations are led by the existing compiler-proven two-slot
+`tryDirectPlainHashIntegerMethod` path. That path is deliberately narrow and
+must not be widened or tuned as a Method benchmark optimization. A future
+candidate must instead demonstrate a material, reusable scalar-result or
+ordinary hash/call-body boundary across more than this one shape.
+
 ## Next steps
 
 1. **String: retain the completed audit; do not implement yet.**
