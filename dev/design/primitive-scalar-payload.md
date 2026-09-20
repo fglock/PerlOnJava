@@ -94,8 +94,13 @@ method-body specialization is part of this phase.
     readers away from direct fixed-width `value` inspection.
   - Added `RuntimeScalarIntegerPayloadTest`, including array and bitwise
     observation of a deferred primitive-flow payload.
-  - Full immutable `make` passed in 4m08s at
-    `/tmp/make_primitive_scalar_payload_accessors_retry_20260920.log`.
+  - Routed `getInt`, `getLong`, `getDouble`, `getBigint`, and unsigned-long
+    conversion through the fixed-width accessor where valid, while retaining
+    `BigInteger` conversion for UV and wide values. The focused test covers
+    both representations and prevents the rejected-accessor regression in
+    pack, `sprintf`, and integer bitwise paths.
+  - Full immutable `make` passed in 4m01s at
+    `/tmp/make_primitive_scalar_payload_getters_clean_20260920.log`.
 
 ## Next steps
 
