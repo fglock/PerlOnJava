@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Reuse validated `pos()` cache state throughout one `/g` or `\G` regex
+  operation, while retaining mutation and LRU-eviction recovery.
+
 - Restore `op/tie.t` compatibility for tied scalar operators, output
   separators, deferred aliases, glob copies, and tied hash iteration on both
   execution backends.

@@ -77,6 +77,36 @@ Semantic validation for the exact implementation source:
   an incremental, qualified delivery result rather than an official parity
   acceptance claim.
 
+## Current retained change: validated regex position-cache handle
+
+JFR identified repeated access-order `LinkedHashMap` probes in
+`RuntimePosLvalue` during one ordinary `/g` or `\G` operation: position
+lookup, matcher-publication provenance, zero-length bookkeeping, and
+publication all rediscovered the same entry. Commit `71f712bb9` adds a general
+`RegexPosition` handle that validates its entry before every use. Scalar
+mutation or LRU eviction marks the handle stale and routes that use through the
+ordinary cache lookup; the bounded access-ordered cache and `pos` semantics are
+unchanged.
+
+`PerlRuntimeRegexIsolationTest` directly forces mutation and LRU eviction with
+a live handle. Existing `pos_defined_element_bytes.t` covers aliased elements,
+callbacks, byte/character views, and `\G`. Candidate and exact-commit gates
+passed at `/tmp/make_regex_position_handle_candidate_20260920.log` and
+`/tmp/make_regex_position_handle_exact_20260920.log`; independently built
+parent `514ff13aa` passed at
+`/tmp/make_regex_position_handle_parent_514ff13_20260920.log`.
+
+The source/JAR-matched, warmup-stable seven-pair parent-first/candidate-second
+screens are
+`/tmp/perf-regex-position-handle-parent-full-20260920/20260920T093516Z/portfolio.json`
+and
+`/tmp/perf-regex-position-handle-candidate-full-20260920/20260920T094355Z/portfolio.json`.
+Same-index PerlOnJava median-throughput ratios were 1.3701x, 1.4475x,
+1.5365x, 1.5469x, 1.1772x, 1.1441x, and 1.1465x (geometric mean 1.3278x;
+minimum 1.1441x). Regex improved from 0.76417x Perl on the parent screen to
+0.87343x on the candidate screen. Retain this material, repeatable hash-access
+improvement and profile residual matcher/dispatch cost next.
+
 ## Progress tracking
 
 ### Current status: Phase 2, regex delivery candidate validated
@@ -89,13 +119,20 @@ Semantic validation for the exact implementation source:
   - Added focused recursive-cache and runtime-isolation coverage.
   - Ran standard-Perl regressions, full `make`, focused production brackets,
     and a complete parent/candidate production portfolio.
+- [x] Select and validate a mutation-safe regex position-cache handle (2026-09-20)
+  - Reused one validated entry for an ordinary `/g` or `\G` operation.
+  - Retained ordinary mutation and LRU-eviction recovery.
+  - Passed independent exact-parent gates and stable seven-pair production
+    measurement with a 1.3278x same-index geometric-mean gain.
 
 ### Next steps
 
 1. Publish the focused static-match cache PR with its qualified evidence and
    exact tested commits; do not represent the noisy portfolios as parity proof.
-2. Continue profiling the remaining String and Life gaps from the delivered
-   source baseline, targeting independently measured broad costs.
+2. Profile residual Regex matcher/dispatch cost and the remaining String and
+   Life gaps from the delivered source baseline, targeting independently
+   measured broad costs. Do not weaken the position handle's mutation/LRU
+   fallback or reintroduce repeated cache probes through new helper paths.
 3. For any future retained candidate, repeat source-matched semantic gates and
    a complete portfolio under the same production-load protocol.
 
