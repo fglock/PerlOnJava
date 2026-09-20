@@ -178,6 +178,21 @@ sentinel with an otherwise unchanged public field. It needs an explicit
 per-cell active-payload state and the three boundary changes above. This is a
 design constraint, not yet an implementation decision.
 
+### Assignment and proxy audit, third slice (2026-09-20)
+
+The follow-up assignment scan found `RuntimeScalar.set(RuntimeScalar)` copies
+`type` and `value` directly on its ordinary fast path. More than fifty
+proxy, clone, localization, tied-value, graph-copy, and package-state paths
+likewise assign one scalar's `value` field to another. A new primitive active
+state would silently lose its payload in those copies, or propagate a sentinel
+as if it were the source value.
+
+Before general storage can change, add a canonical scalar-payload copy
+protocol and route each of these assignments through it. Assignment may
+materialize at a documented identity/alias boundary, but must never copy only
+the public object field. This prevents a setter-only optimization and keeps
+the current work at the representation-proof phase.
+
 ## Related work
 
 - [Performance over Perl handoff](performance-over-perl-handoff.md)
