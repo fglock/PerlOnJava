@@ -2581,7 +2581,7 @@ public class Opcodes {
     /** Declared-reference foreach scalar dereference without autovivification. */
     public static final short FOREACH_DEREF_SCALAR = 566;
     /** Declared-reference foreach array dereference without autovivification. */
-    public static final short FOREACH_DEREF_ARRAY = 567;
+    public static final short FOREACH_DEREF_ARRAY = 569;
     /** Declared-reference foreach hash dereference without autovivification. */
     public static final short FOREACH_DEREF_HASH = 568;
 
