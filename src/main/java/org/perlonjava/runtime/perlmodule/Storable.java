@@ -370,10 +370,11 @@ public class Storable extends PerlModuleBase {
     private static RuntimeScalar deepClone(RuntimeScalar scalar, CloneContext context) {
         if (scalar == null) return new RuntimeScalar();
         boolean sourceWasWeak = WeakRefRegistry.isweak(scalar);
+        Object observedPayload = scalar.materializeObjectPayload();
 
         // Check for already-cloned references (circular reference handling)
-        if (scalar.value != null && context.cloned.containsKey(scalar.value)) {
-            RuntimeScalar copy = new RuntimeScalar(context.cloned.get(scalar.value));
+        if (observedPayload != null && context.cloned.containsKey(observedPayload)) {
+            RuntimeScalar copy = new RuntimeScalar(context.cloned.get(observedPayload));
             if (sourceWasWeak) context.pendingWeakRefs.add(copy);
             return copy;
         }

@@ -379,8 +379,9 @@ public class YAMLPP extends PerlModuleBase {
             return null;
         }
 
-        if (seen.containsKey(scalar.value)) {
-            return seen.get(scalar.value);
+        Object observedPayload = scalar.materializeObjectPayload();
+        if (seen.containsKey(observedPayload)) {
+            return seen.get(observedPayload);
         }
 
         Object result = switch (scalar.type) {

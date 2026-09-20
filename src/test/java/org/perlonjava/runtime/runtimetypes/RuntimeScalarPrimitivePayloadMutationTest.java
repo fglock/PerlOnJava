@@ -43,4 +43,14 @@ class RuntimeScalarPrimitivePayloadMutationTest {
         assertEquals(42L, decimal.getLong());
         assertTrue(decimal.hasFixedWidthIntegerPayload());
     }
+
+    @Test
+    void objectObservationMaterializesTheDeferredPayload() {
+        RuntimeScalar scalar = new RuntimeScalar(0);
+        scalar.setPrimitiveFlowInteger(1_000_003L);
+
+        assertEquals(1_000_003L, ((Number) scalar.materializeObjectPayload()).longValue());
+        assertTrue(!scalar.hasPrimitiveFlowInteger());
+        assertEquals(1_000_003L, scalar.getLong());
+    }
 }

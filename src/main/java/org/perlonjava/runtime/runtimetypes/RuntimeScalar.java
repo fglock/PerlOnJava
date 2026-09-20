@@ -292,6 +292,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return this;
     }
 
+    /**
+     * Return the object payload at an identity-sensitive observation boundary.
+     * Deferred fixed-width integers are first materialized into ordinary
+     * per-cell INTEGER storage, so callers never observe the transient boxed
+     * sentinel as a scalar value or identity key.
+     */
+    public Object materializeObjectPayload() {
+        flushPrimitiveFlowInteger();
+        return value;
+    }
+
     private void clearPrimitiveFlowInteger() {
         primitiveFlowInteger = false;
     }

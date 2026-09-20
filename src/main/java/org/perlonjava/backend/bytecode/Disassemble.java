@@ -129,7 +129,9 @@ public class Disassemble {
                             Object obj = interpretedCode.constants[constIdx];
                             sb.append(" (");
                             if (obj instanceof RuntimeScalar scalar) {
-                                sb.append("RuntimeScalar{type=").append(scalar.type).append(", value=").append(scalar.value.getClass().getSimpleName()).append("}");
+                                Object payload = scalar.materializeObjectPayload();
+                                sb.append("RuntimeScalar{type=").append(scalar.type).append(", value=")
+                                        .append(payload == null ? "null" : payload.getClass().getSimpleName()).append("}");
                             } else if (obj instanceof PerlRange range) {
                                 // Special handling for PerlRange to avoid expanding large ranges
                                 sb.append("PerlRange{").append(range.getStart().toString()).append("..")

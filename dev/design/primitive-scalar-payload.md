@@ -111,6 +111,9 @@ method-body specialization is part of this phase.
   - Routed scalar stringification and native-array eligibility through the
     fixed-width payload while retaining INTEGER-tagged `Double` and wide-value
     fallbacks.
+  - Added a one-way object-observation materialization boundary. Deep cloning,
+    YAML cycle tracking, and bytecode disassembly invoke it before observing
+    object identity; the focused test proves the deferred value is retained.
   - Full immutable `make` passed in 4m01s at
     `/tmp/make_primitive_scalar_payload_getters_clean_20260920.log`, and
     again in 3m55s at
@@ -119,13 +122,15 @@ method-body specialization is part of this phase.
     `/tmp/make_primitive_scalar_payload_string_increment_20260920.log`, and
     in 3m59s at
     `/tmp/make_primitive_scalar_payload_substr_20260920.log`, and in 4m05s at
-    `/tmp/make_primitive_scalar_payload_stringification_20260920.log`.
+    `/tmp/make_primitive_scalar_payload_stringification_20260920.log`, and
+    in 4m12s at
+    `/tmp/make_primitive_scalar_payload_object_observation_20260920.log`.
 
 ## Next steps
 
-1. Complete a broader observability audit before replacing ordinary boxed
-   integer storage: direct object reads must either be unreachable for
-   INTEGER, use the payload accessor, or materialize explicitly.
+1. Complete the remaining observability audit before replacing ordinary boxed
+   integer storage, especially direct public-field Java interoperation and
+   generic object identity paths outside cloning/YAML/debugging.
 2. Define the smallest storage-state transition that cannot expose a stale
    public object payload across either backend.
 3. Add focused regression coverage for every newly migrated observation
