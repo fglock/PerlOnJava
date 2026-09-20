@@ -336,7 +336,8 @@ public class Re extends PerlModuleBase {
         result.put("implicit", perlBoolean(
                 info.implicitSingleLineAnchor() || info.implicitMultiLineAnchor()));
         result.put("anchor SBOL", perlBoolean(
-                info.implicitMultiLineAnchor() || info.beginLineAnchored()));
+                info.implicitMultiLineAnchor() || info.beginLineAnchored()
+                        || info.beginBufferAnchored()));
         result.put("anchor MBOL", perlBoolean(info.implicitSingleLineAnchor()));
         result.put("anchor GPOS", perlBoolean(info.beginPositionAnchored()));
         result.put("joni search", new RuntimeScalar(info.searchAlgorithm()));
@@ -348,21 +349,33 @@ public class Re extends PerlModuleBase {
         if (exact == null) {
             result.put("checking", new RuntimeScalar("none"));
         } else {
+            boolean hasAlternative = info.alternativeExact() != null;
+            int minimumOffset = info.minimumOffset();
             // A fixed-offset exact is Perl's "anchored" optimization even
             // when the literal follows a mandatory prefix.  Only an exact
             // whose offset can vary is "floating"; offset zero is not a
             // requirement for the anchored classification.
             Integer maximumOffset = info.maximumOffsetInCharacters();
             boolean anchored = maximumOffset != null
-                    && info.minimumOffset() == maximumOffset;
+                    && minimumOffset == maximumOffset;
             String kind = anchored ? "anchored" : "floating";
             result.put(kind, new RuntimeScalar(exact));
-            result.put(kind + " min offset", new RuntimeScalar(info.minimumOffset()));
+            result.put(kind + " min offset", new RuntimeScalar(minimumOffset));
             if (maximumOffset != null) {
                 result.put(kind + " max offset", new RuntimeScalar(maximumOffset));
             }
             result.put("checking", new RuntimeScalar(kind));
-            boolean isAll = anchored && info.minimumOffset() == 0
+            if (hasAlternative) {
+                result.put("floating", new RuntimeScalar(info.alternativeExact()));
+                result.put("floating min offset",
+                        new RuntimeScalar(info.alternativeMinimumOffset()));
+                if (info.alternativeMaximumOffset() != null) {
+                    result.put("floating max offset",
+                            new RuntimeScalar(info.alternativeMaximumOffset()));
+                }
+                result.put("checking", new RuntimeScalar("floating"));
+            }
+            boolean isAll = anchored && minimumOffset == 0
                     && info.exactReachEnd() && !info.hasCaptures()
                     && !info.hasControlVerbs()
                     && exact.codePointCount(0, exact.length()) == info.minimumLength();

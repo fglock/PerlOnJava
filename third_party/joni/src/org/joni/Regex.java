@@ -162,6 +162,10 @@ public final class Regex {
     int dMax;                               /* max-distance of exact or map */
     int minimumLength;                      /* minimum match length */
     boolean exactReachEnd;                  /* selected exact reaches pattern end */
+    byte[] alternativeExact;
+    int alternativeExactEnd;
+    int alternativeDMin;
+    int alternativeDMax;
     boolean characterMapOptimization;       /* selected search uses the char map */
     boolean syntheticStartClass;            /* retained start map beside floating exact */
     String optimizationStartClass;          /* Perl-visible start-class name */
@@ -644,6 +648,25 @@ public final class Regex {
         }
     }
 
+    void setAlternativeExactInfo(OptExactInfo e) {
+        setAlternativeExactInfo(e, 0);
+    }
+
+    void setAlternativeExactInfo(OptExactInfo e, int skip) {
+        if (e == null || e.length == 0) return;
+        skip = Math.max(0, Math.min(skip, e.length - 1));
+        alternativeExact = new byte[e.length - skip];
+        System.arraycopy(e.bytes, skip, alternativeExact, 0, e.length - skip);
+        alternativeExactEnd = e.length - skip;
+        alternativeDMin = e.mmd.min;
+        alternativeDMax = e.mmd.max;
+    }
+
+    void setAlternativeExactOffsets(int minimum, int maximum) {
+        alternativeDMin = minimum;
+        alternativeDMax = maximum;
+    }
+
     void setOptimizeMapInfo(OptMapInfo m) {
         map = m.map;
 
@@ -682,6 +705,9 @@ public final class Regex {
         exactP = exactEnd = 0;
         minimumLength = 0;
         exactReachEnd = false;
+        alternativeExact = null;
+        alternativeExactEnd = 0;
+        alternativeDMin = alternativeDMax = 0;
         characterMapOptimization = false;
         syntheticStartClass = false;
         optimizationStartClass = null;
@@ -773,6 +799,9 @@ public final class Regex {
         private final int minimumOffset;
         private final Integer maximumOffset;
         private final boolean exactReachEnd;
+        private final String alternativeExact;
+        private final int alternativeMinimumOffset;
+        private final Integer alternativeMaximumOffset;
         private final int anchor;
         private final int subAnchor;
         private final String searchAlgorithm;
@@ -789,12 +818,17 @@ public final class Regex {
                 int anchor, int subAnchor, String searchAlgorithm,
                 boolean characterMap, boolean captures, String startClass,
                 int encodingMaxLength, int logicalMinimumOffset,
-                Integer logicalMaximumOffset, boolean controlVerbs) {
+                Integer logicalMaximumOffset, boolean controlVerbs,
+                String alternativeExact, int alternativeMinimumOffset,
+                Integer alternativeMaximumOffset) {
             this.minimumLength = minimumLength;
             this.exact = exact;
             this.minimumOffset = minimumOffset;
             this.maximumOffset = maximumOffset;
             this.exactReachEnd = exactReachEnd;
+            this.alternativeExact = alternativeExact;
+            this.alternativeMinimumOffset = alternativeMinimumOffset;
+            this.alternativeMaximumOffset = alternativeMaximumOffset;
             this.anchor = anchor;
             this.subAnchor = subAnchor;
             this.searchAlgorithm = searchAlgorithm;
@@ -812,6 +846,9 @@ public final class Regex {
         public int minimumOffset() { return minimumOffset; }
         public Integer maximumOffset() { return maximumOffset; }
         public boolean exactReachEnd() { return exactReachEnd; }
+        public String alternativeExact() { return alternativeExact; }
+        public int alternativeMinimumOffset() { return alternativeMinimumOffset; }
+        public Integer alternativeMaximumOffset() { return alternativeMaximumOffset; }
         public int anchor() { return anchor; }
         public int subAnchor() { return subAnchor; }
         public String searchAlgorithm() { return searchAlgorithm; }
@@ -842,10 +879,10 @@ public final class Regex {
 
     /** Returns the optimizer's actual selected search and length metadata. */
     public OptimizationInfo getOptimizationInfo() {
+        Charset charset = enc.isSingleByte()
+                ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8;
         String exactString = null;
         if (exact != null) {
-            Charset charset = enc.isSingleByte()
-                    ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8;
             exactString = new String(exact, exactP, exactEnd - exactP, charset);
         }
         Integer maximumOffset = dMax == MinMaxLen.INFINITE_DISTANCE ? null : dMax;
@@ -853,6 +890,11 @@ public final class Regex {
         if (perlOnJavaSyntax && optimizationBeginLine) {
             reportedSubAnchor |= AnchorType.BEGIN_LINE;
         }
+        String alternativeString = alternativeExact == null ? null
+                : new String(alternativeExact, 0, alternativeExactEnd, charset);
+        Integer alternativeMaximum = alternativeExact == null
+                || alternativeDMax == MinMaxLen.INFINITE_DISTANCE
+                ? null : alternativeDMax;
         return new OptimizationInfo(minimumLength, exactString, dMin,
                 maximumOffset, exactReachEnd, anchor, reportedSubAnchor,
                 forward == null ? "NONE" : forward.getName(),
@@ -860,7 +902,9 @@ public final class Regex {
                 enc.maxLength(), logicalDMin,
                 logicalOptimizationAvailable
                         ? (logicalDMax == MinMaxLen.INFINITE_DISTANCE ? null : logicalDMax)
-                        : maximumOffset, hasControlVerb);
+                        : maximumOffset, hasControlVerb, alternativeString,
+                alternativeExact == null ? 0 : alternativeDMin,
+                alternativeMaximum);
     }
 
     /** Stable textual view of the actual compiled native instruction stream. */

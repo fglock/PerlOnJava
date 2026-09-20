@@ -21,6 +21,17 @@ is($floating->{'floating min offset'}, 0, 'floating minimum offset');
 is($floating->{'floating max offset'}, 1, 'floating maximum offset');
 is($floating->{checking}, 'floating', 'floating string is checked');
 
+my $variable = re::optimization(qr/a(b){2,3}c/);
+is($variable->{anchored}, 'abb', 'variable repetition retains anchored prefix');
+is($variable->{floating}, 'bbc', 'variable repetition reports floating tail');
+is($variable->{'floating min offset'}, 1,
+    'variable repetition reports floating tail offset');
+is($variable->{checking}, 'floating', 'floating tail is checked');
+
+my $sbol = re::optimization(
+    qr/^(?:mat1|mat2|(?:mat3|mat4)|mat5|(?:mat6|mat7))$/);
+is($sbol->{'anchor SBOL'}, 1, 'beginning anchor is reported as SBOL');
+
 for my $casefold ('', 'i') {
     my $trie_tail = re::optimization(eval "qr/(?:(?:cat|dog|fish)|bird)x/$casefold");
     is($trie_tail->{floating}, 'x',

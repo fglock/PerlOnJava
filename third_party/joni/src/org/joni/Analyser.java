@@ -3789,7 +3789,7 @@ final class Analyser extends Parser {
             do {
                 optimizeNodeLeft(lin.value, nopt, nenv);
                 if (nopt.acceptBoundary) {
-                    if (!exactClosed) opt.concatLeftNode(nopt, enc);
+                    if (!exactClosed) opt.concatLeftNode(nopt, enc, logicalOptimizationLengths);
                     opt.acceptBoundary = true;
                     break;
                 }
@@ -3797,7 +3797,7 @@ final class Analyser extends Parser {
                     opt.length.add(nopt.length);
                 } else {
                     nenv.mmd.add(nopt.length);
-                    opt.concatLeftNode(nopt, enc);
+                    opt.concatLeftNode(nopt, enc, logicalOptimizationLengths);
                 }
                 if (nopt.exactBoundary) {
                     exactClosed = true;
@@ -3819,6 +3819,9 @@ final class Analyser extends Parser {
                     opt.altMerge(nopt, oenv);
                 }
             } while ((aln = aln.tail) != null);
+            if (logicalOptimizationLengths && opt.length.min != opt.length.max) {
+                opt.hasVariableQuantifier = true;
+            }
             break;
         }
 
@@ -4090,6 +4093,10 @@ final class Analyser extends Parser {
                     }
                     if (qn.lower > 1) {
                         opt.exm.reachEnd = false;
+                        if (logicalOptimizationLengths && nopt.hasVariableQuantifier) {
+                            opt.exm.copy(opt.exb);
+                            opt.exm.reachEnd = false;
+                        }
                     }
 
                 }
@@ -4219,10 +4226,10 @@ final class Analyser extends Parser {
         oenv.mmd.clear(); // ??
 
         optimizeNodeLeft(node, opt, oenv);
+        regex.minimumLength = opt.length.min;
         if (regex.perlOnJavaSyntax) {
             setLogicalOptimizationInfo(node, oenv);
         }
-        regex.minimumLength = opt.length.min;
 
         regex.anchor = opt.anchor.leftAnchor & (AnchorType.BEGIN_BUF |
                                                 AnchorType.BEGIN_POSITION |
@@ -4299,6 +4306,15 @@ final class Analyser extends Parser {
 
         if (!perlReverseFoldClassSequenceExpanded
                 && (logical.exb.length > 0 || logical.exm.length > 0)) {
+            if (logical.hasVariableQuantifier) {
+                regex.setAlternativeExactInfo(logical.exm, logical.floatingPrefixLength);
+                int candidateLength = logical.exm.length - logical.floatingPrefixLength;
+                regex.setAlternativeExactOffsets(
+                        Math.max(0, regex.minimumLength - candidateLength),
+                        logical.length.max == MinMaxLen.INFINITE_DISTANCE
+                                ? MinMaxLen.INFINITE_DISTANCE
+                                : Math.max(0, logical.length.max - candidateLength));
+            }
             if (logical.hasVariableQuantifier && logical.exm.length > 0) {
                 logical.exb.copy(logical.exm);
             } else {
