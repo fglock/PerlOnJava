@@ -585,6 +585,24 @@ stabilize; its 0.76829x median and 0.78702x pair geometric mean at load
 anchor. The source was reverted without an exact-parent screen. Do not retry
 this captureless state-query leaf; seek a broader Joni search/match boundary.
 
+### Rejected capture-free named-capture map sharing (2026-09-20)
+
+A fresh source/JAR-matched JFR found that `updateLastNamedCaptureGroups`
+allocated a `LinkedHashMap` for each successful capture-free match. Candidate
+`d8b276ffe` reused an immutable empty map only when the matcher reported no
+named groups; its focused system-Perl/JVM/interpreter state oracle and two
+immutable full gates passed. The JFR screen removed the sampled
+`LinkedHashMap` allocation entirely, but allocation removal is not a workload
+gain by itself.
+
+The exact-commit two-pair alternating non-JFR screen at
+`/tmp/perf-regex-empty-named-map-exact-screen-20260920/20260920T071902Z/portfolio.json`
+was protocol-inconclusive and directionally negative: 0.65078x Perl geometric
+mean, with pair ratios 0.75752x and 0.55908x on the intentional high-load host.
+There is no material, repeatable whole-workload gain, so the optimization and
+its test were removed. Do not rerun or widen this empty-map candidate; seek a
+larger generic matcher/search boundary.
+
 ### Rejected literal-alternation first-byte dispatch (2026-09-14)
 
 The retained capture-free byte-literal alternation engine was audited because
