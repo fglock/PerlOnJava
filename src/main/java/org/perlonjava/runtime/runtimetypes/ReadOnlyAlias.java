@@ -37,8 +37,7 @@ public class ReadOnlyAlias extends RuntimeScalarReadOnly {
     public ReadOnlyAlias(RuntimeScalar src) {
         super();
         this.src = src;
-        this.type = src.type;
-        this.value = src.value;
+        copyPayloadFrom(src);
         this.blessId = src.blessId;
     }
 

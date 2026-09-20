@@ -497,6 +497,14 @@ public class RuntimeGraphCloner {
         copyBase(source, target);
         copyScalarMetadata(source, target);
 
+        // A fixed-width deferred payload has no object graph to clone. Copy
+        // its active value into ordinary target storage before inspecting the
+        // public object field, which only holds a transient sentinel.
+        if (source.hasPrimitiveFlowInteger()) {
+            target.copyPayloadFrom(source);
+            return target;
+        }
+
         if (RuntimeScalarType.isReference(source) && source.value == null) {
             // A cleared weak reference can temporarily retain its reference
             // type while its payload has already disappeared.  It is Perl
@@ -802,7 +810,7 @@ public class RuntimeGraphCloner {
     private record InheritedHandlePair(IOHandle parent, IOHandle child) {}
 
     private void copyScalarMetadata(RuntimeScalar source, RuntimeScalar target) {
-        target.type = source.type;
+        target.copyPayloadFrom(source);
         target.numericLiteralText = source.numericLiteralText;
         target.firstClassRegexScalar = source.firstClassRegexScalar;
         target.formatPictureTainted = source.formatPictureTainted;

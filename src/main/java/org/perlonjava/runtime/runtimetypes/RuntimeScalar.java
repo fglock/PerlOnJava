@@ -5041,8 +5041,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Create a new RuntimeScalar to save the current state
         RuntimeScalar currentState = new RuntimeScalar();
         // Copy the current type and value to the new state
-        currentState.type = this.type;
-        currentState.value = this.value;
+        currentState.copyPayloadFrom(this);
         currentState.blessId = this.blessId;
         currentState.ownsScalarReferenceContents = this.ownsScalarReferenceContents;
         currentState.referencedByScalarReference = this.referencedByScalarReference;
@@ -5087,8 +5086,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             RuntimeScalar scalarReferenceContents = scalarReferenceContentsReferent(this);
 
             // Restore the type, value from the saved state
-            this.type = previousState.type;
-            this.value = previousState.value;
+            copyPayloadFrom(previousState);
             this.blessId = previousState.blessId;
             this.ownsScalarReferenceContents = previousState.ownsScalarReferenceContents;
             this.referencedByScalarReference =
@@ -5123,8 +5121,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public void dynamicResumeState(Object token) {
         dynamicSaveState();
         if (token instanceof RuntimeScalar activeState) {
-            this.type = activeState.type;
-            this.value = activeState.value;
+            copyPayloadFrom(activeState);
             this.blessId = activeState.blessId;
             this.ownsScalarReferenceContents = activeState.ownsScalarReferenceContents;
             this.referencedByScalarReference = activeState.referencedByScalarReference;

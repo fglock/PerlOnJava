@@ -120,6 +120,10 @@ method-body specialization is part of this phase.
   - Migrated base hash/array proxy synchronization, aliases, dynamic snapshots,
     and substring lvalue snapshots to the payload-copy protocol. Added a
     focused array-proxy regression for an active deferred element.
+  - Migrated scalar dynamic save/restore/resume, read-only alias construction,
+    and graph-cloner metadata copying to the payload-copy protocol. Graph
+    cloning now converts an active deferred fixed-width payload into ordinary
+    target storage before it can inspect the public object field.
   - Full immutable `make` passed in 4m01s at
     `/tmp/make_primitive_scalar_payload_getters_clean_20260920.log`, and
     again in 3m55s at
@@ -133,12 +137,13 @@ method-body specialization is part of this phase.
     `/tmp/make_primitive_scalar_payload_object_observation_20260920.log`, and
     in 4m04s at
     `/tmp/make_primitive_scalar_payload_copy_protocol_20260920.log`, and in
-    4m08s at `/tmp/make_primitive_scalar_payload_proxy_copy_20260920.log`.
+    4m08s at `/tmp/make_primitive_scalar_payload_proxy_copy_20260920.log`, and
+    in 4m at `/tmp/make_primitive_scalar_payload_graph_copy_20260920.log`.
 
 ## Next steps
 
-1. Migrate remaining clone, localization, tied-value, graph-copy, and package
-   state raw assignment paths to the canonical payload-copy protocol.
+1. Migrate remaining tied-value, package-state, and external serialization
+   copy paths to the canonical payload-copy protocol.
 2. Define the smallest storage-state transition that cannot expose a stale
    public object payload across either backend.
 3. Add focused regression coverage for every newly migrated observation
