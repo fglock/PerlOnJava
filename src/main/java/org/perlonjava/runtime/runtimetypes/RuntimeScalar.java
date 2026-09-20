@@ -313,7 +313,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * materialized only in the destination; the source stays deferred for its
      * current owner.
      */
-    void copyPayloadFrom(RuntimeScalar source) {
+    public void copyPayloadFrom(RuntimeScalar source) {
         if (source.hasPrimitiveFlowInteger()) {
             setIntegerValue(source.fixedWidthIntegerPayload());
         } else {
@@ -724,12 +724,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         // Copying is an observation boundary.  A deferred loop payload has a
         // boxed sentinel in value, so snapshot its active integer instead.
-        if (scalar.hasPrimitiveFlowInteger()) {
-            setIntegerValue(scalar.fixedWidthIntegerPayload());
-        } else {
-            this.type = scalar.type;
-            this.value = scalar.value;
-        }
+        copyPayloadFrom(scalar);
         this.utf8UncheckedOctets = scalar.utf8UncheckedOctets;
         this.tainted = scalar.tainted;
         this.numericLiteralText = scalar.numericLiteralText;
@@ -808,8 +803,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             case RuntimeGlob v -> {
                 RuntimeScalar tmp = new RuntimeScalar(v);
-                this.type = tmp.type;
-                this.value = tmp.value;  // Use the detached copy from the constructor
+                copyPayloadFrom(tmp);  // Use the detached copy from the constructor
             }
             case RuntimeIO v -> {
                 RuntimeScalar tmp = new RuntimeScalar(v);
@@ -820,12 +814,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // A scalar copy is an observation boundary.  Snapshot a
                 // deferred integer as an ordinary INTEGER value instead of
                 // copying its harmless boxed sentinel.
-                if (scalar.hasPrimitiveFlowInteger()) {
-                    setIntegerValue(scalar.fixedWidthIntegerPayload());
-                } else {
-                    this.type = scalar.type;
-                    this.value = scalar.value;
-                }
+                copyPayloadFrom(scalar);
                 this.utf8UncheckedOctets = scalar.utf8UncheckedOctets;
                 this.tainted = scalar.tainted;
                 this.numericLiteralText = scalar.numericLiteralText;
@@ -1030,7 +1019,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /** Capture a plain scalar payload for regex callback backtracking. */
     Object snapshotRegexMutationState() {
         if (type < INTEGER || type > BOOLEAN) return null;
-        return new RegexMutationState(type, value, utf8UncheckedOctets, tainted,
+        RuntimeScalar payload = new RuntimeScalar();
+        payload.copyPayloadFrom(this);
+        return new RegexMutationState(payload, utf8UncheckedOctets, tainted,
                 numericLiteralText, numericContextSeen, firstClassRegexScalar,
                 formatPictureTainted);
     }
@@ -1038,8 +1029,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     void restoreRegexMutationState(Object token) {
         if (!(token instanceof RegexMutationState state)) return;
         RuntimeScalar restored = new RuntimeScalar();
-        restored.type = state.type;
-        restored.value = state.value;
+        restored.copyPayloadFrom(state.payload);
         restored.utf8UncheckedOctets = state.utf8UncheckedOctets;
         restored.tainted = state.tainted;
         restored.numericLiteralText = state.numericLiteralText;
@@ -1049,7 +1039,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         set(restored);
     }
 
-    private record RegexMutationState(int type, Object value,
+    private record RegexMutationState(RuntimeScalar payload,
                                       boolean utf8UncheckedOctets, boolean tainted,
                                       String numericLiteralText, boolean numericContextSeen,
                                       boolean firstClassRegexScalar,
@@ -4541,8 +4531,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         result = ctx.tryOverload("(+", new RuntimeArray(this, scalarOne, scalarUndef));
                         if (result != null) {
                             // For fallback, + should NOT modify operand, so we handle assignment
-                            this.type = result.type;
-                            this.value = result.value;
+                            copyPayloadFrom(result);
                             return this;
                         }
 
@@ -4699,8 +4688,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         result = ctx.tryOverload("(+", new RuntimeArray(this, scalarOne, scalarUndef));
                         if (result != null) {
                             // For fallback, + should NOT modify operand, so we handle assignment
-                            this.type = result.type;
-                            this.value = result.value;
+                            copyPayloadFrom(result);
                             return old;
                         }
 
@@ -4820,8 +4808,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         RuntimeScalar copyResult = ctx.tryOverload("(=", new RuntimeArray(this));
                         if (copyResult != null) {
                             // Copy the cloned object's fields into this
-                            this.type = copyResult.type;
-                            this.value = copyResult.value;
+                            copyPayloadFrom(copyResult);
                         }
 
                         // Try direct overload method for --
@@ -4836,8 +4823,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         result = ctx.tryOverload("(-", new RuntimeArray(this, scalarOne, scalarUndef));
                         if (result != null) {
                             // For fallback, - should NOT modify operand, so we handle assignment
-                            this.type = result.type;
-                            this.value = result.value;
+                            copyPayloadFrom(result);
                             return this;
                         }
                     }
@@ -4955,8 +4941,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         RuntimeScalar copyResult = ctx.tryOverload("(=", new RuntimeArray(this));
                         if (copyResult != null) {
                             // Copy the cloned object's fields into this
-                            this.type = copyResult.type;
-                            this.value = copyResult.value;
+                            copyPayloadFrom(copyResult);
                         }
 
                         // Try direct overload method for --
@@ -4971,8 +4956,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         result = ctx.tryOverload("(-", new RuntimeArray(this, scalarOne, scalarUndef));
                         if (result != null) {
                             // For fallback, - should NOT modify operand, so we handle assignment
-                            this.type = result.type;
-                            this.value = result.value;
+                            copyPayloadFrom(result);
                             return old;
                         }
                     }

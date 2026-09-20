@@ -128,6 +128,9 @@ method-body specialization is part of this phase.
     localized package scalars, and hash-proxy restoration to the payload-copy
     protocol. Added focused tied FETCH-cache coverage for an active deferred
     source payload.
+  - Made payload copying an explicit scalar API and migrated scalar
+    constructors, overload result copies, and regex callback rollback to it.
+    Added focused rollback coverage for an active deferred payload.
   - Full immutable `make` passed in 4m01s at
     `/tmp/make_primitive_scalar_payload_getters_clean_20260920.log`, and
     again in 3m55s at
@@ -144,11 +147,13 @@ method-body specialization is part of this phase.
     4m08s at `/tmp/make_primitive_scalar_payload_proxy_copy_20260920.log`, and
     in 4m at `/tmp/make_primitive_scalar_payload_graph_copy_20260920.log`, and
     in 3m51s at `/tmp/make_primitive_scalar_payload_tied_copy_20260920.log`.
+    The scalar snapshot migration also passed in 3m47s at
+    `/tmp/make_primitive_scalar_payload_regex_snapshot_20260920.log`.
 
 ## Next steps
 
 1. Migrate the remaining external serialization, clone, bytecode snapshot,
-   and package-cache copy paths to the canonical payload-copy protocol.
+   and package-cache copy paths to the now-public canonical payload-copy API.
 2. Define the smallest storage-state transition that cannot expose a stale
    public object payload across either backend.
 3. Add focused regression coverage for every newly migrated observation
