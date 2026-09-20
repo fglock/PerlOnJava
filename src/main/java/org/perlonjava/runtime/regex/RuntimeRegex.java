@@ -92,6 +92,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             Pattern.compile("\\\\([pP])\\{((?:[A-Za-z_][A-Za-z0-9_]*::)*(?:Is|In)[A-Za-z_][A-Za-z0-9_]*)}");
     private static final Pattern MALFORMED_USER_DEFINED_PROPERTY_PATTERN =
             Pattern.compile("(?:^|::)(?:Is|In)::");
+    /**
+     * Capture-free matches expose empty read-only %+ and %- special hashes.
+     * No provisional named-capture resolver exists for that state, so it never
+     * mutates this shared immutable map.
+     */
+    private static final Map<String, List<String>> EMPTY_NAMED_CAPTURE_GROUPS = Map.of();
     // Maximum size for each runtime's regex cache.
     private static final int MAX_REGEX_CACHE_SIZE = RuntimeRegexState.MAX_REGEX_CACHE_SIZE;
     private static RuntimeRegexState state() {
@@ -3181,12 +3187,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RuntimeRegexState regexState = state();
         regexState.provisionalNamedCaptureGroups = null;
         Map<String, Integer> namedGroups = matcher.namedGroups();
-        Map<String, List<String>> byPerlName = new LinkedHashMap<>();
         if (namedGroups == null || namedGroups.isEmpty()) {
-            regexState.lastNamedCaptureGroups = byPerlName;
+            regexState.lastNamedCaptureGroups = EMPTY_NAMED_CAPTURE_GROUPS;
             return;
         }
 
+        Map<String, List<String>> byPerlName = new LinkedHashMap<>();
         Map<String, List<String>> javaNamesByPerlName = new LinkedHashMap<>();
         for (String javaName : namedGroups.keySet()) {
             if (CaptureNameEncoder.isInternalCapture(javaName)) {
