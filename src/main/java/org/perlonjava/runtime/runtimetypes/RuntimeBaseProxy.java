@@ -26,8 +26,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
     public static RuntimeScalar bless(RuntimeBaseProxy runtimeBaseProxy, RuntimeScalar className) {
         runtimeBaseProxy.vivify();
         RuntimeScalar ret = ReferenceOperators.bless(runtimeBaseProxy.lvalue, className);
-        runtimeBaseProxy.type = runtimeBaseProxy.lvalue.type;
-        runtimeBaseProxy.value = runtimeBaseProxy.lvalue.value;
+        runtimeBaseProxy.copyPayloadFrom(runtimeBaseProxy.lvalue);
         return ret;
     }
 
@@ -54,8 +53,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         vivify();
         // Sync proxy state with the underlying lvalue
         if (lvalue != null) {
-            this.type = lvalue.type;
-            this.value = lvalue.value;
+            copyPayloadFrom(lvalue);
         }
     }
 
@@ -79,8 +77,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
             }
         }
         this.lvalue.set(value);
-        this.type = lvalue.type;
-        this.value = lvalue.value;
+        copyPayloadFrom(lvalue);
         // D-W6.18: propagate package-global metadata flag.
         // If this proxy is for an element of a package-global hash,
         // mark the stored value's referent as storedInPackageGlobal
@@ -117,8 +114,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         vivify();  // Ensure the scalar exists in parent hash
         RuntimeHash result = lvalue.hashDeref();  // Delegate to the actual scalar
         // Update proxy's type and value to match lvalue after vivification
-        this.type = lvalue.type;
-        this.value = lvalue.value;
+        copyPayloadFrom(lvalue);
         return result;
     }
 
@@ -127,8 +123,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         vivify();  // Ensure the scalar exists in parent hash
         RuntimeArray result = lvalue.arrayDeref();  // Delegate to the actual scalar
         // Update proxy's type and value to match lvalue after vivification
-        this.type = lvalue.type;
-        this.value = lvalue.value;
+        copyPayloadFrom(lvalue);
         return result;
     }
 
@@ -139,8 +134,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         }
         vivify();
         RuntimeScalar result = lvalue.scalarDeref();
-        this.type = lvalue.type;
-        this.value = lvalue.value;
+        copyPayloadFrom(lvalue);
         return result;
     }
 
@@ -153,8 +147,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         RuntimeScalar result = lvalue.type == RuntimeScalarType.UNDEF
                 ? lvalue.scalarDeref()
                 : lvalue.scalarDerefNonStrict(packageName);
-        this.type = lvalue.type;
-        this.value = lvalue.value;
+        copyPayloadFrom(lvalue);
         return result;
     }
 
@@ -163,8 +156,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         vivify();  // Ensure the scalar exists in parent hash/array
         RuntimeArray result = lvalue.arrayDerefNonStrict(packageName);  // Delegate to the actual scalar
         // Update proxy's type and value to match lvalue after vivification
-        this.type = lvalue.type;
-        this.value = lvalue.value;
+        copyPayloadFrom(lvalue);
         return result;
     }
 
@@ -173,8 +165,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         vivify();  // Ensure the scalar exists in parent hash/array
         RuntimeHash result = lvalue.hashDerefNonStrict(packageName);  // Delegate to the actual scalar
         // Update proxy's type and value to match lvalue after vivification
-        this.type = lvalue.type;
-        this.value = lvalue.value;
+        copyPayloadFrom(lvalue);
         return result;
     }
 
@@ -195,8 +186,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
             }
         }
         RuntimeScalar ret = lvalue.undefine();
-        this.type = lvalue.type;
-        this.value = lvalue.value;
+        copyPayloadFrom(lvalue);
         return ret;
     }
 
@@ -208,8 +198,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
     public RuntimeScalar chop() {
         vivify();
         RuntimeScalar ret = lvalue.chop();
-        this.type = lvalue.type;
-        this.value = lvalue.value;
+        copyPayloadFrom(lvalue);
         return ret;
     }
 
@@ -221,8 +210,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
     public RuntimeScalar chomp() {
         vivify();
         RuntimeScalar ret = lvalue.chomp();
-        this.type = lvalue.type;
-        this.value = lvalue.value;
+        copyPayloadFrom(lvalue);
         return ret;
     }
 
@@ -237,8 +225,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
     public RuntimeScalar hashDerefGet(RuntimeScalar index) {
         vivify();
         RuntimeScalar ret = lvalue.hashDerefGet(index);
-        this.type = lvalue.type;
-        this.value = lvalue.value;
+        copyPayloadFrom(lvalue);
         return ret;
     }
 
@@ -259,8 +246,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         }
         vivify();
         RuntimeScalar ret = lvalue.arrayDerefGet(index);
-        this.type = lvalue.type;
-        this.value = lvalue.value;
+        copyPayloadFrom(lvalue);
         return ret;
     }
 
@@ -269,8 +255,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
     public RuntimeScalar hashDerefExists(RuntimeScalar index) {
         vivify();
         RuntimeScalar ret = lvalue.hashDerefExists(index);
-        this.type = lvalue.type;
-        this.value = lvalue.value;
+        copyPayloadFrom(lvalue);
         return ret;
     }
 
@@ -332,8 +317,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
     public RuntimeScalar preAutoIncrement() {
         vivify();
         RuntimeScalar ret = lvalue.preAutoIncrement();
-        this.type = lvalue.type;
-        this.value = lvalue.value;
+        copyPayloadFrom(lvalue);
         return ret;
     }
 
@@ -345,8 +329,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
     public RuntimeScalar postAutoIncrement() {
         vivify();
         RuntimeScalar ret = lvalue.postAutoIncrement();
-        this.type = lvalue.type;
-        this.value = lvalue.value;
+        copyPayloadFrom(lvalue);
         return ret;
     }
 
@@ -359,8 +342,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
     public RuntimeScalar preAutoDecrement() {
         vivify();
         RuntimeScalar ret = lvalue.preAutoDecrement();
-        this.type = lvalue.type;
-        this.value = lvalue.value;
+        copyPayloadFrom(lvalue);
         return ret;
     }
 
@@ -372,8 +354,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
     public RuntimeScalar postAutoDecrement() {
         vivify();
         RuntimeScalar ret = lvalue.postAutoDecrement();
-        this.type = lvalue.type;
-        this.value = lvalue.value;
+        copyPayloadFrom(lvalue);
         return ret;
     }
 

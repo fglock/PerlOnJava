@@ -313,7 +313,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * materialized only in the destination; the source stays deferred for its
      * current owner.
      */
-    private void copyPayloadFrom(RuntimeScalar source) {
+    void copyPayloadFrom(RuntimeScalar source) {
         if (source.hasPrimitiveFlowInteger()) {
             setIntegerValue(source.fixedWidthIntegerPayload());
         } else {

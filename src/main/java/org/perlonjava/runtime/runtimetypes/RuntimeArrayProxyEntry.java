@@ -62,8 +62,7 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
         parent.elements.set(key, referent);
         parent.markPackageRootedValue(referent);
         this.lvalue = referent;
-        this.type = referent.type;
-        this.value = referent.value;
+        copyPayloadFrom(referent);
         if (!parent.elementsAliased) {
             parent.elementsOwned = true;
         }
@@ -174,8 +173,7 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
         } else {
             RuntimeScalar currentState = new RuntimeScalar();
             // Copy the current type and value to the new state
-            currentState.type = this.lvalue.type;
-            currentState.value = this.lvalue.value;
+            currentState.copyPayloadFrom(this.lvalue);
             currentState.blessId = this.lvalue.blessId;
             dynamicStateStack().push(currentState);
             // Clear the current type and value

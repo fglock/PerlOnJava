@@ -104,8 +104,7 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
         // Update the local type and value
         String parentValue = parentSnapshot != null ? parentSnapshot : lvalue.toString();
         String newValue = value.toString();
-        this.type = value.type;
-        this.value = value.value;
+        copyPayloadFrom(value);
         int strLength = PerlUtfString.codePointCountPerl(parentValue);
 
         // Calculate the actual offset, handling negative offsets

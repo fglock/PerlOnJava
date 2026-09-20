@@ -117,6 +117,9 @@ method-body specialization is part of this phase.
   - Added a canonical payload-copy protocol to central scalar assignment paths.
     An assignment copies an active payload into ordinary destination storage
     without flushing the source; the focused test covers this invariant.
+  - Migrated base hash/array proxy synchronization, aliases, dynamic snapshots,
+    and substring lvalue snapshots to the payload-copy protocol. Added a
+    focused array-proxy regression for an active deferred element.
   - Full immutable `make` passed in 4m01s at
     `/tmp/make_primitive_scalar_payload_getters_clean_20260920.log`, and
     again in 3m55s at
@@ -129,12 +132,13 @@ method-body specialization is part of this phase.
     in 4m12s at
     `/tmp/make_primitive_scalar_payload_object_observation_20260920.log`, and
     in 4m04s at
-    `/tmp/make_primitive_scalar_payload_copy_protocol_20260920.log`.
+    `/tmp/make_primitive_scalar_payload_copy_protocol_20260920.log`, and in
+    4m08s at `/tmp/make_primitive_scalar_payload_proxy_copy_20260920.log`.
 
 ## Next steps
 
-1. Migrate remaining proxy, clone, localization, and tied-value raw assignment
-   paths to the canonical payload-copy protocol.
+1. Migrate remaining clone, localization, tied-value, graph-copy, and package
+   state raw assignment paths to the canonical payload-copy protocol.
 2. Define the smallest storage-state transition that cannot expose a stale
    public object payload across either backend.
 3. Add focused regression coverage for every newly migrated observation

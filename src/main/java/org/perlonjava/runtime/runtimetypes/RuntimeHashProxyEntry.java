@@ -56,8 +56,7 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
      */
     void initLvalue(RuntimeScalar existing) {
         this.lvalue = existing;
-        this.type = existing.type;
-        this.value = existing.value;
+        copyPayloadFrom(existing);
     }
 
     /**
@@ -138,8 +137,7 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
         parent.markKeyByte(key, byteKey);
         parent.markPackageRootedValue(referent);
         this.lvalue = referent;
-        this.type = referent.type;
-        this.value = referent.value;
+        copyPayloadFrom(referent);
         return referent;
     }
 
@@ -158,8 +156,7 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
         } else {
             RuntimeScalar currentState = new RuntimeScalar();
             // Copy the current type and value to the new state
-            currentState.type = this.lvalue.type;
-            currentState.value = this.lvalue.value;
+            currentState.copyPayloadFrom(this.lvalue);
             currentState.blessId = this.lvalue.blessId;
             dynamicStateStack().push(currentState);
             // Clear the current type and value
