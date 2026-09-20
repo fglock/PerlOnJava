@@ -344,8 +344,12 @@ public class Re extends PerlModuleBase {
         if (exact == null) {
             result.put("checking", new RuntimeScalar("none"));
         } else {
-            boolean anchored = info.minimumOffset() == 0
-                    && info.maximumOffset() != null && info.maximumOffset() == 0;
+            // A fixed-offset exact is Perl's "anchored" optimization even
+            // when the literal follows a mandatory prefix.  Only an exact
+            // whose offset can vary is "floating"; offset zero is not a
+            // requirement for the anchored classification.
+            boolean anchored = info.maximumOffset() != null
+                    && info.minimumOffset() == info.maximumOffset();
             String kind = anchored ? "anchored" : "floating";
             result.put(kind, new RuntimeScalar(exact));
             result.put(kind + " min offset", new RuntimeScalar(info.minimumOffset()));

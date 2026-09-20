@@ -27,6 +27,24 @@ for my $casefold ('', 'i') {
         "casefold trie expansion preserves its trailing floating literal /$casefold");
 }
 
+my $nested_trie_tail = re::optimization(
+    qr/(?:(?:(?:a|b)|(?:c|d))|(?:(?:e|f)|(?:g|h)))z/);
+is($nested_trie_tail->{anchored}, 'z',
+    'nested single-character trie preserves its fixed-offset tail');
+is($nested_trie_tail->{'anchored min offset'}, 1,
+    'fixed-offset tail reports its mandatory prefix length');
+ok(!defined $nested_trie_tail->{floating},
+    'fixed-offset tail is not reported as floating');
+
+my $nested_two_char_trie_tail = re::optimization(
+    qr/(?:(?:(?:aa|ab|ac)|(?:ba|bb|bc))|(?:(?:ca|cb|cc)|(?:da|db|dc)))e/);
+is($nested_two_char_trie_tail->{anchored}, 'e',
+    'nested two-character trie preserves its fixed-offset tail');
+is($nested_two_char_trie_tail->{'anchored min offset'}, 2,
+    'two-character trie reports its mandatory prefix length');
+ok(!defined $nested_two_char_trie_tail->{floating},
+    'two-character fixed-offset tail is not reported as floating');
+
 my $empty = re::optimization(qr//);
 is($empty->{minlen}, 0, 'empty pattern minimum length');
 is($empty->{checking}, 'none', 'empty pattern has no exact check');
