@@ -407,15 +407,14 @@ public class Operator {
         // Most substr offsets are ordinary IVs.  Avoid allocating a
         // BigInteger merely to prove that an Integer/Long already fits the
         // Java string-index domain; wide values retain the exact path below.
-        Number nativeOffset = offsetScalar.type == RuntimeScalarType.INTEGER
-                && offsetScalar.value instanceof Number number
-                && !(number instanceof BigInteger) ? number : null;
+        boolean fixedOffset = offsetScalar.hasFixedWidthIntegerPayload();
+        long fixedOffsetValue = fixedOffset ? offsetScalar.fixedWidthIntegerPayload() : 0L;
         BigInteger offsetValue = null;
         int offset;
-        if (nativeOffset != null
-                && nativeOffset.longValue() >= Integer.MIN_VALUE
-                && nativeOffset.longValue() <= Integer.MAX_VALUE) {
-            offset = nativeOffset.intValue();
+        if (fixedOffset
+                && fixedOffsetValue >= Integer.MIN_VALUE
+                && fixedOffsetValue <= Integer.MAX_VALUE) {
+            offset = (int) fixedOffsetValue;
         } else {
             offsetValue = offsetScalar.getSignedBigint();
             if (offsetValue.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0
@@ -450,9 +449,8 @@ public class Operator {
                     RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
         RuntimeScalar lengthScalar = hasExplicitLength ? (RuntimeScalar) lengthBase : null;
-        Number nativeLength = lengthScalar != null && lengthScalar.type == RuntimeScalarType.INTEGER
-                && lengthScalar.value instanceof Number number
-                && !(number instanceof BigInteger) ? number : null;
+        boolean fixedLength = lengthScalar != null && lengthScalar.hasFixedWidthIntegerPayload();
+        long fixedLengthValue = fixedLength ? lengthScalar.fixedWidthIntegerPayload() : 0L;
         BigInteger lengthValue = null;
         String replacement = hasReplacement ? replacementBase.toString() : null;
         RuntimeScalar replacementScalar = hasReplacement ? (RuntimeScalar) replacementBase : null;
@@ -464,10 +462,10 @@ public class Operator {
         int length;
         if (!hasExplicitLength) {
             length = offset < 0 ? strLength : strLength - offset;
-        } else if (nativeLength != null
-                && nativeLength.longValue() >= Integer.MIN_VALUE
-                && nativeLength.longValue() <= Integer.MAX_VALUE) {
-            length = nativeLength.intValue();
+        } else if (fixedLength
+                && fixedLengthValue >= Integer.MIN_VALUE
+                && fixedLengthValue <= Integer.MAX_VALUE) {
+            length = (int) fixedLengthValue;
         } else {
             lengthValue = lengthScalar.getSignedBigint();
             if (lengthValue.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
