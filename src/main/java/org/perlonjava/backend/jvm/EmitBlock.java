@@ -129,13 +129,59 @@ public class EmitBlock {
             return;
         }
         if (node instanceof BlockNode block) {
+            if (insideLoop) {
+                for (String label : block.labels) {
+                    out.add(label);
+                    tokenIndices.putIfAbsent(label, block.getIndex());
+                }
+            }
             for (Node child : block.elements) collectLoopBodyLabels(child, out, tokenIndices, insideLoop);
+            return;
+        }
+        if (node instanceof SubroutineNode subroutine) {
+            // An eval BLOCK is emitted as a separate JVM method but remains
+            // within the enclosing Perl lexical control-flow scope.  Carry
+            // protected foreach destinations into that method so a goto is
+            // rejected there instead of propagating by name to a later outer
+            // label. Ordinary subroutines remain control-flow boundaries.
+            if (subroutine.useTryCatch) {
+                collectLoopBodyLabels(subroutine.block, out, tokenIndices, insideLoop);
+            }
             return;
         }
         if (node instanceof IfNode ifNode) {
             collectLoopBodyLabels(ifNode.thenBranch, out, tokenIndices, insideLoop);
             collectLoopBodyLabels(ifNode.elseBranch, out, tokenIndices, insideLoop);
+            return;
         }
+        // Parser-generated wrappers such as `local $_` around foreach must
+        // not hide a label that is structurally in the loop body.  Do not
+        // descend into SubroutineNode: ordinary subroutines are lexical
+        // control-flow boundaries and compile independently.
+        if (node instanceof OperatorNode operator) {
+            collectLoopBodyLabels(operator.operand, out, tokenIndices, insideLoop);
+            return;
+        }
+        if (node instanceof ListNode list) {
+            for (Node child : list.elements) collectLoopBodyLabels(child, out, tokenIndices, insideLoop);
+            return;
+        }
+        if (node instanceof BinaryOperatorNode binary) {
+            collectLoopBodyLabels(binary.left, out, tokenIndices, insideLoop);
+            collectLoopBodyLabels(binary.right, out, tokenIndices, insideLoop);
+            return;
+        }
+        if (node instanceof TernaryOperatorNode ternary) {
+            collectLoopBodyLabels(ternary.condition, out, tokenIndices, insideLoop);
+            collectLoopBodyLabels(ternary.trueExpr, out, tokenIndices, insideLoop);
+            collectLoopBodyLabels(ternary.falseExpr, out, tokenIndices, insideLoop);
+        }
+    }
+
+    /** Collect protected foreach destinations for a separately compiled eval block. */
+    static void collectEvalLoopBodyLabels(Node block, JavaClassInfo javaClassInfo) {
+        collectLoopBodyLabels(block, javaClassInfo.gotoLabelsInsideLoop,
+                javaClassInfo.gotoLoopLabelTokenIndices, false);
     }
 
     /**

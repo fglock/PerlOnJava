@@ -253,6 +253,13 @@ public class EmitSubroutine {
         if (ctx.javaClassInfo != null) {
             newJavaClassInfo.gotoLabelsInsideLoop.addAll(ctx.javaClassInfo.gotoLabelsInsideLoop);
         }
+        if (node.useTryCatch) {
+            // The eval body is compiled into a fresh method before its own
+            // visitor has emitted control flow.  Establish its protected
+            // foreach destinations now, rather than relying on labels from
+            // the parent method's later traversal.
+            EmitBlock.collectEvalLoopBodyLabels(node.block, newJavaClassInfo);
+        }
         
         // Check if this subroutine is a defer block - control flow restrictions apply
         Boolean isDeferBlock = (Boolean) node.getAnnotation("isDeferBlock");

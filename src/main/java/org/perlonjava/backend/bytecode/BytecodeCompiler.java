@@ -266,8 +266,18 @@ public class BytecodeCompiler implements Visitor {
 
     GotoLabelTarget resolveStaticGotoTarget(String name, int sourceTokenIndex) {
         GotoLabelTarget scoped = resolveStaticGotoTarget(name);
-        if (scoped != null) return scoped;
         List<GotoLabelTarget> candidates = gotoLabelTargetsByName.get(name);
+        // eval BLOCK shares its caller's control-flow frame.  If the eval
+        // contains a foreach-body label with this name, that shadowing label
+        // is the destination even when a later outer label is numerically
+        // closer in the source.  Choosing the latter used to bypass the
+        // foreach-entry guard and jump to the outer label instead.
+        if (evalBlockDepth > 0 && candidates != null) {
+            for (GotoLabelTarget candidate : candidates) {
+                if (candidate.loopBody) return candidate;
+            }
+        }
+        if (scoped != null) return scoped;
         if (candidates == null || candidates.isEmpty()) return resolveStaticGotoTarget(name);
         GotoLabelTarget result = null;
         long bestDistance = Long.MAX_VALUE;

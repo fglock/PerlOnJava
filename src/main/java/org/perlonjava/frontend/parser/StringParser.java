@@ -1173,16 +1173,16 @@ public class StringParser {
     /** Perl rejects Unicode named sequences in either side of tr/// before
      * expanding the double-quoted escape into its multiple code points. */
     private static void rejectNamedSequencesInTransliteration(String list) {
-        for (int start = list.indexOf("\\\\N{"); start >= 0; ) {
+        for (int start = list.indexOf("\\N{"); start >= 0; ) {
             int nameStart = start + 3;
             int end = list.indexOf('}', nameStart);
             if (end < 0) return;
             String name = list.substring(nameStart, end).trim();
             if (org.perlonjava.runtime.regex.PerlUnicodeNamedSequenceData.isNamedSequence(name)) {
-                throw new PerlCompilerException("\\\\N{" + name
+                throw new PerlCompilerException("\\N{" + name
                         + "} must not be a named sequence in transliteration operator");
             }
-            start = list.indexOf("\\\\N{", end + 1);
+            start = list.indexOf("\\N{", end + 1);
         }
     }
 
