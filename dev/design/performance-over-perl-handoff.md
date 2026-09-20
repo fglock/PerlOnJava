@@ -8,6 +8,13 @@ The objective is **not achieved**. Continue from the current committed source,
 after rebuilding it, and use the measured portfolio protocol rather than older
 commit identifiers or historical benchmark narratives.
 
+The current native-array loop expansion is rejected: its safe nested-foreach
+selection added enough per-element guard and carrier work to reduce Life by
+about 87% against its exact parent. The next active investigation is the
+shared scalar-result representation cost identified by steady-state Life JFR;
+see [Primitive scalar payload](primitive-scalar-payload.md). Do not reopen
+native-array loop selection unchanged.
+
 The retained improvements have brought closure, method, numeric, and JSON
 above Perl in the latest high-load evidence. String, regex, and Life remain
 materially below parity. The next deliverable is one conservative,
