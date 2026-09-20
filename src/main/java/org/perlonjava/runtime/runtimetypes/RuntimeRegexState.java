@@ -100,14 +100,7 @@ public final class RuntimeRegexState {
 
     /** Per-runtime {@code pos()} values and zero-length-match bookkeeping. */
     final Map<RuntimeScalar, RuntimePosLvalue.CacheEntry> positionCache =
-            new LinkedHashMap<RuntimeScalar, RuntimePosLvalue.CacheEntry>(
-                    MAX_POSITION_CACHE_SIZE, 0.75f, true) {
-                @Override
-                protected boolean removeEldestEntry(
-                        Map.Entry<RuntimeScalar, RuntimePosLvalue.CacheEntry> eldest) {
-                    return size() > MAX_POSITION_CACHE_SIZE;
-                }
-            };
+            RuntimePosLvalue.newPositionCache(MAX_POSITION_CACHE_SIZE);
 
     public void clearMatchState() {
         globalMatcher = null;
