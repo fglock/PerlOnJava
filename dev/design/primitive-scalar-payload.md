@@ -153,6 +153,26 @@ or `PUTFIELD` use of `RuntimeScalar.value` for ordinary INTEGER values in this
 slice. That removes one compiler-specific blocker, but does not relax the
 runtime audit or the public-field observability constraint.
 
+### Broad object-observation audit, second slice (2026-09-20)
+
+The broader source scan found 759 scalar-associated raw payload references.
+The dominant classes are type-gated: references, globs, IO, Java objects,
+regexes, tied/read-only wrappers, and code values. An INTEGER cannot reach
+those object casts, so they are not integer materialization sites.
+
+Three generic paths are materialization-critical:
+
+| Path | Why it matters | Required storage rule |
+| --- | --- | --- |
+| `Storable.deepClone` | Its identity map probes `scalar.value` before type dispatch. A shared integer sentinel could falsely join unrelated scalar values. | Track identity only for reference/object payloads, or materialize a per-cell object at this boundary. |
+| `YAMLPP.convertRuntimeScalarToYaml` | Its cycle map likewise probes `scalar.value` before its INTEGER conversion. | Move cycle tracking behind reference cases or materialize explicitly. |
+| bytecode `Disassemble` | It calls `scalar.value.getClass()` without a type guard for diagnostic output. | Use a null-safe materialized payload/class accessor. |
+
+Therefore the initial general-storage prototype must not use one shared boxed
+sentinel with an otherwise unchanged public field. It needs an explicit
+per-cell active-payload state and the three boundary changes above. This is a
+design constraint, not yet an implementation decision.
+
 ## Related work
 
 - [Performance over Perl handoff](performance-over-perl-handoff.md)
