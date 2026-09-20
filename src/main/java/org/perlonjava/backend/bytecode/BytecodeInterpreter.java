@@ -1769,6 +1769,10 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeHashKeys(bytecode, pc, registers);
                             }
 
+                            case Opcodes.HASH_KEYS_SCALAR -> {
+                                pc = InlineOpcodeHandler.executeHashKeysScalar(bytecode, pc, registers);
+                            }
+
                             case Opcodes.HASH_VALUES -> {
                                 pc = InlineOpcodeHandler.executeHashValues(bytecode, pc, registers);
                             }

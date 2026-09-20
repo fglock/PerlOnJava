@@ -2654,6 +2654,9 @@ public class Opcodes {
     /** Return the mutable {@code $#array} cell. Format: ARRAY_LAST_INDEX_LVALUE rd arrayReg. */
     public static final short ARRAY_LAST_INDEX_LVALUE = 518;
 
+    /** Scalar-context {@code keys}: rd = scalar keys(hashReg). Format: rd hashReg. */
+    public static final short HASH_KEYS_SCALAR = 575;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

@@ -1173,6 +1173,12 @@ public class Disassemble {
                         int hashKeysReg = interpretedCode.bytecode[pc++];
                         sb.append("HASH_KEYS r").append(rd).append(" = keys(r").append(hashKeysReg).append(")\n");
                         break;
+                    case Opcodes.HASH_KEYS_SCALAR:
+                        rd = interpretedCode.bytecode[pc++];
+                        int hashKeysScalarReg = interpretedCode.bytecode[pc++];
+                        sb.append("HASH_KEYS_SCALAR r").append(rd).append(" = scalar keys(r")
+                                .append(hashKeysScalarReg).append(")\n");
+                        break;
                     case Opcodes.HASH_VALUES:
                         rd = interpretedCode.bytecode[pc++];
                         int hashValuesReg = interpretedCode.bytecode[pc++];

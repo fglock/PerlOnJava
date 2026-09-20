@@ -1763,13 +1763,20 @@ public class CompileOperator {
         bc.compileNode(node.operand, -1, RuntimeContextType.LIST);
         int hashReg = bc.lastResultReg;
         int rd = bc.allocateOutputRegister();
+        if (bc.currentCallContext == RuntimeContextType.SCALAR) {
+            // A scalar keys result is the hash count. Calling the context-aware
+            // runtime path avoids materializing (and then counting) a key list,
+            // which is especially important for repeatedly queried empty hashes.
+            bc.emit(Opcodes.HASH_KEYS_SCALAR); bc.emitReg(rd); bc.emitReg(hashReg);
+            bc.lastResultReg = rd;
+            return;
+        }
         bc.emit(Opcodes.HASH_KEYS); bc.emitReg(rd); bc.emitReg(hashReg);
         // keys is not itself an assignable aggregate.  In the lvalue contexts
         // reached by `keys %h .= ...` and `substr keys %h, ...`, Perl uses its
         // scalar count result rather than passing the key RuntimeArray through
         // to the assignment operator.
-        if (bc.currentCallContext == RuntimeContextType.SCALAR
-                || bc.currentCallContext == RuntimeContextType.LVALUE) {
+        if (bc.currentCallContext == RuntimeContextType.LVALUE) {
             int scalarReg = bc.allocateRegister();
             bc.emit(Opcodes.ARRAY_SIZE); bc.emitReg(scalarReg); bc.emitReg(rd);
             if (bc.currentCallContext == RuntimeContextType.LVALUE) {

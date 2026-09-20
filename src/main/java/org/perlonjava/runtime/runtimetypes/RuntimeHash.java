@@ -1374,6 +1374,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 RuntimeArray keyList = keys();
                 return new RuntimeScalar(keyList.scalarContextSize);
             }
+            if (this.elements.isEmpty()) {
+                return RuntimeScalarCache.scalarZero;
+            }
             return new RuntimeScalar(this.size());
         }
         return keys();
