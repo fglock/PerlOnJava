@@ -234,18 +234,21 @@ its immutable full gate passed in 3m 43s at
 `/tmp/make_private_native_array_ordinary_bound_20260920.log`. Minimal JVM
 bytecode records carrier `setWord` at
 `/tmp/private_native_array_ordinary_bound_disassemble_20260920.log`.
-The same shape remains unselected inside a closure because carrier slots are
-currently method-local, so closure carrier lifetime is the next boundary.
+An attempted nested-foreach emission expansion reached the carrier safely,
+but its paired Life evidence was strongly regressive (0.087x Perl versus
+0.668x for the exact parent). The issue was inline block-emission coverage,
+not closure carrier storage; the change was removed. Do not reopen this
+selection boundary unless a broader body-cost design has a credible,
+repeatable performance case.
 
 ### Exact resume steps
 
 1. Inspect active benchmark/test processes and their worktrees; wait for all
    children before modifying a checkout. Do not restart completed artifacts.
-2. Generalize the initialized-prefix fact into a per-iteration/range lattice
-   with exact materialization joins before accepting ownership transfer or
-   nested loops. Preserve the ordered-temporary, completed-initializer,
-   ordinary-source guards, and deny-by-default fallback, and add focused
-   rejection coverage before accepting each control-flow form.
+2. Prioritize a broader body-cost boundary over further native-array loop
+   selection. Do not retry the nested-foreach carrier expansion unchanged;
+   preserve the ordered-temporary, completed-initializer, ordinary-source
+   guards, and deny-by-default fallback.
 3. Cover materialization through aliases, callbacks, exceptions, early return,
    and closure rejection with system-Perl-validated tests before widening
    selection beyond the current straight-line subset.

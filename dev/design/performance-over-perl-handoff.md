@@ -98,9 +98,12 @@ The following ordinary-bound checkpoint admits a write-only `0 .. $#source`
 loop for a fresh private destination and records no carrier-read fact from that
 bound. It passes system Perl, JVM, interpreter, and the 3m43s immutable full
 gate at `/tmp/make_private_native_array_ordinary_bound_20260920.log`; minimal
-bytecode reaches carrier `setWord`. The representative closure remains
-ordinary because a carrier is still a method-local JVM slot. The next proof
-must model closure-spanning carrier storage and one-way materialization.
+bytecode reaches carrier `setWord`. A later nested-foreach selection trial
+showed that the missing analysis call was an inline-emission coverage gap, not
+a closure-carrier lifetime issue; it reached `setWord` safely but reduced the
+representative Life workload to 0.087x Perl, versus 0.668x on its exact parent.
+The trial was removed. Do not widen this carrier path without a broad,
+repeatable body-cost gain.
 
 The native-array effort is now at a safe code checkpoint: commit `d863f4a09`
 adds phase-one, compiler-inert proof scaffolding and its five Java unit tests.
