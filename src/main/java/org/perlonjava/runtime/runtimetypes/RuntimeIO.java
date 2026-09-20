@@ -112,6 +112,9 @@ public class RuntimeIO extends RuntimeScalar {
     public static RuntimeIO getLastReadlineHandle() { return lastReadlineHandle.get(); }
     public static void setLastReadlineHandle(RuntimeIO io) { lastReadlineHandle.set(io); }
 
+    /** Clear the per-thread readline fallback before an embedded script starts. */
+    public static void resetLastReadlineHandle() { lastReadlineHandle.remove(); }
+
     private boolean ioError;
     // An anonymous lexical handle has no glob name.  Preserve the source
     // expression used for its most recent readline so later warn/die context

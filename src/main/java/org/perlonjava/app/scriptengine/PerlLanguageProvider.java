@@ -116,6 +116,7 @@ public class PerlLanguageProvider {
             // engine resets run multiple top-level programs in one JVM, so give
             // the next program a fresh wrapper around the process standard input.
             RuntimeIO.setStdin(new RuntimeIO(new StandardIO(System.in)));
+            RuntimeIO.resetLastReadlineHandle();
             DataSection.reset();
         }
     }

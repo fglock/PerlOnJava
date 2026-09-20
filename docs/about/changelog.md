@@ -25,6 +25,9 @@ priorities and future plans.
 - Avoid materializing a key list when bytecode evaluates `keys %hash` in scalar
   context, restoring empty-hash performance for repeated hash-count queries.
 
+- Reset embedded-script readline state between top-level programs and include
+  the nested-class fixture required by the standalone unit-test corpus.
+
 - Improve Perl-compatible compiler diagnostics for unterminated quoted strings
   and here-document delimiters.
 
