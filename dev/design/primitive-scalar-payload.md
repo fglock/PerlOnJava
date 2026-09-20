@@ -245,6 +245,24 @@ It is protocol-inconclusive rather than acceptance evidence, but it provides
 no basis to retain a general representation change. The activation and its
 test were removed; do not rerun or widen it.
 
+### Scalar-result lifecycle counter cross-check (2026-09-20)
+
+The existing one-scalar `RuntimeList` wrapper already has a runtime-local pool.
+The bounded Method counter run at
+`/tmp/scalar-result-method-current-20260920.json` recorded 158,414,197 pool
+hits and matching recycles, against 2,400,922 pool misses. The bounded Life
+run at `/tmp/scalar-result-life-current-20260920.json` recorded 28,323 hits
+and recycles against 29,021 misses. In both cases the unpooled extractions
+were ordinary one-scalar lists rather than multi-element wrappers.
+
+This rules out wrapper pooling as an unimplemented broad cost reduction. The
+Method result pool is already effective; Life's remaining misses arise from
+ordinary result-list transport, not a missing pool operation. Replacing that
+transport would be a larger JVM/generator result-ABI change and needs a
+cross-workload ownership and escape model before a source candidate is
+considered. Do not turn the existing Method-only direct hash path into a
+scalar-result test vehicle.
+
 - [Performance over Perl handoff](performance-over-perl-handoff.md)
 - [Main performance design](performance-over-perl.md)
 - [Private native-array representation](private-native-array-representation.md)
