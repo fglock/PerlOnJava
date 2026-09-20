@@ -22,6 +22,9 @@ class RuntimeScalarIntegerPayloadTest {
         scalar.setPrimitiveFlowInteger(1_000_003L);
         assertTrue(scalar.hasFixedWidthIntegerPayload());
         assertEquals(1_000_003L, scalar.fixedWidthIntegerPayload());
+        assertEquals(1_000_003, scalar.getInt());
+        assertEquals(1_000_003.0, scalar.getDouble());
+        assertEquals(BigInteger.valueOf(1_000_003L), scalar.getBigint());
     }
 
     @Test
@@ -30,6 +33,14 @@ class RuntimeScalarIntegerPayloadTest {
         assertFalse(scalar.hasFixedWidthIntegerPayload());
         assertTrue(scalar.hasWideIntegerPayload());
         assertThrows(IllegalStateException.class, scalar::fixedWidthIntegerPayload);
+
+        // Wide integers must continue through Number's conversion methods rather
+        // than the fixed-width fast path.  UV values use this route in pack,
+        // sprintf, and integer bitwise operations.
+        assertEquals(0L, scalar.getLong());
+        assertEquals(0, scalar.getInt());
+        assertEquals(Math.scalb(1.0, 80), scalar.getDouble());
+        assertEquals(BigInteger.ONE.shiftLeft(80), scalar.getBigint());
     }
 
     @Test

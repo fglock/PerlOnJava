@@ -1153,9 +1153,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     // Inlineable fast path for getInt()
     public int getInt() {
-        if (type == INTEGER) {
-            if (primitiveFlowInteger) return (int) primitiveFlowIntegerValue;
-            return ((Number) this.value).intValue();
+        if (hasFixedWidthIntegerPayload()) {
+            return (int) fixedWidthIntegerPayload();
         }
         return getIntLarge();
     }
@@ -1215,7 +1214,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         } else if (type == RuntimeScalarType.INTEGER) {
             // For regular integers
             return value instanceof BigInteger integerValue
-                    ? integerValue : BigInteger.valueOf(((Number) value).longValue());
+                    ? integerValue : BigInteger.valueOf(fixedWidthIntegerPayload());
         } else if (type == RuntimeScalarType.UNDEF) {
             return BigInteger.ZERO;
         } else {
@@ -1302,7 +1301,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             if (value instanceof BigInteger integerValue) {
                 return integerValue;
             }
-            long val = ((Number) value).longValue();
+            long val = fixedWidthIntegerPayload();
             if (val < 0) {
                 // Convert negative to unsigned BigInteger
                 return new BigInteger(Long.toUnsignedString(val));
@@ -1357,9 +1356,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public long getLong() {
-        if (type == INTEGER && primitiveFlowInteger) return primitiveFlowIntegerValue;
+        if (hasFixedWidthIntegerPayload()) return fixedWidthIntegerPayload();
         // Cases 0-8 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
+            // BigInteger backs valid unsigned 64-bit and wider values.  The fast
+            // path above is only for the fixed-width payload representation.
             case INTEGER -> ((Number) value).longValue();
             case DOUBLE -> (long) ((double) value);
             case STRING, BYTE_STRING -> {
@@ -1394,9 +1395,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     // Inlineable fast path for getDouble()
     public double getDouble() {
-        if (type == INTEGER) {
-            if (primitiveFlowInteger) return primitiveFlowIntegerValue;
-            return ((Number) this.value).doubleValue();
+        if (hasFixedWidthIntegerPayload()) {
+            return fixedWidthIntegerPayload();
         }
         return getDoubleLarge();
     }
