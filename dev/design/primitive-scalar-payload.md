@@ -104,14 +104,34 @@ method-body specialization is part of this phase.
 
 ## Next steps
 
-1. Classify the remaining direct INTEGER `value` consumers by materializing
-   observation versus primitive-safe numeric use; preserve a direct-object
-   path for Java interoperation and identity-sensitive consumers.
+1. Complete the remaining primitive-safe numeric migrations identified below,
+   then add their focused scalar behavior tests.
 2. Define the smallest storage-state transition that cannot expose a stale
    public object payload across either backend.
 3. Add focused regression coverage for every newly migrated observation
    boundary before changing representation state.
 4. Measure only after a complete fallback and observability proof exists.
+
+### Direct-payload audit, first slice (2026-09-20)
+
+The first searchable slice separates the apparent 105 `value` consumers into
+the following categories. It confirms that a storage experiment must not alter
+the public field first: most reads are type-directed reference, IO, regex,
+serialization, debugger, or Java-object operations, but a small group does
+read ordinary integer objects directly.
+
+| Category | Current sites | Required treatment |
+| --- | --- | --- |
+| Primitive-safe numeric reads | `RuntimeScalar` boolean and increment/decrement paths; `Operator.substr` offset/length fast path | Change to the fixed-width accessor before a general primitive storage state. Preserve the `BigInteger` fallback. |
+| Wide-only object reads | `BitwiseOperators.exactInteger`, `StorableWriter` wide integer encoding | Keep direct `BigInteger` checks: these deliberately need the object representation. |
+| Numeric conversion fallbacks | `RuntimeScalar` `getIntLarge`, `getLong` switch, `getDoubleLarge` | Keep `Number` conversion for the `BigInteger`/unusual fallback after the fixed-width fast path. |
+| Object-only reads | References, read-only/tied wrappers, globs, IO, regexes, Java objects, cloning, serialization, debugger diagnostics | A plain INTEGER cannot reach these typed paths. They remain object-boundary evidence, not candidates for integer payload access. |
+| Direct writers | `RuntimeScalar.setIntegerValue`; `ScalarUtils.stringIncrement` | Route the string increment INTEGER writes through the canonical setter before any storage change. |
+
+The JVM emitter/bytecode compiler did not reveal a generated direct `GETFIELD`
+or `PUTFIELD` use of `RuntimeScalar.value` for ordinary INTEGER values in this
+slice. That removes one compiler-specific blocker, but does not relax the
+runtime audit or the public-field observability constraint.
 
 ## Related work
 
