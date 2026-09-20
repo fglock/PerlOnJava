@@ -183,14 +183,14 @@ public class DataSection {
         if (existingIO != null) {
             // Update the existing IO handle with new content instead of replacing it
             // This ensures that any aliased handles (like *ARGV = *DATA) continue to work
-            RuntimeScalar contentScalar = new RuntimeScalar(content);
+            RuntimeScalar contentScalar = dataContentScalar(content);
             ScalarBackedIO newScalarIO = new ScalarBackedIO(contentScalar);
             newScalarIO.seek(initialPosition, IOHandle.SEEK_SET);
             existingIO.ioHandle = newScalarIO;
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Updated existing DATA handle with new content");
         } else {
             // Fallback: create new handle if no placeholder exists
-            RuntimeScalar contentScalar = new RuntimeScalar(content);
+            RuntimeScalar contentScalar = dataContentScalar(content);
             var fileHandle = RuntimeIO.open(contentScalar.createReference(), "<");
             fileHandle.ioHandle.seek(initialPosition, IOHandle.SEEK_SET);
             GlobalVariable.getGlobalIO(handleName).setIO(fileHandle);
@@ -379,5 +379,21 @@ public class DataSection {
         }
         // Return tokens.size() to indicate we've consumed everything
         return tokens.size();
+    }
+
+    /**
+     * DATA is a byte-oriented handle.  Raw source extraction represents each
+     * source byte as one ISO-8859-1 code point, so retain that representation
+     * as BYTE_STRING instead of accidentally turning it into a Unicode scalar.
+     * Token-stream fallbacks may contain real code points and must remain
+     * ordinary strings.
+     */
+    private static RuntimeScalar dataContentScalar(String content) {
+        for (int i = 0; i < content.length(); i++) {
+            if (content.charAt(i) > 0xFF) {
+                return new RuntimeScalar(content);
+            }
+        }
+        return new RuntimeScalar(content.getBytes(StandardCharsets.ISO_8859_1));
     }
 }

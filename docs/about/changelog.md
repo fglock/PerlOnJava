@@ -10,6 +10,9 @@ priorities and future plans.
   including mutation errors, refaliasing, closure ordering, redefinition
   diagnostics, and both execution backends.
 
+- Fix core compatibility gaps for UTF-8 eval sources, `lock &code` prototypes,
+  nested `@ARGV` traversal, and in-place editing of existing backup files.
+
 - Restore `op/tie.t` compatibility for tied scalar operators, output
   separators, deferred aliases, glob copies, and tied hash iteration on both
   execution backends.

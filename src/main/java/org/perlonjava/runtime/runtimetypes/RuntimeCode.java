@@ -2819,7 +2819,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             boolean evalbytesUtf8Source = ctx.isEvalbytes && shouldDecodeEvalbytesUtf8Source(evalString);
             boolean byteStringUtf8Source = !ctx.isEvalbytes
                     && code.type == RuntimeScalarType.BYTE_STRING
-                    && (ctx.symbolTable.strictOptionsStack.peek() & Strict.HINT_UTF8) != 0
+                    // A byte-backed eval may enable `use utf8` inside the
+                    // eval itself.  Checking only the caller's lexical hints
+                    // leaves DATA payloads mojibake and makes valid UTF-8
+                    // identifiers fail during eval compilation.
+                    && ((ctx.symbolTable.strictOptionsStack.peek() & Strict.HINT_UTF8) != 0
+                        || shouldDecodeEvalbytesUtf8Source(evalString))
                     && !ctx.symbolTable.isFeatureCategoryEnabled("unicode_eval");
             if (evalbytesUtf8Source || byteStringUtf8Source) {
                 evalString = decodeEvalbytesUtf8Source(evalString);
@@ -2848,6 +2853,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     && !byteStringUtf8Source;
             if (hasUnicode) {
                 evalCompilerOptions.isUnicodeSource = true;
+            }
+            if (byteStringUtf8Source) {
+                // The source has been decoded from its byte-backed UTF-8 form.
+                // Do not let the enclosing eval site's byte-source flag make the
+                // parser reinterpret the already-decoded characters as octets.
+                evalCompilerOptions.isByteStringSource = false;
             }
             if (ctx.isEvalbytes && !evalbytesUtf8Source) {
                 evalCompilerOptions.isEvalbytes = true;
@@ -3424,7 +3435,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             boolean evalbytesUtf8Source = ctx.isEvalbytes && shouldDecodeEvalbytesUtf8Source(evalString);
             boolean byteStringUtf8Source = !ctx.isEvalbytes
                     && code.type == RuntimeScalarType.BYTE_STRING
-                    && (ctx.symbolTable.strictOptionsStack.peek() & Strict.HINT_UTF8) != 0
+                    && ((ctx.symbolTable.strictOptionsStack.peek() & Strict.HINT_UTF8) != 0
+                        || shouldDecodeEvalbytesUtf8Source(evalString))
                     && !ctx.symbolTable.isFeatureCategoryEnabled("unicode_eval");
             if (evalbytesUtf8Source || byteStringUtf8Source) {
                 evalString = decodeEvalbytesUtf8Source(evalString);

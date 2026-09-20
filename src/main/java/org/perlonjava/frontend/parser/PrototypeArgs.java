@@ -1025,7 +1025,18 @@ public class PrototypeArgs {
             }
         }
 
-        Node codeRef = parseRequiredArgument(parser, isOptional);
+        // An ampersand prototype receives a code reference, not an invocation.
+        // Without the reference mode, parseCoderefVariable treats `&name` as
+        // a caller-sharing subroutine call and an undeclared name dies before
+        // the callee can receive the reference (e.g. `lock &foo`).
+        boolean oldParsingTakeReference = parser.parsingTakeReference;
+        parser.parsingTakeReference = true;
+        Node codeRef;
+        try {
+            codeRef = parseRequiredArgument(parser, isOptional);
+        } finally {
+            parser.parsingTakeReference = oldParsingTakeReference;
+        }
         if (codeRef != null) {
             // Check if a bare array, hash, or scalar sigil was passed (e.g., @array, %hash, $scalar)
             // These should be rejected for (&) prototype
@@ -1203,7 +1214,7 @@ public class PrototypeArgs {
 
         // Set flag for \& to prevent &sub from being called
         boolean oldParsingTakeReference = parser.parsingTakeReference;
-        if (refType == '&') {
+        if (refType == '&' || isGroup) {
             parser.parsingTakeReference = true;
         }
 
