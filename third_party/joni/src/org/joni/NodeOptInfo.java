@@ -31,6 +31,10 @@ final class NodeOptInfo {
     final OptMapInfo requiredTailMap = new OptMapInfo();    /* last mandatory map */
     boolean hasZeroLowerQuantifier;
     boolean hasOptimisticCalloutBoundary;
+    boolean exactBoundary;
+    boolean acceptBoundary;
+    boolean hasVariableQuantifier;
+    int floatingPrefixLength;
 
     public void setBoundNode(MinMaxLen mmd) {
         exb.mmd.copy(mmd);
@@ -49,6 +53,10 @@ final class NodeOptInfo {
         requiredTailMap.clear();
         hasZeroLowerQuantifier = false;
         hasOptimisticCalloutBoundary = false;
+        exactBoundary = false;
+        acceptBoundary = false;
+        hasVariableQuantifier = false;
+        floatingPrefixLength = 0;
     }
 
     public void copy(NodeOptInfo other) {
@@ -61,9 +69,14 @@ final class NodeOptInfo {
         requiredTailMap.copy(other.requiredTailMap);
         hasZeroLowerQuantifier = other.hasZeroLowerQuantifier;
         hasOptimisticCalloutBoundary = other.hasOptimisticCalloutBoundary;
+        exactBoundary = other.exactBoundary;
+        acceptBoundary = other.acceptBoundary;
+        hasVariableQuantifier = other.hasVariableQuantifier;
+        floatingPrefixLength = other.floatingPrefixLength;
     }
 
-    public void concatLeftNode(NodeOptInfo other, Encoding enc) {
+    public void concatLeftNode(NodeOptInfo other, Encoding enc,
+                               boolean floatingTailMode) {
         OptAnchorInfo tanchor = new OptAnchorInfo(); // remove it somehow ?
         tanchor.concat(anchor, other.anchor, length.max, other.length.max);
         anchor.copy(tanchor);
@@ -92,9 +105,21 @@ final class NodeOptInfo {
                 exb.concat(other.exb, enc);
                 other.exb.clear();
             } else if (exmReach) {
-            	exm.concat(other.exb, enc);
-            	other.exb.clear();
+                exm.concat(other.exb, enc);
+                other.exb.clear();
             }
+        }
+
+        if (floatingTailMode && rightFactsVisible && other.hasVariableQuantifier
+                && other.exb.length > 0) {
+            exm.copy(other.exb);
+            exm.reachEnd = false;
+        }
+
+        if (floatingTailMode && rightFactsVisible && hasVariableQuantifier
+                && exm.length > 0 && other.exb.length > 0) {
+            exm.concat(other.exb, enc);
+            exm.reachEnd = false;
         }
 
         if (rightFactsVisible) {
@@ -126,6 +151,13 @@ final class NodeOptInfo {
         }
         hasZeroLowerQuantifier |= other.hasZeroLowerQuantifier;
         hasOptimisticCalloutBoundary |= other.hasOptimisticCalloutBoundary;
+        exactBoundary |= other.exactBoundary;
+        acceptBoundary |= other.acceptBoundary;
+        boolean hadVariableQuantifier = hasVariableQuantifier;
+        hasVariableQuantifier |= other.hasVariableQuantifier;
+        if (!hadVariableQuantifier && other.hasVariableQuantifier) {
+            floatingPrefixLength = length.min;
+        }
         length.add(other.length);
     }
 
@@ -138,6 +170,9 @@ final class NodeOptInfo {
         requiredTailMap.altMerge(other.requiredTailMap, env.enc);
         hasZeroLowerQuantifier &= other.hasZeroLowerQuantifier;
         hasOptimisticCalloutBoundary |= other.hasOptimisticCalloutBoundary;
+        exactBoundary &= other.exactBoundary;
+        acceptBoundary &= other.acceptBoundary;
+        hasVariableQuantifier &= other.hasVariableQuantifier;
         length.altMerge(other.length);
     }
 
