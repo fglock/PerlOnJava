@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Reuse validated `pos` state throughout an ordinary `/g` or `\G` match,
+  reducing repeated position-cache probes while preserving mutation and LRU
+  eviction recovery.
+
 - Restore `op/tie.t` compatibility for tied scalar operators, output
   separators, deferred aliases, glob copies, and tied hash iteration on both
   execution backends.

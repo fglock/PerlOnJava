@@ -77,9 +77,38 @@ Semantic validation for the exact implementation source:
   an incremental, qualified delivery result rather than an official parity
   acceptance claim.
 
+## Current retained candidate: validated regex position-cache handle
+
+One ordinary `/g` or `\G` operation used to repeatedly rediscover the same
+access-order position-cache entry for lookup, provenance, zero-length
+bookkeeping, and publication. The candidate creates one `RegexPosition` view
+per match. Every use revalidates the entry; a subject mutation or LRU eviction
+falls back to the ordinary cache lookup. The bounded cache and all externally
+observable `pos` behavior remain unchanged.
+
+### Current-source evidence
+
+- Current-master parent: `a91c57056`; candidate: `8f6a7158b`.
+- Standard Perl position-state oracles passed (83 assertions); the focused JVM
+  and interpreter runs also passed. The candidate's immutable full `make` gate
+  passed at `/tmp/make-regex-position-cache-current-20260921.log`.
+- Seven alternating, source/JAR-identified parent/candidate Regex pairs all
+  had matching checksums and stabilized warmups. Candidate/parent median
+  ratios were 1.1365, 1.0986, 1.1257, 1.1889, 0.9359, 1.0629, and 1.2287
+  (1.1074x geometric mean). Raw artifacts:
+  `/tmp/perf-regex-position-cache-current-seven-pair-20260921/`.
+- Seven alternating candidate/system-Perl pairs also had matching checksums
+  and stabilized warmups. The candidate measured 0.5539x geometric mean and
+  0.5353x median versus system Perl. Raw artifacts:
+  `/tmp/perf-regex-position-cache-current-vs-perl-20260921/`.
+
+This is a material focused Regex improvement, not a parity or complete
+portfolio claim. The direct Perl comparison confirms that Regex remains a
+large gap and must be profiled again from this delivery baseline.
+
 ## Progress tracking
 
-### Current status: Phase 2, regex delivery candidate validated
+### Current status: Phase 3, position-cache candidate revalidated on current master
 
 ### Completed phases
 
@@ -89,13 +118,20 @@ Semantic validation for the exact implementation source:
   - Added focused recursive-cache and runtime-isolation coverage.
   - Ran standard-Perl regressions, full `make`, focused production brackets,
     and a complete parent/candidate production portfolio.
+- [x] Revalidate a mutation-safe position-cache handle on current master (2026-09-21)
+  - Ported the focused `/g` and `\G` cache-view change onto `a91c57056`.
+  - Preserved mutation and LRU-eviction fallback, with system-Perl, JVM,
+    interpreter, and full-gate coverage.
+  - Measured a 1.1074x focused Regex geometric-mean candidate/parent gain;
+    the direct candidate/Perl result remains 0.5539x.
 
 ### Next steps
 
-1. Publish the focused static-match cache PR with its qualified evidence and
-   exact tested commits; do not represent the noisy portfolios as parity proof.
-2. Continue profiling the remaining String and Life gaps from the delivered
-   source baseline, targeting independently measured broad costs.
+1. Publish the focused position-cache PR with its qualified current-source
+   evidence; do not represent its Regex-only result as portfolio parity.
+2. Profile residual Regex matcher/dispatch cost and the remaining String and
+   Life gaps from this delivery baseline, targeting independently measured
+   broad costs.
 3. For any future retained candidate, repeat source-matched semantic gates and
    a complete portfolio under the same production-load protocol.
 
