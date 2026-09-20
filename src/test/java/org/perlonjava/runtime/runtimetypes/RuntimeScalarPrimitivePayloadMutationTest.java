@@ -53,4 +53,17 @@ class RuntimeScalarPrimitivePayloadMutationTest {
         assertTrue(!scalar.hasPrimitiveFlowInteger());
         assertEquals(1_000_003L, scalar.getLong());
     }
+
+    @Test
+    void scalarAssignmentCopiesTheActivePayloadWithoutFlushingTheSource() {
+        RuntimeScalar source = new RuntimeScalar(0);
+        source.setPrimitiveFlowInteger(73);
+        RuntimeScalar target = new RuntimeScalar(0);
+
+        target.set(source);
+
+        assertEquals(73L, target.getLong());
+        assertTrue(source.hasPrimitiveFlowInteger());
+        assertEquals(73L, source.getLong());
+    }
 }

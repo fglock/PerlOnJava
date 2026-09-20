@@ -307,6 +307,21 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         primitiveFlowInteger = false;
     }
 
+    /**
+     * Copy the source payload into this scalar without trusting its public
+     * object field as the complete representation. A deferred source is
+     * materialized only in the destination; the source stays deferred for its
+     * current owner.
+     */
+    private void copyPayloadFrom(RuntimeScalar source) {
+        if (source.hasPrimitiveFlowInteger()) {
+            setIntegerValue(source.fixedWidthIntegerPayload());
+        } else {
+            this.type = source.type;
+            this.value = source.value;
+        }
+    }
+
     /** True on the scalar slot that owns a newly created anonymous IO glob. */
     public boolean ioOwner;
 
@@ -1946,8 +1961,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // string hash, and refresh in place so existing PosLvalueScalar handles stay valid.
         if (value != null && this.type < TIED_SCALAR & value.type < TIED_SCALAR) {
             if (this != value) {
-                this.type = value.type;
-                this.value = value.value;
+                copyPayloadFrom(value);
                 this.utf8UncheckedOctets = value.utf8UncheckedOctets;
                 this.tainted = value.tainted;
                 this.numericLiteralText = value.numericLiteralText;
@@ -1956,8 +1970,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.formatPictureTainted = value.formatPictureTainted;
                 RuntimePosLvalue.invalidatePos(this);
             } else {
-                this.type = value.type;
-                this.value = value.value;
+                copyPayloadFrom(value);
                 this.utf8UncheckedOctets = value.utf8UncheckedOctets;
                 this.tainted = value.tainted;
                 this.numericLiteralText = value.numericLiteralText;
@@ -2094,8 +2107,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Simple non-reference assignment (no refCount tracking needed).
         // No MortalList.flush() here — neither old nor new value is a reference,
         // so no refCount was incremented/decremented, and no mortal entries were added.
-        this.type = value.type;
-        this.value = value.value;
+        copyPayloadFrom(value);
         this.utf8UncheckedOctets = value.utf8UncheckedOctets;
         this.tainted = value.tainted;
         this.numericLiteralText = value.numericLiteralText;
@@ -2142,8 +2154,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         && (nb instanceof RuntimeHash || nb instanceof RuntimeArray)) {
                     // fall through to full refCounted assignment
                 } else {
-                    this.type = value.type;
-                    this.value = value.value;
+                    copyPayloadFrom(value);
                     this.utf8UncheckedOctets = value.utf8UncheckedOctets;
                     this.tainted = value.tainted;
                     this.numericLiteralText = value.numericLiteralText;
@@ -2308,8 +2319,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         Object preAssignValue = this.value;
 
         // Do the assignment
-        this.type = value.type;
-        this.value = value.value;
+        copyPayloadFrom(value);
         if (this.captureCount > 0 && (this.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && this.value instanceof RuntimeBase capturedBase
                 && !WeakRefRegistry.isweak(this)) {
