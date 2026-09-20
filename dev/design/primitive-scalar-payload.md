@@ -133,6 +133,9 @@ method-body specialization is part of this phase.
     Added focused rollback coverage for an active deferred payload.
   - Migrated external Storable/Clone copies, readonly unwrap/wrap paths, and
     scalar `untie` restoration to the public payload-copy API.
+  - Migrated mutable bytecode copies of readonly scalars, direct-call cache
+    refresh, input-record validation rollback, and errno scope resumption to
+    the payload-copy API.
   - Full immutable `make` passed in 4m01s at
     `/tmp/make_primitive_scalar_payload_getters_clean_20260920.log`, and
     again in 3m55s at
@@ -153,11 +156,13 @@ method-body specialization is part of this phase.
     `/tmp/make_primitive_scalar_payload_regex_snapshot_20260920.log`.
     The external-copy migration also passed in 3m57s at
     `/tmp/make_primitive_scalar_payload_external_copy_20260920.log`.
+    The bytecode/special-variable migration also passed in 3m51s at
+    `/tmp/make_primitive_scalar_payload_special_copy_20260920.log`.
 
 ## Next steps
 
-1. Migrate the remaining bytecode snapshot, package-cache, special-variable,
-   and glob slot copy paths to the canonical payload-copy API.
+1. Classify the remaining code-only bytecode snapshots and glob-slot copies;
+   migrate any path that can carry an ordinary INTEGER payload.
 2. Define the smallest storage-state transition that cannot expose a stale
    public object payload across either backend.
 3. Add focused regression coverage for every newly migrated observation

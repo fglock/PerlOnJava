@@ -35,8 +35,7 @@ public class BytecodeInterpreter {
     static RuntimeScalar ensureMutableScalar(RuntimeBase val) {
         if (val instanceof RuntimeScalarReadOnly ro) {
             RuntimeScalar copy = new RuntimeScalar();
-            copy.type = ro.type;
-            copy.value = ro.value;
+            copy.copyPayloadFrom(ro);
             copy.numericLiteralText = ro.numericLiteralText;
             copy.numericContextSeen = ro.numericContextSeen;
             return copy;

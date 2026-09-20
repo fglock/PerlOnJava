@@ -1869,8 +1869,7 @@ public class GlobalVariable {
             current = globalCodeRefs.get(key);
         }
         if (current != null) {
-            cached.type = current.type;
-            cached.value = current.value;
+            cached.copyPayloadFrom(current);
             return cached;
         }
         if (cached.type == RuntimeScalarType.CODE

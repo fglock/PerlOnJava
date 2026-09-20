@@ -40,21 +40,19 @@ public class InputRecordSeparator extends RuntimeScalar {
         }
 
         // Store current value in case validation fails
-        int oldType = this.type;
-        Object oldValue = this.value;
+        RuntimeScalar oldPayload = new RuntimeScalar();
+        oldPayload.copyPayloadFrom(this);
 
         try {
             // Validate the assignment
             validateInputRecordSeparator(value);
 
             // If validation passes, set the value
-            this.type = value.type;
-            this.value = value.value;
+            copyPayloadFrom(value);
             return this;
         } catch (PerlCompilerException e) {
             // Restore original value and re-throw
-            this.type = oldType;
-            this.value = oldValue;
+            copyPayloadFrom(oldPayload);
             throw e;
         }
     }

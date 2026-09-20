@@ -385,8 +385,7 @@ public class ErrnoVariable extends RuntimeScalar {
         if (token instanceof ErrnoState active) {
             errno = active.errno;
             message = active.message;
-            this.type = active.value.type;
-            this.value = active.value.value;
+            copyPayloadFrom(active.value);
             this.blessId = active.value.blessId;
         }
     }
