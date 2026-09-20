@@ -603,6 +603,46 @@ There is no material, repeatable whole-workload gain, so the optimization and
 its test were removed. Do not rerun or widen this empty-map candidate; seek a
 larger generic matcher/search boundary.
 
+### Retained position-cache match handle (2026-09-20)
+
+The fresh Regex JFR showed repeated access-order `LinkedHashMap` probes in
+`RuntimePosLvalue` for one ordinary `/g` or `\G` operation: position lookup,
+matcher-publication provenance, zero-length bookkeeping, and position
+publication all rediscovered the same cache entry. Commit `2cf99aab6` adds a
+general `RegexPosition` handle, initialized once per such operation. It
+validates the entry before every use; scalar mutation or LRU eviction marks
+the handle stale and routes that use through the ordinary cache lookup. The
+ordinary cache remains access-ordered and bounded, and callback-driven
+mutation therefore retains the same position semantics rather than relying on
+a feature-free or pattern-shaped fast path.
+
+The direct regression test in
+`src/test/java/org/perlonjava/runtime/runtimetypes/PerlRuntimeRegexIsolationTest.java`
+forces both scalar mutation and cache eviction while a handle is live. The
+existing project-owned `pos_defined_element_bytes.t` additionally covers
+aliased elements, callback observation, byte/character position views, and
+`\G`. Candidate and exact-commit gates passed at
+`/tmp/make_regex_position_handle_candidate_20260920.log` and
+`/tmp/make_regex_position_handle_exact_20260920.log`; the independently built
+exact parent `514ff13aa` passed at
+`/tmp/make_regex_position_handle_parent_514ff13_20260920.log`.
+
+The candidate's initial two-pair screen was
+`/tmp/perf-regex-position-handle-exact-screen-20260920/20260920T092259Z/portfolio.json`,
+with independently built parent confirmation at
+`/tmp/perf-regex-position-handle-parent-screen-20260920/20260920T093132Z/portfolio.json`.
+The full source/JAR-matched, warmup-stable, seven-pair screens then ran parent
+first and candidate second:
+`/tmp/perf-regex-position-handle-parent-full-20260920/20260920T093516Z/portfolio.json`
+and
+`/tmp/perf-regex-position-handle-candidate-full-20260920/20260920T094355Z/portfolio.json`.
+Same-index PerlOnJava median-throughput ratios were 1.3701x, 1.4475x,
+1.5365x, 1.5469x, 1.1772x, 1.1441x, and 1.1465x (geometric mean 1.3278x;
+minimum 1.1441x). The standalone Regex ratio improved from the parent
+screen's 0.76417x geometric mean against Perl to 0.87343x. This is a material,
+repeatable whole-workload gain; retain the change and profile the residual
+matcher/dispatch costs rather than reworking its cache-validity contract.
+
 ### Rejected literal-alternation first-byte dispatch (2026-09-14)
 
 The retained capture-free byte-literal alternation engine was audited because
@@ -798,7 +838,11 @@ ordinary hash/call-body boundary across more than this one shape.
    string-builder variants. The latter leaked through a tied-hash-key value
    boundary before benchmarking. The current audit found no such closed
    boundary, so no String benchmark or representation substitution is active.
-2. **Regex: seek a different broad Joni body boundary.** The stack-guard
+2. **Regex: profile the residual broad matcher/dispatch body.** The retained
+   validated position-cache match handle removes repeated `pos()` hash access
+   without changing position or capture publication. Do not weaken its
+   mutation/LRU fallback or reintroduce repeated cache probes through new
+   helper paths. The stack-guard
    elision has two completed reverse-order screens and is retired; preserve
    both artifact roots and do not restart or retry it. The retained matcher
    pool, literal-alternation path, lazy `$&`, and warning-path elision remain

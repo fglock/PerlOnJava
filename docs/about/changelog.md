@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Reuse validated `pos()` cache state throughout one `/g` or `\G` regex
+  operation, while retaining mutation and LRU-eviction recovery.
+
 - Add a JVM private native-array carrier for conservatively proven
   straight-line native-word operations, materializing the ordinary array on
   first observation.
