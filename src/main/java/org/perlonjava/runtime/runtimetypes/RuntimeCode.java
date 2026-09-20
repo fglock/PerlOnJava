@@ -1294,8 +1294,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             if (value instanceof RuntimeScalarReadOnly ro && !(value instanceof ReadOnlyAlias)) {
                 RuntimeScalar scalar = new RuntimeScalar();
-                scalar.type = ro.type;
-                scalar.value = ro.value;
+                scalar.copyPayloadFrom(ro);
                 scalar.blessId = ro.blessId;
                 replacement = scalar;
             }

@@ -136,6 +136,10 @@ method-body specialization is part of this phase.
   - Migrated mutable bytecode copies of readonly scalars, direct-call cache
     refresh, input-record validation rollback, and errno scope resumption to
     the payload-copy API.
+  - Completed the raw-copy classification: the final INTEGER-capable copies in
+    readonly method invocation and `$@` save/restore now use the protocol.
+    Remaining raw pairs are CODE-only compiler/call snapshots or IO glob-slot
+    copies and cannot observe an ordinary INTEGER payload.
   - Full immutable `make` passed in 4m01s at
     `/tmp/make_primitive_scalar_payload_getters_clean_20260920.log`, and
     again in 3m55s at
@@ -158,16 +162,16 @@ method-body specialization is part of this phase.
     `/tmp/make_primitive_scalar_payload_external_copy_20260920.log`.
     The bytecode/special-variable migration also passed in 3m51s at
     `/tmp/make_primitive_scalar_payload_special_copy_20260920.log`.
+    The final raw-copy classification migration passed in 4m02s at
+    `/tmp/make_primitive_scalar_payload_final_raw_copy_20260920.log`.
 
 ## Next steps
 
-1. Classify the remaining code-only bytecode snapshots and glob-slot copies;
-   migrate any path that can carry an ordinary INTEGER payload.
-2. Define the smallest storage-state transition that cannot expose a stale
+1. Define the smallest storage-state transition that cannot expose a stale
    public object payload across either backend.
-3. Add focused regression coverage for every newly migrated observation
+2. Add focused regression coverage for every newly migrated observation
    boundary before changing representation state.
-4. Measure only after a complete fallback and observability proof exists.
+3. Measure only after a complete fallback and observability proof exists.
 
 ### Direct-payload audit, first slice (2026-09-20)
 

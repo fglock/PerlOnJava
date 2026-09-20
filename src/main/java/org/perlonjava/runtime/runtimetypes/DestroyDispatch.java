@@ -386,8 +386,7 @@ public class DestroyDispatch {
         // is restored even when DESTROY throws (die inside DESTROY).
         RuntimeScalar savedDollarAt = new RuntimeScalar();
         RuntimeScalar dollarAt = GlobalVariable.getGlobalVariable("main::@");
-        savedDollarAt.type = dollarAt.type;
-        savedDollarAt.value = dollarAt.value;
+        savedDollarAt.copyPayloadFrom(dollarAt);
 
         // Enable rescue detection: track the DESTROY target and reset the flag.
         // During DESTROY, if $self is stored in a hash element (e.g.,
@@ -570,8 +569,7 @@ public class DestroyDispatch {
             }
             // Restore $@ — must happen whether DESTROY succeeded or threw.
             // Without this, die inside DESTROY would clobber the caller's $@.
-            dollarAt.type = savedDollarAt.type;
-            dollarAt.value = savedDollarAt.value;
+            dollarAt.copyPayloadFrom(savedDollarAt);
             // Phase D: outermost DESTROY is finishing. If any nested set()
             // released a cyclic blessed-with-DESTROY ref, fire one walker
             // sweep to clear any now-orphaned weak refs. This amortizes
