@@ -10,9 +10,14 @@ import org.perlonjava.frontend.astnode.StringNode;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.runtimetypes.GlobalContext;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.PerlParserException;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
@@ -66,14 +71,16 @@ public class NumberParser {
      * @return {@code literal} unchanged when no handler is active, or a
      *         {@code $handler->(originalText, literal, category)} call AST
      */
-    private static Node wrapWithConstantHandler(Node literal, String originalText,
+    private static Node wrapWithConstantHandler(Parser parser, Node literal, String originalText,
                                                 String category, int tokenIndex) {
         RuntimeHash hh = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
         if (hh == null || hh.elements.isEmpty()) {
+            rejectClearedConstantHandler(parser, originalText, category, tokenIndex);
             return literal;
         }
         RuntimeScalar handler = hh.elements.get(category);
         if (handler == null) {
+            rejectClearedConstantHandler(parser, originalText, category, tokenIndex);
             return literal;
         }
         // Accept both a CODE scalar (rare) and a CODE reference (normal).
@@ -85,31 +92,47 @@ public class NumberParser {
             return literal;
         }
 
-        // Stash the handler into a uniquely-named package global so it
-        // remains reachable at runtime (unlike %^H, which is cleared).
+        // Perl applies :constant handlers while compiling the literal.  Keep
+        // the category out of %^H while the callback runs so eval STRING in
+        // the callback cannot recursively re-enter the same handler.
+        RuntimeScalar saved = hh.elements.remove(category);
+        RuntimeScalar result;
+        try {
+            RuntimeArray callArgs = new RuntimeArray();
+            callArgs.elements.add(new RuntimeScalar(originalText));
+            callArgs.elements.add(new RuntimeScalar(originalText));
+            callArgs.elements.add(new RuntimeScalar(category));
+            result = RuntimeCode.apply(handler, callArgs, RuntimeContextType.SCALAR).scalar();
+        } finally {
+            if (saved != null) hh.elements.put(category, saved);
+        }
+        if (result.type == RuntimeScalarType.UNDEF) {
+            var location = parser.ctx.errorUtil.getSourceLocationAccurate(Math.max(0, tokenIndex - 1));
+            parser.deferDiagnostic("Constant(" + originalText + "): Call to &{$^H{" + category
+                    + "}} did not return a defined value at " + location.fileName()
+                    + " line " + location.lineNumber() + ", at end of line\n");
+            return literal;
+        }
+
+        // Retain the compile-time result in a synthetic global for emitted
+        // bytecode; %^H itself is cleared before execution.
         int id = CONSTANT_HANDLER_COUNTER.incrementAndGet();
         String varName = "overload::__poj_const_handler_" + id;
-        GlobalVariable.getGlobalVariable(varName).set(handler);
+        GlobalVariable.getGlobalVariable(varName).set(result);
 
-        // Emit  overload::__poj_const_call($handler, $text, $literal, $category)
-        // rather than a direct $handler->($text, $literal, $category) call.
-        // The helper temporarily removes %^H{$category} for the duration of
-        // the handler's execution so that patterns like
-        //     sub { return eval $_[0] }
-        // in `overload::constant float => ...` don't infinite-recurse when
-        // the handler's body reparses the original source text.
+        // Emit the captured scalar result.
         OperatorNode handlerVar = new OperatorNode("$",
                 new IdentifierNode(varName, tokenIndex), tokenIndex);
-        ListNode args = new ListNode(tokenIndex);
-        args.elements.add(handlerVar);
-        args.elements.add(new StringNode(originalText, tokenIndex));
-        args.elements.add(literal);
-        args.elements.add(new StringNode(category, tokenIndex));
-        return new BinaryOperatorNode("(",
-                new OperatorNode("&",
-                        new IdentifierNode("overload::__poj_const_call", tokenIndex),
-                        tokenIndex),
-                args, tokenIndex);
+        return handlerVar;
+    }
+
+    private static void rejectClearedConstantHandler(Parser parser, String originalText, String category,
+                                                     int tokenIndex) {
+        if (HintHashRegistry.constantHandlerWasCleared(category)) {
+            var location = parser.ctx.errorUtil.getSourceLocationAccurate(Math.max(0, tokenIndex - 1));
+            throw new PerlParserException("Constant(" + originalText + ") unknown at "
+                    + location.fileName() + " line " + location.lineNumber() + ", at end of line\n");
+        }
     }
 
     /**
@@ -218,13 +241,23 @@ public class NumberParser {
         String originalText = number.toString();
         NumberNode numberNode = new NumberNode(originalText, parser.tokenIndex);
         String category = (hasFractional || hasExponent) ? "float" : "integer";
-        return wrapWithConstantHandler(numberNode, originalText, category, parser.tokenIndex);
+        return wrapWithConstantHandler(parser, numberNode, originalText, category, parser.tokenIndex);
     }
 
     /**
      * Unified parsing method for special number formats (binary, octal, hex)
      */
     private static Node parseSpecialNumber(Parser parser, String initialPart, NumberFormat format) {
+        if (!containsDigitForFormat(initialPart, format)
+                && !hasLeadingFractionalDigit(parser, format)) {
+            PerlParserException adjacentNumberError =
+                    missingOperatorBeforeIncompleteBaseLiteral(parser, format);
+            if (adjacentNumberError != null) {
+                throw adjacentNumberError;
+            }
+            deferNoDigitsForLiteral(parser, initialPart, format);
+            return new NumberNode("0", parser.tokenIndex);
+        }
         StringBuilder numberStr = new StringBuilder();
         boolean hasFractionalPart = false;
         String exponentStr = "";
@@ -252,6 +285,7 @@ public class NumberParser {
             TokenUtils.consume(parser); // consume '.'
 
             StringBuilder fractionalPart = new StringBuilder();
+            boolean invalidFractionalDigit = false;
 
             while (parser.tokenIndex < parser.tokens.size()) {
                 String currentToken = parser.tokens.get(parser.tokenIndex).text;
@@ -259,7 +293,13 @@ public class NumberParser {
                 if (parser.tokens.get(parser.tokenIndex).type == LexerTokenType.NUMBER) {
                     String digitStr = cleanUnderscores(TokenUtils.consume(parser).text);
                     if (!format.digitValidator.test(digitStr)) {
-                        parser.throwError("Invalid " + format.name + " digit in fractional part");
+                        // A non-base digit means this was not a base-specific
+                        // floating literal after all.  Perl leaves the dot for
+                        // the ordinary concatenation parser (for example,
+                        // `07.8p0` is `07 . 8p0`), which then diagnoses the
+                        // trailing bareword.
+                        invalidFractionalDigit = true;
+                        break;
                     }
                     fractionalPart.append(digitStr);
                 } else if (parser.tokens.get(parser.tokenIndex).type == LexerTokenType.IDENTIFIER) {
@@ -295,7 +335,10 @@ public class NumberParser {
                     break;
                 }
             }
-            if (format == HEX_FORMAT && exponentStr.isEmpty()) {
+            if (invalidFractionalDigit) {
+                parser.tokenIndex = beforeFractionalPart;
+                hasFractionalPart = false;
+            } else if (format == HEX_FORMAT && exponentStr.isEmpty()) {
                 if (numberStr.isEmpty()) {
                     parser.throwError("Invalid hexadecimal number");
                 }
@@ -365,7 +408,7 @@ public class NumberParser {
                 }
 
                 NumberNode numberNode = new NumberNode(Double.toString(value), parser.tokenIndex);
-                return wrapWithConstantHandler(numberNode, originalText, "float", parser.tokenIndex);
+                return wrapWithConstantHandler(parser, numberNode, originalText, "float", parser.tokenIndex);
             } else {
                 // Integer number
                 try {
@@ -377,12 +420,12 @@ public class NumberParser {
                     if (value.bitLength() > 64) {
                         if (hasConstantHandler("binary")) {
                             NumberNode numberNode = new NumberNode("0", parser.tokenIndex);
-                            return wrapWithConstantHandler(numberNode, originalText, "binary", parser.tokenIndex);
+                            return wrapWithConstantHandler(parser, numberNode, originalText, "binary", parser.tokenIndex);
                         }
                         return new NumberNode(Double.toString(value.doubleValue()), parser.tokenIndex);
                     }
                     NumberNode numberNode = new NumberNode(value.toString(), parser.tokenIndex);
-                    return wrapWithConstantHandler(numberNode, originalText, "binary", parser.tokenIndex);
+                    return wrapWithConstantHandler(parser, numberNode, originalText, "binary", parser.tokenIndex);
                 } catch (NumberFormatException overflow) {
                     // Value doesn't fit in a Perl UV. If a `binary`
                     // overload::constant handler is active (e.g. `use bigint`),
@@ -391,7 +434,7 @@ public class NumberParser {
                     // ignores the numeric-form argument in that case.
                     if (hasConstantHandler("binary")) {
                         NumberNode numberNode = new NumberNode("0", parser.tokenIndex);
-                        return wrapWithConstantHandler(numberNode, originalText, "binary", parser.tokenIndex);
+                        return wrapWithConstantHandler(parser, numberNode, originalText, "binary", parser.tokenIndex);
                     }
                     throw overflow;
                 }
@@ -400,6 +443,102 @@ public class NumberParser {
             parser.throwError("Invalid " + format.name + " number");
         }
         return null;
+    }
+
+    private static boolean containsDigitForFormat(String text, NumberFormat format) {
+        String digits = text.replace("_", "");
+        for (int index = 0; index < digits.length(); index++) {
+            if (format.digitValidator.test(Character.toString(digits.charAt(index)))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * A hexadecimal float may omit the integer portion (for example
+     * {@code 0x.8p0}).  At this point the prefix has been consumed, so its
+     * digit is in the fraction rather than {@code initialPart}; do not
+     * mistake that valid form for an incomplete {@code 0x} literal.
+     */
+    private static boolean hasLeadingFractionalDigit(Parser parser, NumberFormat format) {
+        if (format != HEX_FORMAT || parser.tokenIndex + 1 >= parser.tokens.size()
+                || !parser.tokens.get(parser.tokenIndex).text.equals(".")) {
+            return false;
+        }
+        String fractionalStart = parser.tokens.get(parser.tokenIndex + 1).text;
+        return containsDigitForFormat(fractionalStart, format);
+    }
+
+    private static void deferNoDigitsForLiteral(Parser parser, String initialPart, NumberFormat format) {
+        int prefixIndex = Math.max(0, parser.tokenIndex - 2);
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(prefixIndex);
+        String prefix = format == HEX_FORMAT ? "0x" : format == BINARY_FORMAT ? "0b" : "0";
+        StringBuilder near = new StringBuilder(prefix).append(initialPart);
+        if (parser.tokenIndex < parser.tokens.size()) {
+            LexerToken next = parser.tokens.get(parser.tokenIndex);
+            if ((next.type == LexerTokenType.WHITESPACE && initialPart.isEmpty())
+                    || next.text.equals(";")) {
+                near.append(next.text);
+            }
+        }
+        parser.deferDiagnostic("No digits found for " + format.name + " literal at "
+                + location.fileName() + " line " + location.lineNumber() + ", near \""
+                + near + "\"\n");
+        while (parser.tokenIndex < parser.tokens.size()) {
+            LexerToken token = parser.tokens.get(parser.tokenIndex);
+            if (token.type == LexerTokenType.NEWLINE || token.type == LexerTokenType.EOF
+                    || token.text.equals(";")) {
+                return;
+            }
+            parser.tokenIndex++;
+        }
+    }
+
+    /**
+     * A base-literal prefix immediately after another number is not a second
+     * expression: Perl diagnoses the missing operator first, then preserves
+     * the incomplete-literal diagnostic.  Do this before generic recovery
+     * consumes the trailing token, which would otherwise lose the shared
+     * {@code "0 0x"} source excerpt.
+     */
+    private static PerlParserException missingOperatorBeforeIncompleteBaseLiteral(
+            Parser parser, NumberFormat format) {
+        int literalStart = parser.tokenIndex - 2;
+        if (literalStart <= 0 || literalStart >= parser.tokens.size()
+                || parser.tokens.get(literalStart).type != LexerTokenType.NUMBER) {
+            return null;
+        }
+
+        int previous = literalStart - 1;
+        while (previous >= 0 && parser.tokens.get(previous).type == LexerTokenType.WHITESPACE) {
+            previous--;
+        }
+        if (previous < 0 || parser.tokens.get(previous).type != LexerTokenType.NUMBER
+                || previous == literalStart - 1) {
+            return null;
+        }
+
+        String literal = TokenUtils.toText(parser.tokens, literalStart, parser.tokenIndex - 1);
+        String near = TokenUtils.toText(parser.tokens, previous, parser.tokenIndex - 1);
+        String noDigitsNear = near;
+        if (parser.tokenIndex < parser.tokens.size()) {
+            LexerToken trailing = parser.tokens.get(parser.tokenIndex);
+            if (trailing.type != LexerTokenType.EOF && trailing.type != LexerTokenType.NEWLINE) {
+                noDigitsNear += trailing.text;
+            }
+        }
+
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(previous);
+        String at = " at " + location.fileName() + " line " + location.lineNumber();
+        String message = "Number found where operator expected (Missing operator before \""
+                + literal + "\"?)" + at + ", near \"" + near + "\"\n"
+                + "No digits found for " + format.name + " literal" + at + ", near \""
+                + noDigitsNear + "\"\n"
+                + "syntax error" + at + ", near \"" + near + "\"\n"
+                + "Execution of " + location.fileName()
+                + " aborted due to compilation errors.\n";
+        return new PerlParserException(message);
     }
 
     // Helper methods
@@ -413,19 +552,29 @@ public class NumberParser {
         checkNumberExponent(parser, number);
         String originalText = number.toString();
         NumberNode numberNode = new NumberNode(originalText, parser.tokenIndex);
-        return wrapWithConstantHandler(numberNode, originalText, "float", parser.tokenIndex);
+        return wrapWithConstantHandler(parser, numberNode, originalText, "float", parser.tokenIndex);
     }
 
     public static void checkNumberExponent(Parser parser, StringBuilder number) {
         String exponentPart = parser.tokens.get(parser.tokenIndex).text;
         if (exponentPart.startsWith("e") || exponentPart.startsWith("E")) {
-            TokenUtils.consume(parser);
             int index = 1;
             for (; index < exponentPart.length(); index++) {
                 if (!Character.isDigit(exponentPart.charAt(index)) && exponentPart.charAt(index) != '_') {
                     parser.throwError("Malformed number");
                 }
             }
+
+            // The lexer splits a decimal exponent into an identifier token for
+            // its `e` and separate sign/number tokens.  Do not consume a bare
+            // `e` unless it is followed by a complete exponent: leaving it in
+            // place lets the ordinary parser identify it as the bareword in
+            // malformed input such as `1e--5`.
+            if (index == 1 && !hasDecimalExponentTail(parser)) {
+                return;
+            }
+
+            TokenUtils.consume(parser);
             number.append(cleanUnderscores(exponentPart));
 
             if (index == 1) {
@@ -435,6 +584,20 @@ public class NumberParser {
                 number.append(cleanUnderscores(TokenUtils.consume(parser, LexerTokenType.NUMBER).text));
             }
         }
+    }
+
+    private static boolean hasDecimalExponentTail(Parser parser) {
+        int nextIndex = parser.tokenIndex + 1;
+        if (nextIndex >= parser.tokens.size()) {
+            return false;
+        }
+        LexerToken next = parser.tokens.get(nextIndex);
+        if (next.type == LexerTokenType.NUMBER) {
+            return true;
+        }
+        return (next.text.equals("-") || next.text.equals("+"))
+                && nextIndex + 1 < parser.tokens.size()
+                && parser.tokens.get(nextIndex + 1).type == LexerTokenType.NUMBER;
     }
 
     private static String checkHexExponent(Parser parser) {

@@ -139,6 +139,18 @@ public class FormatParser {
                     break;
                 }
 
+                // A malformed format argument beginning with '=' leaves the
+                // following POD terminator in the tokenizer's impossible
+                // state.  Perl reports that token rather than continuing to
+                // EOF and calling the format unterminated.
+                if (line.trim().equals("=cut") && !templateLines.isEmpty()
+                        && templateLines.getLast().content.trim().startsWith("=")
+                        && !templateLines.getLast().content.trim().equals("=cut")) {
+                    var location = parser.ctx.errorUtil.getSourceLocationAccurate(lineIndex);
+                    throw new PerlCompilerException("syntax error at " + location.fileName()
+                            + " line " + location.lineNumber() + ", next token ???\n");
+                }
+
                 // Parse the line and add to template
                 FormatLine formatLine = parseFormatLine(parser, line, lineIndex);
                 setSourceLocation(parser, formatLine, lineIndex);
@@ -172,6 +184,14 @@ public class FormatParser {
         }
 
         if (!foundTerminator) {
+            if (!templateLines.isEmpty()
+                    && templateLines.getFirst().content.trim().startsWith("@")
+                    && templateLines.getLast().content.trim().startsWith("for(")) {
+                var location = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
+                throw new PerlCompilerException("syntax error at " + location.fileName()
+                        + " line " + location.lineNumber() + ", \nExecution of "
+                        + location.fileName() + " aborted due to compilation errors.\n");
+            }
             throw new PerlCompilerException(parser.tokenIndex,
                     "Format not terminated", parser.ctx.errorUtil);
         }
@@ -297,6 +317,12 @@ public class FormatParser {
      * @return FormatLine representing the parsed line
      */
     private static FormatLine parseFormatLine(Parser parser, String line, int tokenIndex) {
+        if (line.trim().equals(".//")) {
+            var location = parser.ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
+            throw new PerlCompilerException("syntax error at " + location.fileName()
+                    + " line " + location.lineNumber() + ", near \".\"\n");
+        }
+
         // Comment lines start with #
         if (line.trim().startsWith("#")) {
             String comment = line.trim().substring(1).trim();

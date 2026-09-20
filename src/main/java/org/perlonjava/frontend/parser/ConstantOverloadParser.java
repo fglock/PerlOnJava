@@ -12,6 +12,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
+import org.perlonjava.runtime.runtimetypes.PerlParserException;
 
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -32,8 +33,8 @@ final class ConstantOverloadParser {
      * can change package variables that the handler consults, whereas Perl
      * constant overloading observes their compile-time values.</p>
      */
-    static Node wrapRegexSegment(StringNode cooked, String raw, int tokenIndex,
-                                 boolean utf8Source) {
+    static Node wrapRegexSegment(Parser parser, StringNode cooked, String raw, int tokenIndex,
+                                 String literalKind, boolean utf8Source) {
         RuntimeScalar handler = findHandler("qr");
         if (handler == null) {
             return cooked;
@@ -46,12 +47,20 @@ final class ConstantOverloadParser {
             RuntimeArray args = new RuntimeArray();
             args.elements.add(materializeRawSource(raw, utf8Source));
             args.elements.add(materializeCooked(cooked, utf8Source));
+            // The qr callback contract always receives qq; literalKind is
+            // only for Perl's later diagnostic wording (m'...' reports q).
             args.elements.add(new RuntimeScalar("qq"));
             result = RuntimeCode.apply(handler, args, RuntimeContextType.SCALAR).scalar();
         } finally {
             if (saved != null) {
                 hints.elements.put("qr", saved);
             }
+        }
+
+        if (result.type == RuntimeScalarType.UNDEF) {
+            var location = parser.ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
+            throw new PerlParserException("Constant(" + literalKind + "): Call to &{$^H{qr}} did not return a defined value at "
+                    + location.fileName() + " line " + location.lineNumber() + ", within pattern");
         }
 
         int id = HANDLER_COUNTER.incrementAndGet();

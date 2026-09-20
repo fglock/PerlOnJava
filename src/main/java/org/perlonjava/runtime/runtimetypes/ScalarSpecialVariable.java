@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.frontend.parser.SpecialBlockParser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.nativ.NativeUtils;
@@ -130,7 +131,31 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
             }
             return value;
         }
+        if (variableId == Id.REMOVED_ENCODING) {
+            if (value != null && value.getDefinedBoolean()) {
+                throw new PerlCompilerException("${^ENCODING} is no longer supported");
+            }
+            return scalarUndef;
+        }
         return super.set(value);
+    }
+
+    /**
+     * {@code undef *^H} reaches the magic hints scalar through the generic
+     * undef-list path.  Unlike {@code undef $^H}, it removes the lexical hint
+     * hash as well as resetting the public numeric hints value.
+     */
+    @Override
+    public RuntimeScalar undefine() {
+        if (variableId == Id.HINTS) {
+            HintHashRegistry.clearCurrentHintHash();
+            ScopedSymbolTable symbolTable = SpecialBlockParser.getCurrentScope();
+            if (symbolTable != null) {
+                symbolTable.setStrictOptions(0);
+            }
+            return scalarUndef;
+        }
+        return super.undefine();
     }
 
     // Add itself to a RuntimeArray.
@@ -292,6 +317,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     }
                     yield scalarUndef;
                 }
+                case REMOVED_ENCODING -> scalarUndef;
                 case EVAL_STATE -> {
                     // $^S - Current state of the interpreter
                     // undef = parsing/compiling (BEGIN blocks)
@@ -558,6 +584,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         REAL_UID, // $< - Real user ID (lazy, JNA call only on access)
         EFFECTIVE_UID, // $> - Effective user ID (lazy, JNA call only on access)
         WARNING_BITS, // ${^WARNING_BITS} - Compile-time warning bits
+        REMOVED_ENCODING, // ${^ENCODING} - accepts undef but rejects defined values
         EVAL_STATE, // $^S - Current state of the interpreter (undef=compiling, 0=not in eval, 1=in eval)
     }
 

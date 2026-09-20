@@ -67,6 +67,20 @@ is($after, 99, 'handler unwound on scope exit');
        'oversize hex literal goes through binary handler');
 }
 
+# Undefining the ^H typeglob clears its associated lexical hint hash.  In
+# particular, a constant handler installed before `undef *^H` must no longer
+# be callable for the following literal.
+{
+    my $error = eval q{
+        use overload;
+        BEGIN { overload::constant integer => sub {}; undef *^H }
+        1;
+        1;
+    };
+    ::ok(index($@, 'Constant(1) unknown') >= 0,
+         'undef *^H clears a constant-overload handler');
+}
+
 # End-to-end smoke test: `use bigint` must now promote literals.
 SKIP: {
     my $ok = eval { require bigint; 1 };

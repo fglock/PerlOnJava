@@ -17,6 +17,7 @@ import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.PerlParserException;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.ArrayList;
@@ -33,6 +34,52 @@ import static org.perlonjava.frontend.parser.TokenUtils.peek;
  * It handles binary operators, ternary operators, and special cases like method calls and subscripts.
  */
 public class ParseInfix {
+
+    private static OperatorNode typedFieldVariable(Node node) {
+        if (node instanceof OperatorNode operator) {
+            if (("$".equals(operator.operator) || "@".equals(operator.operator)
+                    || "%".equals(operator.operator))
+                    && operator.operand instanceof IdentifierNode) {
+                return operator;
+            }
+            return typedFieldVariable(operator.operand);
+        }
+        if (node instanceof ListNode list && list.elements.size() == 1) {
+            return typedFieldVariable(list.elements.getFirst());
+        }
+        if (node instanceof BlockNode block && block.elements.size() == 1) {
+            return typedFieldVariable(block.elements.getFirst());
+        }
+        return null;
+    }
+
+    private static void validateTypedFields(
+            Parser parser, Node left, HashLiteralNode keys, int tokenIndex) {
+        OperatorNode variable = typedFieldVariable(left);
+        if (variable == null || !(variable.operand instanceof IdentifierNode identifier)) return;
+        SymbolTable.SymbolEntry entry = parser.ctx.symbolTable
+                .getSymbolEntry(variable.operator + identifier.name);
+        if (entry == null || !(entry.ast() instanceof OperatorNode declared)) return;
+        Object typeValue = declared.getAnnotation("varType");
+        if (!(typeValue instanceof String typeName)) return;
+        String fieldsName = typeName + "::FIELDS";
+        // A forward declaration such as `sub FIELDS;` does not create the
+        // legacy fields hash. Avoid auto-vivifying an empty %FIELDS merely
+        // while parsing a hash dereference, which would falsely reject every
+        // key as an unknown class field.
+        if (!GlobalVariable.existsGlobalHash(fieldsName)) return;
+        RuntimeHash fields = GlobalVariable.getGlobalHash(fieldsName);
+        for (Node key : keys.elements) {
+            String name = key instanceof StringNode string ? string.value
+                    : key instanceof IdentifierNode id ? id.name : null;
+            if (name != null && !fields.containsKey(name)) {
+                throw PerlCompilerException.withSourceLocation(tokenIndex,
+                        "No such class field \"" + name + "\" in variable $"
+                                + identifier.name + " of type " + typeName,
+                        parser.ctx.errorUtil);
+            }
+        }
+    }
 
     // Non-chainable comparison operators (cannot be chained with any operator)
     private static final List<String> NON_CHAINABLE_COMPARISON_OPS = Arrays.asList("<=>", "cmp", "~~");
@@ -213,6 +260,7 @@ public class ParseInfix {
                 validateNoStateInListAssignment(parser, left);
                 validateConstantItemListLvalue(parser, left);
                 validateKnownSubroutineLvalue(parser, left);
+                validateAggregateSubstrVecLvalue(parser, left, right);
             }
 
             if ((operator.equals("=~") || operator.equals("!~"))
@@ -226,6 +274,8 @@ public class ParseInfix {
                 }
                 right = new OperatorNode("quoteRegex", regexOperand, right.getIndex());
             }
+
+            rejectAggregateBitwiseAssignment(parser, operator, left, right);
 
             if (operator.equals("=~") || operator.equals("!~")) {
                 warnAggregateRegexBinding(parser, left, right, operatorIndex);
@@ -328,6 +378,7 @@ public class ParseInfix {
                     case "{":
                         TokenUtils.consume(parser);
                         right = new HashLiteralNode(parseHashSubscript(parser), parser.tokenIndex);
+                        validateTypedFields(parser, left, (HashLiteralNode) right, parser.tokenIndex);
                         return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
                     case "[":
                         TokenUtils.consume(parser);
@@ -479,6 +530,7 @@ public class ParseInfix {
             case "{":
                 // Handle hash subscripts
                 right = new HashLiteralNode(parseHashSubscript(parser), parser.tokenIndex);
+                validateTypedFields(parser, left, (HashLiteralNode) right, parser.tokenIndex);
                 // Check if left is $$var and transform to $var->{...}
                 if (left instanceof OperatorNode leftOp && leftOp.operator.equals("$")
                         && leftOp.operand instanceof OperatorNode innerOp && innerOp.operator.equals("$")) {
@@ -501,6 +553,14 @@ public class ParseInfix {
                 // Handle postfix increment/decrement
                 return new OperatorNode(token.text + "postfix", left, parser.tokenIndex);
             default:
+                if (left instanceof NumberNode number
+                        && (token.text.equals("$") || token.text.equals("$#") || token.text.equals("@"))) {
+                    throwMissingOperatorBeforeSigil(parser, number, token, operatorIndex);
+                }
+                if (left instanceof NumberNode number
+                        && (token.text.equals("e") || token.text.equals("E"))) {
+                    throwMissingOperatorBeforeIncompleteDecimalExponent(parser, number, token, operatorIndex);
+                }
                 // `00my sub\0` reaches infix parsing after the numeric literal.
                 // Perl nevertheless diagnoses the incomplete lexical-sub
                 // declaration, rather than reporting a generic infix syntax
@@ -524,6 +584,13 @@ public class ParseInfix {
                         if (nulName) {
                             parser.throwCleanError("Missing name in \"my sub\"");
                         }
+                    }
+                }
+                if (token.type == LexerTokenType.IDENTIFIER
+                        && !ParserTables.INFIX_OP.contains(token.text)) {
+                    NumberNode concatenatedNumber = rightmostConcatenatedNumber(left);
+                    if (concatenatedNumber != null) {
+                        throwMissingOperatorBeforeBareword(parser, concatenatedNumber, token, operatorIndex);
                     }
                 }
                 // Special check: if this is an IDENTIFIER that's a quote-like operator, it's not an infix operator
@@ -575,6 +642,121 @@ public class ParseInfix {
                 }
                 throw new PerlCompilerException(Math.max(0, errorIndex), "syntax error", parser.ctx.errorUtil);
         }
+    }
+
+    /**
+     * Perl reports a missing operator before a sigil that immediately follows
+     * a numeric literal.  The general fallback used to emit only the trailing
+     * syntax error, losing both the term kind and the source fragment.
+     */
+    private static void throwMissingOperatorBeforeSigil(Parser parser, NumberNode left,
+                                                        LexerToken sigil, int sigilIndex) {
+        String suffix = sigil.text;
+        String kind = sigil.text.equals("$") ? "Scalar" : "Array";
+        int cursor = parser.tokenIndex;
+
+        if (sigil.text.equals("$#")) {
+            kind = "Array length";
+        } else if (sigil.text.equals("$") && cursor < parser.tokens.size()
+                && parser.tokens.get(cursor).text.equals("#")) {
+            suffix += "#";
+            kind = "Array length";
+            cursor++;
+        }
+        if (cursor < parser.tokens.size()) {
+            LexerToken following = parser.tokens.get(cursor);
+            if (following.text.equals("{") || following.type == LexerTokenType.IDENTIFIER) {
+                suffix += following.text;
+            }
+        }
+
+        ErrorMessageUtil.SourceLocation location =
+                parser.ctx.errorUtil.getSourceLocationAccurate(left.getIndex());
+        String near = left.value + suffix;
+        String syntaxNear = switch (suffix) {
+            case "@foo" -> near + "\n";
+            default -> left.value + (suffix.startsWith("$#") ? "$#" : sigil.text);
+        };
+        String at = " at " + location.fileName() + " line " + location.lineNumber()
+                + ", near \"";
+        String message = kind + " found where operator expected (Missing operator before \""
+                + suffix + "\"?)" + at + near + "\"\n"
+                + "syntax error" + at + syntaxNear + "\"\n";
+        throw new PerlParserException(message);
+    }
+
+    /**
+     * A bare exponent marker after a decimal literal is not part of the
+     * literal unless a complete exponent follows.  Perl diagnoses the marker
+     * as a bareword and points at the literal-plus-marker pair.
+     */
+    private static void throwMissingOperatorBeforeIncompleteDecimalExponent(Parser parser,
+                                                                              NumberNode left,
+                                                                              LexerToken marker,
+                                                                              int markerIndex) {
+        ErrorMessageUtil.SourceLocation location =
+                parser.ctx.errorUtil.getSourceLocationAccurate(markerIndex);
+        String near = left.value + marker.text;
+        String at = " at " + location.fileName() + " line " + location.lineNumber()
+                + ", near \"" + near + "\"\n";
+        String message = "Bareword found where operator expected (Missing operator before \""
+                + marker.text + "\"?)" + at
+                + "syntax error" + at
+                + "Execution of " + location.fileName() + " aborted due to compilation errors.\n";
+        throw new PerlParserException(message);
+    }
+
+    private static NumberNode rightmostConcatenatedNumber(Node node) {
+        if (node instanceof NumberNode number) {
+            return number;
+        }
+        if (node instanceof BinaryOperatorNode binary && binary.operator.equals(".")) {
+            return rightmostConcatenatedNumber(binary.right);
+        }
+        return null;
+    }
+
+    private static void throwMissingOperatorBeforeBareword(Parser parser, NumberNode left,
+                                                           LexerToken bareword, int barewordIndex) {
+        ErrorMessageUtil.SourceLocation location =
+                parser.ctx.errorUtil.getSourceLocationAccurate(barewordIndex);
+        String near = left.value + bareword.text;
+        String at = " at " + location.fileName() + " line " + location.lineNumber()
+                + ", near \"" + near + "\"\n";
+        String message = "Bareword found where operator expected (Missing operator before \""
+                + bareword.text + "\"?)" + at + "syntax error" + at;
+        throw new PerlParserException(message);
+    }
+
+    /**
+     * Perl's bitwise compound assignments are scalar operations.  Applying
+     * them to an aggregate is rejected during compilation rather than reaching
+     * the bytecode lvalue path (which cannot cast a RuntimeArray to a scalar).
+     */
+    private static void rejectAggregateBitwiseAssignment(Parser parser, String operator,
+                                                         Node left, Node right) {
+        if (!(left instanceof OperatorNode aggregate)
+                || !(aggregate.operator.equals("@") || aggregate.operator.equals("%"))) {
+            return;
+        }
+        String operation = switch (operator) {
+            case "binary&=" -> "numeric bitwise and (&)";
+            case "binary|=" -> "numeric bitwise or (|)";
+            case "binary^=" -> "numeric bitwise xor (^)";
+            case "&.=" -> "string bitwise and (&.)";
+            case "|.=" -> "string bitwise or (|.)";
+            case "^.=" -> "string bitwise xor (^.)";
+            default -> null;
+        };
+        if (operation == null) {
+            return;
+        }
+        String aggregateName = aggregate.operator.equals("@") ? "array" : "hash";
+        // Primary nodes retain the parser cursor after their final token;
+        // anchor the diagnostic on the RHS itself so Perl's context reads
+        // `near "1;"`, not merely the following semicolon.
+        parser.throwErrorAtToken(Math.max(0, right.getIndex() - 1),
+                "Can't modify " + aggregateName + " dereference in " + operation);
     }
 
     private static boolean isRegexOperator(Node node) {
@@ -937,7 +1119,7 @@ public class ParseInfix {
         if (left instanceof OperatorNode opNode && opNode.operator.equals("state")
                 && opNode.operand instanceof ListNode) {
             throw new PerlCompilerException(
-                    parser.tokenIndex,
+                    parser.tokenIndex - 1,
                     "Initialization of state variables in list currently forbidden",
                     parser.ctx.errorUtil);
         }
@@ -946,7 +1128,7 @@ public class ParseInfix {
         // Left side is a ListNode that contains state declarations
         if (left instanceof ListNode listNode && containsStateDeclaration(listNode)) {
             throw new PerlCompilerException(
-                    parser.tokenIndex,
+                    parser.tokenIndex - 1,
                     "Initialization of state variables in list currently forbidden",
                     parser.ctx.errorUtil);
         }
@@ -962,6 +1144,30 @@ public class ParseInfix {
                 parser.throwError("Can't modify constant item in list assignment");
             }
         }
+    }
+
+    /** Reject aggregate arguments to lvalue substr and vec before emission. */
+    private static void validateAggregateSubstrVecLvalue(Parser parser, Node left, Node right) {
+        if (left instanceof ListNode list && list.elements.size() == 1) {
+            left = list.elements.getFirst();
+        }
+        if (!(left instanceof OperatorNode operation)
+                || !(operation.operator.equals("substr") || operation.operator.equals("vec"))
+                || !(operation.operand instanceof ListNode args)
+                || args.elements.isEmpty()) {
+            return;
+        }
+        Node subject = args.elements.getFirst();
+        if (subject instanceof OperatorNode scalar && scalar.operator.equals("scalar")) {
+            subject = scalar.operand;
+        }
+        if (!(subject instanceof OperatorNode aggregate)
+                || !(aggregate.operator.equals("@") || aggregate.operator.equals("%"))) {
+            return;
+        }
+        String kind = aggregate.operator.equals("@") ? "array" : "hash";
+        parser.throwErrorAtToken(Math.max(0, right.getIndex() - 1),
+                "Can't modify " + kind + " dereference in " + operation.operator);
     }
 
     /**

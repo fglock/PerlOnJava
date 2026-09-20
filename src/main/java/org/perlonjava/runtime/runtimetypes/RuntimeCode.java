@@ -29,6 +29,7 @@ import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
 import org.perlonjava.runtime.perlmodule.Strict;
+import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.CoreSubroutineGenerator;
 
 import java.lang.invoke.MethodHandle;
@@ -39,6 +40,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import org.perlonjava.runtime.perlmodule.Universal;
 import java.util.function.Supplier;
 
 import static org.perlonjava.frontend.parser.ParserTables.CORE_PROTOTYPES;
@@ -54,6 +56,12 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.runUnitcheckBlock
  * It provides functionality to compile, store, and execute Perl subroutines and eval strings.
  */
 public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
+    private static final String INDIRECT_BLOCK_METHOD_PREFIX = "\uFDD0indirect-block:";
+
+    /** Marks the parser's {@code method { BLOCK }} indirect-object form. */
+    public static String indirectBlockMethodName(String methodName) {
+        return INDIRECT_BLOCK_METHOD_PREFIX + methodName;
+    }
     private static final ThreadLocal<Integer> SIGNATURE_CALL_DEPTH =
             ThreadLocal.withInitial(() -> 0);
 
@@ -172,19 +180,36 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             values.put(args.elements.get(i).toString(), args.elements.get(i + 1));
         }
         if (signatureSlurpySigil == null) {
+            List<String> unrecognized = new ArrayList<>();
             for (String name : values.keySet()) {
                 if (!signatureNamedParams.contains(name)) {
-                    WarnDie.die(new RuntimeScalar("Unrecognized named parameter '" + name
-                            + "' to subroutine '" + signatureSubName + "'"), new RuntimeScalar(""));
+                    unrecognized.add(name);
                 }
+            }
+            if (!unrecognized.isEmpty()) {
+                boolean truncated = unrecognized.size() > 5;
+                String listed = truncated
+                        ? String.join("', '", unrecognized.subList(0, 5)) + "', ..."
+                        : String.join("', '", unrecognized);
+                String label = unrecognized.size() == 1 ? "parameter" : "parameters";
+                String message = "Unrecognized named " + label + " '" + listed
+                        + (truncated ? " to subroutine '" : "' to subroutine '")
+                        + signatureSubName + "'";
+                WarnDie.die(new RuntimeScalar(message), new RuntimeScalar(""));
             }
         }
         if (!"@".equals(signatureSlurpySigil)) {
+            List<String> missing = new ArrayList<>();
             for (String required : signatureRequiredNamedParams) {
                 if (!values.containsKey(required)) {
-                    WarnDie.die(new RuntimeScalar("Missing required named parameter '" + required
-                            + "' to subroutine '" + signatureSubName + "'"), new RuntimeScalar(""));
+                    missing.add(required);
                 }
+            }
+            if (!missing.isEmpty()) {
+                String label = missing.size() == 1 ? "parameter" : "parameters";
+                WarnDie.die(new RuntimeScalar("Missing required named " + label + " '"
+                        + String.join("', '", missing) + "' to subroutine '" + signatureSubName + "'"),
+                        new RuntimeScalar(""));
             }
         }
     }
@@ -1295,6 +1320,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // Functional interface for direct subroutine invocation (preferred for generated classes)
     public PerlSubroutine subroutine;
     public boolean isStatic;
+    /** True for a `method` declared inside a Perl class. */
+    public boolean isClassMethod;
+    /** Synthetic constructor emitted for a Perl class declaration. */
+    public boolean generatedClassConstructor;
+    /** Anonymous CV implementing a Perl class ADJUST block. */
+    public boolean classAdjustBlock;
+    /** Declaring class for {@link #isClassMethod}. */
+    public String declaringClass;
     public String autoloadVariableName = null;
     // Code object instance used during execution (legacy - used with methodHandle)
     public Object codeObject;
@@ -1908,6 +1941,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.isConstantCv = this.isConstantCv;
         clone.isLexicalConstantCv = this.isLexicalConstantCv;
         clone.isStatic = this.isStatic;
+        clone.isClassMethod = this.isClassMethod;
+        clone.generatedClassConstructor = this.generatedClassConstructor;
+        clone.classAdjustBlock = this.classAdjustBlock;
+        clone.declaringClass = this.declaringClass;
         clone.isDeclared = this.isDeclared;
         clone.constantValue = this.constantValue;
         clone.lexicalVariableNames = this.lexicalVariableNames == null
@@ -2081,6 +2118,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * call-site line.
      */
     public static void throwIfDirectCallUndefined(RuntimeScalar runtimeScalar, String subroutineName) {
+        throwIfDirectCallUndefined(runtimeScalar, subroutineName, null);
+    }
+
+    /**
+     * Direct-call preflight with the optional bare statement label that Perl
+     * includes in an undefined-subroutine diagnostic.
+     */
+    public static void throwIfDirectCallUndefined(RuntimeScalar runtimeScalar,
+                                                  String subroutineName,
+                                                  String precedingLabel) {
         RuntimeScalar curScalar = resolveDirectCallTarget(runtimeScalar, subroutineName);
         RuntimeScalar evalFilledLexicalForward = resolveEvalFilledLexicalForward(curScalar);
         if (evalFilledLexicalForward != null) {
@@ -2099,8 +2146,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (curScalar.type == RuntimeScalarType.UNDEF) {
                 String fullSubName = knownUndefinedSubroutineName(curScalar, subroutineName);
                 if (fullSubName != null) {
-                    throw new PerlCompilerException(gotoErrorPrefix(subroutineName)
-                            + "ndefined subroutine &" + fullSubName + " called");
+                    throw new PerlCompilerException(undefinedDirectCallMessage(
+                            subroutineName, fullSubName, precedingLabel));
                 }
                 return;
             }
@@ -2112,16 +2159,26 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     return;
                 }
 
-                if (code.compilerSupplier != null) {
-                    RuntimeList savedConstantValue = code.constantValue;
-                    java.util.List<String> savedAttributes = code.attributes;
-                    code.compilerSupplier.get();
+            if (code.compilerSupplier != null) {
+                RuntimeList savedConstantValue = code.constantValue;
+                java.util.List<String> savedAttributes = code.attributes;
+                boolean savedIsClassMethod = code.isClassMethod;
+                String savedDeclaringClass = code.declaringClass;
+                String savedReferenceOriginFqn = code.referenceOriginFqn;
+                code.compilerSupplier.get();
                     code = (RuntimeCode) curScalar.value;
                     if (savedConstantValue != null && code.constantValue == null) {
                         code.constantValue = savedConstantValue;
-                    }
-                    restoreLazyAttributes(code, savedAttributes);
                 }
+                restoreLazyAttributes(code, savedAttributes);
+                if (savedIsClassMethod) {
+                    code.isClassMethod = true;
+                    code.declaringClass = savedDeclaringClass;
+                }
+                if (code.referenceOriginFqn == null) {
+                    code.referenceOriginFqn = savedReferenceOriginFqn;
+                }
+            }
 
                 if (!code.defined() && "CORE".equals(code.packageName) && code.subName != null) {
                     if (CoreSubroutineGenerator.generateWrapper(code.subName)) {
@@ -2170,8 +2227,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         }
                     }
 
-                    throw new PerlCompilerException(gotoErrorPrefix(subroutineName)
-                            + "ndefined subroutine &" + fullSubName + " called");
+                    throw new PerlCompilerException(undefinedDirectCallMessage(
+                            subroutineName, fullSubName, precedingLabel));
                 }
                 return;
             }
@@ -2226,6 +2283,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             return;
         }
+    }
+
+    private static String undefinedDirectCallMessage(String subroutineName,
+                                                     String fullSubName,
+                                                     String precedingLabel) {
+        String message = gotoErrorPrefix(subroutineName)
+                + "ndefined subroutine &" + fullSubName + " called";
+        return precedingLabel == null || precedingLabel.isEmpty()
+                ? message
+                : message + ", close to label '" + precedingLabel + "'";
     }
 
     private static RuntimeScalar findImportedStubAutoload(RuntimeCode code, String fullSubName) {
@@ -2448,6 +2515,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return PerlRuntime.current().runtimeCodeState().nextEvalFilename();
     }
 
+    public static String getNextEvalFilename(String sourceName) {
+        return PerlRuntime.current().runtimeCodeState().nextEvalFilename(sourceName);
+    }
+
     private static void warnSignatureArgsInEval(String source, String fileName) {
         if (source == null || !source.contains("@_")) return;
         // JVM-generated subroutine bodies do not always enter through a
@@ -2475,6 +2546,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         code.methodHandle = codeFrom.methodHandle;
         code.subroutine = codeFrom.subroutine;
         code.isStatic = codeFrom.isStatic;
+        code.isClassMethod = codeFrom.isClassMethod;
+        code.generatedClassConstructor = codeFrom.generatedClassConstructor;
+        code.classAdjustBlock = codeFrom.classAdjustBlock;
+        code.declaringClass = codeFrom.declaringClass;
         code.codeObject = codeFrom.codeObject;
         code.cvStartFile = codeFrom.cvStartFile;
         code.cvStartLine = codeFrom.cvStartLine;
@@ -2496,6 +2571,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.methodHandle = codeFrom.methodHandle;
         this.subroutine = codeFrom.subroutine;
         this.isStatic = codeFrom.isStatic;
+        this.isClassMethod = codeFrom.isClassMethod;
+        this.generatedClassConstructor = codeFrom.generatedClassConstructor;
+        this.classAdjustBlock = codeFrom.classAdjustBlock;
+        this.declaringClass = codeFrom.declaringClass;
         this.autoloadVariableName = codeFrom.autoloadVariableName;
         this.codeObject = codeFrom.codeObject;
         this.prototype = codeFrom.prototype;
@@ -2786,7 +2865,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             boolean isDebugging = debugFlags != 0;
 
             // Always generate a unique filename for each eval to prevent source location collisions
-            String actualFileName = getNextEvalFilename();
+            String actualFileName = getNextEvalFilename(ctx.compilerOptions.fileName);
             evalCompilerOptions.fileName = actualFileName;
             warnSignatureArgsInEval(evalString, actualFileName);
 
@@ -3380,7 +3459,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 evalCompilerOptions.isByteStringSource = true;
             }
             // Always generate a unique filename for each eval to prevent source location collisions
-            evalCompilerOptions.fileName = getNextEvalFilename();
+            evalCompilerOptions.fileName = getNextEvalFilename(ctx.compilerOptions.fileName);
             warnSignatureArgsInEval(evalString, evalCompilerOptions.fileName);
 
             // Setup for BEGIN block support - create aliases for captured variables.
@@ -4291,6 +4370,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         String methodName = method.toString();
+        boolean indirectBlockMethod = methodName.startsWith(INDIRECT_BLOCK_METHOD_PREFIX);
+        if (indirectBlockMethod) {
+            methodName = methodName.substring(INDIRECT_BLOCK_METHOD_PREFIX.length());
+            method = new RuntimeScalar(methodName);
+        }
         RuntimeScalar requestedMethod = method;
 
         // Unwrap READONLY_SCALAR for method dispatch.
@@ -4333,6 +4417,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             perlClassName = "IO::File";
             ModuleOperators.require(new RuntimeScalar("IO/File.pm"));
         } else if (!invocant.getDefinedBoolean()) {
+            if (indirectBlockMethod) {
+                throw new PerlCompilerException("Can't call method \"" + methodName
+                        + "\" without a package or object reference");
+            }
             throw new PerlCompilerException("Can't call method \"" + methodName + "\" on an undefined value");
         } else {
             perlClassName = invocant.toString();
@@ -4477,7 +4565,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             qualifiedSuperIndex + "::SUPER::".length());
                 }
             }
-            throw new PerlCompilerException("Can't locate object method \"" + errorMethodName + "\" via package \"" + perlClassName + "\" (perhaps you forgot to load \"" + perlClassName + "\"?)");
+            if (ClassRegistry.isClass(perlClassName)) {
+                throw new PerlCompilerException("Can't locate object method \"" + errorMethodName
+                        + "\" via package \"" + perlClassName + "\"");
+            }
+            throw new PerlCompilerException("Can't locate object method \"" + errorMethodName
+                    + "\" via package \"" + perlClassName + "\" (perhaps you forgot to load \""
+                    + perlClassName + "\"?)");
         }
     }
 
@@ -5528,6 +5622,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (code.compilerSupplier != null) {
                 RuntimeList savedConstantValue = code.constantValue;
                 java.util.List<String> savedAttributes = code.attributes;
+                boolean savedIsClassMethod = code.isClassMethod;
+                String savedDeclaringClass = code.declaringClass;
+                String savedReferenceOriginFqn = code.referenceOriginFqn;
                 code.compilerSupplier.get();
                 // Reload code from curScalar.value in case it was replaced
                 code = (RuntimeCode) curScalar.value;
@@ -5536,6 +5633,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     code.constantValue = savedConstantValue;
                 }
                 restoreLazyAttributes(code, savedAttributes);
+                if (savedIsClassMethod) {
+                    code.isClassMethod = true;
+                    code.declaringClass = savedDeclaringClass;
+                }
+                if (code.referenceOriginFqn == null) {
+                    code.referenceOriginFqn = savedReferenceOriginFqn;
+                }
             }
 
             // Check if it's an unfilled forward declaration (not defined)
@@ -5572,8 +5676,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     autoloadPackage = code.stashInstallPackage;
                     autoloadSubName = code.stashInstallSub;
                 }
-                String subroutineName = autoloadPackage + "::" + autoloadSubName;
-                if (autoloadPackage != null && autoloadSubName != null && !subroutineName.isEmpty()) {
+                String autoloadTargetName = autoloadPackage + "::" + autoloadSubName;
+                if (autoloadPackage != null && autoloadSubName != null && !autoloadTargetName.isEmpty()) {
                     // If this is an imported forward declaration, check AUTOLOAD in the source package FIRST
                     // This matches Perl semantics where imported subs resolve via the exporting package's AUTOLOAD
                     if (code.sourcePackage != null && !code.sourcePackage.equals(code.packageName)) {
@@ -5596,7 +5700,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         // Set $AUTOLOAD — in the package where the AUTOLOAD sub
                         // was compiled, not in the package we looked it up from
                         // (see autoloadVarFor() for details).
-                        getGlobalVariable(autoloadVarFor(autoload, autoloadPackage)).set(subroutineName);
+                        getGlobalVariable(autoloadVarFor(autoload, autoloadPackage)).set(autoloadTargetName);
                         // Call AUTOLOAD (iterative — continue the outer dispatch
                         // loop rather than recursing into apply(), to avoid
                         // Java-stack growth on long AUTOLOAD chains).
@@ -5604,17 +5708,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         continue;
                     }
                 }
-                if ("tailcall".equals(subroutineName)) {
+                if (PerlRuntime.current().executionState().tailCallTrampolineDepth > 0) {
                     throw new PerlCompilerException("Goto undefined subroutine &"
                             + code.packageName + "::" + code.subName);
                 }
                 String displayName = code.lexicalForwardGlobPlaceholder && code.subName != null
-                        ? code.subName : subroutineName;
+                        ? code.subName : autoloadTargetName;
                 throw new PerlCompilerException("Undefined subroutine &" + displayName + " called");
             }
             String resolvedSubroutineName = code.packageName != null && code.subName != null
                     ? code.packageName + "::" + code.subName
                     : null;
+            requireClassMethodInstance(code, curArgs);
             requireLvalueCallable(code, callContext, resolvedSubroutineName);
             int effectiveContext = effectiveCallContext(code, callContext);
             // Look up warning bits for the code's class and push to context stack
@@ -5689,7 +5794,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // invocation, so enterCall/exitCall depth tracking is
                     // not re-entered (no inTailCallTrampoline bump needed).
                 } else {
-                    if (result instanceof RuntimeControlFlowList) {
+                    if (result instanceof RuntimeControlFlowList flow) {
+                        if (code.classAdjustBlock) {
+                            flow.markClassAdjustOrigin();
+                        }
+                        handleEscapingLoopControl(result, code.generatedClassConstructor,
+                                code.classAdjustBlock);
                         MyVarCleanupStack.unwindTo(cleanupMark);
                         MortalList.flush();
                     }
@@ -5851,7 +5961,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         // If the type is not CODE, throw an exception indicating an invalid state
-        throw new PerlCompilerException("Not a CODE reference");
+        throw invalidCodeReference(curScalar);
         } // end while(true)
     }
 
@@ -5864,6 +5974,66 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             array.markDirectCallArgument();
         }
         return argument;
+    }
+    /** Warn when loop control crosses a subroutine boundary, as Perl does. */
+    private static void warnOnEscapingLoopControl(RuntimeControlFlowList flow) {
+        if (flow.suppressEscapingLoopControlWarning()) {
+            return;
+        }
+        if (!Warnings.warningManager.isWarningEnabled("exiting")) {
+            return;
+        }
+        String operation = flow.getControlFlowType().name().toLowerCase();
+        WarnDie.warn(new RuntimeScalar("Exiting subroutine via " + operation),
+                new RuntimeScalar(" at " + flow.marker.fileName + " line "
+                        + flow.marker.lineNumber));
+    }
+
+    public static RuntimeScalar markGeneratedClassConstructor(RuntimeScalar codeRef) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
+            code.generatedClassConstructor = true;
+        }
+        return codeRef;
+    }
+
+    public static RuntimeScalar markClassAdjustBlock(RuntimeScalar codeRef) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
+            code.classAdjustBlock = true;
+        }
+        return codeRef;
+    }
+
+    /**
+     * Apply the subroutine-boundary semantics for loop control that escaped a
+     * called subroutine.  A generated class constructor is a hard boundary:
+     * its field initializers and ADJUST blocks must not target the caller's
+     * loop.  ADJUST already emitted the exiting-subroutine warning, so carry
+     * that provenance to avoid issuing it a second time at the constructor.
+     */
+    public static RuntimeList handleEscapingLoopControl(
+            RuntimeList result, boolean generatedConstructor, boolean classAdjust) {
+        if (!(result instanceof RuntimeControlFlowList flow)) {
+            return result;
+        }
+        ControlFlowType type = flow.getControlFlowType();
+        if (type != ControlFlowType.LAST && type != ControlFlowType.NEXT
+                && type != ControlFlowType.REDO) {
+            return result;
+        }
+        if (classAdjust) {
+            flow.markClassAdjustOrigin();
+        }
+        if (!generatedConstructor || !flow.hasClassAdjustOrigin()) {
+            warnOnEscapingLoopControl(flow);
+        }
+        if (generatedConstructor) {
+            String message = flow.marker.buildErrorMessage();
+            if (!message.endsWith(".")) {
+                message += ".";
+            }
+            throw new PerlCompilerException(message + "\n");
+        }
+        return result;
     }
 
     // Method to apply (execute) a subroutine reference for eval/evalbytes.
@@ -6017,6 +6187,40 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     // Method to apply (execute) a subroutine reference using native array for parameters
+    /**
+     * Invoke a generated direct call while retaining its source location for
+     * signature validation.  Named-signature validation happens before the
+     * callee body has entered a normal Perl frame, so {@code caller()} alone
+     * cannot otherwise identify the Perl call site for its diagnostic.
+     *
+     * <p>The synthetic frame is deliberately limited to signature-bearing
+     * callees.  Installing one for every call changes observable {@code caller}
+     * results in ordinary subroutines.</p>
+     */
+    public static RuntimeList applyAtLocation(RuntimeScalar runtimeScalar, String subroutineName,
+                                              RuntimeBase[] args, int callContext,
+                                              String callerPackage, String callerFile,
+                                              int callerLine) {
+        RuntimeScalar resolved = resolveDirectCallTarget(runtimeScalar, subroutineName);
+        RuntimeScalar target = resolved;
+        while (target != null && target.type == RuntimeScalarType.READONLY_SCALAR) {
+            target = (RuntimeScalar) target.value;
+        }
+        if (target == null || target.type != RuntimeScalarType.CODE
+                || !(target.value instanceof RuntimeCode code)
+                || (code.signatureNamedParams.isEmpty()
+                && !"%".equals(code.signatureSlurpySigil))) {
+            return apply(resolved, subroutineName, args, callContext);
+        }
+
+        pushSyntheticCallerFrame(callerPackage, callerFile, callerLine, "(signature)");
+        try {
+            return apply(resolved, subroutineName, args, callContext);
+        } finally {
+            popSyntheticCallerFrame();
+        }
+    }
+
     public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeBase[] args, int callContext) {
         runtimeScalar = resolveDirectCallTarget(runtimeScalar, subroutineName);
 
@@ -6076,6 +6280,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (code.compilerSupplier != null) {
                 RuntimeList savedConstantValue = code.constantValue;
                 java.util.List<String> savedAttributes = code.attributes;
+                boolean savedIsClassMethod = code.isClassMethod;
+                String savedDeclaringClass = code.declaringClass;
                 code.compilerSupplier.get();
                 // Reload code from runtimeScalar.value in case it was replaced
                 code = (RuntimeCode) runtimeScalar.value;
@@ -6084,6 +6290,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     code.constantValue = savedConstantValue;
                 }
                 restoreLazyAttributes(code, savedAttributes);
+                if (savedIsClassMethod) {
+                    code.isClassMethod = true;
+                    code.declaringClass = savedDeclaringClass;
+                }
             }
 
             // Lazily generate CORE:: subroutine wrappers on first call
@@ -6100,6 +6310,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
             if (code.defined()) {
+                requireClassMethodInstance(code, a);
                 requireLvalueCallable(code, callContext, subroutineName);
                 int effectiveContext = effectiveCallContext(code, callContext);
                 // Look up warning bits for the code's class and push to context stack
@@ -6279,7 +6490,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return apply(overloadedCode, subroutineName, args, callContext);
         }
 
-        throw new PerlCompilerException("Not a CODE reference");
+        throw invalidCodeReference(runtimeScalar);
     }
 
     /**
@@ -6305,8 +6516,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             String namedTarget = cfList.marker.namedTarget;
             if (namedTarget != null) {
                 codeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(namedTarget);
-                if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof RuntimeCode code
-                        && !code.defined() && !hasAutoload(code)) {
+                // A fresh missing stash entry can be represented either by an
+                // undefined CV or by a plain UNDEF scalar.  Both are an
+                // undefined named goto target; only an undefined CV with an
+                // available AUTOLOAD is allowed to continue to apply().
+                boolean hasTargetAutoload = codeRef.type == RuntimeScalarType.CODE
+                        && codeRef.value instanceof RuntimeCode code
+                        && hasAutoload(code);
+                if (!isCodeDefined(codeRef) && !hasTargetAutoload) {
                     cleanupTailCallArgs(cfList.marker.ownedArgs);
                     cleanupTailCallCodeRef(cfList.getTailCallCodeRef());
                     throw new PerlCompilerException("Goto undefined subroutine &" + namedTarget
@@ -6410,6 +6627,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (code.compilerSupplier != null) {
                 RuntimeList savedConstantValue = code.constantValue;
                 java.util.List<String> savedAttributes = code.attributes;
+                boolean savedIsClassMethod = code.isClassMethod;
+                String savedDeclaringClass = code.declaringClass;
+                String savedReferenceOriginFqn = code.referenceOriginFqn;
                 code.compilerSupplier.get();
                 // Reload code from runtimeScalar.value in case it was replaced
                 code = (RuntimeCode) runtimeScalar.value;
@@ -6418,6 +6638,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     code.constantValue = savedConstantValue;
                 }
                 restoreLazyAttributes(code, savedAttributes);
+                if (savedIsClassMethod) {
+                    code.isClassMethod = true;
+                    code.declaringClass = savedDeclaringClass;
+                }
+                if (code.referenceOriginFqn == null) {
+                    code.referenceOriginFqn = savedReferenceOriginFqn;
+                }
             }
 
             // Lazily generate CORE:: subroutine wrappers on first call
@@ -6434,6 +6661,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
             if (code.defined()) {
+                requireClassMethodInstance(code, a);
                 requireLvalueCallable(code, callContext, subroutineName);
                 int effectiveContext = effectiveCallContext(code, callContext);
                 // Look up warning bits for the code's class and push to context stack
@@ -6601,7 +6829,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return apply(overloadedCode, subroutineName, list, callContext);
         }
 
-        throw new PerlCompilerException("Not a CODE reference");
+        throw invalidCodeReference(runtimeScalar);
+    }
+
+    private static PerlCompilerException invalidCodeReference(RuntimeScalar scalar) {
+        if (scalar.type == RuntimeScalarType.UNDEF) {
+            return new PerlCompilerException("Can't use an undefined value as a subroutine reference");
+        }
+        return new PerlCompilerException("Not a CODE reference");
     }
 
     // Handle \$var where $var might be a CODE reference (for lexical subs)
@@ -7001,12 +7236,43 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         getGlobalVariable(GlobalContext.WARNING_SCOPE).set(savedScope);
     }
 
+    private static void requireClassMethodInstance(RuntimeCode code, RuntimeArray args) {
+        if (!code.isClassMethod) {
+            return;
+        }
+        RuntimeScalar self = args.elements.isEmpty() ? null : args.elements.getFirst();
+        if (self == null || !RuntimeScalarType.isReference(self)
+                || !(((RuntimeBase) self.value).blessId != 0)) {
+            String methodName = code.subName;
+            if (methodName == null && code.referenceOriginFqn != null) {
+                int separator = code.referenceOriginFqn.lastIndexOf("::");
+                methodName = separator >= 0
+                        ? code.referenceOriginFqn.substring(separator + 2)
+                        : code.referenceOriginFqn;
+            }
+            throw new PerlCompilerException("Cannot invoke method \"" + methodName
+                    + "\" on a non-instance");
+        }
+        String actualClass = NameNormalizer.getBlessStr(((RuntimeBase) self.value).blessId);
+        if (actualClass.equals(code.declaringClass)) {
+            return;
+        }
+        RuntimeArray isaArgs = new RuntimeArray();
+        isaArgs.elements.add(self);
+        isaArgs.elements.add(new RuntimeScalar(code.declaringClass));
+        if (!Universal.isa(isaArgs, RuntimeContextType.SCALAR).scalar().getBoolean()) {
+            throw new PerlCompilerException("Cannot invoke a method of \"" + code.declaringClass
+                    + "\" on an instance of \"" + actualClass + "\"");
+        }
+    }
+
     public RuntimeList apply(RuntimeArray a, int callContext) {
         if (boundRuntime != null && PerlRuntime.currentOrNull() != boundRuntime) {
             try (PerlRuntime.Binding ignored = boundRuntime.bind()) {
                 return apply(a, callContext);
             }
         }
+        requireClassMethodInstance(this, a);
         if (constantValue != null) {
             requireLvalueCallable(this, callContext, null);
             return new RuntimeList(constantValue);

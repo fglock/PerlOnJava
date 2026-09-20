@@ -22,6 +22,10 @@ public class FieldRegistry {
         return PerlRuntime.current().globalState().classParents();
     }
 
+    private static Map<String, Set<String>> classParameters() {
+        return PerlRuntime.current().globalState().classParameters();
+    }
+
     /**
      * Register a field declaration in a class
      */
@@ -51,6 +55,21 @@ public class FieldRegistry {
         return classParents().get(className);
     }
 
+    public static Set<String> getParameterNamesInHierarchy(String className) {
+        Set<String> names = new HashSet<>();
+        Set<String> visited = new HashSet<>();
+        String current = className;
+        while (current != null && visited.add(current)) {
+            names.addAll(classParameters().getOrDefault(current, Set.of()));
+            current = classParents().get(current);
+        }
+        return names;
+    }
+
+    public static void registerParameterName(String className, String parameterName) {
+        classParameters().computeIfAbsent(className, ignored -> new HashSet<>()).add(parameterName);
+    }
+
     /**
      * Check if a field exists in the class hierarchy
      * This works if parent classes were parsed before child classes
@@ -58,6 +77,24 @@ public class FieldRegistry {
     public static boolean hasFieldInHierarchy(String className, String fieldName) {
         Set<String> visited = new HashSet<>();
         return hasFieldInHierarchyHelper(className, fieldName, visited);
+    }
+
+    /**
+     * Returns whether {@code candidateAncestor} is {@code className} or one
+     * of its declared class parents.  Field names alone are insufficient for
+     * access control: a nested class can see its enclosing parser scope, but
+     * must not inherit that enclosing class's fields.
+     */
+    public static boolean isClassOrAncestor(String className, String candidateAncestor) {
+        Set<String> visited = new HashSet<>();
+        String current = className;
+        while (current != null && visited.add(current)) {
+            if (current.equals(candidateAncestor)) {
+                return true;
+            }
+            current = classParents().get(current);
+        }
+        return false;
     }
 
     private static boolean hasFieldInHierarchyHelper(String className, String fieldName, Set<String> visited) {
@@ -87,5 +124,6 @@ public class FieldRegistry {
     public static void clear() {
         classParents().clear();
         classFields().clear();
+        classParameters().clear();
     }
 }

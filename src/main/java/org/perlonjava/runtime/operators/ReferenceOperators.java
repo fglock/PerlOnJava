@@ -21,7 +21,37 @@ public class ReferenceOperators {
      * @throws PerlCompilerException if attempting to bless a non-reference value
      */
     public static RuntimeScalar bless(RuntimeScalar runtimeScalar, RuntimeScalar className) {
+        return bless(runtimeScalar, className, false);
+    }
+
+    /**
+     * Bless the object allocated by a synthetic {@code class} constructor.
+     * User-visible {@code bless} must reject a class name, but the constructor
+     * is the language-defined mechanism that creates instances of that class.
+     */
+    public static RuntimeScalar blessClassInstance(RuntimeScalar runtimeScalar, RuntimeScalar className) {
+        return bless(runtimeScalar, className, true);
+    }
+
+    private static RuntimeScalar bless(RuntimeScalar runtimeScalar, RuntimeScalar className,
+                                       boolean classConstruction) {
         if (RuntimeScalarType.isReference(runtimeScalar)) {
+            // The class-name operand is an ordinary scalar read, so tied
+            // scalar magic must run before deciding whether it is a reference.
+            className = RuntimeScalar.fetchTiedOnce(className);
+            // A reference cannot be used directly as a class name. Perl does
+            // permit an object with an explicit stringification overload, so
+            // resolve that before rejecting ordinary references.
+            if (RuntimeScalarType.isReference(className)) {
+                OverloadContext overloadContext = OverloadContext.prepare(
+                        RuntimeScalarType.blessedId(className));
+                RuntimeScalar stringified = overloadContext == null ? null
+                        : overloadContext.tryOverload("(\"\"", new RuntimeArray(className));
+                if (stringified == null) {
+                    throw new PerlCompilerException("Attempt to bless into a reference");
+                }
+                className = stringified;
+            }
             // Match Perl's diagnostics for `bless`:
             //   - undef class name produces "Use of uninitialized value $class in bless"
             //   - empty class name produces "Explicit blessing to '' (assuming package main)"
@@ -63,6 +93,13 @@ public class ReferenceOperators {
             str = GlobalVariable.resolveStashAlias(str);
 
             RuntimeBase referent = (RuntimeBase) runtimeScalar.value;
+            if (!classConstruction && ClassRegistry.isClass(str)) {
+                throw new PerlCompilerException("Attempt to bless into a class");
+            }
+            if (referent.blessId != 0
+                    && ClassRegistry.isClass(NameNormalizer.getBlessStr(referent.blessId))) {
+                throw new PerlCompilerException("Can't bless an object reference");
+            }
             int newBlessId = NameNormalizer.getBlessId(str);
 
             // Phase D-W6.10: arm targeted refCount tracing for classes

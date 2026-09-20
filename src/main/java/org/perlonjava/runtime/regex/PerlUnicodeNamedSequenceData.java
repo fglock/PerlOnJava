@@ -264,7 +264,7 @@ public final class PerlUnicodeNamedSequenceData {
     }
 
     /** Returns whether a name identifies a sequence under Unicode loose matching. */
-    static boolean isNamedSequence(String name) {
+    public static boolean isNamedSequence(String name) {
         if (name == null) return false;
         String loose = looseName(name);
         for (String candidate : NAMES) {

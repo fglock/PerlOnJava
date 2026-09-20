@@ -3,6 +3,9 @@ package org.perlonjava.runtime.runtimetypes;
 import java.util.List;
 import java.util.Set;
 
+import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.perlmodule.Warnings;
+
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 
 /**
@@ -87,6 +90,30 @@ public class RuntimeSigHash extends RuntimeHash {
                 }
             }
         }
+    }
+
+    /**
+     * Warn for unknown OS signal names but retain their slots, as Perl does.
+     * Underscore-prefixed entries are Perl hooks and remain an error when
+     * unrecognized.
+     */
+    @Override
+    public void put(String key, RuntimeScalar value) {
+        if (!KNOWN_SIGNALS.contains(key)) {
+            String visibleKey = key.replace("\0", "\\0");
+            int nulIndex = key.indexOf('\0');
+            String baseSignal = nulIndex >= 0 ? key.substring(0, nulIndex) : key;
+            if (baseSignal.startsWith("_")) {
+                throw new PerlCompilerException("No such hook: " + visibleKey);
+            }
+            // A malformed OS signal name is a Perl warning, routed through
+            // __WARN__, but its hash entry remains usable.  Signal extensions
+            // rely on this behavior when warnings are locally disabled.
+            if (Warnings.warningManager.isWarningEnabled("signal")) {
+                WarnDie.warn(new RuntimeScalar("No such signal: SIG" + visibleKey), new RuntimeScalar());
+            }
+        }
+        super.put(key, value);
     }
 
     /**

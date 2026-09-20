@@ -325,8 +325,31 @@ public class ErrorMessageUtil {
      * @return the formatted error message with context
      */
     public String errorMessage(int index, String message) {
+        return errorMessage(index, message, true, 3, false);
+    }
+
+    /**
+     * Formats a syntax error whose source context must include a mismatched
+     * collection delimiter.  Most syntax excerpts stop before braces so that
+     * enclosing blocks do not leak into the diagnostic; Perl retains the
+     * mismatched delimiter for errors such as {@code near "[ }"}.
+     */
+    public String errorMessageIncludingDelimiter(int index, String message) {
+        return errorMessage(index, message, true, 3, true);
+    }
+
+    /**
+     * Formats an error whose index intentionally identifies the first token
+     * in its source context, including when that token follows a newline.
+     */
+    public String errorMessageAtToken(int index, String message) {
+        return errorMessage(index, message, false, 2, false);
+    }
+
+    private String errorMessage(int index, String message, boolean rewindAfterNewline,
+                                int maxContextTokens, boolean includeDelimiters) {
         int effectiveIndex = index;
-        if ("syntax error".equals(message) && index > 1
+        if (rewindAfterNewline && "syntax error".equals(message) && index > 1
                 && tokens.get(index - 1).type == LexerTokenType.NEWLINE) {
             effectiveIndex = index - 2;
         }
@@ -337,7 +360,7 @@ public class ErrorMessageUtil {
             return message + " at " + loc.fileName() + " line " + loc.lineNumber() + ".\n";
         }
 
-        String nearString = buildNearString(effectiveIndex, message);
+        String nearString = buildNearString(effectiveIndex, message, maxContextTokens, includeDelimiters);
 
         String quotedNear = errorMessageQuote(nearString);
         // Perl prints a malformed quoted-string escape verbatim in its
@@ -361,7 +384,8 @@ public class ErrorMessageUtil {
         return " at " + loc.fileName() + " line " + loc.lineNumber();
     }
 
-    private String buildNearString(int index, String message) {
+    private String buildNearString(int index, String message, int maxContextTokens,
+                                   boolean includeDelimiters) {
         if ("syntax error".equals(message)) {
             String previousContext = buildPreviousNotContext(index);
             if (previousContext != null) {
@@ -396,16 +420,25 @@ public class ErrorMessageUtil {
         // non-whitespace tokens.  Keep the complete repeated escape in the
         // diagnostic rather than truncating it after the historical generic
         // three-token excerpt limit.
-        int maxNonWhitespaceTokens = 3;
+        int maxNonWhitespaceTokens = maxContextTokens;
         if (start + 2 < tokens.size()
                 && "\\".equals(tokens.get(start).text)
                 && "\\".equals(tokens.get(start + 2).text)) {
-            maxNonWhitespaceTokens = 4;
+            maxNonWhitespaceTokens = Math.max(maxNonWhitespaceTokens, 4);
+        }
+        // A named signature parameter starts with three significant tokens
+        // (':', '$', and its name).  Keep its terminating ')' in a slurpy
+        // ordering diagnostic, matching Perl's `near ":$name) "` excerpt.
+        if (("Slurpy parameter not last".equals(message)
+                || "Duplicated subroutine parameter name".equals(message)
+                || "Mandatory parameter follows optional parameter".equals(message))
+                && start < tokens.size() && ":".equals(tokens.get(start).text)) {
+            maxNonWhitespaceTokens = Math.max(maxNonWhitespaceTokens, 4);
         }
         for (int i = start; i <= end; i++) {
             LexerToken tok = tokens.get(i);
             if (tok.type == LexerTokenType.EOF || tok.type == LexerTokenType.NEWLINE) break;
-            if (tok.text.equals("{") || tok.text.equals("}")) break;
+            if (!includeDelimiters && (tok.text.equals("{") || tok.text.equals("}"))) break;
             if (tok.type != LexerTokenType.WHITESPACE) {
                 nonWsCount++;
                 if (nonWsCount > maxNonWhitespaceTokens) break;
@@ -414,6 +447,18 @@ public class ErrorMessageUtil {
         }
         String near = sb.toString();
         near = near.replaceAll("^\\s+", "");
+        // Signature validation stops an excerpt at a parameter separator.
+        // Do not retain the space after that comma: Perl says `near "$c,"`.
+        if ("Mandatory parameter follows optional parameter".equals(message)
+                && near.matches(".*,[\\s]+$")) {
+            near = near.replaceFirst("\\s+$", "");
+        }
+        // A leading comma in a signature is reported by Perl as `near "(,"`;
+        // the whitespace that follows the comma is not part of that syntax
+        // excerpt.
+        if ("syntax error".equals(message) && near.matches("^\\(,[\\s]+$")) {
+            near = near.replaceFirst("\\s+$", "");
+        }
         if (trimTrailingWhitespace) {
             near = near.replaceAll("\\s+$", "");
         }

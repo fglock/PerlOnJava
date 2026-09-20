@@ -180,6 +180,14 @@ public class ParseBlock {
                             swallowedLookahead);
                     statementNode.setAnnotation("statementStartIndex", coplineIndex);
                 }
+                // A bare label before a direct subroutine call affects only the
+                // undefined-call diagnostic for that statement ("close to label
+                // 'LABEL'").  Preserve it on the statement so the call emitters
+                // can carry it to their direct-call preflight without changing
+                // ordinary label/control-flow handling.
+                if (label != null && statement instanceof AbstractNode statementNode) {
+                    statementNode.setAnnotation("precedingLabel", label);
+                }
                 statements.add(statement);
             } else {
                 // This should never happen - log and skip

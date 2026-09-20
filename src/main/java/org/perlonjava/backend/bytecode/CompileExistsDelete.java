@@ -9,12 +9,22 @@ import java.util.List;
 
 public class CompileExistsDelete {
 
+    // Perl permits a leading unary plus to disambiguate a dereference target
+    // passed to exists/delete. It does not turn the element access into a
+    // value expression for these operators.
+    private static Node unwrapUnaryPlus(Node arg) {
+        if (arg instanceof OperatorNode operator && operator.operator.equals("+")) {
+            return operator.operand;
+        }
+        return arg;
+    }
+
     public static void visitExists(BytecodeCompiler bc, OperatorNode node) {
         if (node.operand == null || !(node.operand instanceof ListNode list) || list.elements.isEmpty()) {
             bc.throwCompilerException("exists requires an argument");
             return;
         }
-        Node arg = list.elements.get(0);
+        Node arg = unwrapUnaryPlus(list.elements.get(0));
         if (arg instanceof BinaryOperatorNode binOp) {
             switch (binOp.operator) {
                 case "{" -> visitExistsHash(bc, node, binOp);
@@ -98,7 +108,7 @@ public class CompileExistsDelete {
             bc.throwCompilerException("delete requires an argument");
             return;
         }
-        Node arg = list.elements.get(0);
+        Node arg = unwrapUnaryPlus(list.elements.get(0));
         if (arg instanceof BinaryOperatorNode binOp) {
             switch (binOp.operator) {
                 case "{" -> visitDeleteHash(bc, node, binOp);

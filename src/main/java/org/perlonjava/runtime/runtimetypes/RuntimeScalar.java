@@ -44,6 +44,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
     }
 
+    public static void rejectLocalizeThroughReference() {
+        throw new PerlCompilerException("Can't localize through a reference");
+    }
+
+    /** Reject localization with a source location captured by the JVM emitter. */
+    public static void rejectLocalizeThroughReference(String message) {
+        throw new PerlCompilerException(message);
+    }
+
 
     /**
      * Deferred storage for a plain string being grown with repeated {@code .=}.
@@ -280,6 +289,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * ordinary undef scalar: calls must report {@code &name} in diagnostics.
      */
     public String lexicalSubName;
+
+    /** Source spelling retained for diagnostics that operate on a lexical scalar. */
+    public String lexicalDisplayName;
 
     /** Package containing {@link #lexicalSubName} for an eval-filled forward declaration. */
     public String lexicalSubPackageName;
@@ -617,6 +629,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.value = value;
     }
 
+    /** Attach the source-level lexical name used by handle diagnostics. */
+    public RuntimeScalar setLexicalDisplayName(String name) {
+        this.lexicalDisplayName = name;
+        return this;
+    }
+
     public RuntimeScalar(Boolean value) {
         this.type = RuntimeScalarType.BOOLEAN;
         this.value = value;
@@ -647,6 +665,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.firstClassRegexScalar = scalar.firstClassRegexScalar;
         this.formatPictureTainted = scalar.formatPictureTainted;
         this.lexicalSubName = scalar.lexicalSubName;
+        this.lexicalDisplayName = scalar.lexicalDisplayName;
         this.lexicalSubPackageName = scalar.lexicalSubPackageName;
         this.lexicalSubPackageCodeDefinedAtDeclaration = scalar.lexicalSubPackageCodeDefinedAtDeclaration;
         Object argumentFrame = RuntimeCode.currentArgumentAliasFrame(scalar);
@@ -739,6 +758,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.firstClassRegexScalar = scalar.firstClassRegexScalar;
                 this.formatPictureTainted = scalar.formatPictureTainted;
                 this.lexicalSubName = scalar.lexicalSubName;
+                this.lexicalDisplayName = scalar.lexicalDisplayName;
                 this.lexicalSubPackageName = scalar.lexicalSubPackageName;
                 this.lexicalSubPackageCodeDefinedAtDeclaration = scalar.lexicalSubPackageCodeDefinedAtDeclaration;
             }
@@ -3245,6 +3265,36 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             default -> throw new PerlCompilerException("Not a SCALAR reference");
         };
+    }
+
+    /**
+     * Dereference a foreach declared-reference iterator value without the
+     * ordinary dereference operators' autovivification semantics.
+     */
+    public RuntimeScalar foreachScalarReference() {
+        requireForeachReference(REFERENCE, "SCALAR");
+        return (RuntimeScalar) value;
+    }
+
+    public RuntimeArray foreachArrayReference() {
+        requireForeachReference(ARRAYREFERENCE, "ARRAY");
+        return (RuntimeArray) value;
+    }
+
+    public RuntimeHash foreachHashReference() {
+        requireForeachReference(HASHREFERENCE, "HASH");
+        return (RuntimeHash) value;
+    }
+
+    private void requireForeachReference(int expectedType, String expectedName) {
+        if (!RuntimeScalarType.isReference(this)) {
+            throw new PerlCompilerException("Assigned value is not a reference");
+        }
+        if (type != expectedType) {
+            String article = expectedName.equals("ARRAY") ? "an" : "a";
+            throw new PerlCompilerException("Assigned value is not " + article + " "
+                    + expectedName + " reference");
+        }
     }
 
     // Method to implement `$$v`, when "no strict refs" is in effect

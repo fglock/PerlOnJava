@@ -13,12 +13,12 @@ import org.perlonjava.app.cli.Main;
  * losslessly, including physical newlines and embedded double quotes.
  *
  * <p>The outer Java process receives URL-safe base64, so no cmd.exe parser can
- * consume part of an argument. The decoded values are installed in the child
- * environment and expanded with delayed expansion after cmd has parsed the
- * command structure. Because the target batch inherits delayed expansion, a
- * literal {@code !} in its path or argv cannot be transported safely through
- * its later {@code %1}/{@code %*} expansion; reject that case explicitly
- * instead of silently changing the child's arguments.</p>
+ * consume part of an argument. Ordinary batch targets receive the decoded
+ * values through delayed environment expansion after cmd has parsed the
+ * command structure. A literal {@code !} cannot survive that expansion, so
+ * those targets reject it explicitly. The {@code jperl.bat} target is
+ * different: it dispatches straight to {@link Main} and never invokes
+ * {@code cmd.exe}, so it preserves literal exclamation marks losslessly.</p>
  */
 public final class WindowsBatchArgvLauncher {
     private WindowsBatchArgvLauncher() {
@@ -37,6 +37,11 @@ public final class WindowsBatchArgvLauncher {
         if (isJperlBatch(script)) {
             invokeJperl(arguments, Main::main);
             return;
+        }
+
+        rejectDelayedExpansionHazard(script, "batch script path");
+        for (int i = 0; i < arguments.size(); i++) {
+            rejectDelayedExpansionHazard(arguments.get(i), "batch argument " + i);
         }
 
         ProcessBuilder builder = new ProcessBuilder();
@@ -59,8 +64,6 @@ public final class WindowsBatchArgvLauncher {
         List<String> decoded = new ArrayList<>(encoded.length);
         for (int i = 0; i < encoded.length; i++) {
             String value = decode(decoder, encoded[i]);
-            rejectDelayedExpansionHazard(value,
-                    i == 0 ? "batch script path" : "batch argument " + (i - 1));
             decoded.add(value);
         }
         return decoded;

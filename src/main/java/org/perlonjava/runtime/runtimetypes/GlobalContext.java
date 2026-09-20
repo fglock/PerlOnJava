@@ -136,7 +136,10 @@ public class GlobalContext {
             GlobalVariable.globalVariables.put("main::\\", ors);
         }
         GlobalVariable.getGlobalVariable("main::$").set(ForkOpenState.initialProcessId());
-        GlobalVariable.getGlobalVariable("main::?");
+        // Perl starts with a successful child status. Leaving this as undef
+        // makes numeric loop conditions see a nonzero value and changes
+        // control flow before the first child process is run.
+        GlobalVariable.getGlobalVariable("main::?").set(0);
         // Only set $0 if it hasn't been set yet - prevents overwriting during re-entrant calls
         // (e.g., when require() is called during module initialization)
         if (!GlobalVariable.globalVariables.containsKey("main::0")) {
@@ -176,6 +179,7 @@ public class GlobalContext {
         GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_SUCCESSFUL_PATTERN"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_SUCCESSFUL_PATTERN));
         GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_FH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_FH)); // $^LAST_FH
         GlobalVariable.globalVariables.put(encodeSpecialVar("H"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.HINTS)); // $^H - compile-time hints
+        GlobalVariable.globalVariables.put(encodeSpecialVar("ENCODING"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.REMOVED_ENCODING));
         // $^R is writable, not read-only - initialize as regular variable instead of ScalarSpecialVariable
         // GlobalVariable.globalVariables.put(encodeSpecialVar("R"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_REGEXP_CODE_RESULT)); // $^R
         GlobalVariable.getGlobalVariable(encodeSpecialVar("R"));    // initialize $^R to "undef" - writable variable

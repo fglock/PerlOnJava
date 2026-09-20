@@ -178,6 +178,17 @@ public class EmitForeach {
             // Use the variable node without the declaration for codegen, but do not mutate the AST.
             variableNode = opNode.operand;
 
+            // `foreach my \$x (...)` is represented as a declared-reference
+            // annotation on the declaration, rather than as a literal leading
+            // backslash node. Preserve that distinction for the iteration
+            // lowering: declared references must validate and bind each input
+            // reference, not receive ordinary foreach assignment.
+            if (opNode.getBooleanAnnotation("isDeclaredReference")
+                    && variableNode instanceof OperatorNode declaredReferenceTarget) {
+                variableNode = new OperatorNode("\\", declaredReferenceTarget,
+                        declaredReferenceTarget.tokenIndex);
+            }
+
             if (opNode.operator.equals("my") && variableNode instanceof OperatorNode declVar
                     && declVar.operator.equals("$") && declVar.operand instanceof IdentifierNode declId) {
                 String varName = declVar.operator + declId.name;
@@ -244,6 +255,17 @@ public class EmitForeach {
         if (variableNode instanceof OperatorNode opNode && opNode.operator.equals("\\")) {
             isReferenceAliasing = true;
             actualVariable = opNode.operand; // Get the actual variable ($x, @x, %x)
+
+            // `for \my $x (...)` retains the declaration beneath the
+            // reference operator.  Lower it to its sigil target just like
+            // `for \$x (...)`, so the reference validator is selected for
+            // every list element (including sparse-array undef slots).
+            if (actualVariable instanceof OperatorNode declaration
+                    && (declaration.operator.equals("my") || declaration.operator.equals("our")
+                    || declaration.operator.equals("state"))
+                    && declaration.operand instanceof OperatorNode sigil) {
+                actualVariable = sigil;
+            }
 
             // Allocate a temporary variable to save the current value
             savedValueIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
@@ -551,24 +573,28 @@ public class EmitForeach {
             // Reference-alias loop variables bind to the referenced cell, not
             // to the RuntimeScalar that holds the reference.
             if (isReferenceAliasing && actualVariable instanceof OperatorNode innerOp) {
+                // The validation below is emitted directly rather than through
+                // a child node visitor.  Give it the iterator variable's COP
+                // so runtime errors retain the iterator's #line location.
+                ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, innerOp.getIndex());
                 if (innerOp.operator.equals("$")) {
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                             "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                            "scalarDeref",
+                            "foreachScalarReference",
                             "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                             false);
                 } else if (innerOp.operator.equals("@")) {
                     // Array: dereference scalar to get RuntimeArray
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                             "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                            "arrayDeref",
+                            "foreachArrayReference",
                             "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
                             false);
                 } else if (innerOp.operator.equals("%")) {
                     // Hash: dereference scalar to get RuntimeHash
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                             "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                            "hashDeref",
+                            "foreachHashReference",
                             "()Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;",
                             false);
                 }

@@ -41,6 +41,32 @@ public class SubroutineParser {
     private static final Semaphore semaphore = new Semaphore(1);
 
     /**
+     * With apostrophe package separators disabled, a leading quote after
+     * {@code sub} starts an expression rather than a package component.
+     */
+    private static void throwDisabledLeadingApostropheSubError(Parser parser) {
+        int quoteIndex = parser.tokenIndex;
+        int firstNameIndex = quoteIndex + 1;
+        int closingQuoteIndex = firstNameIndex + 1;
+        int trailingNameIndex = closingQuoteIndex + 1;
+        if (trailingNameIndex >= parser.tokens.size()
+                || parser.tokens.get(firstNameIndex).type != LexerTokenType.IDENTIFIER
+                || !parser.tokens.get(closingQuoteIndex).text.equals("'")
+                || parser.tokens.get(trailingNameIndex).type != LexerTokenType.IDENTIFIER) {
+            return;
+        }
+
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(quoteIndex);
+        String firstName = parser.tokens.get(firstNameIndex).text;
+        String trailingName = parser.tokens.get(trailingNameIndex).text;
+        String at = " at " + location.fileName() + " line " + location.lineNumber();
+        String message = "Bareword found where operator expected (Missing operator before \""
+                + trailingName + "\"?)" + at + ", near \"'" + firstName + "'" + trailingName + "\"\n"
+                + "Illegal declaration of anonymous subroutine" + at + ", near \"sub '" + firstName + "'\"\n";
+        throw new PerlCompilerException(message);
+    }
+
+    /**
      * Parses a subroutine call.
      *
      * @param parser The parser object
@@ -492,6 +518,12 @@ public class SubroutineParser {
                 return parseIndirectMethodCall(parser, nameNode);
             }
             LexerToken nextTok = peek(parser);
+            // An unresolved bareword followed by a number is not an
+            // unparenthesized call. Perl diagnoses the missing infix operator
+            // before it can become a runtime undefined-subroutine call.
+            if (nextTok.type == LexerTokenType.NUMBER) {
+                throwNumberAfterBarewordDiagnostic(parser, sourceSubName, currentIndex, nextTok);
+            }
             boolean terminator = nextTok.text.equals(";")
                     || nextTok.text.equals("}")
                     || nextTok.text.equals(")")
@@ -617,7 +649,10 @@ public class SubroutineParser {
                             new OperatorNode("&", nameNode, currentIndex),
                             arguments,
                             currentIndex);
-                    return new BinaryOperatorNode("->", invocant, methodCall, currentIndex);
+                    BinaryOperatorNode indirectBlockCall = new BinaryOperatorNode(
+                            "->", invocant, methodCall, currentIndex);
+                    indirectBlockCall.setAnnotation("indirectBlockMethod", true);
+                    return indirectBlockCall;
                 }
 
                 ListNode arguments = consumeArgsWithPrototype(parser, "@");
@@ -694,6 +729,13 @@ public class SubroutineParser {
                     && !GlobalVariable.isSubs.containsKey(fullName);
             if (!unshadowedCoreBuiltin) {
                 codeRefNode.setAnnotation("directNamedCall", true);
+                int separator = fullName.lastIndexOf("::");
+                if (separator >= 0 && !"new".equals(subName)) {
+                    String packageName = fullName.substring(0, separator);
+                    if (ClassRegistry.isClass(packageName)) {
+                        codeRefNode.setAnnotation("directClassMethod", packageName);
+                    }
+                }
             }
             if (!isMethod && parseTimeCodeRef == null && !unshadowedCoreBuiltin) {
                 // Perl allocates and pins the call site's GV while parsing an
@@ -706,6 +748,19 @@ public class SubroutineParser {
                 parseTimeCodeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(fullName);
             }
             if (parseTimeCodeRef != null) {
+                // The parser's class registry is intentionally compile-time
+                // state.  Preserve the declaring-class identity on this
+                // call site's CV now, before execution switches to its own
+                // runtime state.
+                int separator = fullName.lastIndexOf("::");
+                if (separator >= 0 && parseTimeCodeRef.value instanceof RuntimeCode code) {
+                    String packageName = fullName.substring(0, separator);
+                    if (!"new".equals(code.subName) && code.isClassMethod) {
+                        code.isClassMethod = true;
+                        code.declaringClass = packageName;
+                        codeRefNode.setAnnotation("directClassMethod", packageName);
+                    }
+                }
                 codeRefNode.setAnnotation("parseTimeCodeRef", parseTimeCodeRef);
             }
             return new BinaryOperatorNode("(",
@@ -716,6 +771,18 @@ public class SubroutineParser {
             // Restore the previous subroutine context
             parser.ctx.symbolTable.setCurrentSubroutine(previousSubroutine);
         }
+    }
+
+    private static void throwNumberAfterBarewordDiagnostic(Parser parser, String subName,
+                                                            int subNameIndex, LexerToken number) {
+        ErrorMessageUtil.SourceLocation location =
+                parser.ctx.errorUtil.getSourceLocationAccurate(subNameIndex);
+        String near = subName + " " + number.text;
+        String at = " at " + location.fileName() + " line " + location.lineNumber()
+                + ", near \"" + near + "\"\n";
+        throw new PerlParserException(
+                "Number found where operator expected (Do you need to predeclare \""
+                        + subName + "\"?)" + at + "syntax error" + at);
     }
 
     private static boolean isValidIndirectMethod(String subName) {
@@ -813,6 +880,11 @@ public class SubroutineParser {
             // 'parseSubroutineIdentifier' is called to handle cases where the subroutine name might be complex
             // (e.g., namespaced, fully qualified names). It may return null if no valid name is found.
             subName = IdentifierParser.parseSubroutineIdentifier(parser);
+
+            if (subName == null && peek(parser).text.equals("'")
+                    && !parser.ctx.symbolTable.isFeatureCategoryEnabled("apostrophe_as_package_separator")) {
+                throwDisabledLeadingApostropheSubError(parser);
+            }
 
             // Mark named subroutines as non-packages in packageExistsCache immediately
             // This helps indirect object detection distinguish subs from packages.
@@ -930,7 +1002,17 @@ public class SubroutineParser {
                 // If the signatures feature is not enabled, we just parse the prototype as a string.
                 // If a prototype exists, we parse it using 'parseRawString' method which handles it like the 'q()' operator.
                 // This means it will take everything inside the parentheses as a literal string.
-                prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
+                int prototypeStartIndex = parser.tokenIndex;
+                try {
+                    prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
+                } catch (PerlCompilerException e) {
+                    if (e.getMessage() != null && e.getMessage().contains("Can't find string terminator")) {
+                        var location = parser.ctx.errorUtil.getSourceLocationAccurate(prototypeStartIndex);
+                        throw new PerlParserException("Prototype not terminated at " + location.fileName()
+                                + " line " + location.lineNumber() + ".\n");
+                    }
+                    throw e;
+                }
 
                 // Validate prototype - certain characters are not allowed
                 if (prototype.contains("<>") || prototype.contains("__FILE__")) {
@@ -1658,7 +1740,8 @@ public class SubroutineParser {
 
         // Emit "Prototype mismatch" and "Subroutine redefined" warnings
         // Skip warnings for Java-registered (XS-like) built-in methods being overridden by Perl stubs
-        if (isRedefinition && block != null && !isBuiltinSub) {
+        if (isRedefinition && block != null && !isBuiltinSub
+                && !block.getBooleanAnnotation("generatedClassConstructor")) {
             String location = "";
             if (parser.ctx.errorUtil != null) {
                 int line = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex);
@@ -1748,6 +1831,13 @@ public class SubroutineParser {
         placeholder.packageName = lastSep >= 0
                 ? fullName.substring(0, lastSep)
                 : parser.ctx.symbolTable.getCurrentPackage();
+        placeholder.isClassMethod = "method".equals(declaration)
+                || (block != null && block.getBooleanAnnotation("isClassMethod"));
+        placeholder.declaringClass = placeholder.isClassMethod ? placeholder.packageName : null;
+        placeholder.generatedClassConstructor = block != null
+                && block.getBooleanAnnotation("generatedClassConstructor");
+        placeholder.classAdjustBlock = block != null
+                && block.getBooleanAnnotation("classAdjustBlock");
         placeholder.isConstantCv = isConstantCvBody(prototype, block);
 
         // Compile-time attribute handlers can inspect the still-lazy CV with
@@ -2167,6 +2257,10 @@ public class SubroutineParser {
                     interpretedCode.attributes = placeholder.attributes;
                     interpretedCode.subName = placeholder.subName;
                     interpretedCode.packageName = placeholder.packageName;
+                    interpretedCode.isClassMethod = placeholder.isClassMethod;
+                    interpretedCode.declaringClass = placeholder.declaringClass;
+                    interpretedCode.generatedClassConstructor = placeholder.generatedClassConstructor;
+                    interpretedCode.classAdjustBlock = placeholder.classAdjustBlock;
                     interpretedCode.lexicalVariableNames = placeholder.lexicalVariableNames;
                     interpretedCode.ourVariableRegistry = placeholder.ourVariableRegistry;
                     interpretedCode.lexicalAliases = placeholder.lexicalAliases;
@@ -2213,6 +2307,10 @@ public class SubroutineParser {
                 interpretedCode.attributes = placeholder.attributes;
                 interpretedCode.subName = placeholder.subName;
                 interpretedCode.packageName = placeholder.packageName;
+                interpretedCode.isClassMethod = placeholder.isClassMethod;
+                interpretedCode.declaringClass = placeholder.declaringClass;
+                interpretedCode.generatedClassConstructor = placeholder.generatedClassConstructor;
+                interpretedCode.classAdjustBlock = placeholder.classAdjustBlock;
                 interpretedCode.lexicalVariableNames = placeholder.lexicalVariableNames;
                 interpretedCode.ourVariableRegistry = placeholder.ourVariableRegistry;
                 interpretedCode.lexicalAliases = placeholder.lexicalAliases;

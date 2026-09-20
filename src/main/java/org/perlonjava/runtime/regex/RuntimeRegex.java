@@ -779,6 +779,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         String displayDiagnosticPattern = sourceDiagnosticPattern == null
                 ? originalPatternString
                 : RegexMarkers.stripLiteralDiagnostics(sourceDiagnosticPattern);
+        enforceCompileRecursionLimit(displayDiagnosticPattern);
+        if (isNamedCharacterDiagnostic(literalFrontendDiagnostic)) {
+            String diagnostic = malformedUPlusDiagnostic(
+                    displayDiagnosticPattern, literalFrontendDiagnostic);
+            if (diagnostic != null) {
+                throw new PerlCompilerException(diagnostic);
+            }
+        }
         // Lexical regex debugging changes the compiled representation.
         // A lexical charname translator may return a different expansion for
         // each compilation. Literal syntax validation is the first leg of one
@@ -1018,6 +1026,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 }
                 if (e instanceof IllegalArgumentException
                         && isNamedCharacterDiagnostic(e.getMessage())) {
+                    String diagnostic = malformedUPlusDiagnostic(
+                            displayDiagnosticPattern, e.getMessage());
+                    if (diagnostic != null) {
+                        throw new PerlCompilerException(diagnostic);
+                    }
                     throw new PerlCompilerException(e.getMessage());
                 }
                 if (e instanceof IllegalArgumentException
@@ -1117,6 +1130,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     if (message != null
                             && message.matches("undefined group <\\d+> reference")) {
                         message = "Reference to nonexistent group";
+                    }
+                    if ("\\K not permitted in lookahead/lookbehind in regex".equals(message)) {
+                        int keepOffset = displayDiagnosticPattern.indexOf("\\K");
+                        if (keepOffset >= 0) {
+                            throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(
+                                    displayDiagnosticPattern, keepOffset + 2,
+                                    "\\K not permitted in lookahead/lookbehind"));
+                        }
                     }
                     int bytePosition = ((SyntaxException) e).getPatternPosition();
                     if (bytePosition != SyntaxException.UNKNOWN_PATTERN_POSITION) {
@@ -1219,6 +1240,46 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
         }
         return regex;
+    }
+
+    /** Implements ${^RE_COMPILE_RECURSION_LIMIT} for nested regex groups. */
+    private static void enforceCompileRecursionLimit(String pattern) {
+        RuntimeScalar limitScalar = GlobalVariable.getGlobalVariable(
+                GlobalContext.encodeSpecialVar("RE_COMPILE_RECURSION_LIMIT"));
+        if (!limitScalar.getDefinedBoolean()) return;
+        int limit = limitScalar.getInt();
+        if (limit <= 0 || pattern == null) return;
+        boolean escaped = false;
+        boolean characterClass = false;
+        int depth = 0;
+        for (int i = 0; i < pattern.length(); i++) {
+            char current = pattern.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (current == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (current == '[') {
+                characterClass = true;
+                continue;
+            }
+            if (current == ']' && characterClass) {
+                characterClass = false;
+                continue;
+            }
+            if (characterClass) continue;
+            if (current == '(') {
+                if (++depth >= limit) {
+                    throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(
+                            pattern, i + 1, "Too many nested open parens"));
+                }
+            } else if (current == ')' && depth > 0) {
+                depth--;
+            }
+        }
     }
 
     /**
@@ -2540,8 +2601,44 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return "Invalid character in \\N{...}".equals(message)
                 || "Zero length \\N{}".equals(message)
                 || "Invalid hexadecimal number in \\N{U+...}".equals(message)
+                || (message != null && message.startsWith("Use of code point 0x")
+                        && message.contains("the permissible max is 0x7FFFFFFFFFFFFFFF"))
                 || (message != null && message.startsWith(
                         "charnames alias definitions may not contain "));
+    }
+
+    /** Formats malformed U+ named-character escapes at their source location. */
+    private static String malformedUPlusDiagnostic(String pattern, String message) {
+        if (pattern == null) {
+            return null;
+        }
+        boolean overflow = message != null && message.startsWith("Use of code point 0x");
+        if (!overflow && !"Invalid hexadecimal number in \\N{U+...}".equals(message)) return null;
+        int start = pattern.indexOf("\\N{U+");
+        if (start < 0) return null;
+        int bodyStart = start + "\\N{U+".length();
+        int close = pattern.indexOf('}', bodyStart);
+        if (close < 0) return null;
+        if (overflow) {
+            return RegexDiagnosticFormatter.markedPerl(pattern, close, message);
+        }
+        int marker = bodyStart;
+        boolean sawDigit = false;
+        for (; marker < close; marker++) {
+            char ch = pattern.charAt(marker);
+            if (Character.digit(ch, 16) >= 0) {
+                sawDigit = true;
+                continue;
+            }
+            if (ch == '_' && sawDigit && marker + 1 < close
+                    && Character.digit(pattern.charAt(marker + 1), 16) >= 0) {
+                continue;
+            }
+            marker++;
+            break;
+        }
+        return RegexDiagnosticFormatter.markedPerl(pattern, marker,
+                "Invalid hexadecimal number in \\N{U+...}");
     }
 
     static boolean containsExecutableSource(String pattern, boolean extended) {
@@ -3833,6 +3930,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 || taintMode && localeResultsTainted
                 || (regex.regexFlags.taintResults() && inputTainted);
         boolean destructiveReplacement = !regex.regexFlags.isNonDestructive();
+
+        if (!destructiveReplacement && ctx == RuntimeContextType.VOID) {
+            Warnings.emitCategoryWarning(
+                    "void", "Useless use of non-destructive substitution (s///r)");
+        }
 
         // Don't reset state().globalMatcher here - only reset it if we actually find a match
         // This preserves capture variables from previous matches when substitution doesn't match

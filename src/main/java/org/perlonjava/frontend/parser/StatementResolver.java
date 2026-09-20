@@ -48,7 +48,7 @@ public class StatementResolver {
             "skip", "warning_like", "warning_is", "warnings_like");
 
     private static final Set<String> CORE_QUALIFIED_CONTROL_STATEMENTS = Set.of(
-            "if", "unless", "for", "foreach", "while", "until");
+            "if", "unless", "for", "foreach", "while", "until", "given");
 
     /**
      * Parses a single statement from the parser's token stream.
@@ -61,6 +61,7 @@ public class StatementResolver {
         parser.validateRemainingByteSourceUtf8();
         int currentIndex = parser.tokenIndex;
         LexerToken token = peek(parser);
+        boolean coreQualifiedControl = false;
 
         // Perl permits control-flow keywords to be explicitly qualified, e.g.
         // CORE::for (...) { ... }. ParsePrimary handles CORE:: function-style
@@ -72,6 +73,7 @@ public class StatementResolver {
             LexerToken coreKeyword = parser.tokens.get(parser.tokenIndex + 2);
             if (coreKeyword.type == LexerTokenType.IDENTIFIER
                     && CORE_QUALIFIED_CONTROL_STATEMENTS.contains(coreKeyword.text)) {
+                coreQualifiedControl = true;
                 consume(parser, LexerTokenType.IDENTIFIER); // CORE
                 consume(parser, LexerTokenType.OPERATOR, "::");
                 currentIndex = parser.tokenIndex;
@@ -91,6 +93,14 @@ public class StatementResolver {
                     if (peek(parser).text.equals("{")) {
                         parser.tokenIndex = currentIndex;
                         yield SpecialBlockParser.parseSpecialBlock(parser);
+                    }
+                    // A diamond after a special block name is parsed as an
+                    // attempted declaration, not an ordinary subroutine call.
+                    // Preserve Perl's dedicated diagnostic instead of allowing
+                    // the diamond parser to report a generic syntax error.
+                    if (!"ADJUST".equals(token.text) && peek(parser).text.equals("<")) {
+                        parser.throwCleanError(currentIndex,
+                                "Illegal declaration of subroutine " + token.text);
                     }
                     // Not a special block, backtrack
                     parser.tokenIndex = currentIndex;
@@ -114,7 +124,7 @@ public class StatementResolver {
 
                 case "while", "until" -> StatementParser.parseWhileStatement(parser, label);
 
-                case "given" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("switch")
+                case "given" -> (coreQualifiedControl || parser.ctx.symbolTable.isFeatureCategoryEnabled("switch"))
                         ? StatementParser.parseGivenStatement(parser)
                         : null;
 
@@ -372,9 +382,38 @@ public class StatementResolver {
                         consume(parser); // consume "sub"
                         LexerToken nameToken = peek(parser);
 
+                        // A lexical/package-qualified declaration without a
+                        // name is distinct from an anonymous sub expression.
+                        // Preserve Perl's declaration-specific diagnostic for
+                        // `my sub;`, `our sub;`, and `state sub;`.
+                        if (nameToken.text.equals(";") || nameToken.type == LexerTokenType.EOF) {
+                            parser.throwCleanError("Missing name in \"" + declaration + " sub\"");
+                        }
+
                         if (nameToken.type == LexerTokenType.IDENTIFIER) {
                             String subName = consume(parser).text;
                             int subNameIndex = parser.tokenIndex - 1; // Save the token index of the sub name
+
+                            int qualifiedStart = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+                            if (qualifiedStart < parser.tokens.size()
+                                    && parser.tokens.get(qualifiedStart).text.equals("::")) {
+                                int end = qualifiedStart;
+                                StringBuilder qualified = new StringBuilder(subName);
+                                while (end + 1 < parser.tokens.size()
+                                        && parser.tokens.get(end).text.equals("::")
+                                        && parser.tokens.get(end + 1).type == LexerTokenType.IDENTIFIER) {
+                                    qualified.append("::").append(parser.tokens.get(end + 1).text);
+                                    end += 2;
+                                }
+                                var location = parser.ctx.errorUtil.getSourceLocationAccurate(subNameIndex);
+                                String diagnostic = declaration.equals("our")
+                                        ? "No package name allowed for subroutine &" + qualified + " in \"our\""
+                                        : "\"" + declaration + "\" subroutine &" + qualified
+                                                + " can't be in a package";
+                                parser.deferDiagnostic(diagnostic + " at " + location.fileName()
+                                        + " line " + location.lineNumber() + ", near \""
+                                        + declaration + " sub " + qualified + "\"\n");
+                            }
 
                             if (declaration.equals("our")) {
                                 // our sub works like our var - it creates a package sub AND a lexical alias
@@ -870,6 +909,10 @@ public class StatementResolver {
                             || nextToken.text.equals("'")
                             || nextToken.text.equals("::")) {
                         // Accept legacy package separator ' and leading :: like sub names
+                        if (nextToken.text.equals("'")
+                                && !parser.ctx.symbolTable.isFeatureCategoryEnabled("apostrophe_as_package_separator")) {
+                            throwDisabledLeadingApostropheFormatError(parser);
+                        }
                         formatName = IdentifierParser.parseSubroutineIdentifier(parser);
                     }
 
@@ -1671,5 +1714,35 @@ public class StatementResolver {
 
         // No 'my' declaration, use simple short-circuit
         return new BinaryOperatorNode(operator, modifierExpression, expression, tokenIndex);
+    }
+
+    /** Report Perl's recovery diagnostic for a disabled apostrophe format name. */
+    private static void throwDisabledLeadingApostropheFormatError(Parser parser) {
+        int quoteIndex = parser.tokenIndex;
+        int lineStart = quoteIndex;
+        while (lineStart < parser.tokens.size() && parser.tokens.get(lineStart).type != LexerTokenType.NEWLINE) {
+            lineStart++;
+        }
+        if (lineStart >= parser.tokens.size()) {
+            return;
+        }
+        lineStart = Whitespace.skipWhitespace(parser, lineStart + 1, parser.tokens);
+        int end = lineStart;
+        while (end < parser.tokens.size() && !parser.tokens.get(end).text.equals("'")) {
+            end++;
+        }
+        if (end >= parser.tokens.size()) {
+            return;
+        }
+        StringBuilder near = new StringBuilder();
+        for (int i = lineStart; i <= end; i++) {
+            near.append(parser.tokens.get(i).text);
+        }
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(lineStart);
+        var start = parser.ctx.errorUtil.getSourceLocationAccurate(quoteIndex);
+        String message = "syntax error at " + location.fileName() + " line " + location.lineNumber()
+                + ", near \"" + near + "\"\n"
+                + "  (Might be a runaway multi-line '' string starting on line " + start.lineNumber() + ")\n";
+        throw new PerlCompilerException(message);
     }
 }

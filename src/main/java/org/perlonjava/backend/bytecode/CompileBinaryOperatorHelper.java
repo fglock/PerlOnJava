@@ -25,11 +25,13 @@ public class CompileBinaryOperatorHelper {
     }
 
     public static int compileBinaryOperatorSwitch(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node, int rs1, int rs2, int tokenIndex) {
-        return compileBinaryOperatorSwitch(bytecodeCompiler, node.operator, rs1, rs2, tokenIndex, false, integerOverride(node));
+        return compileBinaryOperatorSwitch(bytecodeCompiler, node.operator, rs1, rs2, tokenIndex, false,
+                integerOverride(node), node.operator.equals("blessClassInstance"));
     }
 
     public static int compileBinaryOperatorSwitch(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node, int rs1, int rs2, int tokenIndex, boolean shareCallerArgs) {
-        return compileBinaryOperatorSwitch(bytecodeCompiler, node.operator, rs1, rs2, tokenIndex, shareCallerArgs, integerOverride(node));
+        return compileBinaryOperatorSwitch(bytecodeCompiler, node.operator, rs1, rs2, tokenIndex, shareCallerArgs,
+                integerOverride(node), node.operator.equals("blessClassInstance"));
     }
 
     private static Boolean integerOverride(BinaryOperatorNode node) {
@@ -42,6 +44,11 @@ public class CompileBinaryOperatorHelper {
     }
 
     private static int compileBinaryOperatorSwitch(BytecodeCompiler bytecodeCompiler, String operator, int rs1, int rs2, int tokenIndex, boolean shareCallerArgs, Boolean useIntegerOverride) {
+        return compileBinaryOperatorSwitch(bytecodeCompiler, operator, rs1, rs2, tokenIndex, shareCallerArgs,
+                useIntegerOverride, false);
+    }
+
+    private static int compileBinaryOperatorSwitch(BytecodeCompiler bytecodeCompiler, String operator, int rs1, int rs2, int tokenIndex, boolean shareCallerArgs, Boolean useIntegerOverride, boolean classConstructionBless) {
         // Allocate result register
         int rd = bytecodeCompiler.allocateOutputRegister();
 
@@ -121,11 +128,11 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
             }
-            case "bless" -> {
+            case "bless", "blessClassInstance" -> {
                 // bless $ref, "Package" or bless $ref (defaults to current package)
                 // rs1 = reference to bless
                 // rs2 = package name (or undef for current package)
-                bytecodeCompiler.emit(Opcodes.BLESS);
+                bytecodeCompiler.emit(classConstructionBless ? Opcodes.BLESS_CLASS_INSTANCE : Opcodes.BLESS);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);

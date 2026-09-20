@@ -616,7 +616,11 @@ public class WarnDie {
             String out = message.toString();
             if (!out.endsWith("\n")) {
                 // Add " at FILE line N" location
-                out += signatureMismatchLocation(out, where);
+                String location = signatureMismatchLocation(out, where);
+                if (location.isEmpty() && fileName != null && lineNumber > 0) {
+                    location = " at " + fileName + " line " + lineNumber;
+                }
+                out += location;
                 // Add filehandle context if available (e.g., ", <DATA> chunk 1")
                 String filehandleContext = getFilehandleContext();
                 if (filehandleContext != null && !filehandleContext.isEmpty()) {
@@ -694,8 +698,8 @@ public class WarnDie {
         if (!message.startsWith("Too few arguments for subroutine '")
                 && !message.startsWith("Too many arguments for subroutine '")
                 && !message.startsWith("Odd name/value argument for subroutine '")
-                && !message.startsWith("Missing required named parameter '")
-                && !message.startsWith("Unrecognized named parameter '")
+                && !message.startsWith("Missing required named parameter")
+                && !message.startsWith("Unrecognized named parameter")
                 // Native subs use Perl's conventional Usage: diagnostic for
                 // arguments that cannot be represented by their prototype.
                 // These errors, like signature errors, are reported at the
@@ -712,10 +716,14 @@ public class WarnDie {
             return " at (eval 0) line 1";
         }
 
-        RuntimeList caller = RuntimeCode.caller(new RuntimeList(), RuntimeContextType.LIST);
-        if (caller.size() >= 3 && caller.elements.get(1).getDefinedBoolean()
-                && caller.elements.get(2).getDefinedBoolean()) {
-            return " at " + caller.elements.get(1) + " line " + caller.elements.get(2);
+        for (int depth = 0; depth <= 1; depth++) {
+            RuntimeList arguments = new RuntimeList();
+            if (depth != 0) arguments.add(new RuntimeScalar(depth));
+            RuntimeList caller = RuntimeCode.caller(arguments, RuntimeContextType.LIST);
+            if (caller.size() >= 3 && caller.elements.get(1).getDefinedBoolean()
+                    && caller.elements.get(2).getDefinedBoolean()) {
+                return " at " + caller.elements.get(1) + " line " + caller.elements.get(2);
+            }
         }
         return definitionWhere.toString();
     }

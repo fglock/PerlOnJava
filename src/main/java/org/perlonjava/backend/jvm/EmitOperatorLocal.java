@@ -6,6 +6,7 @@ import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.LValueVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 public class EmitOperatorLocal {
@@ -30,6 +31,39 @@ public class EmitOperatorLocal {
         if (node.operand instanceof OperatorNode opNode && opNode.operator.equals("undef")) {
             node.operand.accept(emitterVisitor);
             return;
+        }
+
+        Node localOperand = node.operand;
+        if (localOperand instanceof OperatorNode sigilNode
+                && (sigilNode.operator.equals("@") || sigilNode.operator.equals("%"))) {
+            Node dereferenceOperand = sigilNode.operand;
+            if (dereferenceOperand instanceof BlockNode block && block.elements.size() == 1) {
+                dereferenceOperand = block.elements.getFirst();
+            }
+            if (dereferenceOperand instanceof OperatorNode dereference
+                    && dereference.operator.equals("\\")) {
+                // This error is runtime-visible: `eval { local %{$ref} }`
+                // must catch it rather than abort compilation of the outer
+                // program.  Match the interpreter's REJECT_LOCALIZE_REFERENCE
+                // opcode by evaluating the reference and rejecting it here.
+                var location = emitterVisitor.ctx.errorUtil
+                        .getSourceLocationAccurate(node.tokenIndex);
+                mv.visitLdcInsn("Can't localize through a reference at "
+                        + location.fileName() + " line " + location.lineNumber() + ".\n");
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                        "rejectLocalizeThroughReference",
+                        "(Ljava/lang/String;)V",
+                        false);
+                // The helper always throws, but retain a formal scalar result
+                // on the unreachable normal-flow path for ASM frame merging.
+                mv.visitFieldInsn(Opcodes.GETSTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache",
+                        "scalarUndef",
+                        "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+                EmitOperator.handleVoidContext(emitterVisitor);
+                return;
+            }
         }
 
         if (node.operand instanceof OperatorNode opNode && opNode.operator.equals("$")) {

@@ -100,6 +100,30 @@ public class BytecodeCompiler implements Visitor {
         }
     }
 
+    /** Record labels in given blocks; entering one skips topicalizer setup. */
+    private static void collectGivenLabels(Node node, Set<String> out, boolean insideGiven) {
+        if (node == null) return;
+        if (node instanceof LabelNode labelNode) {
+            if (insideGiven) out.add(labelNode.label);
+            return;
+        }
+        if (node instanceof BlockNode block) {
+            boolean nestedGiven = insideGiven || block.getBooleanAnnotation("givenBlock");
+            if (nestedGiven) out.addAll(block.labels);
+            for (Node child : block.elements) collectGivenLabels(child, out, nestedGiven);
+            return;
+        }
+        if (node instanceof IfNode conditional) {
+            collectGivenLabels(conditional.condition, out, insideGiven);
+            collectGivenLabels(conditional.thenBranch, out, insideGiven);
+            collectGivenLabels(conditional.elseBranch, out, insideGiven);
+            return;
+        }
+        if (node instanceof OperatorNode operator) {
+            collectGivenLabels(operator.operand, out, insideGiven);
+        }
+    }
+
     private static void markGotosInLoopConditions(Node node) {
         if (node == null) return;
         if (node instanceof For3Node loop) {
@@ -177,6 +201,8 @@ public class BytecodeCompiler implements Visitor {
     final Map<String, Integer> gotoLabelPcs = new HashMap<>();
     final Set<String> gotoLabelsInsideLoop = new HashSet<>();
     final Set<String> gotoLabelsInsideConstruct = new HashSet<>();
+    final Set<String> gotoLabelsInsideGiven = new HashSet<>();
+    private int givenBlockDepth;
     final Map<String, int[]> gotoLabelLoopRanges = new HashMap<>();
     final Map<Integer, String> gotoLabelPackages = new HashMap<>();
     static final class GotoLabelTarget {
@@ -206,7 +232,21 @@ public class BytecodeCompiler implements Visitor {
 
     private void pushGotoLabelScope(BlockNode block) {
         Map<String, GotoLabelTarget> scope = new LinkedHashMap<>();
-        for (String name : block.labels) scope.put(name, new GotoLabelTarget(name, -1, false, false, block));
+        // Reuse the predeclared targets, rather than inventing a second target
+        // for the same source label.  Static goto resolution must first choose
+        // the nearest lexical block; a global source-position heuristic sends
+        // a goto back into an inner loop when labels share a name.
+        for (Map.Entry<String, List<GotoLabelTarget>> entry : gotoLabelTargetsByName.entrySet()) {
+            for (GotoLabelTarget target : entry.getValue()) {
+                if (target.owner == block) {
+                    scope.putIfAbsent(entry.getKey(), target);
+                    break;
+                }
+            }
+        }
+        for (String name : block.labels) {
+            scope.putIfAbsent(name, new GotoLabelTarget(name, -1, false, false, block));
+        }
         gotoLabelScopes.push(scope);
         gotoLabelBlockScopes.push(block);
     }
@@ -214,6 +254,7 @@ public class BytecodeCompiler implements Visitor {
     private void popGotoLabelScope() { gotoLabelScopes.pop(); gotoLabelBlockScopes.pop(); }
 
     boolean isInsideGotoLabelBlock(BlockNode block) { return block != null && gotoLabelBlockScopes.contains(block); }
+    boolean isInsideGivenBlock() { return givenBlockDepth > 0; }
 
     GotoLabelTarget resolveStaticGotoTarget(String name) {
         for (Map<String, GotoLabelTarget> scope : gotoLabelScopes) {
@@ -224,7 +265,19 @@ public class BytecodeCompiler implements Visitor {
     }
 
     GotoLabelTarget resolveStaticGotoTarget(String name, int sourceTokenIndex) {
+        GotoLabelTarget scoped = resolveStaticGotoTarget(name);
         List<GotoLabelTarget> candidates = gotoLabelTargetsByName.get(name);
+        // eval BLOCK shares its caller's control-flow frame.  If the eval
+        // contains a foreach-body label with this name, that shadowing label
+        // is the destination even when a later outer label is numerically
+        // closer in the source.  Choosing the latter used to bypass the
+        // foreach-entry guard and jump to the outer label instead.
+        if (evalBlockDepth > 0 && candidates != null) {
+            for (GotoLabelTarget candidate : candidates) {
+                if (candidate.loopBody) return candidate;
+            }
+        }
+        if (scoped != null) return scoped;
         if (candidates == null || candidates.isEmpty()) return resolveStaticGotoTarget(name);
         GotoLabelTarget result = null;
         long bestDistance = Long.MAX_VALUE;
@@ -257,6 +310,19 @@ public class BytecodeCompiler implements Visitor {
             boolean constructEntry = expressionContext
                     && !block.getBooleanAnnotation("fieldInitializer");
             Map<String, GotoLabelTarget> local = new HashMap<>();
+            // StatementParser keeps labels that prefix a statement in the
+            // owning block's label table.  They have no LabelNode child, but
+            // must still be visible to a forward goto outside that block.
+            // In particular, this lets the existing foreach-entry guard
+            // report the Perl diagnostic instead of falling through to
+            // "Can't find label".
+            for (String name : block.labels) {
+                GotoLabelTarget created = new GotoLabelTarget(name, block.getIndex(),
+                        constructEntry, insideLoopBody, block);
+                local.put(name, created);
+                gotoLabelTargetsByName.computeIfAbsent(name,
+                        ignoredName -> new ArrayList<>()).add(created);
+            }
             for (Node child : block.elements) {
                 if (!(child instanceof LabelNode label)) continue;
                 GotoLabelTarget target = local.computeIfAbsent(label.label, ignored -> {
@@ -431,6 +497,8 @@ public class BytecodeCompiler implements Visitor {
     private int maxRegisterEverUsed = 2;  // Track highest register ever allocated
     // True when this compiler was constructed for eval STRING (has parentRegistry)
     private boolean isEvalString;
+    boolean isSubroutineBody;
+    boolean isSmartmatchPredicate;
     // Runtime regex interpolation can synthesize executable source through
     // overload, so the containing CV must expose all of its live lexical cells.
     private boolean tracksRuntimeRegexLexicals;
@@ -1134,11 +1202,20 @@ public class BytecodeCompiler implements Visitor {
      */
     void checkNotInDeferBlock(int tokenIndex, String operator) {
         if (isInDeferBlock) {
-            throwCompilerException("Can't \"" + operator + "\" out of a \"defer\" block", tokenIndex);
+            throwCleanCompilerException("Can't \"" + operator + "\" out of a \"defer\" block", tokenIndex);
         }
         if (finallyBlockDepth > 0) {
-            throwCompilerException("Can't \"" + operator + "\" out of a \"finally\" block", tokenIndex);
+            throwCleanCompilerException("Can't \"" + operator + "\" out of a \"finally\" block", tokenIndex);
         }
+    }
+
+    void throwCleanCompilerException(String message, int tokenIndex) {
+        if (errorUtil != null && tokenIndex >= 0) {
+            var location = errorUtil.getSourceLocationAccurate(tokenIndex);
+            throw new PerlCompilerException(message + " at " + location.fileName()
+                    + " line " + location.lineNumber() + ".\n");
+        }
+        throw new PerlCompilerException(message);
     }
 
     /**
@@ -1193,6 +1270,7 @@ public class BytecodeCompiler implements Visitor {
 
         collectLoopBodyLabels(node, gotoLabelsInsideLoop, false);
         collectConstructEntryLabels(node, gotoLabelsInsideConstruct, false);
+        collectGivenLabels(node, gotoLabelsInsideGiven, false);
         predeclareGotoLabels(node, false, false);
         markGotosInLoopConditions(node);
 
@@ -1349,6 +1427,9 @@ public class BytecodeCompiler implements Visitor {
         }
         if (!this.gotoLabelsInsideConstruct.isEmpty()) {
             code.gotoLabelsInsideConstruct = new HashSet<>(this.gotoLabelsInsideConstruct);
+        }
+        if (!this.gotoLabelsInsideGiven.isEmpty()) {
+            code.gotoLabelsInsideGiven = new HashSet<>(this.gotoLabelsInsideGiven);
         }
         if (!this.gotoLabelLoopRanges.isEmpty()) {
             code.gotoLabelLoopRanges = new HashMap<>(this.gotoLabelLoopRanges);
@@ -1604,6 +1685,7 @@ public class BytecodeCompiler implements Visitor {
         }
 
         pushGotoLabelScope(node);
+        if (node.getBooleanAnnotation("givenBlock")) givenBlockDepth++;
         enterScope();
 
         int regexSaveReg = -1;
@@ -1854,6 +1936,7 @@ public class BytecodeCompiler implements Visitor {
             emitRefreshVisibleOurVariables();
         }
 
+        if (node.getBooleanAnnotation("givenBlock")) givenBlockDepth--;
         popGotoLabelScope();
         // Set lastResultReg to the outer register (or -1 if VOID context)
         lastResultReg = outerResultReg;
@@ -2923,6 +3006,19 @@ public class BytecodeCompiler implements Visitor {
         int targetReg;
         Node left = scalarizeSingleElementSliceLvalue(node.left);
 
+        // Match the JVM backend: a parenthesized single-target state
+        // declaration is a scalar lvalue for logical assignment, not a list
+        // target.  Keeping the ListNode would assign to a temporary list and
+        // leave the state scalar undef on every call.
+        if (left instanceof OperatorNode declaration
+                && "state".equals(declaration.operator)
+                && declaration.operand instanceof ListNode list
+                && list.elements.size() == 1
+                && list.elements.getFirst() instanceof OperatorNode target
+                && "$@%".contains(target.operator)) {
+            left = new OperatorNode("state", target, declaration.tokenIndex);
+        }
+
         if (left instanceof ListNode listNode && listNode.elements.size() == 1) {
             compileNode(listNode.elements.get(0), -1, RuntimeContextType.LVALUE);
             return lastResultReg;
@@ -2959,7 +3055,7 @@ public class BytecodeCompiler implements Visitor {
                 }
             } else {
                 // Other operator (not simple variable) - compile as lvalue expression
-                compileNode(node.left, -1, RuntimeContextType.LVALUE);
+                compileNode(left, -1, RuntimeContextType.LVALUE);
                 targetReg = lastResultReg;
             }
         } else {
@@ -3428,7 +3524,7 @@ public class BytecodeCompiler implements Visitor {
                     if (beginId != null) {
                         // BEGIN-captured variable: use RETRIEVE_BEGIN_* (destructive removal from global storage)
                         int persistId = beginId;
-                        int reg = allocateRegister();
+                        int reg = op.equals("state") ? allocateStateVariableRegister() : allocateRegister();
                         int nameIdx = addToStringPool(varName);
 
                         switch (sigil) {
@@ -3482,7 +3578,7 @@ public class BytecodeCompiler implements Visitor {
                         // State variable without initializer: use STATE_INIT_* (non-destructive)
                         // This preserves the variable across subroutine calls
                         int persistId = sigilOp.id;
-                        int reg = allocateRegister();
+                        int reg = allocateStateVariableRegister();
                         int nameIdx = addToStringPool(varName);
 
                         // Allocate a register for the undef/empty initial value
@@ -3859,7 +3955,7 @@ public class BytecodeCompiler implements Visitor {
                             Integer beginId2 = RuntimeCode.evalBeginIds().get(sigilOp);
                             if (beginId2 != null || op.equals("state")) {
                                 int persistId = beginId2 != null ? beginId2 : sigilOp.id;
-                                int reg = allocateRegister();
+                                int reg = op.equals("state") ? allocateStateVariableRegister() : allocateRegister();
                                 int nameIdx = addToStringPool(varName);
 
                                 switch (sigil) {
@@ -5349,6 +5445,19 @@ public class BytecodeCompiler implements Visitor {
                 // Check strict refs at compile time — mirrors JVM path in EmitVariable.java
                 compileNode(block, -1, RuntimeContextType.SCALAR);
                 int blockResultReg = lastResultReg;
+                // A block may return a typeglob assignment such as
+                // `${*name = \$value}`.  Block-scope register recycling can
+                // immediately reuse a temporary which is also the scalar-slot
+                // referent.  Materialize the result as a scalar first, just as
+                // assigning that glob result to a lexical does, before the
+                // dereference reads its slot.
+                int stableBlockResultReg = allocateRegister();
+                emit(Opcodes.LOAD_UNDEF);
+                emitReg(stableBlockResultReg);
+                emit(Opcodes.SET_SCALAR);
+                emitReg(stableBlockResultReg);
+                emitReg(blockResultReg);
+                blockResultReg = stableBlockResultReg;
                 int rd = allocateOutputRegister();
                 if (isStrictRefsEnabled()) {
                     // strict refs: scalarDeref() — throws for non-refs
@@ -5682,10 +5791,18 @@ public class BytecodeCompiler implements Visitor {
                     int rd = allocateOutputRegister();
                     int nameIdx = addToStringPool(subName);
                     int cacheIdx = addToConstantPool(new RuntimeScalar());
+                    Object classMethod = node.getAnnotation("directClassMethod");
+                    int classNameIdx = classMethod instanceof String className
+                            ? addToStringPool(className) : -1;
+                    Object precedingLabel = node.getAnnotation("precedingLabel");
+                    int labelIdx = precedingLabel instanceof String label
+                            ? addToStringPool(label) : -1;
                     emit(Opcodes.DIRECT_NAMED_CODE_CALL);
                     emitReg(rd);
                     emit(nameIdx);
                     emit(cacheIdx);
+                    emit(classNameIdx);
+                    emit(labelIdx);
                     lastResultReg = rd;
                     return;
                 }
@@ -5790,7 +5907,18 @@ public class BytecodeCompiler implements Visitor {
                         ? RuntimeContextType.SCALAR
                         : RuntimeContextType.LIST;
                 int valueReg;
-                if (node.operand instanceof StringNode stringNode && !stringNode.isVString) {
+                if (node.operand instanceof IdentifierNode identifierNode) {
+                    // A bare identifier under refgen is a bareword literal:
+                    // \_ means a reference to the scalar string "_", not a
+                    // reference to @_ merely because the caller frame owns
+                    // that implicitly named array.  Generic IdentifierNode
+                    // compilation searches sigil-prefixed pad entries, which
+                    // is correct for variable syntax but not refgen barewords.
+                    valueReg = allocateRegister();
+                    emit(Opcodes.LOAD_STRING);
+                    emitReg(valueReg);
+                    emit(addToStringPool(identifierNode.name));
+                } else if (node.operand instanceof StringNode stringNode && !stringNode.isVString) {
                     boolean byteString = !stringNode.forceUnicodeString
                             && (stringNode.forceByteString || isAsciiOnly(stringNode.value));
                     if (!stringNode.forceUnicodeString && !byteString
@@ -5917,6 +6045,17 @@ public class BytecodeCompiler implements Visitor {
             maxRegisterEverUsed = reg;
         }
         return reg;
+    }
+
+    /**
+     * Allocate storage for a state lexical without reusing a temporary from
+     * an earlier statement. A goto may skip the declaration and a later redo
+     * can then read that lexical before its declaration executes; it must see
+     * an uninitialized state cell, never a stale condition temporary.
+     */
+    int allocateStateVariableRegister() {
+        nextRegister = Math.max(nextRegister, maxRegisterEverUsed + 1);
+        return allocateRegister();
     }
 
     /**
@@ -6469,6 +6608,8 @@ public class BytecodeCompiler implements Visitor {
         // The parentRegistry constructor sets isEvalString=true (for eval STRING closures),
         // but named subs are NOT eval strings - clear the flag.
         subCompiler.isEvalString = false;
+        subCompiler.isSubroutineBody = true;
+        subCompiler.isSmartmatchPredicate = node.getBooleanAnnotation("smartmatchPredicate");
         subCompiler.symbolTable.setCurrentPackage(getCurrentPackage(),
                 symbolTable.currentPackageIsClass());
 
@@ -6487,6 +6628,12 @@ public class BytecodeCompiler implements Visitor {
         subCode.futureAsyncAwaitSub = node.getBooleanAnnotation("futureAsyncAwaitSub");
         subCode.futureAsyncAwaitFutureClass =
                 (String) node.getAnnotation("futureAsyncAwaitFutureClass");
+        subCode.generatedClassConstructor = node.getBooleanAnnotation("generatedClassConstructor")
+                || (node.block instanceof AbstractNode blockNode
+                && blockNode.getBooleanAnnotation("generatedClassConstructor"));
+        subCode.classAdjustBlock = node.getBooleanAnnotation("classAdjustBlock")
+                || (node.block instanceof AbstractNode blockNode
+                && blockNode.getBooleanAnnotation("classAdjustBlock"));
         copySignatureMetadata(subCode, node.block);
         attachDeparseSourceSpan(subCode, node);
 
@@ -6588,6 +6735,8 @@ public class BytecodeCompiler implements Visitor {
         // The parentRegistry constructor sets isEvalString=true (for eval STRING closures),
         // but anonymous subs are NOT eval strings - clear the flag.
         subCompiler.isEvalString = false;
+        subCompiler.isSubroutineBody = true;
+        subCompiler.isSmartmatchPredicate = node.getBooleanAnnotation("smartmatchPredicate");
         subCompiler.symbolTable.setCurrentPackage(getCurrentPackage(),
                 symbolTable.currentPackageIsClass());
 
@@ -7010,6 +7159,23 @@ public class BytecodeCompiler implements Visitor {
                 && sigilOp.operand instanceof IdentifierNode) {
             referenceAliasedVariable = sigilOp;
         }
+        if (referenceAliasedVariable == null && node.variable instanceof OperatorNode referenceOp
+                && referenceOp.operator.equals("\\")
+                && referenceOp.operand instanceof OperatorNode declaration
+                && (declaration.operator.equals("my") || declaration.operator.equals("our")
+                || declaration.operator.equals("state"))
+                && declaration.operand instanceof OperatorNode sigilOp
+                && (sigilOp.operator.equals("$") || sigilOp.operator.equals("@") || sigilOp.operator.equals("%"))
+                && sigilOp.operand instanceof IdentifierNode) {
+            referenceAliasedVariable = sigilOp;
+        }
+        if (referenceAliasedVariable == null && node.variable instanceof OperatorNode declaration
+                && declaration.operator.equals("my")
+                && declaration.getBooleanAnnotation("isDeclaredReference")
+                && declaration.operand instanceof OperatorNode sigilOp
+                && (sigilOp.operator.equals("$") || sigilOp.operator.equals("@") || sigilOp.operator.equals("%"))) {
+            referenceAliasedVariable = sigilOp;
+        }
         if (globalLoopVarName == null && node.variable instanceof OperatorNode declaration
                 && declaration.operator.equals("my")
                 && declaration.operand instanceof ListNode variables) {
@@ -7282,15 +7448,15 @@ public class BytecodeCompiler implements Visitor {
             emitReg(referenceReg);
             emitReg(iterReg);
             if (referenceAliasedVariable.operator.equals("$")) {
-                emitWithToken(Opcodes.DEREF_SCALAR_STRICT, node.getIndex());
+                emitWithToken(Opcodes.FOREACH_DEREF_SCALAR, referenceAliasedVariable.getIndex());
                 emitReg(varReg);
                 emitReg(referenceReg);
             } else if (referenceAliasedVariable.operator.equals("@")) {
-                emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                emitWithToken(Opcodes.FOREACH_DEREF_ARRAY, referenceAliasedVariable.getIndex());
                 emitReg(varReg);
                 emitReg(referenceReg);
             } else {
-                emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                emitWithToken(Opcodes.FOREACH_DEREF_HASH, referenceAliasedVariable.getIndex());
                 emitReg(varReg);
                 emitReg(referenceReg);
             }
@@ -8070,8 +8236,13 @@ public class BytecodeCompiler implements Visitor {
     @Override
     public void visit(LabelNode node) {
         int pc = bytecode.size();
-        GotoLabelTarget target = gotoLabelTargetsByToken.get(node.getIndex());
-        if (target == null) target = resolveStaticGotoTarget(node.label);
+        // The active lexical scope may contain a target created after a
+        // folding pass cloned this block.  Bind that scope's target here so
+        // its pending static gotos receive this PC; otherwise their initial
+        // zero placeholder jumps to the program start.  Prefer the scope over
+        // the prepass's token table, whose owner can be the pre-fold clone.
+        GotoLabelTarget target = resolveStaticGotoTarget(node.label);
+        if (target == null) target = gotoLabelTargetsByToken.get(node.getIndex());
         if (target == null) {
             target = new GotoLabelTarget(node.label, node.getIndex(), false, false, null);
         }
@@ -8440,6 +8611,12 @@ public class BytecodeCompiler implements Visitor {
         }
 
         if (targetLoop == null) {
+            // A normal subroutine cannot direct loop control at its caller.
+            // Eval STRING intentionally carries a marker to its lexical
+            // caller, where the surrounding loop is resolved.
+            if (isSmartmatchPredicate) {
+                throwCleanCompilerException("Can't \"" + op + "\" outside a loop block", node.getIndex());
+            }
             // No matching loop found - non-local control flow
             // Emit CREATE_LAST/NEXT/REDO + RETURN to propagate via RuntimeControlFlowList
             short createOp = op.equals("last") ? Opcodes.CREATE_LAST

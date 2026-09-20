@@ -1173,6 +1173,12 @@ public class Disassemble {
                         int hashKeysReg = interpretedCode.bytecode[pc++];
                         sb.append("HASH_KEYS r").append(rd).append(" = keys(r").append(hashKeysReg).append(")\n");
                         break;
+                    case Opcodes.HASH_KEYS_SCALAR:
+                        rd = interpretedCode.bytecode[pc++];
+                        int hashKeysScalarReg = interpretedCode.bytecode[pc++];
+                        sb.append("HASH_KEYS_SCALAR r").append(rd).append(" = scalar keys(r")
+                                .append(hashKeysScalarReg).append(")\n");
+                        break;
                     case Opcodes.HASH_VALUES:
                         rd = interpretedCode.bytecode[pc++];
                         int hashValuesReg = interpretedCode.bytecode[pc++];
@@ -1413,6 +1419,13 @@ public class Disassemble {
                         int packageReg = interpretedCode.bytecode[pc++];
                         sb.append("BLESS r").append(rd).append(" = bless(r").append(refReg)
                                 .append(", r").append(packageReg).append(")\n");
+                        break;
+                    case Opcodes.BLESS_CLASS_INSTANCE:
+                        rd = interpretedCode.bytecode[pc++];
+                        int classRefReg = interpretedCode.bytecode[pc++];
+                        int classPackageReg = interpretedCode.bytecode[pc++];
+                        sb.append("BLESS_CLASS_INSTANCE r").append(rd).append(" = bless(r").append(classRefReg)
+                                .append(", r").append(classPackageReg).append(")\n");
                         break;
                     case Opcodes.ISA:
                         rd = interpretedCode.bytecode[pc++];
@@ -1992,9 +2005,18 @@ public class Disassemble {
                         int directCallRd = interpretedCode.bytecode[pc++];
                         int directCallNameIdx = interpretedCode.bytecode[pc++];
                         int directCallCacheIdx = interpretedCode.bytecode[pc++];
+                        int directCallClassNameIdx = interpretedCode.bytecode[pc++];
+                        int directCallLabelIdx = interpretedCode.bytecode[pc++];
                         sb.append("DIRECT_NAMED_CODE_CALL r").append(directCallRd)
                                 .append(" = &").append(interpretedCode.stringPool[directCallNameIdx])
-                                .append(" cache=").append(directCallCacheIdx).append("\n");
+                                .append(" cache=").append(directCallCacheIdx);
+                        if (directCallClassNameIdx >= 0) {
+                            sb.append(" class=").append(interpretedCode.stringPool[directCallClassNameIdx]);
+                        }
+                        if (directCallLabelIdx >= 0) {
+                            sb.append(" label=").append(interpretedCode.stringPool[directCallLabelIdx]);
+                        }
+                        sb.append("\n");
                         break;
                     case Opcodes.PUSH_LABELED_BLOCK: {
                         int labelIdx = interpretedCode.bytecode[pc++];
@@ -2882,6 +2904,31 @@ public class Disassemble {
                         int stPersist = interpretedCode.bytecode[pc++];
                         sb.append(name).append(" r").append(stRd).append(", r").append(stVal)
                                 .append(", name=").append(stName).append(", persist=").append(stPersist).append("\n");
+                        break;
+                    }
+                    case Opcodes.STATE_RETRIEVE_SCALAR: {
+                        int stateRd = interpretedCode.bytecode[pc++];
+                        int stateName = interpretedCode.bytecode[pc++];
+                        int statePersist = interpretedCode.bytecode[pc++];
+                        sb.append("STATE_RETRIEVE_SCALAR r").append(stateRd)
+                                .append(", name=").append(stateName)
+                                .append(", persist=").append(statePersist).append("\n");
+                        break;
+                    }
+                    case Opcodes.STATE_IS_INITIALIZED: {
+                        int stateRd = interpretedCode.bytecode[pc++];
+                        int stateName = interpretedCode.bytecode[pc++];
+                        int statePersist = interpretedCode.bytecode[pc++];
+                        sb.append("STATE_IS_INITIALIZED r").append(stateRd)
+                                .append(", name=").append(stateName)
+                                .append(", persist=").append(statePersist).append("\n");
+                        break;
+                    }
+                    case Opcodes.STATE_MARK_INITIALIZED: {
+                        int stateName = interpretedCode.bytecode[pc++];
+                        int statePersist = interpretedCode.bytecode[pc++];
+                        sb.append("STATE_MARK_INITIALIZED name=").append(stateName)
+                                .append(", persist=").append(statePersist).append("\n");
                         break;
                     }
                     case Opcodes.SMARTMATCH: {

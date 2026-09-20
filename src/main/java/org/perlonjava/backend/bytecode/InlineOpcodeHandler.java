@@ -876,6 +876,17 @@ public class InlineOpcodeHandler {
         return pc;
     }
 
+    /**
+     * Get the scalar-context count for {@code keys %hash} without first
+     * materializing a key list. Format: HASH_KEYS_SCALAR rd hashReg.
+     */
+    public static int executeHashKeysScalar(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int hashReg = bytecode[pc++];
+        registers[rd] = registers[hashReg].keys(RuntimeContextType.SCALAR);
+        return pc;
+    }
+
     /** Preallocate hash buckets. Format: HASH_PREALLOCATE hashReg capacityReg. */
     public static int executeHashPreallocate(int[] bytecode, int pc, RuntimeBase[] registers) {
         int hashReg = bytecode[pc++];

@@ -69,7 +69,23 @@ public class Lexer {
     }
 
     private static boolean isPerlIdentifierStart(int codePoint) {
-        return codePoint == '_' || UCharacter.hasBinaryProperty(codePoint, UProperty.XID_START);
+        return codePoint == '_' || UCharacter.hasBinaryProperty(codePoint, UProperty.XID_START)
+                || isNewerPerlXidStart(codePoint);
+    }
+
+    // Perl's bundled Unicode table is newer than the ICU table used here. Keep
+    // this intentionally narrow: Character.isUnicodeIdentifierStart also
+    // admits compatibility characters Perl rejects as XIDS.
+    private static boolean isNewerPerlXidStart(int cp) {
+        return cp == 0x088F || cp == 0x0C5C || cp == 0x0CDC || cp == 0x1885 || cp == 0x1886
+                || cp == 0x2118 || cp == 0x212E || cp == 0x3007 || cp == 0x3038 || cp == 0x3039 || cp == 0x303A
+                || cp == 0xA7CE || cp == 0xA7CF || cp == 0xA7D2 || cp == 0xA7D4 || cp == 0xA7F1
+                || (cp >= 0x16EE && cp <= 0x16F0)
+                || (cp >= 0x2160 && cp <= 0x217F)
+                || (cp >= 0x2180 && cp <= 0x2182)
+                || (cp >= 0x2185 && cp <= 0x2188)
+                || (cp >= 0x3021 && cp <= 0x3029)
+                || (cp >= 0xA6E6 && cp <= 0xA6EF);
     }
 
     private static boolean isPerlIdentifierPart(int codePoint) {

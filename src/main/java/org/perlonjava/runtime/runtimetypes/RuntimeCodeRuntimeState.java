@@ -35,6 +35,7 @@ public final class RuntimeCodeRuntimeState {
 
     private int nextMethodCallsiteId;
     private int nextRuntimeEvalId = 1;
+    private final Map<String, Integer> nextRuntimeEvalIdsBySource = new HashMap<>();
     boolean disassemble = System.getenv("JPERL_DISASSEMBLE") != null;
     boolean useInterpreter = System.getenv("JPERL_INTERPRETER") != null;
     boolean lexicalAliasSupportEnabled;
@@ -54,6 +55,19 @@ public final class RuntimeCodeRuntimeState {
 
     synchronized String nextEvalFilename() {
         return "(eval " + nextRuntimeEvalId++ + ")";
+    }
+
+    /**
+     * Allocate an eval filename in the calling source's namespace.  Perl's
+     * {@code (eval N)} labels are local to the file that executes eval STRING:
+     * evals run while loading another module must not advance the caller's
+     * visible sequence.
+     */
+    synchronized String nextEvalFilename(String sourceName) {
+        String source = sourceName == null || sourceName.isEmpty() ? "-" : sourceName;
+        int nextId = nextRuntimeEvalIdsBySource.getOrDefault(source, 1);
+        nextRuntimeEvalIdsBySource.put(source, nextId + 1);
+        return "(eval " + nextId + ")";
     }
 
     /**

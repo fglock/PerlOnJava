@@ -129,6 +129,14 @@ public class Directory {
         RuntimeScalar dirHandle = (RuntimeScalar) args.elements.get(0);
         String dirPath = args.elements.get(1).toString();
 
+        RuntimeIO existingHandle = dirHandle.getRuntimeIO();
+        if (existingHandle != null
+                && existingHandle.ioHandle != null
+                && !(existingHandle.ioHandle instanceof org.perlonjava.runtime.io.ClosedIOHandle)) {
+            throw new PerlCompilerException("Cannot open " + filehandleName(dirHandle)
+                    + " as a dirhandle: it is already open as a filehandle");
+        }
+
         try {
             // Close existing directory stream if present
             if ((dirHandle.type == RuntimeScalarType.GLOB || dirHandle.type == RuntimeScalarType.GLOBREFERENCE)
@@ -157,6 +165,22 @@ public class Directory {
             handleIOException(e, "Directory operation failed");
             return scalarFalse;
         }
+    }
+
+    private static String filehandleName(RuntimeScalar handle) {
+        RuntimeIO io = handle.getRuntimeIO();
+        String name = io != null ? io.globName : null;
+        if (name == null && handle.value instanceof RuntimeGlob glob) {
+            name = glob.globName;
+        }
+        if (name == null) {
+            name = handle.lexicalDisplayName;
+        }
+        if (name == null || name.isEmpty()) {
+            return "$fh";
+        }
+        int separator = name.lastIndexOf("::");
+        return separator >= 0 ? name.substring(separator + 2) : name;
     }
 
     public static RuntimeScalar closedir(RuntimeScalar runtimeScalar) {

@@ -2077,6 +2077,15 @@ public class Opcodes {
      */
     public static final short STATE_INIT_HASH = 399;
 
+    /** Retrieve a persistent state scalar without initializing it. Format: rd name_idx persist_id. */
+    public static final short STATE_RETRIEVE_SCALAR = 572;
+
+    /** Read a persistent state scalar's initialization flag. Format: rd name_idx persist_id. */
+    public static final short STATE_IS_INITIALIZED = 573;
+
+    /** Mark a persistent state scalar initialized. Format: name_idx persist_id. */
+    public static final short STATE_MARK_INITIALIZED = 574;
+
     // Smartmatch operator (~~)
     // Format: SMARTMATCH rd rs1 rs2
     // Effect: rd = CompareOperators.smartmatch(rs1, rs2)
@@ -2569,8 +2578,18 @@ public class Opcodes {
     /** Array element fetch that preserves tied-array lvalue semantics for local(). */
     public static final short ARRAY_GET_FOR_LOCAL = 562;
 
+    /** Declared-reference foreach scalar dereference without autovivification. */
+    public static final short FOREACH_DEREF_SCALAR = 566;
+    /** Declared-reference foreach array dereference without autovivification. */
+    public static final short FOREACH_DEREF_ARRAY = 569;
+    /** Declared-reference foreach hash dereference without autovivification. */
+    public static final short FOREACH_DEREF_HASH = 568;
+
+    /** Synthetic class constructor blessing. Format: BLESS_CLASS_INSTANCE rd refReg packageReg. */
+    public static final short BLESS_CLASS_INSTANCE = 570;
+
     /** Record a readline handle's source spelling for $. diagnostics. Format: nameStringIdx. */
-    public static final short SET_LAST_READLINE_HANDLE_NAME = 566;
+    public static final short SET_LAST_READLINE_HANDLE_NAME = 571;
 
     /**
      * Resolve a statically named CODE reference at runtime. This preserves the
@@ -2595,7 +2614,7 @@ public class Opcodes {
      */
     public static final short UNDEFINE_SCALAR_LVALUE = 534;
 
-    /** Resolve a direct named call with a call-site CV cache. Format: rd nameStringIdx cacheConstIdx. */
+    /** Resolve a direct named call with a call-site CV cache. Format: rd nameStringIdx cacheConstIdx classNameStringIdx (-1 if ordinary sub) labelStringIdx (-1 if absent). */
     public static final short DIRECT_NAMED_CODE_CALL = 535;
 
     /** Register a format declaration and lexical cells. Format: constantIdx captureCount (nameIdx reg)*. */
@@ -2634,6 +2653,9 @@ public class Opcodes {
 
     /** Return the mutable {@code $#array} cell. Format: ARRAY_LAST_INDEX_LVALUE rd arrayReg. */
     public static final short ARRAY_LAST_INDEX_LVALUE = 518;
+
+    /** Scalar-context {@code keys}: rd = scalar keys(hashReg). Format: rd hashReg. */
+    public static final short HASH_KEYS_SCALAR = 575;
 
     private Opcodes() {
     } // Utility class - no instantiation

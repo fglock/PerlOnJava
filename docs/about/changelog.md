@@ -19,6 +19,21 @@ priorities and future plans.
 - Complete `tr///` compatibility for extended Unicode and surrogate scalars,
   identity lvalues, and `chop`/`chomp` diagnostics on both execution backends.
 
+- Reject Unicode named sequences in transliteration operands and preserve the
+  Perl foreach-entry diagnostic for shadowing `goto` labels inside `eval`.
+
+- Avoid materializing a key list when bytecode evaluates `keys %hash` in scalar
+  context, restoring empty-hash performance for repeated hash-count queries.
+
+- Reset embedded-script readline state between top-level programs and include
+  the nested-class fixture required by the standalone unit-test corpus.
+
+- Preserve literal exclamation marks in multiline `-e` arguments when Windows
+  dispatches a child `jperl` process without invoking its batch launcher.
+
+- Improve Perl-compatible compiler diagnostics for unterminated quoted strings
+  and here-document delimiters.
+
 - Restore `local` compatibility for tied hash and array elements, sparse
   arrays, magic stashes, implicit `$_` foreach aliases (including early
   return), and localized regex captures on both execution backends.
@@ -33,6 +48,36 @@ priorities and future plans.
   launcher's process priority.
 
 - Keep debugger EOF from terminating embedded Gradle test workers on Windows.
+
+
+- Restore source-scoped eval diagnostic numbering; reject Unicode punctuation
+  in lexical declarations; diagnose invalid `delete` and `exists` targets; and
+  report clean control-flow errors from `defer` and `finally` blocks. Require
+  block arguments for feature-gated `all` and `any` keywords, with
+  Perl-compatible syntax diagnostics, and diagnose invalid indirect arguments
+  to `return` without rejecting valid return statement modifiers. Reject
+  reference-valued `bless` class names, including values from tied scalars.
+  Diagnose `when` and `default` used outside a `given` topicalizer.
+  Reject assignments to unknown `%SIG` hooks and diagnose defined assignments
+  to the removed `${^ENCODING}` special variable.
+  Reject assignments of Perl class objects to typeglobs.
+  Diagnose aggregate operands to numeric and string bitwise assignments.
+  Diagnose aggregate lvalues passed to `substr` and `vec`.
+  Report Perl-compatible hash, private-hash, and typeglob diagnostics for
+  invalid `push`, `pop`, `shift`, and `unshift` operands, including every
+  direct invalid operation in a compilation.
+  Report undefined hash-reference diagnostics when aggregate values are used
+  as hash references.
+  Preserve mismatched array and hash literal delimiters in syntax-error
+  context, matching Perl's diagnostics.
+  Report evaluated missing labels for the legacy `CORE::dump` operator.
+  Report Perl-compatible undefined subroutine-reference errors for ordinary
+  and tied scalar codereferences.
+  Reject attempts to reopen active filehandles as directory handles (and vice
+  versa), with Perl-compatible lexical and Unicode handle diagnostics.
+  Report Perl-compatible UTF-8-layer errors from `sysread` and `syswrite`.
+  Reject non-reference and wrong-reference-type values in declared-reference
+  `foreach` iterators with Perl-compatible diagnostics.
 
 - Avoid transient helper allocation while counting ordinary Perl UTF strings.
 
@@ -96,7 +141,8 @@ priorities and future plans.
   closure capture, and experimental `@_` warnings.
 
 - Preserve state-variable initialization across `goto` loops after nested
-  closure compilation.
+  closure compilation and parenthesized logical defaults on both execution
+  backends.
 
 - Preserve async Future ownership across interpreter suspension and resume.
 

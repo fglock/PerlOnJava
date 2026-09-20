@@ -244,12 +244,21 @@ public class EmitSubroutine {
 
         // Create the new method context
         JavaClassInfo newJavaClassInfo = new JavaClassInfo();
+        newJavaClassInfo.isSubroutineBody = !node.useTryCatch;
+        newJavaClassInfo.isSmartmatchPredicate = node.getBooleanAnnotation("smartmatchPredicate");
         // Eval blocks are compiled as separate methods, but a goto inside one
         // still observes labels structurally contained by the enclosing method.
         // Carry the loop-body set so it can reject an illegal entry before the
         // loop's iterator/control state has been initialized.
         if (ctx.javaClassInfo != null) {
             newJavaClassInfo.gotoLabelsInsideLoop.addAll(ctx.javaClassInfo.gotoLabelsInsideLoop);
+        }
+        if (node.useTryCatch) {
+            // The eval body is compiled into a fresh method before its own
+            // visitor has emitted control flow.  Establish its protected
+            // foreach destinations now, rather than relying on labels from
+            // the parent method's later traversal.
+            EmitBlock.collectEvalLoopBodyLabels(node.block, newJavaClassInfo);
         }
         
         // Check if this subroutine is a defer block - control flow restrictions apply
@@ -449,6 +458,24 @@ public class EmitSubroutine {
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                         "setConstantCv",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
+            }
+            if (node.getBooleanAnnotation("generatedClassConstructor")
+                    || (node.block instanceof AbstractNode blockNode
+                    && blockNode.getBooleanAnnotation("generatedClassConstructor"))) {
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "markGeneratedClassConstructor",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
+            }
+            if (node.getBooleanAnnotation("classAdjustBlock")
+                    || (node.block instanceof AbstractNode blockNode
+                    && blockNode.getBooleanAnnotation("classAdjustBlock"))) {
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "markClassAdjustBlock",
                         "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                         false);
             }
@@ -1147,11 +1174,17 @@ public class EmitSubroutine {
 
         mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
         mv.visitVarInsn(Opcodes.ALOAD, nameSlot);
+        Object precedingLabel = node.getAnnotation("precedingLabel");
+        if (precedingLabel instanceof String label) {
+            mv.visitLdcInsn(label);
+        } else {
+            mv.visitInsn(Opcodes.ACONST_NULL);
+        }
         mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                 "throwIfDirectCallUndefined",
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)V",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Ljava/lang/String;)V",
                 false);
 
         // Set debug line number to the call site. Perl reports the enclosing
@@ -1179,11 +1212,23 @@ public class EmitSubroutine {
         mv.visitVarInsn(Opcodes.ALOAD, nameSlot);
         mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
         emitterVisitor.pushCallContext();   // Push call context to stack
+        String callerPackage = emitterVisitor.ctx.symbolTable.getCurrentPackage();
+        String callerFile = emitterVisitor.ctx.compilerOptions.fileName;
+        int callerLine = 0;
+        if (emitterVisitor.ctx.errorUtil != null && callSiteIndex > 0) {
+            var callerLocation = emitterVisitor.ctx.errorUtil
+                    .getSourceLocationAccurate(callSiteIndex);
+            callerFile = callerLocation.fileName();
+            callerLine = callerLocation.lineNumber();
+        }
+        mv.visitLdcInsn(callerPackage == null ? "main" : callerPackage);
+        mv.visitLdcInsn(callerFile == null ? "-e" : callerFile);
+        mv.visitLdcInsn(callerLine);
         mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                "apply",
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                "applyAtLocation",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;ILjava/lang/String;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                 false); // Generate an .apply() call
 
         if (pooledArgsArray) {
