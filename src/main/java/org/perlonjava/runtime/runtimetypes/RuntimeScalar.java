@@ -84,9 +84,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public boolean isPlainUntaintedNativeInteger() {
         return getClass() == RuntimeScalar.class
-                && type == INTEGER
-                && value instanceof Number
-                && !(value instanceof BigInteger)
+                && hasFixedWidthIntegerPayload()
+                && !(value instanceof Double)
                 && !tainted
                 && !hasWatchers();
     }
@@ -2734,7 +2733,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     @Override
     // Inlineable fast path for toString()
     public String toString() {
-        if (type == INTEGER && primitiveFlowInteger) return Long.toString(primitiveFlowIntegerValue);
+        if (type == INTEGER && hasFixedWidthIntegerPayload()
+                && !(value instanceof Double)) {
+            return Long.toString(fixedWidthIntegerPayload());
+        }
         if (type == STRING || type == BYTE_STRING) {
             return materializeGrowingString();
         }
@@ -2799,6 +2801,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * For blessed references, returns the raw "Class=TYPE(0xADDR)" string directly.
      */
     public String toStringNoOverload() {
+        if (type == INTEGER && hasFixedWidthIntegerPayload()
+                && !(value instanceof Double)) {
+            return Long.toString(fixedWidthIntegerPayload());
+        }
         if (type == STRING || type == BYTE_STRING) {
             return materializeGrowingString();
         }
