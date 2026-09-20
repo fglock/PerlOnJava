@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore `op/tie.t` compatibility for tied scalar operators, output
+  separators, deferred aliases, glob copies, and tied hash iteration on both
+  execution backends.
+
 - Improve `pack`/`unpack` compatibility for UUencoding, scoped Unicode modes,
   pointer strings, and native unsigned integers; correct interpreter string
   repetition for function calls in list context.
