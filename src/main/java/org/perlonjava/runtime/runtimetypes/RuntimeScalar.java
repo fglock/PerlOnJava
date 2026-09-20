@@ -970,7 +970,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         setIntegerValue(value);
     }
 
-    private void setIntegerValue(long integerValue) {
+    // Package-visible for runtime helpers that must perform an INTEGER write
+    // without triggering a second watcher notification.
+    void setIntegerValue(long integerValue) {
         // This is the canonical ordinary INTEGER write.  It must retire a
         // deferred loop payload before publishing the replacement value, or
         // later fixed-width readers would continue to see the stale payload.

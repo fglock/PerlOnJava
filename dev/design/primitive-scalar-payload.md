@@ -103,16 +103,21 @@ method-body specialization is part of this phase.
     fixed-width payload. Canonical INTEGER writes now retire deferred state,
     and scalar copies materialize a numeric snapshot instead of copying a
     boxed sentinel. Added focused mutation/copy regression coverage.
+  - Routed `ScalarUtils.stringIncrement` empty and decimal INTEGER writes
+    through the same canonical transition without a duplicate watcher
+    notification. The focused mutation test covers both string forms.
   - Full immutable `make` passed in 4m01s at
     `/tmp/make_primitive_scalar_payload_getters_clean_20260920.log`, and
     again in 3m55s at
-    `/tmp/make_primitive_scalar_payload_copy_constructor_final_20260920.log`.
+    `/tmp/make_primitive_scalar_payload_copy_constructor_final_20260920.log`,
+    and in 3m51s at
+    `/tmp/make_primitive_scalar_payload_string_increment_20260920.log`.
 
 ## Next steps
 
 1. Complete the remaining primitive-safe numeric migrations identified below,
-   especially `Operator.substr` offsets/lengths and `ScalarUtils` integer
-   writes, then add their focused scalar behavior tests.
+   especially `Operator.substr` offsets/lengths, then add their focused scalar
+   behavior tests.
 2. Define the smallest storage-state transition that cannot expose a stale
    public object payload across either backend.
 3. Add focused regression coverage for every newly migrated observation

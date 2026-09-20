@@ -205,9 +205,9 @@ public class ScalarUtils {
 
         // Check if the string is empty
         if (str.isEmpty()) {
-            // If empty, set the value to 1 and update type to INTEGER
-            runtimeScalar.value = 1;
-            runtimeScalar.type = INTEGER; // RuntimeScalarType is an enum that holds different scalar types
+            // Use the canonical INTEGER transition so a future primitive
+            // payload representation cannot bypass its observation rules.
+            runtimeScalar.setIntegerValue(1);
             return runtimeScalar; // Return the current instance
         }
 
@@ -227,11 +227,11 @@ public class ScalarUtils {
             try {
                 // Try to increment with overflow detection
                 long result = Math.addExact(longValue, 1);
-                // Check if result fits in an int - if so, store as INTEGER with Integer object
+                // Check if result fits in an int - if so, retain INTEGER
+                // semantics through the canonical scalar write.
                 // Otherwise, store as DOUBLE to match Perl semantics
                 if (result >= Integer.MIN_VALUE && result <= Integer.MAX_VALUE) {
-                    runtimeScalar.type = INTEGER;
-                    runtimeScalar.value = (int) result;
+                    runtimeScalar.setIntegerValue(result);
                 } else {
                     // Value doesn't fit in int - promote to double
                     runtimeScalar.type = RuntimeScalarType.DOUBLE;

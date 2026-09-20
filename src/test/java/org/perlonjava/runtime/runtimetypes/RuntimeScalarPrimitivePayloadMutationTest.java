@@ -30,4 +30,17 @@ class RuntimeScalarPrimitivePayloadMutationTest {
             assertEquals(6L, scalar.getLong());
         }
     }
+
+    @Test
+    void stringIncrementUsesTheCanonicalIntegerWrite() {
+        RuntimeScalar empty = new RuntimeScalar("");
+        ScalarUtils.stringIncrement(empty);
+        assertEquals(1L, empty.getLong());
+        assertTrue(empty.hasFixedWidthIntegerPayload());
+
+        RuntimeScalar decimal = new RuntimeScalar("41");
+        ScalarUtils.stringIncrement(decimal);
+        assertEquals(42L, decimal.getLong());
+        assertTrue(decimal.hasFixedWidthIntegerPayload());
+    }
 }
