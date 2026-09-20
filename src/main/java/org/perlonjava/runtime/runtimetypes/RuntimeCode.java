@@ -4716,7 +4716,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     private static boolean directNativeInteger(RuntimeScalar value) {
         return value != null && value.type == INTEGER && !value.tainted && value.blessId == 0
-                && !(value.value instanceof BigInteger);
+                && value.hasFixedWidthIntegerPayload();
     }
 
     private static boolean directNativeIntegerSlot(RuntimeScalar value) {
@@ -6486,8 +6486,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         if (scalars == null || scalars.length == 0) return false;
         for (RuntimeScalar scalar : scalars) {
-            if (scalar == null || scalar.type != RuntimeScalarType.INTEGER
-                    || scalar.value instanceof BigInteger || scalar.tainted || scalar.blessId != 0) {
+            if (scalar == null || !scalar.hasFixedWidthIntegerPayload()
+                    || scalar.tainted || scalar.blessId != 0) {
                 return false;
             }
         }

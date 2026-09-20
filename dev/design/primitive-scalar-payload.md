@@ -81,17 +81,31 @@ payload boxing, not reuse of cells or a new array representation.
 
 ## Status
 
-Research and ownership audit in progress (2026-09-20). No implementation is
-selected yet; no native-array widening or method-body specialization is part
-of this phase.
+Phase 1, representation-safe core accessors, completed (2026-09-20). No
+payload storage change is selected yet; no native-array widening or
+method-body specialization is part of this phase.
+
+### Completed phases
+
+- [x] Phase 1: Fixed-width payload accessors (2026-09-20)
+  - Added `RuntimeScalar` predicates and a primitive-flow-aware fixed-width
+    integer accessor.
+  - Migrated core array, bitwise, math, numeric-flow, and call eligibility
+    readers away from direct fixed-width `value` inspection.
+  - Added `RuntimeScalarIntegerPayloadTest`, including array and bitwise
+    observation of a deferred primitive-flow payload.
+  - Full immutable `make` passed in 4m08s at
+    `/tmp/make_primitive_scalar_payload_accessors_retry_20260920.log`.
 
 ## Next steps
 
-1. Inventory direct INTEGER `value` consumers and group them by materializing
-   observation versus primitive-safe numeric use.
-2. Define the smallest runtime-accessor migration that makes a primitive
-   payload sound across both backends.
-3. Add focused regression coverage before changing representation state.
+1. Classify the remaining direct INTEGER `value` consumers by materializing
+   observation versus primitive-safe numeric use; preserve a direct-object
+   path for Java interoperation and identity-sensitive consumers.
+2. Define the smallest storage-state transition that cannot expose a stale
+   public object payload across either backend.
+3. Add focused regression coverage for every newly migrated observation
+   boundary before changing representation state.
 4. Measure only after a complete fallback and observability proof exists.
 
 ## Related work

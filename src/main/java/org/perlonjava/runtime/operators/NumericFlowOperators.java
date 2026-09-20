@@ -122,10 +122,6 @@ public final class NumericFlowOperators {
                 // RuntimeScalar represents both Long and BigInteger as INTEGER.
                 // getLong() on the latter truncates, so only accept the two
                 // fixed-width payload forms supported by this first slice.
-                && isFixedWidthInteger(left.value) && isFixedWidthInteger(right.value);
-    }
-
-    private static boolean isFixedWidthInteger(Object value) {
-        return value instanceof Integer || value instanceof Long;
+                && left.hasFixedWidthIntegerPayload() && right.hasFixedWidthIntegerPayload();
     }
 }

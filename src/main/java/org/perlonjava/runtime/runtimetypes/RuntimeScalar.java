@@ -255,6 +255,35 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return primitiveFlowInteger;
     }
 
+    /**
+     * True when this scalar has an INTEGER payload representable in a signed
+     * JVM {@code long}.  Callers which need arithmetic rather than the public
+     * object payload must use this predicate and
+     * {@link #fixedWidthIntegerPayload()} together: a primitive-flow scalar
+     * deliberately keeps a harmless boxed sentinel in {@link #value} until an
+     * ordinary observation boundary flushes it.
+     */
+    public boolean hasFixedWidthIntegerPayload() {
+        return type == RuntimeScalarType.INTEGER && !(value instanceof BigInteger);
+    }
+
+    /**
+     * Return the fixed-width INTEGER payload without observing the public
+     * boxed representation.  BigInteger-backed INTEGER values retain their
+     * exact wide representation and are intentionally rejected here.
+     */
+    public long fixedWidthIntegerPayload() {
+        if (!hasFixedWidthIntegerPayload()) {
+            throw new IllegalStateException("scalar does not have a fixed-width integer payload");
+        }
+        return primitiveFlowInteger ? primitiveFlowIntegerValue : ((Number) value).longValue();
+    }
+
+    /** True when INTEGER storage is the exact BigInteger fallback. */
+    public boolean hasWideIntegerPayload() {
+        return type == RuntimeScalarType.INTEGER && value instanceof BigInteger;
+    }
+
     public RuntimeScalar flushPrimitiveFlowInteger() {
         if (primitiveFlowInteger) {
             long value = primitiveFlowIntegerValue;

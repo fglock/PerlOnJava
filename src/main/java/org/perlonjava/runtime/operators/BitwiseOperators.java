@@ -34,7 +34,7 @@ public class BitwiseOperators {
     }
 
     private static boolean hasNativeInteger(RuntimeScalar scalar) {
-        return scalar.type == RuntimeScalarType.INTEGER && !(scalar.value instanceof BigInteger);
+        return scalar.hasFixedWidthIntegerPayload();
     }
 
     private static RuntimeScalar unsignedResult(long value) {
@@ -44,8 +44,8 @@ public class BitwiseOperators {
 
     private static RuntimeScalar nativeBitwiseResult(
             RuntimeScalar left, RuntimeScalar right, char operator) {
-        long a = ((Number) left.value).longValue();
-        long b = ((Number) right.value).longValue();
+        long a = left.fixedWidthIntegerPayload();
+        long b = right.fixedWidthIntegerPayload();
         long value = switch (operator) {
             case '&' -> a & b;
             case '|' -> a | b;
@@ -76,7 +76,7 @@ public class BitwiseOperators {
     }
 
     private static BigInteger exactInteger(RuntimeScalar scalar) {
-        return scalar.type == RuntimeScalarType.INTEGER && scalar.value instanceof BigInteger
+        return scalar.hasWideIntegerPayload()
                 ? (BigInteger) scalar.value : null;
     }
 
@@ -547,7 +547,7 @@ public class BitwiseOperators {
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER
                 && hasNativeInteger(runtimeScalar) && exactInteger(arg2) == null) {
             long shift = arg2.getLong();
-            long value = ((Number) runtimeScalar.value).longValue();
+            long value = runtimeScalar.fixedWidthIntegerPayload();
             if (value >= 0) {
                 if (shift >= 0) return unsignedNativeShift(value, shift, true);
                 if (shift != Long.MIN_VALUE) return unsignedNativeShift(value, -shift, false);
@@ -638,7 +638,7 @@ public class BitwiseOperators {
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER
                 && hasNativeInteger(runtimeScalar) && exactInteger(arg2) == null) {
             long shift = arg2.getLong();
-            long value = ((Number) runtimeScalar.value).longValue();
+            long value = runtimeScalar.fixedWidthIntegerPayload();
             if (value >= 0) {
                 if (shift >= 0) return unsignedNativeShift(value, shift, false);
                 if (shift != Long.MIN_VALUE) return unsignedNativeShift(value, -shift, true);

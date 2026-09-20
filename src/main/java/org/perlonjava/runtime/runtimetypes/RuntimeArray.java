@@ -1272,7 +1272,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     /** Read after {@link #isPlainUnsharedNativeIntegerElement(int)} succeeds. */
     public long nativeIntegerElement(int index) {
         if (index < 0) index += elements.size();
-        return ((Number) elements.get(index).value).longValue();
+        return elements.get(index).fixedWidthIntegerPayload();
     }
 
     /** Store a native unsigned word without materializing intermediate RHS scalars. */
