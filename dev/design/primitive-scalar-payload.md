@@ -140,6 +140,10 @@ method-body specialization is part of this phase.
     readonly method invocation and `$@` save/restore now use the protocol.
     Remaining raw pairs are CODE-only compiler/call snapshots or IO glob-slot
     copies and cannot observe an ordinary INTEGER payload.
+  - Activated primitive storage for the generic plain, unshared native-array
+    non-negative word-store path. Tied, watched, readonly, shared, non-native,
+    and wide stores retain their ordinary fallback; focused coverage proves the
+    array read observes the active primitive payload.
   - Full immutable `make` passed in 4m01s at
     `/tmp/make_primitive_scalar_payload_getters_clean_20260920.log`, and
     again in 3m55s at
@@ -164,14 +168,15 @@ method-body specialization is part of this phase.
     `/tmp/make_primitive_scalar_payload_special_copy_20260920.log`.
     The final raw-copy classification migration passed in 4m02s at
     `/tmp/make_primitive_scalar_payload_final_raw_copy_20260920.log`.
+    The native-array activation passed in 3m57s at
+    `/tmp/make_primitive_scalar_payload_native_array_store_20260920.log`.
 
 ## Next steps
 
-1. Define the smallest storage-state transition that cannot expose a stale
-   public object payload across either backend.
-2. Add focused regression coverage for every newly migrated observation
-   boundary before changing representation state.
-3. Measure only after a complete fallback and observability proof exists.
+1. Run alternating fresh-process Life and portfolio measurements, then retain
+   this generic store activation only for a material, repeatable gain.
+2. Add focused regression coverage for any observation boundary exposed by the
+   production screen before widening primitive storage.
 
 ### Direct-payload audit, first slice (2026-09-20)
 

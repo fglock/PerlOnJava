@@ -1288,7 +1288,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             elements.set(index, element);
             if (!elementsAliased) elementsOwned = true;
         }
-        if (value >= 0) element.set(value);
+        // This guard proves an ordinary, unshared scalar cell with no observable
+        // proxy semantics. Keep its changing signed payload out of Object
+        // storage; every non-native, shared, tied, watched, readonly, or wide
+        // store above retains the established scalar path.
+        if (value >= 0) element.setPrimitiveFlowInteger(value);
         else element.set(unsignedWordScalar(value));
         return element;
     }
