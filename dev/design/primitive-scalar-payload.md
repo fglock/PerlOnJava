@@ -140,10 +140,6 @@ method-body specialization is part of this phase.
     readonly method invocation and `$@` save/restore now use the protocol.
     Remaining raw pairs are CODE-only compiler/call snapshots or IO glob-slot
     copies and cannot observe an ordinary INTEGER payload.
-  - Activated primitive storage for the generic plain, unshared native-array
-    non-negative word-store path. Tied, watched, readonly, shared, non-native,
-    and wide stores retain their ordinary fallback; focused coverage proves the
-    array read observes the active primitive payload.
   - Full immutable `make` passed in 4m01s at
     `/tmp/make_primitive_scalar_payload_getters_clean_20260920.log`, and
     again in 3m55s at
@@ -168,15 +164,14 @@ method-body specialization is part of this phase.
     `/tmp/make_primitive_scalar_payload_special_copy_20260920.log`.
     The final raw-copy classification migration passed in 4m02s at
     `/tmp/make_primitive_scalar_payload_final_raw_copy_20260920.log`.
-    The native-array activation passed in 3m57s at
-    `/tmp/make_primitive_scalar_payload_native_array_store_20260920.log`.
 
 ## Next steps
 
-1. Run alternating fresh-process Life and portfolio measurements, then retain
-   this generic store activation only for a material, repeatable gain.
+1. Define a new general storage transition only after it can show an early,
+   repeatable whole-workload gain; the plain native-array word-store activation
+   is rejected below.
 2. Add focused regression coverage for any observation boundary exposed by the
-   production screen before widening primitive storage.
+   next production screen before widening primitive storage.
 
 ### Direct-payload audit, first slice (2026-09-20)
 
@@ -235,6 +230,20 @@ the public object field. This prevents a setter-only optimization and keeps
 the current work at the representation-proof phase.
 
 ## Related work
+
+### Rejected plain native-array primitive-store activation (2026-09-20)
+
+The first general activation used deferred fixed-width payload storage for a
+non-negative `RuntimeArray.setUnsignedWordElement` write after its existing
+plain/unshared/native guard. Its focused regression and immutable full gate
+passed at `/tmp/make_primitive_scalar_payload_native_array_store_20260920.log`.
+The two-pair fresh-process Life diagnostic at
+`/tmp/perf-native-array-primitive-store-screen-20260920/20260920T034555Z/portfolio.json`
+was nonetheless directionally negative: 0.62832x Perl geometric mean, with a
+0.61629--0.64058 interval, versus the retained parent evidence near 0.668x.
+It is protocol-inconclusive rather than acceptance evidence, but it provides
+no basis to retain a general representation change. The activation and its
+test were removed; do not rerun or widen it.
 
 - [Performance over Perl handoff](performance-over-perl-handoff.md)
 - [Main performance design](performance-over-perl.md)
