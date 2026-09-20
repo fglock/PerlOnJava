@@ -980,6 +980,11 @@ public class Disassemble {
                         rs = interpretedCode.bytecode[pc++];
                         sb.append("CREATE_REF r").append(rd).append(" = \\r").append(rs).append("\n");
                         break;
+                    case Opcodes.CREATE_REF_NO_VIVIFY:
+                        rd = interpretedCode.bytecode[pc++];
+                        rs = interpretedCode.bytecode[pc++];
+                        sb.append("CREATE_REF_NO_VIVIFY r").append(rd).append(" = \\r").append(rs).append("\n");
+                        break;
                     case Opcodes.DEREF:
                         rd = interpretedCode.bytecode[pc++];
                         rs = interpretedCode.bytecode[pc++];

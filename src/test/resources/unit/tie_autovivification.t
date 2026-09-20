@@ -45,6 +45,20 @@ sub FETCHSIZE{ scalar @{$_[0]{wrapped}} }
 sub STORESIZE{ $#{$_[0]{wrapped}} = $_[1] - 1 }
 sub UNTIE    { }
 
+# STORE deliberately copies references rather than retaining the temporary
+# reference it receives.  Nested assignment must continue through the value
+# returned by FETCH after autovivification.
+package T::CopyingHash;
+sub TIEHASH  { bless {}, $_[0] }
+sub FETCH    { $_[0]{$_[1]} }
+sub STORE    { $_[0]{$_[1]} = { %{$_[2]} } }
+sub FIRSTKEY { my $a = keys %{$_[0]}; each %{$_[0]} }
+sub NEXTKEY  { each %{$_[0]} }
+sub EXISTS   { exists $_[0]{$_[1]} }
+sub DELETE   { delete $_[0]{$_[1]} }
+sub CLEAR    { %{$_[0]} = () }
+sub UNTIE    { }
+
 package main;
 
 # ---------------------------------------------------------------------
@@ -85,6 +99,17 @@ package main;
     ok defined($h),                             'helper returns a defined value';
     is ref($h), 'HASH',                         'helper returns a hashref';
     is $h->{x}, 'ok',                           'tied FETCH works on returned ref';
+}
+
+# ---------------------------------------------------------------------
+# A tied element's STORE can replace a newly autovivified reference.  The
+# following dereference must use FETCH's canonical replacement, not the
+# temporary reference passed to STORE.
+# ---------------------------------------------------------------------
+{
+    tie my %h, 'T::CopyingHash';
+    $h{i}{j} = 'k';
+    is $h{i}{j}, 'k', 'nested assignment follows copied tied-hash value';
 }
 
 done_testing;

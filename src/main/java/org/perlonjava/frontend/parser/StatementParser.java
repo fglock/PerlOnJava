@@ -1098,6 +1098,14 @@ public class StatementParser {
                                 }
                             }
 
+                            // builtin exports are lexical, rather than package
+                            // globals.  In particular, `use builtin 'weaken'`
+                            // must still resolve after a later `package` statement.
+                            if (!isNoDeclaration && "builtin".equals(packageName)) {
+                                org.perlonjava.runtime.perlmodule.Builtin.importLexically(
+                                        parser.ctx.symbolTable, args);
+                            }
+
                             // Check if a source filter was installed during import()
                             // If so, we need to rejoin remaining tokens, apply the filter, and re-tokenize
                             if (FilterUtilCall.wasFilterInstalled()) {

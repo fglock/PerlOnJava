@@ -1572,6 +1572,28 @@ public class EmitOperator {
     }
 
     /**
+     * A direct `!keys %tied` is boolean context, not ordinary scalar keys
+     * context. Perl asks the hash for its scalar value (and thus its SCALAR
+     * tie method) instead of iterating FIRSTKEY/NEXTKEY.
+     */
+    static void handleLogicalNot(OperatorNode node, EmitterVisitor emitterVisitor) {
+        Node operand = node.operand;
+        if (operand instanceof ListNode list && list.elements.size() == 1) {
+            operand = list.elements.getFirst();
+        }
+        if (operand instanceof OperatorNode keys && "keys".equals(keys.operator)
+                && keys.operand != null) {
+            keys.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                    "scalar", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+            emitOperatorWithKey("not", node, emitterVisitor);
+            return;
+        }
+        handleUnaryDefaultCase(node, "not", emitterVisitor);
+    }
+
+    /**
      * Handles the 'length' operator, which can be affected by 'use bytes'.
      *
      * @param node           The operator node
@@ -1912,7 +1934,8 @@ public class EmitOperator {
                 // Always create a proper reference - don't special case CODE references
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                         "org/perlonjava/runtime/runtimetypes/RuntimeBase",
-                        "createReference",
+                        Boolean.TRUE.equals(node.getAnnotation("nonVivifyingReference"))
+                                ? "createReferenceNoVivify" : "createReference",
                         "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                         false);
             }

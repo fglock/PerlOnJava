@@ -71,6 +71,20 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
         return lvalue.createReference();
     }
 
+    @Override
+    public RuntimeScalar createReferenceNoVivify() {
+        RuntimeScalar reference = new RuntimeScalar();
+        reference.type = RuntimeScalarType.REFERENCE;
+        reference.value = this;
+        return reference;
+    }
+
+    @Override
+    public boolean hasLvalue() {
+        return lvalue != null || parent.elements.containsKey(key);
+    }
+
+
     /**
      * Vivifies (initializes) the element in the parent hash if it does not exist.
      * If the element associated with the key is not present, it creates a new

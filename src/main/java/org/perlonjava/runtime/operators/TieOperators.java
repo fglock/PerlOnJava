@@ -47,6 +47,7 @@ public class TieOperators {
 
         // Determine the class name and arguments
         String className;
+        boolean includeLoadHint;
         RuntimeArray args;
 
         // Check if classArg is a blessed reference (object)
@@ -54,12 +55,26 @@ public class TieOperators {
         if (blessId != 0) {
             // classArg is a blessed object, get the package name
             className = NameNormalizer.getBlessStr(blessId);
+            includeLoadHint = false;
             // Extra args only — classArg will be used as the invocant,
             // so RuntimeCode.call() will prepend it as $_[0]
             args = new RuntimeArray(Arrays.copyOfRange(scalars, 2, scalars.length));
         } else {
-            // classArg is a string class name
-            className = classArg.getBoolean() ? scalars[1].toString() : "main";
+            // A glob in the class position denotes its package, not its
+            // stringified `*main::NAME` form.  Perl also omits the usual
+            // "perhaps you forgot to load" suffix for non-string class
+            // arguments (including an empty/undef class and references).
+            if (classArg.type == GLOB && classArg instanceof RuntimeGlob glob) {
+                className = glob.globName == null ? "main" : glob.globName;
+                if (className.startsWith("main::")) {
+                    className = className.substring("main::".length());
+                }
+                includeLoadHint = false;
+            } else {
+                className = classArg.getBoolean() ? scalars[1].toString() : "main";
+                includeLoadHint = classArg.getBoolean()
+                        && (classArg.type == STRING || classArg.type == BYTE_STRING);
+            }
             args = new RuntimeArray(Arrays.copyOfRange(scalars, 2, scalars.length));
         }
 
@@ -87,17 +102,20 @@ public class TieOperators {
                         args,
                         RuntimeContextType.SCALAR
                 ).getFirst()
-                : callTieConstructor(className, method, args);
+                : callTieConstructor(className, method, args, includeLoadHint);
 
         switch (variable.type) {
             case REFERENCE -> {
                 RuntimeScalar scalar = variable.scalarDeref();
                 RuntimeScalar previousValue = new RuntimeScalar(scalar);
                 scalar.type = TIED_SCALAR;
-                scalar.value = new TieScalar(className, previousValue, self);
+                scalar.value = new TieScalar(className, previousValue, self, scalar);
             }
             case ARRAYREFERENCE -> {
                 RuntimeArray array = variable.arrayDeref();
+                if (self != null && self.value == array) {
+                    throw new PerlCompilerException("Self-ties of arrays and hashes are not supported");
+                }
                 // If this array is the autoviv proxy of a still-undef scalar
                 // (e.g. `tie @$undef, ...`), bind the scalar to a real array
                 // ref now so the caller's variable becomes a usable arrayref.
@@ -114,6 +132,9 @@ public class TieOperators {
             }
             case HASHREFERENCE -> {
                 RuntimeHash hash = variable.hashDeref();
+                if (self != null && self.value == hash) {
+                    throw new PerlCompilerException("Self-ties of arrays and hashes are not supported");
+                }
                 // If this hash is the autoviv proxy of a still-undef scalar
                 // (e.g. `tie %$undef, ...`), bind the scalar to a real hash
                 // ref now so the caller's variable becomes a usable hashref.
@@ -156,14 +177,18 @@ public class TieOperators {
         return self;
     }
 
-    private static RuntimeScalar callTieConstructor(String className, String methodName, RuntimeArray args) {
+    private static RuntimeScalar callTieConstructor(String className, String methodName, RuntimeArray args,
+                                                    boolean includeLoadHint) {
         args.elements.addFirst(new RuntimeScalar(className));
 
         RuntimeScalar method = InheritanceResolver.findMethodInHierarchy(methodName, className, null, 0);
         if (method == null) {
-            throw new PerlCompilerException("Can't locate object method \"" + methodName
-                    + "\" via package \"" + className + "\" (perhaps you forgot to load \""
-                    + className + "\"?)");
+            String message = "Can't locate object method \"" + methodName
+                    + "\" via package \"" + className + "\"";
+            if (includeLoadHint) {
+                message += " (perhaps you forgot to load \"" + className + "\"?)";
+            }
+            throw new PerlCompilerException(message);
         }
 
         String autoloadVariableName = ((RuntimeCode) method.value).autoloadVariableName;
@@ -195,9 +220,17 @@ public class TieOperators {
     public static RuntimeScalar untie(int ctx, RuntimeBase... scalars) {
         RuntimeScalar variable = (RuntimeScalar) scalars[0];
 
+        // The \[$@%*] prototype deliberately supplies an unvivified proxy for
+        // a missing aggregate element.  untie is a no-op in that case.
+        if (variable.type == REFERENCE
+                && variable.value instanceof RuntimeBaseProxy proxy
+                && !proxy.hasLvalue()) {
+            return scalarTrue;
+        }
+
         switch (variable.type) {
             case REFERENCE -> {
-                RuntimeScalar scalar = variable.scalarDeref();
+                RuntimeScalar scalar = scalarTieTarget(variable);
                 if (scalar.type == TIED_SCALAR && scalar.value instanceof TieScalar tieScalar) {
                     TieScalar.tiedUntie(scalar);
                     RuntimeScalar previousValue = tieScalar.getPreviousValue();
@@ -211,6 +244,7 @@ public class TieOperators {
                 RuntimeArray array = variable.arrayDeref();
                 if (array.type == TIED_ARRAY) {
                     TieArray tieArray = (TieArray) array.elements;
+                    warnUntieReferences(tieArray.getSelf());
                     TieArray.tiedUntie(array);
                     RuntimeArray previousValue = tieArray.getPreviousValue();
                     array.type = previousValue.type;
@@ -223,6 +257,7 @@ public class TieOperators {
                 RuntimeHash hash = variable.hashDeref();
                 if (hash.type == TIED_HASH) {
                     TieHash tieHash = (TieHash) hash.elements;
+                    warnUntieReferences(tieHash.getSelf());
                     TieHash.tiedUntie(hash);
                     RuntimeHash previousValue = tieHash.getPreviousValue();
                     hash.type = previousValue.type;
@@ -255,6 +290,18 @@ public class TieOperators {
         }
     }
 
+    /** Perl's untie warning excludes the reference held by the tie wrapper. */
+    private static void warnUntieReferences(RuntimeScalar self) {
+        if (self == null || !(self.value instanceof RuntimeBase base)) {
+            return;
+        }
+        int externalReferences = Math.max(0, base.refCount - 1);
+        if (externalReferences != 0) {
+            WarnDie.warnWithCategory(new RuntimeScalar("untie attempted while " + externalReferences
+                    + " inner references still exist"), RuntimeScalarCache.scalarEmptyString, "untie");
+        }
+    }
+
     /**
      * Implements Perl's tied() builtin function.
      *
@@ -268,9 +315,15 @@ public class TieOperators {
      */
     public static RuntimeScalar tied(int ctx, RuntimeBase... scalars) {
         RuntimeScalar variable = (RuntimeScalar) scalars[0];
+        // See untie(): inspecting a missing element must not create it.
+        if (variable.type == REFERENCE
+                && variable.value instanceof RuntimeBaseProxy proxy
+                && !proxy.hasLvalue()) {
+            return scalarUndef;
+        }
         switch (variable.type) {
             case REFERENCE -> {
-                RuntimeScalar scalar = variable.scalarDeref();
+                RuntimeScalar scalar = scalarTieTarget(variable);
                 if (scalar.type == TIED_SCALAR) {
                     if (scalar.value instanceof TiedVariableBase tvb) {
                         RuntimeScalar selfObj = tvb.getSelf();
@@ -279,12 +332,15 @@ public class TieOperators {
                         }
                     }
                 }
-                // Handle tied($$glob_ref) where $$glob_ref evaluates to a GLOB wrapped in a reference.
-                // In Perl 5, tied($$fh) when the glob is tied via tie(*$fh, ...) returns the tied object.
+                // A live glob stored in a scalar reference is a handle for
+                // tied().  A detached glob copy (`my $copy = *FH`) is instead
+                // a scalar value and must not expose the copied handle's tie.
                 if (scalar.type == GLOB) {
-                    RuntimeGlob g = (scalar instanceof RuntimeGlob) ? (RuntimeGlob) scalar : (scalar.value instanceof RuntimeGlob ? (RuntimeGlob) scalar.value : null);
-                    if (g != null && g.IO.type == TIED_SCALAR) {
-                        return ((TieHandle) g.IO.value).getSelf();
+                    RuntimeGlob glob = scalar instanceof RuntimeGlob g ? g
+                            : scalar.value instanceof RuntimeGlob g ? g : null;
+                    if (glob != null && !glob.isSlotSnapshot()
+                            && glob.IO.type == TIED_SCALAR) {
+                        return ((TieHandle) glob.IO.value).getSelf();
                     }
                 }
             }
@@ -334,6 +390,14 @@ public class TieOperators {
             }
         }
         return scalarUndef;
+    }
+
+    /** A deferred aggregate alias must expose its slot, not dereference it. */
+    private static RuntimeScalar scalarTieTarget(RuntimeScalar variable) {
+        if (variable.value instanceof RuntimeBaseProxy proxy) {
+            return proxy.resolveLvalue();
+        }
+        return variable.scalarDeref();
     }
 
     private static RuntimeScalar sharedTieMarker() {

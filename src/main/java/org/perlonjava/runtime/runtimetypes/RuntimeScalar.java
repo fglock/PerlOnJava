@@ -3060,11 +3060,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case TIED_SCALAR -> { // 9
                 RuntimeScalar fetched = tiedFetch();
                 if (fetched.type == RuntimeScalarType.UNDEF) {
-                    // Autovivify: create array ref, store back to tied var, re-fetch
+                    // Autovivify: create an array ref, store it, then use the
+                    // handler's canonical value. STORE may have copied/replaced it.
                     RuntimeArray arr = new RuntimeArray();
                     arr.strictAutovivify = true;
                     tiedStore(arr.createAnonymousReference());
-                    yield arr;
+                    yield tiedFetch().arrayDeref();
                 }
                 yield fetched.arrayDeref();
             }
@@ -3172,10 +3173,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case TIED_SCALAR -> { // 9
                 RuntimeScalar fetched = tiedFetch();
                 if (fetched.type == RuntimeScalarType.UNDEF) {
-                    // Autovivify: create hash ref, store back to tied var
+                    // Autovivify: use the handler's canonical post-STORE value.
                     RuntimeHash hash = new RuntimeHash();
                     tiedStore(hash.createAnonymousReference());
-                    yield hash;
+                    yield tiedFetch().hashDeref();
                 }
                 yield fetched.hashDeref();
             }
@@ -3364,7 +3365,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (fetched.type == RuntimeScalarType.UNDEF) {
                     RuntimeHash hash = new RuntimeHash();
                     tiedStore(hash.createAnonymousReference());
-                    yield hash;
+                    yield tiedFetch().hashDerefNonStrict(packageName);
                 }
                 yield fetched.hashDerefNonStrict(packageName);
             }
@@ -3439,7 +3440,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     RuntimeArray arr = new RuntimeArray();
                     arr.strictAutovivify = true;
                     tiedStore(arr.createAnonymousReference());
-                    yield arr;
+                    yield tiedFetch().arrayDerefNonStrict(packageName);
                 }
                 yield fetched.arrayDerefNonStrict(packageName);
             }

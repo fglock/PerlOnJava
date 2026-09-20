@@ -5837,8 +5837,10 @@ public class BytecodeCompiler implements Visitor {
                 // Allocate register for reference
                 int rd = allocateOutputRegister();
 
-                // Emit CREATE_REF
-                emit(Opcodes.CREATE_REF);
+                // tied/untie prototype references inspect missing aggregate
+                // elements without materializing them.
+                emit(Boolean.TRUE.equals(node.getAnnotation("nonVivifyingReference"))
+                        ? Opcodes.CREATE_REF_NO_VIVIFY : Opcodes.CREATE_REF);
                 emitReg(rd);
                 emitReg(valueReg);
 

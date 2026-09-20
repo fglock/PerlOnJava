@@ -448,6 +448,9 @@ public class Opcodes {
      */
     public static final short CREATE_REF = 68;
 
+    /** Create a reference without vivifying a missing aggregate proxy. */
+    public static final short CREATE_REF_NO_VIVIFY = 567;
+
     /**
      * Dereference: rd = rs.dereference()
      */

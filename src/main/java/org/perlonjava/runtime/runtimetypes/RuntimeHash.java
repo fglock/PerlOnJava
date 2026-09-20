@@ -1462,7 +1462,15 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     public void resetIterator() {
+        if (hashIterator instanceof RuntimeTiedHashIterator tiedIterator) {
+            tiedIterator.releaseCurrentKey();
+        }
         hashIterator = null;
+    }
+
+    /** True while a tied each() traversal has a current key in flight. */
+    boolean hasActiveIterator() {
+        return hashIterator != null;
     }
 
     /**
@@ -1849,6 +1857,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     private class RuntimeTiedHashIterator implements Iterator<RuntimeScalar> {
         private RuntimeScalar currentKey;   // last key returned by FIRSTKEY/NEXTKEY (passed to next NEXTKEY)
+        private RuntimeBase currentKeyOwner; // explicit Perl lifetime hold for a reference key
         private RuntimeScalar pendingKey;   // key fetched by hasNext() but not yet consumed by next()
         private boolean returnKey;          // true: next() returns a key; false: next() returns the value
         private boolean started;            // whether FIRSTKEY has been called
@@ -1860,6 +1869,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             this.returnKey = true;
             this.started = false;
             this.currentKey = null;
+            this.currentKeyOwner = null;
             this.pendingKey = null;
         }
 
@@ -1888,6 +1898,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     started = true;
                 } else {
                     pendingKey = TieHash.tiedNextKey(RuntimeHash.this, currentKey);
+                    // NEXTKEY has consumed the previous key.  Its lifetime ends
+                    // before the newly returned key becomes the iterator state.
+                    releaseCurrentKey();
                 }
             }
 
@@ -1908,6 +1921,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             if (returnKey) {
                 // Return the key and prepare to return its value next
                 currentKey = pendingKey;
+                retainCurrentKey();
                 pendingKey = null;
                 returnKey = false;
                 return new RuntimeScalar(currentKey);
@@ -1929,6 +1943,28 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         @Override
         public void remove() {
             throw new UnsupportedOperationException("Remove not supported for tied hash iterator");
+        }
+
+        private void retainCurrentKey() {
+            if ((currentKey.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    && currentKey.value instanceof RuntimeBase base && base.refCount >= 0) {
+                base.traceRefCount(+1, "RuntimeTiedHashIterator current key");
+                base.refCount++;
+                base.acquireTransientTraceOwner("tied hash iterator key", "RuntimeHash.RuntimeTiedHashIterator");
+                currentKeyOwner = base;
+            }
+        }
+
+        private void releaseCurrentKey() {
+            if (currentKeyOwner == null) return;
+            RuntimeBase base = currentKeyOwner;
+            currentKeyOwner = null;
+            base.traceRefCount(-1, "RuntimeTiedHashIterator current key release");
+            base.releaseTransientTraceOwner("tied hash iterator key", "RuntimeHash.RuntimeTiedHashIterator");
+            if (base.refCount > 0 && --base.refCount == 0) {
+                base.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(base);
+            }
         }
     }
 }

@@ -145,6 +145,8 @@ public class CompareOperators {
      * @return A RuntimeScalar representing a boolean value (true if arg1 < arg2).
      */
     public static RuntimeScalar lessThan(RuntimeScalar arg1, RuntimeScalar arg2) {
+        arg1 = RuntimeScalar.fetchTiedOnce(arg1);
+        arg2 = RuntimeScalar.fetchTiedOnce(arg2);
         // Fast path: both INTEGER - skip blessedId check, getNumber()
         if (arg1.type == RuntimeScalarType.INTEGER && arg2.type == RuntimeScalarType.INTEGER) {
             return getScalarBoolean(compareIntegers(arg1, arg2) < 0);
@@ -189,6 +191,8 @@ public class CompareOperators {
      * @return A RuntimeScalar representing a boolean value (true if arg1 <= arg2).
      */
     public static RuntimeScalar lessThanOrEqual(RuntimeScalar arg1, RuntimeScalar arg2) {
+        arg1 = RuntimeScalar.fetchTiedOnce(arg1);
+        arg2 = RuntimeScalar.fetchTiedOnce(arg2);
         // Fast path: both INTEGER - skip blessedId check, getNumber()
         if (arg1.type == RuntimeScalarType.INTEGER && arg2.type == RuntimeScalarType.INTEGER) {
             return getScalarBoolean(compareIntegers(arg1, arg2) <= 0);
@@ -232,6 +236,8 @@ public class CompareOperators {
      * @return A RuntimeScalar representing a boolean value (true if arg1 > arg2).
      */
     public static RuntimeScalar greaterThan(RuntimeScalar arg1, RuntimeScalar arg2) {
+        arg1 = RuntimeScalar.fetchTiedOnce(arg1);
+        arg2 = RuntimeScalar.fetchTiedOnce(arg2);
         // Fast path: both INTEGER - skip blessedId check, getNumber()
         if (arg1.type == RuntimeScalarType.INTEGER && arg2.type == RuntimeScalarType.INTEGER) {
             return getScalarBoolean(compareIntegers(arg1, arg2) > 0);
@@ -275,6 +281,8 @@ public class CompareOperators {
      * @return A RuntimeScalar representing a boolean value (true if arg1 >= arg2).
      */
     public static RuntimeScalar greaterThanOrEqual(RuntimeScalar arg1, RuntimeScalar arg2) {
+        arg1 = RuntimeScalar.fetchTiedOnce(arg1);
+        arg2 = RuntimeScalar.fetchTiedOnce(arg2);
         // Fast path: both INTEGER - skip blessedId check, getNumber()
         if (arg1.type == RuntimeScalarType.INTEGER && arg2.type == RuntimeScalarType.INTEGER) {
             return getScalarBoolean(compareIntegers(arg1, arg2) >= 0);
@@ -318,6 +326,7 @@ public class CompareOperators {
      * @return A RuntimeScalar representing a boolean value (true if arg1 == arg2).
      */
     public static RuntimeScalar equalTo(RuntimeScalar arg1, int arg2) {
+        arg1 = RuntimeScalar.fetchTiedOnce(arg1);
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         if (blessId < 0) {
@@ -354,6 +363,8 @@ public class CompareOperators {
      * @return A RuntimeScalar representing a boolean value (true if arg1 == arg2).
      */
     public static RuntimeScalar equalTo(RuntimeScalar arg1, RuntimeScalar arg2) {
+        arg1 = RuntimeScalar.fetchTiedOnce(arg1);
+        arg2 = RuntimeScalar.fetchTiedOnce(arg2);
         // Fast path: both INTEGER - skip blessedId check, getNumber()
         if (arg1.type == RuntimeScalarType.INTEGER && arg2.type == RuntimeScalarType.INTEGER) {
             return getScalarBoolean(compareIntegers(arg1, arg2) == 0);
@@ -397,6 +408,8 @@ public class CompareOperators {
      * @return A RuntimeScalar representing a boolean value (true if arg1 != arg2).
      */
     public static RuntimeScalar notEqualTo(RuntimeScalar arg1, RuntimeScalar arg2) {
+        arg1 = RuntimeScalar.fetchTiedOnce(arg1);
+        arg2 = RuntimeScalar.fetchTiedOnce(arg2);
         // Fast path: both INTEGER - skip blessedId check, getNumber()
         if (arg1.type == RuntimeScalarType.INTEGER && arg2.type == RuntimeScalarType.INTEGER) {
             return getScalarBoolean(compareIntegers(arg1, arg2) != 0);
@@ -440,6 +453,8 @@ public class CompareOperators {
      * @return A RuntimeScalar representing an integer (-1, 0, 1) based on comparison.
      */
     public static RuntimeScalar spaceship(RuntimeScalar arg1, RuntimeScalar arg2) {
+        arg1 = RuntimeScalar.fetchTiedOnce(arg1);
+        arg2 = RuntimeScalar.fetchTiedOnce(arg2);
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);

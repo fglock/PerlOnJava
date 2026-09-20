@@ -1129,26 +1129,41 @@ public class IOOperator {
             return scalarFalse;
         }
 
-        StringBuilder sb = new StringBuilder();
-        String separator = OutputFieldSeparator.getInternalOFS(); // fetch $, (internal copy, not affected by aliasing)
         String newline = OutputRecordSeparator.getInternalORS();  // fetch $\ (internal copy, not affected by aliasing)
         boolean first = true;
 
-        // Iterate through elements and append them with the separator
-        for (RuntimeBase element : runtimeList.elements) {
-            if (!first) {
-                sb.append(separator);
-            }
-            sb.append(element.toString());
-            first = false;
-        }
-
-        // Append the newline character
-        sb.append(newline);
-
         try {
-            // Write the content to the file handle
-            return fh.write(sb.toString());
+            StringBuilder output = new StringBuilder();
+            RuntimeScalar result = scalarTrue;
+            for (RuntimeBase element : runtimeList.elements) {
+                if (!first) {
+                    // $, is fetched between arguments, not before the first one.
+                    // When it is tied, FETCH may itself write to this handle;
+                    // flush the preceding argument first. Keep ordinary print
+                    // calls as one write so PerlIO layer callback lifecycles
+                    // remain unchanged.
+                    RuntimeScalar separator = getGlobalVariable("main::,");
+                    if (separator.type == RuntimeScalarType.TIED_SCALAR) {
+                        if (!output.isEmpty()) {
+                            result = fh.write(output.toString());
+                            // A tied $, may print from FETCH.  Make the preceding
+                            // argument observable before that re-entrant write.
+                            fh.flush();
+                            output.setLength(0);
+                        }
+                        output.append(separator.toString());
+                    } else {
+                        output.append(OutputFieldSeparator.getInternalOFS());
+                    }
+                }
+                output.append(element.toString());
+                first = false;
+            }
+
+            // Append the newline character
+            output.append(newline);
+            result = fh.write(output.toString());
+            return result;
         } catch (java.nio.channels.NonWritableChannelException e) {
             // Writing to a read-only filehandle (opened with "<")
             getGlobalVariable("main::!").set("Bad file descriptor");

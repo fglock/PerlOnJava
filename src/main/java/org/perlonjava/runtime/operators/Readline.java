@@ -21,9 +21,28 @@ public class Readline {
         // diagnostic state. Save the compiler-provided source spelling before
         // that resolution and attach it to the resulting IO below.
         String sourceName = RuntimeIO.getLastReadlineHandleName();
+        // A tied scalar supplies the actual filehandle object through FETCH.
+        // Resolve it once before either overload dispatch or IO extraction.
+        fileHandle = RuntimeScalar.fetchTiedOnce(fileHandle);
         if (fileHandle == null || fileHandle.type == RuntimeScalarType.UNDEF) {
             RuntimeIO.setLastAccessedHandle(null);
         }
+
+        // `<>` has precedence over the generic `*{}` conversion used while
+        // extracting a RuntimeIO.  Calling getRuntimeIO first would wrongly
+        // dispatch `*{}` (or emit an unopened-filehandle warning) for an
+        // object that explicitly overloads readline.
+        int blessId = RuntimeScalarType.blessedId(fileHandle);
+        if (blessId < 0) {
+            OverloadContext overloadCtx = OverloadContext.prepare(blessId);
+            if (overloadCtx != null) {
+                RuntimeScalar result = overloadCtx.tryOverload("(<>", new RuntimeArray(fileHandle));
+                if (result != null) {
+                    return result;
+                }
+            }
+        }
+
         RuntimeIO fh;
         if (fileHandle != null && fileHandle.isString()) {
             String name = NameNormalizer.normalizeVariableName(fileHandle.toString(), "main");
@@ -37,18 +56,6 @@ public class Readline {
         }
 
         if (fh == null) {
-            // Check for <> overload before warning about unopened filehandle
-            int blessId = RuntimeScalarType.blessedId(fileHandle);
-            if (blessId < 0) {
-                OverloadContext overloadCtx = OverloadContext.prepare(blessId);
-                if (overloadCtx != null) {
-                    RuntimeScalar result = overloadCtx.tryOverload("(<>", new RuntimeArray(fileHandle));
-                    if (result != null) {
-                        return result;
-                    }
-                }
-            }
-
             // DATA exists as a special handle even in a source file that has no
             // __DATA__ section.  Perl returns undef silently in that case;
             // treating it as an ordinary unopened handle emits a spurious
