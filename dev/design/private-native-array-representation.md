@@ -223,6 +223,20 @@ JVM disassembly confirms carrier `setWord` reachability at
 `/tmp/jperl_private_native_array_loop_temporaries_disassemble_retry_20260920.log`.
 It still does not prove array ownership transfer or closure-spanning state.
 
+The 2026-09-20 ordinary-bound checkpoint accepts `0 .. $#source` for a
+write-only fresh private destination when `source` is distinct from the
+carrier. This deliberately records no initialized-prefix fact, so it cannot
+permit a carrier read. The system-Perl, JVM, and interpreter oracle passes at
+`/tmp/prove_private_native_array_ordinary_bound_perl_20260920.log`,
+`/tmp/jperl_private_native_array_ordinary_bound_jvm_20260920.log`, and
+`/tmp/jperl_private_native_array_ordinary_bound_interpreter_20260920.log`;
+its immutable full gate passed in 3m 43s at
+`/tmp/make_private_native_array_ordinary_bound_20260920.log`. Minimal JVM
+bytecode records carrier `setWord` at
+`/tmp/private_native_array_ordinary_bound_disassemble_20260920.log`.
+The same shape remains unselected inside a closure because carrier slots are
+currently method-local, so closure carrier lifetime is the next boundary.
+
 ### Exact resume steps
 
 1. Inspect active benchmark/test processes and their worktrees; wait for all

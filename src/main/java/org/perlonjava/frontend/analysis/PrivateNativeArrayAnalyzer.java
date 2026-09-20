@@ -163,8 +163,12 @@ public final class PrivateNativeArrayAnalyzer {
         // A complete preceding 0..N initializer is the only fact that makes
         // $#array an initialized native-read boundary.  A direct write past N
         // could make $#array expose a hole, so reject it before codegen.
-        if (lastIndex == null || initializedThrough < 0 || maxInitializedIndex > initializedThrough) return null;
-        return new LoopRange(initializedThrough, lastIndex);
+        if (lastIndex != null) {
+            if (initializedThrough < 0 || maxInitializedIndex > initializedThrough) return null;
+            return new LoopRange(initializedThrough, lastIndex);
+        }
+        if (ordinaryArrayLastIndex(range.right, candidate)) return new LoopRange(-1, null);
+        return null;
     }
 
     private static OperatorNode privateLastIndex(Node node, String candidate) {
@@ -175,6 +179,16 @@ public final class PrivateNativeArrayAnalyzer {
         if (operand instanceof OperatorNode array && "@".equals(array.operator)
                 && array.operand instanceof IdentifierNode identifier && candidate.equals(identifier.name)) return lastIndex;
         return null;
+    }
+
+    private static boolean ordinaryArrayLastIndex(Node node, String candidate) {
+        node = unwrapSingletonList(node);
+        if (!(node instanceof OperatorNode lastIndex) || !"$#".equals(lastIndex.operator)) return false;
+        Node operand = unwrapSingletonList(lastIndex.operand);
+        if (operand instanceof IdentifierNode identifier) return !candidate.equals(identifier.name);
+        return operand instanceof OperatorNode array && "@".equals(array.operator)
+                && array.operand instanceof IdentifierNode identifier
+                && !candidate.equals(identifier.name);
     }
 
     private static int maxInitializedIndex(Set<Integer> initializedIndexes) {
@@ -209,7 +223,7 @@ public final class PrivateNativeArrayAnalyzer {
             return true;
         }
         if (isLoopTemporary(node, temporaryNames)) return true;
-        if (initializedThrough >= lastIndex
+        if (lastIndex >= 0 && initializedThrough >= lastIndex
                 && isLoopArrayElement(node, candidate, indexName, indexOccurrences)) return true;
         // A distinct lexical array may supply a native-word input to a private
         // destination. The emitter guards that ordinary source at runtime and

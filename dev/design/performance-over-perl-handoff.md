@@ -94,6 +94,14 @@ full gate pass; the gate completed in 4m 09s at
 minimal disassembly records carrier `setWord`. Ownership transfer and closure
 capture remain required before this can select the representative Life kernel.
 
+The following ordinary-bound checkpoint admits a write-only `0 .. $#source`
+loop for a fresh private destination and records no carrier-read fact from that
+bound. It passes system Perl, JVM, interpreter, and the 3m43s immutable full
+gate at `/tmp/make_private_native_array_ordinary_bound_20260920.log`; minimal
+bytecode reaches carrier `setWord`. The representative closure remains
+ordinary because a carrier is still a method-local JVM slot. The next proof
+must model closure-spanning carrier storage and one-way materialization.
+
 The native-array effort is now at a safe code checkpoint: commit `d863f4a09`
 adds phase-one, compiler-inert proof scaffolding and its five Java unit tests.
 It recognizes only `my @a = ()`-equivalent empty declarations followed by
