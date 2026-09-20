@@ -28,6 +28,9 @@ priorities and future plans.
 - Reset embedded-script readline state between top-level programs and include
   the nested-class fixture required by the standalone unit-test corpus.
 
+- Preserve literal exclamation marks in multiline `-e` arguments when Windows
+  dispatches a child `jperl` process without invoking its batch launcher.
+
 - Improve Perl-compatible compiler diagnostics for unterminated quoted strings
   and here-document delimiters.
 
