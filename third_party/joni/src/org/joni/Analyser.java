@@ -70,6 +70,7 @@ import org.joni.exception.ValueException;
 
 final class Analyser extends Parser {
     private boolean perlReverseFoldClassSequenceExpanded;
+    private boolean logicalOptimizationLengths;
     private Map<Node, Integer> recursiveHeadResults;
     private Map<Node, Integer> recursiveNonHeadResults;
 
@@ -191,7 +192,8 @@ final class Analyser extends Parser {
         // unreachable. The ordinary optimizer assumes every concatenated node
         // remains mandatory, so its minimum-length and literal-search filters
         // are not sound for these programs.
-        if (Config.OPTIMIZE && !env.hasControlVerb
+        if (Config.OPTIMIZE
+                && (!env.hasControlVerb || onlyAcceptCommitControlVerbs(root))
                 && !env.hasOptimizationBlockingCallout
                 && !regex.hasDynamicOptions) {
             setOptimizedInfoFromTree(root);
@@ -3783,10 +3785,25 @@ final class Analyser extends Parser {
             NodeOptInfo nopt = new NodeOptInfo();
             nenv.copy(oenv);
             ListNode lin = (ListNode)node;
+            boolean exactClosed = false;
             do {
                 optimizeNodeLeft(lin.value, nopt, nenv);
-                nenv.mmd.add(nopt.length);
-                opt.concatLeftNode(nopt, enc);
+                if (nopt.acceptBoundary) {
+                    if (!exactClosed) opt.concatLeftNode(nopt, enc);
+                    opt.acceptBoundary = true;
+                    break;
+                }
+                if (exactClosed) {
+                    opt.length.add(nopt.length);
+                } else {
+                    nenv.mmd.add(nopt.length);
+                    opt.concatLeftNode(nopt, enc);
+                }
+                if (nopt.exactBoundary) {
+                    exactClosed = true;
+                    opt.exactBoundary = true;
+                    opt.exb.reachEnd = true;
+                }
             } while ((lin = lin.tail) != null);
             break;
         }
@@ -3808,6 +3825,16 @@ final class Analyser extends Parser {
         case NodeType.STR: {
             StringNode sn = (StringNode)node;
 
+            if (sn instanceof ControlVerbNode control) {
+                opt.length.set(0, 0);
+                if (control.kind == ControlVerbNode.Kind.ACCEPT) {
+                    opt.acceptBoundary = true;
+                } else if (control.kind == ControlVerbNode.Kind.COMMIT) {
+                    opt.exactBoundary = true;
+                }
+                break;
+            }
+
             if (sn instanceof CalloutNode callout && callout.dynamic) {
                 opt.length.set(0, MinMaxLen.INFINITE_DISTANCE);
                 break;
@@ -3818,7 +3845,7 @@ final class Analyser extends Parser {
                 break;
             }
 
-            int slen = sn.length();
+            int slen = logicalOptimizationLengths ? sn.length(enc) : sn.length();
 
             if (!sn.isAmbig()) {
                 opt.exb.concatStr(sn.bytes, sn.p, sn.end, sn.isRaw(), enc);
@@ -3874,13 +3901,13 @@ final class Analyser extends Parser {
                 // A host wide-scalar codec may encode that one logical value
                 // in more bytes than Encoding.maxLength(), so its distance to
                 // a following exact literal must remain unbounded.
-                opt.length.set(enc.minLength(),
-                        env.syntax.wideScalarCodec == null
+                opt.length.set(enc.minLength(), logicalOptimizationLengths ? 1
+                        : env.syntax.wideScalarCodec == null
                                 ? enc.maxLength()
                                 : MinMaxLen.INFINITE_DISTANCE);
             } else if (cc.mbuf != null || cc.isNot()) {
                 int min = enc.minLength();
-                int max = enc.maxLength();
+                int max = logicalOptimizationLengths ? 1 : enc.maxLength();
                 addPositiveSingletonClassMap(cc, opt.map);
                 opt.requiredTailMap.copy(opt.map);
                 opt.length.set(min, max);
@@ -3899,7 +3926,7 @@ final class Analyser extends Parser {
 
         case NodeType.CTYPE: {
             int min;
-            int max = enc.maxLength();
+            int max = logicalOptimizationLengths ? 1 : enc.maxLength();
             if (max == 1) {
                 min = 1;
                 CTypeNode cn = (CTypeNode)node;
@@ -3931,7 +3958,7 @@ final class Analyser extends Parser {
         }
 
         case NodeType.CANY: {
-            opt.length.set(enc.minLength(), enc.maxLength());
+            opt.length.set(enc.minLength(), logicalOptimizationLengths ? 1 : enc.maxLength());
             break;
         }
 
@@ -4030,6 +4057,10 @@ final class Analyser extends Parser {
                 break;
             }
             optimizeNodeLeft(qn.target, nopt, oenv);
+            if (nopt.acceptBoundary) {
+                opt.copy(nopt);
+                break;
+            }
             if (/*qn.lower == 0 &&*/ isRepeatInfinite(qn.upper)) {
                 if (oenv.mmd.max == 0 && qn.target.getType() == NodeType.CANY) {
                     if (isMultiline(oenv.options)) {
@@ -4055,6 +4086,7 @@ final class Analyser extends Parser {
                     if (qn.lower != qn.upper) {
                         opt.exb.reachEnd = false;
                         opt.exm.reachEnd = false;
+                        opt.hasVariableQuantifier = true;
                     }
                     if (qn.lower > 1) {
                         opt.exm.reachEnd = false;
@@ -4187,6 +4219,9 @@ final class Analyser extends Parser {
         oenv.mmd.clear(); // ??
 
         optimizeNodeLeft(node, opt, oenv);
+        if (regex.perlOnJavaSyntax) {
+            setLogicalOptimizationInfo(node, oenv);
+        }
         regex.minimumLength = opt.length.min;
 
         regex.anchor = opt.anchor.leftAnchor & (AnchorType.BEGIN_BUF |
@@ -4203,14 +4238,24 @@ final class Analyser extends Parser {
 
         if ((regex.anchor & (AnchorType.END_BUF | AnchorType.SEMI_END_BUF)) != 0) {
             regex.anchorDmin = opt.length.min;
-            regex.anchorDmax = opt.length.max;
+        regex.anchorDmax = opt.length.max;
         }
+
+        regex.optimizationBeginLine = regex.perlOnJavaSyntax
+                && containsBeginLineAnchor(node);
 
         if (!perlReverseFoldClassSequenceExpanded
                 && (opt.exb.length > 0 || opt.exm.length > 0)) {
-            opt.exb.select(opt.exm, enc);
+            if (opt.hasVariableQuantifier && opt.exm.length > 0) {
+                opt.exb.copy(opt.exm);
+            } else {
+                opt.exb.select(opt.exm, enc);
+            }
             if (opt.map.value > 0 && opt.exb.compare(opt.map) > 0) {
                 // !goto set_map;!
+                if (isAhoCorasickExactTree(node)) {
+                    regex.optimizationStartClass = "AHOCORASICK-EXACT";
+                }
                 regex.setOptimizeMapInfo(opt.map);
                 regex.setSubAnchor(opt.map.anchor);
             } else {
@@ -4222,6 +4267,9 @@ final class Analyser extends Parser {
             }
         } else if (!perlReverseFoldClassSequenceExpanded && opt.map.value > 0) {
             // !set_map:!
+            if (isAhoCorasickExactTree(node)) {
+                regex.optimizationStartClass = "AHOCORASICK-EXACT";
+            }
             regex.setOptimizeMapInfo(opt.map);
             regex.setSubAnchor(opt.map.anchor);
         } else {
@@ -4234,6 +4282,175 @@ final class Analyser extends Parser {
         if (Config.DEBUG_COMPILE || Config.DEBUG_MATCH) {
             Config.log.println(regex.optimizeInfoToString());
         }
+    }
+
+    private void setLogicalOptimizationInfo(Node node, OptEnvironment oenv) {
+        boolean previous = logicalOptimizationLengths;
+        Map<EncloseNode, OptimizationState> saved = new IdentityHashMap<>();
+        saveOptimizationState(node, saved);
+        logicalOptimizationLengths = true;
+        NodeOptInfo logical = new NodeOptInfo();
+        try {
+            optimizeNodeLeft(node, logical, oenv);
+        } finally {
+            logicalOptimizationLengths = previous;
+            restoreOptimizationState(saved);
+        }
+
+        if (!perlReverseFoldClassSequenceExpanded
+                && (logical.exb.length > 0 || logical.exm.length > 0)) {
+            if (logical.hasVariableQuantifier && logical.exm.length > 0) {
+                logical.exb.copy(logical.exm);
+            } else {
+                logical.exb.select(logical.exm, enc);
+            }
+            if (logical.map.value > 0 && logical.exb.compare(logical.map) > 0) {
+                regex.logicalDMin = logical.map.mmd.min;
+                regex.logicalDMax = logical.map.mmd.max;
+            } else {
+                regex.logicalDMin = logical.exb.mmd.min;
+                regex.logicalDMax = logical.exb.mmd.max;
+            }
+            regex.logicalOptimizationAvailable = true;
+        } else if (!perlReverseFoldClassSequenceExpanded
+                && logical.map.value > 0) {
+            regex.logicalDMin = logical.map.mmd.min;
+            regex.logicalDMax = logical.map.mmd.max;
+            regex.logicalOptimizationAvailable = true;
+        }
+    }
+
+    private record OptimizationState(int optCount, int minLength, int maxLength,
+                                     boolean minFixed, boolean maxFixed) {}
+
+    private void saveOptimizationState(Node node,
+                                       Map<EncloseNode, OptimizationState> saved) {
+        if (node instanceof EncloseNode enclose) {
+            saved.put(enclose, new OptimizationState(enclose.optCount,
+                    enclose.minLength, enclose.maxLength,
+                    enclose.isMinFixed(), enclose.isMaxFixed()));
+            saveOptimizationState(enclose.target, saved);
+            return;
+        }
+        switch (node.getType()) {
+        case NodeType.LIST, NodeType.ALT -> {
+            ListNode list = (ListNode) node;
+            do {
+                saveOptimizationState(list.value, saved);
+            } while ((list = list.tail) != null);
+        }
+        case NodeType.QTFR -> saveOptimizationState(
+                ((QuantifierNode) node).target, saved);
+        case NodeType.ANCHOR -> {
+            AnchorNode anchor = (AnchorNode) node;
+            if (anchor.target != null) saveOptimizationState(anchor.target, saved);
+        }
+        default -> { }
+        }
+    }
+
+    private void restoreOptimizationState(Map<EncloseNode, OptimizationState> saved) {
+        for (Map.Entry<EncloseNode, OptimizationState> entry : saved.entrySet()) {
+            EncloseNode enclose = entry.getKey();
+            OptimizationState state = entry.getValue();
+            enclose.optCount = state.optCount();
+            enclose.minLength = state.minLength();
+            enclose.maxLength = state.maxLength();
+            if (state.minFixed()) enclose.setMinFixed();
+            else enclose.clearMinFixed();
+            if (state.maxFixed()) enclose.setMaxFixed();
+            else enclose.clearMaxFixed();
+        }
+    }
+
+    private boolean containsBeginLineAnchor(Node node) {
+        if (node instanceof AnchorNode anchor
+                && (anchor.type & AnchorType.BEGIN_LINE) != 0) {
+            return true;
+        }
+        return switch (node.getType()) {
+        case NodeType.LIST, NodeType.ALT -> {
+            ListNode list = (ListNode) node;
+            boolean found = false;
+            do {
+                found |= containsBeginLineAnchor(list.value);
+            } while (!found && (list = list.tail) != null);
+            yield found;
+        }
+        case NodeType.QTFR -> containsBeginLineAnchor(((QuantifierNode) node).target);
+        case NodeType.ENCLOSE -> containsBeginLineAnchor(((EncloseNode) node).target);
+        default -> false;
+        };
+    }
+
+    /** Recognize fixed-string alternations reported by Perl as an
+     * AHOCORASICK-EXACT start class. The native map remains the matcher
+     * implementation; this only preserves the public optimization label. */
+    private boolean isAhoCorasickExactTree(Node node) {
+        List<StringNode> strings = new ArrayList<>();
+        if (!collectAhoStrings(node, strings) || strings.size() < 2) return false;
+        int common = strings.get(0).length(enc);
+        for (int index = 1; index < strings.size(); index++) {
+            common = Math.min(common, strings.get(index).length(enc));
+            while (common > 0 && !samePrefix(strings.get(0), strings.get(index), common)) {
+                common--;
+            }
+        }
+        if (common != 0) return false;
+        for (StringNode string : strings) {
+            if (string.isAmbig() || string.length(enc) < 3) return false;
+        }
+        return true;
+    }
+
+    private boolean onlyAcceptCommitControlVerbs(Node node) {
+        if (node instanceof ControlVerbNode control) {
+            return control.kind == ControlVerbNode.Kind.ACCEPT
+                    || control.kind == ControlVerbNode.Kind.COMMIT;
+        }
+        return switch (node.getType()) {
+        case NodeType.LIST, NodeType.ALT -> {
+            ListNode list = (ListNode) node;
+            boolean allowed = true;
+            do {
+                allowed &= onlyAcceptCommitControlVerbs(list.value);
+            } while (allowed && (list = list.tail) != null);
+            yield allowed;
+        }
+        case NodeType.QTFR -> onlyAcceptCommitControlVerbs(
+                ((QuantifierNode) node).target);
+        case NodeType.ENCLOSE -> onlyAcceptCommitControlVerbs(
+                ((EncloseNode) node).target);
+        case NodeType.ANCHOR -> {
+            AnchorNode anchor = (AnchorNode) node;
+            yield anchor.target == null || onlyAcceptCommitControlVerbs(anchor.target);
+        }
+        default -> true;
+        };
+    }
+
+    private boolean collectAhoStrings(Node node, List<StringNode> strings) {
+        if (node.getType() == NodeType.ALT) {
+            ListNode list = (ListNode)node;
+            do {
+                if (!collectAhoStrings(list.value, strings)) return false;
+            } while ((list = list.tail) != null);
+            return true;
+        }
+        if (node instanceof StringNode string && !(string instanceof ControlVerbNode)) {
+            strings.add(string);
+            return true;
+        }
+        return false;
+    }
+
+    private boolean samePrefix(StringNode first, StringNode second, int length) {
+        for (int index = 0; index < length; index++) {
+            if (first.bytes[first.p + index] != second.bytes[second.p + index]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

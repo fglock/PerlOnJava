@@ -31,6 +31,9 @@ final class NodeOptInfo {
     final OptMapInfo requiredTailMap = new OptMapInfo();    /* last mandatory map */
     boolean hasZeroLowerQuantifier;
     boolean hasOptimisticCalloutBoundary;
+    boolean exactBoundary;
+    boolean acceptBoundary;
+    boolean hasVariableQuantifier;
 
     public void setBoundNode(MinMaxLen mmd) {
         exb.mmd.copy(mmd);
@@ -49,6 +52,9 @@ final class NodeOptInfo {
         requiredTailMap.clear();
         hasZeroLowerQuantifier = false;
         hasOptimisticCalloutBoundary = false;
+        exactBoundary = false;
+        acceptBoundary = false;
+        hasVariableQuantifier = false;
     }
 
     public void copy(NodeOptInfo other) {
@@ -61,6 +67,9 @@ final class NodeOptInfo {
         requiredTailMap.copy(other.requiredTailMap);
         hasZeroLowerQuantifier = other.hasZeroLowerQuantifier;
         hasOptimisticCalloutBoundary = other.hasOptimisticCalloutBoundary;
+        exactBoundary = other.exactBoundary;
+        acceptBoundary = other.acceptBoundary;
+        hasVariableQuantifier = other.hasVariableQuantifier;
     }
 
     public void concatLeftNode(NodeOptInfo other, Encoding enc) {
@@ -126,6 +135,9 @@ final class NodeOptInfo {
         }
         hasZeroLowerQuantifier |= other.hasZeroLowerQuantifier;
         hasOptimisticCalloutBoundary |= other.hasOptimisticCalloutBoundary;
+        exactBoundary |= other.exactBoundary;
+        acceptBoundary |= other.acceptBoundary;
+        hasVariableQuantifier |= other.hasVariableQuantifier;
         length.add(other.length);
     }
 
@@ -138,6 +150,9 @@ final class NodeOptInfo {
         requiredTailMap.altMerge(other.requiredTailMap, env.enc);
         hasZeroLowerQuantifier &= other.hasZeroLowerQuantifier;
         hasOptimisticCalloutBoundary |= other.hasOptimisticCalloutBoundary;
+        exactBoundary &= other.exactBoundary;
+        acceptBoundary &= other.acceptBoundary;
+        hasVariableQuantifier &= other.hasVariableQuantifier;
         length.altMerge(other.length);
     }
 

@@ -133,6 +133,7 @@ public final class Regex {
 
     final Encoding enc;
     final boolean perlSyntax;
+    final boolean perlOnJavaSyntax;
     int options;
     int userOptions;
     Object userObject;
@@ -163,6 +164,11 @@ public final class Regex {
     boolean exactReachEnd;                  /* selected exact reaches pattern end */
     boolean characterMapOptimization;       /* selected search uses the char map */
     boolean syntheticStartClass;            /* retained start map beside floating exact */
+    String optimizationStartClass;          /* Perl-visible start-class name */
+    boolean optimizationBeginLine;           /* Perl-visible SBOL metadata */
+    int logicalDMin;
+    int logicalDMax;
+    boolean logicalOptimizationAvailable;
 
     byte[][]templates;                      /* fixed pattern strings not embedded in bytecode */
     int templateNum;
@@ -276,6 +282,7 @@ public final class Regex {
 
         this.enc = enc;
         this.perlSyntax = syntax.op2OptionPerl();
+        this.perlOnJavaSyntax = "PERLONJAVA".equals(syntax.name);
         this.wideScalarCodec = syntax.wideScalarCodec;
         this.characterPropertyResolver = syntax.characterPropertyResolver;
         this.options = option;
@@ -677,6 +684,10 @@ public final class Regex {
         exactReachEnd = false;
         characterMapOptimization = false;
         syntheticStartClass = false;
+        optimizationStartClass = null;
+        optimizationBeginLine = false;
+        logicalDMin = logicalDMax = 0;
+        logicalOptimizationAvailable = false;
         requiredTailMap = null;
     }
 
@@ -767,11 +778,18 @@ public final class Regex {
         private final String searchAlgorithm;
         private final boolean characterMap;
         private final boolean captures;
+        private final String startClass;
+        private final int encodingMaxLength;
+        private final int logicalMinimumOffset;
+        private final Integer logicalMaximumOffset;
+        private final boolean controlVerbs;
 
         private OptimizationInfo(int minimumLength, String exact,
                 int minimumOffset, Integer maximumOffset, boolean exactReachEnd,
                 int anchor, int subAnchor, String searchAlgorithm,
-                boolean characterMap, boolean captures) {
+                boolean characterMap, boolean captures, String startClass,
+                int encodingMaxLength, int logicalMinimumOffset,
+                Integer logicalMaximumOffset, boolean controlVerbs) {
             this.minimumLength = minimumLength;
             this.exact = exact;
             this.minimumOffset = minimumOffset;
@@ -782,6 +800,11 @@ public final class Regex {
             this.searchAlgorithm = searchAlgorithm;
             this.characterMap = characterMap;
             this.captures = captures;
+            this.startClass = startClass;
+            this.encodingMaxLength = encodingMaxLength;
+            this.logicalMinimumOffset = logicalMinimumOffset;
+            this.logicalMaximumOffset = logicalMaximumOffset;
+            this.controlVerbs = controlVerbs;
         }
 
         public int minimumLength() { return minimumLength; }
@@ -794,11 +817,20 @@ public final class Regex {
         public String searchAlgorithm() { return searchAlgorithm; }
         public boolean characterMap() { return characterMap; }
         public boolean hasCaptures() { return captures; }
+        public String startClass() { return startClass; }
+        public Integer maximumOffsetInCharacters() {
+            return logicalMaximumOffset;
+        }
+        public boolean hasControlVerbs() { return controlVerbs; }
         public boolean beginBufferAnchored() {
             return (anchor & AnchorType.BEGIN_BUF) != 0;
         }
         public boolean beginPositionAnchored() {
             return (anchor & AnchorType.BEGIN_POSITION) != 0;
+        }
+        public boolean beginLineAnchored() {
+            return (anchor & AnchorType.BEGIN_LINE) != 0
+                    || (subAnchor & AnchorType.BEGIN_LINE) != 0;
         }
         public boolean implicitSingleLineAnchor() {
             return (anchor & AnchorType.ANYCHAR_STAR) != 0;
@@ -817,10 +849,18 @@ public final class Regex {
             exactString = new String(exact, exactP, exactEnd - exactP, charset);
         }
         Integer maximumOffset = dMax == MinMaxLen.INFINITE_DISTANCE ? null : dMax;
+        int reportedSubAnchor = subAnchor;
+        if (perlOnJavaSyntax && optimizationBeginLine) {
+            reportedSubAnchor |= AnchorType.BEGIN_LINE;
+        }
         return new OptimizationInfo(minimumLength, exactString, dMin,
-                maximumOffset, exactReachEnd, anchor, subAnchor,
+                maximumOffset, exactReachEnd, anchor, reportedSubAnchor,
                 forward == null ? "NONE" : forward.getName(),
-                characterMapOptimization, numMem > 0);
+                characterMapOptimization, numMem > 0, optimizationStartClass,
+                enc.maxLength(), logicalDMin,
+                logicalOptimizationAvailable
+                        ? (logicalDMax == MinMaxLen.INFINITE_DISTANCE ? null : logicalDMax)
+                        : maximumOffset, hasControlVerb);
     }
 
     /** Stable textual view of the actual compiled native instruction stream. */

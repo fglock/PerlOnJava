@@ -335,10 +335,14 @@ public class Re extends PerlModuleBase {
         result.put("skip", perlBoolean(false));
         result.put("implicit", perlBoolean(
                 info.implicitSingleLineAnchor() || info.implicitMultiLineAnchor()));
-        result.put("anchor SBOL", perlBoolean(info.implicitMultiLineAnchor()));
+        result.put("anchor SBOL", perlBoolean(
+                info.implicitMultiLineAnchor() || info.beginLineAnchored()));
         result.put("anchor MBOL", perlBoolean(info.implicitSingleLineAnchor()));
         result.put("anchor GPOS", perlBoolean(info.beginPositionAnchored()));
         result.put("joni search", new RuntimeScalar(info.searchAlgorithm()));
+        if (info.startClass() != null) {
+            result.put("stclass", new RuntimeScalar(info.startClass()));
+        }
 
         String exact = info.exact();
         if (exact == null) {
@@ -348,17 +352,19 @@ public class Re extends PerlModuleBase {
             // when the literal follows a mandatory prefix.  Only an exact
             // whose offset can vary is "floating"; offset zero is not a
             // requirement for the anchored classification.
-            boolean anchored = info.maximumOffset() != null
-                    && info.minimumOffset() == info.maximumOffset();
+            Integer maximumOffset = info.maximumOffsetInCharacters();
+            boolean anchored = maximumOffset != null
+                    && info.minimumOffset() == maximumOffset;
             String kind = anchored ? "anchored" : "floating";
             result.put(kind, new RuntimeScalar(exact));
             result.put(kind + " min offset", new RuntimeScalar(info.minimumOffset()));
-            if (info.maximumOffset() != null) {
-                result.put(kind + " max offset", new RuntimeScalar(info.maximumOffset()));
+            if (maximumOffset != null) {
+                result.put(kind + " max offset", new RuntimeScalar(maximumOffset));
             }
             result.put("checking", new RuntimeScalar(kind));
             boolean isAll = anchored && info.minimumOffset() == 0
                     && info.exactReachEnd() && !info.hasCaptures()
+                    && !info.hasControlVerbs()
                     && exact.codePointCount(0, exact.length()) == info.minimumLength();
             result.put("isall", perlBoolean(isAll));
         }
