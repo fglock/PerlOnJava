@@ -201,8 +201,7 @@ public class TieOperators {
                 if (scalar.type == TIED_SCALAR && scalar.value instanceof TieScalar tieScalar) {
                     TieScalar.tiedUntie(scalar);
                     RuntimeScalar previousValue = tieScalar.getPreviousValue();
-                    scalar.type = previousValue.type;
-                    scalar.value = previousValue.value;
+                    scalar.copyPayloadFrom(previousValue);
                     tieScalar.releaseTiedObject();
                 }
                 return scalarTrue;

@@ -581,8 +581,7 @@ public class Storable extends PerlModuleBase {
     }
 
     private static void copyScalarPayload(RuntimeScalar target, RuntimeScalar source) {
-        target.type = source.type;
-        target.value = source.value;
+        target.copyPayloadFrom(source);
         target.utf8UncheckedOctets = source.utf8UncheckedOctets;
     }
 

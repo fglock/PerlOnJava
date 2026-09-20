@@ -167,16 +167,14 @@ public class Clone extends PerlModuleBase {
             default -> {
                 // Scalar values (int, double, string, undef) — just copy
                 RuntimeScalar copy = new RuntimeScalar();
-                copy.type = scalar.type;
-                copy.value = scalar.value;
+                copy.copyPayloadFrom(scalar);
                 yield copy;
             }
         };
     }
 
     private static void copyScalarPayload(RuntimeScalar target, RuntimeScalar source) {
-        target.type = source.type;
-        target.value = source.value;
+        target.copyPayloadFrom(source);
         target.utf8UncheckedOctets = source.utf8UncheckedOctets;
     }
 }

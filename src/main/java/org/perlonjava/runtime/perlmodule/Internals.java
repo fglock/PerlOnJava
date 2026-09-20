@@ -815,8 +815,7 @@ public class Internals extends PerlModuleBase {
                     } else if (scalar.type == RuntimeScalarType.READONLY_SCALAR
                             && scalar.value instanceof RuntimeScalar inner) {
                         // Unwrap READONLY_SCALAR (covers plain scalars and reference scalars)
-                        scalar.type = inner.type;
-                        scalar.value = inner.value;
+                        scalar.copyPayloadFrom(inner);
                     } else if (scalar.type == RuntimeScalarType.REFERENCE
                             && scalar.value instanceof RuntimeScalar targetScalar) {
                         // Prototype-style call: variable is \$x, targetScalar is $x.
@@ -826,8 +825,7 @@ public class Internals extends PerlModuleBase {
                         if (!(targetScalar instanceof RuntimeScalarReadOnly)
                                 && targetScalar.type == RuntimeScalarType.READONLY_SCALAR
                                 && targetScalar.value instanceof RuntimeScalar inner) {
-                            targetScalar.type = inner.type;
-                            targetScalar.value = inner.value;
+                            targetScalar.copyPayloadFrom(inner);
                         }
                     }
                 }

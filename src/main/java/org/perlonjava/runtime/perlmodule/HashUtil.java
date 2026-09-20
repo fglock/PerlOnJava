@@ -218,8 +218,7 @@ public class HashUtil extends PerlModuleBase {
             for (RuntimeScalar scalar : hash.elements.values()) {
                 if (scalar.type == RuntimeScalarType.READONLY_SCALAR
                         && scalar.value instanceof RuntimeScalar inner) {
-                    scalar.type = inner.type;
-                    scalar.value = inner.value;
+                    scalar.copyPayloadFrom(inner);
                 }
             }
             hash.type = RuntimeHash.PLAIN_HASH;
@@ -241,8 +240,7 @@ public class HashUtil extends PerlModuleBase {
             return;
         }
         RuntimeScalar inner = new RuntimeScalar();
-        inner.type = scalar.type;
-        inner.value = scalar.value;
+        inner.copyPayloadFrom(scalar);
         scalar.type = RuntimeScalarType.READONLY_SCALAR;
         scalar.value = inner;
     }

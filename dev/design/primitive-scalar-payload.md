@@ -131,6 +131,8 @@ method-body specialization is part of this phase.
   - Made payload copying an explicit scalar API and migrated scalar
     constructors, overload result copies, and regex callback rollback to it.
     Added focused rollback coverage for an active deferred payload.
+  - Migrated external Storable/Clone copies, readonly unwrap/wrap paths, and
+    scalar `untie` restoration to the public payload-copy API.
   - Full immutable `make` passed in 4m01s at
     `/tmp/make_primitive_scalar_payload_getters_clean_20260920.log`, and
     again in 3m55s at
@@ -149,11 +151,13 @@ method-body specialization is part of this phase.
     in 3m51s at `/tmp/make_primitive_scalar_payload_tied_copy_20260920.log`.
     The scalar snapshot migration also passed in 3m47s at
     `/tmp/make_primitive_scalar_payload_regex_snapshot_20260920.log`.
+    The external-copy migration also passed in 3m57s at
+    `/tmp/make_primitive_scalar_payload_external_copy_20260920.log`.
 
 ## Next steps
 
-1. Migrate the remaining external serialization, clone, bytecode snapshot,
-   and package-cache copy paths to the now-public canonical payload-copy API.
+1. Migrate the remaining bytecode snapshot, package-cache, special-variable,
+   and glob slot copy paths to the canonical payload-copy API.
 2. Define the smallest storage-state transition that cannot expose a stale
    public object payload across either backend.
 3. Add focused regression coverage for every newly migrated observation
