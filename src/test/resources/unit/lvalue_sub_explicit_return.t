@@ -82,4 +82,16 @@ use Test::More;
         'mixed lvalue return preserves array argument aliases');
 }
 
+{
+    our $indexed_lvalue_return = 'before';
+    sub indexed_lvalue_sub :lvalue { $indexed_lvalue_return }
+    sub indexed_lvalue_sub_return :lvalue { return $indexed_lvalue_return }
+
+    ${\(indexed_lvalue_sub())[0]} = 'implicit';
+    is($indexed_lvalue_return, 'implicit', 'indexed implicit lvalue return preserves its alias');
+
+    ${\(indexed_lvalue_sub_return())[0]} = 'explicit';
+    is($indexed_lvalue_return, 'explicit', 'indexed explicit lvalue return preserves its alias');
+}
+
 done_testing;

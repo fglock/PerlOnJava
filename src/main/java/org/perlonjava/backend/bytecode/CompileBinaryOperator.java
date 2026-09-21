@@ -396,9 +396,10 @@ public class CompileBinaryOperator {
 
             // Handle ListNode case: (expr)[indices] like (caller(0))[0] or (1,2,3,4)[1,2]
             // Use proper list slice semantics: evaluate list, then slice by indices
-            if (node.left instanceof ListNode listNode) {
-                // Compile the list in LIST context
-                bytecodeCompiler.compileNode(listNode, -1, RuntimeContextType.LIST);
+            if (node.left instanceof ListNode
+                    || node.left instanceof BinaryOperatorNode call && call.operator.equals("(")) {
+                // Compile the list-producing expression in LIST context.
+                bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.LIST);
                 int listReg = bytecodeCompiler.lastResultReg;
 
                 // Compile the indices in LIST context

@@ -410,9 +410,10 @@ public class RuntimeList extends RuntimeBase {
     public RuntimeList getSlice(RuntimeList indices) {
         RuntimeList result = new RuntimeList();
         
-        // First, flatten this list to get actual elements
-        RuntimeArray flattened = new RuntimeArray();
-        this.addToArray(flattened);
+        // Flatten without materializing into an array.  addToArray() consumes
+        // the list and copies scalar cells, while a list slice must retain the
+        // original cells so an lvalue subroutine result remains assignable.
+        RuntimeList flattened = this.flattenElements();
         int size = flattened.size();
         
         // If the source list is empty, return empty list for any indices
@@ -427,7 +428,7 @@ public class RuntimeList extends RuntimeBase {
                 index = size + index;
             }
             if (index >= 0 && index < size) {
-                result.elements.add(flattened.get(index));
+                result.elements.add(flattened.elements.get(index));
             } else {
                 result.elements.add(new RuntimeScalar());  // undef for out of bounds
             }
