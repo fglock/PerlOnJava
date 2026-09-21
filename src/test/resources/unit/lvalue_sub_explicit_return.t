@@ -73,4 +73,13 @@ use Test::More;
         'lvalue array return preserves argument aliases');
 }
 
+{
+    our ($lvalue_prefix_return, @lvalue_mixed_return) = ('half', qw(one two three));
+    sub lvalue_mixed_return :lvalue { $lvalue_prefix_return, @lvalue_mixed_return }
+    sub replace_mixed { $_[2] = 'free' }
+    replace_mixed(lvalue_mixed_return());
+    is(join(' ', @lvalue_mixed_return), 'one free three',
+        'mixed lvalue return preserves array argument aliases');
+}
+
 done_testing;

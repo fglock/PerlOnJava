@@ -983,6 +983,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // rvalue returns.
             result = new RuntimeList();
             result.elements.addAll(array.elements);
+        } else if (!copyReferenceScalars && retVal instanceof RuntimeList list) {
+            result = new RuntimeList();
+            for (RuntimeBase value : list.elements) {
+                if (value instanceof RuntimeArray array) {
+                    result.elements.addAll(array.elements);
+                } else {
+                    result.elements.add(value);
+                }
+            }
         } else {
             result = retVal.getList();
         }

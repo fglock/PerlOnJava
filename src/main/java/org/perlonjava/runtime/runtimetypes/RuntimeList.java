@@ -209,6 +209,20 @@ public class RuntimeList extends RuntimeBase {
         }
     }
 
+    /**
+     * Expands a dynamic-context list member returned by an {@code :lvalue}
+     * subroutine without detaching array element cells.  Ordinary array list
+     * conversion copies scalars so rvalue callers cannot alias them; an lvalue
+     * return must instead expose the original cells to its caller.
+     */
+    public void addFlattenedLvalue(RuntimeBase value) {
+        if (value instanceof RuntimeArray array) {
+            elements.addAll(array.elements);
+        } else {
+            addFlattened(value);
+        }
+    }
+
     public void add(RuntimeScalar value) {
         this.elements.add(value);
     }
