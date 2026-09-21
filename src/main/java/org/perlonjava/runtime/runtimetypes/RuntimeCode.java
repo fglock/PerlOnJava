@@ -958,7 +958,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static RuntimeList returnList(RuntimeBase retVal, int callContext, boolean copyReferenceScalars) {
+        requireWritableLvalueReturn(callContext, retVal);
         if (retVal == null) {
+            requireNonemptyLvalueReturn(callContext, null);
             return new RuntimeList();
         }
         if (callContext == RuntimeContextType.LVALUE_LIST
@@ -968,6 +970,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return result;
         }
         RuntimeList result = retVal.getList();
+        requireNonemptyLvalueReturn(callContext, result);
         if (copyReferenceScalars && callContext == RuntimeContextType.LIST) {
             RuntimeList copied = copyReturnedReferenceScalars(result, callContext, true, false);
             if (copied != result) {
@@ -977,6 +980,37 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         transferReturnedIoOwners(retVal, result);
         return result;
+    }
+
+    /**
+     * A scalar lvalue call needs a returned slot. Perl permits an empty
+     * lvalue-sub return only when the caller requested a list lvalue.
+     */
+    private static void requireNonemptyLvalueReturn(int callContext, RuntimeList result) {
+        if (callContext == RuntimeContextType.LVALUE
+                && (result == null || result.elements.isEmpty())) {
+            throw new PerlCompilerException("Can't return undef from lvalue subroutine");
+        }
+    }
+
+    /**
+     * Literal and constant scalars cannot be the target returned by an lvalue
+     * subroutine. Unlike undef, they are invalid in both scalar and list
+     * lvalue contexts.
+     */
+    private static void requireWritableLvalueReturn(int callContext, RuntimeBase value) {
+        if ((callContext != RuntimeContextType.LVALUE
+                && callContext != RuntimeContextType.LVALUE_LIST)
+                || !(value instanceof RuntimeScalarReadOnly scalar)) {
+            return;
+        }
+        if (scalar.type == RuntimeScalarType.UNDEF) {
+            if (callContext == RuntimeContextType.LVALUE) {
+                throw new PerlCompilerException("Can't return undef from lvalue subroutine");
+            }
+            return;
+        }
+        throw new PerlCompilerException("Can't return a readonly value from lvalue subroutine");
     }
 
     /**
