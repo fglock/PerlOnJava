@@ -5229,6 +5229,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     private void warnImprecisionForAutoOperation(int delta) {
         if (this.type != INTEGER && this.type != DOUBLE) return;
         if (imprecisionAutoWarningCount >= 2) return;
+        // INTEGER normally carries an exact Integer, Long, or BigInteger.
+        // Its unit-step operation is exact even beyond the IEEE-754 precision
+        // boundary; only the exceptional integer-tagged Double payload needs
+        // the NV warning probe below.
+        if (this.type == INTEGER && !(this.value instanceof Double)) return;
         double numericValue = getDouble();
         if (!Double.isFinite(numericValue) || numericValue + delta != numericValue) return;
         BigInteger exact = getSignedBigint();
