@@ -27,6 +27,14 @@ import java.util.*;
  */
 public class ErrnoHash extends AbstractMap<String, RuntimeScalar> {
 
+    /** Mark the bundled Errno implementation as loaded when %! is actually used. */
+    public static void markLoaded() {
+        RuntimeHash inc = GlobalVariable.getGlobalHash("main::INC");
+        inc.elements.putIfAbsent("Errno.pm", new RuntimeScalar("builtin"));
+        RuntimeHash stash = GlobalVariable.getGlobalHash("Errno::");
+        stash.elements.putIfAbsent("ENOENT", new RuntimeScalar(2));
+    }
+
     // Platform-specific errno constant table: name -> value
     private static final Map<String, Integer> ERRNO_TABLE;
 
@@ -55,6 +63,7 @@ public class ErrnoHash extends AbstractMap<String, RuntimeScalar> {
      */
     @Override
     public RuntimeScalar get(Object key) {
+        markLoaded();
         if (!(key instanceof String name)) return new RuntimeScalar("");
         Integer errval = ERRNO_TABLE.get(name);
         if (errval == null) return new RuntimeScalar("");
@@ -70,6 +79,7 @@ public class ErrnoHash extends AbstractMap<String, RuntimeScalar> {
      */
     @Override
     public boolean containsKey(Object key) {
+        markLoaded();
         return key instanceof String && ERRNO_TABLE.containsKey(key);
     }
 
@@ -79,6 +89,7 @@ public class ErrnoHash extends AbstractMap<String, RuntimeScalar> {
      */
     @Override
     public Set<Entry<String, RuntimeScalar>> entrySet() {
+        markLoaded();
         Set<Entry<String, RuntimeScalar>> entries = new HashSet<>();
         int currentErrno = getCurrentErrno();
         for (Map.Entry<String, Integer> e : ERRNO_TABLE.entrySet()) {
@@ -96,6 +107,7 @@ public class ErrnoHash extends AbstractMap<String, RuntimeScalar> {
      */
     @Override
     public int size() {
+        markLoaded();
         return ERRNO_TABLE.size();
     }
 

@@ -485,11 +485,12 @@ sub run_single_test {
     my $private_test_root;
     my $private_test_dir;
     my $test_name;
+    my $test_launcher = $abs_jperl;
     if ($^O ne 'MSWin32' && $^O ne 'cygwin' && $^O ne 'msys'
-            && $test_file =~ m{(?:^|/)perl5_t/t/japh/abigail\.t$}) {
+            && $test_file =~ m{(?:^|/)perl5_t/t/(?:japh/abigail|op/magic)\.t$}) {
         my $source_test_dir = File::Spec->rel2abs('perl5_t/t', $old_dir);
         my $source_lib_dir = File::Spec->rel2abs('perl5_t/lib', $old_dir);
-        $private_test_root = tempdir('perlonjava-abigail-XXXXXX', TMPDIR => 1, CLEANUP => 1);
+        $private_test_root = tempdir('perlonjava-core-XXXXXX', TMPDIR => 1, CLEANUP => 1);
         $private_test_dir = File::Spec->catdir($private_test_root, 't');
         mkdir $private_test_dir or die "Cannot create private test cwd: $!";
         symlink $source_lib_dir, File::Spec->catfile($private_test_root, 'lib')
@@ -522,7 +523,7 @@ int main(int argc, char **argv) {
         fputs("PERLONJAVA_SHEBANG_TARGET is not set\n", stderr);
         return 127;
     }
-    argv[0] = (char *)target;
+    argv[0] = (char *)"./perl";
     execv(target, argv);
     perror("execv selected jperl");
     return 127;
@@ -535,7 +536,10 @@ NATIVE_LAUNCHER
         unlink $launcher_source;
         $ENV{PERLONJAVA_SHEBANG_TARGET} = $abs_jperl;
         $local_test_dir = $private_test_dir;
-        $test_name = 'japh/abigail.t';
+        $test_name = $test_file =~ m{/op/magic\.t$} ? 'op/magic.t' : 'japh/abigail.t';
+        # Run through the private ./perl name so Perl's $^X matches the
+        # interpreter path expected by shebang-sensitive core tests.
+        $test_launcher = './perl';
     }
 
     chdir($local_test_dir) if $local_test_dir && -d $local_test_dir;
@@ -588,7 +592,7 @@ NATIVE_LAUNCHER
             exec {
                 $timeout_program
             } $timeout_program, '--foreground', '-k', "${kill_after}s",
-                "${test_timeout}s", $abs_jperl, $test_name;
+                "${test_timeout}s", $test_launcher, $test_name;
             die "Cannot execute $timeout_program: $!";
         }
 
@@ -616,7 +620,7 @@ NATIVE_LAUNCHER
         $output_captured = 1;
     } else {
         # Fallback to alarm-based timeout
-        my $cmd = join(' ', $abs_jperl, $test_name)
+        my $cmd = join(' ', $test_launcher, $test_name)
             . " < $devnull 2>&1";
         eval {
             local $SIG{ALRM} = sub { die "timeout\n" };

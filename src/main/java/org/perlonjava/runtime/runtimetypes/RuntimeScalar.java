@@ -4033,6 +4033,21 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public static void scopeExitCleanup(RuntimeScalar scalar) {
         if (scalar == null) return;
 
+        // ${^LAST_FH} is tied to the lexical handle that performed the last
+        // tell/read.  A lexical coercible glob must stop being observable once
+        // that lexical leaves scope, even though the named STDOUT glob remains
+        // alive in the symbol table.
+        if ((scalar.type == RuntimeScalarType.GLOB || scalar.type == RuntimeScalarType.GLOBREFERENCE)
+                && scalar.value instanceof RuntimeGlob glob
+                && RuntimeIO.getLastAccessedHandle() != null) {
+            RuntimeIO last = RuntimeIO.getLastAccessedHandle();
+            if ((glob.globName != null && glob.globName.equals(last.globName))
+                    || (glob.IO != null && glob.IO.value == last)) {
+                RuntimeIO.setLastAccessedHandle(null);
+                RuntimeIO.setLastReadlineHandleName(null);
+            }
+        }
+
         if (scalar.referencedByScalarReference
                 && scalar.localBindingExists
                 && scalar.captureCount == 0) {

@@ -743,6 +743,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeScalar get(String key) {
 
+        if (isEnvironmentHash) key = normalizeEnvironmentKey(key);
+
         if (type == TIED_HASH) {
             return get(new RuntimeScalar(key));
         }
@@ -767,6 +769,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeHashProxyEntry with lvalue pre-initialized if the key exists.
      */
     public RuntimeScalar getForLocal(String key) {
+        if (isEnvironmentHash) key = normalizeEnvironmentKey(key);
         if (type == TIED_HASH) {
             return new RuntimeTiedHashProxyEntry(this, new RuntimeScalar(key));
         }
@@ -793,7 +796,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         if (type == TIED_HASH) {
             return new RuntimeTiedHashProxyEntry(this, keyScalar);
         }
-        String key = keyScalar.toString();
+        String key = isEnvironmentHash ? normalizeEnvironmentKey(keyScalar.toString()) : keyScalar.toString();
         boolean isByteKey = keyScalar.type == BYTE_STRING;
         RuntimeHashProxyEntry proxy = new RuntimeHashProxyEntry(this, key, isByteKey);
         RuntimeScalar existing = elements.get(key);
@@ -822,7 +825,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         return switch (this.type) {
             case PLAIN_HASH, AUTOVIVIFY_HASH, READONLY_HASH -> {
                 // Note: get() does not autovivify the hash, so we don't call AutovivificationHash.vivify()
-                String key = keyScalar.toString();
+                String key = isEnvironmentHash ? normalizeEnvironmentKey(keyScalar.toString()) : keyScalar.toString();
                 var value = elements.get(key);
                 if (value != null) {
                     // Update the key's byte/UTF-8 flag to match the accessing key's type.
@@ -882,6 +885,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeScalar indicating whether the key exists.
      */
     public RuntimeScalar exists(RuntimeScalar key) {
+        if (isEnvironmentHash) key = new RuntimeScalar(normalizeEnvironmentKey(key.toString()));
         return switch (type) {
             case PLAIN_HASH, READONLY_HASH -> new RuntimeScalar(elements.containsKey(key.toString()));
             // exists does not create its final key, but it does materialize a
@@ -897,6 +901,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     public RuntimeScalar exists(String key) {
+        if (isEnvironmentHash) key = normalizeEnvironmentKey(key);
         return switch (type) {
             case PLAIN_HASH, READONLY_HASH -> new RuntimeScalar(elements.containsKey(key));
             case AUTOVIVIFY_HASH -> {
@@ -909,7 +914,18 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     public boolean containsKey(String key) {
+        if (isEnvironmentHash) key = normalizeEnvironmentKey(key);
         return elements.containsKey(key);
+    }
+
+    private String normalizeEnvironmentKey(String key) {
+        if (key == null) return null;
+        boolean wide = key.codePoints().anyMatch(codePoint -> codePoint > 0xff);
+        if (!wide) return key;
+        WarnDie.warn(new RuntimeScalar("Wide character in setenv\n"),
+                RuntimeScalarCache.scalarEmptyString);
+        byte[] bytes = key.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        return new String(bytes, java.nio.charset.StandardCharsets.ISO_8859_1);
     }
 
     /**
@@ -919,6 +935,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return The value associated with the deleted key, or an empty RuntimeScalar if the key did not exist.
      */
     public RuntimeScalar delete(RuntimeScalar key) {
+        if (isEnvironmentHash) key = new RuntimeScalar(normalizeEnvironmentKey(key.toString()));
         return switch (type) {
             case PLAIN_HASH -> {
                 String k = key.toString();

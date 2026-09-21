@@ -222,6 +222,11 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     if (RuntimeIO.getLastAccessedHandle() == null) {
                         yield scalarUndef;
                     }
+                    RuntimeScalar source = RuntimeIO.getLastAccessedScalar();
+                    if (source != null && source.value instanceof RuntimeGlob sourceGlob
+                            && sourceGlob.isSlotSnapshot()) {
+                        yield source.createReference();
+                    }
                     String globName = RuntimeIO.getLastAccessedHandle().globName;
                     if (globName != null) {
                         // Extract package and name from the glob name

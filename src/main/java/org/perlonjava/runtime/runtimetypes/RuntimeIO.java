@@ -72,6 +72,7 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  */
 public class RuntimeIO extends RuntimeScalar {
     private static final ThreadLocal<RuntimeIO> lastReadlineHandle = new ThreadLocal<>();
+    private static final ThreadLocal<RuntimeScalar> lastAccessedScalar = new ThreadLocal<>();
 
     // Platform-specific ENOTEMPTY (only errno that differs across platforms in handleIOException)
     private static final int ENOTEMPTY;
@@ -107,7 +108,12 @@ public class RuntimeIO extends RuntimeScalar {
     public static RuntimeIO getStdin() { return PerlRuntime.current().ioStdin; }
     public static void setStdin(RuntimeIO io) { PerlRuntime.current().replaceStandardHandle("main::STDIN", io); }
     public static RuntimeIO getLastAccessedHandle() { return PerlRuntime.current().ioLastAccessedHandle; }
-    public static void setLastAccessedHandle(RuntimeIO io) { PerlRuntime.current().ioLastAccessedHandle = io; }
+    public static void setLastAccessedHandle(RuntimeIO io) {
+        PerlRuntime.current().ioLastAccessedHandle = io;
+        if (io == null) lastAccessedScalar.remove();
+    }
+    public static RuntimeScalar getLastAccessedScalar() { return lastAccessedScalar.get(); }
+    public static void setLastAccessedScalar(RuntimeScalar scalar) { lastAccessedScalar.set(scalar); }
     public static String getLastReadlineHandleName() { return PerlRuntime.current().ioLastReadlineHandleName; }
     public static RuntimeIO getLastReadlineHandle() { return lastReadlineHandle.get(); }
     public static void setLastReadlineHandle(RuntimeIO io) { lastReadlineHandle.set(io); }

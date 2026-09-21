@@ -1648,6 +1648,19 @@ public class GlobalVariable {
                 }
             }
         }
+        if (key.equals("main::!") || key.equals("!")) {
+            // ErrnoHash supplies the platform constants directly.  Record the
+            // bundled module as loaded without executing Errno.pm, whose Perl
+            // bootstrap consults %! while it is being initialized.
+            RuntimeHash inc = getGlobalHash("main::INC");
+            if (!inc.elements.containsKey("Errno.pm")) {
+                inc.elements.put("Errno.pm", new RuntimeScalar("builtin"));
+            }
+            RuntimeHash errnoStash = getGlobalHash("Errno::");
+            if (errnoStash.elements.isEmpty()) {
+                errnoStash.elements.put("ENOENT", new RuntimeScalar(2));
+            }
+        }
         RuntimeHash var = globalHashes.get(key);
         if (var == null) {
             boolean isStash = key.endsWith("::");
@@ -1702,7 +1715,7 @@ public class GlobalVariable {
         // Merely mentioning *! can create an ordinary HASH slot before the
         // magic %! value is requested (notably in `*Y = *!`).  Upgrade that
         // pre-existing slot in place so aliases see Errno's populated hash.
-        if (key.equals("main::!") && !(var.elements instanceof ErrnoHash)) {
+        if ((key.equals("main::!") || key.equals("!")) && !(var.elements instanceof ErrnoHash)) {
             var.elements = new ErrnoHash();
         }
         return var;
@@ -1710,7 +1723,7 @@ public class GlobalVariable {
 
     private static RuntimeHash createNamedGlobalHash(java.util.List<String> names) {
         RuntimeHash hash = new RuntimeHash();
-        if (names.contains("main::!")) {
+        if (names.contains("main::!") || names.contains("!")) {
             // %! is magic but remains absent from the stash until first
             // accessed. A glob alias of %! must materialize the same magic.
             hash.elements = new ErrnoHash();

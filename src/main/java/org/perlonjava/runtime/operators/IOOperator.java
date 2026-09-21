@@ -573,6 +573,12 @@ public class IOOperator {
 
         // Update the last accessed filehandle
         RuntimeIO.setLastAccessedHandle(fh);
+        if (MyVarCleanupStack.isRegistered(fileHandle)
+                && fileHandle.value instanceof RuntimeGlob glob && glob.isSlotSnapshot()) {
+            RuntimeIO.setLastAccessedScalar(fileHandle);
+        } else {
+            RuntimeIO.setLastAccessedScalar(null);
+        }
 
         if (fh instanceof TieHandle tieHandle) {
             return TieHandle.tiedTell(tieHandle);

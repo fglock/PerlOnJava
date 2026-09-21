@@ -130,6 +130,8 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         } else if (originalVariable instanceof OperatingSystemVariable) {
             newLocal = new OperatingSystemVariable("");
             newLocal.set(RuntimeScalarCache.scalarUndef);
+        } else if (originalVariable instanceof ProgramNameVariable) {
+            newLocal = new ProgramNameVariable();
         } else {
             newLocal = new GlobalRuntimeScalar(fullName);
         }

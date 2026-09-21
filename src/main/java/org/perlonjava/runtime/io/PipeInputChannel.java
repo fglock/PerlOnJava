@@ -6,11 +6,13 @@ import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 import org.perlonjava.runtime.operators.SystemOperator;
 
 import java.io.*;
 import java.nio.charset.Charset;
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -32,6 +34,8 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
  * which is more faithful to how Perl's I/O system actually works.
  */
 public class PipeInputChannel implements IOHandle {
+    private record EnvironmentByteMapping(byte[] processBytes, byte[] perlBytes) {}
+    private final List<EnvironmentByteMapping> environmentByteMappings = new ArrayList<>();
     @Override
     public ThreadInheritancePolicy threadInheritancePolicy() {
         return ThreadInheritancePolicy.SHARED_TRANSPORT;
@@ -178,13 +182,11 @@ public class PipeInputChannel implements IOHandle {
                 return new RuntimeScalar("");
             }
 
-            // Convert bytes to string where each char represents a byte
-            StringBuilder sb = new StringBuilder(bytesRead);
-            for (int i = 0; i < bytesRead; i++) {
-                sb.append((char) (buffer[i] & 0xFF));
+            byte[] data = java.util.Arrays.copyOf(buffer, bytesRead);
+            for (EnvironmentByteMapping mapping : environmentByteMappings) {
+                data = replaceBytes(data, mapping.processBytes(), mapping.perlBytes());
             }
-
-            return new RuntimeScalar(sb.toString());
+            return new RuntimeScalar(data);
         } catch (IOException e) {
             isEOF = true;
             checkProcessExit();
@@ -381,13 +383,7 @@ public class PipeInputChannel implements IOHandle {
                 return new RuntimeScalar("");
             }
 
-            // Convert bytes to string representation
-            StringBuilder result = new StringBuilder(bytesRead);
-            for (int i = 0; i < bytesRead; i++) {
-                result.append((char) (buffer[i] & 0xFF));
-            }
-
-            return new RuntimeScalar(result.toString());
+            return new RuntimeScalar(java.util.Arrays.copyOf(buffer, bytesRead));
         } catch (IOException e) {
             getGlobalVariable("main::!").set(e.getMessage());
             return new RuntimeScalar(); // undef
@@ -409,13 +405,53 @@ public class PipeInputChannel implements IOHandle {
             pbEnv.clear();
 
             for (java.util.Map.Entry<String, RuntimeScalar> entry : envHash.elements.entrySet()) {
-                String value = entry.getValue().toString();
+                String value = environmentStringForProcess(entry.getValue());
                 if (value != null) {
-                    pbEnv.put(entry.getKey(), value);
+                    RuntimeScalar perlKey = new RuntimeScalar(
+                            entry.getKey().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
+                    String processKey = environmentStringForProcess(perlKey);
+                    pbEnv.put(processKey, value);
+                    addEnvironmentMapping(processKey.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                            entry.getKey().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
+                    addEnvironmentMapping(value.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                            entry.getValue().toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
                 }
             }
         } catch (Exception e) {
             // If we can't access %ENV, just use inherited environment (default behavior)
         }
+    }
+
+    private static String environmentStringForProcess(RuntimeScalar scalar) {
+        if (scalar == null || !scalar.getDefinedBoolean()) return null;
+        if (scalar.type == RuntimeScalarType.BYTE_STRING) {
+            return new String(scalar.toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1),
+                    java.nio.charset.StandardCharsets.UTF_8);
+        }
+        return scalar.toString();
+    }
+
+    private void addEnvironmentMapping(byte[] processBytes, byte[] perlBytes) {
+        if (!java.util.Arrays.equals(processBytes, perlBytes)) {
+            environmentByteMappings.add(new EnvironmentByteMapping(processBytes, perlBytes));
+        }
+    }
+
+    private static byte[] replaceBytes(byte[] source, byte[] needle, byte[] replacement) {
+        if (needle.length == 0 || needle.length > source.length) return source;
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream(source.length);
+        for (int i = 0; i < source.length;) {
+            boolean match = i + needle.length <= source.length;
+            for (int j = 0; match && j < needle.length; j++) {
+                match = source[i + j] == needle[j];
+            }
+            if (match) {
+                out.writeBytes(replacement);
+                i += needle.length;
+            } else {
+                out.write(source[i++]);
+            }
+        }
+        return out.toByteArray();
     }
 }

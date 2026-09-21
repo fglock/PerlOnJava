@@ -1,6 +1,9 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
+
+import org.perlonjava.runtime.operators.WarnDie;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.BYTE_STRING;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.STRING;
@@ -27,6 +30,10 @@ final class RuntimeEnvironmentScalar extends RuntimeScalar {
             }
             if (latin1) {
                 type = BYTE_STRING;
+            } else {
+                WarnDie.warn(new RuntimeScalar("Wide character in setenv\n"),
+                        RuntimeScalarCache.scalarEmptyString);
+                super.set(new RuntimeScalar(string.getBytes(StandardCharsets.UTF_8)));
             }
         } else if (type != RuntimeScalarType.UNDEF && type < RuntimeScalarType.GLOB) {
             value = toString();

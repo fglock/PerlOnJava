@@ -10,6 +10,9 @@ priorities and future plans.
   including mutation errors, refaliasing, closure ordering, redefinition
   diagnostics, and both execution backends.
 
+- Restore core `op/magic.t` compatibility for wide `$0`, `%ENV` byte handling,
+  `${^LAST_FH}`, and subprocess output decoding.
+
 - Restore core compatibility for grouped subroutine prototypes, nested
   heredocs in interpolations, tied-handle EOF/write dispatch, and byte-string
   UTF-8 evals.
