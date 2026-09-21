@@ -6087,7 +6087,8 @@ public class BytecodeCompiler implements Visitor {
             emitReg(rd);
             emitReg(arrayReg);
             lastResultReg = rd;
-        } else if (currentCallContext == RuntimeContextType.RUNTIME) {
+        } else if (currentCallContext == RuntimeContextType.RUNTIME
+                || currentCallContext == RuntimeContextType.LVALUE) {
             int rd = allocateOutputRegister();
             emit(Opcodes.SCALAR_IF_WANTARRAY);
             emitReg(rd);

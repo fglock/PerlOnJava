@@ -47,4 +47,12 @@ use Test::More;
         'literal lvalue return is rejected');
 }
 
+{
+    our @aggregate_lvalue_return = (2, 3);
+    sub aggregate_lvalue_return :lvalue { @aggregate_lvalue_return }
+
+    is(aggregate_lvalue_return->${\sub { return $_[0] }}, 2,
+        'aggregate lvalue return observes scalar context through a dereference');
+}
+
 done_testing;
