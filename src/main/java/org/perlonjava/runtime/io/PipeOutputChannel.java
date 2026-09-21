@@ -360,7 +360,7 @@ public class PipeOutputChannel implements IOHandle {
             }
             joinPump(outputThread);
             joinPump(errorThread);
-            getGlobalVariable("main::?").set(exitCode << 8);
+            getGlobalVariable("main::?").set(ProcessExitStatus.toPerlWaitStatus(exitCode));
 
             isClosed = true;
             return exitCode == 0 ? scalarTrue : scalarFalse;

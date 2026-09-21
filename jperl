@@ -24,10 +24,12 @@ export PERLONJAVA_EXECUTABLE="$JPERL_PATH"
 
 # Use the native shim for $^X when it has been built. This allows a generated
 # '#!$^X' script to run directly on platforms that reject chained scripts.
-if [ -x "$SCRIPT_DIR/jperl-exec" ]; then
-    export PERLONJAVA_SHEBANG_EXECUTABLE="$SCRIPT_DIR/jperl-exec"
-elif [ -x "$SCRIPT_DIR/target/jperl-exec" ]; then
-    export PERLONJAVA_SHEBANG_EXECUTABLE="$SCRIPT_DIR/target/jperl-exec"
+if [ -z "${PERLONJAVA_SHEBANG_EXECUTABLE+x}" ]; then
+    if [ -x "$SCRIPT_DIR/jperl-exec" ]; then
+        export PERLONJAVA_SHEBANG_EXECUTABLE="$SCRIPT_DIR/jperl-exec"
+    elif [ -x "$SCRIPT_DIR/target/jperl-exec" ]; then
+        export PERLONJAVA_SHEBANG_EXECUTABLE="$SCRIPT_DIR/target/jperl-exec"
+    fi
 fi
 
 # Java 24 virtual threads are the default Perl ithread carrier. Preserve an

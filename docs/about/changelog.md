@@ -11,7 +11,8 @@ priorities and future plans.
   diagnostics, and both execution backends.
 
 - Restore core `op/magic.t` compatibility for wide `$0`, `%ENV` byte handling,
-  `${^LAST_FH}`, `%!` void-context autoloading, and subprocess output decoding.
+  `${^LAST_FH}`, `%!` void-context autoloading, signal wait statuses, shebang
+  `$^X` identity, and subprocess output decoding.
 
 - Restore core compatibility for grouped subroutine prototypes, nested
   heredocs in interpolations, tied-handle EOF/write dispatch, and byte-string

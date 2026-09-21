@@ -534,7 +534,16 @@ NATIVE_LAUNCHER
         system(@compiler, $launcher_source, '-o', $launcher_binary) == 0
             or die "Cannot build private native jperl trampoline\n";
         unlink $launcher_source;
-        $ENV{PERLONJAVA_SHEBANG_TARGET} = $abs_jperl;
+        # Invoke the native shim directly when available so it can preserve
+        # the trampoline's argv[0] (./perl) as $^X. The shell launcher alone
+        # replaces that identity before the JVM starts.
+        my $native_shebang = File::Spec->catfile($old_dir, 'target', 'jperl-exec');
+        if (-x $native_shebang) {
+            $ENV{PERLONJAVA_EXECUTABLE} = $abs_jperl;
+            $ENV{PERLONJAVA_SHEBANG_TARGET} = $native_shebang;
+        } else {
+            $ENV{PERLONJAVA_SHEBANG_TARGET} = $abs_jperl;
+        }
         $local_test_dir = $private_test_dir;
         $test_name = $test_file =~ m{/op/magic\.t$} ? 'op/magic.t' : 'japh/abigail.t';
         # Run through the private ./perl name so Perl's $^X matches the

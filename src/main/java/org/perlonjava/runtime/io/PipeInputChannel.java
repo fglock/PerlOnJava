@@ -219,7 +219,7 @@ public class PipeInputChannel implements IOHandle {
                 }
             }
 
-            getGlobalVariable("main::?").set(exitCode << 8);
+            getGlobalVariable("main::?").set(ProcessExitStatus.toPerlWaitStatus(exitCode));
 
             isEOF = true;
             return exitCode == 0 ? scalarTrue : scalarFalse;
@@ -281,7 +281,7 @@ public class PipeInputChannel implements IOHandle {
                 Thread.currentThread().interrupt();
                 exitCode = -1;
             }
-            getGlobalVariable("main::?").set(exitCode << 8);
+            getGlobalVariable("main::?").set(ProcessExitStatus.toPerlWaitStatus(exitCode));
         }
     }
 
