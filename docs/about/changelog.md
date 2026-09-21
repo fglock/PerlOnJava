@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Reuse the current runtime state across JVM subroutine and method call boundaries, reducing repeated dispatch bookkeeping in call-heavy workloads.
+
 - Restore `op/tie.t` compatibility for tied scalar operators, output
   separators, deferred aliases, glob copies, and tied hash iteration on both
   execution backends.
