@@ -10,6 +10,10 @@ priorities and future plans.
   including mutation errors, refaliasing, closure ordering, redefinition
   diagnostics, and both execution backends.
 
+- Restore core compatibility for grouped subroutine prototypes, nested
+  heredocs in interpolations, tied-handle EOF/write dispatch, and byte-string
+  UTF-8 evals.
+
 - Fix core compatibility gaps for UTF-8 eval sources, `lock &code` prototypes,
   nested `@ARGV` traversal, and in-place editing of existing backup files.
 

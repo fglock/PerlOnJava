@@ -1352,31 +1352,74 @@ public class Variable {
                     if (nextToken.type == LexerTokenType.IDENTIFIER) {
                         // This looks like <<IDENTIFIER - treat as heredoc in ${<<END} context
 
-                        // Get the identifier
-                        String identifier = nextToken.text;
-                        parser.tokenIndex = identifierIndex + 1;
+                        // A braced interpolation may queue multiple heredocs,
+                        // separated by semicolons: ${<<EOY; <<EOZ}.  Consume
+                        // the whole declaration list before the closing brace;
+                        // the bodies are processed later by the parent parser.
+                        String firstIdentifier = null;
+                        List<Node> heredocExpressions = new ArrayList<>();
+                        while (true) {
+                            String identifier = nextToken.text;
+                            if (firstIdentifier == null) firstIdentifier = identifier;
+                            parser.tokenIndex = identifierIndex + 1;
 
-                        // Create a heredoc node and add it to the queue for later processing
-                        OperatorNode heredocNode = new OperatorNode("HEREDOC", null, parser.tokenIndex);
-                        heredocNode.setAnnotation("identifier", identifier);
-                        heredocNode.setAnnotation("delimiter", "\""); // Default to double-quoted
-                        parser.getHeredocNodes().add(heredocNode);
+                            OperatorNode heredocNode = new OperatorNode("HEREDOC", null, parser.tokenIndex);
+                            heredocNode.setAnnotation("identifier", identifier);
+                            heredocNode.setAnnotation("delimiter", "\"");
+                            parser.getHeredocNodes().add(heredocNode);
+                            heredocExpressions.add(heredocNode);
 
-                        // Consume the closing brace
-                        if (!TokenUtils.peek(parser).text.equals("}")) {
-                            String message = "Can't find string terminator \"" + identifier
-                                    + "\" anywhere before EOF";
-                            if (parser.baseLineNumber > 0 && parser.baseSourceFileName != null) {
-                                throw new PerlCompilerException(message + " at " + parser.baseSourceFileName
-                                        + " line " + parser.sourceLineAt(heredocTokenIndex) + ".\n");
+                            if (TokenUtils.peek(parser).text.equals("}")) {
+                                TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+                                break;
                             }
-                            throw PerlCompilerException.withSourceLocation(
-                                    heredocTokenIndex, message, parser.ctx.errorUtil);
+                            if (!TokenUtils.peek(parser).text.equals(";")) {
+                                String message = "Can't find string terminator \"" + firstIdentifier
+                                        + "\" anywhere before EOF";
+                                if (parser.baseLineNumber > 0 && parser.baseSourceFileName != null) {
+                                    throw new PerlCompilerException(message + " at " + parser.baseSourceFileName
+                                            + " line " + parser.sourceLineAt(heredocTokenIndex) + ".\n");
+                                }
+                                throw PerlCompilerException.withSourceLocation(
+                                        heredocTokenIndex, message, parser.ctx.errorUtil);
+                            }
+                            TokenUtils.consume(parser, LexerTokenType.OPERATOR, ";");
+                            while (parser.tokenIndex < parser.tokens.size()
+                                    && parser.tokens.get(parser.tokenIndex).type == LexerTokenType.WHITESPACE) {
+                                parser.tokenIndex++;
+                            }
+                            if (!TokenUtils.peek(parser).text.equals("<")
+                                    && !TokenUtils.peek(parser).text.equals("<<")) {
+                                throw PerlCompilerException.withSourceLocation(
+                                        heredocTokenIndex, "Missing heredoc after ';'", parser.ctx.errorUtil);
+                            }
+                            if (TokenUtils.peek(parser).text.equals("<<")) {
+                                TokenUtils.consume(parser, LexerTokenType.OPERATOR, "<<");
+                            } else {
+                                TokenUtils.consume(parser, LexerTokenType.OPERATOR, "<");
+                                if (!TokenUtils.peek(parser).text.equals("<")) {
+                                    throw PerlCompilerException.withSourceLocation(
+                                            heredocTokenIndex, "Missing heredoc after ';'", parser.ctx.errorUtil);
+                                }
+                                TokenUtils.consume(parser, LexerTokenType.OPERATOR, "<");
+                            }
+                            identifierIndex = parser.tokenIndex;
+                            if (identifierIndex >= parser.tokens.size()
+                                    || parser.tokens.get(identifierIndex).type != LexerTokenType.IDENTIFIER) {
+                                throw PerlCompilerException.withSourceLocation(
+                                        heredocTokenIndex, "Missing heredoc identifier", parser.ctx.errorUtil);
+                            }
+                            nextToken = parser.tokens.get(identifierIndex);
                         }
-                        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
-                        // In ${<<END} context, this evaluates to empty string
-                        return new OperatorNode(sigil, new StringNode("", parser.tokenIndex), parser.tokenIndex);
+                        // Keep the queued heredocs in the expression so their
+                        // interpolated bodies execute when the parent string
+                        // is evaluated.  A single heredoc retains the ordinary
+                        // scalar shape; multiple declarations form a list.
+                        if (heredocExpressions.size() == 1) {
+                            return new OperatorNode(sigil, heredocExpressions.getFirst(), parser.tokenIndex);
+                        }
+                        return new ListNode(heredocExpressions, parser.tokenIndex);
                     }
                 }
             }

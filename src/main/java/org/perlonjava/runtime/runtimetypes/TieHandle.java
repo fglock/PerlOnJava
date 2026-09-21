@@ -175,6 +175,11 @@ public class TieHandle extends RuntimeIO {
         return tieHandle.tieCall("WRITE", data, length, offset);
     }
 
+    /** Writes to a tied handle without an explicit offset argument. */
+    public static RuntimeScalar tiedWrite(TieHandle tieHandle, RuntimeScalar data, RuntimeScalar length) {
+        return tieHandle.tieCall("WRITE", data, length);
+    }
+
     @Override
     public RuntimeScalar write(String data) {
         RuntimeIO.setLastWrittenHandle(this);

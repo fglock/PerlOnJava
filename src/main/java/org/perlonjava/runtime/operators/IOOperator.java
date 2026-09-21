@@ -1140,6 +1140,16 @@ public class IOOperator {
     public static RuntimeScalar print(RuntimeList runtimeList, RuntimeScalar fileHandle) {
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
+        for (RuntimeBase element : runtimeList.elements) {
+            if (element instanceof RuntimeScalar scalar
+                    && scalar.type == RuntimeScalarType.UNDEF) {
+                WarnDie.warnWithCategory(
+                        new RuntimeScalar("Use of uninitialized value in print"),
+                        RuntimeScalarCache.scalarEmptyString,
+                        "uninitialized");
+            }
+        }
+
         if (fh instanceof TieHandle tieHandle) {
             return TieHandle.tiedPrint(tieHandle, runtimeList);
         }
@@ -1213,10 +1223,19 @@ public class IOOperator {
     public static RuntimeScalar say(RuntimeList runtimeList, RuntimeScalar fileHandle) {
         RuntimeIO fh = fileHandle.getRuntimeIO();
         if (fh instanceof TieHandle tieHandle) {
-            RuntimeList args = new RuntimeList();
-            args.elements.addAll(runtimeList.elements);
-            args.elements.add(new RuntimeScalar("\n"));
-            return TieHandle.tiedPrint(tieHandle, args);
+            // Perl implements say on a tied handle as a localized print with
+            // $\ set to a newline.  The newline is not an extra PRINT
+            // argument; the tie implementation observes the localized
+            // separator instead.
+            RuntimeScalar outputSeparator = getGlobalVariable("main::\\");
+            int localLevel = DynamicVariableManager.getLocalLevel();
+            DynamicVariableManager.pushLocalVariable(outputSeparator);
+            outputSeparator.set("\n");
+            try {
+                return TieHandle.tiedPrint(tieHandle, runtimeList);
+            } finally {
+                DynamicVariableManager.popToLocalLevel(localLevel);
+            }
         }
 
         StringBuilder sb = new StringBuilder();
@@ -1275,10 +1294,13 @@ public class IOOperator {
             if (argless) {
                 RuntimeIO last = RuntimeIO.getLastAccessedHandle();
                 if (last != null) {
+                    if (last instanceof TieHandle tieHandle) {
+                        return TieHandle.tiedEof(tieHandle, new RuntimeList(new RuntimeScalar(0)));
+                    }
                     return last.eof();
                 }
                 // Perl's eof() defaults to ARGV if ${^LAST_FH} is unset
-                RuntimeIO argv = new RuntimeScalar("main::ARGV").getRuntimeIO();
+                RuntimeIO argv = GlobalVariable.getGlobalIO("main::ARGV").getRuntimeIO();
                 if (argv == null || argv.ioHandle == null || argv.ioHandle instanceof ClosedIOHandle) {
                     return scalarTrue;
                 }
@@ -1293,7 +1315,10 @@ public class IOOperator {
         }
 
         if (fh instanceof TieHandle tieHandle) {
-            return TieHandle.tiedEof(tieHandle, new RuntimeList());
+            // Bare `eof` is the zero-argument tied EOF form.  The parser
+            // dispatches parenthesized/explicit forms through the list
+            // overload, which supplies their corresponding flag.
+            return TieHandle.tiedEof(tieHandle, new RuntimeList(new RuntimeScalar(0)));
         }
 
         return fh.eof();
@@ -1303,14 +1328,28 @@ public class IOOperator {
         boolean argless = !fileHandle.getDefinedBoolean();
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
+        boolean explicitEmptyCall = runtimeList.size() == 1 && runtimeList.getFirst().getInt() == 2;
+        if (argless && (runtimeList.isEmpty() || explicitEmptyCall) && DiamondIO.hasActiveTraversal()) {
+            return DiamondIO.eof();
+        }
+
         // Handle undefined or invalid filehandle
         if (fh == null) {
             if (argless) {
+                RuntimeIO argv = GlobalVariable.getGlobalIO("main::ARGV").getRuntimeIO();
+                if (argv instanceof TieHandle tieHandle) {
+                    RuntimeList tiedArgs = runtimeList.isEmpty()
+                            ? new RuntimeList(new RuntimeScalar(0))
+                            : runtimeList;
+                    return TieHandle.tiedEof(tieHandle, tiedArgs);
+                }
                 RuntimeIO last = RuntimeIO.getLastAccessedHandle();
                 if (last != null) {
+                    if (last instanceof TieHandle tieHandle) {
+                        return TieHandle.tiedEof(tieHandle, new RuntimeList(new RuntimeScalar(0)));
+                    }
                     return last.eof();
                 }
-                RuntimeIO argv = new RuntimeScalar("main::ARGV").getRuntimeIO();
                 if (argv == null || argv.ioHandle == null || argv.ioHandle instanceof ClosedIOHandle) {
                     return scalarTrue;
                 }
@@ -1325,7 +1364,10 @@ public class IOOperator {
         }
 
         if (fh instanceof TieHandle tieHandle) {
-            return TieHandle.tiedEof(tieHandle, runtimeList);
+            RuntimeList tiedArgs = runtimeList.isEmpty()
+                    ? new RuntimeList(new RuntimeScalar(1))
+                    : runtimeList;
+            return TieHandle.tiedEof(tieHandle, tiedArgs);
         }
 
         return fh.eof();
@@ -1516,7 +1558,7 @@ public class IOOperator {
             if (args.length > 3) {
                 return TieHandle.tiedWrite(tieHandle, data, lengthArg, args[3].scalar());
             } else {
-                return TieHandle.tiedWrite(tieHandle, data, lengthArg, new RuntimeScalar(0));
+                return TieHandle.tiedWrite(tieHandle, data, lengthArg);
             }
         }
 
@@ -3804,7 +3846,11 @@ public class IOOperator {
 
     public static RuntimeScalar eof(int ctx, RuntimeBase... args) {
         RuntimeScalar fh = args.length > 0 ? args[0].scalar() : new RuntimeScalar();
-        return eof(fh);
+        RuntimeList extra = new RuntimeList();
+        for (int i = 1; i < args.length; i++) {
+            extra.add(args[i]);
+        }
+        return eof(extra, fh);
     }
 
     public static RuntimeScalar printf(int ctx, RuntimeBase... args) {

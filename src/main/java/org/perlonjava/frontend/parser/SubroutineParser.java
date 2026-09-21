@@ -269,8 +269,19 @@ public class SubroutineParser {
         if (!subExists && !isNewMethod && !isMethod) {
             subExists = GlobalVariable.existsGlobalCodeRefAsScalar(fullName).getBoolean();
         }
+        boolean prototypeWasPredeclared = prototype != null;
+        if (prototype == null) {
+            prototype = parser.declaredSubPrototypes.get(fullName);
+        }
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("SubroutineCall exists " + subExists + " prototype `" + prototype + "` attributes " + attributes);
 
+        // A recursive call is parsed while the declaration's own body is
+        // still being compiled.  Perl does not apply the just-declared
+        // prototype to that initial recursive call.
+        if (!isMethod && !prototypeWasPredeclared
+                && fullName.equals(parser.ctx.symbolTable.getCurrentSubroutine())) {
+            prototype = null;
+        }
         boolean prototypeHasGlob = prototype != null && prototype.contains("*");
 
         // Note: feature-gated core keywords (`try`, `catch`, `finally`) should
@@ -933,6 +944,7 @@ public class SubroutineParser {
 
         // Initialize the prototype node to null. This will store the prototype of the subroutine if it exists.
         String prototype = null;
+        String deferredPrototypeWarningName = null;
 
         // Initialize a list to store any attributes the subroutine might have.
         List<String> attributes = new ArrayList<>();
@@ -1054,7 +1066,7 @@ public class SubroutineParser {
                     } else {
                         protoDisplayName = "?";
                     }
-                    emitIllegalProtoWarning(parser, prototype, protoDisplayName);
+                    deferredPrototypeWarningName = protoDisplayName;
                 }
 
                 // Build display name for :prototype() warnings
@@ -1080,6 +1092,9 @@ public class SubroutineParser {
         }
 
         if (wantName && subName != null && !peek(parser).text.equals("{")) {
+            if (deferredPrototypeWarningName != null) {
+                emitIllegalProtoWarning(parser, prototype, deferredPrototypeWarningName);
+            }
             // A named subroutine can be predeclared without a block of code.
             String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
             RuntimeScalar codeRefScalar = GlobalVariable.defineGlobalCodeRef(fullName);
@@ -1160,6 +1175,12 @@ public class SubroutineParser {
         // After parsing name, prototype, and attributes, we expect an opening curly brace '{' to denote the start of the subroutine block.
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
 
+        if (subName != null && prototype != null) {
+            String headerName = NameNormalizer.normalizeVariableName(
+                    subName, parser.ctx.symbolTable.getCurrentPackage());
+            parser.declaredSubPrototypes.put(headerName, prototype);
+        }
+
         // Save the current subroutine context and set the new one
         String previousSubroutine = parser.ctx.symbolTable.getCurrentSubroutine();
         boolean previousInSubroutineBody = parser.ctx.symbolTable.isInSubroutineBody();
@@ -1210,6 +1231,9 @@ public class SubroutineParser {
                 TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             } finally {
                 HintHashRegistry.exitScope();
+            }
+            if (deferredPrototypeWarningName != null) {
+                emitIllegalProtoWarning(parser, prototype, deferredPrototypeWarningName);
             }
             if (signature != null) {
                 boolean previousSignatureWarningState = parser.signatureArgsWarningsEnabled;

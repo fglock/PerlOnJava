@@ -627,6 +627,9 @@ public class DiamondIO {
 
         // With an empty @ARGV, diamond is defined in terms of the current
         // STDIN handle. It may have been reopened since a previous traversal.
+        if (state.currentReader != null) {
+            return state.currentReader.eof();
+        }
         RuntimeIO stdin = getGlobalIO("main::STDIN").getRuntimeIO();
         if (stdin != null && !(stdin.ioHandle instanceof ClosedIOHandle)) {
             return stdin.eof();

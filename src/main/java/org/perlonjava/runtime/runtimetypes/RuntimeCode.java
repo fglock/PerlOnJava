@@ -2667,11 +2667,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     || Character.isWhitespace(source.charAt(after))
                     || source.charAt(after) == ';';
             if (startsAtWordBoundary && endsAtWordBoundary) {
-                for (int i = 0; i < pos; i++) {
-                    if (source.charAt(i) > 127) {
-                        return false;
-                    }
-                }
                 return true;
             }
             pos = source.indexOf("use utf8", pos + 1);
@@ -3464,6 +3459,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     && !byteStringUtf8Source;
             if (hasUnicode) {
                 evalCompilerOptions.isUnicodeSource = true;
+            }
+            if (byteStringUtf8Source) {
+                // The byte-backed eval source has been decoded above. Do not
+                // let the caller's byte-source mode reinterpret it as octets.
+                evalCompilerOptions.isByteStringSource = false;
             }
             if (ctx.isEvalbytes && !evalbytesUtf8Source) {
                 evalCompilerOptions.isEvalbytes = true;
