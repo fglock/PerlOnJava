@@ -660,6 +660,7 @@ public class BytecodeInterpreter {
                                 if (retVal == null) {
                                     retVal = new RuntimeList();
                                 }
+                                RuntimeCode.requireInterpreterLvalueReturn(code, retVal, callContext);
                                 RuntimeList retList = RuntimeCode.returnList(
                                         retVal, callContext, !RuntimeCode.isLvalueCode(code));
                                 RuntimeCode.materializeSpecialVarsInResult(retList, callContext);

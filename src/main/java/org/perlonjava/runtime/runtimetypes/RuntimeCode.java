@@ -1013,6 +1013,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         throw new PerlCompilerException("Can't return a readonly value from lvalue subroutine");
     }
 
+    /** Validate the interpreter's mutable undef sentinel for an lvalue CV. */
+    public static void requireInterpreterLvalueReturn(RuntimeCode code, RuntimeBase value, int callContext) {
+        if (!isLvalueCode(code) || callContext != RuntimeContextType.LVALUE
+                || !(value instanceof RuntimeScalar scalar)
+                || scalar.type != RuntimeScalarType.UNDEF
+                || scalar.hasDurableLvalueStorage()) {
+            return;
+        }
+        throw new PerlCompilerException("Can't return undef from lvalue subroutine");
+    }
+
     /**
      * Materialize only anonymous-IO scalars before JVM lexical cleanup. Other
      * return values retain their existing identity and DESTROY/refcount timing.

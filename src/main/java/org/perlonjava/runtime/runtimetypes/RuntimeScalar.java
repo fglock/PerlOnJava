@@ -357,6 +357,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return false;
     }
 
+    /** Whether this scalar is backed by durable Perl storage for lvalue use. */
+    boolean hasDurableLvalueStorage() {
+        return isPackageGlobalRoot
+                || MyVarCleanupStack.isRegistered(this)
+                || isStoredInRegisteredContainerOwner()
+                || containerOwner == RuntimeCode.getCurrentArgs()
+                || this instanceof RuntimeBaseProxy;
+    }
+
     /** True when a container removal returned this scalar slot as a loose value. */
     private boolean isDetachedFromContainerOwner() {
         RuntimeBase owner = containerOwner;
