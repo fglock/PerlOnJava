@@ -322,7 +322,8 @@ public class EvalStringHandler {
                     : currentCode != null ? currentCode.featureFlags : 0;
             boolean byteStringUtf8Source = !isEvalbytes
                     && sourceType == RuntimeScalarType.BYTE_STRING
-                    && (inheritedStrictOptions & Strict.HINT_UTF8) != 0
+                    && ((inheritedStrictOptions & Strict.HINT_UTF8) != 0
+                        || RuntimeCode.shouldDecodeEvalbytesUtf8Source(perlCode))
                     && !RuntimeCode.featureFlagsContain(inheritedFeatureFlags, "unicode_eval");
             if ((isEvalbytes && RuntimeCode.shouldDecodeEvalbytesUtf8Source(perlCode))
                     || byteStringUtf8Source) {

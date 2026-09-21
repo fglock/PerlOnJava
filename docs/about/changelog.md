@@ -10,6 +10,21 @@ priorities and future plans.
   including mutation errors, refaliasing, closure ordering, redefinition
   diagnostics, and both execution backends.
 
+- Restore core `op/magic.t` compatibility for wide `$0`, `%ENV` byte handling,
+  `${^LAST_FH}`, `%!` void-context autoloading, signal wait statuses, shebang
+  `$^X` identity, and subprocess output decoding.
+
+- Restore core compatibility for grouped subroutine prototypes, nested
+  heredocs in interpolations, tied-handle EOF/write dispatch, and byte-string
+  UTF-8 evals.
+
+- Fix core compatibility gaps for UTF-8 eval sources, `lock &code` prototypes,
+  nested `@ARGV` traversal, and in-place editing of existing backup files.
+
+- Restore Perl-compatible warning order for prototype attributes and report
+  failed in-place backup renames instead of moving files into a backup
+  directory.
+
 - Restore `op/tie.t` compatibility for tied scalar operators, output
   separators, deferred aliases, glob copies, and tied hash iteration on both
   execution backends.

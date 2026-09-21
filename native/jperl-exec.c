@@ -17,6 +17,14 @@ int main(int argc, char **argv) {
     const char *launcher = getenv("PERLONJAVA_EXECUTABLE");
     char fallback[PATH_MAX];
 
+    // A native test trampoline may invoke this shim with argv[0] set to the
+    // interpreter name from the shebang (for example, "./perl"). Preserve
+    // that identity for $^X; ordinary jperl launches keep their absolute
+    // PERLONJAVA_SHEBANG_EXECUTABLE value.
+    if (argv[0] != NULL && strcmp(argv[0], "./perl") == 0) {
+        setenv("PERLONJAVA_SHEBANG_EXECUTABLE", argv[0], 1);
+    }
+
     if ((launcher == NULL || launcher[0] == '\0') && strchr(argv[0], '/') != NULL) {
         snprintf(fallback, sizeof(fallback), "%s", argv[0]);
         char *slash = strrchr(fallback, '/');

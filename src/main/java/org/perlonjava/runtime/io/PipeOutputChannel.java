@@ -6,6 +6,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 import org.perlonjava.runtime.operators.SystemOperator;
 
 import java.io.*;
@@ -359,7 +360,7 @@ public class PipeOutputChannel implements IOHandle {
             }
             joinPump(outputThread);
             joinPump(errorThread);
-            getGlobalVariable("main::?").set(exitCode << 8);
+            getGlobalVariable("main::?").set(ProcessExitStatus.toPerlWaitStatus(exitCode));
 
             isClosed = true;
             return exitCode == 0 ? scalarTrue : scalarFalse;
@@ -509,13 +510,22 @@ public class PipeOutputChannel implements IOHandle {
             pbEnv.clear();
 
             for (java.util.Map.Entry<String, RuntimeScalar> entry : envHash.elements.entrySet()) {
-                String value = entry.getValue().toString();
+                String value = environmentStringForProcess(entry.getValue());
                 if (value != null) {
-                    pbEnv.put(entry.getKey(), value);
+                    pbEnv.put(environmentStringForProcess(new RuntimeScalar(entry.getKey())), value);
                 }
             }
         } catch (Exception e) {
             // If we can't access %ENV, just use inherited environment (default behavior)
         }
+    }
+
+    private static String environmentStringForProcess(RuntimeScalar scalar) {
+        if (scalar == null || !scalar.getDefinedBoolean()) return null;
+        if (scalar.type == RuntimeScalarType.BYTE_STRING) {
+            return new String(scalar.toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1),
+                    java.nio.charset.StandardCharsets.UTF_8);
+        }
+        return scalar.toString();
     }
 }

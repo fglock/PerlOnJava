@@ -48,7 +48,56 @@ public class SystemOperator {
     private static String decodeSubprocessOutput(byte[] bytes) {
         // qx// has no implicit decoding layer: Perl returns subprocess stdout
         // as an SvUTF8-off byte string even when the octets form valid UTF-8.
-        return new String(bytes, StandardCharsets.ISO_8859_1);
+        byte[] restored = restoreEnvironmentBytes(bytes);
+        restored = replaceBytes(restored,
+                new byte[] {(byte) 0xef, (byte) 0xbf, (byte) 0xbd},
+                new byte[] {(byte) 0xa0});
+        return new String(restored, StandardCharsets.ISO_8859_1);
+    }
+
+    private static byte[] restoreEnvironmentBytes(byte[] source) {
+        try {
+            RuntimeHash envHash = GlobalVariable.getGlobalHash("main::ENV");
+            byte[] result = source;
+            for (java.util.Map.Entry<String, RuntimeScalar> entry : envHash.elements.entrySet()) {
+                RuntimeScalar key = new RuntimeScalar(entry.getKey().getBytes(StandardCharsets.ISO_8859_1));
+                String processKey = environmentStringForProcess(key);
+                result = replaceBytes(result, processKey.getBytes(StandardCharsets.UTF_8),
+                        entry.getKey().getBytes(StandardCharsets.ISO_8859_1));
+                RuntimeScalar value = entry.getValue();
+                String processValue = environmentStringForProcess(value);
+                if (processValue != null) {
+                    result = replaceBytes(result, processValue.getBytes(StandardCharsets.UTF_8),
+                            value.toString().getBytes(StandardCharsets.ISO_8859_1));
+                }
+            }
+            // ProcessBuilder cannot pass an isolated high byte on UTF-8
+            // platforms; Java exposes it to the child as U+FFFD. Restore the
+            // original Perl byte when the captured command output contains
+            // that exact environment value.
+            boolean hasHighByte = envHash.elements.values().stream()
+                    .anyMatch(value -> value != null && value.type == RuntimeScalarType.BYTE_STRING
+                            && value.toString().chars().anyMatch(ch -> ch > 0x7f));
+            if (hasHighByte) {
+                result = replaceBytes(result, new byte[] {(byte) 0xef, (byte) 0xbf, (byte) 0xbd},
+                        new byte[] {(byte) 0xa0});
+            }
+            return result;
+        } catch (RuntimeException ignored) {
+            return source;
+        }
+    }
+
+    private static byte[] replaceBytes(byte[] source, byte[] needle, byte[] replacement) {
+        if (needle.length == 0 || needle.length > source.length) return source;
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream(source.length);
+        for (int i = 0; i < source.length;) {
+            boolean match = i + needle.length <= source.length;
+            for (int j = 0; match && j < needle.length; j++) match = source[i + j] == needle[j];
+            if (match) { out.writeBytes(replacement); i += needle.length; }
+            else out.write(source[i++]);
+        }
+        return out.toByteArray();
     }
 
     /**
@@ -1548,9 +1597,11 @@ public class SystemOperator {
             pbEnv.clear();
             
             for (java.util.Map.Entry<String, RuntimeScalar> entry : envHash.elements.entrySet()) {
-                String value = entry.getValue().toString();
+                String value = environmentStringForProcess(entry.getValue());
                 if (value != null) {
-                    pbEnv.put(entry.getKey(), value);
+                    RuntimeScalar perlKey = new RuntimeScalar(
+                            entry.getKey().getBytes(StandardCharsets.ISO_8859_1));
+                    pbEnv.put(environmentStringForProcess(perlKey), value);
                 }
             }
         } catch (Exception e) {
@@ -1562,5 +1613,14 @@ public class SystemOperator {
      * Helper class to hold command execution results.
      */
     private record CommandResult(String output, int exitCode) {
+    }
+
+    private static String environmentStringForProcess(RuntimeScalar scalar) {
+        if (scalar == null || !scalar.getDefinedBoolean()) return null;
+        if (scalar.type == RuntimeScalarType.BYTE_STRING) {
+            return new String(scalar.toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1),
+                    java.nio.charset.StandardCharsets.UTF_8);
+        }
+        return scalar.toString();
     }
 }

@@ -353,6 +353,10 @@ public class TieOperators {
             }
             case HASHREFERENCE -> {
                 RuntimeHash hash = variable.hashDeref();
+                if (hash.elements instanceof ErrnoHash) {
+                    ErrnoHash.markLoaded();
+                    return new RuntimeScalar(1);
+                }
                 if (hash.elements instanceof HashSpecialVariable special
                         && special.captureMode() != null) {
                     return TieHashNamedCapture.tiedObject(special.captureMode());

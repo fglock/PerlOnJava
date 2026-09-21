@@ -140,7 +140,9 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
             SharedPerlStorage.validateStoredValue(value);
             SharedPerlStorage.publishBlessing(value);
         }
-        return super.set(value);
+        RuntimeScalar result = super.set(value);
+        parent.markKeyByte(key, byteKey);
+        return result;
     }
 
     /** Replace this hash slot with the scalar referenced by a refaliasing RHS. */

@@ -85,6 +85,7 @@ public class Readline {
         // context after its lexical handle is released.
         RuntimeIO.setLastReadlineHandle(
                 ctx == RuntimeContextType.LIST ? null : fh);
+        RuntimeIO.setLastAccessedHandle(fh);
 
         if (fh instanceof TieHandle tieHandle) {
             return TieHandle.tiedReadline(tieHandle, ctx);

@@ -1366,8 +1366,11 @@ public class OperatorParser {
 
     static BinaryOperatorNode parseReadline(Parser parser, LexerToken token, int currentIndex) {
         String operator = token.text;
+        boolean explicitEmptyCall = parser.tokenIndex < parser.tokens.size()
+                && "(".equals(parser.tokens.get(parser.tokenIndex).text);
         // Handle file-related operators with special handling for default handles
         ListNode operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
+        boolean hadReadlineArgument = !operand.elements.isEmpty();
         Node handle;
         boolean implicitArgvReadline = false;
         if (operand.elements.isEmpty()) {
@@ -1404,6 +1407,12 @@ public class OperatorParser {
                     }
                 }
             }
+        }
+        if (operator.equals("eof") && operand.elements.isEmpty()
+                && explicitEmptyCall && !hadReadlineArgument) {
+            // Preserve the distinction between `eof` (tied EOF flag 0) and
+            // `eof()` (tied EOF flag 2); both otherwise have an empty AST list.
+            operand.elements.add(new NumberNode("2", currentIndex));
         }
         BinaryOperatorNode result = new BinaryOperatorNode(operator, handle, operand, currentIndex);
         if (implicitArgvReadline) {

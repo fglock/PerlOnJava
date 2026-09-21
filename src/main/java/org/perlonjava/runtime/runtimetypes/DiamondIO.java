@@ -10,6 +10,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayDeque;
+import java.util.Deque;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalArray;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalIO;
@@ -40,6 +42,34 @@ public class DiamondIO {
         String inPlaceSourceName;
         String inPlaceSourceDirectory;
         boolean inPlaceSourceWasRelative;
+        int inPlaceFileMode = -1;
+        RuntimeArray activeArgv;
+        final Deque<State> suspendedTraversals = new ArrayDeque<>();
+
+        State() {}
+
+        State(State source) {
+            currentReader = source.currentReader;
+            currentWriter = source.currentWriter;
+            eofReached = source.eofReached;
+            readingStarted = source.readingStarted;
+            argvWasInitiallyEmpty = source.argvWasInitiallyEmpty;
+            doubleDiamond = source.doubleDiamond;
+            stdinReader = source.stdinReader;
+            lastDiamondReader = source.lastDiamondReader;
+            accumulatedLineNumber = source.accumulatedLineNumber;
+            inPlaceExtension = source.inPlaceExtension;
+            inPlaceEdit = source.inPlaceEdit;
+            tempFilePath = source.tempFilePath;
+            inPlaceOriginalPath = source.inPlaceOriginalPath;
+            inPlaceBackupPath = source.inPlaceBackupPath;
+            selectedHandleBeforeInPlace = source.selectedHandleBeforeInPlace;
+            inPlaceSourceName = source.inPlaceSourceName;
+            inPlaceSourceDirectory = source.inPlaceSourceDirectory;
+            inPlaceSourceWasRelative = source.inPlaceSourceWasRelative;
+            inPlaceFileMode = source.inPlaceFileMode;
+            activeArgv = source.activeArgv;
+        }
 
         void clear() {
             currentReader = null;
@@ -60,6 +90,9 @@ public class DiamondIO {
             inPlaceSourceName = null;
             inPlaceSourceDirectory = null;
             inPlaceSourceWasRelative = false;
+            inPlaceFileMode = -1;
+            activeArgv = null;
+            suspendedTraversals.clear();
         }
     }
 
@@ -110,6 +143,7 @@ public class DiamondIO {
             return lines;
         } else {
             RuntimeArray argv = getGlobalArray("main::ARGV");
+            switchTraversalForArgv(state, argv);
             // A completed diamond loop is reusable after Perl code refills
             // @ARGV. In particular, `@ARGV = (...)` between separate `<>`
             // loops must begin a new traversal rather than retain EOF forever.
@@ -173,6 +207,89 @@ public class DiamondIO {
                 state.lastDiamondReader.currentLineNumber = state.accumulatedLineNumber;
                 state.currentReader = null;
             }
+        }
+    }
+
+    /**
+     * A localized *ARGV owns an independent diamond traversal.  Keep the
+     * suspended outer traversal open while the nested one edits its files,
+     * then restore it when localization returns the outer array.
+     */
+    private static void switchTraversalForArgv(State state, RuntimeArray argv) {
+        if (state.activeArgv == argv) return;
+
+        if (!state.suspendedTraversals.isEmpty()
+                && state.suspendedTraversals.peek().activeArgv == argv) {
+            State outer = state.suspendedTraversals.pop();
+            restoreState(state, outer);
+            return;
+        }
+
+        if (state.activeArgv != null && state.readingStarted) {
+            state.suspendedTraversals.push(new State(state));
+            clearTraversalFields(state);
+        }
+        state.activeArgv = argv;
+    }
+
+    private static void restoreState(State target, State source) {
+        target.currentReader = source.currentReader;
+        target.currentWriter = source.currentWriter;
+        target.eofReached = source.eofReached;
+        target.readingStarted = source.readingStarted;
+        target.argvWasInitiallyEmpty = source.argvWasInitiallyEmpty;
+        target.doubleDiamond = source.doubleDiamond;
+        target.stdinReader = source.stdinReader;
+        target.lastDiamondReader = source.lastDiamondReader;
+        target.accumulatedLineNumber = source.accumulatedLineNumber;
+        target.inPlaceExtension = source.inPlaceExtension;
+        target.inPlaceEdit = source.inPlaceEdit;
+        target.tempFilePath = source.tempFilePath;
+        target.inPlaceOriginalPath = source.inPlaceOriginalPath;
+        target.inPlaceBackupPath = source.inPlaceBackupPath;
+        target.selectedHandleBeforeInPlace = source.selectedHandleBeforeInPlace;
+        target.inPlaceSourceName = source.inPlaceSourceName;
+        target.inPlaceSourceDirectory = source.inPlaceSourceDirectory;
+        target.inPlaceSourceWasRelative = source.inPlaceSourceWasRelative;
+        target.inPlaceFileMode = source.inPlaceFileMode;
+        target.activeArgv = source.activeArgv;
+    }
+
+    private static void clearTraversalFields(State state) {
+        state.currentReader = null;
+        state.currentWriter = null;
+        state.eofReached = false;
+        state.readingStarted = false;
+        state.argvWasInitiallyEmpty = false;
+        state.doubleDiamond = false;
+        state.stdinReader = null;
+        state.lastDiamondReader = null;
+        state.accumulatedLineNumber = 0;
+        state.tempFilePath = null;
+        state.inPlaceOriginalPath = null;
+        state.inPlaceBackupPath = null;
+        state.selectedHandleBeforeInPlace = null;
+        state.inPlaceSourceName = null;
+        state.inPlaceSourceDirectory = null;
+        state.inPlaceSourceWasRelative = false;
+        state.inPlaceFileMode = -1;
+    }
+
+    private static int readUnixMode(Path path) {
+        try {
+            Object mode = Files.getAttribute(path, "unix:mode");
+            return mode instanceof Number number ? number.intValue() : -1;
+        } catch (IOException | UnsupportedOperationException ignored) {
+            return -1;
+        }
+    }
+
+    private static void restoreUnixMode(Path path, int mode) {
+        if (mode < 0) return;
+        try {
+            Files.setAttribute(path, "unix:mode", mode);
+        } catch (IOException | UnsupportedOperationException ignored) {
+            // Non-POSIX filesystems do not expose a unix mode attribute.
         }
     }
 
@@ -270,6 +387,7 @@ public class DiamondIO {
             state.inPlaceSourceWasRelative = !Paths.get(originalFileName).isAbsolute();
             // Use RuntimeIO's existing path resolution methods for consistency
             Path originalPath = RuntimeIO.resolvePath(originalFileName);
+            state.inPlaceFileMode = readUnixMode(originalPath);
 
             if (extension == null || extension.isEmpty() || "*".equals(extension)) {
                 // A lone '*' is Perl's extensionless form.  It must use a
@@ -310,19 +428,20 @@ public class DiamondIO {
                         return false;
                     }
 
-                    // Check if backup file already exists
-                    if (Files.exists(backupPath)) {
-                        System.err.println("Can't rename " + originalFileName + " to " + backupFileName
-                                + ": File exists");
-                        return false;
+                    // Java's move-to-directory behavior differs from Perl's
+                    // rename(2) semantics: with REPLACE_EXISTING, a source
+                    // file may be moved inside an existing destination
+                    // directory instead of failing.  Perl -i must report the
+                    // backup rename failure to the caller.
+                    if (Files.isDirectory(backupPath)) {
+                        return dieCannotRename(originalFileName, backupFileName, "Is a directory");
                     }
 
                     Files.move(originalPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
                     state.inPlaceBackupPath = backupPath;
                 } catch (IOException e) {
-                    System.err.println("Error: Unable to create backup file " + backupFileName + ": " + e.getMessage());
-                    e.printStackTrace();
-                    return false;
+                    String error = e.getMessage() == null ? "I/O error" : e.getMessage();
+                    return dieCannotRename(originalFileName, backupFileName, error);
                 }
             }
 
@@ -331,6 +450,7 @@ public class DiamondIO {
             // Open the original file for writing (this is the ARGVOUT equivalent)
             // Use the resolved path to ensure we write to the correct location
             state.currentWriter = RuntimeIO.open(originalPath.toString(), ">");
+            restoreUnixMode(originalPath, state.inPlaceFileMode);
             getGlobalIO("main::ARGVOUT").set(state.currentWriter);
             RuntimeIO.setLastAccessedHandle(state.currentWriter);
 
@@ -369,6 +489,13 @@ public class DiamondIO {
     private static boolean dieCannotOpen(String fileName) {
         RuntimeScalar error = GlobalVariable.getGlobalVariable("main::!");
         WarnDie.die(new RuntimeScalar("Can't open " + fileName + ": " + error),
+                new RuntimeScalar(WarnDie.getPerlLocationFromStack()));
+        return false; // unreachable; keeps the compiler's flow analysis explicit
+    }
+
+    private static boolean dieCannotRename(String source, String destination, String error) {
+        GlobalVariable.getGlobalVariable("main::!").set(error);
+        WarnDie.die(new RuntimeScalar("Can't rename " + source + " to " + destination + ": " + error),
                 new RuntimeScalar(WarnDie.getPerlLocationFromStack()));
         return false; // unreachable; keeps the compiler's flow analysis explicit
     }
@@ -448,6 +575,7 @@ public class DiamondIO {
         state.tempFilePath = null;
         state.inPlaceOriginalPath = null;
         state.inPlaceBackupPath = null;
+        state.inPlaceFileMode = -1;
         finishInPlaceEditing();
     }
 
@@ -514,6 +642,9 @@ public class DiamondIO {
 
         // With an empty @ARGV, diamond is defined in terms of the current
         // STDIN handle. It may have been reopened since a previous traversal.
+        if (state.currentReader != null) {
+            return state.currentReader.eof();
+        }
         RuntimeIO stdin = getGlobalIO("main::STDIN").getRuntimeIO();
         if (stdin != null && !(stdin.ioHandle instanceof ClosedIOHandle)) {
             return stdin.eof();
