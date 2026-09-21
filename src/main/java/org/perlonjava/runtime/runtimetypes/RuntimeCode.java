@@ -976,7 +976,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             result.add(retVal);
             return result;
         }
-        RuntimeList result = retVal.getList();
+        RuntimeList result;
+        if (!copyReferenceScalars && retVal instanceof RuntimeArray array) {
+            // An :lvalue sub returning an array must expose its element cells;
+            // RuntimeArray.getList() intentionally copies them for ordinary
+            // rvalue returns.
+            result = new RuntimeList();
+            result.elements.addAll(array.elements);
+        } else {
+            result = retVal.getList();
+        }
         requireNonemptyLvalueReturn(callContext, result);
         if (copyReferenceScalars && callContext == RuntimeContextType.LIST) {
             RuntimeList copied = copyReturnedReferenceScalars(result, callContext, true, false);

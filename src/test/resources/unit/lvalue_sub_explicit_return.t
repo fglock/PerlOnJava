@@ -64,4 +64,13 @@ use Test::More;
         'keys lvalue return rejects list assignment');
 }
 
+{
+    our @lvalue_array_return = qw(one two three);
+    sub lvalue_array_return :lvalue { @lvalue_array_return }
+    sub replace_last { $_[2] = 'free' }
+    replace_last(lvalue_array_return());
+    is(join(' ', @lvalue_array_return), 'one two free',
+        'lvalue array return preserves argument aliases');
+}
+
 done_testing;
