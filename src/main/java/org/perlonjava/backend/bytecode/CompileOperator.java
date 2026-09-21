@@ -1362,6 +1362,8 @@ public class CompileOperator {
                         ? Opcodes.RETURN_NONLOCAL : Opcodes.RETURN;
                 boolean hasOperand = !(node.operand == null
                         || (node.operand instanceof ListNode list && list.elements.isEmpty()));
+                int returnContext = bytecodeCompiler.isCompilingLvalueSubroutine()
+                        ? RuntimeContextType.LVALUE : RuntimeContextType.RUNTIME;
                 if (!hasOperand) {
                     int listReg = bytecodeCompiler.allocateRegister();
                     bytecodeCompiler.emit(Opcodes.CREATE_LIST);
@@ -1376,7 +1378,7 @@ public class CompileOperator {
                         returnedCall = returnedList.elements.getFirst();
                     }
                     returnedCall.setAnnotation("inheritRawCallContext", true);
-                    bytecodeCompiler.compileNode(returnExpression, -1, RuntimeContextType.RUNTIME);
+                    bytecodeCompiler.compileNode(returnExpression, -1, returnContext);
                 } else {
                     Node returnedCall = node.operand;
                     while (returnedCall instanceof ListNode returnedList
@@ -1384,7 +1386,7 @@ public class CompileOperator {
                         returnedCall = returnedList.elements.getFirst();
                     }
                     returnedCall.setAnnotation("inheritRawCallContext", true);
-                    bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.RUNTIME);
+                    bytecodeCompiler.compileNode(node.operand, -1, returnContext);
                 }
                 int exprReg = bytecodeCompiler.lastResultReg;
 

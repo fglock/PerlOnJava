@@ -203,6 +203,12 @@ public class BytecodeCompiler implements Visitor {
     final Set<String> gotoLabelsInsideConstruct = new HashSet<>();
     final Set<String> gotoLabelsInsideGiven = new HashSet<>();
     private int givenBlockDepth;
+    /** True while compiling the body of a {@code :lvalue} subroutine. */
+    private boolean compilingLvalueSubroutine;
+
+    boolean isCompilingLvalueSubroutine() {
+        return compilingLvalueSubroutine;
+    }
     final Map<String, int[]> gotoLabelLoopRanges = new HashMap<>();
     final Map<Integer, String> gotoLabelPackages = new HashMap<>();
     static final class GotoLabelTarget {
@@ -1267,6 +1273,8 @@ public class BytecodeCompiler implements Visitor {
     public InterpretedCode compile(Node node, EmitterContext ctx) {
         // Store context for strict checks and other compile-time options
         this.emitterContext = ctx;
+        this.compilingLvalueSubroutine = node instanceof AbstractNode abstractNode
+                && abstractNode.getBooleanAnnotation("subroutineIsLvalue");
 
         collectLoopBodyLabels(node, gotoLabelsInsideLoop, false);
         collectConstructEntryLabels(node, gotoLabelsInsideConstruct, false);

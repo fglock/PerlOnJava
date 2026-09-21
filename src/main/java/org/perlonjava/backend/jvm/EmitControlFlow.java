@@ -323,6 +323,13 @@ public class EmitControlFlow {
         boolean hasOperand = !(node.operand == null || (node.operand instanceof ListNode list && list.elements.isEmpty()));
         boolean protectsLexicalAggregate = containsAggregateReferenceReturn(node.operand);
 
+        // A :lvalue sub must return the storage cell selected by an explicit
+        // return as well as by its implicit final expression.  Compiling the
+        // operand in RUNTIME context copies a lexical scalar before the return
+        // boundary, so `return $x` from inside a loop becomes a writable copy
+        // instead of $x itself.
+        int returnContext = ctx.javaClassInfo.isLvalueSubroutine
+                ? RuntimeContextType.LVALUE : RuntimeContextType.RUNTIME;
         if (!hasOperand) {
             ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeList");
             ctx.mv.visitInsn(Opcodes.DUP);
@@ -340,7 +347,7 @@ public class EmitControlFlow {
                 returnedCall = returnedList.elements.getFirst();
             }
             returnedCall.setAnnotation("inheritRawCallContext", true);
-            returnExpression.accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
+            returnExpression.accept(emitterVisitor.with(returnContext));
         } else {
             Node returnedCall = node.operand;
             while (returnedCall instanceof ListNode returnedList
@@ -348,14 +355,18 @@ public class EmitControlFlow {
                 returnedCall = returnedList.elements.getFirst();
             }
             returnedCall.setAnnotation("inheritRawCallContext", true);
-            node.operand.accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
+            node.operand.accept(emitterVisitor.with(returnContext));
         }
 
         // Clone scalar elements to prevent aliasing issues with local variable teardown.
         // Without this, returning a symbolic dereference like ${$name} with local *{$name}
         // would return the restored (empty) value instead of the value at return time.
         // Only needed when the subroutine uses 'local'.
-        if (ctx.javaClassInfo.usesLocal) {
+        // An lvalue subroutine must retain the returned cell's identity.  In
+        // particular, a foreach body localizes $_; cloning an explicit return
+        // merely because that implicit local exists turns `return $slot` into
+        // a detached scalar and makes the caller assign to the copy.
+        if (ctx.javaClassInfo.usesLocal && !ctx.javaClassInfo.isLvalueSubroutine) {
             // First ensure we have a RuntimeList (the stack may have RuntimeScalar in some cases),
             // then clone the scalar elements.
             ctx.mv.visitMethodInsn(
