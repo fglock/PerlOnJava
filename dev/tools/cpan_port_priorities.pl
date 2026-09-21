@@ -28,6 +28,8 @@ my $sort_by = 'dependants';
 my $refresh = 0;
 my $help = 0;
 my @only_modules;
+my $http_attempts = 4;
+my $http_timeout = 30;
 
 GetOptions(
     'pass-file=s'     => \$pass_file,
@@ -60,7 +62,10 @@ add_candidates($fail_file, 'FAIL');
 add_candidates($skip_file, 'SKIP') if $include_skip;
 
 my $cache = read_cache($cache_file);
-my $http = HTTP::Tiny->new(timeout => 30);
+my $http = HTTP::Tiny->new(
+    timeout => $http_timeout,
+    agent   => 'PerlOnJava-cpan-port-priorities/1.0',
+);
 my @rows;
 
 my $bulk_index;
@@ -188,10 +193,12 @@ sub reverse_dependencies {
     for my $page (1 .. 1000) {
         my $url = 'https://fastapi.metacpan.org/v1/reverse_dependencies/module/'
             . path_escape($module) . "?page=$page";
-        my $response = $http->get($url);
+        my $response = request_with_retry(
+            $http, GET => $url, undef, "MetaCPAN reverse-dependency request for $module page $page"
+        );
         if (!$response->{success}) {
             warn "MetaCPAN request failed for $module page $page: "
-                . "$response->{status} $response->{reason}\n";
+                . response_error($response) . "\n";
             return;
         }
 
@@ -234,9 +241,11 @@ sub bulk_reverse_dependencies {
     };
     my $total_seen = 0;
     for my $page (0 .. $bulk_pages - 1) {
-        my $response = $http->post(
+        my $response = request_with_retry(
+            $http, POST =>
             'https://fastapi.metacpan.org/v1/release/_search?from=' . ($page * $page_size),
             json_request($query),
+            'bulk MetaCPAN search page ' . ($page + 1),
         );
         my $decoded = decode_response($response, 'bulk MetaCPAN search page ' . ($page + 1));
         last unless $decoded;
@@ -276,6 +285,50 @@ sub json_request {
         headers => { 'content-type' => 'application/json' },
         content => encode_json($payload),
     };
+}
+
+sub request_with_retry {
+    my ($http, $method, $url, $args, $operation) = @_;
+
+    for my $attempt (1 .. $http_attempts) {
+        my $response = $method eq 'POST'
+            ? $http->post($url, $args)
+            : $http->get($url);
+
+        return $response if $response->{success};
+
+        my $error = response_error($response);
+        my $retryable = retryable_response($response);
+        if (!$retryable || $attempt == $http_attempts) {
+            return $response;
+        }
+
+        my $delay = 2 ** ($attempt - 1);
+        warn "$operation failed on attempt $attempt: $error; "
+            . "retrying in ${delay}s\n";
+        sleep $delay;
+    }
+
+    die "unreachable request retry state\n";
+}
+
+sub retryable_response {
+    my ($response) = @_;
+    my $status = $response->{status} || 0;
+    return 1 if $status == 599; # HTTP::Tiny transport exception
+    return 1 if $status == 408 || $status == 425 || $status == 429;
+    return 1 if $status >= 500 && $status <= 599;
+    return 0;
+}
+
+sub response_error {
+    my ($response) = @_;
+    my $error = ($response->{status} || 'unknown') . ' ' . ($response->{reason} || 'unknown error');
+    my $content = $response->{content} || '';
+    $content =~ s/\s+/ /g;
+    $content = substr($content, 0, 240);
+    $error .= ": $content" if length $content;
+    return $error;
 }
 
 sub decode_response {
