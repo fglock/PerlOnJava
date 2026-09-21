@@ -1615,6 +1615,17 @@ public class EmitOperator {
      */
     static void handleLengthOperator(OperatorNode node, EmitterVisitor emitterVisitor) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
+        Node lengthOperand = node.operand;
+        if (lengthOperand instanceof ListNode list && !list.elements.isEmpty()) {
+            lengthOperand = list.elements.getFirst();
+        }
+        if (lengthOperand instanceof OperatorNode declaration
+                && "my".equals(declaration.operator)
+                && declaration.operand instanceof OperatorNode aggregate
+                && "@".equals(aggregate.operator)
+                && aggregate.operand instanceof IdentifierNode identifier) {
+            org.perlonjava.runtime.operators.StringOperators.warnLengthOnLexicalArray(identifier.name);
+        }
         // Emit the operand in scalar context
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
 

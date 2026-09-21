@@ -357,7 +357,38 @@ public class FormatParser {
         List<Node> expressions = parseArgumentExpressions(parser, line, tokenIndex);
         ArgumentLine argumentLine = new ArgumentLine(line, expressions, tokenIndex);
         annotateUnavailableLexicalSub(parser, argumentLine);
+        annotateUnavailableLexicalVariables(parser, argumentLine);
         return argumentLine;
+    }
+
+    /** Preserve deferred closure warnings for lexical scalar/array/hash uses. */
+    private static void annotateUnavailableLexicalVariables(Parser parser, ArgumentLine argumentLine) {
+        List<String> unavailable = new ArrayList<>();
+        Matcher matcher = Pattern.compile("[$@%][A-Za-z_]\\w*").matcher(argumentLine.content);
+        while (matcher.find()) {
+            String name = matcher.group();
+            boolean lexical = parser.ctx.symbolTable.getAllVisibleVariables().values().stream()
+                    .anyMatch(entry -> name.equals(entry.name())
+                            && ("my".equals(entry.decl()) || "state".equals(entry.decl())));
+            if (!lexical) lexical = hasPriorLexicalDeclaration(parser, name);
+            if (lexical && !unavailable.contains(name)) unavailable.add(name);
+        }
+        if (!unavailable.isEmpty()) {
+            argumentLine.setAnnotation("unavailableLexicalVariableNames", unavailable);
+        }
+    }
+
+    private static boolean hasPriorLexicalDeclaration(Parser parser, String name) {
+        List<LexerToken> tokens = parser.tokens;
+        for (int i = 0; i + 1 < tokens.size(); i++) {
+            if (!("my".equals(tokens.get(i).text) || "state".equals(tokens.get(i).text))) continue;
+            String declared = tokens.get(i + 1).text;
+            if (name.equals(declared)) return true;
+            if (i + 2 < tokens.size() && "$".equals(declared) && name.equals("$" + tokens.get(i + 2).text)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

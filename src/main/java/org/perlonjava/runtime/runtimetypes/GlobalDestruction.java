@@ -39,6 +39,16 @@ public class GlobalDestruction {
             destroyIfTracked(val, visited);
         }
 
+        // CODE slots are kept in a separate namespace map from ordinary
+        // package variables. They are also the roots for closures whose pads
+        // may contain the last blessed object reference.
+        for (RuntimeScalar code : new ArrayList<>(GlobalVariable.globalCodeRefs.values())) {
+            if (code != null && code.value instanceof RuntimeCode runtimeCode) {
+                runtimeCode.releaseCaptures();
+            }
+            destroyIfTracked(code, visited);
+        }
+
         // Walk global arrays for blessed ref elements
         for (RuntimeArray arr : new ArrayList<>(GlobalVariable.globalArrays.values())) {
             if (arr == null) continue;  // defensive: rare null entries seen during END
@@ -68,6 +78,10 @@ public class GlobalDestruction {
                 destroyIfTracked(elem, visited);
             }
         }
+
+        // Releasing a global closure can enqueue the final decrement for a
+        // captured lexical. Drain that decrement before global teardown ends.
+        MortalList.flush();
     }
 
     /**
@@ -87,6 +101,13 @@ public class GlobalDestruction {
             return;
         }
         if (base.blessId != 0 || WeakRefRegistry.hasWeakRefsTo(base) || base instanceof RuntimeCode) {
+            if (base instanceof RuntimeCode code) {
+                // A global named subroutine can be the last owner of a
+                // closure's lexical pad. Release that pad before dispatching
+                // destruction so objects held only by captured lexicals are
+                // also finalized during global destruction.
+                code.releaseCaptures();
+            }
             base.refCount = Integer.MIN_VALUE;
             DestroyDispatch.callDestroy(base);
             return;

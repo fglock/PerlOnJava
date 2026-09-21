@@ -626,10 +626,39 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
             // is recreated in the child. Refresh only names captured by the
             // emitter; never discover new names from arbitrary caller frames.
             Map<String, RuntimeBase> activeLexicals = RuntimeCode.snapshotAllActiveLexicals();
+            if (argLine.getAnnotation("unavailableLexicalVariableNames") instanceof List<?> names
+                    && !names.isEmpty()) {
+                for (Object value : names) {
+                    if (!(value instanceof String name) || isPackageVariable(name)) continue;
+                    RuntimeBase active = activeLexicals.get(name);
+                    if (active != null) {
+                        lexicalVariables.put(name, active);
+                        continue;
+                    }
+                    WarnDie.warn(new RuntimeScalar("Variable \"" + name
+                                    + "\" is not available at format " + formatName + "\n"),
+                            new RuntimeScalar(""));
+                    lexicalVariables.put(name, new RuntimeScalar());
+                }
+            }
             for (String name : lexicalVariables.keySet()) {
                 RuntimeBase active = activeLexicals.get(name);
                 if (active != null) {
                     lexicalVariables.put(name, active);
+                } else if (!(argLine.getAnnotation("unavailableLexicalVariableNames") instanceof List<?> unavailable
+                                && unavailable.contains(name))
+                        && !isPackageVariable(name)
+                        && argLine.content.matches("(?s).*\\Q" + name + "\\E(?:\\b|\\W).*")) {
+                    // A FORMAT can outlive the CV whose lexical pad declared
+                    // an argument.  Perl keeps the FORMAT callable, but
+                    // reports the captured lexical as unavailable when the
+                    // declaring scope is no longer active.  Do not silently
+                    // reuse the stale cell captured at declaration time: it
+                    // suppresses the warning and can expose an old value.
+                    WarnDie.warn(new RuntimeScalar("Variable \"" + name
+                                    + "\" is not available at format " + formatName + "\n"),
+                            new RuntimeScalar(""));
+                    lexicalVariables.put(name, new RuntimeScalar());
                 }
             }
             List<RuntimeScalar> simpleScalarSlots = resolveSimpleGlobalScalarSlots(argLine.content);
@@ -710,6 +739,19 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
             }
         }
         return lineArgs;
+    }
+
+    /** Package variables remain available even when no lexical pad is active. */
+    private static boolean isPackageVariable(String name) {
+        if (name == null || name.length() < 2) return false;
+        String normalized = NameNormalizer.normalizeVariableName(
+                name.substring(1), RuntimeCode.getCurrentPackage());
+        return switch (name.charAt(0)) {
+            case '$' -> GlobalVariable.existsGlobalVariable(normalized);
+            case '@' -> GlobalVariable.existsGlobalArray(normalized);
+            case '%' -> GlobalVariable.existsGlobalHash(normalized);
+            default -> false;
+        };
     }
 
     /**
