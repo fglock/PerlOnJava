@@ -339,6 +339,7 @@ public class EmitVariable {
         // relies on this for its `local *__ANON__:: = $namespace; *{"__ANON__::$name"};` pattern.
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID
                 && !sigil.equals("*")
+                && !(sigil.equals("%") && operandIsErrnoHash(node))
                 && node.operand instanceof IdentifierNode) {
             return;
         }
@@ -784,6 +785,11 @@ public class EmitVariable {
 
         // TODO ${a} ${[ 123 ]}
         throw new PerlCompilerException(node.tokenIndex, "Not implemented: " + sigil, emitterVisitor.ctx.errorUtil);
+    }
+
+    private static boolean operandIsErrnoHash(OperatorNode node) {
+        return node.operand instanceof IdentifierNode identifier
+                && identifier.name.equals("!");
     }
 
     static void handleAssignOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
