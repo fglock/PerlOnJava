@@ -1776,6 +1776,12 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeHashKeysScalar(bytecode, pc, registers);
                             }
 
+                            case Opcodes.KEYS_LVALUE -> {
+                                int rd = bytecode[pc++];
+                                int containerReg = bytecode[pc++];
+                                registers[rd] = RuntimeCode.keysLvalue(registers[containerReg]);
+                            }
+
                             case Opcodes.HASH_VALUES -> {
                                 pc = InlineOpcodeHandler.executeHashValues(bytecode, pc, registers);
                             }

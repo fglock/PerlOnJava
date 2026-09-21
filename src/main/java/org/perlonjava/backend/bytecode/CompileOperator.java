@@ -1765,6 +1765,13 @@ public class CompileOperator {
         bc.compileNode(node.operand, -1, RuntimeContextType.LIST);
         int hashReg = bc.lastResultReg;
         int rd = bc.allocateOutputRegister();
+        if (bc.currentCallContext == RuntimeContextType.LVALUE
+                || bc.currentCallContext == RuntimeContextType.LVALUE_LIST
+                || bc.isCompilingLvalueSubroutine()) {
+            bc.emit(Opcodes.KEYS_LVALUE); bc.emitReg(rd); bc.emitReg(hashReg);
+            bc.lastResultReg = rd;
+            return;
+        }
         if (bc.currentCallContext == RuntimeContextType.SCALAR) {
             // A scalar keys result is the hash count. Calling the context-aware
             // runtime path avoids materializing (and then counting) a key list,

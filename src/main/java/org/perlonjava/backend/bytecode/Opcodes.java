@@ -2657,6 +2657,9 @@ public class Opcodes {
     /** Scalar-context {@code keys}: rd = scalar keys(hashReg). Format: rd hashReg. */
     public static final short HASH_KEYS_SCALAR = 575;
 
+    /** Scalar lvalue represented by {@code keys %hash}. Format: rd containerReg. */
+    public static final short KEYS_LVALUE = 576;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

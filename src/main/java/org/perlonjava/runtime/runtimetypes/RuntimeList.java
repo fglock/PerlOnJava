@@ -617,6 +617,9 @@ public class RuntimeList extends RuntimeBase {
                     result.scalarContextSize = rhsSize;
                     for (int i = 0; i < lhsSize; i++) {
                         RuntimeScalar lhs = (RuntimeScalar) elements.get(i);
+                        if (lhs.isKeysLvalue()) {
+                            lhs.rejectKeysLvalueListAssignment();
+                        }
                         if (i < rhsValues.length) {
                             lhs.set(rhsValues[i]);
                         } else {
@@ -712,6 +715,9 @@ public class RuntimeList extends RuntimeBase {
                     rhsIndex++;
                 }
             } else if (elem instanceof RuntimeScalar runtimeScalar) {
+                if (runtimeScalar.isKeysLvalue()) {
+                    runtimeScalar.rejectKeysLvalueListAssignment();
+                }
                 RuntimeScalar assigned = (rhsIndex < rhsSize) ? rhsElements.get(rhsIndex++) : null;
                 runtimeScalar.set(assigned != null ? assigned : new RuntimeScalar());
                 result.elements.add(runtimeScalar);  // Add reference to the variable itself

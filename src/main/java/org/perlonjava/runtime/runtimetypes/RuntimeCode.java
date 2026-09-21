@@ -957,6 +957,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return returnList(retVal, callContext, true);
     }
 
+    /** Return the scalar lvalue represented by {@code keys %hash}. */
+    public static RuntimeScalar keysLvalue(RuntimeBase container) {
+        RuntimeScalar result = new RuntimeScalar(container.keys(RuntimeContextType.SCALAR));
+        result.setKeysLvalueContainer(container);
+        return result;
+    }
+
     public static RuntimeList returnList(RuntimeBase retVal, int callContext, boolean copyReferenceScalars) {
         requireWritableLvalueReturn(callContext, retVal);
         if (retVal == null) {

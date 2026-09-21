@@ -55,4 +55,13 @@ use Test::More;
         'aggregate lvalue return observes scalar context through a dereference');
 }
 
+{
+    our %keys_lvalue_return = (item => 'value');
+    sub keys_lvalue_return :lvalue { keys %keys_lvalue_return }
+
+    eval '(keys_lvalue_return()) = 64';
+    like($@, qr/^Can't modify keys in list assignment/,
+        'keys lvalue return rejects list assignment');
+}
+
 done_testing;
