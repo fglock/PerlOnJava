@@ -507,7 +507,9 @@ public class IOOperator {
     public static RuntimeScalar sysseek(RuntimeScalar fileHandle, RuntimeList runtimeList) {
         RuntimeScalar seekResult = seek(fileHandle, runtimeList);
         if (!seekResult.getBoolean()) {
-            return seekResult;
+            // sysseek returns undef on failure, unlike seek which returns a
+            // boolean false value.
+            return new RuntimeScalar();
         }
         RuntimeScalar pos = tell(fileHandle);
         long p = pos.getLong();
@@ -1452,6 +1454,21 @@ public class IOOperator {
             offset = args[3].scalar().getInt();
         }
 
+        // Validate arguments before touching the file position. Perl throws
+        // for these programmer errors; reading first would consume bytes and
+        // leave the target partially modified when the offset is invalid.
+        if (length < 0) {
+            throw new PerlCompilerException("Negative length");
+        }
+
+        if (offset < 0) {
+            int targetLength = target.toString().length();
+            offset = targetLength + offset;
+            if (offset < 0) {
+                throw new PerlCompilerException("Offset outside string");
+            }
+        }
+
         // Check for in-memory handles (ScalarBackedIO)
         // System Perl does not support sysread on in-memory file handles —
         // it returns undef and sets $! to "Bad file descriptor".
@@ -1510,14 +1527,6 @@ public class IOOperator {
         // Handle offset
         String currentValue = target.toString();
         int currentLength = currentValue.length();
-
-        if (offset < 0) {
-            // Negative offset counts from end
-            offset = currentLength + offset;
-            if (offset < 0) {
-                offset = 0;
-            }
-        }
 
         // Pad with nulls if needed
         if (offset > currentLength) {
@@ -1597,17 +1606,21 @@ public class IOOperator {
             offset = args[3].scalar().getInt();
         }
 
+        if (length < 0) {
+            throw new PerlCompilerException("Negative length");
+        }
+
         // Handle negative offset
         if (offset < 0) {
             offset = data.length() + offset;
             if (offset < 0) {
-                return RuntimeIO.handleIOError("Offset outside string");
+                throw new PerlCompilerException("Offset outside string");
             }
         }
 
         // Check offset bounds
         if (offset > data.length()) {
-            return RuntimeIO.handleIOError("Offset outside string");
+            throw new PerlCompilerException("Offset outside string");
         }
 
         // Calculate actual length to write
