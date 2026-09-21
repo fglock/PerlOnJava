@@ -323,13 +323,10 @@ public class EmitControlFlow {
         boolean hasOperand = !(node.operand == null || (node.operand instanceof ListNode list && list.elements.isEmpty()));
         boolean protectsLexicalAggregate = containsAggregateReferenceReturn(node.operand);
 
-        // A :lvalue sub must return the storage cell selected by an explicit
-        // return as well as by its implicit final expression.  Compiling the
-        // operand in RUNTIME context copies a lexical scalar before the return
-        // boundary, so `return $x` from inside a loop becomes a writable copy
-        // instead of $x itself.
-        int returnContext = ctx.javaClassInfo.isLvalueSubroutine
-                ? RuntimeContextType.LVALUE : RuntimeContextType.RUNTIME;
+        // A return expression must inherit the subroutine's actual calling
+        // context.  In an :lvalue sub this keeps nested lvalue calls assignable
+        // for assignment while treating them as ordinary rvalues when read.
+        int returnContext = RuntimeContextType.RUNTIME;
         if (!hasOperand) {
             ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeList");
             ctx.mv.visitInsn(Opcodes.DUP);

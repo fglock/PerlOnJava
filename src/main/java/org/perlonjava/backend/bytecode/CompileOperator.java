@@ -1362,8 +1362,11 @@ public class CompileOperator {
                         ? Opcodes.RETURN_NONLOCAL : Opcodes.RETURN;
                 boolean hasOperand = !(node.operand == null
                         || (node.operand instanceof ListNode list && list.elements.isEmpty()));
-                int returnContext = bytecodeCompiler.isCompilingLvalueSubroutine()
-                        ? RuntimeContextType.LVALUE : RuntimeContextType.RUNTIME;
+                // A return expression inherits the subroutine's actual calling
+                // context.  In an :lvalue sub this must remain dynamic: nested
+                // lvalue calls are ordinary rvalues when the outer call is read,
+                // but must preserve their lvalue result for assignment.
+                int returnContext = RuntimeContextType.RUNTIME;
                 if (!hasOperand) {
                     int listReg = bytecodeCompiler.allocateRegister();
                     bytecodeCompiler.emit(Opcodes.CREATE_LIST);

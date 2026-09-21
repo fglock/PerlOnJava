@@ -9,6 +9,10 @@ priorities and future plans.
 - Allow valid Moo-style constant closures that capture an initialized lexical
   within a `BEGIN` block.
 
+- Restore `op/sub_lval.t` compatibility for lvalue subroutine returns, including
+  nested calls, readonly values, list aliases, tied scalars, and both execution
+  backends.
+
 - Restore `op/const-optree.t` compatibility for lexical constant CVs,
   including mutation errors, refaliasing, closure ordering, redefinition
   diagnostics, and both execution backends.

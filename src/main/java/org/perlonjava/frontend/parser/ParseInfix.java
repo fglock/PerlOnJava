@@ -259,7 +259,7 @@ public class ParseInfix {
             if (operator.equals("=")) {
                 validateNoStateInListAssignment(parser, left);
                 validateConstantItemListLvalue(parser, left);
-                validateKnownSubroutineLvalue(parser, left);
+                validateKnownSubroutineLvalue(parser, left, right);
                 validateAggregateSubstrVecLvalue(parser, left, right);
             }
 
@@ -925,7 +925,7 @@ public class ParseInfix {
      * string eval.  Class::Method::Modifiers relies on this behavior to probe a
      * localized coderef with {@code eval 'return 1; &_sub = 1'}.
      */
-    private static void validateKnownSubroutineLvalue(Parser parser, Node left) {
+    private static void validateKnownSubroutineLvalue(Parser parser, Node left, Node right) {
         if (!(left instanceof BinaryOperatorNode call) || !"(".equals(call.operator)
                 || !(call.left instanceof OperatorNode ampersand)
                 || !"&".equals(ampersand.operator)) {
@@ -954,8 +954,15 @@ public class ParseInfix {
                 || GlobalVariable.hasGlobalPseudoConstant(name)) {
             parser.throwError("Can't modify constant item in scalar assignment");
         }
-        parser.throwError("Can't modify non-lvalue subroutine call of &" + name
-                + " in scalar assignment");
+        String message = "Can't modify non-lvalue subroutine call of &" + name
+                + " in scalar assignment";
+        // Primary nodes retain the parser cursor after their final token.
+        // Anchor on the RHS token so the context is `near "3;"` rather
+        // than just the following semicolon.
+        int errorIndex = Math.max(0, right.getIndex() - 1);
+        String diagnostic = parser.ctx.errorUtil.errorMessageAtToken(errorIndex, message);
+        throw new PerlParserException(diagnostic + "Execution of "
+                + parser.ctx.errorUtil.getFileName() + " aborted due to compilation errors.\n");
     }
 
     private static List<Node> parseArraySubscript(Parser parser) {

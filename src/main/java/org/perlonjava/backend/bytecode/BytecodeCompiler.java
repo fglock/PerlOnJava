@@ -411,6 +411,10 @@ public class BytecodeCompiler implements Visitor {
     // A key/value hash slice is special when it supplies a foreach source:
     // Perl aliases only its values, not its (temporary) keys.
     private boolean compilingForeachList;
+
+    boolean isCompilingForeachList() {
+        return compilingForeachList;
+    }
     // Source information
     final String sourceName;
     final int sourceLine;
@@ -1834,7 +1838,7 @@ public class BytecodeCompiler implements Visitor {
                 stmtContext = RuntimeContextType.VOID;
             } else {
                 stmtContext = isLastStatement && node.getBooleanAnnotation("subroutineIsLvalue")
-                        ? RuntimeContextType.LVALUE : currentCallContext;
+                        ? RuntimeContextType.RUNTIME : currentCallContext;
             }
 
             compileNode(stmt, stmtTarget, stmtContext);

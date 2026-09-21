@@ -1064,7 +1064,9 @@ public class EmitterMethodCreator implements Opcodes {
             // The return list may contain lazy ScalarSpecialVariable references; if we
             // restored first, they would resolve to the caller's (stale) values.
             mv.visitInsn(Opcodes.DUP);
-            mv.visitVarInsn(Opcodes.ILOAD, 2);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "currentRawCallContext", "()I", false);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "materializeSpecialVarsInResult",

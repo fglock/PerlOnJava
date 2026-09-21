@@ -1072,6 +1072,7 @@ public class SlowOpcodeHandler {
 
         // Convert to RuntimeArray for array assignment
         RuntimeArray result = new RuntimeArray();
+        result.lvalueSliceContainer = true;
         for (RuntimeBase elem : valuesList.elements) {
             result.elements.add(elem.scalar());
         }

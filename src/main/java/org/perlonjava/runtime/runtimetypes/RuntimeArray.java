@@ -85,6 +85,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     // Internal one-shot array used to materialize the RHS of list assignment.
     // Its elements are expression temporaries, not durable array-owned slots.
     boolean transientListAssignmentRhs;
+    // Interpreter hash slices use an array only as a transport container for
+    // the original hash entry cells.  It is not a Perl array-valued return.
+    public boolean lvalueSliceContainer;
     // Iterator for traversing the hash elements
     private Integer eachIteratorIndex;
     // Package arrays named @ISA participate in method resolution.  All writes
@@ -1539,22 +1542,22 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             case PLAIN_ARRAY -> {
                 // If this array was created from hash assignment, use the original list size
                 if (scalarContextSize != null) {
-                    yield getScalarInt(scalarContextSize);
+                    yield new RuntimeScalarTemporary(scalarContextSize);
                 }
-                yield getScalarInt(elements.size());
+                yield new RuntimeScalarTemporary(elements.size());
             }
             case AUTOVIVIFY_ARRAY -> {
                 if (this.strictAutovivify) {
                     throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
                 }
-                yield getScalarInt(0);
+                yield new RuntimeScalarTemporary(0);
             }
             case TIED_ARRAY -> TieArray.tiedFetchSize(this);
             case READONLY_ARRAY -> {
                 if (scalarContextSize != null) {
-                    yield getScalarInt(scalarContextSize);
+                    yield new RuntimeScalarTemporary(scalarContextSize);
                 }
-                yield getScalarInt(elements.size());
+                yield new RuntimeScalarTemporary(elements.size());
             }
             default -> throw new IllegalStateException("Unknown array type: " + type);
         };

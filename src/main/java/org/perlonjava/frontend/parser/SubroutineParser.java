@@ -794,6 +794,10 @@ public class SubroutineParser {
                     }
                 }
                 codeRefNode.setAnnotation("parseTimeCodeRef", parseTimeCodeRef);
+                if (parseTimeCodeRef.value instanceof RuntimeCode code
+                        && RuntimeCode.isLvalueCode(code)) {
+                    codeRefNode.setAnnotation("directLvalueCall", true);
+                }
             }
             return new BinaryOperatorNode("(",
                     codeRefNode,
@@ -1108,6 +1112,21 @@ public class SubroutineParser {
                 codeRef.prototype = prototype;
                 codeRef.attributes = attributes;
             } else {
+                // A declaration after a body cannot retroactively turn that
+                // body into an lvalue CV.  Keep processing any other
+                // attributes (including user handlers) in source order.
+                if (!codeRef.isStatic && attributes != null && attributes.contains("lvalue")) {
+                    String location = "";
+                    if (parser.ctx.errorUtil != null) {
+                        int line = parser.ctx.errorUtil.getLineNumber(currentIndex);
+                        location = " at " + parser.ctx.compilerOptions.fileName + " line " + line + ".\n";
+                    }
+                    org.perlonjava.runtime.operators.WarnDie.warn(
+                            new RuntimeScalar("lvalue attribute ignored after the subroutine has been defined" + location),
+                            new RuntimeScalar(""));
+                    attributes = new java.util.ArrayList<>(attributes);
+                    attributes.remove("lvalue");
+                }
                 // When redeclaring an existing sub with attributes (e.g., sub X : method),
                 // merge the new attributes into the existing ones. This matches Perl's behavior
                 // where `sub X { ... } sub X : method` adds the method attribute to X.
@@ -1825,7 +1844,10 @@ public class SubroutineParser {
             }
         }
 
-        if (codeRef.value == null || isRedefinition) {
+        // A declaration updates the existing CV's metadata.  Replacing it
+        // would lose the fact that a body was already defined and incorrectly
+        // let a late :lvalue declaration change that body.
+        if (codeRef.value == null || (isRedefinition && block != null)) {
             codeRef.type = RuntimeScalarType.CODE;
             codeRef.value = new RuntimeCode(subName, attributes);
         }
@@ -1855,6 +1877,20 @@ public class SubroutineParser {
 
         // Initialize placeholder metadata (accessed via codeRef.value)
         RuntimeCode placeholder = (RuntimeCode) codeRef.value;
+        if (block == null && placeholder.hasBodyDefinition
+                && attributes != null && attributes.contains("lvalue")) {
+            String location = "";
+            if (parser.ctx.errorUtil != null) {
+                int line = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex);
+                location = " at " + parser.ctx.compilerOptions.fileName + " line " + line + ".\n";
+            }
+            org.perlonjava.runtime.operators.WarnDie.warn(
+                    new RuntimeScalar("lvalue attribute ignored after the subroutine has been defined" + location),
+                    new RuntimeScalar(""));
+            attributes = new java.util.ArrayList<>(attributes);
+            attributes.remove("lvalue");
+        }
+        placeholder.hasBodyDefinition |= block != null;
         placeholder.prototype = prototype;
         // Preserve existing attributes from forward declarations when the new definition
         // doesn't specify attributes. In Perl, `sub PS : lvalue; sub PS { }` preserves
@@ -1885,7 +1921,8 @@ public class SubroutineParser {
                 && block.getBooleanAnnotation("generatedClassConstructor");
         placeholder.classAdjustBlock = block != null
                 && block.getBooleanAnnotation("classAdjustBlock");
-        placeholder.isConstantCv = isConstantCvBody(prototype, block);
+        boolean literalConstantCv = isConstantCvBody(prototype, block);
+        placeholder.isConstantCv = literalConstantCv;
 
         // Compile-time attribute handlers can inspect the still-lazy CV with
         // B::Deparse before compilerSupplier has materialized its body.  Give
@@ -2308,9 +2345,17 @@ public class SubroutineParser {
                     interpretedCode.declaringClass = placeholder.declaringClass;
                     interpretedCode.generatedClassConstructor = placeholder.generatedClassConstructor;
                     interpretedCode.classAdjustBlock = placeholder.classAdjustBlock;
+                    interpretedCode.isConstantCv = placeholder.isConstantCv;
                     interpretedCode.lexicalVariableNames = placeholder.lexicalVariableNames;
                     interpretedCode.ourVariableRegistry = placeholder.ourVariableRegistry;
                     interpretedCode.lexicalAliases = placeholder.lexicalAliases;
+
+                    if (interpretedCode.isConstantCv) {
+                        interpretedCode.cacheConstantCvValue();
+                        if (literalConstantCv) {
+                            placeholder.constantValue = interpretedCode.constantValue;
+                        }
+                    }
 
                     // Set the __SUB__ field for self-reference
                     interpretedCode.__SUB__ = codeRef;
@@ -2358,9 +2403,16 @@ public class SubroutineParser {
                 interpretedCode.declaringClass = placeholder.declaringClass;
                 interpretedCode.generatedClassConstructor = placeholder.generatedClassConstructor;
                 interpretedCode.classAdjustBlock = placeholder.classAdjustBlock;
+                interpretedCode.isConstantCv = placeholder.isConstantCv;
                 interpretedCode.lexicalVariableNames = placeholder.lexicalVariableNames;
                 interpretedCode.ourVariableRegistry = placeholder.ourVariableRegistry;
                 interpretedCode.lexicalAliases = placeholder.lexicalAliases;
+                if (interpretedCode.isConstantCv) {
+                    interpretedCode.cacheConstantCvValue();
+                    if (literalConstantCv) {
+                        placeholder.constantValue = interpretedCode.constantValue;
+                    }
+                }
                 interpretedCode.__SUB__ = codeRef;
                 placeholder.subroutine = interpretedCode;
                 placeholder.codeObject = interpretedCode;

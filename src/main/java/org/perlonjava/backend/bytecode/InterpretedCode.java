@@ -389,6 +389,10 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         // Return cached constant value if this sub has been const-folded
         if (constantValue != null) {
             RuntimeCode.requireLvalueCallable(this, callContext, null);
+            if (callContext == RuntimeContextType.LVALUE
+                    || callContext == RuntimeContextType.LVALUE_LIST) {
+                return lvalueConstantValue();
+            }
             return isConstantCv
                     ? constantValue.cloneScalars() : new RuntimeList(constantValue);
         }
@@ -468,6 +472,10 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         // Return cached constant value if this sub has been const-folded
         if (constantValue != null) {
             RuntimeCode.requireLvalueCallable(this, callContext, subroutineName);
+            if (callContext == RuntimeContextType.LVALUE
+                    || callContext == RuntimeContextType.LVALUE_LIST) {
+                return lvalueConstantValue();
+            }
             return isConstantCv
                     ? constantValue.cloneScalars() : new RuntimeList(constantValue);
         }
