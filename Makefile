@@ -20,6 +20,7 @@ THREAD_TOOLING_TESTS := \
 	dev/tools/tests/perl_test_runner_timeout_cleanup.t \
 	dev/tools/tests/perl_test_runner_timeout_floor.t \
 	dev/tools/tests/perl_test_runner_watchdog_factor.t \
+	dev/tools/tests/perl_test_runner_win32_exclusion.t \
 	dev/tools/tests/perl_test_runner_weighted_integration.t
 
 THREAD_DIST_DIRS := perl5/dist/threads/t perl5/dist/threads-shared/t perl5/dist/Thread-Queue/t perl5/dist/Thread-Semaphore/t
