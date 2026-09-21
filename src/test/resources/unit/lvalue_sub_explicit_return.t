@@ -94,4 +94,10 @@ use Test::More;
     is($indexed_lvalue_return, 'explicit', 'indexed explicit lvalue return preserves its alias');
 }
 
+{
+    eval { +sub :lvalue { return 3 }->() = 4 };
+    like($@, qr/^Can't return a readonly value from lvalue subroutine/,
+        'anonymous numeric lvalue return is rejected');
+}
+
 done_testing;

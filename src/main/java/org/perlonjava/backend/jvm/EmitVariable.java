@@ -1177,6 +1177,11 @@ public class EmitVariable {
 
     private static boolean isScalarLvalueTarget(Node node) {
         if (node instanceof OperatorNode operator) {
+            // Unary plus is a parse disambiguator around an lvalue, except
+            // for the separately handled +() empty-list assignment form.
+            if (operator.operator.equals("+")) {
+                return isScalarLvalueTarget(operator.operand);
+            }
             return operator.operator.equals("substr")
                     || operator.operator.equals("pos")
                     || operator.operator.equals("vec");

@@ -2004,26 +2004,14 @@ public class BytecodeCompiler implements Visitor {
 
             if (isInteger) {
                 int intValue = Integer.parseInt(value);
-                if (currentCallContext == RuntimeContextType.LIST) {
-                    // In LIST context, emit the cached read-only scalar so foreach
-                    // iteration preserves Perl's "literal alias" semantics:
-                    // `for (3) { $_ = 4 }` must throw "Modification of a read-only
-                    // value". Downstream copy-consumers (MY_SCALAR via addToScalar,
-                    // array/hash setFromList, etc.) copy by value so mutable storage
-                    // is unaffected. Fixes op/ref.t 231-234, op/for.t 130-134
-                    // (interpreter fallback).
-                    int constIdx = addToConstantPool(RuntimeScalarCache.getScalarInt(intValue));
-                    emit(Opcodes.LOAD_CONST);
-                    emitReg(rd);
-                    emit(constIdx);
-                } else {
-                    // Regular integer - use LOAD_INT to create mutable scalar
-                    // Note: We don't use RuntimeScalarCache here because ALIAS just copies references,
-                    // and we need mutable scalars for variables (++, --, etc.)
-                    emit(Opcodes.LOAD_INT);
-                    emitReg(rd);
-                    emitInt(intValue);
-                }
+                // A number literal is never writable.  Keeping scalar-context
+                // literals mutable let an interpreter-backed :lvalue sub expose
+                // `3` as a writable return cell, unlike the JVM backend and Perl.
+                // Assignment consumers materialize their own mutable destination.
+                int constIdx = addToConstantPool(RuntimeScalarCache.getScalarInt(intValue));
+                emit(Opcodes.LOAD_CONST);
+                emitReg(rd);
+                emit(constIdx);
             } else if (isLargeInteger) {
                 RuntimeScalar integerScalar;
                 try {
