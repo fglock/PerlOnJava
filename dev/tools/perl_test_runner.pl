@@ -59,6 +59,10 @@ my @test_files;
 for my $test_path (@ARGV) {
     if (-f $test_path && $test_path =~ /\.t$/) {
         # Single test file
+        if (is_excluded_test_file($test_path)) {
+            print "Excluding unsupported test file: $test_path\n";
+            next;
+        }
         push @test_files, $test_path;
         print "Adding test file: $test_path\n";
     } elsif (-d $test_path) {
@@ -189,10 +193,24 @@ sub find_test_files {
     my @files;
 
     find(sub {
-        push @files, $File::Find::name if /\.t$/;
+        return unless /\.t$/;
+        return if is_excluded_test_file($File::Find::name);
+        push @files, $File::Find::name;
     }, $dir);
 
     return sort @files;
+}
+
+sub is_excluded_test_file {
+    my ($path) = @_;
+
+    # These imported tests exercise Perl 5's native Win32 port (NTFS,
+    # junctions, cmd.exe, pseudo-fork, and Win32 APIs), rather than the
+    # portable Perl behavior that PerlOnJava's core-suite result measures.
+    # Keep the upstream source available for reference, but do not run it as
+    # part of the PerlOnJava compatibility corpus, even when named directly.
+    $path =~ s{\\}{/}g;
+    return $path =~ m{(?:^|/)perl5_t/t/win32(?:/|$)};
 }
 
 sub run_tests_parallel {
