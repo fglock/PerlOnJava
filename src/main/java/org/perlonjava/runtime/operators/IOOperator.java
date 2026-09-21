@@ -1461,8 +1461,8 @@ public class IOOperator {
             throw new PerlCompilerException("Negative length");
         }
 
-        int targetLength = target.toString().length();
         if (offset < 0) {
+            int targetLength = target.toString().length();
             offset = targetLength + offset;
             if (offset < 0) {
                 throw new PerlCompilerException("Offset outside string");

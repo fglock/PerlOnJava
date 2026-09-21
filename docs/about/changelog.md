@@ -14,6 +14,9 @@ priorities and future plans.
   `${^LAST_FH}`, `%!` void-context autoloading, signal wait statuses, shebang
   `$^X` identity, and subprocess output decoding.
 
+- Restore `sysread`/`syswrite` validation and `sysseek` failure semantics,
+  including tied-buffer magic access counts.
+
 - Restore core compatibility for grouped subroutine prototypes, nested
   heredocs in interpolations, tied-handle EOF/write dispatch, and byte-string
   UTF-8 evals.
