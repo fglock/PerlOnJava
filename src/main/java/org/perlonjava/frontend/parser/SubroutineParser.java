@@ -1783,10 +1783,13 @@ public class SubroutineParser {
         // This matches Perl's behavior where:
         //   my $orig = \&foo; sub foo { "new" }; $orig->() returns "old"
         boolean isRedefinition = false;
+        boolean hasPriorPrototype = false;
         String oldPrototype = null;
         boolean isConstantSub = false;
         boolean isBuiltinSub = false;  // Java-registered (XS-like) methods don't trigger redefine warnings
         if (codeRef.value instanceof RuntimeCode existingCode) {
+            oldPrototype = existingCode.prototype;
+            hasPriorPrototype = oldPrototype != null;
             // Check if the existing code has actual implementation OR pending compilation
             // compilerSupplier != null means there's a lazy definition waiting to be compiled
             // InterpretedCode stores its executable body outside the base
@@ -1795,7 +1798,6 @@ public class SubroutineParser {
             // an interpreted wrapper just as it replaces a JVM-compiled CV.
             isRedefinition = existingCode.defined() || existingCode.codeObject != null;
             if (isRedefinition) {
-                oldPrototype = existingCode.prototype;
                 // Previous sub was compile-time constant iff prototype is "()". (Perl stores "()", not "")
                 isConstantSub = existingCode.isConstantCv
                         || "()".equals(oldPrototype) || "".equals(oldPrototype);
@@ -1806,7 +1808,7 @@ public class SubroutineParser {
 
         // Emit "Prototype mismatch" and "Subroutine redefined" warnings
         // Skip warnings for Java-registered (XS-like) built-in methods being overridden by Perl stubs
-        if (isRedefinition && block != null && !isBuiltinSub
+        if ((isRedefinition || hasPriorPrototype) && block != null && !isBuiltinSub
                 && !block.getBooleanAnnotation("generatedClassConstructor")) {
             String location = "";
             if (parser.ctx.errorUtil != null) {

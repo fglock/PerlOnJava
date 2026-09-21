@@ -380,6 +380,12 @@ public class RuntimeIO extends RuntimeScalar {
      */
     public int currentLineNumber = 0;
     /**
+     * Tracks whether slurp-mode readline has already produced this handle's
+     * one record.  This cannot be inferred from {@link #currentLineNumber}:
+     * diamond input carries $. across files, including empty files.
+     */
+    public boolean slurpReadAttempted;
+    /**
      * The underlying I/O handle that performs actual I/O operations.
      * Can be a file, socket, pipe, or custom I/O implementation.
      */
@@ -468,6 +474,7 @@ public class RuntimeIO extends RuntimeScalar {
         }
 
         this.currentLineNumber = other.currentLineNumber;
+        this.slurpReadAttempted = other.slurpReadAttempted;
         this.ioHandle = other.ioHandle;
         this.directoryIO = other.directoryIO;
         this.needFlush = other.needFlush;
@@ -1710,6 +1717,7 @@ public class RuntimeIO extends RuntimeScalar {
      */
     public RuntimeScalar seek(long pos) {
         setLastAccessedHandle(this);
+        slurpReadAttempted = false;
         return ioHandle.seek(pos);
     }
 

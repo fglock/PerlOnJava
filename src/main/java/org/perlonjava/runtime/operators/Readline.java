@@ -140,7 +140,7 @@ public class Readline {
             // Match Perl's semantics: a slurp call on a fresh handle returns
             // the file contents (possibly the empty string) even if the
             // handle is positioned at EOF; the next call returns undef.
-            if (runtimeIO.eof().getBoolean() && runtimeIO.currentLineNumber > 0) {
+            if (runtimeIO.eof().getBoolean() && runtimeIO.slurpReadAttempted) {
                 return externalUndef();
             }
             StringBuilder content = new StringBuilder();
@@ -156,6 +156,7 @@ public class Readline {
 
             // In Perl 5, slurp mode increments $. by 1 (not per line)
             runtimeIO.currentLineNumber++;
+            runtimeIO.slurpReadAttempted = true;
             RuntimeScalar result = new RuntimeScalar(content.toString());
             if (isByteData) {
                 result.type = RuntimeScalarType.BYTE_STRING;
