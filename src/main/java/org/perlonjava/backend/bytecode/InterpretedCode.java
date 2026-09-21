@@ -389,7 +389,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         // Return cached constant value if this sub has been const-folded
         if (constantValue != null) {
             RuntimeCode.requireLvalueCallable(this, callContext, null);
-            return new RuntimeList(constantValue);
+            return isConstantCv
+                    ? constantValue.cloneScalars() : new RuntimeList(constantValue);
         }
         RuntimeCode.requireLvalueCallable(this, callContext, null);
         validateAsyncSignature(args);
@@ -467,7 +468,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         // Return cached constant value if this sub has been const-folded
         if (constantValue != null) {
             RuntimeCode.requireLvalueCallable(this, callContext, subroutineName);
-            return new RuntimeList(constantValue);
+            return isConstantCv
+                    ? constantValue.cloneScalars() : new RuntimeList(constantValue);
         }
         RuntimeCode.requireLvalueCallable(this, callContext, subroutineName);
         validateAsyncSignature(args);
@@ -581,6 +583,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         copy.lexicalSubDisplayName = this.lexicalSubDisplayName;
         copy.deferredClosureWarning = this.deferredClosureWarning;
         copy.deferredClosureWarningLocation = this.deferredClosureWarningLocation;
+        copy.deferredConstantCvError = this.deferredConstantCvError;
         copy.isTryExpressionWrapper = this.isTryExpressionWrapper;
         copy.isMapGrepBlock = this.isMapGrepBlock;
         copy.isSortComparator = this.isSortComparator;

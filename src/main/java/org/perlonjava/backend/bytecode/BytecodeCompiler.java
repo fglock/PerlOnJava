@@ -6852,6 +6852,8 @@ public class BytecodeCompiler implements Visitor {
                 (String) node.block.getAnnotation("deferredClosureWarning");
         subCode.deferredClosureWarningLocation =
                 (String) node.block.getAnnotation("deferredClosureWarningLocation");
+        subCode.deferredConstantCvError =
+                (String) node.getAnnotation("deferredConstantCvError");
         subCode.prototype = node.prototype;
         // Perl treats a no-argument anonymous sub whose entire body is a
         // lexical scalar read as a constant CV.  Object::HashBase creates its

@@ -8,6 +8,8 @@ import org.perlonjava.frontend.astnode.FormatNode;
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.astnode.NumberNode;
 import org.perlonjava.frontend.astnode.OperatorNode;
+import org.perlonjava.frontend.astnode.IdentifierNode;
+import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.runtimetypes.ErrorMessageUtil;
@@ -56,6 +58,83 @@ public class Parser {
 
     public final Deque<LexicalSubWarningFrame> lexicalSubWarningFrames =
             new ArrayDeque<>();
+
+    // Perl's constant-CV optimization is sensitive to the order in which
+    // closures capture a lexical.  Keep the captures made by earlier
+    // anonymous closures in each lexical scope so a later `sub () { $x }`
+    // can decline the optimization when $x has already escaped.
+    private final Map<LexicalSubWarningFrame, Set<String>> anonymousClosureCaptures =
+            new IdentityHashMap<>();
+    private final Map<LexicalSubWarningFrame, Map<String, List<Node>>> lexicalConstantCandidates =
+            new IdentityHashMap<>();
+    private final Map<LexicalSubWarningFrame, Set<String>> refaliasLexicals =
+            new IdentityHashMap<>();
+
+    /** The anonymous CV currently enclosing the subroutine being parsed. */
+    public LexicalSubWarningFrame enclosingAnonymousClosureFrame() {
+        var frames = lexicalSubWarningFrames.iterator();
+        if (frames.hasNext()) frames.next(); // current subroutine
+        return frames.hasNext() ? frames.next() : null;
+    }
+
+    public boolean hasPriorAnonymousClosureCapture(LexicalSubWarningFrame owner,
+                                                    Set<String> names) {
+        if (owner == null) return false;
+        Set<String> prior = anonymousClosureCaptures.get(owner);
+        if (prior == null || prior.isEmpty()) return false;
+        for (String name : names) {
+            if (prior.contains(name)) return true;
+        }
+        return false;
+    }
+
+    public void noteAnonymousClosureCaptures(LexicalSubWarningFrame owner,
+                                              Set<String> names) {
+        if (owner == null || names.isEmpty()) return;
+        anonymousClosureCaptures.computeIfAbsent(owner, ignored -> new HashSet<>()).addAll(names);
+    }
+
+    public void noteLexicalConstantCandidate(LexicalSubWarningFrame owner, String name, Node node) {
+        if (owner == null || name == null || node == null) return;
+        lexicalConstantCandidates.computeIfAbsent(owner, ignored -> new LinkedHashMap<>())
+                .computeIfAbsent(name, ignored -> new ArrayList<>()).add(node);
+    }
+
+    public void noteRefaliasLexical(String name) {
+        if (name == null) return;
+        for (LexicalSubWarningFrame frame : lexicalSubWarningFrames) {
+            if (frame.anonymous) {
+                refaliasLexicals.computeIfAbsent(frame, ignored -> new HashSet<>()).add(name);
+                return;
+            }
+        }
+    }
+
+    public boolean hasRefaliasLexical(LexicalSubWarningFrame owner, String name) {
+        return owner != null && refaliasLexicals.getOrDefault(owner, Set.of()).contains(name);
+    }
+
+    /** Record a write parsed after a candidate CV in the same anonymous scope. */
+    public void noteLexicalConstantMutation(String name) {
+        if (name == null) return;
+        for (LexicalSubWarningFrame frame : lexicalSubWarningFrames) {
+            if (!frame.anonymous) continue;
+            List<Node> candidates = lexicalConstantCandidates
+                    .getOrDefault(frame, Map.of()).get(name);
+            if (candidates == null) return;
+            for (Node candidate : candidates) {
+                if (candidate instanceof AbstractNode annotated) {
+                    if (annotated.getBooleanAnnotation("optimizedLexicalConstantCandidate")) {
+                        annotated.setAnnotation("simpleLexicalConstantCandidate", false);
+                    } else {
+                        annotated.setAnnotation("deferredConstantCvError",
+                                "Constants from lexical variables potentially modified elsewhere are no longer permitted");
+                    }
+                }
+            }
+            return;
+        }
+    }
 
     // Format argument text is re-tokenized and may be parsed after the normal
     // symbol-table scope has been unwound.  Retain source-level lexical-sub

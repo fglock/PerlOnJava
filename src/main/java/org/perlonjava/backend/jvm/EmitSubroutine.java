@@ -461,6 +461,14 @@ public class EmitSubroutine {
                         "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                         false);
             }
+            if (node.getAnnotation("deferredConstantCvError") instanceof String error) {
+                mv.visitLdcInsn(error);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "throwDeferredConstantCvError",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
+            }
             if (node.getBooleanAnnotation("generatedClassConstructor")
                     || (node.block instanceof AbstractNode blockNode
                     && blockNode.getBooleanAnnotation("generatedClassConstructor"))) {
