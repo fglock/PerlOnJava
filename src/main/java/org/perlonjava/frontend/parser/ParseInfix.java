@@ -277,6 +277,17 @@ public class ParseInfix {
 
             rejectAggregateBitwiseAssignment(parser, operator, left, right);
 
+            if (isAssignmentOperator(operator)) {
+                String mutatedLexical = directScalarLexicalName(left);
+                if (mutatedLexical != null) {
+                    parser.noteLexicalConstantMutation(mutatedLexical);
+                }
+                String refaliasLexical = refaliasDeclarationName(right);
+                if (refaliasLexical != null) {
+                    parser.noteRefaliasLexical(refaliasLexical);
+                }
+            }
+
             if (operator.equals("=~") || operator.equals("!~")) {
                 warnAggregateRegexBinding(parser, left, right, operatorIndex);
                 rejectAggregateRegexMutation(parser, left, right);
@@ -642,6 +653,33 @@ public class ParseInfix {
                 }
                 throw new PerlCompilerException(Math.max(0, errorIndex), "syntax error", parser.ctx.errorUtil);
         }
+    }
+
+    private static boolean isAssignmentOperator(String operator) {
+        return operator.equals("=") || operator.endsWith("=");
+    }
+
+    private static String directScalarLexicalName(Node node) {
+        if (node instanceof OperatorNode op && "$".equals(op.operator)
+                && op.operand instanceof IdentifierNode id) {
+            return "$" + id.name;
+        }
+        return null;
+    }
+
+    private static String refaliasDeclarationName(Node node) {
+        if (!(node instanceof OperatorNode reference) || !"\\".equals(reference.operator)
+                || !(reference.operand instanceof ListNode list) || list.elements == null) {
+            return null;
+        }
+        for (Node element : list.elements) {
+            if (element instanceof BinaryOperatorNode assignment
+                    && assignment.left instanceof OperatorNode declaration
+                    && "my".equals(declaration.operator)) {
+                return directScalarLexicalName(declaration.operand);
+            }
+        }
+        return null;
     }
 
     /**

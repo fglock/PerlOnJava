@@ -548,8 +548,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                         && !isNativeModuleMethod(oldCode)
                         && !isCompiledDeclarationInstall(oldCode, newCode)
                         && !isSameCachedConstant(oldCode, newCode)) {
+                    String warningPrefix = oldCode.isConstantCv
+                            ? "Constant subroutine " : "Subroutine ";
                     org.perlonjava.runtime.operators.WarnDie.warnWithCategory(
-                            new RuntimeScalar("Subroutine " + this.globName + " redefined"),
+                            new RuntimeScalar(warningPrefix + this.globName + " redefined"),
                             new RuntimeScalar(),
                             "redefine");
                 }

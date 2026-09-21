@@ -1417,6 +1417,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /** A parser-validated closure warning emitted when this CV is created. */
     public String deferredClosureWarning;
     public String deferredClosureWarningLocation;
+    public String deferredConstantCvError;
 
     /**
      * Source location of the start of this CV's body (Perl {@code B::CV->START->line} /
@@ -2604,6 +2605,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.lexicalSubDisplayName = codeFrom.lexicalSubDisplayName;
         this.deferredClosureWarning = codeFrom.deferredClosureWarning;
         this.deferredClosureWarningLocation = codeFrom.deferredClosureWarningLocation;
+        this.deferredConstantCvError = codeFrom.deferredConstantCvError;
         this.cvStartFile = codeFrom.cvStartFile;
         this.cvStartLine = codeFrom.cvStartLine;
         this.deparseSourceText = codeFrom.deparseSourceText;
@@ -5191,6 +5193,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return codeRef;
     }
 
+    /** Raise a parser-proven constant-CV incompatibility when the CV is created. */
+    public static RuntimeScalar throwDeferredConstantCvError(RuntimeScalar codeRef, String error) {
+        if (error != null && !error.isEmpty()) {
+            throw new PerlCompilerException(error);
+        }
+        return codeRef;
+    }
+
 
 
     /** Marks a generated code reference as a parser-recognized constant CV. */
@@ -7275,7 +7285,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         requireClassMethodInstance(this, a);
         if (constantValue != null) {
             requireLvalueCallable(this, callContext, null);
-            return new RuntimeList(constantValue);
+            return isConstantCv
+                    ? constantValue.cloneScalars() : new RuntimeList(constantValue);
         }
         try {
             if (this.compilerSupplier != null) {
@@ -7444,7 +7455,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         if (constantValue != null) {
             requireLvalueCallable(this, callContext, subroutineName);
-            return new RuntimeList(constantValue);
+            return isConstantCv
+                    ? constantValue.cloneScalars() : new RuntimeList(constantValue);
         }
         try {
             if (this.compilerSupplier != null) {

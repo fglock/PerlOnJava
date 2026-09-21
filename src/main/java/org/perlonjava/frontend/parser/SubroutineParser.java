@@ -242,6 +242,27 @@ public class SubroutineParser {
                             // Forward declarations like `sub foo;` create a RuntimeCode with a non-null
                             // attributes list (possibly empty). Placeholders created implicitly use null.
                             || attributes != null;
+
+                    // `local *time = $coderef` installs a real override in
+                    // the live glob.  A later bare `time` in eval STRING is
+                    // parsed against that slot and, unless the CV has the
+                    // :method attribute, Perl warns that it resolved to the
+                    // CORE keyword.  Do not diagnose ordinary lazily-created
+                    // CORE placeholders: only a typeglob installation marks
+                    // the name in isSubs.
+                    if (!isMethod && CORE_PROTOTYPES.containsKey(subName)
+                            && GlobalVariable.isSubs.containsKey(fullName)
+                            && !runtimeCode.isBuiltin
+                            && (attributes == null || !attributes.contains("method"))) {
+                        String location = parser.ctx.errorUtil == null
+                                ? ""
+                                : parser.ctx.errorUtil.warningLocation(currentIndex);
+                        Warnings.warnWithCategory("ambiguous",
+                                "Ambiguous call resolved as CORE::" + subName
+                                        + "(), qualify as such or use &",
+                                location);
+                    }
+
                 }
             }
         }
@@ -1499,10 +1520,14 @@ public class SubroutineParser {
         } else {
             elements = List.of(block);
         }
-        if (elements.size() != 1) {
+        if (elements.isEmpty() || elements.size() > 2) {
             return false;
         }
-        Node node = elements.get(0);
+        Node node = elements.getLast();
+        if (elements.size() == 2 && !(elements.getFirst() instanceof NumberNode number
+                && number.value.equals("0"))) {
+            return false;
+        }
         while (node instanceof ListNode list && list.handle == null && list.elements.size() == 1) {
             node = list.elements.get(0);
         }
@@ -1527,10 +1552,14 @@ public class SubroutineParser {
         } else {
             elements = List.of(block);
         }
-        if (elements.size() != 1) {
+        if (elements.isEmpty() || elements.size() > 2) {
             return false;
         }
-        Node body = elements.get(0);
+        Node body = elements.getLast();
+        if (elements.size() == 2 && !(elements.getFirst() instanceof NumberNode number
+                && number.value.equals("0"))) {
+            return false;
+        }
         while (body instanceof ListNode list && list.handle == null && list.elements.size() == 1) {
             body = list.elements.get(0);
         }
@@ -1732,7 +1761,8 @@ public class SubroutineParser {
             if (isRedefinition) {
                 oldPrototype = existingCode.prototype;
                 // Previous sub was compile-time constant iff prototype is "()". (Perl stores "()", not "")
-                isConstantSub = "()".equals(oldPrototype) || "".equals(oldPrototype);
+                isConstantSub = existingCode.isConstantCv
+                        || "()".equals(oldPrototype) || "".equals(oldPrototype);
                 // Java-registered methods (via registerMethod) have isStatic=true and methodHandle set
                 isBuiltinSub = existingCode.isStatic && existingCode.methodHandle != null;
             }
@@ -2596,12 +2626,48 @@ public class SubroutineParser {
         SubroutineNode node =
                 new SubroutineNode(subName, prototype, attributes, block, false, currentIndex,
                         sourceEndTokenIndex);
-        if (isSimpleLexicalConstantBody(parser, prototype, block)) {
+        Set<String> capturedNames = new HashSet<>();
+        Set<String> declared = new HashSet<>();
+        block.accept(new VariableCollectorVisitor(capturedNames, declared));
+        capturedNames.removeAll(declared);
+        Parser.LexicalSubWarningFrame owner = parser.enclosingAnonymousClosureFrame();
+        boolean priorCapture = parser.hasPriorAnonymousClosureCapture(owner, capturedNames);
+        // An anonymous no-argument subroutine whose body is a literal (or an
+        // optimized `0; literal`) is a constant CV in Perl.  A lexical read
+        // has the same property only until another closure has captured that
+        // lexical in the same enclosing scope.
+        if (isConstantCvBody(prototype, block)) {
+            node.setAnnotation("lexicalLiteralConstantCv", true);
+        }
+        boolean simpleLexical = isSimpleLexicalConstantBody(parser, prototype, block);
+        boolean optimizedLexical = simpleLexical && block.elements.size() == 2;
+        // currentIndex is a source offset whereas parser.tokenIndex indexes the
+        // lexer stream.  Use the latter for the lexical-block token scan.
+        boolean unsafeLexical = simpleLexical
+                && lexicalConstantCvMustFail(parser, parser.tokenIndex, capturedNames);
+        boolean refaliasLexical = simpleLexical
+                && (lexicalConstantCvIsRefalias(parser, parser.tokenIndex, capturedNames)
+                || (capturedNames.size() == 1 && parser.hasRefaliasLexical(owner,
+                capturedNames.iterator().next())));
+        if (simpleLexical && !priorCapture && !refaliasLexical
+                && !(optimizedLexical && unsafeLexical)) {
             node.setAnnotation("simpleLexicalConstantCandidate", true);
+            if (optimizedLexical) {
+                node.setAnnotation("optimizedLexicalConstantCandidate", true);
+            }
+            node.setAnnotation("simpleLexicalConstantCaptures", Set.copyOf(capturedNames));
+            if (capturedNames.size() == 1) {
+                parser.noteLexicalConstantCandidate(owner, capturedNames.iterator().next(), node);
+            }
+            if (unsafeLexical) {
+                node.setAnnotation("deferredConstantCvError",
+                        "Constants from lexical variables potentially modified elsewhere are no longer permitted");
+            }
             if (parser.parsingDynamicGlobAssignmentRhs) {
                 node.setAnnotation("dynamicGlobAssignment", true);
             }
         }
+        parser.noteAnonymousClosureCaptures(owner, capturedNames);
         if (attributes != null && hasNonBuiltinCodeAttribute(attributes)) {
             RuntimeCode placeholder = new RuntimeCode(prototype, new ArrayList<>(attributes));
             placeholder.packageName = parser.ctx.symbolTable.getCurrentPackage();
@@ -2619,6 +2685,102 @@ public class SubroutineParser {
             node.setAnnotation("compileTimeAttributeCodeRef", codeRef);
         }
         return node;
+    }
+
+    /**
+     * Perl rejects the historic lexical-constant optimization when a lexical
+     * can subsequently be changed in the same lexical block.  The parser has
+     * the complete token stream here, while the enclosing anonymous CV is
+     * still being parsed, so retain the diagnostic on the inner CV and raise
+     * it when that CV is created at runtime (rather than while compiling).
+     */
+    private static boolean lexicalConstantCvMustFail(Parser parser, int afterSub,
+            Set<String> captures) {
+        if (captures.size() != 1) return false;
+        String captured = captures.iterator().next();
+        int blockStart = enclosingBlockStart(parser, afterSub);
+        int blockEnd = matchingBlockEnd(parser, blockStart);
+        if (blockStart < 0 || blockEnd < afterSub) return false;
+
+        // A refalias declaration makes a later mutation observable through a
+        // different name; it must never be treated as a frozen lexical CV.
+        if (containsRefaliasDeclaration(parser, blockStart + 1, afterSub, captured)) return true;
+        // state $x++ has already made the cell mutable before the CV exists.
+        if (containsModification(parser, blockStart + 1, afterSub, captured)) return true;
+
+        for (int i = afterSub; i < blockEnd; i++) {
+            String text = parser.tokens.get(i).text;
+            if ("eval".equals(text) || "evalbytes".equals(text) || "ee".equals(text)) return true;
+        }
+        return containsModification(parser, afterSub, blockEnd, captured);
+    }
+
+    private static boolean lexicalConstantCvIsRefalias(Parser parser, int afterSub,
+            Set<String> captures) {
+        if (captures.size() != 1) return false;
+        int blockStart = enclosingBlockStart(parser, afterSub);
+        return blockStart >= 0 && containsRefaliasDeclaration(parser, blockStart + 1, afterSub,
+                captures.iterator().next());
+    }
+
+    private static int enclosingBlockStart(Parser parser, int before) {
+        int depth = 0;
+        for (int i = before - 1; i >= 0; i--) {
+            String text = parser.tokens.get(i).text;
+            if ("}".equals(text)) depth++;
+            else if ("{".equals(text) && depth-- == 0) return i;
+        }
+        return -1;
+    }
+
+    private static int matchingBlockEnd(Parser parser, int start) {
+        if (start < 0) return -1;
+        int depth = 0;
+        for (int i = start; i < parser.tokens.size(); i++) {
+            String text = parser.tokens.get(i).text;
+            if ("{".equals(text)) depth++;
+            else if ("}".equals(text) && --depth == 0) return i;
+        }
+        return -1;
+    }
+
+    private static boolean containsRefaliasDeclaration(Parser parser, int from, int to,
+            String captured) {
+        for (int i = from; i < to; i++) {
+            if (!"\\".equals(parser.tokens.get(i).text)) continue;
+            for (int j = i + 1; j < Math.min(to, i + 5); j++) {
+                if ("my".equals(parser.tokens.get(j).text)
+                        && variableAt(parser, j + 1, captured)) return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean containsModification(Parser parser, int from, int to,
+            String captured) {
+        for (int i = from; i < to; i++) {
+            if (!variableAt(parser, i, captured)) continue;
+            int next = i + variableTokenWidth(parser, i, captured);
+            if (next < to) {
+                String op = parser.tokens.get(next).text;
+                if (op.equals("=") || op.equals("++") || op.equals("--") || op.endsWith("=")) return true;
+            }
+            if (i > from && (parser.tokens.get(i - 1).text.equals("++")
+                    || parser.tokens.get(i - 1).text.equals("--"))) return true;
+        }
+        return false;
+    }
+
+    private static boolean variableAt(Parser parser, int index, String captured) {
+        if (index >= parser.tokens.size()) return false;
+        if (captured.equals(parser.tokens.get(index).text)) return true;
+        return captured.length() > 1 && "$".equals(parser.tokens.get(index).text)
+                && index + 1 < parser.tokens.size()
+                && captured.substring(1).equals(parser.tokens.get(index + 1).text);
+    }
+
+    private static int variableTokenWidth(Parser parser, int index, String captured) {
+        return captured.equals(parser.tokens.get(index).text) ? 1 : 2;
     }
 
     private static boolean hasNonBuiltinCodeAttribute(List<String> attributes) {

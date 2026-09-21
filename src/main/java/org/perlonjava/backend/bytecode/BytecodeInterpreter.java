@@ -1254,6 +1254,8 @@ public class BytecodeInterpreter {
                                     RuntimeCode.emitDeferredClosureWarning(crs,
                                             ic.deferredClosureWarning,
                                             ic.deferredClosureWarningLocation);
+                                    RuntimeCode.throwDeferredConstantCvError(crs,
+                                            ic.deferredConstantCvError);
                                 }
                             }
 

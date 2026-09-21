@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore `op/const-optree.t` compatibility for lexical constant CVs,
+  including mutation errors, refaliasing, closure ordering, redefinition
+  diagnostics, and both execution backends.
+
 - Restore `op/tie.t` compatibility for tied scalar operators, output
   separators, deferred aliases, glob copies, and tied hash iteration on both
   execution backends.
