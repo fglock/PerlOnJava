@@ -21,6 +21,10 @@ priorities and future plans.
 - Fix core compatibility gaps for UTF-8 eval sources, `lock &code` prototypes,
   nested `@ARGV` traversal, and in-place editing of existing backup files.
 
+- Restore Perl-compatible warning order for prototype attributes and report
+  failed in-place backup renames instead of moving files into a backup
+  directory.
+
 - Restore `op/tie.t` compatibility for tied scalar operators, output
   separators, deferred aliases, glob copies, and tied hash iteration on both
   execution backends.

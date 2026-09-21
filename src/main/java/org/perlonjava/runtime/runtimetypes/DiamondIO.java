@@ -428,12 +428,20 @@ public class DiamondIO {
                         return false;
                     }
 
+                    // Java's move-to-directory behavior differs from Perl's
+                    // rename(2) semantics: with REPLACE_EXISTING, a source
+                    // file may be moved inside an existing destination
+                    // directory instead of failing.  Perl -i must report the
+                    // backup rename failure to the caller.
+                    if (Files.isDirectory(backupPath)) {
+                        return dieCannotRename(originalFileName, backupFileName, "Is a directory");
+                    }
+
                     Files.move(originalPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
                     state.inPlaceBackupPath = backupPath;
                 } catch (IOException e) {
-                    System.err.println("Error: Unable to create backup file " + backupFileName + ": " + e.getMessage());
-                    e.printStackTrace();
-                    return false;
+                    String error = e.getMessage() == null ? "I/O error" : e.getMessage();
+                    return dieCannotRename(originalFileName, backupFileName, error);
                 }
             }
 
@@ -481,6 +489,13 @@ public class DiamondIO {
     private static boolean dieCannotOpen(String fileName) {
         RuntimeScalar error = GlobalVariable.getGlobalVariable("main::!");
         WarnDie.die(new RuntimeScalar("Can't open " + fileName + ": " + error),
+                new RuntimeScalar(WarnDie.getPerlLocationFromStack()));
+        return false; // unreachable; keeps the compiler's flow analysis explicit
+    }
+
+    private static boolean dieCannotRename(String source, String destination, String error) {
+        GlobalVariable.getGlobalVariable("main::!").set(error);
+        WarnDie.die(new RuntimeScalar("Can't rename " + source + " to " + destination + ": " + error),
                 new RuntimeScalar(WarnDie.getPerlLocationFromStack()));
         return false; // unreachable; keeps the compiler's flow analysis explicit
     }

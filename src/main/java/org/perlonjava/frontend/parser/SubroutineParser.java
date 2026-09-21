@@ -944,7 +944,6 @@ public class SubroutineParser {
 
         // Initialize the prototype node to null. This will store the prototype of the subroutine if it exists.
         String prototype = null;
-        String deferredPrototypeWarningName = null;
 
         // Initialize a list to store any attributes the subroutine might have.
         List<String> attributes = new ArrayList<>();
@@ -1066,7 +1065,7 @@ public class SubroutineParser {
                     } else {
                         protoDisplayName = "?";
                     }
-                    deferredPrototypeWarningName = protoDisplayName;
+                    emitIllegalProtoWarning(parser, prototype, protoDisplayName);
                 }
 
                 // Build display name for :prototype() warnings
@@ -1092,9 +1091,6 @@ public class SubroutineParser {
         }
 
         if (wantName && subName != null && !peek(parser).text.equals("{")) {
-            if (deferredPrototypeWarningName != null) {
-                emitIllegalProtoWarning(parser, prototype, deferredPrototypeWarningName);
-            }
             // A named subroutine can be predeclared without a block of code.
             String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
             RuntimeScalar codeRefScalar = GlobalVariable.defineGlobalCodeRef(fullName);
@@ -1231,9 +1227,6 @@ public class SubroutineParser {
                 TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             } finally {
                 HintHashRegistry.exitScope();
-            }
-            if (deferredPrototypeWarningName != null) {
-                emitIllegalProtoWarning(parser, prototype, deferredPrototypeWarningName);
             }
             if (signature != null) {
                 boolean previousSignatureWarningState = parser.signatureArgsWarningsEnabled;
