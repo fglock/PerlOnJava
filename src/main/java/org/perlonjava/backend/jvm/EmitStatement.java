@@ -706,14 +706,15 @@ public class EmitStatement {
             // use register spilling to capture the result: allocate a local variable,
             // tell the block to store its last element's value there, then load it after endLabel.
             // This ensures consistent stack state across all code paths (including last/next jumps).
-            // Apply for SCALAR/LIST contexts - bare blocks always return their value in Perl.
+            // Apply for SCALAR/LIST/LVALUE contexts - bare blocks always return their value in Perl.
             // Note: Only apply to UNLABELED bare blocks. Labeled blocks like TODO: { ... } should
             // not return their value (this would break Test::More's TODO handling).
             // RUNTIME context is NOT included because it causes issues with Test2 context handling.
             boolean needsReturnValue = node.isSimpleBlock
                     && node.labelName == null  // Only bare blocks, not labeled blocks
                     && (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
-                        || emitterVisitor.ctx.contextType == RuntimeContextType.LIST);
+                        || emitterVisitor.ctx.contextType == RuntimeContextType.LIST
+                        || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE);
             int resultReg = -1;
 
             if (node.useNewScope) {
@@ -751,6 +752,7 @@ public class EmitStatement {
                     mv.visitVarInsn(Opcodes.ASTORE, resultReg);
                     // Tell the block to store its last element's value in this register
                     node.body.setAnnotation("resultRegister", resultReg);
+                    node.body.setAnnotation("resultRegisterContext", emitterVisitor.ctx.contextType);
                     // Visit body in VOID context (consistent stack state)
                     node.body.accept(voidVisitor);
                     // NOTE: Don't load the result here! We load it after endLabel so that
