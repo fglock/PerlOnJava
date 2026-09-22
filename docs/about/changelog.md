@@ -23,6 +23,9 @@ priorities and future plans.
   glob IO handles, `-x` extraction, length diagnostics, and deterministic
   closure destruction.
 
+- Restore braced typeglob IO-slot handles in `print`, unblocking core glob
+  compatibility tests for both ASCII and Unicode symbol names.
+
 - Restore core compatibility for UTF-8 `pack "U"` byte comparisons and
   whitespace-equivalent subroutine prototype declarations.
 

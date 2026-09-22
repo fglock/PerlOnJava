@@ -305,7 +305,12 @@ public class OperatorParser {
         if (isBracedGlobSlotHandle(parser)) {
             TokenUtils.consume(parser, OPERATOR, "{");
             parser.parsingForLoopVariable = true;
-            handle = ParsePrimary.parsePrimary(parser);
+            // The handle may itself contain a braced glob slot, as in
+            // `print {*FH{IO}} ...`.  Parsing only the primary consumes
+            // `*FH` and leaves `{IO}` where the enclosing print-handle brace
+            // expects its closing delimiter.  Parse the complete expression
+            // so its postfix slot access remains part of the handle.
+            handle = parser.parseExpression(0);
             parser.parsingForLoopVariable = false;
             TokenUtils.consume(parser, OPERATOR, "}");
             operand = ListParser.parseZeroOrMoreList(parser, 1, false, false, false, false);
