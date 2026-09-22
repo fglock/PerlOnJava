@@ -929,9 +929,47 @@ sub print_summary {
         printf "  Pass rate:   %.1f%%\n", $pass_rate;
     }
     
+    print_aborted_tests();
     # Show incomplete test opportunities
     print_incomplete_opportunities();
     print_complete_failure_opportunities();
+}
+
+sub print_aborted_tests {
+    # An error with no TAP results means the test aborted before it could emit
+    # a plan or any assertions. Keep this separate from intentionally empty
+    # or skip-only tests, which complete successfully.
+    my @aborted_tests;
+    for my $file (keys %results) {
+        my $result = $results{$file};
+        next unless $result->{status} eq 'error'
+            && ($result->{actual_tests_run} || 0) == 0;
+
+        push @aborted_tests, {
+            file => $file,
+            error => $result->{errors},
+            exit_code => $result->{exit_code},
+        };
+    }
+
+    return unless @aborted_tests;
+
+    @aborted_tests = sort { $a->{file} cmp $b->{file} } @aborted_tests;
+
+    print "\n🛑 ABORTED TESTS (no TAP assertions emitted):\n";
+    print "(Tests that exited with an error before producing a TAP plan or result)\n\n";
+    printf "  Total aborted tests: %d files\n\n", scalar(@aborted_tests);
+
+    for my $test (@aborted_tests) {
+        printf "  %-40s  exit %s\n",
+               $test->{file},
+               defined $test->{exit_code} ? $test->{exit_code} : '?';
+        if ($test->{error} && @{$test->{error}} > 0) {
+            my $error = $test->{error}[0];
+            $error = substr($error, 0, 120) . "..." if length($error) > 120;
+            print "      Error: $error\n";
+        }
+    }
 }
 
 sub print_incomplete_opportunities {
