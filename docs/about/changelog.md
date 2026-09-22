@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Allow valid Moo-style constant closures that capture an initialized lexical
+  within a `BEGIN` block.
+
 - Restore `op/const-optree.t` compatibility for lexical constant CVs,
   including mutation errors, refaliasing, closure ordering, redefinition
   diagnostics, and both execution backends.
