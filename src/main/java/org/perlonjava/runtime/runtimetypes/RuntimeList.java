@@ -209,6 +209,20 @@ public class RuntimeList extends RuntimeBase {
         }
     }
 
+    /**
+     * Expands a dynamic-context list member returned by an {@code :lvalue}
+     * subroutine without detaching array element cells.  Ordinary array list
+     * conversion copies scalars so rvalue callers cannot alias them; an lvalue
+     * return must instead expose the original cells to its caller.
+     */
+    public void addFlattenedLvalue(RuntimeBase value) {
+        if (value instanceof RuntimeArray array) {
+            elements.addAll(array.elements);
+        } else {
+            addFlattened(value);
+        }
+    }
+
     public void add(RuntimeScalar value) {
         this.elements.add(value);
     }
@@ -396,9 +410,10 @@ public class RuntimeList extends RuntimeBase {
     public RuntimeList getSlice(RuntimeList indices) {
         RuntimeList result = new RuntimeList();
         
-        // First, flatten this list to get actual elements
-        RuntimeArray flattened = new RuntimeArray();
-        this.addToArray(flattened);
+        // Flatten without materializing into an array.  addToArray() consumes
+        // the list and copies scalar cells, while a list slice must retain the
+        // original cells so an lvalue subroutine result remains assignable.
+        RuntimeList flattened = this.flattenElements();
         int size = flattened.size();
         
         // If the source list is empty, return empty list for any indices
@@ -413,7 +428,7 @@ public class RuntimeList extends RuntimeBase {
                 index = size + index;
             }
             if (index >= 0 && index < size) {
-                result.elements.add(flattened.get(index));
+                result.elements.add(flattened.elements.get(index));
             } else {
                 result.elements.add(new RuntimeScalar());  // undef for out of bounds
             }
@@ -617,6 +632,9 @@ public class RuntimeList extends RuntimeBase {
                     result.scalarContextSize = rhsSize;
                     for (int i = 0; i < lhsSize; i++) {
                         RuntimeScalar lhs = (RuntimeScalar) elements.get(i);
+                        if (lhs.isKeysLvalue()) {
+                            lhs.rejectKeysLvalueListAssignment();
+                        }
                         if (i < rhsValues.length) {
                             lhs.set(rhsValues[i]);
                         } else {
@@ -712,6 +730,9 @@ public class RuntimeList extends RuntimeBase {
                     rhsIndex++;
                 }
             } else if (elem instanceof RuntimeScalar runtimeScalar) {
+                if (runtimeScalar.isKeysLvalue()) {
+                    runtimeScalar.rejectKeysLvalueListAssignment();
+                }
                 RuntimeScalar assigned = (rhsIndex < rhsSize) ? rhsElements.get(rhsIndex++) : null;
                 runtimeScalar.set(assigned != null ? assigned : new RuntimeScalar());
                 result.elements.add(runtimeScalar);  // Add reference to the variable itself

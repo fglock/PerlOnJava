@@ -60,6 +60,21 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * invariant that STRING scalars expose a {@link String} to Java callers.
      */
     private transient StringBuilder growingString;
+    /** Backing aggregate when this scalar represents an assignable keys() result. */
+    private transient RuntimeBase keysLvalueContainer;
+
+    void setKeysLvalueContainer(RuntimeBase container) {
+        keysLvalueContainer = container;
+    }
+
+    boolean isKeysLvalue() {
+        return keysLvalueContainer != null;
+    }
+
+    void rejectKeysLvalueListAssignment() {
+        String target = keysLvalueContainer instanceof RuntimeArray ? "keys on array" : "keys";
+        throw new PerlCompilerException("Can't modify " + target + " in list assignment");
+    }
     private transient boolean transferableGrowingString;
     /** Number of imprecision diagnostics already emitted for a run of auto-operations. */
     private transient int imprecisionAutoWarningCount;
@@ -355,6 +370,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return array.elements.contains(this);
         }
         return false;
+    }
+
+    /** Whether this scalar is backed by durable Perl storage for lvalue use. */
+    boolean hasDurableLvalueStorage() {
+        return isPackageGlobalRoot
+                || MyVarCleanupStack.isRegistered(this)
+                || isStoredInRegisteredContainerOwner()
+                || containerOwner == RuntimeCode.getCurrentArgs()
+                || this instanceof RuntimeBaseProxy;
     }
 
     /** True when a container removal returned this scalar slot as a loose value. */
@@ -1855,6 +1879,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Types < TIED_SCALAR (0-8) never have REFERENCE_BIT (0x8000), so no
     // reference check is needed here — all reference types route to setLarge().
     public RuntimeScalar set(RuntimeScalar value) {
+        if (keysLvalueContainer != null) {
+            if (keysLvalueContainer instanceof RuntimeHash hash) {
+                hash.preallocateCapacity(value.getInt());
+                this.type = RuntimeScalarType.INTEGER;
+                this.value = hash.keys(RuntimeContextType.SCALAR).scalar().getInt();
+                return this;
+            }
+            throw new PerlCompilerException("Can't modify keys on array in list assignment");
+        }
         if (value != this) {
             clearLastReadlineHandleIfGlobValue();
         }
@@ -2691,6 +2724,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeArray setFromList(RuntimeList value) {
+        if (keysLvalueContainer != null) {
+            rejectKeysLvalueListAssignment();
+        }
         return new RuntimeArray(this.set(value.scalar()));
     }
 
@@ -3730,6 +3766,58 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 RuntimeScalar pseudoCode = GlobalVariable.createPseudoConstantCodeRef(varName);
                 yield pseudoCode != null ? pseudoCode : GlobalVariable.getGlobalCodeRef(varName);
             }
+        };
+    }
+
+    /**
+     * Implement {@code &{$value}} while {@code strict 'refs'} is active.
+     * A CODE value (and a glob that owns a CODE slot) remains callable, but a
+     * string must not be treated as a symbolic subroutine name.
+     */
+    public RuntimeScalar codeDerefStrict() {
+        if (type == CODE) {
+            return this;
+        }
+        int blessId = blessedId(this);
+        if (blessId != 0) {
+            if (blessId < 0) {
+                OverloadContext ctx = OverloadContext.prepare(blessId);
+                if (ctx != null) {
+                    RuntimeScalar result = ctx.tryOverload("(&{}", unaryDerefOverloadArgs());
+                    if (overloadReturnedDifferentObject(result)) {
+                        return result.codeDerefStrict();
+                    }
+                }
+            }
+            throw new PerlCompilerException("Not a subroutine reference");
+        }
+        return switch (type) {
+            case TIED_SCALAR -> tiedFetch().codeDerefStrict();
+            case READONLY_SCALAR -> ((RuntimeScalar) value).codeDerefStrict();
+            case STRING, BYTE_STRING -> throw new PerlCompilerException(
+                    "Can't use string (\"" + toString()
+                            + "\") as a subroutine ref while \"strict refs\" in use");
+            case REFERENCE -> {
+                RuntimeScalar deref = (RuntimeScalar) value;
+                if (deref.type == RuntimeScalarType.CODE) {
+                    yield deref;
+                }
+                throw new PerlCompilerException("Not a subroutine reference");
+            }
+            case ARRAYREFERENCE, HASHREFERENCE, REGEX ->
+                    throw new PerlCompilerException("Not a subroutine reference");
+            case GLOB, GLOBREFERENCE -> {
+                RuntimeGlob glob = (RuntimeGlob) value;
+                RuntimeScalar savedCode = glob.getSavedCodeSlot();
+                if (savedCode != null) {
+                    yield savedCode;
+                }
+                if (glob.globName == null) {
+                    yield glob.codeSlot != null ? glob.codeSlot : new RuntimeScalar();
+                }
+                yield GlobalVariable.getGlobalCodeRef(glob.globName);
+            }
+            default -> throw new PerlCompilerException("Not a subroutine reference");
         };
     }
 

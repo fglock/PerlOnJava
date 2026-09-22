@@ -203,6 +203,12 @@ public class BytecodeCompiler implements Visitor {
     final Set<String> gotoLabelsInsideConstruct = new HashSet<>();
     final Set<String> gotoLabelsInsideGiven = new HashSet<>();
     private int givenBlockDepth;
+    /** True while compiling the body of a {@code :lvalue} subroutine. */
+    private boolean compilingLvalueSubroutine;
+
+    boolean isCompilingLvalueSubroutine() {
+        return compilingLvalueSubroutine;
+    }
     final Map<String, int[]> gotoLabelLoopRanges = new HashMap<>();
     final Map<Integer, String> gotoLabelPackages = new HashMap<>();
     static final class GotoLabelTarget {
@@ -405,6 +411,10 @@ public class BytecodeCompiler implements Visitor {
     // A key/value hash slice is special when it supplies a foreach source:
     // Perl aliases only its values, not its (temporary) keys.
     private boolean compilingForeachList;
+
+    boolean isCompilingForeachList() {
+        return compilingForeachList;
+    }
     // Source information
     final String sourceName;
     final int sourceLine;
@@ -1267,6 +1277,10 @@ public class BytecodeCompiler implements Visitor {
     public InterpretedCode compile(Node node, EmitterContext ctx) {
         // Store context for strict checks and other compile-time options
         this.emitterContext = ctx;
+        this.compilingLvalueSubroutine = this.compilingLvalueSubroutine
+                || ctx != null && ctx.isLvalueSubroutine
+                || node instanceof AbstractNode abstractNode
+                && abstractNode.getBooleanAnnotation("subroutineIsLvalue");
 
         collectLoopBodyLabels(node, gotoLabelsInsideLoop, false);
         collectConstructEntryLabels(node, gotoLabelsInsideConstruct, false);
@@ -1826,7 +1840,7 @@ public class BytecodeCompiler implements Visitor {
                 stmtContext = RuntimeContextType.VOID;
             } else {
                 stmtContext = isLastStatement && node.getBooleanAnnotation("subroutineIsLvalue")
-                        ? RuntimeContextType.LVALUE : currentCallContext;
+                        ? RuntimeContextType.RUNTIME : currentCallContext;
             }
 
             compileNode(stmt, stmtTarget, stmtContext);
@@ -1996,26 +2010,14 @@ public class BytecodeCompiler implements Visitor {
 
             if (isInteger) {
                 int intValue = Integer.parseInt(value);
-                if (currentCallContext == RuntimeContextType.LIST) {
-                    // In LIST context, emit the cached read-only scalar so foreach
-                    // iteration preserves Perl's "literal alias" semantics:
-                    // `for (3) { $_ = 4 }` must throw "Modification of a read-only
-                    // value". Downstream copy-consumers (MY_SCALAR via addToScalar,
-                    // array/hash setFromList, etc.) copy by value so mutable storage
-                    // is unaffected. Fixes op/ref.t 231-234, op/for.t 130-134
-                    // (interpreter fallback).
-                    int constIdx = addToConstantPool(RuntimeScalarCache.getScalarInt(intValue));
-                    emit(Opcodes.LOAD_CONST);
-                    emitReg(rd);
-                    emit(constIdx);
-                } else {
-                    // Regular integer - use LOAD_INT to create mutable scalar
-                    // Note: We don't use RuntimeScalarCache here because ALIAS just copies references,
-                    // and we need mutable scalars for variables (++, --, etc.)
-                    emit(Opcodes.LOAD_INT);
-                    emitReg(rd);
-                    emitInt(intValue);
-                }
+                // A number literal is never writable.  Keeping scalar-context
+                // literals mutable let an interpreter-backed :lvalue sub expose
+                // `3` as a writable return cell, unlike the JVM backend and Perl.
+                // Assignment consumers materialize their own mutable destination.
+                int constIdx = addToConstantPool(RuntimeScalarCache.getScalarInt(intValue));
+                emit(Opcodes.LOAD_CONST);
+                emitReg(rd);
+                emit(constIdx);
             } else if (isLargeInteger) {
                 RuntimeScalar integerScalar;
                 try {
@@ -5925,13 +5927,26 @@ public class BytecodeCompiler implements Visitor {
                 compileNode(node.operand, -1, RuntimeContextType.SCALAR);
                 int valueReg = lastResultReg;
 
-                // Use CODE_DEREF_NONSTRICT to look up the code reference
                 int rd = allocateOutputRegister();
-                int pkgIdx = addToStringPool(getCurrentPackage());
-                emit(Opcodes.CODE_DEREF_NONSTRICT);
-                emitReg(rd);
-                emitReg(valueReg);
-                emit(pkgIdx);
+                // Only lvalue subroutine calls need the strict dereference
+                // here. Other dynamic CODE references retain their established
+                // dispatch path (including module-loading callbacks).
+                // A lazily materialized named sub compiles this body with its
+                // own symbol table.  Consult that table so a `use strict
+                // 'refs'` inside the body is visible here rather than the
+                // enclosing emitter context's earlier pragma snapshot.
+                if (symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS)
+                        && isCompilingLvalueSubroutine()) {
+                    emit(Opcodes.CODE_DEREF_STRICT);
+                    emitReg(rd);
+                    emitReg(valueReg);
+                } else {
+                    int pkgIdx = addToStringPool(getCurrentPackage());
+                    emit(Opcodes.CODE_DEREF_NONSTRICT);
+                    emitReg(rd);
+                    emitReg(valueReg);
+                    emit(pkgIdx);
+                }
 
                 lastResultReg = rd;
             } else {
@@ -6079,7 +6094,8 @@ public class BytecodeCompiler implements Visitor {
             emitReg(rd);
             emitReg(arrayReg);
             lastResultReg = rd;
-        } else if (currentCallContext == RuntimeContextType.RUNTIME) {
+        } else if (currentCallContext == RuntimeContextType.RUNTIME
+                || currentCallContext == RuntimeContextType.LVALUE) {
             int rd = allocateOutputRegister();
             emit(Opcodes.SCALAR_IF_WANTARRAY);
             emitReg(rd);
@@ -6680,6 +6696,7 @@ public class BytecodeCompiler implements Visitor {
         // but named subs are NOT eval strings - clear the flag.
         subCompiler.isEvalString = false;
         subCompiler.isSubroutineBody = true;
+        subCompiler.compilingLvalueSubroutine = node.getBooleanAnnotation("subroutineIsLvalue");
         subCompiler.isSmartmatchPredicate = node.getBooleanAnnotation("smartmatchPredicate");
         subCompiler.symbolTable.setCurrentPackage(getCurrentPackage(),
                 symbolTable.currentPackageIsClass());

@@ -1072,6 +1072,7 @@ public class SlowOpcodeHandler {
 
         // Convert to RuntimeArray for array assignment
         RuntimeArray result = new RuntimeArray();
+        result.lvalueSliceContainer = true;
         for (RuntimeBase elem : valuesList.elements) {
             result.elements.add(elem.scalar());
         }
@@ -1523,6 +1524,22 @@ public class SlowOpcodeHandler {
         String pkg = code.stringPool[pkgIdx];
         registers[rd] = value.codeDerefNonStrict(pkg);
 
+        return pc;
+    }
+
+    /**
+     * CODE_DEREF_STRICT: rd = value.codeDerefStrict().
+     * Format: [CODE_DEREF_STRICT] [rd] [value_reg]
+     */
+    public static int executeCodeDerefStrict(int[] bytecode, int pc,
+                                              RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int valueReg = bytecode[pc++];
+        RuntimeBase valueBase = registers[valueReg];
+        RuntimeScalar value = (valueBase instanceof RuntimeScalar)
+                ? (RuntimeScalar) valueBase
+                : valueBase.scalar();
+        registers[rd] = value.codeDerefStrict();
         return pc;
     }
 

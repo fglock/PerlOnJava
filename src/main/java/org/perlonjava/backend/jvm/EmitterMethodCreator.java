@@ -612,6 +612,7 @@ public class EmitterMethodCreator implements Opcodes {
             // analysis (forces cleanupNeeded=true) as an escape hatch.
             ctx.javaClassInfo.isLvalueSubroutine =
                     Boolean.TRUE.equals(ast.getAnnotation("subroutineIsLvalue"));
+            ctx.isLvalueSubroutine = ctx.javaClassInfo.isLvalueSubroutine;
             if (FORCE_CLEANUP) {
                 ctx.javaClassInfo.cleanupNeeded = true;
             } else {
@@ -1064,7 +1065,9 @@ public class EmitterMethodCreator implements Opcodes {
             // The return list may contain lazy ScalarSpecialVariable references; if we
             // restored first, they would resolve to the caller's (stale) values.
             mv.visitInsn(Opcodes.DUP);
-            mv.visitVarInsn(Opcodes.ILOAD, 2);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "currentRawCallContext", "()I", false);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "materializeSpecialVarsInResult",
@@ -1840,6 +1843,10 @@ public class EmitterMethodCreator implements Opcodes {
         // For anonymous subs this is set by SubroutineNode constructor, but for named subs the block
         // is passed directly here without going through SubroutineNode.
         ast.setAnnotation("blockIsSubroutine", true);
+        // Keep the lvalue property on the context as well as the AST.  The
+        // interpreter backend receives this block directly, so it cannot rely
+        // on the enclosing SubroutineNode to carry the annotation.
+        ctx.isLvalueSubroutine = Boolean.TRUE.equals(ast.getAnnotation("subroutineIsLvalue"));
         if (Boolean.TRUE.equals(ast.getAnnotation("futureAsyncAwaitSub"))) {
             InterpretedCode code = compileToInterpreter(ast, ctx, useTryCatch);
             code.applySignatureMetadata(ast);

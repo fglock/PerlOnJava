@@ -459,14 +459,14 @@ public class StringOperators {
         if (sub.isEmpty()) {
             // Empty string can be found at any position up to and including the length
             if (pos > str.length()) {
-                return getScalarInt(str.length());
+                return new RuntimeScalarTemporary(str.length());
             }
-            return getScalarInt(pos);
+            return new RuntimeScalarTemporary(pos);
         }
 
         // For non-empty substring, position beyond string length returns -1
         if (pos >= str.length()) {
-            return getScalarInt(-1);
+            return new RuntimeScalarTemporary(-1);
         }
 
         // Find the index of the substring starting from the specified position
@@ -479,7 +479,7 @@ public class StringOperators {
         }
 
         // Return the index or -1 if not found
-        return getScalarInt(result);
+        return new RuntimeScalarTemporary(result);
     }
 
     /**
@@ -506,18 +506,18 @@ public class StringOperators {
         if (sub.isEmpty()) {
             // For empty string, negative position returns 0
             if (pos < 0) {
-                return getScalarInt(0);
+                return new RuntimeScalarTemporary(0);
             }
             // Bound position to string length
             if (pos > str.length()) {
-                return getScalarInt(str.length());
+                return new RuntimeScalarTemporary(str.length());
             }
-            return getScalarInt(pos);
+            return new RuntimeScalarTemporary(pos);
         }
 
         // For non-empty substring, negative position returns -1
         if (pos < 0) {
-            return getScalarInt(-1);
+            return new RuntimeScalarTemporary(-1);
         }
 
         // Bound the position to be within the valid range of the string
@@ -535,7 +535,7 @@ public class StringOperators {
         }
 
         // Return the index or -1 if not found
-        return getScalarInt(result);
+        return new RuntimeScalarTemporary(result);
     }
 
     public static RuntimeScalar stringConcat(RuntimeScalar runtimeScalar, RuntimeScalar b) {

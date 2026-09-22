@@ -9,6 +9,16 @@ priorities and future plans.
 - Allow valid Moo-style constant closures that capture an initialized lexical
   within a `BEGIN` block.
 
+- Restore `op/sub_lval.t` compatibility for lvalue subroutine returns, including
+  nested calls, readonly values, list aliases, tied scalars, and both execution
+  backends.
+
+- Normalize bytecode-interpreter method-call operands in scalar context, restoring
+  Moose role composition with constant methods.
+
+- Allow the full core UAT sufficient wall-clock time to complete `re/anyof.t`
+  under parallel load.
+
 - Restore `op/const-optree.t` compatibility for lexical constant CVs,
   including mutation errors, refaliasing, closure ordering, redefinition
   diagnostics, and both execution backends.

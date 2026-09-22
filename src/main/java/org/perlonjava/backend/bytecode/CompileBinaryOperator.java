@@ -243,7 +243,13 @@ public class CompileBinaryOperator {
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(coderefReg);
                 bytecodeCompiler.emitReg(argsReg);
-                bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+                int callContext = bytecodeCompiler.currentCallContext;
+                if (callContext == RuntimeContextType.LIST
+                        && bytecodeCompiler.isCompilingForeachList()
+                        && directCallIsLvalue(bytecodeCompiler, node)) {
+                    callContext = RuntimeContextType.LVALUE_LIST;
+                }
+                bytecodeCompiler.emit(callContext);
 
                 bytecodeCompiler.lastResultReg = rd;
                 return;
@@ -300,8 +306,10 @@ public class CompileBinaryOperator {
                         methodNode = new StringNode(methodName, methodNode.getIndex());
                     }
 
-                    // Compile invocant in scalar context
-                    bytecodeCompiler.compileNode(invocantNode, -1, RuntimeContextType.SCALAR);
+                    // OBJECT retains scalar wantarray semantics while allowing
+                    // an lvalue subroutine used as an invocant to preserve its
+                    // returned storage through the following dispatch.
+                    bytecodeCompiler.compileNode(invocantNode, -1, RuntimeContextType.OBJECT);
                     int invocantReg = bytecodeCompiler.lastResultReg;
                     if (holdInvocantDuringArguments) {
                         bytecodeCompiler.emit(Opcodes.HOLD_METHOD_INVOCANT);
@@ -396,9 +404,10 @@ public class CompileBinaryOperator {
 
             // Handle ListNode case: (expr)[indices] like (caller(0))[0] or (1,2,3,4)[1,2]
             // Use proper list slice semantics: evaluate list, then slice by indices
-            if (node.left instanceof ListNode listNode) {
-                // Compile the list in LIST context
-                bytecodeCompiler.compileNode(listNode, -1, RuntimeContextType.LIST);
+            if (node.left instanceof ListNode
+                    || node.left instanceof BinaryOperatorNode call && call.operator.equals("(")) {
+                // Compile the list-producing expression in LIST context.
+                bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.LIST);
                 int listReg = bytecodeCompiler.lastResultReg;
 
                 // Compile the indices in LIST context
@@ -506,18 +515,29 @@ public class CompileBinaryOperator {
             int rs1 = bytecodeCompiler.lastResultReg;
 
             // A dynamic `$sub(...)` call under `no strict 'refs'` is a CODE
-            // dereference before it is a call.  Do this at the call site so
-            // strict refs continues to reject symbolic scalars in CALL_SUB.
+            // dereference before it is a call.  In an lvalue subroutine, a
+            // lexical `use strict 'refs'` must reject the same scalar before
+            // dispatching the call.  Other strict calls retain the general
+            // dispatch path, including its overloaded-CODE behavior.
             if (node.left instanceof OperatorNode op && op.operator.equals("$")
-                    && (op.getAnnotation("hiddenVarName") == null || bytecodeCompiler.evalBlockDepth == 0)
-                    && !bytecodeCompiler.isStrictRefsEnabled()) {
-                int codeRefReg = bytecodeCompiler.allocateRegister();
-                int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
-                bytecodeCompiler.emit(Opcodes.CODE_DEREF_NONSTRICT);
-                bytecodeCompiler.emitReg(codeRefReg);
-                bytecodeCompiler.emitReg(rs1);
-                bytecodeCompiler.emit(pkgIdx);
-                rs1 = codeRefReg;
+                    && (op.getAnnotation("hiddenVarName") == null || bytecodeCompiler.evalBlockDepth == 0)) {
+                boolean strictLvalueCall = bytecodeCompiler.isStrictRefsEnabled()
+                        && bytecodeCompiler.isCompilingLvalueSubroutine();
+                if (!bytecodeCompiler.isStrictRefsEnabled() || strictLvalueCall) {
+                    int codeRefReg = bytecodeCompiler.allocateRegister();
+                    if (strictLvalueCall) {
+                        bytecodeCompiler.emit(Opcodes.CODE_DEREF_STRICT);
+                        bytecodeCompiler.emitReg(codeRefReg);
+                        bytecodeCompiler.emitReg(rs1);
+                    } else {
+                        int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                        bytecodeCompiler.emit(Opcodes.CODE_DEREF_NONSTRICT);
+                        bytecodeCompiler.emitReg(codeRefReg);
+                        bytecodeCompiler.emitReg(rs1);
+                        bytecodeCompiler.emit(pkgIdx);
+                    }
+                    rs1 = codeRefReg;
+                }
             }
 
             int savedCallerLineOverride = bytecodeCompiler.callerLineTokenOverride;
@@ -540,9 +560,20 @@ public class CompileBinaryOperator {
             int callSiteToken = effectiveCallerLineToken(
                     bytecodeCompiler, node,
                     callerLineCallSiteToken(node, bytecodeCompiler.statementTokenIndex));
-            int rd = CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(
-                    bytecodeCompiler, node, rs1, rs2, callSiteToken,
-                    shareCallerArgs);
+            int savedCallContext = bytecodeCompiler.currentCallContext;
+            if (savedCallContext == RuntimeContextType.LIST
+                    && bytecodeCompiler.isCompilingForeachList()
+                    && directCallIsLvalue(bytecodeCompiler, node)) {
+                bytecodeCompiler.currentCallContext = RuntimeContextType.LVALUE_LIST;
+            }
+            int rd;
+            try {
+                rd = CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(
+                        bytecodeCompiler, node, rs1, rs2, callSiteToken,
+                        shareCallerArgs);
+            } finally {
+                bytecodeCompiler.currentCallContext = savedCallContext;
+            }
             bytecodeCompiler.lastResultReg = rd;
             return;
         }
@@ -1113,6 +1144,15 @@ public class CompileBinaryOperator {
         }
         return code.prototype;
     }
+
+    private static boolean directCallIsLvalue(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {
+        if (!(node.left instanceof OperatorNode operatorNode)
+                || !operatorNode.operator.equals("&")) {
+            return false;
+        }
+        return operatorNode.getBooleanAnnotation("directLvalueCall");
+    }
+
 
     static boolean isArrayLikeNode(Node node) {
         if (node instanceof OperatorNode op) {

@@ -775,6 +775,17 @@ public class CompileAssignment {
             return;
         }
 
+        // Apart from +(), unary plus is transparent around an lvalue.  In
+        // particular, +sub :lvalue { ... }->() = value must retain LVALUE
+        // context for the anonymous call rather than assigning to a scalar
+        // copy of its result.
+        if (node.left instanceof OperatorNode leftOp
+                && leftOp.operator.equals("+")) {
+            compileAssignmentOperator(bytecodeCompiler,
+                    new BinaryOperatorNode("=", leftOp.operand, node.right, node.tokenIndex));
+            return;
+        }
+
         if (compileReferenceAliasListAssignment(bytecodeCompiler, node)) {
             return;
         }

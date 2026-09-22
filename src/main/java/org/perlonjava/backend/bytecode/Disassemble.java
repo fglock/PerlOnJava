@@ -1713,6 +1713,11 @@ public class Disassemble {
                         nameIdx = interpretedCode.bytecode[pc++];
                         sb.append("CODE_DEREF_NONSTRICT r").append(rd).append(" = &{r").append(rs).append("} pkg=").append(interpretedCode.stringPool[nameIdx]).append("\n");
                         break;
+                    case Opcodes.CODE_DEREF_STRICT:
+                        rd = interpretedCode.bytecode[pc++];
+                        rs = interpretedCode.bytecode[pc++];
+                        sb.append("CODE_DEREF_STRICT r").append(rd).append(" = &{r").append(rs).append("}\n");
+                        break;
                     case Opcodes.NAMED_CODE_REFERENCE:
                         rd = interpretedCode.bytecode[pc++];
                         nameIdx = interpretedCode.bytecode[pc++];

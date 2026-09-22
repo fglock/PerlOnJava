@@ -967,11 +967,32 @@ public class EmitSubroutine {
             String hiddenVarName = (String) scalarOpNode.getAnnotation("hiddenVarName");
             isLexicalSub = (hiddenVarName != null);
 
-            // Only call codeDerefNonStrict when strict refs is disabled AND not a lexical sub
-            // This allows symbolic references like: my $x = "main::test"; &$x()
-            if (!isLexicalSub && !emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
-                // Without strict refs and not a lexical sub: allow symbolic references
-                // Call codeDerefNonStrict to look up CODE slot from glob if needed
+            if (!isLexicalSub) {
+                boolean strictRefs = emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS);
+                if (emitterVisitor.ctx.isLvalueSubroutine && strictRefs) {
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                            "codeDerefStrict",
+                            "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                            false);
+                } else if (!strictRefs) {
+                    emitterVisitor.pushCurrentPackage();
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                            "codeDerefNonStrict",
+                            "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                            false);
+                }
+            }
+        } else if (isBlockDeref) {
+            boolean strictRefs = emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS);
+            if (emitterVisitor.ctx.isLvalueSubroutine && strictRefs) {
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                        "codeDerefStrict",
+                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
+            } else if (!strictRefs) {
                 emitterVisitor.pushCurrentPackage();
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                         "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
@@ -979,16 +1000,6 @@ public class EmitSubroutine {
                         "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                         false);
             }
-        } else if (isBlockDeref && !emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
-            // For &{expr} where expr is not a simple variable (e.g., &{$hash{key}})
-            // We need to call codeDerefNonStrict to resolve symbolic references
-            // using the current package
-            emitterVisitor.pushCurrentPackage();
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                    "codeDerefNonStrict",
-                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                    false);
         }
 
         int codeRefSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();

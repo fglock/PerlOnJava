@@ -660,9 +660,11 @@ public class BytecodeInterpreter {
                                 if (retVal == null) {
                                     retVal = new RuntimeList();
                                 }
+                                RuntimeCode.requireInterpreterLvalueReturn(code, retVal, callContext);
                                 RuntimeList retList = RuntimeCode.returnList(
                                         retVal, callContext, !RuntimeCode.isLvalueCode(code));
-                                RuntimeCode.materializeSpecialVarsInResult(retList, callContext);
+                                RuntimeCode.materializeSpecialVarsInResult(
+                                        retList, RuntimeCode.currentRawCallContext());
                                 frame.returnedClosures = collectReturnedClosures(retList);
                                 if (!returnListContainsTrackedReference(retList)) {
                                     MortalList.flushAboveMark();
@@ -682,7 +684,8 @@ public class BytecodeInterpreter {
                                 }
                                 RuntimeList retList = RuntimeCode.returnList(
                                         retVal, callContext, !RuntimeCode.isLvalueCode(code));
-                                RuntimeCode.materializeSpecialVarsInResult(retList, callContext);
+                                RuntimeCode.materializeSpecialVarsInResult(
+                                        retList, RuntimeCode.currentRawCallContext());
                                 frame.returnedClosures = collectReturnedClosures(retList);
 
                                 return new RuntimeControlFlowList(retList, code.sourceName, code.sourceLine);
@@ -1775,6 +1778,12 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeHashKeysScalar(bytecode, pc, registers);
                             }
 
+                            case Opcodes.KEYS_LVALUE -> {
+                                int rd = bytecode[pc++];
+                                int containerReg = bytecode[pc++];
+                                registers[rd] = RuntimeCode.keysLvalue(registers[containerReg]);
+                            }
+
                             case Opcodes.HASH_VALUES -> {
                                 pc = InlineOpcodeHandler.executeHashValues(bytecode, pc, registers);
                             }
@@ -2015,9 +2024,13 @@ public class BytecodeInterpreter {
                                     context = RuntimeCode.currentRawCallContext();
                                 }
 
-                                RuntimeScalar invocant = (RuntimeScalar) registers[invocantReg];
-                                RuntimeScalar method = (RuntimeScalar) registers[methodReg];
-                                RuntimeScalar currentSub = (RuntimeScalar) registers[currentSubReg];
+                                // Method operands normally compile to scalars, but a
+                                // scalar-context expression can retain its one-element
+                                // RuntimeList wrapper (notably during Moose's role
+                                // composition). Normalize it at the call boundary.
+                                RuntimeScalar invocant = registers[invocantReg].scalar();
+                                RuntimeScalar method = registers[methodReg].scalar();
+                                RuntimeScalar currentSub = registers[currentSubReg].scalar();
                                 RuntimeBase argsBase = registers[argsReg];
 
                                 RuntimeArray callArgs;
@@ -2874,6 +2887,7 @@ public class BytecodeInterpreter {
                                  Opcodes.ALARM_OP, Opcodes.DEREF_GLOB, Opcodes.DEREF_GLOB_NONSTRICT,
                                  Opcodes.LOAD_GLOB_DYNAMIC, Opcodes.DEREF_SCALAR_STRICT,
                                  Opcodes.DEREF_SCALAR_NONSTRICT, Opcodes.CODE_DEREF_NONSTRICT,
+                                 Opcodes.CODE_DEREF_STRICT,
                                  Opcodes.NAMED_CODE_REFERENCE, Opcodes.DIRECT_NAMED_CODE_CALL,
                                  Opcodes.FOREACH_DEREF_SCALAR, Opcodes.FOREACH_DEREF_ARRAY,
                                  Opcodes.FOREACH_DEREF_HASH -> {
@@ -4477,6 +4491,9 @@ public class BytecodeInterpreter {
             }
             case Opcodes.CODE_DEREF_NONSTRICT -> {
                 return SlowOpcodeHandler.executeCodeDerefNonStrict(bytecode, pc, registers, code);
+            }
+            case Opcodes.CODE_DEREF_STRICT -> {
+                return SlowOpcodeHandler.executeCodeDerefStrict(bytecode, pc, registers);
             }
             case Opcodes.NAMED_CODE_REFERENCE -> {
                 return SlowOpcodeHandler.executeNamedCodeReference(bytecode, pc, registers, code);

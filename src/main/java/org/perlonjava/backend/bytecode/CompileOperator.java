@@ -1362,6 +1362,11 @@ public class CompileOperator {
                         ? Opcodes.RETURN_NONLOCAL : Opcodes.RETURN;
                 boolean hasOperand = !(node.operand == null
                         || (node.operand instanceof ListNode list && list.elements.isEmpty()));
+                // A return expression inherits the subroutine's actual calling
+                // context.  In an :lvalue sub this must remain dynamic: nested
+                // lvalue calls are ordinary rvalues when the outer call is read,
+                // but must preserve their lvalue result for assignment.
+                int returnContext = RuntimeContextType.RUNTIME;
                 if (!hasOperand) {
                     int listReg = bytecodeCompiler.allocateRegister();
                     bytecodeCompiler.emit(Opcodes.CREATE_LIST);
@@ -1376,7 +1381,7 @@ public class CompileOperator {
                         returnedCall = returnedList.elements.getFirst();
                     }
                     returnedCall.setAnnotation("inheritRawCallContext", true);
-                    bytecodeCompiler.compileNode(returnExpression, -1, RuntimeContextType.RUNTIME);
+                    bytecodeCompiler.compileNode(returnExpression, -1, returnContext);
                 } else {
                     Node returnedCall = node.operand;
                     while (returnedCall instanceof ListNode returnedList
@@ -1384,7 +1389,7 @@ public class CompileOperator {
                         returnedCall = returnedList.elements.getFirst();
                     }
                     returnedCall.setAnnotation("inheritRawCallContext", true);
-                    bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.RUNTIME);
+                    bytecodeCompiler.compileNode(node.operand, -1, returnContext);
                 }
                 int exprReg = bytecodeCompiler.lastResultReg;
 
@@ -1763,6 +1768,13 @@ public class CompileOperator {
         bc.compileNode(node.operand, -1, RuntimeContextType.LIST);
         int hashReg = bc.lastResultReg;
         int rd = bc.allocateOutputRegister();
+        if (bc.currentCallContext == RuntimeContextType.LVALUE
+                || bc.currentCallContext == RuntimeContextType.LVALUE_LIST
+                || bc.isCompilingLvalueSubroutine()) {
+            bc.emit(Opcodes.KEYS_LVALUE); bc.emitReg(rd); bc.emitReg(hashReg);
+            bc.lastResultReg = rd;
+            return;
+        }
         if (bc.currentCallContext == RuntimeContextType.SCALAR) {
             // A scalar keys result is the hash count. Calling the context-aware
             // runtime path avoids materializing (and then counting) a key list,

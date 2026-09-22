@@ -141,6 +141,20 @@ public class EmitOperator {
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
 
+        if (node.operator.equals("keys")
+                && (emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE
+                || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE_LIST
+                // The final expression in an :lvalue subroutine is normally
+                // compiled in runtime context.  Preserve keys' assignable
+                // proxy there too, so the return boundary can distinguish
+                // scalar preallocation from forbidden list assignment.
+                || emitterVisitor.ctx.javaClassInfo.isLvalueSubroutine)) {
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode", "keysLvalue",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+            return;
+        }
+
         // keys() depends on context (scalar/list/void), so pass call context.
         if (node.operator.equals("keys")) {
             emitterVisitor.pushCallContext();

@@ -367,13 +367,14 @@ public class Dereference {
                 return;
             }
         }
-        if (node.left instanceof ListNode list) { // ("a","b","c")[2]
+        if (node.left instanceof ListNode list
+                || node.left instanceof BinaryOperatorNode call && call.operator.equals("(")) { // ("a","b","c")[2], (call())[2]
             // Use proper list slice semantics: evaluate list, then slice
             // This differs from array dereference because empty list returns empty, not undef
             if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) (list)[indices] - list slice");
             
-            // Evaluate the list
-            list.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            // Evaluate the list-producing expression in list context.
+            node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));
             
             // Convert to RuntimeList if not already (handles RuntimeScalar case)
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,

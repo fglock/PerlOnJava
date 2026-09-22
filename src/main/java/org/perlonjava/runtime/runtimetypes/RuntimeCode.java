@@ -957,17 +957,49 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return returnList(retVal, callContext, true);
     }
 
+    /** Return the scalar lvalue represented by {@code keys %hash}. */
+    public static RuntimeScalar keysLvalue(RuntimeBase container) {
+        RuntimeScalar result = new RuntimeScalar(container.keys(RuntimeContextType.SCALAR));
+        result.setKeysLvalueContainer(container);
+        return result;
+    }
+
     public static RuntimeList returnList(RuntimeBase retVal, int callContext, boolean copyReferenceScalars) {
+        requireWritableLvalueReturn(callContext, retVal);
         if (retVal == null) {
+            requireNonemptyLvalueReturn(callContext, null);
             return new RuntimeList();
         }
         if (callContext == RuntimeContextType.LVALUE_LIST
                 && !(retVal instanceof RuntimeControlFlowList)) {
             RuntimeList result = new RuntimeList();
+            if (retVal instanceof RuntimeArray array && array.lvalueSliceContainer) {
+                result.elements.addAll(array.elements);
+                return result;
+            }
             result.add(retVal);
             return result;
         }
-        RuntimeList result = retVal.getList();
+        RuntimeList result;
+        if (!copyReferenceScalars && retVal instanceof RuntimeArray array) {
+            // An :lvalue sub returning an array must expose its element cells;
+            // RuntimeArray.getList() intentionally copies them for ordinary
+            // rvalue returns.
+            result = new RuntimeList();
+            result.elements.addAll(array.elements);
+        } else if (!copyReferenceScalars && retVal instanceof RuntimeList list) {
+            result = new RuntimeList();
+            for (RuntimeBase value : list.elements) {
+                if (value instanceof RuntimeArray array) {
+                    result.elements.addAll(array.elements);
+                } else {
+                    result.elements.add(value);
+                }
+            }
+        } else {
+            result = retVal.getList();
+        }
+        requireNonemptyLvalueReturn(callContext, result);
         if (copyReferenceScalars && callContext == RuntimeContextType.LIST) {
             RuntimeList copied = copyReturnedReferenceScalars(result, callContext, true, false);
             if (copied != result) {
@@ -977,6 +1009,80 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         transferReturnedIoOwners(retVal, result);
         return result;
+    }
+
+    /**
+     * A scalar lvalue call needs a returned slot. Perl permits an empty
+     * lvalue-sub return only when the caller requested a list lvalue.
+     */
+    private static void requireNonemptyLvalueReturn(int callContext, RuntimeList result) {
+        if (callContext == RuntimeContextType.LVALUE
+                && (result == null || result.elements.isEmpty())) {
+            throw new PerlCompilerException("Can't return undef from lvalue subroutine");
+        }
+    }
+
+    /**
+     * Literal and constant scalars cannot be the target returned by an lvalue
+     * subroutine. Unlike undef, they are invalid in both scalar and list
+     * lvalue contexts.
+     */
+    private static void requireWritableLvalueReturn(int callContext, RuntimeBase value) {
+        if (callContext != RuntimeContextType.LVALUE
+                && callContext != RuntimeContextType.LVALUE_LIST) {
+            return;
+        }
+        if (value instanceof RuntimeScalar scalar
+                && scalar.type == RuntimeScalarType.READONLY_SCALAR) {
+            throw new PerlCompilerException("Can't return a readonly value from lvalue subroutine");
+        }
+        if (value instanceof RuntimeList list) {
+            for (RuntimeBase element : list.elements) {
+                requireWritableLvalueReturn(callContext, element);
+            }
+            return;
+        }
+        if (!(value instanceof RuntimeScalarReadOnly scalar)) {
+            return;
+        }
+        if (scalar instanceof RuntimeScalarTemporary) {
+            WarnDie.warnWithCategory(
+                    new RuntimeScalar("Useless assignment to a temporary"),
+                    new RuntimeScalar(""), "void");
+            throw new PerlCompilerException("Can't return a temporary from lvalue subroutine");
+        }
+        if (scalar.type == RuntimeScalarType.UNDEF) {
+            if (callContext == RuntimeContextType.LVALUE) {
+                throw new PerlCompilerException("Can't return undef from lvalue subroutine");
+            }
+            return;
+        }
+        throw new PerlCompilerException("Can't return a readonly value from lvalue subroutine");
+    }
+
+    protected RuntimeList lvalueConstantValue() {
+        RuntimeList result = new RuntimeList();
+        for (RuntimeBase value : constantValue.elements) {
+            if (value instanceof RuntimeScalar scalar) {
+                result.elements.add(scalar.type == RuntimeScalarType.UNDEF
+                        ? new RuntimeScalarReadOnly()
+                        : new RuntimeScalarReadOnly(scalar.toString()));
+            } else {
+                result.elements.add(value);
+            }
+        }
+        return result;
+    }
+
+    /** Validate the interpreter's mutable undef sentinel for an lvalue CV. */
+    public static void requireInterpreterLvalueReturn(RuntimeCode code, RuntimeBase value, int callContext) {
+        if (!isLvalueCode(code) || callContext != RuntimeContextType.LVALUE
+                || !(value instanceof RuntimeScalar scalar)
+                || scalar.type != RuntimeScalarType.UNDEF
+                || scalar.hasDurableLvalueStorage()) {
+            return;
+        }
+        throw new PerlCompilerException("Can't return undef from lvalue subroutine");
     }
 
     /**
@@ -1056,6 +1162,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 RuntimeBase value = result.elements.getFirst();
                 if (originalContext != RuntimeContextType.LVALUE
                         && originalContext != RuntimeContextType.LVALUE_LIST
+                        && originalContext != RuntimeContextType.OBJECT
+                        && copyCapturedScalars
                         && value instanceof RuntimeScalar scalar
                         && scalar.type == RuntimeScalarType.TIED_SCALAR) {
                     return copyReturnedReferenceScalars(new RuntimeList(scalar.tiedFetch()), originalContext,
@@ -1246,6 +1354,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static void requireLvalueCallable(RuntimeCode code, int callContext, String subroutineName) {
         if ((callContext != RuntimeContextType.LVALUE && callContext != RuntimeContextType.LVALUE_LIST)
                 || isLvalueCode(code)
+                || (code != null && (code.isConstantCv || code.constantValue != null))
                 || (code != null && code.isTryExpressionWrapper)) {
             return;
         }
@@ -1260,7 +1369,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         throw new PerlCompilerException(
-                "Can't modify non-lvalue subroutine call of &" + displayName + " in scalar assignment");
+                "Can't modify non-lvalue subroutine call of &" + displayName);
     }
 
     private RuntimeList detachTryExpressionLvalueResult(RuntimeList result, int callContext) {
@@ -1378,6 +1487,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // as opposed to auto-created by getGlobalCodeRef() for lookups.
     // In Perl 5, declared subs (even forward declarations) are visible via *{glob}{CODE}.
     public boolean isDeclared = false;
+    /** True once this named CV has received an actual body, not just a declaration. */
+    public boolean hasBodyDefinition = false;
     // Flag to indicate this is a closure prototype (the template CV before cloning).
     // In Perl 5, MODIFY_CODE_ATTRIBUTES receives the closure prototype for closures.
     // Calling a closure prototype should die with "Closure prototype called".
@@ -1947,6 +2058,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.classAdjustBlock = this.classAdjustBlock;
         clone.declaringClass = this.declaringClass;
         clone.isDeclared = this.isDeclared;
+        clone.hasBodyDefinition = this.hasBodyDefinition;
         clone.constantValue = this.constantValue;
         clone.lexicalVariableNames = this.lexicalVariableNames == null
                 ? null : new java.util.LinkedHashSet<>(this.lexicalVariableNames);
@@ -4148,7 +4260,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                    int callContext) {
         // Handle tied scalars: in Perl 5, $tied->method() evaluates $tied
         // (triggering FETCH) before method dispatch
-        if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
+        if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR
+                && method.type != RuntimeScalarType.CODE) {
             runtimeScalar = runtimeScalar.tiedFetch();
         }
         // Transform the native array to RuntimeArray of aliases (Perl variable `@_`)
@@ -4208,7 +4321,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Dispatch sees only the TIED_SCALAR shell, so unwrap to the
         // underlying blessed reference and re-enter callCached (which
         // re-establishes a cleanup boundary for the unwrapped invocant).
-        if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
+        if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR
+                && method.type != RuntimeScalarType.CODE) {
             return callCached(callsiteId, runtimeScalar.tiedFetch(), method,
                     currentSub, args, callContext);
         }
@@ -4607,7 +4721,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Handle tied scalars: the invocant may be a TIED_SCALAR returned
         // from a tied hash / array FETCH. Unwrap before dispatch so
         // isReference / blessId checks see the real underlying value.
-        if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
+        if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR
+                && method.type != RuntimeScalarType.CODE) {
             return call(runtimeScalar.tiedFetch(), method, currentSub, args, callContext);
         }
 
@@ -4620,6 +4735,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             releaseMethodInvocantHold(invHold);
         }
     }
+
 
     /**
      * Implementation of Perl's caller() builtin.
@@ -7092,6 +7208,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 elems.set(i, new RuntimeScalar(resolved));
             } else if (callContext != RuntimeContextType.LVALUE
                     && callContext != RuntimeContextType.LVALUE_LIST
+                    && callContext != RuntimeContextType.OBJECT
                     && elem instanceof RuntimeScalar scalar
                     && scalar.type == RuntimeScalarType.TIED_SCALAR) {
                 // FETCH before RegexState/local teardown. A tied return can
@@ -7297,6 +7414,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         requireClassMethodInstance(this, a);
         if (constantValue != null) {
             requireLvalueCallable(this, callContext, null);
+            if (callContext == RuntimeContextType.LVALUE
+                    || callContext == RuntimeContextType.LVALUE_LIST) {
+                return lvalueConstantValue();
+            }
             return isConstantCv
                     ? constantValue.cloneScalars() : new RuntimeList(constantValue);
         }
@@ -7467,6 +7588,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         if (constantValue != null) {
             requireLvalueCallable(this, callContext, subroutineName);
+            if (callContext == RuntimeContextType.LVALUE
+                    || callContext == RuntimeContextType.LVALUE_LIST) {
+                return lvalueConstantValue();
+            }
             return isConstantCv
                     ? constantValue.cloneScalars() : new RuntimeList(constantValue);
         }

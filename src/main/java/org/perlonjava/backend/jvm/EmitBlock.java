@@ -531,8 +531,13 @@ public class EmitBlock {
                     // Special case for the last element
                     if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("Last element: " + element);
                     if (resultReg >= 0) {
-                        // Visit in SCALAR context to get a value, store it, then pop
-                        element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                        // Preserve the enclosing bare block's context. In particular, an
+                        // lvalue sub may end in `{ @array }`, whose list container must
+                        // survive the block boundary as an assignment target.
+                        Object resultContext = node.getAnnotation("resultRegisterContext");
+                        int context = resultContext instanceof Integer
+                                ? (Integer) resultContext : RuntimeContextType.SCALAR;
+                        element.accept(emitterVisitor.with(context));
                         mv.visitVarInsn(Opcodes.ASTORE, resultReg);
                     } else if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME
                             && (node.getBooleanAnnotation("isFileLevelBlock") || node.getBooleanAnnotation("blockIsSubroutine"))
@@ -541,8 +546,11 @@ public class EmitBlock {
                             && for3.labelName == null) {
                         // Bare block (no label) as last statement in file-level RUNTIME context
                         // or inside a subroutine. This handles do "file", require, and sub { { 99 } }.
-                        // Visit with SCALAR context to get the block's return value.
-                        element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                        // An lvalue sub must preserve its assignment-target context through
+                        // the nested bare block instead of reducing an array result to scalar.
+                        int blockContext = emitterVisitor.ctx.javaClassInfo.isLvalueSubroutine
+                                ? RuntimeContextType.LVALUE : RuntimeContextType.SCALAR;
+                        element.accept(emitterVisitor.with(blockContext));
                     } else {
                         element.accept(emitterVisitor);
                     }

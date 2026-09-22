@@ -609,14 +609,21 @@ public class EmitVariable {
 
                     // Dereference the scalar to get the CODE reference
                     if (!isLexicalSub) {
-                        // Not a lexical sub: call codeDerefNonStrict to look up CODE slot from glob if needed
-                        // This handles both CODE references (returns unchanged) and symbolic references
-                        emitterVisitor.pushCurrentPackage();
-                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                                "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                                "codeDerefNonStrict",
-                                "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                                false);
+                        if (emitterVisitor.ctx.isLvalueSubroutine
+                                && emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
+                            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                                    "codeDerefStrict",
+                                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                    false);
+                        } else {
+                            emitterVisitor.pushCurrentPackage();
+                            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                                    "codeDerefNonStrict",
+                                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                    false);
+                        }
                     }
                 }
 
@@ -1177,6 +1184,11 @@ public class EmitVariable {
 
     private static boolean isScalarLvalueTarget(Node node) {
         if (node instanceof OperatorNode operator) {
+            // Unary plus is a parse disambiguator around an lvalue, except
+            // for the separately handled +() empty-list assignment form.
+            if (operator.operator.equals("+")) {
+                return isScalarLvalueTarget(operator.operand);
+            }
             return operator.operator.equals("substr")
                     || operator.operator.equals("pos")
                     || operator.operator.equals("vec");

@@ -535,7 +535,9 @@ public class EmitLiteral {
                 // scalar callers and remains an aggregate for list callers.
                 // Expand the latter here without re-evaluating the expression.
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeDescriptorConstants.LIST_CLASS,
-                        "addFlattened", "(" + RuntimeDescriptorConstants.BASE_TYPE + ")V", false);
+                        emitterVisitor.ctx.javaClassInfo.isLvalueSubroutine
+                                ? "addFlattenedLvalue" : "addFlattened",
+                        "(" + RuntimeDescriptorConstants.BASE_TYPE + ")V", false);
             } else {
                 addElementToList(mv, element, contextType);
             }
