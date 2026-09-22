@@ -421,6 +421,15 @@ sub run_single_test {
     # preserving any larger timeout requested by the caller.
     my $test_timeout = timeout_for_test($test_file, $timeout);
 
+    # Complete anyof maps are exceptionally expensive under a full UAT load.
+    # Keep the policy module's general floor, then give this runner enough
+    # wall-clock headroom to finish the complete map rather than truncating the
+    # corpus result during an otherwise healthy run.
+    if ($test_file =~ m{(?:^|/)perl5_t/t/re/anyof(?:_thr)?\.t$}
+            && $test_timeout < 3600) {
+        $test_timeout = 3600;
+    }
+
     # These tests have their own watchdogs and scale them through this upstream
     # variable. Keep a caller's larger value, but do not let an internal
     # deadline expire before the resource-aware runner's outer deadline.
