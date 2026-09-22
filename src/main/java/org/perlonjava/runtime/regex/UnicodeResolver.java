@@ -1195,11 +1195,15 @@ public class UnicodeResolver {
                 case "XIDS":
                 case "XIDStart":
                 case "XID_Start":
-                    // Use ICU4J UnicodeSet for accurate XID_Start
+                case "IsXIDStart":
+                case "IsXID_Start":
+                case "isxidstart":
                     return getXIDStartPattern(negated);
                 case "XIDC":
                 case "XID_Continue":
-                    // Use ICU4J UnicodeSet for accurate XID_Continue
+                case "IsXIDContinue":
+                case "IsXID_Continue":
+                case "isxidcontinue":
                     return getXIDContinuePattern(negated);
                 case "_Perl_IDStart":
                     // Perl's definition: XID_Start + underscore
@@ -2242,7 +2246,17 @@ public class UnicodeResolver {
         }) {
             return new UnicodeSet('\r', '\r');
         }
-        return unicodePropertyValueSet(UProperty.LINE_BREAK, value);
+        UnicodeSet result = unicodePropertyValueSet(UProperty.LINE_BREAK, value);
+        // ICU4J 78.3 predates Unicode 18.  U+1B164..U+1B168 are the
+        // Unicode-18 Conditional_Japanese_Starter additions in LineBreak.txt.
+        if (switch (loosePropertyName(value)) {
+            case "cj", "conditionaljapanesestarter" -> true;
+            default -> false;
+        }) {
+            result = (result == null ? new UnicodeSet() : new UnicodeSet(result))
+                    .add(0x1B164, 0x1B168).freeze();
+        }
+        return result;
     }
 
     private static boolean isPerlLineBreakProperty(String property) {
@@ -3649,19 +3663,16 @@ public class UnicodeResolver {
         }
     }
 
-    // Helper method to get XID_Start pattern using ICU4J
+    // Perl's Unicode data can be newer than the bundled ICU4J.
     private static String getXIDStartPattern(boolean negated) {
-        UnicodeSet xidStartSet = new UnicodeSet();
-        xidStartSet.applyPropertyAlias("XID_Start", "True");
-        String pattern = unicodeSetToJavaPattern(xidStartSet);
+        String pattern = unicodeSetToJavaPattern(
+                PerlUnicodeResidualPropertyData.binarySet("XID_Start"));
         return wrapCharClass(pattern, negated);
     }
 
-    // Helper method to get XID_Continue pattern using ICU4J
     private static String getXIDContinuePattern(boolean negated) {
-        UnicodeSet xidContSet = new UnicodeSet();
-        xidContSet.applyPropertyAlias("XID_Continue", "True");
-        String pattern = unicodeSetToJavaPattern(xidContSet);
+        String pattern = unicodeSetToJavaPattern(
+                PerlUnicodeResidualPropertyData.binarySet("XID_Continue"));
         return wrapCharClass(pattern, negated);
     }
 
@@ -3675,8 +3686,8 @@ public class UnicodeResolver {
 
     // Helper method to get Perl's _IDStart pattern (XID_Start + underscore)
     private static String getPerlIDStartPattern(boolean negated) {
-        UnicodeSet perlIDStartSet = new UnicodeSet();
-        perlIDStartSet.applyPropertyAlias("XID_Start", "True");
+        UnicodeSet perlIDStartSet = new UnicodeSet(
+                PerlUnicodeResidualPropertyData.binarySet("XID_Start"));
         perlIDStartSet.add('_'); // Add underscore
         String pattern = unicodeSetToJavaPattern(perlIDStartSet);
         return wrapCharClass(pattern, negated);
@@ -3684,12 +3695,12 @@ public class UnicodeResolver {
 
     // Helper method to check if a character has XID_Start property
     public static boolean isXIDStart(int codePoint) {
-        return UCharacter.hasBinaryProperty(codePoint, UProperty.XID_START);
+        return PerlUnicodeResidualPropertyData.binarySet("XID_Start").contains(codePoint);
     }
 
     // Helper method to check if a character has XID_Continue property
     public static boolean isXIDContinue(int codePoint) {
-        return UCharacter.hasBinaryProperty(codePoint, UProperty.XID_CONTINUE);
+        return PerlUnicodeResidualPropertyData.binarySet("XID_Continue").contains(codePoint);
     }
 
     // Helper method to check XPosixSpace (Unicode whitespace)
@@ -3699,7 +3710,7 @@ public class UnicodeResolver {
 
     // Helper method to check _Perl_IDStart (XID_Start + underscore)
     public static boolean isPerlIDStart(int codePoint) {
-        return codePoint == '_' || UCharacter.hasBinaryProperty(codePoint, UProperty.XID_START);
+        return codePoint == '_' || isXIDStart(codePoint);
     }
 
     // Helper methods for negation

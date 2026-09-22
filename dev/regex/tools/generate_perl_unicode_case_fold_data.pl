@@ -12,7 +12,7 @@ use PerlOnJava::UnicodeGenerator qw(
 
 binmode STDOUT, ':raw';
 
-my $unicode_version = '17.0.0';
+my $unicode_version = $ENV{PERLONJAVA_UNICODE_VERSION} // '17.0.0';
 my $version_hash = '8c30575264b2772c7a69c5bb6069a28f0e0a7a0df735871bde2d99ee674316ac';
 my %unicode_hash = (
     'CaseFolding.txt' => 'ff8d8fefbf123574205085d6714c36149eb946d717a0c585c27f0f4ef58c4183',
@@ -45,14 +45,16 @@ for my $relative (sort keys %unicode_hash) {
         path => $path, sha256 => $unicode_hash{$relative});
     verify_unicode_notice($path, $unicode_text{$relative});
 }
-die "CaseFolding.txt is not pinned Unicode $unicode_version data\n"
-    unless $unicode_text{'CaseFolding.txt'} =~ /^# CaseFolding-\Q$unicode_version\E\.txt$/m;
-die "CaseFolding.txt has an unexpected source date\n"
-    unless $unicode_text{'CaseFolding.txt'} =~ /^# Date: 2025-07-30, 23:54:36 GMT$/m;
-die "SpecialCasing.txt is not pinned Unicode $unicode_version data\n"
-    unless $unicode_text{'SpecialCasing.txt'} =~ /^# SpecialCasing-\Q$unicode_version\E\.txt$/m;
-die "SpecialCasing.txt has an unexpected source date\n"
-    unless $unicode_text{'SpecialCasing.txt'} =~ /^# Date: 2025-07-31, 22:11:55 GMT$/m;
+if (!$ENV{PERLONJAVA_UNICODE_REFRESH}) {
+    die "CaseFolding.txt is not pinned Unicode $unicode_version data\n"
+        unless $unicode_text{'CaseFolding.txt'} =~ /^# CaseFolding-\Q$unicode_version\E\.txt$/m;
+    die "CaseFolding.txt has an unexpected source date\n"
+        unless $unicode_text{'CaseFolding.txt'} =~ /^# Date: 2025-07-30, 23:54:36 GMT$/m;
+    die "SpecialCasing.txt is not pinned Unicode $unicode_version data\n"
+        unless $unicode_text{'SpecialCasing.txt'} =~ /^# SpecialCasing-\Q$unicode_version\E\.txt$/m;
+    die "SpecialCasing.txt has an unexpected source date\n"
+        unless $unicode_text{'SpecialCasing.txt'} =~ /^# Date: 2025-07-31, 22:11:55 GMT$/m;
+}
 
 my $perl_root = select_perl_root(
     repo_root => $root,

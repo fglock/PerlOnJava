@@ -11,7 +11,7 @@ use PerlOnJava::UnicodeGenerator qw(
 
 binmode STDOUT, ':raw';
 
-my $expected_version = '17.0.0';
+my $expected_version = $ENV{PERLONJAVA_UNICODE_VERSION} // '17.0.0';
 my $expected_date = '2025-07-21';
 my $expected_hash = '76a3081265e6eb673873f9c93d6f36062e82c7ed027c5c1a592accfbe48c20a5';
 my @required_sources = ('version', 'Unikemet.txt');

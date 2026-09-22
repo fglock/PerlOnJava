@@ -51,6 +51,15 @@ my %property = (
     },
     KEHCORE => { aliases => ['kEH_Core'], default => 'N', values => [qw(C L N)] },
 );
+my %binary_property = (
+    ALPHA => { aliases => [qw(Alphabetic Alpha)] },
+    GRBASE => { aliases => [qw(Grapheme_Base Gr_Base)] },
+    IDEO => { aliases => [qw(Ideographic Ideo)] },
+    IDS => { aliases => [qw(ID_Start IDS)] },
+    IDC => { aliases => [qw(ID_Continue IDC)] },
+    XIDS => { aliases => [qw(XID_Start XIDS)] },
+    XIDC => { aliases => [qw(XID_Continue XIDC)] },
+);
 
 for my $line (split /\n/, $text{'PropValueAliases.txt'}) {
     next if $line =~ /^\s*#/;
@@ -93,6 +102,10 @@ for my $line (split /\n/, $text{'auxiliary/GraphemeBreakProperty.txt'}) {
 }
 for my $line (split /\n/, $text{'DCoreProperties.txt'}) {
     add_range('InCB', $1, $2) if $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*InCB\s*;\s*([A-Za-z_]+)/;
+    if ($line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*(Alphabetic|Grapheme_Base|ID_Start|ID_Continue|XID_Start|XID_Continue)\b/) {
+        my %key_for = (Alphabetic => 'ALPHA', Grapheme_Base => 'GRBASE', ID_Start => 'IDS', ID_Continue => 'IDC', XID_Start => 'XIDS', XID_Continue => 'XIDC');
+        push @{$binary_property{$key_for{$2}}{ranges}}, [parse_range($1)];
+    }
 }
 for my $line (split /\n/, $text{'IdType.txt'}) {
     next unless $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*([^#]+)/;
@@ -106,6 +119,8 @@ my @hex_ranges;
 for my $line (split /\n/, $text{'PropList.txt'}) {
     push @hex_ranges, [parse_range($1)]
         if $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*Hex_Digit\b/;
+    push @{$binary_property{IDEO}{ranges}}, [parse_range($1)]
+        if $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*Ideographic\b/;
 }
 
 sub coalesce {
@@ -201,16 +216,43 @@ for my $source (@sources) {
 print "\n";
 emit_property($_) for qw(GCB InCB IDTYPE KEHCORE);
 print "    private static final int[] HEX_RANGES = {\n"; emit_pairs(\@hex_ranges, '        '); print "    };\n";
+for my $key (sort keys %binary_property) {
+    $binary_property{$key}{ranges} = coalesce($binary_property{$key}{ranges});
+    print "    private static int[] ${key}_ranges() {\n        return new int[] {\n";
+    emit_pairs($binary_property{$key}{ranges}, '        ');
+    print "        };\n    }\n";
+}
 print <<'JAVA';
     private static final UnicodeSet HEX = buildSet(HEX_RANGES);
+
+JAVA
+for my $key (sort keys %binary_property) {
+    print "    private static final UnicodeSet $key = buildSet(${key}_ranges());\n";
+}
+my @binary_aliases;
+for my $key (sort keys %binary_property) {
+    for my $alias (@{$binary_property{$key}{aliases}}) {
+        push @binary_aliases, [loose_name($alias), $key];
+    }
+}
+@binary_aliases = sort { $a->[0] cmp $b->[0] } @binary_aliases;
+print "    private static final String[] BINARY_PROPERTY_ALIASES = {\n        ",
+    join(', ', map { qq{\"$_->[0]\"} } @binary_aliases), "\n    };\n";
+print "    private static final UnicodeSet[] BINARY_PROPERTY_SETS = {\n        ",
+    join(', ', map { $_->[1] } @binary_aliases), "\n    };\n\n";
+print <<'JAVA';
 
     static boolean isPropertyAlias(String alias) { return property(alias) != null; }
     static boolean isBinaryPropertyAlias(String alias) {
         String loose = loose(alias);
-        return loose.equals("hex") || loose.equals("hexdigit");
+        return loose.equals("hex") || loose.equals("hexdigit")
+                || java.util.Arrays.binarySearch(BINARY_PROPERTY_ALIASES, loose) >= 0;
     }
     static UnicodeSet binarySet(String alias) {
-        return isBinaryPropertyAlias(alias) ? HEX : null;
+        String loose = loose(alias);
+        if (loose.equals("hex") || loose.equals("hexdigit")) return HEX;
+        int found = java.util.Arrays.binarySearch(BINARY_PROPERTY_ALIASES, loose);
+        return found < 0 ? null : BINARY_PROPERTY_SETS[found];
     }
     static UnicodeSet valueSet(String propertyAlias, String valueAlias) {
         Property property = property(propertyAlias);

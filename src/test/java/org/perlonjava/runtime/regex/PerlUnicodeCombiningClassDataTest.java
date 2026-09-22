@@ -11,8 +11,8 @@ import org.junit.jupiter.api.Test;
 @Tag("unit")
 class PerlUnicodeCombiningClassDataTest {
     @Test
-    void usesPinnedPerl544Unicode17DataAndAliases() {
-        assertEquals("17.0.0", PerlUnicodeCombiningClassData.UNICODE_VERSION);
+    void usesCurrentImportedUnicodeDataAndAliases() {
+        assertEquals("18.0.0", PerlUnicodeCombiningClassData.UNICODE_VERSION);
         assertTrue(PerlUnicodeCombiningClassData.resolve("A").contains(0x301));
         assertTrue(PerlUnicodeCombiningClassData.resolve("+00_230").contains(0x301));
         assertTrue(PerlUnicodeCombiningClassData.resolve(":\\AAbove\\z:").contains(0x301));

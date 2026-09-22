@@ -16,7 +16,7 @@ use PerlOnJava::UnicodeGenerator qw(
 # For terms of use and license, see https://www.unicode.org/terms_of_use.html
 
 my $source_name = 'NamedSequences.txt';
-my $expected_unicode_version = '17.0.0';
+my $expected_unicode_version = $ENV{PERLONJAVA_UNICODE_VERSION} // '17.0.0';
 my $root = repo_root($FindBin::Bin);
 my $unicode_root = select_unicode_root(
     repo_root => $root,

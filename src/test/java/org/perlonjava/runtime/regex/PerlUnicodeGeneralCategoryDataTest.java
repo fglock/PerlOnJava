@@ -11,8 +11,8 @@ import org.junit.jupiter.api.Test;
 @Tag("unit")
 class PerlUnicodeGeneralCategoryDataTest {
     @Test
-    void usesPinnedPerl544Unicode17DataAndAliases() {
-        assertEquals("17.0.0", PerlUnicodeGeneralCategoryData.UNICODE_VERSION);
+    void usesCurrentImportedUnicodeDataAndAliases() {
+        assertEquals("18.0.0", PerlUnicodeGeneralCategoryData.UNICODE_VERSION);
         assertTrue(PerlUnicodeGeneralCategoryData.resolve("uppercase_letter").contains('A'));
         assertTrue(PerlUnicodeGeneralCategoryData.resolve(":\\ALu\\z:").contains('A'));
         assertTrue(PerlUnicodeGeneralCategoryData.resolve("L").contains('A'));

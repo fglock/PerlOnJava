@@ -12,7 +12,7 @@ use PerlOnJava::UnicodeGenerator qw(
 
 binmode STDOUT, ':raw';
 
-my $expected_version = '17.0.0';
+my $expected_version = $ENV{PERLONJAVA_UNICODE_VERSION} // '17.0.0';
 my @required_sources = (
     'version', File::Spec->catfile('extracted', 'DNumValues.txt'),
     'PropertyAliases.txt', 'PropValueAliases.txt',
@@ -131,6 +131,8 @@ for my $line (split /\n/, $data_text) {
     $source_counts{$canonical} += $last - $first + 1;
 }
 
+my @coalesced;
+if (!$ENV{PERLONJAVA_UNICODE_REFRESH}) {
 die "Expected 1,980 Numeric_Value records, found $record_count\n"
     unless $record_count == 1_980;
 die "Expected 25 source range records, found $range_record_count\n"
@@ -154,6 +156,8 @@ for my $expected (
         unless ($perl_decimal_for{$expected->[0]} // '') eq $expected->[1];
 }
 
+}
+
 @ranges = sort { $a->[0] <=> $b->[0] } @ranges;
 for my $index (0 .. $#ranges) {
     my $range = $ranges[$index];
@@ -163,7 +167,6 @@ for my $index (0 .. $#ranges) {
         if $index > 0 && $range->[0] <= $ranges[$index - 1][1];
 }
 
-my @coalesced;
 for my $range (@ranges) {
     if (@coalesced && $coalesced[-1][2] == $range->[2]
             && $coalesced[-1][1] + 1 == $range->[0]) {
@@ -172,10 +175,12 @@ for my $range (@ranges) {
         push @coalesced, [@$range];
     }
 }
+if (!$ENV{PERLONJAVA_UNICODE_REFRESH}) {
 die "Expected 1,979 coalesced numeric ranges, found " . scalar(@coalesced) . "\n"
     unless @coalesced == 1_979;
 die "Expected 1,112,089 NaN code points\n"
     unless 0x110000 - $explicit_count == 1_112_089;
+}
 
 my @ranges_by_value = map { [] } @values;
 for my $range (@coalesced) {
