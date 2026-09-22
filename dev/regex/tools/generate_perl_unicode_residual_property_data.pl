@@ -14,7 +14,8 @@ my $root = repo_root($FindBin::Bin);
 my $unicore = select_unicode_root(
     repo_root => $root, version => 'current',
     required => [qw(version IdType.txt DCoreProperties.txt PropList.txt
-        PropValueAliases.txt PropertyAliases.txt Unikemet.txt
+        PropValueAliases.txt PropertyAliases.txt Unikemet.txt LineBreak.txt
+        extracted/DBinaryProperties.txt
         auxiliary/GraphemeBreakProperty.txt)],
 );
 my $unicode_version = read_raw(File::Spec->catfile($unicore, 'version'));
@@ -28,6 +29,8 @@ my @sources = (
     ['PropValueAliases.txt', qr/^# PropertyValueAliases-\Q$unicode_version\E\.txt$/m],
     ['PropertyAliases.txt', qr/^# PropertyAliases-\Q$unicode_version\E\.txt$/m],
     ['Unikemet.txt', qr/^# Unikemet-\Q$unicode_version\E\.txt$/m],
+    ['LineBreak.txt', qr/^# LineBreak-\Q$unicode_version\E\.txt$/m],
+    ['extracted/DBinaryProperties.txt', qr/^# DerivedBinaryProperties-\Q$unicode_version\E\.txt$/m],
     ['auxiliary/GraphemeBreakProperty.txt', qr/^# GraphemeBreakProperty-\Q$unicode_version\E\.txt$/m],
 );
 for my $source (@sources) {
@@ -50,6 +53,7 @@ my %property = (
             Exclusion Obsolete Technical Uncommon_Use Limited_Use Inclusion Recommended)],
     },
     KEHCORE => { aliases => ['kEH_Core'], default => 'N', values => [qw(C L N)] },
+    LB => { aliases => [qw(LB Line_Break)], default => 'Unknown' },
 );
 my %binary_property = (
     ALPHA => { aliases => [qw(Alphabetic Alpha)] },
@@ -59,14 +63,15 @@ my %binary_property = (
     IDC => { aliases => [qw(ID_Continue IDC)] },
     XIDS => { aliases => [qw(XID_Start XIDS)] },
     XIDC => { aliases => [qw(XID_Continue XIDC)] },
+    BIDIM => { aliases => [qw(Bidi_Mirrored Bidi_M)] },
 );
 
 for my $line (split /\n/, $text{'PropValueAliases.txt'}) {
     next if $line =~ /^\s*#/;
     $line =~ s/#.*$//;
     my @field = map { trim($_) } split /;/, $line;
-    next unless @field >= 3 && ($field[0] eq 'GCB' || $field[0] eq 'InCB');
-    my $spec = $property{$field[0]};
+    next unless @field >= 3 && ($field[0] eq 'GCB' || $field[0] eq 'InCB' || $field[0] eq 'lb');
+    my $spec = $property{$field[0] eq 'lb' ? 'LB' : $field[0]};
     push @{$spec->{values}}, $field[2];
     push @{$spec->{short_values}}, $field[1];
     my $index = $#{$spec->{values}};
@@ -115,6 +120,43 @@ for my $line (split /\n/, $text{'IdType.txt'}) {
 for my $line (split /\n/, $text{'Unikemet.txt'}) {
     add_range('KEHCORE', $1, $2) if $line =~ /^U\+([0-9A-F]+)\tkEH_Core\t([CL])$/;
 }
+my @line_break_explicit;
+for my $line (split /\n/, $text{'LineBreak.txt'}) {
+    next unless $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*([A-Za-z0-9_]+)/;
+    push @line_break_explicit, [parse_range($1), $2];
+}
+my $line_break = $property{LB};
+my $line_break_default = $line_break->{value_alias}{loose_name('XX')};
+die "Line_Break aliases do not define XX\n" unless defined $line_break_default;
+my @line_break_values = ($line_break_default) x 0x110000;
+# UAX #14 defines these ranges as ID/PR when no explicit LineBreak.txt entry
+# overrides them.  Applying explicit data afterwards retains assigned values.
+for my $default ([0x3400, 0x4DBF, 'ID'], [0x4E00, 0x9FFF, 'ID'],
+        [0xF900, 0xFAFF, 'ID'], [0x20000, 0x2FFFD, 'ID'],
+        [0x30000, 0x3FFFD, 'ID'], [0x1F000, 0x1FAFF, 'ID'],
+        [0x1FC00, 0x1FFFD, 'ID'], [0x20A0, 0x20CF, 'PR']) {
+    my $index = $line_break->{value_alias}{loose_name($default->[2])};
+    die "Line_Break aliases do not define $default->[2]\n" unless defined $index;
+    $line_break_values[$_] = $index for $default->[0] .. $default->[1];
+}
+for my $entry (@line_break_explicit) {
+    my ($start, $end, $value) = @$entry;
+    my $index = $line_break->{value_alias}{loose_name($value)};
+    die "Unknown Line_Break value '$value'\n" unless defined $index;
+    $line_break_values[$_] = $index for $start .. $end;
+}
+my ($line_break_start, $line_break_value) = (0, $line_break_values[0]);
+for my $code (1 .. 0x10FFFF) {
+    next if $line_break_values[$code] == $line_break_value;
+    push @{$line_break->{ranges}[$line_break_value]}, [$line_break_start, $code - 1];
+    ($line_break_start, $line_break_value) = ($code, $line_break_values[$code]);
+}
+push @{$line_break->{ranges}[$line_break_value]}, [$line_break_start, 0x10FFFF];
+$line_break->{complete} = 1;
+for my $line (split /\n/, $text{'extracted/DBinaryProperties.txt'}) {
+    next unless $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*Bidi_Mirrored\b/;
+    push @{$binary_property{BIDIM}{ranges}}, [parse_range($1)];
+}
 my @hex_ranges;
 for my $line (split /\n/, $text{'PropList.txt'}) {
     push @hex_ranges, [parse_range($1)]
@@ -148,6 +190,7 @@ sub complement {
     return \@out;
 }
 for my $spec (values %property) {
+    next if $spec->{complete};
     my @explicit = map { @$_ } @{$spec->{ranges}};
     $spec->{ranges}[$spec->{default_index}] = complement(\@explicit);
     $spec->{ranges}[$_] = coalesce($spec->{ranges}[$_])
@@ -214,7 +257,7 @@ for my $source (@sources) {
     print "    static final String ${constant}_SHA256 = \"$source->[1]\";\n";
 }
 print "\n";
-emit_property($_) for qw(GCB InCB IDTYPE KEHCORE);
+emit_property($_) for qw(GCB InCB IDTYPE KEHCORE LB);
 print "    private static final int[] HEX_RANGES = {\n"; emit_pairs(\@hex_ranges, '        '); print "    };\n";
 for my $key (sort keys %binary_property) {
     $binary_property{$key}{ranges} = coalesce($binary_property{$key}{ranges});
@@ -276,6 +319,7 @@ print <<'JAVA';
         if (InCB.hasAlias(loose)) return InCB;
         if (IDTYPE.hasAlias(loose)) return IDTYPE;
         if (KEHCORE.hasAlias(loose)) return KEHCORE;
+        if (LB.hasAlias(loose)) return LB;
         return null;
     }
     private static String loose(String value) {

@@ -693,17 +693,18 @@ public class UnicodeResolver {
                 return set;
             }
             case "XPosixAlnum": case "Alnum": {
-                UnicodeSet set = new UnicodeSet();
-                set.applyPropertyAlias("Alphabetic", "True");
+                UnicodeSet alphabetic = PerlUnicodeResidualPropertyData.binarySet("Alphabetic");
+                UnicodeSet set = alphabetic == null ? new UnicodeSet() : new UnicodeSet(alphabetic);
+                if (alphabetic == null) set.applyPropertyAlias("Alphabetic", "True");
                 UnicodeSet digits = new UnicodeSet();
                 digits.applyPropertyAlias("gc", "Nd");
                 set.addAll(digits);
                 return set;
             }
             case "XPosixAlpha": case "Alpha": case "Alphabetic": {
-                UnicodeSet set = new UnicodeSet();
-                set.applyPropertyAlias("Alphabetic", "True");
-                return set;
+                UnicodeSet generated = PerlUnicodeResidualPropertyData.binarySet("Alphabetic");
+                if (generated != null) return generated;
+                return new UnicodeSet().applyPropertyAlias("Alphabetic", "True");
             }
             case "XPosixUpper": case "Upper": case "Uppercase": {
                 UnicodeSet set = new UnicodeSet();
@@ -1912,6 +1913,24 @@ public class UnicodeResolver {
                 resolvePerlUnicodePropertyWildcard(alias);
         if (propertyWildcard != null) return propertyWildcard.set;
         if (assignment < 0) {
+            // These aliases are handled by the frontend's Java-pattern path as
+            // well as Joni's native resolver.  Keep both paths pinned to the
+            // imported Perl UCD instead of leaving this early route on ICU.
+            if (alias.equals("XPosixAlpha") || alias.equals("Alpha")
+                    || alias.equals("Alphabetic")) {
+                UnicodeSet alphabetic =
+                        PerlUnicodeResidualPropertyData.binarySet("Alphabetic");
+                if (alphabetic != null) return alphabetic;
+            }
+            if (alias.equals("XPosixAlnum") || alias.equals("Alnum")) {
+                UnicodeSet alphabetic =
+                        PerlUnicodeResidualPropertyData.binarySet("Alphabetic");
+                if (alphabetic != null) {
+                    UnicodeSet decimal = PerlUnicodeGeneralCategoryData.resolve("Nd");
+                    return decimal == null ? alphabetic
+                            : new UnicodeSet(alphabetic).addAll(decimal).freeze();
+                }
+            }
             UnicodeSet generatedBinary =
                     PerlUnicodeResidualPropertyData.binarySet(alias);
             if (generatedBinary != null) return generatedBinary;
@@ -2246,17 +2265,9 @@ public class UnicodeResolver {
         }) {
             return new UnicodeSet('\r', '\r');
         }
-        UnicodeSet result = unicodePropertyValueSet(UProperty.LINE_BREAK, value);
-        // ICU4J 78.3 predates Unicode 18.  U+1B164..U+1B168 are the
-        // Unicode-18 Conditional_Japanese_Starter additions in LineBreak.txt.
-        if (switch (loosePropertyName(value)) {
-            case "cj", "conditionaljapanesestarter" -> true;
-            default -> false;
-        }) {
-            result = (result == null ? new UnicodeSet() : new UnicodeSet(result))
-                    .add(0x1B164, 0x1B168).freeze();
-        }
-        return result;
+        UnicodeSet generated = PerlUnicodeResidualPropertyData.valueSet("Line_Break", value);
+        return generated != null ? generated
+                : unicodePropertyValueSet(UProperty.LINE_BREAK, value);
     }
 
     private static boolean isPerlLineBreakProperty(String property) {
@@ -2617,6 +2628,11 @@ public class UnicodeResolver {
         String binaryProperty =
                 PerlUnicodeBinaryPropertyAliasData.canonicalProperty(looseAlias);
         if (binaryProperty != null) {
+            UnicodeSet generated = PerlUnicodeResidualPropertyData.binarySet(binaryProperty);
+            if (generated != null) {
+                return new PerlBarePropertyAlias(
+                        generated, looseAlias.equals("lowercase"));
+            }
             try {
                 UnicodeSet binary = new UnicodeSet()
                         .applyPropertyAlias(binaryProperty, "True")
@@ -2659,13 +2675,22 @@ public class UnicodeResolver {
                     PERL_UNICODE_SPACE_SET, false);
             case "whitespace" -> new PerlBarePropertyAlias(
                     PERL_UNICODE_SPACE_SET, false);
-            case "xposixalnum", "alnum" -> new PerlBarePropertyAlias(
-                    new UnicodeSet().applyPropertyAlias("Alphabetic", "True")
-                            .addAll(PerlUnicodeGeneralCategoryData.resolve("Nd"))
-                            .freeze(), false);
-            case "xposixalpha" -> new PerlBarePropertyAlias(
-                    new UnicodeSet().applyPropertyAlias("Alphabetic", "True")
-                            .freeze(), false);
+            case "xposixalnum", "alnum" -> {
+                UnicodeSet alphabetic =
+                        PerlUnicodeResidualPropertyData.binarySet("Alphabetic");
+                if (alphabetic == null) {
+                    alphabetic = new UnicodeSet().applyPropertyAlias("Alphabetic", "True");
+                }
+                yield new PerlBarePropertyAlias(new UnicodeSet(alphabetic)
+                        .addAll(PerlUnicodeGeneralCategoryData.resolve("Nd")).freeze(), false);
+            }
+            case "xposixalpha" -> {
+                UnicodeSet alphabetic =
+                        PerlUnicodeResidualPropertyData.binarySet("Alphabetic");
+                yield new PerlBarePropertyAlias(alphabetic == null
+                        ? new UnicodeSet().applyPropertyAlias("Alphabetic", "True").freeze()
+                        : alphabetic, false);
+            }
             case "xposixblank" -> new PerlBarePropertyAlias(
                     PERL_UNICODE_SPACE_SET, false);
             case "xposixcntrl" -> new PerlBarePropertyAlias(
