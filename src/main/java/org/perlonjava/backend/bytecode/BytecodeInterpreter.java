@@ -2015,9 +2015,13 @@ public class BytecodeInterpreter {
                                     context = RuntimeCode.currentRawCallContext();
                                 }
 
-                                RuntimeScalar invocant = (RuntimeScalar) registers[invocantReg];
-                                RuntimeScalar method = (RuntimeScalar) registers[methodReg];
-                                RuntimeScalar currentSub = (RuntimeScalar) registers[currentSubReg];
+                                // Method operands normally compile to scalars, but a
+                                // scalar-context expression can retain its one-element
+                                // RuntimeList wrapper (notably during Moose's role
+                                // composition). Normalize it at the call boundary.
+                                RuntimeScalar invocant = registers[invocantReg].scalar();
+                                RuntimeScalar method = registers[methodReg].scalar();
+                                RuntimeScalar currentSub = registers[currentSubReg].scalar();
                                 RuntimeBase argsBase = registers[argsReg];
 
                                 RuntimeArray callArgs;
