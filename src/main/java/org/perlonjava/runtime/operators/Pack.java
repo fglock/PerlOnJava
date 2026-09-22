@@ -287,6 +287,13 @@ public class Pack {
         RuntimeScalar packed = shouldUpgrade
                 ? new RuntimeScalar(output.toUpgradedString())
                 : new RuntimeScalar(output.toByteArray());
+        // A Unicode pack result can contain only Latin-1 code points (for
+        // example pack("U", 0xFF)). RuntimeScalar(String) deliberately
+        // defaults such strings to an unflagged byte value, but pack U must
+        // retain its UTF-8 flag so `use bytes` observes its encoded octets.
+        if (shouldUpgrade) {
+            packed.type = RuntimeScalarType.STRING;
+        }
         for (RuntimeBase input : args.elements) {
             if (input instanceof RuntimeScalar scalar) {
                 packed = packed.propagateTaint(scalar);

@@ -1147,8 +1147,7 @@ public class SubroutineParser {
                 if (prototype != null || oldProto != null) {
                     String oldDisplay = oldProto == null ? ": none" : " (" + oldProto + ")";
                     String newDisplay = prototype == null ? "none" : "(" + prototype + ")";
-                    String oldForCompare = oldProto == null ? "none" : "(" + oldProto + ")";
-                    if (!oldForCompare.equals(newDisplay)) {
+                    if (!prototypesMatch(oldProto, prototype)) {
                         String location = "";
                         if (parser.ctx.errorUtil != null) {
                             int line = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex);
@@ -1822,8 +1821,7 @@ public class SubroutineParser {
                 // When prototype is null, display as ": none"; when defined, display as " (proto)"
                 String oldDisplay = oldPrototype == null ? ": none" : " (" + oldPrototype + ")";
                 String newDisplay = prototype == null ? "none" : "(" + prototype + ")";
-                String oldForCompare = oldPrototype == null ? "none" : "(" + oldPrototype + ")";
-                if (!oldForCompare.equals(newDisplay)) {
+                if (!prototypesMatch(oldPrototype, prototype)) {
                     String msg = "Prototype mismatch: sub " + fullName + oldDisplay + " vs " + newDisplay + location;
                     org.perlonjava.runtime.operators.WarnDie.warn(
                             new RuntimeScalar(msg), new RuntimeScalar(""));
@@ -1833,16 +1831,18 @@ public class SubroutineParser {
             // "Subroutine X redefined": ckWARN('redefine') - $^W or lexical 'redefine' in ${^WARNING_BITS}.
             // "Constant subroutine X redefined": still emitted when $^W is 0 (e.g. eval under local $^W=0);
             // only suppressed by lexical no warnings 'redefine' / no warnings. See perl5_t/t/comp/redef.t.
-            if (isConstantSub) {
-                if (!Warnings.warningManager.isWarningDisabled("redefine")) {
-                    String msg = "Constant subroutine " + subName + " redefined" + location;
+            if (isRedefinition) {
+                if (isConstantSub) {
+                    if (!Warnings.warningManager.isWarningDisabled("redefine")) {
+                        String msg = "Constant subroutine " + subName + " redefined" + location;
+                        org.perlonjava.runtime.operators.WarnDie.warn(
+                                new RuntimeScalar(msg), new RuntimeScalar(""));
+                    }
+                } else if (WarningFlags.ckWarnForScope(parser.ctx.symbolTable, "redefine")) {
+                    String msg = "Subroutine " + subName + " redefined" + location;
                     org.perlonjava.runtime.operators.WarnDie.warn(
                             new RuntimeScalar(msg), new RuntimeScalar(""));
                 }
-            } else if (WarningFlags.ckWarnForScope(parser.ctx.symbolTable, "redefine")) {
-                String msg = "Subroutine " + subName + " redefined" + location;
-                org.perlonjava.runtime.operators.WarnDie.warn(
-                        new RuntimeScalar(msg), new RuntimeScalar(""));
             }
         }
 
@@ -2890,6 +2890,15 @@ public class SubroutineParser {
             }
         }
         return false;
+    }
+
+    /** Perl ignores whitespace when comparing subroutine prototypes. */
+    private static boolean prototypesMatch(String oldPrototype, String newPrototype) {
+        if (oldPrototype == null || newPrototype == null) {
+            return oldPrototype == newPrototype;
+        }
+        return oldPrototype.replaceAll("\\s+", "")
+                .equals(newPrototype.replaceAll("\\s+", ""));
     }
 
     /**
