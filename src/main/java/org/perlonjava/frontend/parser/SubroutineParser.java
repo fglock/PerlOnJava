@@ -2745,7 +2745,7 @@ public class SubroutineParser {
         for (int i = before - 1; i >= 0; i--) {
             String text = parser.tokens.get(i).text;
             if ("}".equals(text)) depth++;
-            else if ("{".equals(text) && depth-- == 0) return i;
+            else if ("{".equals(text) && --depth == 0) return i;
         }
         return -1;
     }

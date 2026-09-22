@@ -12,6 +12,17 @@ my $optimized = sub {
 }->();
 is(&$optimized, 5, 'an optimized statement before a lexical constant is inlinable');
 
+{
+    package Local::MooStyleConstantClosure;
+    BEGIN {
+        my $phase_code = q[${^GLOBAL_PHASE} eq 'DESTRUCT'];
+        *in_global_destruction_code = sub () { $phase_code };
+        eval "sub in_global_destruction () { $phase_code }; 1" or die $@;
+    }
+}
+ok(defined &Local::MooStyleConstantClosure::in_global_destruction,
+    'a Moo-style BEGIN constant closure permits its lexical initializer');
+
 my $mutation_generator = sub {
     my $value = 5;
     my $constant = sub () { $value };
