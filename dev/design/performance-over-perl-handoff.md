@@ -98,6 +98,23 @@ Semantic validation for the exact implementation source:
   an incremental, qualified delivery result rather than an official parity
   acceptance claim.
 
+## Production A/A calibration pilot (2026-09-22)
+
+Four fresh same-JAR Method runs used the existing authority workload under the
+normal production load, at nice +19, with twenty fixed one-second warmup
+windows and fifteen one-second measurement windows. All runs produced the
+same semantic checksum (`4352`). Their median throughputs were 1,077,020,
+990,036, 851,929, and 598,918 operations/s. The first adjacent same-build
+pair had a 0.919 ratio; the second had a 0.703 ratio. Only the first two runs
+met the former throughput-based warmup rule.
+
+This is not a candidate comparison or a complete seven-block calibration. It
+does establish that a lone apparently stabilized pair can vary by at least 8%
+under the intended load, while the fixed warmup rule alone cannot separate JIT
+state from changing host contention. The current authority script also lacks
+per-process host-state snapshots. Extend that tooling before treating
+single-pair or quiet-window results as useful performance evidence.
+
 ## Progress tracking
 
 ### Current status: Phase 3, production-load measurement protocol defined
@@ -115,6 +132,9 @@ Semantic validation for the exact implementation source:
   - Treat host variability as measured uncertainty, not a blanket blocker.
   - Require A/A calibration, balanced fresh-process blocks, host-state
     capture, and unprofiled validation of profiler-selected changes.
+- [x] Run the first production A/A calibration pilot (2026-09-22)
+  - Same-build Method throughput moved 8.1% across the first adjacent pair and
+    29.7% across the second; retain it only as a lower bound on host variation.
 
 ### Next steps
 
