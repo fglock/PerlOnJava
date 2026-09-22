@@ -1447,15 +1447,18 @@ public class UnicodeResolver {
         property = normalizePerlIsPropertyAssignment(property);
         int assignment = propertyValueDelimiter(property);
         if (assignment <= 0 || assignment == property.length() - 1) {
-            UnicodeSet generatedBinary =
-                    PerlUnicodeResidualPropertyData.binarySet(property);
-            if (generatedBinary != null) {
-                return joniPropertyResult(generatedBinary, true);
-            }
             UnicodeSet foldableBareProperty = resolvePerlCaseFoldableBareProperty(
                     property, caseInsensitive);
             if (foldableBareProperty != null) {
                 return joniPropertyResult(foldableBareProperty, true);
+            }
+            UnicodeSet generatedBinary =
+                    PerlUnicodeResidualPropertyData.binarySet(property);
+            if (generatedBinary != null) {
+                // Binary-property membership is not case-folded by /i.  In
+                // particular, Changes_When_Lowercased must not gain 'a' from
+                // its member 'A' merely because its data is generated.
+                return joniPropertyResult(generatedBinary, false);
             }
             UnicodeSet blockBinaryPrecedence =
                     resolvePerlBlockBinaryPrecedenceAlias(property);

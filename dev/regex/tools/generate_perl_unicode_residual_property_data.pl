@@ -15,8 +15,9 @@ my $unicore = select_unicode_root(
     repo_root => $root, version => 'current',
     required => [qw(version IdType.txt DCoreProperties.txt PropList.txt
         PropValueAliases.txt PropertyAliases.txt Unikemet.txt LineBreak.txt
-        extracted/DBinaryProperties.txt
-        auxiliary/GraphemeBreakProperty.txt)],
+        extracted/DBinaryProperties.txt emoji/emoji.txt
+        auxiliary/GraphemeBreakProperty.txt auxiliary/WordBreakProperty.txt
+        auxiliary/SentenceBreakProperty.txt)],
 );
 my $unicode_version = read_raw(File::Spec->catfile($unicore, 'version'));
 $unicode_version =~ s/\s+\z//;
@@ -31,7 +32,10 @@ my @sources = (
     ['Unikemet.txt', qr/^# Unikemet-\Q$unicode_version\E\.txt$/m],
     ['LineBreak.txt', qr/^# LineBreak-\Q$unicode_version\E\.txt$/m],
     ['extracted/DBinaryProperties.txt', qr/^# DerivedBinaryProperties-\Q$unicode_version\E\.txt$/m],
+    ['emoji/emoji.txt', qr/^# Version:\s*\Q$unicode_version\E$/m],
     ['auxiliary/GraphemeBreakProperty.txt', qr/^# GraphemeBreakProperty-\Q$unicode_version\E\.txt$/m],
+    ['auxiliary/WordBreakProperty.txt', qr/^# WordBreakProperty-\Q$unicode_version\E\.txt$/m],
+    ['auxiliary/SentenceBreakProperty.txt', qr/^# SentenceBreakProperty-\Q$unicode_version\E\.txt$/m],
 );
 for my $source (@sources) {
     my ($name, $version_pattern) = @$source;
@@ -54,6 +58,8 @@ my %property = (
     },
     KEHCORE => { aliases => ['kEH_Core'], default => 'N', values => [qw(C L N)] },
     LB => { aliases => [qw(LB Line_Break)], default => 'Unknown' },
+    WB => { aliases => [qw(WB Word_Break)], default => 'Other' },
+    SB => { aliases => [qw(SB Sentence_Break)], default => 'Other' },
 );
 my %binary_property = (
     ALPHA => { aliases => [qw(Alphabetic Alpha)] },
@@ -65,12 +71,27 @@ my %binary_property = (
     XIDC => { aliases => [qw(XID_Continue XIDC)] },
     BIDIM => { aliases => [qw(Bidi_Mirrored Bidi_M)] },
 );
+my %binary_key_for_property = (
+    Alphabetic => 'ALPHA',
+    Grapheme_Base => 'GRBASE',
+    Ideographic => 'IDEO',
+    ID_Start => 'IDS',
+    ID_Continue => 'IDC',
+    XID_Start => 'XIDS',
+    XID_Continue => 'XIDC',
+    Bidi_Mirrored => 'BIDIM',
+);
+my %extra_binary_property = map { $_ => 1 } qw(
+    Emoji Emoji_Component Emoji_Modifier Emoji_Modifier_Base Emoji_Presentation
+    Modifier_Combining_Mark
+);
 
 for my $line (split /\n/, $text{'PropValueAliases.txt'}) {
     next if $line =~ /^\s*#/;
     $line =~ s/#.*$//;
     my @field = map { trim($_) } split /;/, $line;
-    next unless @field >= 3 && ($field[0] eq 'GCB' || $field[0] eq 'InCB' || $field[0] eq 'lb');
+    next unless @field >= 3 && ($field[0] eq 'GCB' || $field[0] eq 'InCB'
+        || $field[0] eq 'lb' || $field[0] eq 'WB' || $field[0] eq 'SB');
     my $spec = $property{$field[0] eq 'lb' ? 'LB' : $field[0]};
     push @{$spec->{values}}, $field[2];
     push @{$spec->{short_values}}, $field[1];
@@ -104,6 +125,12 @@ sub add_range {
 
 for my $line (split /\n/, $text{'auxiliary/GraphemeBreakProperty.txt'}) {
     add_range('GCB', $1, $2) if $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*([A-Za-z_]+)/;
+}
+for my $line (split /\n/, $text{'auxiliary/WordBreakProperty.txt'}) {
+    add_range('WB', $1, $2) if $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*([A-Za-z_]+)/;
+}
+for my $line (split /\n/, $text{'auxiliary/SentenceBreakProperty.txt'}) {
+    add_range('SB', $1, $2) if $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*([A-Za-z_]+)/;
 }
 for my $line (split /\n/, $text{'DCoreProperties.txt'}) {
     add_range('InCB', $1, $2) if $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*InCB\s*;\s*([A-Za-z_]+)/;
@@ -153,9 +180,23 @@ for my $code (1 .. 0x10FFFF) {
 }
 push @{$line_break->{ranges}[$line_break_value]}, [$line_break_start, 0x10FFFF];
 $line_break->{complete} = 1;
-for my $line (split /\n/, $text{'extracted/DBinaryProperties.txt'}) {
-    next unless $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*Bidi_Mirrored\b/;
-    push @{$binary_property{BIDIM}{ranges}}, [parse_range($1)];
+for my $source (qw(DCoreProperties.txt PropList.txt extracted/DBinaryProperties.txt emoji/emoji.txt)) {
+    for my $line (split /\n/, $text{$source}) {
+        next unless $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*([A-Za-z0-9_]+)\s*(?:#|$)/;
+        my ($range, $name) = ($1, $2);
+        next unless exists $binary_key_for_property{$name}
+                || $extra_binary_property{$name};
+        my $key = $binary_key_for_property{$name};
+        if (!defined $key) {
+            $key = 'BIN_' . uc($name);
+            $key =~ s/[^A-Z0-9]+/_/g;
+            die "Binary-property generator key collision for '$name'\n"
+                if exists $binary_property{$key};
+            $binary_property{$key} = { aliases => [$name] };
+            $binary_key_for_property{$name} = $key;
+        }
+        push @{$binary_property{$key}{ranges}}, [parse_range($range)];
+    }
 }
 my @hex_ranges;
 for my $line (split /\n/, $text{'PropList.txt'}) {
@@ -257,7 +298,7 @@ for my $source (@sources) {
     print "    static final String ${constant}_SHA256 = \"$source->[1]\";\n";
 }
 print "\n";
-emit_property($_) for qw(GCB InCB IDTYPE KEHCORE LB);
+emit_property($_) for qw(GCB InCB IDTYPE KEHCORE LB WB SB);
 print "    private static final int[] HEX_RANGES = {\n"; emit_pairs(\@hex_ranges, '        '); print "    };\n";
 for my $key (sort keys %binary_property) {
     $binary_property{$key}{ranges} = coalesce($binary_property{$key}{ranges});
@@ -320,6 +361,8 @@ print <<'JAVA';
         if (IDTYPE.hasAlias(loose)) return IDTYPE;
         if (KEHCORE.hasAlias(loose)) return KEHCORE;
         if (LB.hasAlias(loose)) return LB;
+        if (WB.hasAlias(loose)) return WB;
+        if (SB.hasAlias(loose)) return SB;
         return null;
     }
     private static String loose(String value) {
