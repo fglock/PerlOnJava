@@ -2727,9 +2727,23 @@ public class SubroutineParser {
 
         for (int i = afterSub; i < blockEnd; i++) {
             String text = parser.tokens.get(i).text;
-            if ("eval".equals(text) || "evalbytes".equals(text) || "ee".equals(text)) return true;
+            // BEGIN-time metaprogramming such as Moo's named constant-sub
+            // installation cannot subsequently mutate the closed-over cell.
+            // Elsewhere an eval/ee may compile code which does, so retain
+            // Perl's conservative diagnostic.
+            if (!isBeginBlock(parser, blockStart)
+                    && ("eval".equals(text) || "evalbytes".equals(text) || "ee".equals(text))) return true;
         }
         return containsModification(parser, afterSub, blockEnd, captured);
+    }
+
+    private static boolean isBeginBlock(Parser parser, int blockStart) {
+        int previous = blockStart - 1;
+        while (previous >= 0 && (parser.tokens.get(previous).type == LexerTokenType.WHITESPACE
+                || parser.tokens.get(previous).type == LexerTokenType.NEWLINE)) {
+            previous--;
+        }
+        return previous >= 0 && "BEGIN".equals(parser.tokens.get(previous).text);
     }
 
     private static boolean lexicalConstantCvIsRefalias(Parser parser, int afterSub,
@@ -2745,7 +2759,7 @@ public class SubroutineParser {
         for (int i = before - 1; i >= 0; i--) {
             String text = parser.tokens.get(i).text;
             if ("}".equals(text)) depth++;
-            else if ("{".equals(text) && --depth == 0) return i;
+            else if ("{".equals(text) && depth-- == 0) return i;
         }
         return -1;
     }
@@ -2780,12 +2794,22 @@ public class SubroutineParser {
             int next = i + variableTokenWidth(parser, i, captured);
             if (next < to) {
                 String op = parser.tokens.get(next).text;
+                // The declaration initializer creates the captured lexical;
+                // it does not make an otherwise constant CV mutable.  This is
+                // the shape used by Moo's BEGIN-time constant closures.
+                if (op.equals("=") && isLexicalInitializer(parser, i)) continue;
                 if (op.equals("=") || op.equals("++") || op.equals("--") || op.endsWith("=")) return true;
             }
             if (i > from && (parser.tokens.get(i - 1).text.equals("++")
                     || parser.tokens.get(i - 1).text.equals("--"))) return true;
         }
         return false;
+    }
+
+    private static boolean isLexicalInitializer(Parser parser, int variableIndex) {
+        if (variableIndex == 0) return false;
+        String declaration = parser.tokens.get(variableIndex - 1).text;
+        return "my".equals(declaration) || "state".equals(declaration);
     }
 
     private static boolean variableAt(Parser parser, int index, String captured) {
