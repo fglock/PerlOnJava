@@ -15,7 +15,7 @@ class PerlUnicodeScalarNameDataTest {
 
     @Test
     void retainsCanonicalNamesAndEveryAliasFamilyFromNamePl() {
-        assertEquals(35_079, PerlUnicodeScalarNameData.entryCount());
+        assertEquals(35_836, PerlUnicodeScalarNameData.entryCount());
         assertEquals(0, PerlUnicodeScalarNameData.DUPLICATE_NAME_COUNT);
         assertEquals(0x00ad, PerlUnicodeScalarNameData.codePoint("SOFT HYPHEN"));
         assertEquals(0x00ad, PerlUnicodeScalarNameData.codePoint("SHY"));
