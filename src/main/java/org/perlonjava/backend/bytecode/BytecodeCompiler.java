@@ -1277,7 +1277,9 @@ public class BytecodeCompiler implements Visitor {
     public InterpretedCode compile(Node node, EmitterContext ctx) {
         // Store context for strict checks and other compile-time options
         this.emitterContext = ctx;
-        this.compilingLvalueSubroutine = node instanceof AbstractNode abstractNode
+        this.compilingLvalueSubroutine = this.compilingLvalueSubroutine
+                || ctx != null && ctx.isLvalueSubroutine
+                || node instanceof AbstractNode abstractNode
                 && abstractNode.getBooleanAnnotation("subroutineIsLvalue");
 
         collectLoopBodyLabels(node, gotoLabelsInsideLoop, false);
@@ -5925,13 +5927,26 @@ public class BytecodeCompiler implements Visitor {
                 compileNode(node.operand, -1, RuntimeContextType.SCALAR);
                 int valueReg = lastResultReg;
 
-                // Use CODE_DEREF_NONSTRICT to look up the code reference
                 int rd = allocateOutputRegister();
-                int pkgIdx = addToStringPool(getCurrentPackage());
-                emit(Opcodes.CODE_DEREF_NONSTRICT);
-                emitReg(rd);
-                emitReg(valueReg);
-                emit(pkgIdx);
+                // Only lvalue subroutine calls need the strict dereference
+                // here. Other dynamic CODE references retain their established
+                // dispatch path (including module-loading callbacks).
+                // A lazily materialized named sub compiles this body with its
+                // own symbol table.  Consult that table so a `use strict
+                // 'refs'` inside the body is visible here rather than the
+                // enclosing emitter context's earlier pragma snapshot.
+                if (symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS)
+                        && isCompilingLvalueSubroutine()) {
+                    emit(Opcodes.CODE_DEREF_STRICT);
+                    emitReg(rd);
+                    emitReg(valueReg);
+                } else {
+                    int pkgIdx = addToStringPool(getCurrentPackage());
+                    emit(Opcodes.CODE_DEREF_NONSTRICT);
+                    emitReg(rd);
+                    emitReg(valueReg);
+                    emit(pkgIdx);
+                }
 
                 lastResultReg = rd;
             } else {
@@ -6681,6 +6696,7 @@ public class BytecodeCompiler implements Visitor {
         // but named subs are NOT eval strings - clear the flag.
         subCompiler.isEvalString = false;
         subCompiler.isSubroutineBody = true;
+        subCompiler.compilingLvalueSubroutine = node.getBooleanAnnotation("subroutineIsLvalue");
         subCompiler.isSmartmatchPredicate = node.getBooleanAnnotation("smartmatchPredicate");
         subCompiler.symbolTable.setCurrentPackage(getCurrentPackage(),
                 symbolTable.currentPackageIsClass());

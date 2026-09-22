@@ -3769,6 +3769,58 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         };
     }
 
+    /**
+     * Implement {@code &{$value}} while {@code strict 'refs'} is active.
+     * A CODE value (and a glob that owns a CODE slot) remains callable, but a
+     * string must not be treated as a symbolic subroutine name.
+     */
+    public RuntimeScalar codeDerefStrict() {
+        if (type == CODE) {
+            return this;
+        }
+        int blessId = blessedId(this);
+        if (blessId != 0) {
+            if (blessId < 0) {
+                OverloadContext ctx = OverloadContext.prepare(blessId);
+                if (ctx != null) {
+                    RuntimeScalar result = ctx.tryOverload("(&{}", unaryDerefOverloadArgs());
+                    if (overloadReturnedDifferentObject(result)) {
+                        return result.codeDerefStrict();
+                    }
+                }
+            }
+            throw new PerlCompilerException("Not a subroutine reference");
+        }
+        return switch (type) {
+            case TIED_SCALAR -> tiedFetch().codeDerefStrict();
+            case READONLY_SCALAR -> ((RuntimeScalar) value).codeDerefStrict();
+            case STRING, BYTE_STRING -> throw new PerlCompilerException(
+                    "Can't use string (\"" + toString()
+                            + "\") as a subroutine ref while \"strict refs\" in use");
+            case REFERENCE -> {
+                RuntimeScalar deref = (RuntimeScalar) value;
+                if (deref.type == RuntimeScalarType.CODE) {
+                    yield deref;
+                }
+                throw new PerlCompilerException("Not a subroutine reference");
+            }
+            case ARRAYREFERENCE, HASHREFERENCE, REGEX ->
+                    throw new PerlCompilerException("Not a subroutine reference");
+            case GLOB, GLOBREFERENCE -> {
+                RuntimeGlob glob = (RuntimeGlob) value;
+                RuntimeScalar savedCode = glob.getSavedCodeSlot();
+                if (savedCode != null) {
+                    yield savedCode;
+                }
+                if (glob.globName == null) {
+                    yield glob.codeSlot != null ? glob.codeSlot : new RuntimeScalar();
+                }
+                yield GlobalVariable.getGlobalCodeRef(glob.globName);
+            }
+            default -> throw new PerlCompilerException("Not a subroutine reference");
+        };
+    }
+
     // Return a reference to this scalar.
     //
     // Special case for GLOB-typed scalars: when a glob passes through @_,

@@ -2887,6 +2887,7 @@ public class BytecodeInterpreter {
                                  Opcodes.ALARM_OP, Opcodes.DEREF_GLOB, Opcodes.DEREF_GLOB_NONSTRICT,
                                  Opcodes.LOAD_GLOB_DYNAMIC, Opcodes.DEREF_SCALAR_STRICT,
                                  Opcodes.DEREF_SCALAR_NONSTRICT, Opcodes.CODE_DEREF_NONSTRICT,
+                                 Opcodes.CODE_DEREF_STRICT,
                                  Opcodes.NAMED_CODE_REFERENCE, Opcodes.DIRECT_NAMED_CODE_CALL,
                                  Opcodes.FOREACH_DEREF_SCALAR, Opcodes.FOREACH_DEREF_ARRAY,
                                  Opcodes.FOREACH_DEREF_HASH -> {
@@ -4490,6 +4491,9 @@ public class BytecodeInterpreter {
             }
             case Opcodes.CODE_DEREF_NONSTRICT -> {
                 return SlowOpcodeHandler.executeCodeDerefNonStrict(bytecode, pc, registers, code);
+            }
+            case Opcodes.CODE_DEREF_STRICT -> {
+                return SlowOpcodeHandler.executeCodeDerefStrict(bytecode, pc, registers);
             }
             case Opcodes.NAMED_CODE_REFERENCE -> {
                 return SlowOpcodeHandler.executeNamedCodeReference(bytecode, pc, registers, code);

@@ -92,6 +92,13 @@ public class EmitterContext {
     public boolean isEvalbytes;
 
     /**
+     * Whether the method currently being emitted is an lvalue subroutine.
+     * This is method-local state; keeping it on JavaClassInfo leaks the flag
+     * to later methods emitted for the same generated class.
+     */
+    public boolean isLvalueSubroutine;
+
+    /**
      * Constructs a new EmitterContext with the specified parameters.
      *
      * @param javaClassInfo   the name of the Java class being generated
@@ -161,6 +168,7 @@ public class EmitterContext {
                 this.javaClassInfo, this.symbolTable,
                 this.mv, this.cw, contextType, this.isBoxed, this.errorUtil, this.compilerOptions,
                 this.unitcheckBlocks);
+        newContext.isLvalueSubroutine = this.isLvalueSubroutine;
         contextCache.put(contextType, newContext);
         return newContext;
     }

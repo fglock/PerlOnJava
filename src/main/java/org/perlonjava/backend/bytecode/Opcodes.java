@@ -2660,6 +2660,13 @@ public class Opcodes {
     /** Scalar lvalue represented by {@code keys %hash}. Format: rd containerReg. */
     public static final short KEYS_LVALUE = 576;
 
+    /**
+     * Code dereference under strict refs: rd = value.codeDerefStrict().
+     * Rejects a symbolic string instead of resolving it through the current
+     * package's CODE slot. Format: CODE_DEREF_STRICT rd value_reg
+     */
+    public static final short CODE_DEREF_STRICT = 577;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

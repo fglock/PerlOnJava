@@ -1527,6 +1527,22 @@ public class SlowOpcodeHandler {
         return pc;
     }
 
+    /**
+     * CODE_DEREF_STRICT: rd = value.codeDerefStrict().
+     * Format: [CODE_DEREF_STRICT] [rd] [value_reg]
+     */
+    public static int executeCodeDerefStrict(int[] bytecode, int pc,
+                                              RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int valueReg = bytecode[pc++];
+        RuntimeBase valueBase = registers[valueReg];
+        RuntimeScalar value = (valueBase instanceof RuntimeScalar)
+                ? (RuntimeScalar) valueBase
+                : valueBase.scalar();
+        registers[rd] = value.codeDerefStrict();
+        return pc;
+    }
+
     /** Resolve a compile-time-undefined static {@code \&name} at runtime. */
     public static int executeNamedCodeReference(int[] bytecode, int pc,
                                                  RuntimeBase[] registers, InterpretedCode code) {
