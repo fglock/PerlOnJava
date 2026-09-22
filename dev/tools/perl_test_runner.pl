@@ -803,7 +803,12 @@ sub parse_tap_output {
         if ($line =~ /^1\.\.(\d+)/) {
             $planned_tests = $1;
             $total_tests = $1;
-            next;
+            # Some core tests deliberately emit the first assertion on the
+            # same physical line as the plan (for example, a child script
+            # assembled with print statements and no newlines).  Keep parsing
+            # the remainder instead of discarding that assertion.
+            $line =~ s/^1\.\.\d+//;
+            next unless $line =~ /\S/;
         }
 
         # Test results (only count top-level tests, not subtest internals).
@@ -829,6 +834,35 @@ sub parse_tap_output {
                 $ok_count++;
                 $actual_tests_run++;
                 $todo_count++;
+            } else {
+                $not_ok_count++;
+                $actual_tests_run++;
+            }
+        }
+        # TAP also permits unnumbered assertions.  A few Perl core tests use
+        # these deliberately (including assertions emitted during BEGIN/CHECK/
+        # END), and some older tests concatenate the keyword directly with the
+        # number ("ok12").  Count those forms too; otherwise a fully executed
+        # test is incorrectly reported as incomplete.
+        if (!$found_tap_result
+                && $line =~ /^(not ok|ok)(?:\s+|$)/) {
+            my $tap_prefix = $1;
+            $found_tap_result = 1;
+            if ($tap_prefix eq 'ok') {
+                $ok_count++;
+                $actual_tests_run++;
+            } else {
+                $not_ok_count++;
+                $actual_tests_run++;
+            }
+        }
+        if (!$found_tap_result
+                && $line =~ /^(not ok|ok)(\d+)(?=\s|$)/) {
+            my $tap_prefix = $1;
+            $found_tap_result = 1;
+            if ($tap_prefix eq 'ok') {
+                $ok_count++;
+                $actual_tests_run++;
             } else {
                 $not_ok_count++;
                 $actual_tests_run++;

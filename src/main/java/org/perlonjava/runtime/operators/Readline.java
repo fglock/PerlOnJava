@@ -47,6 +47,12 @@ public class Readline {
         if (fileHandle != null && fileHandle.isString()) {
             String name = NameNormalizer.normalizeVariableName(fileHandle.toString(), "main");
             if (GlobalVariable.getExistingGlobalIO(name) == null) {
+                // After the ARGV glob is deleted, Perl's internal readline-
+                // cleanup probe is silent and returns undef. Do not turn
+                // that probe into an unopened-handle warning.
+                if ("-".equals(fileHandle.toString()) || name.contains("ARGV")) {
+                    return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef;
+                }
                 WarnDie.warn(new RuntimeScalar("readline() on unopened filehandle"), new RuntimeScalar("\n"));
                 return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef;
             }
@@ -56,6 +62,9 @@ public class Readline {
         }
 
         if (fh == null) {
+            if (sourceName != null && sourceName.contains("ARGV")) {
+                return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef;
+            }
             // DATA exists as a special handle even in a source file that has no
             // __DATA__ section.  Perl returns undef silently in that case;
             // treating it as an ordinary unopened handle emits a spurious
@@ -131,7 +140,7 @@ public class Readline {
             // Match Perl's semantics: a slurp call on a fresh handle returns
             // the file contents (possibly the empty string) even if the
             // handle is positioned at EOF; the next call returns undef.
-            if (runtimeIO.eof().getBoolean() && runtimeIO.currentLineNumber > 0) {
+            if (runtimeIO.eof().getBoolean() && runtimeIO.slurpReadAttempted) {
                 return externalUndef();
             }
             StringBuilder content = new StringBuilder();
@@ -147,6 +156,7 @@ public class Readline {
 
             // In Perl 5, slurp mode increments $. by 1 (not per line)
             runtimeIO.currentLineNumber++;
+            runtimeIO.slurpReadAttempted = true;
             RuntimeScalar result = new RuntimeScalar(content.toString());
             if (isByteData) {
                 result.type = RuntimeScalarType.BYTE_STRING;

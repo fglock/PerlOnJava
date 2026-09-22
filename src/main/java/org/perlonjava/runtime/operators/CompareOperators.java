@@ -59,19 +59,7 @@ public class CompareOperators {
         if (scalar.type == RuntimeScalarType.BYTE_STRING) {
             return value;
         }
-        if (isLatin1(value)) {
-            return value;
-        }
         return new String(value.getBytes(StandardCharsets.UTF_8), StandardCharsets.ISO_8859_1);
-    }
-
-    private static boolean isLatin1(String value) {
-        for (int i = 0; i < value.length(); i++) {
-            if (value.charAt(i) > 0xFF) {
-                return false;
-            }
-        }
-        return true;
     }
 
     private static boolean stringEquals(RuntimeScalar arg1, RuntimeScalar arg2) {

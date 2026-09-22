@@ -1389,7 +1389,11 @@ public class ArgumentParser {
                     String trimmedLine = line.trim();
                     if (trimmedLine.startsWith("#!")
                             && processPerlShebangSwitches(trimmedLine.substring(2).trim(), parsedArgs)) {
+                        // Keep the last real Perl shebang.  Mail headers and
+                        // shell fragments can contain earlier #! markers; -x
+                        // must begin at the embedded Perl interpreter line.
                         perlCodeStarted = true;
+                        perlCode.setLength(0);
                     }
                 }
             }
@@ -1398,7 +1402,10 @@ public class ArgumentParser {
                 System.err.println("No Perl script found in input");
                 System.exit(1);
             }
-            parsedArgs.code = perlCode.toString();
+            // Perl's -x extraction keeps the embedded program's source-line
+            // origin: in the core switchx fixture the first executable print
+            // is line 4, not line 2 after the preamble is discarded.
+            parsedArgs.code = "\n" + perlCode;
         }
 
         // Force line number to start at 1

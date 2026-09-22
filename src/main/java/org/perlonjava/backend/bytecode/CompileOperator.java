@@ -1899,8 +1899,28 @@ public class CompileOperator {
 
     private static void visitLength(BytecodeCompiler bc, OperatorNode node) {
         if (node.operand == null) bc.throwCompilerException("length requires an argument");
-        if (node.operand instanceof ListNode list) { if (list.elements.isEmpty()) bc.throwCompilerException("length requires an argument"); list.elements.get(0).accept(bc); }
-        else node.operand.accept(bc);
+        Node lengthOperand = node.operand;
+        if (lengthOperand instanceof ListNode list) {
+            if (list.elements.isEmpty()) bc.throwCompilerException("length requires an argument");
+            lengthOperand = list.elements.get(0);
+        }
+        if (lengthOperand instanceof OperatorNode declaration
+                && "my".equals(declaration.operator)
+                && declaration.operand instanceof OperatorNode aggregate
+                && "@".equals(aggregate.operator)
+                && aggregate.operand instanceof IdentifierNode identifier) {
+            int messageReg = bc.allocateRegister();
+            org.perlonjava.runtime.operators.StringOperators.warnLengthOnLexicalArray(identifier.name);
+            bc.emit(Opcodes.LOAD_STRING);
+            bc.emitReg(messageReg);
+            bc.emit(bc.addToStringPool("length() used on @" + identifier.name
+                    + " (did you mean \"scalar(@" + identifier.name + ")\"?)"));
+            int locationReg = emitLocationString(bc, node);
+            bc.emitWithToken(Opcodes.WARN, node.getIndex());
+            bc.emitReg(messageReg);
+            bc.emitReg(locationReg);
+        }
+        lengthOperand.accept(bc);
         int stringReg = bc.lastResultReg;
         int rd = bc.allocateOutputRegister(); bc.emit(bc.isBytesEnabled() ? Opcodes.LENGTH_BYTES : Opcodes.LENGTH_OP); bc.emitReg(rd); bc.emitReg(stringReg);
         bc.lastResultReg = rd;

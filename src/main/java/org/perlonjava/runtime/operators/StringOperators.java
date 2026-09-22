@@ -29,6 +29,12 @@ public class StringOperators {
         return (WarningBitsRegistry.getCallSiteHints() & Strict.HINT_BYTES) != 0;
     }
 
+    /** Emits Perl's diagnostic for the compile-time lexical-array length form. */
+    public static void warnLengthOnLexicalArray(String name) {
+        WarnDie.warn(new RuntimeScalar("length() used on @" + name
+                + " (did you mean \"scalar(@" + name + ")\"?)\n"), new RuntimeScalar());
+    }
+
     /**
      * Returns the length of the string representation of the given {@link RuntimeScalar}.
      *

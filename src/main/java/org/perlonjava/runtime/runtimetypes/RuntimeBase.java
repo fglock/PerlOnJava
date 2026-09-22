@@ -212,6 +212,12 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             } else if (this instanceof RuntimeArray array) {
                 MortalList.scopeExitCleanupArray(array);
             }
+            if (blessId != 0 && refCount <= 0) {
+                refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(this);
+            } else if (refCount > 0 && (blessId != 0 || this instanceof RuntimeCode)) {
+                MortalList.deferDecrement(this, "closure aggregate release");
+            }
         }
     }
 

@@ -302,7 +302,20 @@ public class OperatorParser {
 
         parser.debugHeredocState("PRINT_START");
 
-        try {
+        if (isBracedGlobSlotHandle(parser)) {
+            TokenUtils.consume(parser, OPERATOR, "{");
+            parser.parsingForLoopVariable = true;
+            // The handle may itself contain a braced glob slot, as in
+            // `print {*FH{IO}} ...`.  Parsing only the primary consumes
+            // `*FH` and leaves `{IO}` where the enclosing print-handle brace
+            // expects its closing delimiter.  Parse the complete expression
+            // so its postfix slot access remains part of the handle.
+            handle = parser.parseExpression(0);
+            parser.parsingForLoopVariable = false;
+            TokenUtils.consume(parser, OPERATOR, "}");
+            operand = ListParser.parseZeroOrMoreList(parser, 1, false, false, false, false);
+            operand.handle = handle;
+        } else try {
             // A parenthesized bareword call is part of print's argument list,
             // not a parenthesized filehandle form.  In particular, a CODE slot
             // may be installed through a typeglob only when this statement
@@ -358,6 +371,12 @@ public class OperatorParser {
             );
         }
         return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
+    }
+
+    private static boolean isBracedGlobSlotHandle(Parser parser) {
+        return peek(parser).text.equals("{")
+                && parser.tokens.size() > parser.tokenIndex + 2
+                && parser.tokens.get(parser.tokenIndex + 1).text.equals("*");
     }
 
     private static boolean isInputLineNumber(Node node) {

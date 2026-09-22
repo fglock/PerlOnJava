@@ -19,6 +19,16 @@ priorities and future plans.
 - Allow the full core UAT sufficient wall-clock time to complete `re/anyof.t`
   under parallel load.
 
+- Restore remaining core compatibility around format lexical scope warnings,
+  glob IO handles, `-x` extraction, length diagnostics, and deterministic
+  closure destruction.
+
+- Restore braced typeglob IO-slot handles in `print`, unblocking core glob
+  compatibility tests for both ASCII and Unicode symbol names.
+
+- Restore core compatibility for UTF-8 `pack "U"` byte comparisons and
+  whitespace-equivalent subroutine prototype declarations.
+
 - Restore `op/const-optree.t` compatibility for lexical constant CVs,
   including mutation errors, refaliasing, closure ordering, redefinition
   diagnostics, and both execution backends.
