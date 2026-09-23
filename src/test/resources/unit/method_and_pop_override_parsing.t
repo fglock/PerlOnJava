@@ -56,9 +56,10 @@ use Test::More;
 }
 
 {
+    *MethodRootAliasProbe:: = *MethodRootAliasTarget::;
     sub main::::root_namespace_method { 'root namespace' }
     is('::'->root_namespace_method, 'root namespace',
-       'the root package spelling resolves main:::: methods');
+       'the root package spelling resolves main:::: methods after a stash alias');
 }
 
 BEGIN {
