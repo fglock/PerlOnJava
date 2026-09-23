@@ -175,7 +175,7 @@ public class DestroyDispatch {
         // findMethodInHierarchy already falls through to AUTOLOAD if no explicit DESTROY exists.
         RuntimeScalar m = InheritanceResolver.findMethodInHierarchy("DESTROY", className, null, 0);
         state.destroyClassesChecked.set(idx);
-        if (m != null) {
+        if (m != null && RuntimeCode.isCodeDefined(m)) {
             state.destroyClasses.set(idx);
             // Activate the mortal mechanism now that we know DESTROY classes exist
             MortalList.setActive(true);
@@ -347,7 +347,7 @@ public class DestroyDispatch {
             }
         }
 
-        if (destroyMethod == null || destroyMethod.type != RuntimeScalarType.CODE) {
+        if (destroyMethod == null || !RuntimeCode.isCodeDefined(destroyMethod)) {
             // No DESTROY method — clear weak refs and cascade cleanup into elements
             // to decrement refCounts of any tracked references they hold.
             // Without this, blessed objects without DESTROY (e.g., Moo objects like

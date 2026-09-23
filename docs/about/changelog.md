@@ -24,6 +24,9 @@ priorities and future plans.
 - Restore core method-lookup diagnostics for existing stashes and qualified
   method names.
 
+- Preserve Perl-compatible NUL method diagnostics and ignore declared but
+  undefined destructors.
+
 - Restore `Hash::Util::FieldHash` `:all` imports and scalar `id` semantics,
   unblocking Cache::Ref's LRU implementation.
 

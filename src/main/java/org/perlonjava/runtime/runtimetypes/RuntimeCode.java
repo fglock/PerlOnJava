@@ -4780,6 +4780,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             qualifiedSuperIndex + "::SUPER::".length());
                 }
             }
+            // Perl renders embedded NULs in a method name as the two visible
+            // characters "\\0" in method lookup diagnostics.
+            errorMethodName = errorMethodName.replace("\0", "\\0");
             if (GlobalVariable.isPackageLoaded(perlClassName)) {
                 throw new PerlCompilerException("Can't locate object method \"" + errorMethodName
                         + "\" via package \"" + perlClassName + "\"");
