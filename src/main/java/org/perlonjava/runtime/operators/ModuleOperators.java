@@ -605,6 +605,10 @@ public class ModuleOperators {
 
                     // Original string handling for directory paths
                     String dirName = dirScalar.toString();
+                    if (dirName.indexOf('\0') >= 0) {
+                        RuntimeIO.sanitizePathname("@INC entry for require", dirName);
+                        continue;
+                    }
                     if (dirName.equals(GlobalContext.JAR_PERLLIB)) {
                         // Try to find in jar at "src/main/perl/lib"
                         String resourcePath = "/lib/" + fileName;

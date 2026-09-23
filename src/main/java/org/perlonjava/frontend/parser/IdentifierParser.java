@@ -754,7 +754,7 @@ public class IdentifierParser {
                     // Bad name after ::
                     // The separator was appended before validation.  Reusing it
                     // here avoids reporting Foo:::: for the source Foo::$bar.
-                    parser.throwCleanError("Bad name after " + variableName);
+                    parser.throwCleanError("syntax error");
                 }
                 continue;
             }

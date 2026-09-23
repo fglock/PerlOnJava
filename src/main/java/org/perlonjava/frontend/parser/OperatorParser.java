@@ -1842,8 +1842,12 @@ public class OperatorParser {
         // load a file named after the input handle.
         if (token.type == OPERATOR && token.text.equals("<")) {
             int next = Whitespace.skipWhitespace(parser, parser.tokenIndex + 1, parser.tokens);
-            if (next < parser.tokens.size() && parser.tokens.get(next).text.equals(">")) {
-                parser.throwError("<> at require-statement should be quotes");
+            while (next < parser.tokens.size() && parser.tokens.get(next).type != EOF) {
+                if (parser.tokens.get(next).text.equals(">")) {
+                    parser.throwError("<> at require-statement should be quotes");
+                }
+                if (parser.tokens.get(next).type == NEWLINE || parser.tokens.get(next).text.equals(";")) break;
+                next++;
             }
         }
 
@@ -1859,7 +1863,8 @@ public class OperatorParser {
                 // `require eval EXPR` has a computed filename.  Do not consume
                 // `eval` as a bare module name and leave EXPR unparsed.
                 && !token.text.equals("eval")
-                && !token.text.equals("evalbytes")) {
+                && !token.text.equals("evalbytes")
+                && !token.text.equals("undef")) {
             // `require` bareword module name - parse directly without going through expression parser
             // This avoids treating module names like "Encode" as subroutine calls when a sub
             // with the same name exists in the current package (e.g., sub Encode in Image::ExifTool)
