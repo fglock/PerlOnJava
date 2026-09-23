@@ -6,7 +6,6 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
-import org.perlonjava.runtime.runtimetypes.PerlJavaUnimplementedException;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.PerlParserException;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
@@ -156,8 +155,8 @@ public class CoreOperatorResolver {
                         new StringNode("Can't find label ", currentIndex), label, currentIndex));
                 yield OperatorParser.dieWarnNode(parser, "die", message, currentIndex);
             }
-            case "dbmclose", "dbmopen" ->
-                    throw new PerlJavaUnimplementedException(parser.tokenIndex, "Not implemented: operator: " + token.text, parser.ctx.errorUtil);
+            case "dbmopen" -> parseDbmOpen(parser, token, currentIndex, coreQualified);
+            case "dbmclose" -> parseDbmClose(parser, token, currentIndex, coreQualified);
             case "format" ->
                 // Format statements should be handled by StatementResolver, not as operators
                 // Return null to allow StatementResolver to handle it
@@ -240,6 +239,50 @@ public class CoreOperatorResolver {
             parser.ctx.symbolTable.setCurrentSubroutine(previousSubName);
             parser.parsingPrototypeOperator = previousPrototypeOperator;
         }
+    }
+
+    /**
+     * Perl's dbmopen/dbmclose operators are syntactic sugar around a tied
+     * hash.  PerlOnJava's SQLite-backed Java module provides the portable
+     * persistence backend, so lower the operators to the existing tie
+     * machinery rather than duplicating tied-hash dispatch in each backend.
+     */
+    private static Node parseDbmOpen(
+            Parser parser, LexerToken token, int currentIndex, boolean coreQualified) {
+        Node parsed = parseWithPrototype(parser, token, currentIndex, coreQualified);
+        if (!(parsed instanceof OperatorNode operator) || !(operator.operand instanceof ListNode arguments)) {
+            throw new PerlParserException("dbmopen requires a hash and database arguments");
+        }
+        arguments.elements.add(1, new StringNode("PerlOnJava::DBM", operator.getIndex()));
+        // dbmopen implicitly loads AnyDBM_File before tying.  The runtime
+        // DBM implementation is selected by PerlOnJava, but preserve the
+        // availability check so an empty @INC still reports that no DBM is
+        // available, as native Perl does.  ModuleOperators intentionally
+        // restores the bundled library path while requiring ordinary modules;
+        // dbmopen must check the caller's original @INC first.
+        OperatorNode tie = new OperatorNode("tie", arguments, currentIndex);
+        OperatorNode require = new OperatorNode(
+                "require",
+                ListNode.makeList(new StringNode("AnyDBM_File.pm", operator.getIndex())),
+                operator.getIndex());
+        Node inc = new OperatorNode("@", new IdentifierNode("INC", operator.getIndex()), operator.getIndex());
+        Node noDbm = new OperatorNode(
+                "die",
+                ListNode.makeList(new StringNode("No dbm on this machine", operator.getIndex())),
+                operator.getIndex());
+        Node loadDbm = new TernaryOperatorNode("?", new OperatorNode("!", inc, operator.getIndex()),
+                noDbm, require, operator.getIndex());
+        return new BlockNode(List.of(loadDbm, tie), currentIndex);
+    }
+
+    /** Lower dbmclose HASH to the existing untie implementation. */
+    private static Node parseDbmClose(
+            Parser parser, LexerToken token, int currentIndex, boolean coreQualified) {
+        Node parsed = parseWithPrototype(parser, token, currentIndex, coreQualified);
+        if (!(parsed instanceof OperatorNode operator) || !(operator.operand instanceof ListNode arguments)) {
+            throw new PerlParserException("dbmclose requires a hash argument");
+        }
+        return new OperatorNode("untie", arguments, currentIndex);
     }
 
     private static Node parseAnonymousMethodExpression(Parser parser, int currentIndex) {
