@@ -190,7 +190,11 @@ public class ParsePrimary {
                 case "say", "fc", "state", "evalbytes", "isa" -> parser.ctx.symbolTable.isFeatureCategoryEnabled(operator);
                 case "__SUB__" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("current_sub");
                 case "__CLASS__" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("class");
-                case "method" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("class");
+                // `method Package LIST` is legacy indirect method-call syntax,
+                // even where the class feature is enabled.  Anonymous methods
+                // start with a signature, attribute, or body instead.
+                case "method" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("class")
+                        && (peekTokenText.equals("(") || peekTokenText.equals(":") || peekTokenText.equals("{"));
                 case "try", "catch" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("try");
                 default -> true; // Most operators are always enabled
             };

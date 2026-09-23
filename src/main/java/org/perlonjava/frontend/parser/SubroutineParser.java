@@ -827,6 +827,11 @@ public class SubroutineParser {
 
     private static boolean isValidIndirectMethod(String subName, Parser parser) {
         if (subName.startsWith("CORE::")) return false;
+        // `method` is a feature-gated declaration keyword, but it also has
+        // legacy meaning in `method Package LIST` indirect-call syntax.
+        // StatementResolver has already claimed actual declarations, so this
+        // remaining spelling must be eligible for indirect dispatch.
+        if (subName.equals("method")) return true;
         if (!CORE_PROTOTYPES.containsKey(subName)) return true;
         // `try`, `catch`, `finally` are feature-gated.  When the `try`
         // feature is *off* they are not reserved and can participate in

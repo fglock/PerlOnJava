@@ -578,6 +578,35 @@ public class InheritanceResolver {
         return null;
     }
 
+    /**
+     * Resolves an AUTOLOAD handler beginning at a forward stub's owning
+     * package.  This is intentionally separate from normal method lookup:
+     * declared stubs remain MRO entries, while method invocation can still
+     * dispatch through their applicable inherited AUTOLOAD.
+     */
+    public static RuntimeScalar findAutoloadForForwardStub(String stubPackage) {
+        MroRuntimeState state = currentState();
+        if (!state.autoloadEnabled() || stubPackage == null || stubPackage.isEmpty()) {
+            return null;
+        }
+        for (String className : linearizeHierarchy(stubPackage)) {
+            for (String lookupClassName : packageLookupAliases(className)) {
+                String effectiveClassName = GlobalVariable.resolveStashAlias(lookupClassName);
+                String autoloadName = (effectiveClassName.endsWith("::")
+                        ? effectiveClassName : effectiveClassName + "::") + "AUTOLOAD";
+                RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadName);
+                if (RuntimeCode.isCodeDefined(autoload)) {
+                    RuntimeCode autoloadCode = (RuntimeCode) autoload.value;
+                    String cvStash = autoloadCode.packageName;
+                    autoloadCode.autoloadVariableName = cvStash != null && !cvStash.isEmpty()
+                            ? cvStash + "::AUTOLOAD" : autoloadName;
+                    return autoload;
+                }
+            }
+        }
+        return null;
+    }
+
     private static List<String> packageLookupAliases(String className) {
         String normalized = NameNormalizer.normalizePackageName(className);
         List<String> aliases = new ArrayList<>(2);
