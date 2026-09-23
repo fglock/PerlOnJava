@@ -55,6 +55,12 @@ use Test::More;
          'new with an empty hash receiver has the package-or-object diagnostic');
 }
 
+{
+    sub main::::root_namespace_method { 'root namespace' }
+    is('::'->root_namespace_method, 'root namespace',
+       'the root package spelling resolves main:::: methods');
+}
+
 BEGIN {
     *LocalPopOverride::pop = sub { $main::pop_override_result = $_[0][0] };
 }

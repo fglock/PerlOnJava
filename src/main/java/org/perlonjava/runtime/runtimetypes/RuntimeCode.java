@@ -4612,7 +4612,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 return call(globRef, method, currentSub, args, callContext);
             }
             
-            if (perlClassName.endsWith("::")) {
+            if (perlClassName.equals("::")) {
+                // The root-package spelling `"::"->method` addresses the
+                // deliberately distinct main:::: namespace (perl5 op/method).
+                perlClassName = "main::::";
+            } else if (perlClassName.endsWith("::")) {
                 perlClassName = perlClassName.substring(0, perlClassName.length() - 2);
             }
             if (perlClassName.startsWith("::")) {
