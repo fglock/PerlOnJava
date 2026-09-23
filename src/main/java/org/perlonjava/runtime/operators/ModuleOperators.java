@@ -14,8 +14,13 @@ import java.io.InputStream;
 import java.net.URL;
 import java.net.JarURLConnection;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 
 import static org.perlonjava.runtime.runtimetypes.ExceptionFormatter.findInnermostCause;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalHash;
@@ -56,6 +61,9 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
  * @see <a href="https://perldoc.perl.org/functions/require">perldoc require</a>
  */
 public class ModuleOperators {
+    /** Entries actually consulted by the current require search, in order. */
+    private static final ThreadLocal<List<String>> INC_ENTRIES_CHECKED =
+            ThreadLocal.withInitial(ArrayList::new);
 
     /**
      * Public entry point for `do` operator.
@@ -150,12 +158,28 @@ public class ModuleOperators {
      * @return Result of execution (undef on error, with $@ or $! set)
      */
     private static RuntimeBase doFile(RuntimeScalar runtimeScalar, boolean setINC, boolean isRequire, int ctx) {
+        List<String> incEntriesChecked = INC_ENTRIES_CHECKED.get();
+        incEntriesChecked.clear();
+        if (runtimeScalar == null || !runtimeScalar.getDefinedBoolean()
+                || runtimeScalar.toString().isEmpty()) {
+            throw new PerlCompilerException("Missing or undefined argument to "
+                    + (isRequire ? "require" : "do"));
+        }
         RuntimeScalar.checkTaint(runtimeScalar, isRequire ? "require" : "do");
         // Clear error variables at start
         GlobalVariable.setGlobalVariable("main::@", "");
         GlobalVariable.setGlobalVariable("main::!", "");
 
         String fileName = runtimeScalar.toString();
+        String sanitizedFileName = RuntimeIO.sanitizePathname(
+                isRequire ? "require" : "do", fileName);
+        if (sanitizedFileName == null) {
+            // sanitizePathname has emitted the Perl warning (when enabled) and
+            // set $! to ENOENT.  In particular, do FILE returns undef without
+            // setting $@, while require formats the corresponding failure.
+            return new RuntimeScalar();
+        }
+        fileName = sanitizedFileName;
         Path fullName = null;
         String code = null;
         String actualFileName = null;
@@ -478,7 +502,7 @@ public class ModuleOperators {
             if (tryDirectPath) {
                 // For absolute or explicit relative paths, resolve using RuntimeIO.getPath
                 filePath = RuntimeIO.resolvePath(fileName);
-                if (Files.exists(filePath)) {
+                if (pathExistsOrIsInaccessible(filePath)) {
                     // Check if it's a directory
                     if (Files.isDirectory(filePath)) {
                         GlobalVariable.setGlobalVariable("main::!", "Is a directory");
@@ -521,32 +545,40 @@ public class ModuleOperators {
                 // Search in INC directories
                 RuntimeArray incArray = GlobalVariable.getGlobalArray("main::INC");
 
-                // Make sure the jar files are in @INC - the Perl test files can remove it
-                boolean seen = false;
-                int incSize = incArray.size();
-                for (int i = 0; i < incSize; i++) {
+                // The launcher may supply only project test paths. Keep the
+                // bundled library available for runtime loading, but do not
+                // claim this synthesized fallback as a user-searched @INC
+                // entry in Perl's diagnostic.
+                boolean syntheticBundledInc = false;
+                boolean seenBundledInc = false;
+                for (int i = 0; i < incArray.size(); i++) {
                     RuntimeScalar dir = incArray.get(i);
-                    // Handle tied scalars
-                    if (dir.type == RuntimeScalarType.TIED_SCALAR) {
-                        dir = dir.tiedFetch();
-                    }
-                    if (dir.toString().equals(GlobalContext.JAR_PERLLIB)) {
-                        seen = true;
+                    if (dir.type == RuntimeScalarType.TIED_SCALAR) dir = dir.tiedFetch();
+                    if (GlobalContext.JAR_PERLLIB.equals(dir.toString())) {
+                        seenBundledInc = true;
                         break;
                     }
                 }
-                if (!seen) {
+                if (!seenBundledInc) {
                     incArray.push(new RuntimeScalar(GlobalContext.JAR_PERLLIB));
+                    syntheticBundledInc = true;
                 }
 
-                // Iterate using indexed access to properly handle tied arrays
-                incSize = incArray.size();
-                for (int i = 0; fullName == null && i < incSize; i++) {
+                // Re-fetch the global array on every iteration. An @INC hook
+                // may replace @INC entirely; Perl continues with the entry at
+                // the current numeric position in that replacement.
+                for (int i = 0; fullName == null; i++) {
+                    incArray = GlobalVariable.getGlobalArray("main::INC");
+                    if (i >= incArray.size()) break;
                     RuntimeScalar dirScalar = incArray.get(i);
 
                     // If this is a tied scalar, fetch the actual value
                     if (dirScalar.type == RuntimeScalarType.TIED_SCALAR) {
                         dirScalar = dirScalar.tiedFetch();
+                    }
+                    if (!(syntheticBundledInc
+                            && GlobalContext.JAR_PERLLIB.equals(dirScalar.toString()))) {
+                        incEntriesChecked.add(dirScalar.toString());
                     }
 
                     // For absolute/relative paths (starting with /, ./, ../), only try hooks
@@ -563,8 +595,16 @@ public class ModuleOperators {
 
                     // Check if this @INC entry is a CODE reference, ARRAY reference, or blessed object
                     if (isHook) {
-
+                        // Perl exposes the current @INC slot through $INC
+                        // while a hook runs. Clearing it asks require to
+                        // restart from slot zero after replacing @INC.
+                        RuntimeScalar incCursor = getGlobalVariable("main::INC");
+                        incCursor.set(i);
                         RuntimeList hookResult = tryIncHook(dirScalar, fileName);
+                        if (!incCursor.getDefinedBoolean()) {
+                            i = -1;
+                            continue;
+                        }
                         if (hookResult != null) {
                             IncHookSource hookSource;
                             try {
@@ -580,7 +620,7 @@ public class ModuleOperators {
                             }
                             if (hookSource != null) {
                                 code = hookSource.code;
-                                actualFileName = fileName;
+                                actualFileName = incHookFileName(dirScalar, fileName);
                                 incHookRef = dirScalar;
                                 break;
                             }
@@ -591,6 +631,10 @@ public class ModuleOperators {
 
                     // Original string handling for directory paths
                     String dirName = dirScalar.toString();
+                    if (dirName.indexOf('\0') >= 0) {
+                        RuntimeIO.sanitizePathname("@INC entry for require", dirName);
+                        continue;
+                    }
                     if (dirName.equals(GlobalContext.JAR_PERLLIB)) {
                         // Try to find in jar at "src/main/perl/lib"
                         String resourcePath = "/lib/" + fileName;
@@ -635,7 +679,7 @@ public class ModuleOperators {
                             }
                         }
                         Path fullPath = dirPath.resolve(fileName);
-                        if (Files.exists(fullPath)) {
+                        if (pathExistsOrIsInaccessible(fullPath)) {
                             // Check if it's a directory
                             if (Files.isDirectory(fullPath)) {
                                 // Track that we found a directory (for EISDIR error)
@@ -820,6 +864,23 @@ public class ModuleOperators {
     }
 
     /** ClassLoader resources can represent directories; Perl require must skip them. */
+    /**
+     * Distinguish an absent pathname from one that the current effective UID
+     * cannot inspect.  {@link Files#exists(Path, java.nio.file.LinkOption...)}
+     * returns false for both, but Perl reports the latter as a failed open
+     * (with a colon-form diagnostic), not an @INC search miss.
+     */
+    private static boolean pathExistsOrIsInaccessible(Path path) {
+        try {
+            Files.readAttributes(path, BasicFileAttributes.class);
+            return true;
+        } catch (NoSuchFileException e) {
+            return false;
+        } catch (IOException | SecurityException e) {
+            return true;
+        }
+    }
+
     private static boolean isDirectoryResource(URL resource) {
         try {
             if (resource.openConnection() instanceof JarURLConnection jarConnection) {
@@ -936,22 +997,9 @@ public class ModuleOperators {
                 incHash.elements.remove(fileName);
                 throw new PerlCompilerException(message);
             } else if (err.isEmpty()) {
-                // Derive module name from filename for helpful error message
-                String moduleName = fileName;
-                if (moduleName.endsWith(".pm")) {
-                    moduleName = moduleName.substring(0, moduleName.length() - 3);
-                }
-                moduleName = moduleName.replace("/", "::");
-                
-                // Build @INC list for error message
-                RuntimeArray incArray = GlobalVariable.getGlobalArray("main::INC");
-                StringBuilder incList = new StringBuilder();
-                for (int i = 0; i < incArray.size(); i++) {
-                    if (i > 0) incList.append(" ");
-                    incList.append(incArray.get(i).toString());
-                }
-                
-                message = "Can't locate " + fileName + " in @INC (you may need to install the " + moduleName + " module) (@INC entries checked: " + incList + ")";
+                message = "No such file or directory".equals(ioErr)
+                        ? missingRequireMessage(fileName)
+                        : "Can't locate " + fileName + ": " + ioErr;
                 // Don't set %INC for file not found errors
                 throw new PerlCompilerException(message);
             } else {
@@ -993,6 +1041,79 @@ public class ModuleOperators {
         }
     }
 
+    /** Format Perl's missing-require diagnostic without suggesting invalid module names. */
+    private static String missingRequireMessage(String fileName) {
+        String displayName = fileName.replace("\0", "\\0");
+        if (fileName.indexOf('\0') >= 0) {
+            return "Can't locate " + displayName + ": No such file or directory";
+        }
+        if (fileName.startsWith("/") || fileName.startsWith("./") || fileName.startsWith("../")) {
+            return "Can't locate " + displayName;
+        }
+
+        List<String> checked = INC_ENTRIES_CHECKED.get();
+        StringBuilder incList = new StringBuilder();
+        for (int i = 0; i < checked.size(); i++) {
+            if (i > 0) incList.append(" ");
+            incList.append(checked.get(i));
+        }
+
+        String advice = "";
+        if (fileName.endsWith(".h")) {
+            advice = " (change .h to .ph maybe?) (did you run h2ph?)";
+        } else if (fileName.endsWith(".ph")) {
+            advice = " (did you run h2ph?)";
+        } else if (isModuleFilename(fileName)) {
+            String moduleName = fileName.substring(0, fileName.length() - 3).replace("/", "::");
+            advice = " (you may need to install the " + moduleName + " module)";
+        }
+        return "Can't locate " + displayName + " in @INC" + advice
+                + " (@INC entries checked: " + incList + ")";
+    }
+
+    private static boolean isModuleFilename(String fileName) {
+        if (!fileName.endsWith(".pm")) return false;
+        String stem = fileName.substring(0, fileName.length() - 3);
+        if (stem.isEmpty()) return false;
+        String[] parts = stem.split("/", -1);
+        for (int partIndex = 0; partIndex < parts.length; partIndex++) {
+            String part = parts[partIndex];
+            if (part.isEmpty()) return false;
+            int offset = 0;
+            int first = part.codePointAt(offset);
+            // Perl permits numeric package components after the first :: (for
+            // example No::1Such), but still rejects a continuation-only
+            // Unicode character at a component's first position.
+            boolean validStart = first == '_' || Character.isUnicodeIdentifierStart(first)
+                    || (partIndex > 0 && first >= '0' && first <= '9');
+            if (!validStart) return false;
+            offset += Character.charCount(first);
+            while (offset < part.length()) {
+                int codePoint = part.codePointAt(offset);
+                if (!(codePoint == '_' || Character.isUnicodeIdentifierPart(codePoint))) return false;
+                offset += Character.charCount(codePoint);
+            }
+        }
+        return true;
+    }
+
+    /** Give source returned by an @INC hook the virtual filename Perl exposes. */
+    private static String incHookFileName(RuntimeScalar hook, String fileName) {
+        String rendered = hook.toStringNoOverload();
+        int start = rendered.indexOf("0x");
+        int end = rendered.indexOf(')', start);
+        if (start >= 0 && end > start) {
+            return "/loader/" + rendered.substring(start, end) + "/" + fileName;
+        }
+        return fileName;
+    }
+
+    /** Find an already-defined code slot without creating a placeholder CV. */
+    private static RuntimeScalar existingCodeRef(String name) {
+        RuntimeScalar code = GlobalVariable.globalCodeRefs.get(name);
+        return code == null ? new RuntimeScalar() : code;
+    }
+
     /**
      * Try to call an @INC hook to load a module.
      *
@@ -1019,6 +1140,9 @@ public class ModuleOperators {
     private static RuntimeList tryIncHook(RuntimeScalar hook, String fileName) {
         RuntimeCode codeRef = null;
         RuntimeScalar selfArg = hook;
+        RuntimeScalar objectHook = null;
+        RuntimeScalar arrayHook = null;
+        boolean methodHook = false;
 
         // First check if it's a blessed object (takes priority over plain refs)
         int blessIdInt = RuntimeScalarType.blessedId(hook);
@@ -1027,19 +1151,22 @@ public class ModuleOperators {
         if (blessIdInt != 0) {
             String blessId = NameNormalizer.getBlessStr(blessIdInt);
             if (blessId != null && !blessId.equals("main")) {
+                objectHook = hook;
                 // Try to find the INC method or AUTOLOAD
                 try {
                     // Try direct INC method first
-                    RuntimeScalar method = GlobalVariable.getGlobalCodeRef(blessId + "::INC");
+                    RuntimeScalar method = existingCodeRef(blessId + "::INC");
                     if (method.defined().getBoolean() && method.type == RuntimeScalarType.CODE) {
                         codeRef = (RuntimeCode) method.value;
+                        methodHook = true;
                     } else {
                         // Try AUTOLOAD
-                        method = GlobalVariable.getGlobalCodeRef(blessId + "::AUTOLOAD");
+                        method = existingCodeRef(blessId + "::AUTOLOAD");
                         if (method.defined().getBoolean() && method.type == RuntimeScalarType.CODE) {
                             // Set up $AUTOLOAD variable
                             GlobalVariable.getGlobalVariable(blessId + "::AUTOLOAD").set(blessId + "::INC");
                             codeRef = (RuntimeCode) method.value;
+                            methodHook = true;
                         }
                     }
                 } catch (Exception e) {
@@ -1060,11 +1187,64 @@ public class ModuleOperators {
         else if (hook.type == RuntimeScalarType.ARRAYREFERENCE && hook.value instanceof RuntimeArray arr) {
             if (arr.size() > 0) {
                 RuntimeScalar firstElem = arr.get(0);
-                if (firstElem.type == RuntimeScalarType.CODE) {
+                int firstBlessId = RuntimeScalarType.blessedId(firstElem);
+                if (firstBlessId != 0) {
+                    objectHook = firstElem;
+                    arrayHook = hook;
+                    selfArg = firstElem;
+                    String blessId = NameNormalizer.getBlessStr(firstBlessId);
+                    RuntimeScalar method = existingCodeRef(blessId + "::INC");
+                    if (method.defined().getBoolean() && method.type == RuntimeScalarType.CODE) {
+                        codeRef = (RuntimeCode) method.value;
+                        methodHook = true;
+                    }
+                } else if (firstElem.type == RuntimeScalarType.CODE) {
                     codeRef = (RuntimeCode) firstElem.value;
                 } else if (firstElem.type == RuntimeScalarType.REFERENCE && firstElem.value instanceof RuntimeCode) {
                     codeRef = (RuntimeCode) firstElem.value;
                 }
+            }
+        }
+
+        if (codeRef == null && objectHook != null) {
+            String blessId = NameNormalizer.getBlessStr(RuntimeScalarType.blessedId(objectHook));
+            RuntimeScalar incdir = existingCodeRef(blessId + "::INCDIR");
+            if (incdir.defined().getBoolean() && incdir.type == RuntimeScalarType.CODE) {
+                RuntimeArray args = new RuntimeArray();
+                args.push(selfArg);
+                args.push(new RuntimeScalar(fileName));
+                if (arrayHook != null) args.push(arrayHook);
+                RuntimeList directories;
+                try {
+                    directories = ((RuntimeCode) incdir.value).apply(args, RuntimeContextType.LIST);
+                } catch (Throwable t) {
+                    throw new PerlCompilerException(findInnermostCause(t).getMessage()
+                            + "\nINCDIR method hook died--halting @INC search");
+                }
+                RuntimeArray incArray = GlobalVariable.getGlobalArray("main::INC");
+                int hookIndex = incArray.elements.indexOf(hook);
+                if (hookIndex >= 0 && directories != null) {
+                    int insertAt = hookIndex + 1;
+                    for (Iterator<RuntimeScalar> iterator = directories.iterator(); iterator.hasNext(); ) {
+                        RuntimeScalar directory = iterator.next();
+                        incArray.elements.add(insertAt++, new RuntimeScalar(directory.toString()));
+                    }
+                }
+                return null;
+            }
+
+            if (objectHook.type == RuntimeScalarType.CODE) {
+                codeRef = (RuntimeCode) objectHook.value;
+            } else {
+                String rendered = objectHook.toString();
+                if (!rendered.equals(objectHook.toStringNoOverload())) {
+                    List<String> checked = INC_ENTRIES_CHECKED.get();
+                    if (!checked.isEmpty()) checked.set(checked.size() - 1, rendered);
+                    return null;
+                }
+                String position = arrayHook == null ? "object hook" : "object in ARRAY hook";
+                throw new PerlCompilerException("Can't locate object method \"INC\", nor \"INCDIR\" nor string overload via package \""
+                        + blessId + "\" in " + position + " in @INC");
             }
         }
 
@@ -1079,7 +1259,14 @@ public class ModuleOperators {
 
         // Call the hook - if it throws an exception, propagate it
         // This matches Perl's behavior where die() in an @INC hook stops require
-        RuntimeList result = codeRef.apply(args, RuntimeContextType.LIST);
+        RuntimeList result;
+        try {
+            result = codeRef.apply(args, RuntimeContextType.LIST);
+        } catch (Throwable t) {
+            String hookKind = methodHook ? "INC method hook" : "INC sub hook";
+            throw new PerlCompilerException(findInnermostCause(t).getMessage()
+                    + "\n" + hookKind + " died--halting @INC search");
+        }
 
         // If result is empty or undef, return null to continue to next @INC entry
         if (result == null || result.isEmpty()

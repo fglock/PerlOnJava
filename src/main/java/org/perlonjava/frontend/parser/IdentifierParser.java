@@ -655,7 +655,7 @@ public class IdentifierParser {
      * @return The parsed subroutine identifier as a String, or null if there is no valid identifier.
      */
     public static String parseSubroutineIdentifier(Parser parser) {
-        return parseSubroutineIdentifier(parser, false);
+        return parseSubroutineIdentifier(parser, false, false);
     }
 
     /**
@@ -671,6 +671,17 @@ public class IdentifierParser {
      * @return The parsed subroutine identifier as a String, or null if there is no valid identifier.
      */
     public static String parseSubroutineIdentifier(Parser parser, boolean allowTrailingQuoteDelimiter) {
+        return parseSubroutineIdentifier(parser, allowTrailingQuoteDelimiter, false);
+    }
+
+    /**
+     * Parses a subroutine identifier with caller-specific handling for an
+     * invalid package component.  A bareword used by {@code require} follows
+     * Perl's generic syntax-error diagnostic, while other parser contexts
+     * retain the more useful qualified-name diagnostic.
+     */
+    public static String parseSubroutineIdentifier(
+            Parser parser, boolean allowTrailingQuoteDelimiter, boolean requireSyntaxError) {
         // Skip any leading whitespace to find the start of the identifier
         parser.tokenIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
         StringBuilder variableName = new StringBuilder();
@@ -754,7 +765,9 @@ public class IdentifierParser {
                     // Bad name after ::
                     // The separator was appended before validation.  Reusing it
                     // here avoids reporting Foo:::: for the source Foo::$bar.
-                    parser.throwCleanError("Bad name after " + variableName);
+                    parser.throwCleanError(requireSyntaxError
+                            ? "syntax error"
+                            : "Bad name after " + variableName);
                 }
                 continue;
             }
