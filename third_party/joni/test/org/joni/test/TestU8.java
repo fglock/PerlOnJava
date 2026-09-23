@@ -139,6 +139,9 @@ public class TestU8 extends Test {
         x2("\\A\\X\\z".getBytes(), new byte[] {(byte)32, (byte)204, (byte)136}, 0, 3);
         // u{a 308}
         x2s("\\A\\X\\z", "a\u0308", 0, 3);
+        x2s("\\A\\X\\z", "\u094d\u0915", 0, 6);
+        x2s("\\A\\X\\z", "a\u094d\u0924", 0, 7);
+        x2s("\\A\\X\\X\\X\\z", "\n\u0308\u0915", 0, 6);
         x2("\\A\\X\\X\\z".getBytes(), new byte[] {(byte)10, (byte)204, (byte)136}, 0, 3);
         // u{d 308}
         x2s("\\A\\X\\z", "d\u0308", 0, 3);

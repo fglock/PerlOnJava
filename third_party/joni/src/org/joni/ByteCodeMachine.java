@@ -1935,6 +1935,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         if (right == LineBreakData.GL
                 && left != LineBreakData.SP && left != LineBreakData.BA
                 && left != LineBreakData.HY && left != LineBreakData.HH) return false; // LB12a
+        if (left == LineBreakData.BA && right == LineBreakData.GL) return false; // LB12.1
         if (right == LineBreakData.CL || right == LineBreakData.CP
                 || right == LineBreakData.EX || right == LineBreakData.SY) return false; // LB13
         if (lineOpenBeforeSpaces(leftPosition)) return false; // LB14
@@ -2405,20 +2406,25 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private boolean isIndicConjunctBoundary(int leftPosition, int right) {
-        if (!isGcb(right, UnicodeCodeRange.INCBCONSONANT)) return false;
+        if ((indicConjunctProperty(right) & IndicConjunctData.CONSONANT) == 0) return false;
         boolean sawLinker = false;
         int position = leftPosition;
         while (position >= str) {
             int codePoint = enc.mbcToCode(bytes, position, end);
-            if (isGcb(codePoint, UnicodeCodeRange.INCBLINKER)) {
+            byte property = indicConjunctProperty(codePoint);
+            if ((property & IndicConjunctData.LINKER) != 0) {
                 sawLinker = true;
-            } else if (!isGcb(codePoint, UnicodeCodeRange.INCBEXTEND)) {
-                return sawLinker && isGcb(codePoint, UnicodeCodeRange.INCBCONSONANT);
+            } else if ((property & IndicConjunctData.EXTEND) == 0) {
+                return sawLinker;
             }
             if (position == str) break;
             position = enc.prevCharHead(bytes, str, position, end);
         }
-        return false;
+        return sawLinker;
+    }
+
+    private byte indicConjunctProperty(int codePoint) {
+        return enc.isUnicode() ? IndicConjunctData.propertyOf(codePoint) : IndicConjunctData.NONE;
     }
 
     private boolean isExtendedPictographicBoundary(int leftPosition, int right) {

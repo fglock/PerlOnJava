@@ -111,13 +111,22 @@
          "generator" : "dev/regex/tools/generate_joni_line_break_data.pl",
          "name" : "joni-line-break",
          "output" : "third_party/joni/src/org/joni/LineBreakData.java",
-         "output_sha256" : "083a90630602993323073503e338bae2891d8f113244dbfc7be64c9ac426cbe0",
+         "output_sha256" : "c4bd6ba6914129567b9fc5ae670d612dd852ed52600dba3f0a489721445f9d36",
          "sources" : {
-            "EastAsianWidth.txt" : "ea7ce50f3444a050333448dffef1cadd9325af55cbb764b4a2280faf52170a33",
-            "LineBreak.txt" : "e6a18fa91f8f6a6f8e534b1d3f128c21ada45bfe152eb6b1bcc5e15fd8ac92e6",
-            "ReadMe.txt" : "9fe1a90bd32659d7953616283dc2bffaa165518aae9ace026040c42c559ba606",
-            "UnicodeData.txt" : "2e1efc1dcb59c575eedf5ccae60f95229f706ee6d031835247d843c11d96470c",
-            "emoji/emoji.txt" : "2cb2bb9455cda83e8481541ecf5b6dfda66a3bb89efa3fa7c5297eccf607b72b"
+            "EastAsianWidth.txt" : "a0cf29eacd00cfcaec4381c6b7c281685f18dbb4e7ff82b4076ccb342ca839aa",
+            "LineBreak.txt" : "ae8cf1970c73f3f1a12d77852df96c4b2b1723ca8b388e36bb5739250c6849de",
+            "ReadMe.txt" : "b0ea442f29dee90584aacd3665a6e1ce87ffc917a4d31f34e1916d2d6f7f9205",
+            "UnicodeData.txt" : "0736451de439ae7baf1425136617da495e09ee5afbe6e394374db7009ea08950",
+            "emoji/emoji.txt" : "80d00f8e616a0ef27fd6b8de3b758c06383b5d917e2977709578e68baf733bf1"
+         }
+      },
+      {
+         "generator" : "dev/regex/tools/generate_joni_indic_conjunct_data.pl",
+         "name" : "joni-indic-conjunct",
+         "output" : "third_party/joni/src/org/joni/IndicConjunctData.java",
+         "output_sha256" : "780f120b653d641025053805e461623f7626ae44c8c202790ac7e63934467d7f",
+         "sources" : {
+            "DCoreProperties.txt" : "09c928886a178fcafd93c29e4bd59073a058e5a100b716d425cb563ab50f68c9"
          }
       },
       {
