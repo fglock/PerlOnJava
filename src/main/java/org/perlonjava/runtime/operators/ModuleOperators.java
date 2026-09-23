@@ -595,8 +595,16 @@ public class ModuleOperators {
 
                     // Check if this @INC entry is a CODE reference, ARRAY reference, or blessed object
                     if (isHook) {
-
+                        // Perl exposes the current @INC slot through $INC
+                        // while a hook runs. Clearing it asks require to
+                        // restart from slot zero after replacing @INC.
+                        RuntimeScalar incCursor = getGlobalVariable("main::INC");
+                        incCursor.set(i);
                         RuntimeList hookResult = tryIncHook(dirScalar, fileName);
+                        if (!incCursor.getDefinedBoolean()) {
+                            i = -1;
+                            continue;
+                        }
                         if (hookResult != null) {
                             IncHookSource hookSource;
                             try {
@@ -612,7 +620,7 @@ public class ModuleOperators {
                             }
                             if (hookSource != null) {
                                 code = hookSource.code;
-                                actualFileName = fileName;
+                                actualFileName = incHookFileName(dirScalar, fileName);
                                 incHookRef = dirScalar;
                                 break;
                             }
@@ -989,7 +997,9 @@ public class ModuleOperators {
                 incHash.elements.remove(fileName);
                 throw new PerlCompilerException(message);
             } else if (err.isEmpty()) {
-                message = missingRequireMessage(fileName);
+                message = "No such file or directory".equals(ioErr)
+                        ? missingRequireMessage(fileName)
+                        : "Can't locate " + fileName + ": " + ioErr;
                 // Don't set %INC for file not found errors
                 throw new PerlCompilerException(message);
             } else {
@@ -1085,6 +1095,17 @@ public class ModuleOperators {
             }
         }
         return true;
+    }
+
+    /** Give source returned by an @INC hook the virtual filename Perl exposes. */
+    private static String incHookFileName(RuntimeScalar hook, String fileName) {
+        String rendered = hook.toStringNoOverload();
+        int start = rendered.indexOf("0x");
+        int end = rendered.indexOf(')', start);
+        if (start >= 0 && end > start) {
+            return "/loader/" + rendered.substring(start, end) + "/" + fileName;
+        }
+        return fileName;
     }
 
     /** Find an already-defined code slot without creating a placeholder CV. */
