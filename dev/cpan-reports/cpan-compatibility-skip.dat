@@ -52,7 +52,6 @@ DBD::PO	SKIP				2026-08-18	bundled
 DBD::Pg	SKIP				2026-09-04	bundled	
 DBD::SQLite::Constants	SKIP				2026-08-17	bundled	
 DBD::mysql	SKIP				2026-09-15	bundled	
-DBI	SKIP				2026-09-22	bundled	
 DBI::DBD::SqlEngine	SKIP				2026-08-26	bundled	
 DBI::Gofer::Execute	SKIP				2026-08-20	bundled	
 DBI::Mock	SKIP				2026-08-26	bundled	
@@ -82,10 +81,10 @@ HTTP::CookieJar::LWP	SKIP				2026-06-18	bundled
 HTTP::Daemon	SKIP				2026-06-18	distroprefs	
 HTTP::Headers	SKIP				2026-06-15	distroprefs	
 HTTP::Server::Simple	SKIP				2026-06-14	distroprefs	
-HTTP::Tiny	SKIP				2026-09-20	bundled	
+HTTP::Tiny	SKIP				2026-09-23	bundled	
 Hg::Lib	SKIP				2026-08-11	bundled	
 Hook::LexWrap	SKIP				2026-06-18	distroprefs	
-IO	SKIP				2026-09-22	bundled	
+IO	SKIP				2026-09-23	bundled	
 IO::Handle::Record	SKIP				2026-08-19	bundled	
 IO::Pipe	SKIP				2026-09-02	bundled	
 Image::Magick	SKIP				2026-06-18	bundled	
@@ -131,7 +130,7 @@ SQL::Preproc	SKIP				2026-08-26	bundled
 SQL::Statement::Util::ARRAY::Function	SKIP				2026-08-21	bundled	
 SQL::Translator	SKIP				2026-06-15	distroprefs	
 SSL_Context	SKIP				2026-06-14	bundled	
-Safe	SKIP				2026-09-18	bundled	
+Safe	SKIP				2026-09-23	bundled	
 Scalar::List::Utils	SKIP				2026-09-22	bundled	
 Storable	SKIP				2026-09-17	bundled	
 String::Print	SKIP				2026-06-18	distroprefs	
@@ -171,7 +170,7 @@ YAML::PP	SKIP				2026-09-02	bundled
 YAML::PP::Common	SKIP				2026-08-26	bundled	
 YAML::PP::Perl	SKIP				2026-09-02	bundled	
 YAML::PP::v0.41.0	SKIP				2026-09-23	bundled	
-YAML::Syck	SKIP				2026-09-21	bundled	
+YAML::Syck	SKIP				2026-09-23	bundled	
 bigint	SKIP				2026-06-14	bundled	
 common::sense	SKIP				2026-06-18	bundled	
 threads	SKIP				2026-08-12	bundled	
