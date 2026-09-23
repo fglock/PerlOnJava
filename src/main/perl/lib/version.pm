@@ -25,11 +25,7 @@ BEGIN {
     XSLoader::load('Version');
 }
 
-# Java bootstrap installs conversions so version objects work before
-# `use version`.  Tell overload.pm that this declaration is the one-shot
-# replacement of those bootstrap entries, not a user redefinition.
-BEGIN { $overload::PERLONJAVA_BOOTSTRAP_HANDOFF{'version'} = 1 }
-
+# Set up operator overloading
 use overload (
     '""'  => \&stringify,
     '<=>' => \&vcmp,
@@ -45,7 +41,6 @@ use overload (
     '*='  => \&_noop,
     '/='  => \&_noop,
 );
-BEGIN { delete $overload::PERLONJAVA_BOOTSTRAP_HANDOFF{'version'} }
 
 # avoid using Exporter
 require version::regex;

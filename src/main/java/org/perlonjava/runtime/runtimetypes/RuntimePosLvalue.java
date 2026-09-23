@@ -14,70 +14,8 @@ import java.util.Map;
  */
 public class RuntimePosLvalue {
 
-    static Map<RuntimeScalar, CacheEntry> newPositionCache(int maximumEntries) {
-        return new PositionCache(maximumEntries);
-    }
-
     private static Map<RuntimeScalar, CacheEntry> positionCache() {
         return PerlRuntime.current().regexState.positionCache;
-    }
-
-    private static int valueHash(RuntimeScalar perlVariable) {
-        return perlVariable.value == null ? 0 : perlVariable.value.hashCode();
-    }
-
-    private static CacheEntry positionEntry(RuntimeScalar perlVariable) {
-        CacheEntry cachedEntry = positionCache().get(perlVariable);
-        int code = valueHash(perlVariable);
-        if (cachedEntry == null || cachedEntry.valueHash != code) {
-            RuntimeScalar position = new PosLvalueScalar(perlVariable);
-            cachedEntry = new CacheEntry(code, position);
-            positionCache().put(perlVariable, cachedEntry);
-        }
-        return cachedEntry;
-    }
-
-    /**
-     * One regex operation's validated view of a target's position state.
-     *
-     * <p>The ordinary position cache remains LRU-managed. The handle avoids
-     * repeatedly touching that access-order map during one match, but validates
-     * its entry before every use so a scalar mutation or LRU eviction restores
-     * the normal cache lookup semantics.</p>
-     */
-    public static final class RegexPosition {
-        private final RuntimeScalar storage;
-        private CacheEntry entry;
-
-        private RegexPosition(RuntimeScalar storage, CacheEntry entry) {
-            this.storage = storage;
-            this.entry = entry;
-        }
-
-        private CacheEntry entry() {
-            if (!entry.cached || entry.valueHash != valueHash(storage)) {
-                entry = positionEntry(storage);
-            }
-            return entry;
-        }
-
-        private RuntimeScalar scalar() {
-            return entry().regexPosition;
-        }
-    }
-
-    /** Create a reusable position view for one match against {@code perlVariable}. */
-    public static RegexPosition beginRegexPosition(RuntimeScalar perlVariable) {
-        if (perlVariable == null) {
-            throw new PerlCompilerException("perlVariable cannot be null");
-        }
-        RuntimeScalar storage = perlVariable.posStorage();
-        return new RegexPosition(storage, positionEntry(storage));
-    }
-
-    /** Return the ordinary character-view {@code pos} scalar from a match position view. */
-    public static RuntimeScalar position(RegexPosition matchPosition) {
-        return matchPosition.scalar();
     }
 
     /**
@@ -99,11 +37,6 @@ public class RuntimePosLvalue {
                 && ((PosLvalueScalar) cachedEntry.regexPosition).regexPublished;
     }
 
-    /** Whether a validated match position was last published by the matcher. */
-    public static boolean wasPublishedByMatcher(RegexPosition position) {
-        return ((PosLvalueScalar) position.scalar()).regexPublished;
-    }
-
     /** Retrieve the position using character or lexical byte units. */
     public static RuntimeScalar pos(RuntimeScalar perlVariable, boolean byteView) {
         // Validate input
@@ -113,8 +46,24 @@ public class RuntimePosLvalue {
 
         perlVariable = perlVariable.posStorage();
 
-        CacheEntry cachedEntry = positionEntry(perlVariable);
-        RuntimeScalar position = cachedEntry.regexPosition;
+        RuntimeScalar position;
+
+        // Retrieve the cached entry for the given value
+        CacheEntry cachedEntry = positionCache().get(perlVariable);
+
+        // Check if the value is missing or it has changed
+        int code = perlVariable.value == null ? 0 : perlVariable.value.hashCode();
+        if (cachedEntry == null || cachedEntry.valueHash != code) {
+            // If the position is not cached or the value has changed,
+            // create a new undefined RuntimeScalar to represent the position
+            position = new PosLvalueScalar(perlVariable);
+            // Cache the new position with the current hash of the value
+            cachedEntry = new CacheEntry(code, position);
+            positionCache().put(perlVariable, cachedEntry);
+        } else {
+            // Use the cached position if the value has not changed
+            position = cachedEntry.regexPosition;
+        }
         if (!byteView || perlVariable.type == RuntimeScalarType.BYTE_STRING) {
             return position;
         }
@@ -174,30 +123,11 @@ public class RuntimePosLvalue {
                 && position.getDefinedBoolean() ? position.getInt() : null;
     }
 
-    /** Publish a matcher result through a position view already validated for this match. */
-    public static void publishMatchPosition(RegexPosition matchPosition,
-                                            RuntimeScalar perlVariable,
-                                            RuntimeScalar position) {
-        CacheEntry entry = matchPosition.entry();
-        ((PosLvalueScalar) entry.regexPosition).setFromMatcher(position);
-        entry.matcherBytePosition = perlVariable.type == RuntimeScalarType.BYTE_STRING
-                && position.getDefinedBoolean() ? position.getInt() : null;
-    }
-
     /** Publish an integer position produced by the regex engine. */
     public static void publishMatchPosition(RuntimeScalar perlVariable, int position) {
         RuntimeScalar stored = pos(perlVariable);
         ((PosLvalueScalar) stored).setFromMatcher(position);
         CacheEntry entry = positionCache().get(perlVariable.posStorage());
-        entry.matcherBytePosition = perlVariable.type == RuntimeScalarType.BYTE_STRING
-                ? position : null;
-    }
-
-    /** Publish an integer matcher result through a position view already validated for this match. */
-    public static void publishMatchPosition(RegexPosition matchPosition,
-                                            RuntimeScalar perlVariable, int position) {
-        CacheEntry entry = matchPosition.entry();
-        ((PosLvalueScalar) entry.regexPosition).setFromMatcher(position);
         entry.matcherBytePosition = perlVariable.type == RuntimeScalarType.BYTE_STRING
                 ? position : null;
     }
@@ -304,13 +234,6 @@ public class RuntimePosLvalue {
                 cachedEntry.lastMatchPosition == position;
     }
 
-    /** Check zero-length bookkeeping through the current match's validated position view. */
-    public static boolean hadZeroLengthMatchAt(RegexPosition matchPosition, int position) {
-        CacheEntry cachedEntry = matchPosition.entry();
-        return cachedEntry.lastMatchWasZeroLength
-                && cachedEntry.lastMatchPosition == position;
-    }
-
     /**
      * Record that a zero-length match occurred at the given position with the given pattern.
      */
@@ -324,13 +247,6 @@ public class RuntimePosLvalue {
         }
     }
 
-    /** Record zero-length bookkeeping through the current match's validated position view. */
-    public static void recordZeroLengthMatch(RegexPosition matchPosition, int position) {
-        CacheEntry cachedEntry = matchPosition.entry();
-        cachedEntry.lastMatchWasZeroLength = true;
-        cachedEntry.lastMatchPosition = position;
-    }
-
     /**
      * Clear the zero-length match tracking (called after successful non-zero-length match).
      */
@@ -341,13 +257,6 @@ public class RuntimePosLvalue {
             cachedEntry.lastMatchWasZeroLength = false;
             cachedEntry.lastMatchPattern = null;
         }
-    }
-
-    /** Clear zero-length bookkeeping through the current match's validated position view. */
-    public static void recordNonZeroLengthMatch(RegexPosition matchPosition) {
-        CacheEntry cachedEntry = matchPosition.entry();
-        cachedEntry.lastMatchWasZeroLength = false;
-        cachedEntry.lastMatchPattern = null;
     }
 
     private static class PosLvalueScalar extends RuntimeScalar {
@@ -521,7 +430,6 @@ public class RuntimePosLvalue {
      * This helps in determining if the cached position is still valid for the given scalar.
      */
     static final class CacheEntry {
-        boolean cached;
         int valueHash; // Hash of the RuntimeScalar value to detect changes
         RuntimeScalar regexPosition; // Cached position of the regex match
         boolean lastMatchWasZeroLength; // Track if last match was zero-length
@@ -532,53 +440,12 @@ public class RuntimePosLvalue {
         Integer matcherBytePosition; // exact progress for byte regexes inside multibyte scalars
 
         CacheEntry(int valueHash, RuntimeScalar regexPosition) {
-            this.cached = true;
             this.valueHash = valueHash;
             this.regexPosition = regexPosition;
             this.lastMatchWasZeroLength = false;
             this.lastMatchPosition = -1;
             this.lastMatchPattern = null;
             this.hasUnicodeChars = null;
-        }
-    }
-
-    /** LRU position cache that marks entries detached by replacement or eviction. */
-    private static final class PositionCache
-            extends java.util.LinkedHashMap<RuntimeScalar, CacheEntry> {
-        private final int maximumEntries;
-
-        PositionCache(int maximumEntries) {
-            super(maximumEntries, 0.75f, true);
-            this.maximumEntries = maximumEntries;
-        }
-
-        @Override
-        public CacheEntry put(RuntimeScalar key, CacheEntry value) {
-            CacheEntry previous = super.put(key, value);
-            if (previous != null && previous != value) previous.cached = false;
-            value.cached = true;
-            return previous;
-        }
-
-        @Override
-        public CacheEntry remove(Object key) {
-            CacheEntry removed = super.remove(key);
-            if (removed != null) removed.cached = false;
-            return removed;
-        }
-
-        @Override
-        public void clear() {
-            for (CacheEntry entry : values()) entry.cached = false;
-            super.clear();
-        }
-
-        @Override
-        protected boolean removeEldestEntry(
-                Map.Entry<RuntimeScalar, CacheEntry> eldest) {
-            if (size() <= maximumEntries) return false;
-            eldest.getValue().cached = false;
-            return true;
         }
     }
     

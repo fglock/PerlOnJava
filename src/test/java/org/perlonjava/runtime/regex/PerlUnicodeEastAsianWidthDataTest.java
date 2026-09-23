@@ -23,13 +23,13 @@ class PerlUnicodeEastAsianWidthDataTest {
     };
 
     @Test
-    void usesChecksumPinnedCurrentUnicodeSources() {
-        assertEquals("18.0.0", PerlUnicodeEastAsianWidthData.UNICODE_VERSION);
-        assertEquals("f4c7bc4537a71e12452f6347ecbbc71c31cba21b5190c92be1ae296b0ef32b09",
+    void usesChecksumPinnedPerl544Unicode17Sources() {
+        assertEquals("17.0.0", PerlUnicodeEastAsianWidthData.UNICODE_VERSION);
+        assertEquals("0b5523a2217cb318d20b329a05d31eec5af5686ba09d263b85bb75a28989a3a8",
                 PerlUnicodeEastAsianWidthData.DEAST_ASIAN_WIDTH_SHA256);
-        assertEquals("06c4c8eaf7b0bf34abe73b113da1215bd784ac254d4c223600b90267caa4bbbd",
+        assertEquals("670d2bebb48649c04fabfbf033308073dcff47946324a8033237254c048b3b01",
                 PerlUnicodeEastAsianWidthData.PROP_VALUE_ALIASES_SHA256);
-        assertEquals("83b8df695f9da543dba02b0be2b8bd72f0b52836ad264be113c6d285021ef025",
+        assertEquals("4441f573caf952ffece1d7c892e7715bd7136dfc26f96eb6f268bf1e474715fb",
                 PerlUnicodeEastAsianWidthData.PROPERTY_ALIASES_SHA256);
     }
 

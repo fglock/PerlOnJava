@@ -14,10 +14,8 @@ my $root = repo_root($FindBin::Bin);
 my $unicore = select_unicode_root(
     repo_root => $root, version => 'current',
     required => [qw(version IdType.txt DCoreProperties.txt PropList.txt
-        PropValueAliases.txt PropertyAliases.txt Unikemet.txt LineBreak.txt
-        extracted/DBinaryProperties.txt emoji/emoji.txt
-        auxiliary/GraphemeBreakProperty.txt auxiliary/WordBreakProperty.txt
-        auxiliary/SentenceBreakProperty.txt extracted/DNumType.txt)],
+        PropValueAliases.txt PropertyAliases.txt Unikemet.txt
+        auxiliary/GraphemeBreakProperty.txt)],
 );
 my $unicode_version = read_raw(File::Spec->catfile($unicore, 'version'));
 $unicode_version =~ s/\s+\z//;
@@ -30,13 +28,7 @@ my @sources = (
     ['PropValueAliases.txt', qr/^# PropertyValueAliases-\Q$unicode_version\E\.txt$/m],
     ['PropertyAliases.txt', qr/^# PropertyAliases-\Q$unicode_version\E\.txt$/m],
     ['Unikemet.txt', qr/^# Unikemet-\Q$unicode_version\E\.txt$/m],
-    ['LineBreak.txt', qr/^# LineBreak-\Q$unicode_version\E\.txt$/m],
-    ['extracted/DBinaryProperties.txt', qr/^# DerivedBinaryProperties-\Q$unicode_version\E\.txt$/m],
-    ['emoji/emoji.txt', qr/^# Version:\s*\Q$unicode_version\E$/m],
     ['auxiliary/GraphemeBreakProperty.txt', qr/^# GraphemeBreakProperty-\Q$unicode_version\E\.txt$/m],
-    ['auxiliary/WordBreakProperty.txt', qr/^# WordBreakProperty-\Q$unicode_version\E\.txt$/m],
-    ['auxiliary/SentenceBreakProperty.txt', qr/^# SentenceBreakProperty-\Q$unicode_version\E\.txt$/m],
-    ['extracted/DNumType.txt', qr/^# DerivedNumericType-\Q$unicode_version\E\.txt$/m],
 );
 for my $source (@sources) {
     my ($name, $version_pattern) = @$source;
@@ -58,45 +50,14 @@ my %property = (
             Exclusion Obsolete Technical Uncommon_Use Limited_Use Inclusion Recommended)],
     },
     KEHCORE => { aliases => ['kEH_Core'], default => 'N', values => [qw(C L N)] },
-    LB => { aliases => [qw(LB Line_Break)], default => 'Unknown' },
-    WB => { aliases => [qw(WB Word_Break)], default => 'Other' },
-    SB => { aliases => [qw(SB Sentence_Break)], default => 'Other' },
-    NT => { aliases => [qw(NT Numeric_Type)], default => 'None' },
-);
-my %binary_property = (
-    ALPHA => { aliases => [qw(Alphabetic Alpha)] },
-    GRBASE => { aliases => [qw(Grapheme_Base Gr_Base)] },
-    IDEO => { aliases => [qw(Ideographic Ideo)] },
-    IDS => { aliases => [qw(ID_Start IDS)] },
-    IDC => { aliases => [qw(ID_Continue IDC)] },
-    XIDS => { aliases => [qw(XID_Start XIDS)] },
-    XIDC => { aliases => [qw(XID_Continue XIDC)] },
-    BIDIM => { aliases => [qw(Bidi_Mirrored Bidi_M)] },
-);
-my %binary_key_for_property = (
-    Alphabetic => 'ALPHA',
-    Grapheme_Base => 'GRBASE',
-    Ideographic => 'IDEO',
-    ID_Start => 'IDS',
-    ID_Continue => 'IDC',
-    XID_Start => 'XIDS',
-    XID_Continue => 'XIDC',
-    Bidi_Mirrored => 'BIDIM',
-);
-my %extra_binary_property = map { $_ => 1 } qw(
-    Emoji Emoji_Component Emoji_Modifier Emoji_Modifier_Base Emoji_Presentation
-    Modifier_Combining_Mark
 );
 
 for my $line (split /\n/, $text{'PropValueAliases.txt'}) {
     next if $line =~ /^\s*#/;
     $line =~ s/#.*$//;
     my @field = map { trim($_) } split /;/, $line;
-    next unless @field >= 3 && ($field[0] eq 'GCB' || $field[0] eq 'InCB'
-        || $field[0] eq 'lb' || $field[0] eq 'WB' || $field[0] eq 'SB'
-        || $field[0] eq 'nt');
-    my $spec = $property{$field[0] eq 'lb' ? 'LB'
-        : $field[0] eq 'nt' ? 'NT' : $field[0]};
+    next unless @field >= 3 && ($field[0] eq 'GCB' || $field[0] eq 'InCB');
+    my $spec = $property{$field[0]};
     push @{$spec->{values}}, $field[2];
     push @{$spec->{short_values}}, $field[1];
     my $index = $#{$spec->{values}};
@@ -130,21 +91,8 @@ sub add_range {
 for my $line (split /\n/, $text{'auxiliary/GraphemeBreakProperty.txt'}) {
     add_range('GCB', $1, $2) if $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*([A-Za-z_]+)/;
 }
-for my $line (split /\n/, $text{'auxiliary/WordBreakProperty.txt'}) {
-    add_range('WB', $1, $2) if $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*([A-Za-z_]+)/;
-}
-for my $line (split /\n/, $text{'auxiliary/SentenceBreakProperty.txt'}) {
-    add_range('SB', $1, $2) if $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*([A-Za-z_]+)/;
-}
-for my $line (split /\n/, $text{'extracted/DNumType.txt'}) {
-    add_range('NT', $1, $2) if $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*([A-Za-z_]+)/;
-}
 for my $line (split /\n/, $text{'DCoreProperties.txt'}) {
     add_range('InCB', $1, $2) if $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*InCB\s*;\s*([A-Za-z_]+)/;
-    if ($line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*(Alphabetic|Grapheme_Base|ID_Start|ID_Continue|XID_Start|XID_Continue)\b/) {
-        my %key_for = (Alphabetic => 'ALPHA', Grapheme_Base => 'GRBASE', ID_Start => 'IDS', ID_Continue => 'IDC', XID_Start => 'XIDS', XID_Continue => 'XIDC');
-        push @{$binary_property{$key_for{$2}}{ranges}}, [parse_range($1)];
-    }
 }
 for my $line (split /\n/, $text{'IdType.txt'}) {
     next unless $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*([^#]+)/;
@@ -154,63 +102,10 @@ for my $line (split /\n/, $text{'IdType.txt'}) {
 for my $line (split /\n/, $text{'Unikemet.txt'}) {
     add_range('KEHCORE', $1, $2) if $line =~ /^U\+([0-9A-F]+)\tkEH_Core\t([CL])$/;
 }
-my @line_break_explicit;
-for my $line (split /\n/, $text{'LineBreak.txt'}) {
-    next unless $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*([A-Za-z0-9_]+)/;
-    push @line_break_explicit, [parse_range($1), $2];
-}
-my $line_break = $property{LB};
-my $line_break_default = $line_break->{value_alias}{loose_name('XX')};
-die "Line_Break aliases do not define XX\n" unless defined $line_break_default;
-my @line_break_values = ($line_break_default) x 0x110000;
-# UAX #14 defines these ranges as ID/PR when no explicit LineBreak.txt entry
-# overrides them.  Applying explicit data afterwards retains assigned values.
-for my $default ([0x3400, 0x4DBF, 'ID'], [0x4E00, 0x9FFF, 'ID'],
-        [0xF900, 0xFAFF, 'ID'], [0x20000, 0x2FFFD, 'ID'],
-        [0x30000, 0x3FFFD, 'ID'], [0x1F000, 0x1FAFF, 'ID'],
-        [0x1FC00, 0x1FFFD, 'ID'], [0x20A0, 0x20CF, 'PR']) {
-    my $index = $line_break->{value_alias}{loose_name($default->[2])};
-    die "Line_Break aliases do not define $default->[2]\n" unless defined $index;
-    $line_break_values[$_] = $index for $default->[0] .. $default->[1];
-}
-for my $entry (@line_break_explicit) {
-    my ($start, $end, $value) = @$entry;
-    my $index = $line_break->{value_alias}{loose_name($value)};
-    die "Unknown Line_Break value '$value'\n" unless defined $index;
-    $line_break_values[$_] = $index for $start .. $end;
-}
-my ($line_break_start, $line_break_value) = (0, $line_break_values[0]);
-for my $code (1 .. 0x10FFFF) {
-    next if $line_break_values[$code] == $line_break_value;
-    push @{$line_break->{ranges}[$line_break_value]}, [$line_break_start, $code - 1];
-    ($line_break_start, $line_break_value) = ($code, $line_break_values[$code]);
-}
-push @{$line_break->{ranges}[$line_break_value]}, [$line_break_start, 0x10FFFF];
-$line_break->{complete} = 1;
-for my $source (qw(DCoreProperties.txt PropList.txt extracted/DBinaryProperties.txt emoji/emoji.txt)) {
-    for my $line (split /\n/, $text{$source}) {
-        next unless $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*([A-Za-z0-9_]+)\s*(?:#|$)/;
-        my ($range, $name) = ($1, $2);
-        next unless exists $binary_key_for_property{$name}
-                || $extra_binary_property{$name};
-        my $key = $binary_key_for_property{$name};
-        if (!defined $key) {
-            $key = 'BIN_' . uc($name);
-            $key =~ s/[^A-Z0-9]+/_/g;
-            die "Binary-property generator key collision for '$name'\n"
-                if exists $binary_property{$key};
-            $binary_property{$key} = { aliases => [$name] };
-            $binary_key_for_property{$name} = $key;
-        }
-        push @{$binary_property{$key}{ranges}}, [parse_range($range)];
-    }
-}
 my @hex_ranges;
 for my $line (split /\n/, $text{'PropList.txt'}) {
     push @hex_ranges, [parse_range($1)]
         if $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*Hex_Digit\b/;
-    push @{$binary_property{IDEO}{ranges}}, [parse_range($1)]
-        if $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*Ideographic\b/;
 }
 
 sub coalesce {
@@ -238,7 +133,6 @@ sub complement {
     return \@out;
 }
 for my $spec (values %property) {
-    next if $spec->{complete};
     my @explicit = map { @$_ } @{$spec->{ranges}};
     $spec->{ranges}[$spec->{default_index}] = complement(\@explicit);
     $spec->{ranges}[$_] = coalesce($spec->{ranges}[$_])
@@ -305,45 +199,18 @@ for my $source (@sources) {
     print "    static final String ${constant}_SHA256 = \"$source->[1]\";\n";
 }
 print "\n";
-emit_property($_) for qw(GCB InCB IDTYPE KEHCORE LB WB SB NT);
+emit_property($_) for qw(GCB InCB IDTYPE KEHCORE);
 print "    private static final int[] HEX_RANGES = {\n"; emit_pairs(\@hex_ranges, '        '); print "    };\n";
-for my $key (sort keys %binary_property) {
-    $binary_property{$key}{ranges} = coalesce($binary_property{$key}{ranges});
-    print "    private static int[] ${key}_ranges() {\n        return new int[] {\n";
-    emit_pairs($binary_property{$key}{ranges}, '        ');
-    print "        };\n    }\n";
-}
 print <<'JAVA';
     private static final UnicodeSet HEX = buildSet(HEX_RANGES);
-
-JAVA
-for my $key (sort keys %binary_property) {
-    print "    private static final UnicodeSet $key = buildSet(${key}_ranges());\n";
-}
-my @binary_aliases;
-for my $key (sort keys %binary_property) {
-    for my $alias (@{$binary_property{$key}{aliases}}) {
-        push @binary_aliases, [loose_name($alias), $key];
-    }
-}
-@binary_aliases = sort { $a->[0] cmp $b->[0] } @binary_aliases;
-print "    private static final String[] BINARY_PROPERTY_ALIASES = {\n        ",
-    join(', ', map { qq{\"$_->[0]\"} } @binary_aliases), "\n    };\n";
-print "    private static final UnicodeSet[] BINARY_PROPERTY_SETS = {\n        ",
-    join(', ', map { $_->[1] } @binary_aliases), "\n    };\n\n";
-print <<'JAVA';
 
     static boolean isPropertyAlias(String alias) { return property(alias) != null; }
     static boolean isBinaryPropertyAlias(String alias) {
         String loose = loose(alias);
-        return loose.equals("hex") || loose.equals("hexdigit")
-                || java.util.Arrays.binarySearch(BINARY_PROPERTY_ALIASES, loose) >= 0;
+        return loose.equals("hex") || loose.equals("hexdigit");
     }
     static UnicodeSet binarySet(String alias) {
-        String loose = loose(alias);
-        if (loose.equals("hex") || loose.equals("hexdigit")) return HEX;
-        int found = java.util.Arrays.binarySearch(BINARY_PROPERTY_ALIASES, loose);
-        return found < 0 ? null : BINARY_PROPERTY_SETS[found];
+        return isBinaryPropertyAlias(alias) ? HEX : null;
     }
     static UnicodeSet valueSet(String propertyAlias, String valueAlias) {
         Property property = property(propertyAlias);
@@ -367,10 +234,6 @@ print <<'JAVA';
         if (InCB.hasAlias(loose)) return InCB;
         if (IDTYPE.hasAlias(loose)) return IDTYPE;
         if (KEHCORE.hasAlias(loose)) return KEHCORE;
-        if (LB.hasAlias(loose)) return LB;
-        if (WB.hasAlias(loose)) return WB;
-        if (SB.hasAlias(loose)) return SB;
-        if (NT.hasAlias(loose)) return NT;
         return null;
     }
     private static String loose(String value) {

@@ -18,11 +18,11 @@ class PerlUnicodeBlockDataTest {
     private static final int MAX_CODE_POINT = 0x10ffff;
 
     @Test
-    void usesCurrentImportedUnicodeData() {
-        assertEquals("18.0.0", PerlUnicodeBlockData.UNICODE_VERSION);
-        assertEquals(354, PerlUnicodeBlockData.valueCount());
-        assertEquals(505, PerlUnicodeBlockData.aliasCount());
-        assertEquals(406, PerlUnicodeBlockData.rangeCount());
+    void usesPinnedPerl544Unicode17Data() {
+        assertEquals("17.0.0", PerlUnicodeBlockData.UNICODE_VERSION);
+        assertEquals(347, PerlUnicodeBlockData.valueCount());
+        assertEquals(495, PerlUnicodeBlockData.aliasCount());
+        assertEquals(397, PerlUnicodeBlockData.rangeCount());
         assertEquals("No_Block",
                 PerlUnicodeBlockData.canonicalValue(PerlUnicodeBlockData.NO_BLOCK));
 
@@ -58,17 +58,17 @@ class PerlUnicodeBlockDataTest {
             }
         }
 
-        assertEquals(354, names.size());
-        assertEquals(406, rangeCount);
-        assertEquals(316_784, namedCodePoints);
+        assertEquals(347, names.size());
+        assertEquals(397, rangeCount);
+        assertEquals(303_808, namedCodePoints);
         assertEquals(new UnicodeSet(0, MAX_CODE_POINT), union);
     }
 
     @Test
     void noBlockIsThePinnedDefaultComplement() {
         UnicodeSet noBlock = PerlUnicodeBlockData.set(PerlUnicodeBlockData.NO_BLOCK);
-        assertEquals(53, noBlock.getRangeCount());
-        assertEquals(797_328, noBlock.size());
+        assertEquals(51, noBlock.getRangeCount());
+        assertEquals(810_304, noBlock.size());
         assertTrue(noBlock.contains(0x2fe0));
         assertTrue(noBlock.contains(0x33480));
         assertFalse(noBlock.contains(0x2f00));

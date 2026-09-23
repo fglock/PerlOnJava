@@ -11,7 +11,7 @@ use PerlOnJava::UnicodeGenerator qw(
 
 binmode STDOUT, ':raw';
 
-my $expected_version = $ENV{PERLONJAVA_UNICODE_VERSION} // '17.0.0';
+my $expected_version = '17.0.0';
 my @required_sources = (
     'version', File::Spec->catfile('extracted', 'DDecompositionType.txt'),
     'PropertyAliases.txt', 'PropValueAliases.txt',

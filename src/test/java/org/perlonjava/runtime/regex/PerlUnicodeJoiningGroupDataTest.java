@@ -16,13 +16,13 @@ import org.junit.jupiter.api.Test;
 @Tag("unit")
 class PerlUnicodeJoiningGroupDataTest {
     @Test
-    void usesChecksumPinnedCurrentUnicodeSources() {
-        assertEquals("18.0.0", PerlUnicodeJoiningGroupData.UNICODE_VERSION);
-        assertEquals("325be8cd3a32a9cc2b80a1fe67e5c7ade3b58d8280fa9d49134edabed82832a1",
+    void usesChecksumPinnedPerl544Unicode17Sources() {
+        assertEquals("17.0.0", PerlUnicodeJoiningGroupData.UNICODE_VERSION);
+        assertEquals("bb67e0c00b88acfa5be633967b66b23326844a86e49c6fde7b57960d3af66cae",
                 PerlUnicodeJoiningGroupData.DJOIN_GROUP_SHA256);
-        assertEquals("06c4c8eaf7b0bf34abe73b113da1215bd784ac254d4c223600b90267caa4bbbd",
+        assertEquals("670d2bebb48649c04fabfbf033308073dcff47946324a8033237254c048b3b01",
                 PerlUnicodeJoiningGroupData.PROP_VALUE_ALIASES_SHA256);
-        assertEquals("83b8df695f9da543dba02b0be2b8bd72f0b52836ad264be113c6d285021ef025",
+        assertEquals("4441f573caf952ffece1d7c892e7715bd7136dfc26f96eb6f268bf1e474715fb",
                 PerlUnicodeJoiningGroupData.PROPERTY_ALIASES_SHA256);
     }
 
@@ -47,7 +47,7 @@ class PerlUnicodeJoiningGroupDataTest {
     @Test
     void retainsEveryPinnedValueAndWildcardAlias() {
         String[] values = PerlUnicodeJoiningGroupData.canonicalValues();
-        assertEquals(116, values.length);
+        assertEquals(106, values.length);
         for (String value : values) {
             UnicodeSet set = PerlUnicodeJoiningGroupData.valueSet(value);
             assertNotNull(set, value);
@@ -57,7 +57,7 @@ class PerlUnicodeJoiningGroupDataTest {
         }
 
         String[] wildcardValues = PerlUnicodeJoiningGroupData.wildcardValues();
-        assertEquals(117, wildcardValues.length);
+        assertEquals(107, wildcardValues.length);
         for (String value : wildcardValues) {
             assertNotNull(PerlUnicodeJoiningGroupData.valueSet(value), value);
         }

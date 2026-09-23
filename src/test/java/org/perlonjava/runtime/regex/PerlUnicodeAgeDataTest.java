@@ -10,8 +10,8 @@ import org.junit.jupiter.api.Test;
 @Tag("unit")
 class PerlUnicodeAgeDataTest {
     @Test
-    void usesCurrentImportedUnicodeData() {
-        assertEquals("18.0.0", PerlUnicodeAgeData.UNICODE_VERSION);
+    void usesPinnedPerl544Unicode17Data() {
+        assertEquals("17.0.0", PerlUnicodeAgeData.UNICODE_VERSION);
         assertTrue(PerlUnicodeAgeData.exactSet("17.0").contains(0x33479));
         assertFalse(PerlUnicodeAgeData.exactSet("17.0").contains(0x3347a));
         assertTrue(PerlUnicodeAgeData.cumulativeSet("17.0").contains('A'));

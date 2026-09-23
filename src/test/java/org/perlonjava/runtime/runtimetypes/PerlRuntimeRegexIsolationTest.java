@@ -68,31 +68,6 @@ class PerlRuntimeRegexIsolationTest {
     }
 
     @Test
-    void regexPositionHandleRevalidatesAfterMutationAndLruEviction() {
-        PerlRuntime runtime = new PerlRuntime();
-        RuntimeScalar subject = new RuntimeScalar("abc");
-
-        try (PerlRuntime.Binding ignored = runtime.bind()) {
-            RuntimePosLvalue.RegexPosition handle =
-                    RuntimePosLvalue.beginRegexPosition(subject);
-            RuntimePosLvalue.publishMatchPosition(handle, subject, 1);
-            assertEquals(1, RuntimePosLvalue.pos(subject).getInt());
-
-            subject.set("def");
-            RuntimePosLvalue.publishMatchPosition(handle, subject, 2);
-            assertEquals(2, RuntimePosLvalue.pos(subject).getInt());
-
-            RuntimePosLvalue.RegexPosition evictable =
-                    RuntimePosLvalue.beginRegexPosition(subject);
-            for (int i = 0; i <= RuntimeRegexState.MAX_POSITION_CACHE_SIZE; i++) {
-                RuntimePosLvalue.pos(new RuntimeScalar("position-" + i));
-            }
-            RuntimePosLvalue.publishMatchPosition(evictable, subject, 3);
-            assertEquals(3, RuntimePosLvalue.pos(subject).getInt());
-        }
-    }
-
-    @Test
     void optimizedAndMatchOnceCallsitesArePerRuntime() {
         PerlRuntime first = new PerlRuntime();
         PerlRuntime second = new PerlRuntime();

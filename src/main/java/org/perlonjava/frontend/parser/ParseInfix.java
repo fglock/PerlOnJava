@@ -67,8 +67,7 @@ public class ParseInfix {
         // legacy fields hash. Avoid auto-vivifying an empty %FIELDS merely
         // while parsing a hash dereference, which would falsely reject every
         // key as an unknown class field.
-        if (!GlobalVariable.existsGlobalHash(fieldsName)
-                && !GlobalVariable.isDeclaredGlobalHash(fieldsName)) return;
+        if (!GlobalVariable.existsGlobalHash(fieldsName)) return;
         RuntimeHash fields = GlobalVariable.getGlobalHash(fieldsName);
         for (Node key : keys.elements) {
             String name = key instanceof StringNode string ? string.value
