@@ -446,19 +446,13 @@ public class OperatorParser {
         // U+216B) are not mistaken for punctuation.
         if (name.codePointCount(0, name.length()) == 1) {
             int codePoint = name.codePointAt(0);
-            if (codePoint != '_' && !Character.isUnicodeIdentifierStart(codePoint)
-                    && !isNewerPerlXidStart(codePoint)) return true;
+            if (codePoint != '_' && !IdentifierParser.isPerlIdentifierStart(codePoint)) return true;
         }
 
         // Control character prefix (caret variables like $^W stored as chr(23))
         if (name.charAt(0) < 32) return true;
 
         return false;
-    }
-
-    private static boolean isNewerPerlXidStart(int cp) {
-        return cp == 0x088F || cp == 0x0C5C || cp == 0x0CDC
-                || cp == 0xA7CE || cp == 0xA7CF || cp == 0xA7D2 || cp == 0xA7D4 || cp == 0xA7F1;
     }
 
     /**
