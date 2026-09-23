@@ -613,9 +613,10 @@ public class EmitLiteral {
                 mv.visitInsn(Opcodes.DUP);
                 if (fitsInLong) {
                     mv.visitLdcInsn(longVal);
+                    mv.visitLdcInsn(value);
                     mv.visitMethodInsn(
                             Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                            "<init>", "(J)V", false);
+                            "<init>", "(JLjava/lang/String;)V", false);
                 } else if (fitsInUnsignedLong) {
                     mv.visitTypeInsn(Opcodes.NEW, "java/math/BigInteger");
                     mv.visitInsn(Opcodes.DUP);
@@ -623,9 +624,10 @@ public class EmitLiteral {
                     mv.visitMethodInsn(
                             Opcodes.INVOKESPECIAL, "java/math/BigInteger",
                             "<init>", "(Ljava/lang/String;)V", false);
+                    mv.visitLdcInsn(value);
                     mv.visitMethodInsn(
                             Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                            "<init>", "(Ljava/math/BigInteger;)V", false);
+                            "<init>", "(Ljava/math/BigInteger;Ljava/lang/String;)V", false);
                 } else {
                     mv.visitLdcInsn(Double.valueOf(value));
                     mv.visitMethodInsn(

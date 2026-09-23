@@ -67,6 +67,10 @@ priorities and future plans.
   failed in-place backup renames instead of moving files into a backup
   directory.
 
+- Avoid spurious `imprecision` warnings when incrementing or decrementing
+  exact integer literals beyond the IEEE-754 precision boundary, while
+  preserving warnings for computed integer boundary values.
+
 - Restore `op/tie.t` compatibility for tied scalar operators, output
   separators, deferred aliases, glob copies, and tied hash iteration on both
   execution backends.
