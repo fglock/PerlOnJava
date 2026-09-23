@@ -1195,12 +1195,16 @@ public class UnicodeResolver {
                 case "XIDS":
                 case "XIDStart":
                 case "XID_Start":
-                    // Use ICU4J UnicodeSet for accurate XID_Start
-                    return getXIDStartPattern(negated);
+                    return wrapCharClass(
+                            unicodeSetToJavaPattern(
+                                    PerlUnicodeResidualPropertyData.binarySet("XID_Start")),
+                            negated);
                 case "XIDC":
                 case "XID_Continue":
-                    // Use ICU4J UnicodeSet for accurate XID_Continue
-                    return getXIDContinuePattern(negated);
+                    return wrapCharClass(
+                            unicodeSetToJavaPattern(
+                                    PerlUnicodeResidualPropertyData.binarySet("XID_Continue")),
+                            negated);
                 case "_Perl_IDStart":
                     // Perl's definition: XID_Start + underscore
                     return getPerlIDStartPattern(negated);
@@ -1442,11 +1446,6 @@ public class UnicodeResolver {
         property = normalizePerlIsPropertyAssignment(property);
         int assignment = propertyValueDelimiter(property);
         if (assignment <= 0 || assignment == property.length() - 1) {
-            UnicodeSet generatedBinary =
-                    PerlUnicodeResidualPropertyData.binarySet(property);
-            if (generatedBinary != null) {
-                return joniPropertyResult(generatedBinary, true);
-            }
             UnicodeSet foldableBareProperty = resolvePerlCaseFoldableBareProperty(
                     property, caseInsensitive);
             if (foldableBareProperty != null) {
@@ -1859,7 +1858,7 @@ public class UnicodeResolver {
             }
         }
         return switch (loose) {
-            case "alnum" -> "Alnum";
+            case "alnum", "isalnum" -> "Alnum";
             case "perlspace" -> "PerlSpace";
             case "perlword" -> "PerlWord";
             case "xperlspace" -> "XPerlSpace";
@@ -1908,9 +1907,6 @@ public class UnicodeResolver {
                 resolvePerlUnicodePropertyWildcard(alias);
         if (propertyWildcard != null) return propertyWildcard.set;
         if (assignment < 0) {
-            UnicodeSet generatedBinary =
-                    PerlUnicodeResidualPropertyData.binarySet(alias);
-            if (generatedBinary != null) return generatedBinary;
             UnicodeSet blockBinaryPrecedence =
                     resolvePerlBlockBinaryPrecedenceAlias(alias);
             if (blockBinaryPrecedence != null) return blockBinaryPrecedence;
@@ -2198,8 +2194,10 @@ public class UnicodeResolver {
                 || !isPerlWordBreakProperty(property.substring(0, assignment))) {
             return null;
         }
-        return unicodePropertyValueSet(
-                UProperty.WORD_BREAK, property.substring(assignment + 1));
+        String value = property.substring(assignment + 1);
+        UnicodeSet generated = PerlUnicodeResidualPropertyData.valueSet("WB", value);
+        return generated != null ? generated
+                : unicodePropertyValueSet(UProperty.WORD_BREAK, value);
     }
 
     private static boolean isPerlWordBreakProperty(String property) {
@@ -2215,8 +2213,10 @@ public class UnicodeResolver {
                 || !isPerlSentenceBreakProperty(property.substring(0, assignment))) {
             return null;
         }
-        return unicodePropertyValueSet(
-                UProperty.SENTENCE_BREAK, property.substring(assignment + 1));
+        String value = property.substring(assignment + 1);
+        UnicodeSet generated = PerlUnicodeResidualPropertyData.valueSet("SB", value);
+        return generated != null ? generated
+                : unicodePropertyValueSet(UProperty.SENTENCE_BREAK, value);
     }
 
     private static boolean isPerlSentenceBreakProperty(String property) {
@@ -2242,7 +2242,9 @@ public class UnicodeResolver {
         }) {
             return new UnicodeSet('\r', '\r');
         }
-        return unicodePropertyValueSet(UProperty.LINE_BREAK, value);
+        UnicodeSet generated = PerlUnicodeResidualPropertyData.valueSet("LB", value);
+        return generated != null ? generated
+                : unicodePropertyValueSet(UProperty.LINE_BREAK, value);
     }
 
     private static boolean isPerlLineBreakProperty(String property) {
@@ -2603,6 +2605,11 @@ public class UnicodeResolver {
         String binaryProperty =
                 PerlUnicodeBinaryPropertyAliasData.canonicalProperty(looseAlias);
         if (binaryProperty != null) {
+            UnicodeSet generated = PerlUnicodeResidualPropertyData.binarySet(binaryProperty);
+            if (generated != null) {
+                return new PerlBarePropertyAlias(
+                        generated, looseAlias.equals("lowercase"));
+            }
             try {
                 UnicodeSet binary = new UnicodeSet()
                         .applyPropertyAlias(binaryProperty, "True")
@@ -2646,11 +2653,11 @@ public class UnicodeResolver {
             case "whitespace" -> new PerlBarePropertyAlias(
                     PERL_UNICODE_SPACE_SET, false);
             case "xposixalnum", "alnum" -> new PerlBarePropertyAlias(
-                    new UnicodeSet().applyPropertyAlias("Alphabetic", "True")
+                    new UnicodeSet(PerlUnicodeResidualPropertyData.binarySet("Alphabetic"))
                             .addAll(PerlUnicodeGeneralCategoryData.resolve("Nd"))
                             .freeze(), false);
             case "xposixalpha" -> new PerlBarePropertyAlias(
-                    new UnicodeSet().applyPropertyAlias("Alphabetic", "True")
+                    new UnicodeSet(PerlUnicodeResidualPropertyData.binarySet("Alphabetic"))
                             .freeze(), false);
             case "xposixblank" -> new PerlBarePropertyAlias(
                     PERL_UNICODE_SPACE_SET, false);
@@ -2745,7 +2752,7 @@ public class UnicodeResolver {
 
     private static UnicodeSet perlIdStartSet() {
         return new UnicodeSet()
-                .applyPropertyAlias("XID_Start", "True")
+                .addAll(PerlUnicodeResidualPropertyData.binarySet("XID_Start"))
                 .add('_')
                 .freeze();
     }
@@ -2827,9 +2834,10 @@ public class UnicodeResolver {
     }
 
     private static boolean isPerlAcceptedBinaryPropertyAlias(String alias) {
-        return PerlUnicodeBinaryPropertyAliasData.canonicalProperty(alias) != null
+        return !PerlUnicodeBinaryPropertyAliasData.isRejected(alias)
+                && (PerlUnicodeBinaryPropertyAliasData.canonicalProperty(alias) != null
                 || PerlUnicodeResidualPropertyData.isBinaryPropertyAlias(alias)
-                || resolvePerlMissingBaseAlias(alias) != null;
+                || resolvePerlMissingBaseAlias(alias) != null);
     }
 
     private static boolean isPerlRejectedBinaryPropertyExpression(String property) {
@@ -3081,8 +3089,8 @@ public class UnicodeResolver {
         UnicodeSet result = new UnicodeSet();
         for (int valueId = 0; valueId < PerlUnicodeBlockData.valueCount(); valueId++) {
             String candidate = PerlUnicodeBlockData.canonicalValue(valueId);
-            boolean matches = valuePattern.matchesPropertyValue(candidate)
-                    || valuePattern.matchesPropertyValue(loosePropertyName(candidate));
+            boolean matches = matchesPerlUnicodePropertyWildcard(
+                    valuePattern, PerlUnicodeBlockData.valueAliases(valueId));
             int icuValue = unicodePropertyValue(UProperty.BLOCK, candidate);
             for (int nameChoice = UProperty.NameChoice.SHORT;
                     !matches && icuValue >= 0 && nameChoice <= UProperty.NameChoice.LONG;
@@ -3649,20 +3657,16 @@ public class UnicodeResolver {
         }
     }
 
-    // Helper method to get XID_Start pattern using ICU4J
+    // XID properties are generated from the Perl-pinned Unicode data rather
+    // than ICU4J, whose Unicode version can intentionally lag Perl's.
     private static String getXIDStartPattern(boolean negated) {
-        UnicodeSet xidStartSet = new UnicodeSet();
-        xidStartSet.applyPropertyAlias("XID_Start", "True");
-        String pattern = unicodeSetToJavaPattern(xidStartSet);
-        return wrapCharClass(pattern, negated);
+        return wrapCharClass(unicodeSetToJavaPattern(
+                PerlUnicodeResidualPropertyData.binarySet("XID_Start")), negated);
     }
 
-    // Helper method to get XID_Continue pattern using ICU4J
     private static String getXIDContinuePattern(boolean negated) {
-        UnicodeSet xidContSet = new UnicodeSet();
-        xidContSet.applyPropertyAlias("XID_Continue", "True");
-        String pattern = unicodeSetToJavaPattern(xidContSet);
-        return wrapCharClass(pattern, negated);
+        return wrapCharClass(unicodeSetToJavaPattern(
+                PerlUnicodeResidualPropertyData.binarySet("XID_Continue")), negated);
     }
 
     // Helper method to get XPosixSpace pattern using ICU4J
@@ -3675,21 +3679,21 @@ public class UnicodeResolver {
 
     // Helper method to get Perl's _IDStart pattern (XID_Start + underscore)
     private static String getPerlIDStartPattern(boolean negated) {
-        UnicodeSet perlIDStartSet = new UnicodeSet();
-        perlIDStartSet.applyPropertyAlias("XID_Start", "True");
-        perlIDStartSet.add('_'); // Add underscore
+        UnicodeSet perlIDStartSet = new UnicodeSet(
+                PerlUnicodeResidualPropertyData.binarySet("XID_Start"));
+        perlIDStartSet.add('_');
         String pattern = unicodeSetToJavaPattern(perlIDStartSet);
         return wrapCharClass(pattern, negated);
     }
 
     // Helper method to check if a character has XID_Start property
     public static boolean isXIDStart(int codePoint) {
-        return UCharacter.hasBinaryProperty(codePoint, UProperty.XID_START);
+        return PerlUnicodeResidualPropertyData.binarySet("XID_Start").contains(codePoint);
     }
 
     // Helper method to check if a character has XID_Continue property
     public static boolean isXIDContinue(int codePoint) {
-        return UCharacter.hasBinaryProperty(codePoint, UProperty.XID_CONTINUE);
+        return PerlUnicodeResidualPropertyData.binarySet("XID_Continue").contains(codePoint);
     }
 
     // Helper method to check XPosixSpace (Unicode whitespace)
@@ -3699,7 +3703,8 @@ public class UnicodeResolver {
 
     // Helper method to check _Perl_IDStart (XID_Start + underscore)
     public static boolean isPerlIDStart(int codePoint) {
-        return codePoint == '_' || UCharacter.hasBinaryProperty(codePoint, UProperty.XID_START);
+        return codePoint == '_'
+                || PerlUnicodeResidualPropertyData.binarySet("XID_Start").contains(codePoint);
     }
 
     // Helper methods for negation

@@ -16,8 +16,8 @@ import org.junit.jupiter.api.Test;
 @Tag("unit")
 class PerlUnicodeJoiningGroupDataTest {
     @Test
-    void usesChecksumPinnedPerl544Unicode17Sources() {
-        assertEquals("17.0.0", PerlUnicodeJoiningGroupData.UNICODE_VERSION);
+    void usesChecksumPinnedPerl545Unicode18Sources() {
+        assertEquals("18.0.0", PerlUnicodeJoiningGroupData.UNICODE_VERSION);
         assertEquals("bb67e0c00b88acfa5be633967b66b23326844a86e49c6fde7b57960d3af66cae",
                 PerlUnicodeJoiningGroupData.DJOIN_GROUP_SHA256);
         assertEquals("670d2bebb48649c04fabfbf033308073dcff47946324a8033237254c048b3b01",
@@ -47,7 +47,7 @@ class PerlUnicodeJoiningGroupDataTest {
     @Test
     void retainsEveryPinnedValueAndWildcardAlias() {
         String[] values = PerlUnicodeJoiningGroupData.canonicalValues();
-        assertEquals(106, values.length);
+        assertEquals(116, values.length);
         for (String value : values) {
             UnicodeSet set = PerlUnicodeJoiningGroupData.valueSet(value);
             assertNotNull(set, value);
@@ -57,7 +57,7 @@ class PerlUnicodeJoiningGroupDataTest {
         }
 
         String[] wildcardValues = PerlUnicodeJoiningGroupData.wildcardValues();
-        assertEquals(107, wildcardValues.length);
+        assertEquals(117, wildcardValues.length);
         for (String value : wildcardValues) {
             assertNotNull(PerlUnicodeJoiningGroupData.valueSet(value), value);
         }

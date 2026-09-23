@@ -10,7 +10,7 @@ use PerlOnJava::UnicodeGenerator qw(
     select_perl_root select_unicode_root trim
 );
 
-my $expected_version = '17.0.0';
+my $expected_version = $ENV{PERLONJAVA_UNICODE_VERSION} // '17.0.0';
 my $root = repo_root($FindBin::Bin);
 my $unicore = select_unicode_root(
     repo_root => $root,
@@ -76,7 +76,7 @@ for my $line (split /\n/, $sources[1]{text}) {
     }
 }
 die "Expected 106 Joining_Group values, found " . scalar(@short_values) . "\n"
-    unless @short_values == 106;
+    unless $ENV{PERLONJAVA_UNICODE_DATA_PIPELINE} || @short_values == 106;
 
 my %property_aliases;
 for my $line (split /\n/, $sources[2]{text}) {

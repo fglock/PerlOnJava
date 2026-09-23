@@ -32,25 +32,25 @@ import org.junit.Test;
 public class TestPerlUnicodeCaseFoldData {
     @Test
     public void preservesPinnedProvenanceAndExactCardinalities() {
-        assertEquals("17.0.0", PerlUnicodeCaseFoldData.UNICODE_VERSION);
+        assertEquals("18.0.0", PerlUnicodeCaseFoldData.UNICODE_VERSION);
         assertEquals("ff8d8fefbf123574205085d6714c36149eb946d717a0c585c27f0f4ef58c4183",
                 PerlUnicodeCaseFoldData.CASE_FOLDING_SHA256);
         assertEquals("efc25faf19de21b92c1194c111c932e03d2a5eaf18194e33f1156e96de4c9588",
                 PerlUnicodeCaseFoldData.SPECIAL_CASING_SHA256);
-        assertEquals("b2f896452d2b30da3e04800f478c60c1fd0b03d6b668689b020f1e3cf1f1cdd9",
+        assertEquals("1ce43daf54162d0a267412453ce2a613f60f3a7631365775cc52d34213251a83",
                 PerlUnicodeCaseFoldData.PERL_MULTI_FOLD_GENERATOR_SHA256);
-        assertEquals("20a6e3d507a66f4594586485568134873485b08e23383f3dc4e6b3047569267b",
+        assertEquals("2fe950c6526e41c25308da86647024cfe2a1a05108bb8b6a095ce8ab88f43eee",
                 PerlUnicodeCaseFoldData.PERL_INVERSION_GENERATOR_SHA256);
-        assertEquals("e3ac360c03d18779fea6d6497fbbe53798135da55e3764d3c9f90a79bbf7e8b5",
+        assertEquals("9931e372f6528f37dccad70cc9280a6a0fcb3b9afd08eba16f212360881c4ffd",
                 PerlUnicodeCaseFoldData.PERL_MKTABLES_SHA256);
-        assertEquals("c83c6471e7c188f21a20c6285af83f57d0bd09392f3243e4cc3743f0a5d5052c",
+        assertEquals("956ca2dbba6578d30b0627d0890b6818bde113bba3548c475f381475fbf74854",
                 PerlUnicodeCaseFoldData.PERL_INVERSION_DATA_SHA256);
-        assertEquals("b6005d471764b31d04063ccd561c88d165a2a30f9bae9b75172eb7b59672754e",
+        assertEquals("bb7f467fe4e71aa13664b3afa1d7066890e7f0ae16b9f83e721ae5a8d390e675",
                 PerlUnicodeCaseFoldData.PERL_REGCHARCLASS_SHA256);
-        assertEquals("852a8a7814f08a155d79fead2656fe2b4450ab17a2bce8a1127016119c9c3bc3",
+        assertEquals("cad98ca9e7be21f5f2a127f4f6304302e3ea1de98295124986eabd91ab2e9643",
                 PerlUnicodeCaseFoldData.PERL_REGCHARCLASS_GENERATOR_SHA256);
-        assertEquals(1585, PerlUnicodeCaseFoldData.fullMappingCount());
-        assertEquals(1482, PerlUnicodeCaseFoldData.simpleClassCount());
+        assertEquals(1606, PerlUnicodeCaseFoldData.fullMappingCount());
+        assertEquals(1502, PerlUnicodeCaseFoldData.simpleClassCount());
         assertEquals(73, PerlUnicodeCaseFoldData.reverseSequenceCount());
     }
 
@@ -79,7 +79,7 @@ public class TestPerlUnicodeCaseFoldData {
                 }
                 int reverseCount = PerlUnicodeCaseFoldData.reverseFullFoldSourceCount(
                         sequence, 0, sequence.length);
-                assertTrue(reverseCount >= 1 && reverseCount <= 2);
+                assertTrue(reverseCount >= 1 && reverseCount <= 3);
                 boolean found = false;
                 for (int index = 0; index < reverseCount; index++) {
                     found |= PerlUnicodeCaseFoldData.reverseFullFoldSourceAt(
@@ -88,9 +88,9 @@ public class TestPerlUnicodeCaseFoldData {
                 assertTrue(found);
             }
         }
-        assertEquals(1705, fullCodePoints);
-        assertEquals(104, multiSources);
-        assertEquals(88, lengthTwo);
+        assertEquals(1727, fullCodePoints);
+        assertEquals(105, multiSources);
+        assertEquals(89, lengthTwo);
         assertEquals(16, lengthThree);
     }
 
@@ -125,9 +125,9 @@ public class TestPerlUnicodeCaseFoldData {
                 memberCount++;
             }
         }
-        assertEquals(2994, memberCount);
-        assertEquals(1455, sizeTwo);
-        assertEquals(24, sizeThree);
+        assertEquals(3035, memberCount);
+        assertEquals(1474, sizeTwo);
+        assertEquals(25, sizeThree);
         assertEquals(3, sizeFour);
     }
 
@@ -152,7 +152,7 @@ public class TestPerlUnicodeCaseFoldData {
             previous = sequence;
             sequenceCodePoints += length;
             int count = PerlUnicodeCaseFoldData.reverseSourceCountAt(sequenceIndex);
-            assertTrue(count == 1 || count == 2);
+            assertTrue(count >= 1 && count <= 3);
             int previousSource = -1;
             for (int index = 0; index < count; index++) {
                 int source = PerlUnicodeCaseFoldData.reverseSourceAt(sequenceIndex, index);
@@ -162,13 +162,13 @@ public class TestPerlUnicodeCaseFoldData {
             }
         }
         assertEquals(160, sequenceCodePoints);
-        assertEquals(104, sourceCount);
+        assertEquals(105, sourceCount);
         assertEquals(65, components.size());
         assertFalse(PerlUnicodeCaseFoldData.isMultiFoldComponent('x'));
     }
 
     @Test
-    public void exposesSharpSGreekLigatureAndUnicode17Anchors() {
+    public void exposesSharpSGreekLigatureAndUnicode18Anchors() {
         assertFullFold(0x00df, 0x0073, 0x0073);
         assertFullFold(0x1e9e, 0x0073, 0x0073);
         assertFullFold(0x01f0, 0x006a, 0x030c);
@@ -180,12 +180,14 @@ public class TestPerlUnicodeCaseFoldData {
         assertSimpleSiblings(0x16ea0, 0x16ebb);
 
         int[] sharpS = {'s', 's'};
-        assertEquals(2, PerlUnicodeCaseFoldData.reverseFullFoldSourceCount(
+        assertEquals(3, PerlUnicodeCaseFoldData.reverseFullFoldSourceCount(
                 sharpS, 0, sharpS.length));
         assertEquals(0x00df, PerlUnicodeCaseFoldData.reverseFullFoldSourceAt(
                 sharpS, 0, sharpS.length, 0));
         assertEquals(0x1e9e, PerlUnicodeCaseFoldData.reverseFullFoldSourceAt(
                 sharpS, 0, sharpS.length, 1));
+        assertEquals(0x1df95, PerlUnicodeCaseFoldData.reverseFullFoldSourceAt(
+                sharpS, 0, sharpS.length, 2));
     }
 
     @Test

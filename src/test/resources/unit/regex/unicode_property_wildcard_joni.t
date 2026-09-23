@@ -24,6 +24,26 @@ ok(!defined($block_anchored), 'anchored Block wildcard remains a full match');
 ok(length($block_anchored_error),
     'unmatched anchored Block wildcard reports a compile error');
 
+SKIP: {
+    my $unicode_version = eval {
+        require Unicode::UCD;
+        Unicode::UCD::UnicodeVersion();
+    } // 0;
+    skip 'requires Unicode 18 Block aliases', 6
+        unless $unicode_version =~ /\A(?:1[89]|[2-9]\d)(?:\.|\z)/;
+
+    for my $case (
+        ['Bengali_Sup', 0x1CC0, 'Bengali Supplement short alias'],
+        ['Misc_Arrows_Ext', 0x1F800, 'Supplemental Arrows-C short alias'],
+        ['Music_Sup', 0x1D100, 'Musical Symbols short alias'],
+    ) {
+        my ($alias, $code_point, $label) = @$case;
+        my ($pattern, $error) = compile_property("Block=:\\A$alias\\z:");
+        ok(defined $pattern, "$label retains its published spelling") or diag($error);
+        ok(chr($code_point) =~ $pattern, "$label selects its block") if defined $pattern;
+    }
+}
+
 my ($script, $script_error) =
     compile_property('Script=:\A(?:Lat(in)?|Grek)\z:');
 ok(defined $script, 'anchored Script wildcard compiles') or diag($script_error);

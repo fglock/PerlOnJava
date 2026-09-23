@@ -2623,8 +2623,22 @@ class Parser extends Lexer {
                     newSyntaxException(PERL_EXTENDED_CLASS_UNEXPECTED_OPEN_PAREN);
                 }
                 if (extendedClassStarts("\\]")) {
-                    p += 2;
-                    newSyntaxException(PERL_EXTENDED_CLASS_UNEXPECTED_OUTER_CLOSE,
+                    // A separated escaped close is diagnosed as the outer-close
+                    // typo. Adjacent to a completed operand it is a second
+                    // operand, and Perl points between the escape and ']'.
+                    int previous = p > getBegin()
+                            ? enc.prevCharHead(bytes, getBegin(), p, stop) : -1;
+                    int previousCodePoint = previous < 0 ? -1
+                            : enc.mbcToCode(bytes, previous, stop);
+                    boolean separatedFromOperand = Character.isWhitespace(previousCodePoint)
+                            || previousCodePoint == 0x85;
+                    if (separatedFromOperand) {
+                        p += 2;
+                        newSyntaxException(PERL_EXTENDED_CLASS_UNEXPECTED_OUTER_CLOSE,
+                                p - getBegin());
+                    }
+                    p++;
+                    newSyntaxException(PERL_EXTENDED_CLASS_OPERAND_WITHOUT_OPERATOR,
                             p - getBegin());
                 }
                 int operandStart = p;

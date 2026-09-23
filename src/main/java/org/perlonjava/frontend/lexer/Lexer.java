@@ -80,10 +80,13 @@ public class Lexer {
         return cp == 0x088F || cp == 0x0C5C || cp == 0x0CDC || cp == 0x1885 || cp == 0x1886
                 || cp == 0x2118 || cp == 0x212E || cp == 0x3007 || cp == 0x3038 || cp == 0x3039 || cp == 0x303A
                 || cp == 0xA7CE || cp == 0xA7CF || cp == 0xA7D2 || cp == 0xA7D4 || cp == 0xA7F1
+                || cp == 0x0558 || cp == 0x058B || cp == 0x058C || cp == 0x208F
+                || cp == 0xA7DD || cp == 0xA7E2 || cp == 0xAB6C || cp == 0xAB6D
                 || (cp >= 0x16EE && cp <= 0x16F0)
                 || (cp >= 0x2160 && cp <= 0x217F)
                 || (cp >= 0x2180 && cp <= 0x2182)
                 || (cp >= 0x2185 && cp <= 0x2188)
+                || (cp >= 0x209D && cp <= 0x209F)
                 || (cp >= 0x3021 && cp <= 0x3029)
                 || (cp >= 0xA6E6 && cp <= 0xA6EF);
     }

@@ -41,6 +41,23 @@ is(scalar @$warnings, 1, 'short Line_Break alias warns once');
 like($warnings->[0], qr{Use of 'Is_Lb=  SG'},
     'short Line_Break alias preserves spelling');
 
+SKIP: {
+    my $unicode_version = eval {
+        require Unicode::UCD;
+        Unicode::UCD::UnicodeVersion();
+    } // 0;
+    skip 'requires Unicode 18 deprecated spelling rules', 4
+        unless $unicode_version =~ /\A(?:1[89]|[2-9]\d)(?:\.|\z)/;
+
+    ($value, $error, $warnings) = compile_probe(
+        qq{use warnings; qr/\\p{ \t Is_Hyphen}/; 1});
+    is($value, 1, 'spaced Is_Hyphen compiles');
+    is($error, '', 'spaced Is_Hyphen has no compile error');
+    is(scalar @$warnings, 1, 'spaced Is_Hyphen warns once');
+    like($warnings->[0], qr{Use of 'Is_Hyphen'},
+        'spaced Is_Hyphen retains its canonical spelling in the warning');
+}
+
 ($value, $error, $warnings) = compile_probe(
     q{use warnings; qr/\p{Hyphen=no}\P{Line_Break=surrogate}/; 1});
 is(scalar @$warnings, 2, 'two deprecated properties warn twice');

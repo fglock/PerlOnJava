@@ -9,7 +9,7 @@ use PerlOnJava::UnicodeGenerator qw(
     read_unicode_version repo_root select_perl_root select_unicode_root
 );
 
-my $expected_unicode_version = '17.0.0';
+my $expected_unicode_version = $ENV{PERLONJAVA_UNICODE_VERSION} // '17.0.0';
 my %expected_hash = (
     'extracted/DCombiningClass.txt' =>
         '191463abfbd202703c6fd6776a92a23ac44ec65e0476a7f95aa91ca492cef29b',

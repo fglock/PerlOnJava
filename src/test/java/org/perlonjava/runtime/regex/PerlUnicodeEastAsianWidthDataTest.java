@@ -23,8 +23,8 @@ class PerlUnicodeEastAsianWidthDataTest {
     };
 
     @Test
-    void usesChecksumPinnedPerl544Unicode17Sources() {
-        assertEquals("17.0.0", PerlUnicodeEastAsianWidthData.UNICODE_VERSION);
+    void usesChecksumPinnedPerl545Unicode18Sources() {
+        assertEquals("18.0.0", PerlUnicodeEastAsianWidthData.UNICODE_VERSION);
         assertEquals("0b5523a2217cb318d20b329a05d31eec5af5686ba09d263b85bb75a28989a3a8",
                 PerlUnicodeEastAsianWidthData.DEAST_ASIAN_WIDTH_SHA256);
         assertEquals("670d2bebb48649c04fabfbf033308073dcff47946324a8033237254c048b3b01",

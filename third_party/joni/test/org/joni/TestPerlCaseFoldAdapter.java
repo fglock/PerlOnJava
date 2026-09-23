@@ -37,9 +37,10 @@ public class TestPerlCaseFoldAdapter {
         assertEquals(0xa7cf, PerlCaseFold.simpleFoldClassCodePoint(0xa7ce, 1));
 
         int[] sharpS = {'s', 's'};
-        assertEquals(2, PerlCaseFold.reverseFullFoldSourceCount(sharpS, 0, 2));
+        assertEquals(3, PerlCaseFold.reverseFullFoldSourceCount(sharpS, 0, 2));
         assertEquals(0x00df, PerlCaseFold.reverseFullFoldSourceAt(sharpS, 0, 2, 0));
         assertEquals(0x1e9e, PerlCaseFold.reverseFullFoldSourceAt(sharpS, 0, 2, 1));
+        assertEquals(0x1df95, PerlCaseFold.reverseFullFoldSourceAt(sharpS, 0, 2, 2));
         assertTrue(PerlCaseFold.isMultiFoldComponent('s'));
         assertFalse(PerlCaseFold.isMultiFoldComponent('x'));
         assertTrue(PerlCaseFold.isTurkicSourceExcluded('I'));

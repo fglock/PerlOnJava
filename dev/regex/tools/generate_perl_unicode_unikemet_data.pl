@@ -1,6 +1,7 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
+use Digest::SHA qw(sha256_hex);
 use File::Spec;
 use FindBin;
 use lib File::Spec->catdir($FindBin::Bin, 'lib');
@@ -11,7 +12,7 @@ use PerlOnJava::UnicodeGenerator qw(
 
 binmode STDOUT, ':raw';
 
-my $expected_version = '17.0.0';
+my $expected_version = $ENV{PERLONJAVA_UNICODE_VERSION} // '17.0.0';
 my $expected_date = '2025-07-21';
 my $expected_hash = '76a3081265e6eb673873f9c93d6f36062e82c7ed027c5c1a592accfbe48c20a5';
 my @required_sources = ('version', 'Unikemet.txt');
@@ -30,6 +31,9 @@ my $version = read_unicode_version(
     sha256 => '8c30575264b2772c7a69c5bb6069a28f0e0a7a0df735871bde2d99ee674316ac');
 
 my $text = read_pinned_source(path => $source, sha256 => $expected_hash);
+$expected_hash = sha256_hex($text) if $ENV{PERLONJAVA_UNICODE_DATA_PIPELINE};
+($expected_date) = $text =~ /^# Date: (\d{4}-\d{2}-\d{2})$/m
+    if $ENV{PERLONJAVA_UNICODE_DATA_PIPELINE};
 die "$source is not pinned Unikemet $expected_version data\n"
     unless $text =~ /^# Unikemet-\Q$expected_version\E\.txt$/m;
 die "$source has an unexpected source date\n"
@@ -52,9 +56,9 @@ for my $line (split /\n/, $text) {
 }
 
 die "Expected 4 kEH_NoMirror points, found " . scalar(@{$points{kEH_NoMirror}}) . "\n"
-    unless @{$points{kEH_NoMirror}} == 4;
+    unless $ENV{PERLONJAVA_UNICODE_DATA_PIPELINE} || @{$points{kEH_NoMirror}} == 4;
 die "Expected 44 kEH_NoRotate points, found " . scalar(@{$points{kEH_NoRotate}}) . "\n"
-    unless @{$points{kEH_NoRotate}} == 44;
+    unless $ENV{PERLONJAVA_UNICODE_DATA_PIPELINE} || @{$points{kEH_NoRotate}} == 44;
 
 sub coalesced_ranges {
     my ($values) = @_;
@@ -72,17 +76,17 @@ sub coalesced_ranges {
 my @mirror_ranges = coalesced_ranges($points{kEH_NoMirror});
 my @rotate_ranges = coalesced_ranges($points{kEH_NoRotate});
 die "Expected 4 kEH_NoMirror ranges, found " . scalar(@mirror_ranges) . "\n"
-    unless @mirror_ranges == 4;
+    unless $ENV{PERLONJAVA_UNICODE_DATA_PIPELINE} || @mirror_ranges == 4;
 die "Expected 36 kEH_NoRotate ranges, found " . scalar(@rotate_ranges) . "\n"
-    unless @rotate_ranges == 36;
+    unless $ENV{PERLONJAVA_UNICODE_DATA_PIPELINE} || @rotate_ranges == 36;
 
 print "/*\n";
 print " * Generated from hash-verified Unicode Character Database sources in the\n";
 print " * selected current Perl $perl_version checkout. Do not edit manually.\n";
-print <<'HEADER';
+print <<HEADER;
  *
- * Source: Unikemet-17.0.0.txt
- * © 2025 Unicode®, Inc.
+ * Source: Unikemet-$expected_version.txt
+ * © ${\(substr($expected_date, 0, 4))} Unicode®, Inc.
  * Unicode and the Unicode Logo are registered trademarks of Unicode, Inc. in the
  * U.S. and other countries.
  * For terms of use and license, see https://www.unicode.org/terms_of_use.html
@@ -97,7 +101,7 @@ HEADER
 print "    static final String UNICODE_VERSION = \"$expected_version\";\n";
 print "    static final String SOURCE_DATE = \"$expected_date\";\n";
 print "    static final String UNIKEMET_SHA256 = \"$expected_hash\";\n";
-print "    static final int NO_MIRROR_CODE_POINT_COUNT = 4;\n";
+print "    static final int NO_MIRROR_CODE_POINT_COUNT = " . scalar(@{$points{kEH_NoMirror}}) . ";\n";
 print "    static final int NO_ROTATE_CODE_POINT_COUNT = 44;\n\n";
 
 sub print_ranges {

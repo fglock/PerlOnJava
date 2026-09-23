@@ -44,4 +44,15 @@ public class TestPerlExtendedClassEscapedClose {
                 error.getMessage());
         assertEquals(pattern.indexOf("\\]") + 2, error.getPatternPosition());
     }
+
+    @Test
+    public void diagnosesAdjacentEscapedCloseAsMissingOperator() {
+        String pattern = "(?[(?^:(?[\\x00]))\\]\\x00])";
+        byte[] bytes = pattern.getBytes(StandardCharsets.UTF_8);
+        SyntaxException error = assertThrows(SyntaxException.class,
+                () -> new Regex(bytes, 0, bytes.length, Option.NONE,
+                        UTF8Encoding.INSTANCE, Syntax.PerlNG, WarnCallback.NONE));
+        assertEquals("Operand with no preceding operator", error.getMessage());
+        assertEquals(pattern.indexOf("\\]") + 1, error.getPatternPosition());
+    }
 }

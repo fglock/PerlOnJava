@@ -586,7 +586,8 @@ public class StringDoubleQuoted extends StringSegmentParser {
     }
 
     private void warnDeprecatedUnicodeProperty(String sourceProperty) {
-        String spelling = sourceProperty.replaceFirst("^\\^?\\s*", "");
+        String sourceWithoutNegation = sourceProperty.replaceFirst("^\\^?", "");
+        String spelling = sourceWithoutNegation.replaceFirst("^\\s*", "");
         String[] assignment = spelling.split("[=:]", 2);
         String property = normalizeUnicodePropertyPart(assignment[0]);
         String value = assignment.length == 2
@@ -595,7 +596,8 @@ public class StringDoubleQuoted extends StringSegmentParser {
 
         if (property.equals("hyphen") || property.equals("ishyphen")) {
             boolean canonicalIsAlias = assignment.length == 1
-                    && (spelling.equals("IsHyphen") || spelling.equals("Is_Hyphen"));
+                    && (sourceWithoutNegation.equals("IsHyphen")
+                        || sourceWithoutNegation.equals("Is_Hyphen"));
             if (!canonicalIsAlias) {
                 reason = "Supplanted by Line_Break property values; "
                         + "see www.unicode.org/reports/tr14";
@@ -634,7 +636,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
     }
 
     private static String normalizeUnicodePropertyPart(String part) {
-        return part.replaceAll("[\\s_]", "")
+        return part.replaceAll("[\\s_-]", "")
                 .toLowerCase(java.util.Locale.ROOT);
     }
 

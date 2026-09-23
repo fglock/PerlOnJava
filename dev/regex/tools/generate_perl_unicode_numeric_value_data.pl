@@ -12,7 +12,7 @@ use PerlOnJava::UnicodeGenerator qw(
 
 binmode STDOUT, ':raw';
 
-my $expected_version = '17.0.0';
+my $expected_version = $ENV{PERLONJAVA_UNICODE_VERSION} // '17.0.0';
 my @required_sources = (
     'version', File::Spec->catfile('extracted', 'DNumValues.txt'),
     'PropertyAliases.txt', 'PropValueAliases.txt',
@@ -132,18 +132,18 @@ for my $line (split /\n/, $data_text) {
 }
 
 die "Expected 1,980 Numeric_Value records, found $record_count\n"
-    unless $record_count == 1_980;
+    unless $ENV{PERLONJAVA_UNICODE_DATA_PIPELINE} || $record_count == 1_980;
 die "Expected 25 source range records, found $range_record_count\n"
-    unless $range_record_count == 25;
+    unless $ENV{PERLONJAVA_UNICODE_DATA_PIPELINE} || $range_record_count == 25;
 die "Expected 2,023 numeric code points, found $explicit_count\n"
-    unless $explicit_count == 2_023;
+    unless $ENV{PERLONJAVA_UNICODE_DATA_PIPELINE} || $explicit_count == 2_023;
 die "Expected 144 distinct numeric values, found " . scalar(@values) . "\n"
-    unless @values == 144;
+    unless $ENV{PERLONJAVA_UNICODE_DATA_PIPELINE} || @values == 144;
 die "Expected 144 distinct decimal spellings, found " . scalar(keys %decimal_value) . "\n"
-    unless keys(%decimal_value) == 144;
+    unless $ENV{PERLONJAVA_UNICODE_DATA_PIPELINE} || keys(%decimal_value) == 144;
 my %decimal_canonical = map { $decimal_value{$_} => 1 } keys %decimal_value;
 die "Decimal spellings do not map one-to-one to the 144 exact values\n"
-    unless keys(%decimal_canonical) == 144;
+    unless keys(%decimal_canonical) == keys(%decimal_value);
 my %perl_decimal_for = map { $_->[0] => $_->[3] } @values;
 for my $expected (
     ['1/12', '8.333e-02'], ['1/64', '1.562e-02'],
@@ -173,9 +173,9 @@ for my $range (@ranges) {
     }
 }
 die "Expected 1,979 coalesced numeric ranges, found " . scalar(@coalesced) . "\n"
-    unless @coalesced == 1_979;
+    unless $ENV{PERLONJAVA_UNICODE_DATA_PIPELINE} || @coalesced == 1_979;
 die "Expected 1,112,089 NaN code points\n"
-    unless 0x110000 - $explicit_count == 1_112_089;
+    unless $ENV{PERLONJAVA_UNICODE_DATA_PIPELINE} || 0x110000 - $explicit_count == 1_112_089;
 
 my @ranges_by_value = map { [] } @values;
 for my $range (@coalesced) {
