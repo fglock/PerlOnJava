@@ -210,7 +210,16 @@ sub is_excluded_test_file {
     # Keep the upstream source available for reference, but do not run it as
     # part of the PerlOnJava compatibility corpus, even when named directly.
     $path =~ s{\\}{/}g;
-    return $path =~ m{(?:^|/)perl5_t/t/win32(?:/|$)};
+    return 1 if $path =~ m{(?:^|/)perl5_t/t/win32(?:/|$)};
+
+    # These core tests exercise Perl 5's native XS::APItest extension and
+    # C-level value-stack/MARK behavior.  PerlOnJava has no XS ABI, and the
+    # tests also require impractical multi-gigabyte allocations, so they are
+    # not portable compatibility tests.  Keep the upstream sources available
+    # for reference, but exclude them even when named directly.
+    return 1 if $path =~ m{(?:^|/)perl5_t/t/bigmem/(?:stack|stack_over)\.t$};
+
+    return 0;
 }
 
 sub run_tests_parallel {
