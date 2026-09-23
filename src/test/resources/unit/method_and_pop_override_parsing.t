@@ -62,6 +62,16 @@ use Test::More;
        'the root package spelling resolves main:::: methods after a stash alias');
 }
 
+{
+    eval { *MethodBareGlob::slot->missing; 1 };
+    like($@, qr/^Can't call method "missing" without a package or object reference/,
+         'a bare non-IO glob is not an object method invocant');
+
+    eval { (\*MethodBareGlob::slot)->missing; 1 };
+    like($@, qr/^Can't call method "missing" on unblessed reference/,
+         'a reference to a non-IO glob remains unblessed');
+}
+
 BEGIN {
     *LocalPopOverride::pop = sub { $main::pop_override_result = $_[0][0] };
 }

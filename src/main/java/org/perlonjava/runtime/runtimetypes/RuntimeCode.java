@@ -1338,6 +1338,29 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return inner.type == GLOB || inner.type == GLOBREFERENCE;
     }
 
+    private static RuntimeGlob globInvocant(RuntimeScalar invocant) {
+        if ((invocant.type == GLOB || invocant.type == GLOBREFERENCE)
+                && invocant.value instanceof RuntimeGlob glob) {
+            return glob;
+        }
+        if (invocant.type == REFERENCE && invocant.value instanceof RuntimeScalar inner) {
+            while (inner.type == READONLY_SCALAR) {
+                inner = (RuntimeScalar) inner.value;
+            }
+            if ((inner.type == GLOB || inner.type == GLOBREFERENCE)
+                    && inner.value instanceof RuntimeGlob glob) {
+                return glob;
+            }
+        }
+        return null;
+    }
+
+    private static boolean isOpenGlobInvocant(RuntimeScalar invocant) {
+        // Handles both stash-backed RuntimeGlob values and direct RuntimeIO
+        // glob references (used by pipes, sockets, and selected handles).
+        return RuntimeIO.getRuntimeIO(invocant) != null;
+    }
+
     public static boolean isLvalueCode(RuntimeCode code) {
         return code != null && code.attributes != null && code.attributes.contains("lvalue");
     }
@@ -4560,7 +4583,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Handle all reference types (REFERENCE, ARRAYREFERENCE, HASHREFERENCE, etc.)
             int blessId = ((RuntimeBase) invocant.value).blessId;
             if (blessId == 0) {
-                if (invocant.type == GLOBREFERENCE || isReferenceToGlobInvocant(invocant)) {
+                if ((invocant.type == GLOBREFERENCE || isReferenceToGlobInvocant(invocant))
+                        && isOpenGlobInvocant(invocant)) {
                     // Auto-bless file handler to IO::File which inherits from both IO::Handle and IO::Seekable
                     // This allows GLOBs to call methods like seek, tell, etc.
                     perlClassName = "IO::File";
@@ -4583,10 +4607,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 perlClassName = NameNormalizer.getBlessStr(blessId);
             }
         } else if (invocant.type == RuntimeScalarType.GLOB) {
-            // Bare typeglob used as method invocant (e.g., *FH->print(...))
-            // Auto-bless to IO::File, same as GLOBREFERENCE
-            perlClassName = "IO::File";
-            ModuleOperators.require(new RuntimeScalar("IO/File.pm"));
+            if (!isOpenGlobInvocant(invocant)) {
+                throw new PerlCompilerException("Can't call method \"" + methodName
+                        + "\" without a package or object reference");
+            }
+            // A bare filehandle method call supplies a glob reference as $self,
+            // matching the explicit \*FH form.
+            args.elements.removeFirst();
+            return call(((RuntimeGlob) invocant.value).createReference(), method,
+                    currentSub, args, callContext);
         } else if (!invocant.getDefinedBoolean()) {
             if (indirectBlockMethod) {
                 throw new PerlCompilerException("Can't call method \"" + methodName
