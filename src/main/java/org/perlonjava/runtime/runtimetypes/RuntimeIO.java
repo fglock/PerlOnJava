@@ -1455,8 +1455,11 @@ public class RuntimeIO extends RuntimeScalar {
             if (Warnings.warningManager.isWarningEnabled("syscalls") 
                     && !WarningFlags.isWarningSuppressedAtRuntime("syscalls")) {
                 String display = fileName.replace("\0", "\\0");
+                String message = opName.startsWith("@INC entry ")
+                        ? "Invalid \\0 character in " + opName + ": " + display
+                        : "Invalid \\0 character in pathname for " + opName + ": " + display;
                 WarnDie.warn(
-                        new RuntimeScalar("Invalid \\0 character in pathname for " + opName + ": " + display),
+                        new RuntimeScalar(message),
                         new RuntimeScalar("")
                 );
             }

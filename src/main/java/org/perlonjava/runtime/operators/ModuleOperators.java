@@ -492,7 +492,7 @@ public class ModuleOperators {
             if (tryDirectPath) {
                 // For absolute or explicit relative paths, resolve using RuntimeIO.getPath
                 filePath = RuntimeIO.resolvePath(fileName);
-                if (Files.exists(filePath)) {
+                if (Files.exists(filePath) || !Files.notExists(filePath)) {
                     // Check if it's a directory
                     if (Files.isDirectory(filePath)) {
                         GlobalVariable.setGlobalVariable("main::!", "Is a directory");
@@ -653,7 +653,7 @@ public class ModuleOperators {
                             }
                         }
                         Path fullPath = dirPath.resolve(fileName);
-                        if (Files.exists(fullPath)) {
+                        if (Files.exists(fullPath) || !Files.notExists(fullPath)) {
                             // Check if it's a directory
                             if (Files.isDirectory(fullPath)) {
                                 // Track that we found a directory (for EISDIR error)
