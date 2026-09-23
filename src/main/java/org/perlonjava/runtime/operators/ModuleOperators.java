@@ -1124,13 +1124,13 @@ public class ModuleOperators {
                 // Try to find the INC method or AUTOLOAD
                 try {
                     // Try direct INC method first
-                    RuntimeScalar method = GlobalVariable.getGlobalCodeRef(blessId + "::INC");
+                    RuntimeScalar method = GlobalVariable.getGlobalCodeRefForFreshLookup(blessId + "::INC");
                     if (method.defined().getBoolean() && method.type == RuntimeScalarType.CODE) {
                         codeRef = (RuntimeCode) method.value;
                         methodHook = true;
                     } else {
                         // Try AUTOLOAD
-                        method = GlobalVariable.getGlobalCodeRef(blessId + "::AUTOLOAD");
+                        method = GlobalVariable.getGlobalCodeRefForFreshLookup(blessId + "::AUTOLOAD");
                         if (method.defined().getBoolean() && method.type == RuntimeScalarType.CODE) {
                             // Set up $AUTOLOAD variable
                             GlobalVariable.getGlobalVariable(blessId + "::AUTOLOAD").set(blessId + "::INC");
@@ -1162,7 +1162,7 @@ public class ModuleOperators {
                     arrayHook = hook;
                     selfArg = firstElem;
                     String blessId = NameNormalizer.getBlessStr(firstBlessId);
-                    RuntimeScalar method = GlobalVariable.getGlobalCodeRef(blessId + "::INC");
+                    RuntimeScalar method = GlobalVariable.getGlobalCodeRefForFreshLookup(blessId + "::INC");
                     if (method.defined().getBoolean() && method.type == RuntimeScalarType.CODE) {
                         codeRef = (RuntimeCode) method.value;
                         methodHook = true;
@@ -1177,7 +1177,7 @@ public class ModuleOperators {
 
         if (codeRef == null && objectHook != null) {
             String blessId = NameNormalizer.getBlessStr(RuntimeScalarType.blessedId(objectHook));
-            RuntimeScalar incdir = GlobalVariable.getGlobalCodeRef(blessId + "::INCDIR");
+            RuntimeScalar incdir = GlobalVariable.getGlobalCodeRefForFreshLookup(blessId + "::INCDIR");
             if (incdir.defined().getBoolean() && incdir.type == RuntimeScalarType.CODE) {
                 RuntimeArray args = new RuntimeArray();
                 args.push(selfArg);
