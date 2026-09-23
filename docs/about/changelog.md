@@ -9,6 +9,10 @@ priorities and future plans.
 - Restore `Hash::Util::FieldHash` `:all` imports and scalar `id` semantics,
   unblocking Cache::Ref's LRU implementation.
 
+- Add a portable SQLite-backed DBM implementation for `dbmopen` and
+  `dbmclose`, including persistence, binary-safe values, tied-hash iteration,
+  and reopen support.
+
 - Allow valid Moo-style constant closures that capture an initialized lexical
   within a `BEGIN` block.
 

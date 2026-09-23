@@ -928,7 +928,10 @@ maintenance contract.
   `XSLoader` and pure-Perl fallbacks; see [XS Compatibility](xs-compatibility.md).
 - 🚧  **Auto-close files**: Lexical buffered writes and fd closure pass on the JVM backend, but the interpreter backend still permits reopening the fd after the lexical handle goes out of scope. Explicit close and program-end cleanup remain supported. See the [scope probe](../../dev/tools/feature-audit/autoclose_scope.t) and [fd probe](../../dev/tools/feature-audit/autoclose_fd.t).
 - ❌  **Keywords related to the control flow of the Perl program**: `dump` operator.
-- ❌  **DBM file support**: `dbmclose`, `dbmopen` are not implemented.
+- 🟡  **DBM file support**: `dbmopen` and `dbmclose` are implemented with a
+  PerlOnJava-native SQLite format supporting tied-hash persistence, iteration,
+  binary values, deletion, clearing, existence checks, and reopen. Native
+  Berkeley DB/SDBM/NDBM/GDBM file compatibility is not provided.
 - ❌  **Calling a class name** `package Test; Test->()` gives `Undefined subroutine &Test::Test called`.
 
 ---
