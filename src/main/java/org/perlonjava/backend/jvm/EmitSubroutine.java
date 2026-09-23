@@ -969,7 +969,7 @@ public class EmitSubroutine {
 
             if (!isLexicalSub) {
                 boolean strictRefs = emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS);
-                if (emitterVisitor.ctx.isLvalueSubroutine && strictRefs) {
+                if (strictRefs) {
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                             "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
                             "codeDerefStrict",
@@ -986,7 +986,7 @@ public class EmitSubroutine {
             }
         } else if (isBlockDeref) {
             boolean strictRefs = emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS);
-            if (emitterVisitor.ctx.isLvalueSubroutine && strictRefs) {
+            if (strictRefs) {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                         "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
                         "codeDerefStrict",

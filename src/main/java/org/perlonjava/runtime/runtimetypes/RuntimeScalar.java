@@ -3808,7 +3808,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return switch (type) {
             case TIED_SCALAR -> tiedFetch().codeDerefStrict();
             case READONLY_SCALAR -> ((RuntimeScalar) value).codeDerefStrict();
-            case STRING, BYTE_STRING -> throw new PerlCompilerException(
+            // Perl stringifies ordinary scalar values before rejecting them as
+            // symbolic CODE references under strict refs.  Numeric loop aliases
+            // therefore report the same diagnostic as an explicit string.
+            case INTEGER, DOUBLE, STRING, BYTE_STRING, VSTRING, BOOLEAN, DUALVAR -> throw new PerlCompilerException(
                     "Can't use string (\"" + toString()
                             + "\") as a subroutine ref while \"strict refs\" in use");
             case REFERENCE -> {

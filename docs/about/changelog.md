@@ -18,6 +18,9 @@ priorities and future plans.
 - Restore `require` compatibility for dynamic `@INC` hooks, failed-open
   diagnostics, and hook-provided source locations on both execution backends.
 
+- Restore strict-reference diagnostics for dynamic subroutine calls, including
+  numeric scalar invocants and both execution backends.
+
 - Restore `Hash::Util::FieldHash` `:all` imports and scalar `id` semantics,
   unblocking Cache::Ref's LRU implementation.
 

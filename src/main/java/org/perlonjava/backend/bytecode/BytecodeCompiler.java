@@ -5928,15 +5928,11 @@ public class BytecodeCompiler implements Visitor {
                 int valueReg = lastResultReg;
 
                 int rd = allocateOutputRegister();
-                // Only lvalue subroutine calls need the strict dereference
-                // here. Other dynamic CODE references retain their established
-                // dispatch path (including module-loading callbacks).
                 // A lazily materialized named sub compiles this body with its
                 // own symbol table.  Consult that table so a `use strict
                 // 'refs'` inside the body is visible here rather than the
                 // enclosing emitter context's earlier pragma snapshot.
-                if (symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS)
-                        && isCompilingLvalueSubroutine()) {
+                if (symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS)) {
                     emit(Opcodes.CODE_DEREF_STRICT);
                     emitReg(rd);
                     emitReg(valueReg);

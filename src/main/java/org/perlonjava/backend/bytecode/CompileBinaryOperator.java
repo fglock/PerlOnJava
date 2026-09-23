@@ -514,30 +514,25 @@ public class CompileBinaryOperator {
             bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.SCALAR);
             int rs1 = bytecodeCompiler.lastResultReg;
 
-            // A dynamic `$sub(...)` call under `no strict 'refs'` is a CODE
-            // dereference before it is a call.  In an lvalue subroutine, a
-            // lexical `use strict 'refs'` must reject the same scalar before
-            // dispatching the call.  Other strict calls retain the general
-            // dispatch path, including its overloaded-CODE behavior.
+            // A dynamic `$sub(...)` call is a CODE dereference before it is a
+            // call.  Under strict refs, a string invocant must be rejected
+            // before dispatch; otherwise it is resolved as a symbolic CODE ref.
             if (node.left instanceof OperatorNode op && op.operator.equals("$")
                     && (op.getAnnotation("hiddenVarName") == null || bytecodeCompiler.evalBlockDepth == 0)) {
-                boolean strictLvalueCall = bytecodeCompiler.isStrictRefsEnabled()
-                        && bytecodeCompiler.isCompilingLvalueSubroutine();
-                if (!bytecodeCompiler.isStrictRefsEnabled() || strictLvalueCall) {
-                    int codeRefReg = bytecodeCompiler.allocateRegister();
-                    if (strictLvalueCall) {
-                        bytecodeCompiler.emit(Opcodes.CODE_DEREF_STRICT);
-                        bytecodeCompiler.emitReg(codeRefReg);
-                        bytecodeCompiler.emitReg(rs1);
-                    } else {
-                        int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
-                        bytecodeCompiler.emit(Opcodes.CODE_DEREF_NONSTRICT);
-                        bytecodeCompiler.emitReg(codeRefReg);
-                        bytecodeCompiler.emitReg(rs1);
-                        bytecodeCompiler.emit(pkgIdx);
-                    }
-                    rs1 = codeRefReg;
+                boolean strictRefs = bytecodeCompiler.isStrictRefsEnabled();
+                int codeRefReg = bytecodeCompiler.allocateRegister();
+                if (strictRefs) {
+                    bytecodeCompiler.emit(Opcodes.CODE_DEREF_STRICT);
+                    bytecodeCompiler.emitReg(codeRefReg);
+                    bytecodeCompiler.emitReg(rs1);
+                } else {
+                    int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                    bytecodeCompiler.emit(Opcodes.CODE_DEREF_NONSTRICT);
+                    bytecodeCompiler.emitReg(codeRefReg);
+                    bytecodeCompiler.emitReg(rs1);
+                    bytecodeCompiler.emit(pkgIdx);
                 }
+                rs1 = codeRefReg;
             }
 
             int savedCallerLineOverride = bytecodeCompiler.callerLineTokenOverride;
