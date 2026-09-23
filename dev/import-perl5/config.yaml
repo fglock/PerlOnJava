@@ -941,6 +941,7 @@ imports:
   # Must have 'no strict refs' at package level for mycan() to work
   - source: perl5/lib/overload.pm
     target: src/main/perl/lib/overload.pm
+    patch: overload.pm.patch
 
   # overloading pragma - Lexically disable overloading
   - source: perl5/lib/overloading.pm

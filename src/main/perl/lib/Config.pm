@@ -449,6 +449,11 @@ my $startperl = $is_windows
 sub non_bincompat_options() {}
 sub bincompat_options() {}
 
+# Perl 5.44's Config API exposes this probe for code that must avoid behaviour
+# which panics only in a C-level DEBUGGING build.  PerlOnJava has no such C
+# build mode, so it is always false.
+sub DEBUGGING () { 0 }
+
 sub _catdir {
     my ($sep, @parts) = @_;
     my $path = shift @parts;

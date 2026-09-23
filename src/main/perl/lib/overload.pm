@@ -47,7 +47,10 @@ sub OVERLOAD {
                 ${$sym} = $sub;
                 $sub = \&nil;
             }
-            if (defined &$sym
+            # PerlOnJava's class compilation initializes version's built-in
+            # overload slots before version.pm installs its operators.
+            # Those are not user redefinitions and must remain silent.
+            if ($package ne 'version' && defined &$sym
                 && (\&$sym != \&nil ||
                     defined $$sym && $$sym ne "")) {
                 warnings::warnif("redefine", "overload '$_' for $package redefined");
