@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore `Hash::Util::FieldHash` `:all` imports and scalar `id` semantics,
+  unblocking Cache::Ref's LRU implementation.
+
 - Allow valid Moo-style constant closures that capture an initialized lexical
   within a `BEGIN` block.
 

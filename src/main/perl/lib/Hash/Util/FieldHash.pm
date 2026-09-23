@@ -9,6 +9,7 @@ our @EXPORT_OK = qw(
     idhash idhashes
     id id_2obj register
 );
+our %EXPORT_TAGS = (all => \@EXPORT_OK);
 
 use Scalar::Util ();
 
@@ -50,8 +51,10 @@ sub idhashes {
     return @_;
 }
 
-# id() returns the reference address (like Scalar::Util::refaddr)
+# id() returns scalar values unchanged and reference addresses for references.
 sub id ($) {
+    return $_[0] unless ref $_[0];
+
     require Scalar::Util;
     return Scalar::Util::refaddr($_[0]);
 }
