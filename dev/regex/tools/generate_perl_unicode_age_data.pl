@@ -10,7 +10,7 @@ use PerlOnJava::UnicodeGenerator qw(
     verify_unicode_notice
 );
 
-my $expected_unicode_version = $ENV{PERLONJAVA_UNICODE_VERSION} // '17.0.0';
+my $expected_unicode_version = '17.0.0';
 my $root = repo_root($FindBin::Bin);
 my $unicode_root = select_unicode_root(
     repo_root => $root, version => $expected_unicode_version,
@@ -45,8 +45,8 @@ for (split /\n/, $age_text) {
     }
 }
 
-die "Age data does not end at Unicode $expected_unicode_version\n"
-    unless @versions && $versions[-1] eq join('.', (split /\./, $expected_unicode_version)[0, 1]);
+die "Age data does not end at Unicode 17.0\n"
+    unless @versions && $versions[-1] eq '17.0';
 
 print "/*\n";
 print " * Generated from hash-verified Unicode Character Database sources in the\n";

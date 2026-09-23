@@ -33,8 +33,8 @@ class PerlUnicodeDecompositionTypeDataTest {
     };
 
     private static final long[] COUNTS = {
-        13_253, 721, 240, 240, 1_231, 20, 171, 238, 82,
-        122, 5, 1_096_958, 26, 286, 68, 308, 39, 104,
+        13_253, 720, 240, 240, 1_230, 20, 171, 238, 82,
+        122, 5, 1_097_026, 26, 286, 64, 250, 35, 104,
     };
 
     private static final String[][] ALIASES = {
@@ -59,8 +59,8 @@ class PerlUnicodeDecompositionTypeDataTest {
     };
 
     @Test
-    public void usesCurrentImportedUnicodeValuesAndBoundaries() {
-        assertEquals("18.0.0", PerlUnicodeDecompositionTypeData.UNICODE_VERSION);
+    public void usesPinnedUnicode17ValuesAndBoundaries() {
+        assertEquals("17.0.0", PerlUnicodeDecompositionTypeData.UNICODE_VERSION);
         assertEquals(PerlUnicodeDecompositionTypeData.NONE, PerlUnicodeDecompositionTypeData.propertyOf(0x0041));
         assertEquals(PerlUnicodeDecompositionTypeData.COMPAT, PerlUnicodeDecompositionTypeData.propertyOf(0x00A8));
         assertEquals(PerlUnicodeDecompositionTypeData.CANONICAL, PerlUnicodeDecompositionTypeData.propertyOf(0x00C0));
@@ -78,7 +78,7 @@ class PerlUnicodeDecompositionTypeDataTest {
 
     @Test
     public void completelyPartitionsEveryUnicodeCodePoint() {
-        assertEquals(1_224, PerlUnicodeDecompositionTypeData.rangeCount());
+        assertEquals(1_212, PerlUnicodeDecompositionTypeData.rangeCount());
         assertEquals(0, PerlUnicodeDecompositionTypeData.rangeStart(0));
         assertEquals(0x10FFFF, PerlUnicodeDecompositionTypeData.rangeEnd(
                 PerlUnicodeDecompositionTypeData.rangeCount() - 1));
@@ -116,8 +116,8 @@ class PerlUnicodeDecompositionTypeDataTest {
             }
         }
         assertArrayEquals(COUNTS, actualCounts);
-        assertEquals(1_224, transitions);
-        assertEquals(3_901, nonCanonical);
+        assertEquals(1_212, transitions);
+        assertEquals(3_833, nonCanonical);
     }
 
     @Test

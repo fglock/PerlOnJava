@@ -94,7 +94,7 @@ for my $relative (keys %source_hash) {
 for my $entry (@entries) {
     while (my ($relative, $hash) = each %{$entry->{sources} // {}}) {
         die "Conflicting SHA-256 pins for $relative\n"
-            if !$refresh && exists $source_hash{$relative} && $source_hash{$relative} ne $hash;
+            if exists $source_hash{$relative} && $source_hash{$relative} ne $hash;
         $source_hash{$relative} = $hash;
     }
 }
@@ -102,7 +102,7 @@ my %perl_source_hash;
 for my $entry (@entries) {
     while (my ($relative, $hash) = each %{$entry->{perl_sources} // {}}) {
         die "Conflicting Perl source SHA-256 pins for $relative\n"
-            if !$refresh && exists $perl_source_hash{$relative} && $perl_source_hash{$relative} ne $hash;
+            if exists $perl_source_hash{$relative} && $perl_source_hash{$relative} ne $hash;
         $perl_source_hash{$relative} = $hash;
     }
 }
@@ -245,12 +245,6 @@ sub run_generator {
     my ($script, $source_root, $pinned_perl_root) = @_;
     local %ENV = %ENV;
     $ENV{PERLONJAVA_UNICODE_ROOT} = $source_root;
-    if ($refresh) {
-        $ENV{PERLONJAVA_UNICODE_REFRESH} = 1;
-        $ENV{PERLONJAVA_UNICODE_VERSION} = read_raw(
-            File::Spec->catfile($source_root, 'version'));
-        $ENV{PERLONJAVA_UNICODE_VERSION} =~ s/\s+\z//;
-    }
     if (defined $pinned_perl_root) {
         $ENV{PERLONJAVA_PERL_ROOT} = $pinned_perl_root;
     } else {

@@ -94,9 +94,8 @@ sub read_pinned_source {
     my $text = read_raw($path);
     my $actual_hash = sha256_hex($text);
     die "$path SHA-256 mismatch: expected $expected_hash, found $actual_hash\n"
-        unless $ENV{PERLONJAVA_UNICODE_REFRESH} || $actual_hash eq $expected_hash;
-    if (!$ENV{PERLONJAVA_UNICODE_REFRESH}
-            && (my $version_pattern = $args{version_pattern})) {
+        unless $actual_hash eq $expected_hash;
+    if (my $version_pattern = $args{version_pattern}) {
         die "$path is not pinned Unicode $args{unicode_version} data\n"
             unless $text =~ $version_pattern;
     }
@@ -111,8 +110,7 @@ sub read_unicode_version {
         ? read_pinned_source(path => $path, sha256 => $args{sha256})
         : read_raw($path);
     $text =~ s/\s+\z//;
-    die "Expected Unicode $expected, found '$text' in $path\n"
-        unless $ENV{PERLONJAVA_UNICODE_REFRESH} || $text eq $expected;
+    die "Expected Unicode $expected, found '$text' in $path\n" unless $text eq $expected;
     return $text;
 }
 
@@ -221,7 +219,7 @@ sub verify_unicode_notice {
         $text = read_raw($path);
     }
     die "$path does not preserve the Unicode copyright notice\n"
-        unless $text =~ /^# © \d{4} Unicode®, Inc\.$/m;
+        unless $text =~ /^# © 2025 Unicode®, Inc\.$/m;
     die "$path does not preserve the Unicode trademark notice\n"
         unless $text =~ /^# Unicode and the Unicode Logo are registered trademarks of Unicode, Inc\. in the U\.S\. and other countries\.$/m;
     die "$path does not preserve the Unicode terms notice\n"

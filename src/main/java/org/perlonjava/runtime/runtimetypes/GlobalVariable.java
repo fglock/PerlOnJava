@@ -1330,11 +1330,8 @@ public class GlobalVariable {
     }
 
     public static void aliasForeachGlobalVariable(String key, RuntimeScalar var) {
-        GlobalRuntimeState state = globalState();
-        Map<String, RuntimeScalar> aliases = state.foreachScalarAliases();
-        clearForeachGlobalAlias(aliases, key);
-        Map<String, RuntimeScalar> scalars = state.scalarValues();
-        RuntimeScalar previous = scalars.get(key);
+        clearForeachGlobalAlias(key);
+        RuntimeScalar previous = globalVariables.get(key);
         if (var instanceof RuntimeScalarReadOnly || var.type == RuntimeScalarType.READONLY_SCALAR) {
             if (var instanceof RuntimeScalarReadOnly readOnly) {
                 readOnly.installForeachRestore(key, previous);
@@ -1346,18 +1343,14 @@ public class GlobalVariable {
             var = new ReadOnlyAlias(var, key, previous);
         }
         retainForeachAlias(var);
-        aliases.put(key, var);
+        foreachGlobalAliases().put(key, var);
         markPackageGlobalRoot(var);
-        scalars.put(key, var);
+        globalVariables.put(key, var);
         invalidatePackageRootSnapshot();
     }
 
     public static void clearForeachGlobalAlias(String key) {
-        clearForeachGlobalAlias(globalState().foreachScalarAliases(), key);
-    }
-
-    private static void clearForeachGlobalAlias(Map<String, RuntimeScalar> aliases, String key) {
-        RuntimeScalar previous = aliases.remove(key);
+        RuntimeScalar previous = foreachGlobalAliases().remove(key);
         if (previous != null) {
             releaseForeachAlias(previous);
         }
@@ -1365,9 +1358,8 @@ public class GlobalVariable {
 
     /** Restore the global topic scalar after an implicit foreach alias. */
     public static void restoreForeachGlobalVariable(String key, RuntimeScalar value) {
-        GlobalRuntimeState state = globalState();
-        clearForeachGlobalAlias(state.foreachScalarAliases(), key);
-        state.scalarValues().put(key, value);
+        clearForeachGlobalAlias(key);
+        globalVariables.put(key, value);
         invalidatePackageRootSnapshot();
     }
 

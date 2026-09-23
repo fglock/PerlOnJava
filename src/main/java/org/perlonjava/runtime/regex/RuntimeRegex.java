@@ -3376,7 +3376,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Look up pos() for /g matches and for non-/g matches that use \G.
         // In Perl, \G anchors at pos() even in non-/g matches (e.g. $str =~ /\Gfoo/).
         RuntimeScalar posScalar = null;
-        RuntimePosLvalue.RegexPosition matchPosition = null;
         boolean isPosDefined = false;
         int startPos = 0;
         int globalAnchorPosition = 0;
@@ -3388,11 +3387,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         
         if (regex.regexFlags.isGlobalMatch() || regex.useGAssertion) {
             // Use RuntimePosLvalue to get the current position
-            matchPosition = RuntimePosLvalue.beginRegexPosition(string);
-            posScalar = RuntimePosLvalue.position(matchPosition);
+            posScalar = RuntimePosLvalue.pos(string);
             isPosDefined = posScalar.getDefinedBoolean();
             positionPublishedByMatcher = isPosDefined
-                    && RuntimePosLvalue.wasPublishedByMatcher(matchPosition);
+                    && RuntimePosLvalue.wasPublishedByMatcher(string);
             startPos = isPosDefined
                     ? RuntimePosLvalue.toMatcherOffset(
                             inputValue, inputStr, posScalar.getInt())
@@ -3408,7 +3406,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             if (regex.regexFlags.isGlobalMatch() && ctx == RuntimeContextType.SCALAR) {
                 String patternKey = regex.patternString;
                 if (RuntimePosLvalue.hadZeroLengthMatchAt(
-                        matchPosition, posScalar.getInt())) {
+                        string, posScalar.getInt(), patternKey)) {
                     // First, try the notempty variant at the SAME position (Perl behavior)
                     RegexMatcher notemptyMatcher = findNonEmptyGlobalRetry(
                             regex, inputValue, string, inputStr, startPos);
@@ -3416,7 +3414,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     if (notemptySucceeded) {
                         matcher = notemptyMatcher;
                         skipFirstFind = true;
-                        RuntimePosLvalue.recordNonZeroLengthMatch(matchPosition);
+                        RuntimePosLvalue.recordNonZeroLengthMatch(string);
                     }
                     
                     if (!notemptySucceeded) {
@@ -3425,8 +3423,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         if (startPos > inputStr.length()) {
                             // Past end of string, fail
                             if (!regex.regexFlags.keepCurrentPosition()) {
-                                RuntimePosLvalue.publishMatchPosition(
-                                        matchPosition, string, scalarUndef);
+                                RuntimePosLvalue.publishMatchPosition(string, scalarUndef);
                             }
                             return RuntimeScalarCache.scalarFalse;
                         }
@@ -3434,7 +3431,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         // match until this bumped search actually succeeds.
                         // In particular, /gc must preserve the old pos when
                         // an anchored retry fails.
-                        RuntimePosLvalue.recordNonZeroLengthMatch(matchPosition);
+                        RuntimePosLvalue.recordNonZeroLengthMatch(string);
                         isPosDefined = true;
                         bumpedAfterEmptyRetry = true;
                     }
@@ -3563,14 +3560,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         if (posScalar != null) {
                             int perlMatchEnd = RuntimePosLvalue.fromMatcherOffset(
                                     inputValue, inputStr, matchEnd);
-                            RuntimePosLvalue.publishMatchPosition(
-                                    matchPosition, string, perlMatchEnd);
+                            RuntimePosLvalue.publishMatchPosition(string, perlMatchEnd);
                             // Record zero-length match for cross-call tracking
                             if (matchEnd == matchStart) {
                                 RuntimePosLvalue.recordZeroLengthMatch(
-                                        matchPosition, perlMatchEnd);
+                                        string, perlMatchEnd, regex.patternString);
                             } else {
-                                RuntimePosLvalue.recordNonZeroLengthMatch(matchPosition);
+                                RuntimePosLvalue.recordNonZeroLengthMatch(string);
                             }
                         }
                         break; // Break out of the loop after the first match in SCALAR context
@@ -3578,7 +3574,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         startPos = matchEnd;
                         if (nativeGlobalPosition) matcher.setGlobalPosition(startPos);
                         if (posScalar != null) {
-                            RuntimePosLvalue.publishMatchPosition(matchPosition, string,
+                            RuntimePosLvalue.publishMatchPosition(string,
                                     RuntimePosLvalue.fromMatcherOffset(
                                             inputValue, inputStr, startPos));
                         }
@@ -3624,7 +3620,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // Reset pos() on failed match with /g, unless /c is set
         if (!found && regex.regexFlags.isGlobalMatch() && !regex.regexFlags.keepCurrentPosition() && posScalar != null) {
-            RuntimePosLvalue.publishMatchPosition(matchPosition, string, scalarUndef);
+            RuntimePosLvalue.publishMatchPosition(string, scalarUndef);
         }
 
         // Debug logging
@@ -3663,7 +3659,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     && ctx == RuntimeContextType.LIST
                     && !regex.regexFlags.keepCurrentPosition()
                     && posScalar != null) {
-                RuntimePosLvalue.publishMatchPosition(matchPosition, string, scalarUndef);
+                RuntimePosLvalue.publishMatchPosition(string, scalarUndef);
             }
             // System.err.println("DEBUG: Match completed, regexState.globalMatcher is " + (regexState.globalMatcher == null ? "null" : "set"));
         } else {

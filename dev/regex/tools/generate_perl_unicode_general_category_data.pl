@@ -9,7 +9,7 @@ use PerlOnJava::UnicodeGenerator qw(
     read_unicode_version repo_root select_perl_root select_unicode_root
 );
 
-my $expected_unicode_version = $ENV{PERLONJAVA_UNICODE_VERSION} // '17.0.0';
+my $expected_unicode_version = '17.0.0';
 my %expected_hash = (
     'extracted/DGeneralCategory.txt' =>
         'd62e5bab70ca74f099343f71224fa051cb1fdd61a1ab45c0488c44cfc0b6102e',

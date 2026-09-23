@@ -9,7 +9,7 @@ use PerlOnJava::UnicodeGenerator qw(
     verify_unicode_notice
 );
 
-my $expected_version = $ENV{PERLONJAVA_UNICODE_VERSION} // '17.0.0';
+my $expected_version = '17.0.0';
 my $version_hash = '8c30575264b2772c7a69c5bb6069a28f0e0a7a0df735871bde2d99ee674316ac';
 my %sources = (
     Line_Break => ['LineBreak.txt',

@@ -15,34 +15,16 @@ acceptance from a host-noise override or a partial workload result.
 ## Measurement conditions
 
 Performance measurements run on a deliberately loaded production simulation.
-The production load is part of the condition being measured, rather than a
-reason to wait for an idle host. Use the same load scenario, runner, standard
-Perl executable, runtime options, source/JAR identity, power mode, and process
-priority for parent and candidate. Capture the active-worker count, CPU load,
-and process niceness at the start and end of every fresh process.
+Use the same load scenario, runner, standard Perl executable, runtime options,
+and source/JAR identity for parent and candidate. Run suites sequentially,
+alternate order where possible, and preserve raw portfolios, checksums, host
+metadata, and analysis output.
 
-The default portfolio runner uses fresh processes, at least a twenty-second
-fixed JVM warmup, and seven independent comparison blocks per workload. A
-block has a balanced parent/candidate/candidate/parent order; alternate the
-initial order between blocks. A fixed warmup separates JIT preparation from
-measurement. Per-window variation is recorded as production-load information;
-it is not by itself evidence that the JVM has failed to warm up.
-
-Before comparing a new candidate, run the same build against itself in the
-identical block order. This A/A calibration establishes the host's paired
-noise envelope for every workload. Candidate evidence is usable only when its
-paired improvement exceeds that envelope, survives a paired bootstrap interval,
-and the checksums match. A result that overlaps the A/A envelope is
-inconclusive, even when its unpaired median looks favorable. Use longer
-measurement windows or more independent blocks when the calibration cannot
-resolve the required gain; do not select only quiet windows.
-
-Final throughput claims use normal, unprofiled runs. JFR is a bounded,
-separate diagnostic capture: use it to identify recurring CPU, allocation, GC,
-lock, and compilation costs under representative load, then validate any
-change with the unprofiled paired protocol. `--allow-noisy-host` preserves
-diagnostic analysis but never converts a single noisy portfolio into an
-acceptance result.
+The default portfolio runner uses seven alternating fresh-process Perl and
+PerlOnJava pairs per workload, 10--60 one-second warmup windows, and fifteen
+one-second measurement windows. Final throughput claims use normal runs; JFR
+is for diagnosis. `--allow-noisy-host` preserves diagnostic analysis under the
+intended load but never converts noisy evidence into an acceptance result.
 
 ## Delivery discipline
 
@@ -57,9 +39,6 @@ acceptance result.
 - Keep measured checkouts immutable until every benchmark child exits. A
   prematurely returned observation tool is not permission to restart a live
   benchmark or modify its source.
-- Keep competing production jobs at the agreed low priority and record their
-  actual niceness. Do not pause, kill, or otherwise reshape the production
-  workload to make a benchmark look cleaner.
 
 ## Current retained change: static literal match-wrapper cache
 
@@ -98,26 +77,9 @@ Semantic validation for the exact implementation source:
   an incremental, qualified delivery result rather than an official parity
   acceptance claim.
 
-## Production A/A calibration pilot (2026-09-22)
-
-Four fresh same-JAR Method runs used the existing authority workload under the
-normal production load, at nice +19, with twenty fixed one-second warmup
-windows and fifteen one-second measurement windows. All runs produced the
-same semantic checksum (`4352`). Their median throughputs were 1,077,020,
-990,036, 851,929, and 598,918 operations/s. The first adjacent same-build
-pair had a 0.919 ratio; the second had a 0.703 ratio. Only the first two runs
-met the former throughput-based warmup rule.
-
-This is not a candidate comparison or a complete seven-block calibration. It
-does establish that a lone apparently stabilized pair can vary by at least 8%
-under the intended load, while the fixed warmup rule alone cannot separate JIT
-state from changing host contention. The current authority script also lacks
-per-process host-state snapshots. Extend that tooling before treating
-single-pair or quiet-window results as useful performance evidence.
-
 ## Progress tracking
 
-### Current status: Phase 3, production-load measurement protocol defined
+### Current status: Phase 2, regex delivery candidate validated
 
 ### Completed phases
 
@@ -127,32 +89,21 @@ single-pair or quiet-window results as useful performance evidence.
   - Added focused recursive-cache and runtime-isolation coverage.
   - Ran standard-Perl regressions, full `make`, focused production brackets,
     and a complete parent/candidate production portfolio.
-- [x] Define production-load calibration and paired-comparison policy
-  (2026-09-22)
-  - Treat host variability as measured uncertainty, not a blanket blocker.
-  - Require A/A calibration, balanced fresh-process blocks, host-state
-    capture, and unprofiled validation of profiler-selected changes.
-- [x] Run the first production A/A calibration pilot (2026-09-22)
-  - Same-build Method throughput moved 8.1% across the first adjacent pair and
-    29.7% across the second; retain it only as a lower bound on host variation.
 
 ### Next steps
 
-1. Extend the portfolio runner and analyzer to emit the host-state snapshots,
-   execute balanced parent/candidate blocks, and calculate paired A/A and
-   candidate bootstrap intervals.
-2. Calibrate the current delivery build under the normal production workload;
-   use the result to set the smallest resolvable workload gain before selecting
-   another optimization.
-3. Continue profiling the remaining String and Life gaps from the delivered
-   source baseline, targeting independently measured broad costs. Validate each
-   retained candidate with the calibrated unprofiled protocol.
+1. Publish the focused static-match cache PR with its qualified evidence and
+   exact tested commits; do not represent the noisy portfolios as parity proof.
+2. Continue profiling the remaining String and Life gaps from the delivered
+   source baseline, targeting independently measured broad costs.
+3. For any future retained candidate, repeat source-matched semantic gates and
+   a complete portfolio under the same production-load protocol.
 
 ### Open questions
 
-- What precision does A/A calibration achieve for each workload at the current
-  worker count and power mode? The answer determines the required block count
-  or window duration for a candidate claim.
+- The production-load protocol intentionally produces `noisy-paired` results.
+  Establish a recorded production-load stability policy before making an
+  authoritative portfolio acceptance claim.
 - String and Life remain below standard Perl in the historical orientation
   portfolio and require separate cost attribution; do not widen experimental
   native-array representations without a general ownership proof.
@@ -164,8 +115,8 @@ under the intended load demonstrates every scored workload at or above 1.00x
 with a 95% lower confidence bound at least 1.00x, a portfolio geometric mean of
 at least 1.05x with its interval wholly above 1.00x, Closure and Life each at
 least 1.05x with intervals wholly above 1.00x, and no workload below 0.90x.
-Checksums, fixed warmup, A/A-calibrated paired evidence, semantic tests, and
-backend parity must also pass. JFR timing does not count toward this proof.
+Checksums, protocol validity, warmup, semantic tests, and backend parity must
+also pass.
 
 ## References
 

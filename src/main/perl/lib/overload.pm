@@ -1,7 +1,6 @@
 package overload 1.42;
 
 use v5.42;
-use warnings ();
 no strict 'refs';
 
 our %ops = (
@@ -21,11 +20,6 @@ our %ops = (
     matching            => '~~',
     special             => 'nomethod fallback =',
 );
-
-# A runtime bootstrap may install an overload table before its Perl module is
-# loaded.  The module sets this one-shot marker while replacing that table;
-# ordinary user redefinitions continue to use the normal warning path.
-our %PERLONJAVA_BOOTSTRAP_HANDOFF;
 
 my %ops_seen;
 @ops_seen{ map split(/ /), values %ops } = ();
@@ -47,20 +41,12 @@ sub OVERLOAD {
             warnings::warnif("overload arg '$_' is invalid")
                 unless exists $ops_seen{$_};
             $sub = $arg{$_};
-            my $sym = $package . "::(" . $_;
             if (not ref $sub) {
-                ${$sym} = $sub;
+                $ {$package . "::(" . $_} = $sub;
                 $sub = \&nil;
             }
-            if (!$PERLONJAVA_BOOTSTRAP_HANDOFF{$package}
-                && defined &$sym
-                && (\&$sym != \&nil ||
-                    defined $$sym && $$sym ne "")) {
-                warnings::warnif("redefine", "overload '$_' for $package redefined");
-            }
             #print STDERR "Setting '$ {'package'}::\cO$_' to \\&'$sub'.\n";
-            no warnings 'redefine';
-            *$sym = \&{ $sub };
+            *{$package . "::(" . $_} = \&{ $sub };
         }
     }
 }

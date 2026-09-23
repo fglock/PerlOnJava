@@ -9,7 +9,6 @@ import org.perlonjava.frontend.astnode.NumberNode;
 import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
-import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 /**
  * Handles the bytecode emission for Perl operator nodes during compilation.
@@ -122,15 +121,8 @@ public class EmitOperatorNode {
             // Auto-increment/decrement operators
             case "++" -> EmitOperator.handleUnaryDefaultCase(node, "preAutoIncrement", emitterVisitor);
             case "--" -> EmitOperator.handleUnaryDefaultCase(node, "preAutoDecrement", emitterVisitor);
-            // In void context no caller can observe postfix's old-value result.
-            // Use the equivalent prefix mutator so ordinary discarded postfix
-            // operations do not allocate a temporary scalar just to POP it.
-            case "++postfix" -> EmitOperator.handleUnaryDefaultCase(node,
-                    emitterVisitor.ctx.contextType == RuntimeContextType.VOID
-                            ? "preAutoIncrement" : "postAutoIncrement", emitterVisitor);
-            case "--postfix" -> EmitOperator.handleUnaryDefaultCase(node,
-                    emitterVisitor.ctx.contextType == RuntimeContextType.VOID
-                            ? "preAutoDecrement" : "postAutoDecrement", emitterVisitor);
+            case "++postfix" -> EmitOperator.handleUnaryDefaultCase(node, "postAutoIncrement", emitterVisitor);
+            case "--postfix" -> EmitOperator.handleUnaryDefaultCase(node, "postAutoDecrement", emitterVisitor);
 
             // Special case for length under "use bytes"
             case "length" -> EmitOperator.handleLengthOperator(node, emitterVisitor);

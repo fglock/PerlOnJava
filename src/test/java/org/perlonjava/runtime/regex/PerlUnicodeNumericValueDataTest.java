@@ -13,8 +13,8 @@ class PerlUnicodeNumericValueDataTest {
     private static final int MAX_CODE_POINT = 0x10ffff;
 
     @Test
-    void usesCurrentImportedUnicodeData() {
-        assertEquals("18.0.0", PerlUnicodeNumericValueData.UNICODE_VERSION);
+    void usesPinnedPerl544Unicode17Data() {
+        assertEquals("17.0.0", PerlUnicodeNumericValueData.UNICODE_VERSION);
         assertEquals(144, PerlUnicodeNumericValueData.valueCount());
 
         assertTrue(set("-1/2").contains(0x0f33));
@@ -24,7 +24,6 @@ class PerlUnicodeNumericValueDataTest {
         assertTrue(set("3/2").contains(0x16ff5));
         assertFalse(set("3/2").contains(0x16ff6));
         assertTrue(set("2").contains(0x16ff6));
-        assertTrue(set("50").contains(0x324df));
         assertTrue(PerlUnicodeNumericValueData.nanSet().contains('A'));
         assertTrue(PerlUnicodeNumericValueData.nanSet().contains(MAX_CODE_POINT));
     }
@@ -43,13 +42,14 @@ class PerlUnicodeNumericValueDataTest {
             rangeCount += set.getRangeCount();
         }
 
-        assertTrue(rangeCount > 0);
-        assertFalse(union.isEmpty());
+        assertEquals(1_979, rangeCount);
+        assertEquals(2_023, union.size());
         assertEquals(PerlUnicodeNumericValueData.assignedSet(), union);
         assertTrue(PerlUnicodeNumericValueData.assignedSet().isFrozen());
         assertTrue(PerlUnicodeNumericValueData.nanSet().isFrozen());
         assertTrue(new com.ibm.icu.text.UnicodeSet(union)
                 .retainAll(PerlUnicodeNumericValueData.nanSet()).isEmpty());
+        assertEquals(1_112_089, PerlUnicodeNumericValueData.nanSet().size());
         union.addAll(PerlUnicodeNumericValueData.nanSet());
         assertEquals(new com.ibm.icu.text.UnicodeSet(0, MAX_CODE_POINT), union);
     }

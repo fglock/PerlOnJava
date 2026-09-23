@@ -16,15 +16,15 @@ import org.junit.jupiter.api.Test;
 @Tag("unit")
 class PerlUnicodeScriptDataTest {
     @Test
-    void usesChecksumPinnedCurrentUnicodeSources() {
-        assertEquals("18.0.0", PerlUnicodeScriptData.UNICODE_VERSION);
-        assertEquals("0071fd81b6aeae25f6e8bce8efec3066a6476a91b49bdb2f52dc76e817862a6a",
+    void usesChecksumPinnedPerl544Unicode17Sources() {
+        assertEquals("17.0.0", PerlUnicodeScriptData.UNICODE_VERSION);
+        assertEquals("9f5e50d3abaee7d6ce09480f325c706f485ae3240912527e651954d2d6b035bf",
                 PerlUnicodeScriptData.SCRIPTS_SHA256);
-        assertEquals("5c9d34a922f687726f2a8bcf57d49f905987e51f1b21b58c95a00fbe255cec23",
+        assertEquals("ec2107e58825a1586acee8e0911ce18260394ac8b87e535ca325f1ccbeb06bc6",
                 PerlUnicodeScriptData.SCRIPT_EXTENSIONS_SHA256);
-        assertEquals("06c4c8eaf7b0bf34abe73b113da1215bd784ac254d4c223600b90267caa4bbbd",
+        assertEquals("670d2bebb48649c04fabfbf033308073dcff47946324a8033237254c048b3b01",
                 PerlUnicodeScriptData.PROP_VALUE_ALIASES_SHA256);
-        assertEquals("83b8df695f9da543dba02b0be2b8bd72f0b52836ad264be113c6d285021ef025",
+        assertEquals("4441f573caf952ffece1d7c892e7715bd7136dfc26f96eb6f268bf1e474715fb",
                 PerlUnicodeScriptData.PROPERTY_ALIASES_SHA256);
     }
 
@@ -53,7 +53,7 @@ class PerlUnicodeScriptDataTest {
     @Test
     void retainsEveryPinnedValueAndWildcardAlias() {
         String[] values = PerlUnicodeScriptData.canonicalValues();
-        assertEquals(179, values.length);
+        assertEquals(176, values.length);
         for (String value : values) {
             UnicodeSet script = PerlUnicodeScriptData.scriptSet(value);
             UnicodeSet extensions = PerlUnicodeScriptData.scriptExtensionsSet(value);
@@ -65,7 +65,7 @@ class PerlUnicodeScriptDataTest {
         }
 
         String[] wildcardValues = PerlUnicodeScriptData.wildcardValues();
-        assertEquals(351, wildcardValues.length);
+        assertEquals(346, wildcardValues.length);
         for (String value : wildcardValues) {
             assertNotNull(PerlUnicodeScriptData.scriptSet(value), value);
             assertNotNull(PerlUnicodeScriptData.scriptExtensionsSet(value), value);

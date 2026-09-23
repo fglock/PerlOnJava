@@ -1,7 +1,6 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
-use Digest::SHA qw(sha256_hex);
 use File::Spec;
 use FindBin;
 use lib File::Spec->catdir($FindBin::Bin, 'lib');
@@ -11,7 +10,7 @@ use PerlOnJava::UnicodeGenerator qw(
     select_perl_root select_unicode_root trim
 );
 
-my $expected_version = $ENV{PERLONJAVA_UNICODE_VERSION} // '17.0.0';
+my $expected_version = '17.0.0';
 my $root = repo_root($FindBin::Bin);
 my $unicore = select_unicode_root(
     repo_root => $root,
@@ -24,19 +23,19 @@ my $perl_root = select_perl_root(
 my $perl_version = perl_language_version(root => $perl_root);
 my @sources = (
     {
-        name => "DerivedEastAsianWidth-$expected_version.txt",
+        name => 'DerivedEastAsianWidth-17.0.0.txt',
         path => File::Spec->catfile($unicore, 'extracted', 'DEastAsianWidth.txt'),
         hash => '0b5523a2217cb318d20b329a05d31eec5af5686ba09d263b85bb75a28989a3a8',
         version => qr/^# DerivedEastAsianWidth-\Q$expected_version\E\.txt$/m,
     },
     {
-        name => "PropertyValueAliases-$expected_version.txt",
+        name => 'PropertyValueAliases-17.0.0.txt',
         path => File::Spec->catfile($unicore, 'PropValueAliases.txt'),
         hash => '670d2bebb48649c04fabfbf033308073dcff47946324a8033237254c048b3b01',
         version => qr/^# PropertyValueAliases-\Q$expected_version\E\.txt$/m,
     },
     {
-        name => "PropertyAliases-$expected_version.txt",
+        name => 'PropertyAliases-17.0.0.txt',
         path => File::Spec->catfile($unicore, 'PropertyAliases.txt'),
         hash => '4441f573caf952ffece1d7c892e7715bd7136dfc26f96eb6f268bf1e474715fb',
         version => qr/^# PropertyAliases-\Q$expected_version\E\.txt$/m,
@@ -48,7 +47,6 @@ sub read_source {
     $source->{text} = read_pinned_source(
         path => $source->{path}, sha256 => $source->{hash},
         version_pattern => $source->{version}, unicode_version => $expected_version);
-    $source->{hash} = sha256_hex($source->{text});
 }
 
 read_source($_) for @sources;

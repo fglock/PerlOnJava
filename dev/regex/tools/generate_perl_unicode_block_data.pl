@@ -226,13 +226,6 @@ for my $keyword_row (@keyword_rows) {
 die "Current Perl keyword table defines no bare In... Block shortcuts\n"
     unless keys %shortcut_value_id;
 my @shortcut_keys = sort keys %shortcut_value_id;
-my @row_for_value_id;
-for my $row (keys %value_id_for_row) {
-    $row_for_value_id[$value_id_for_row{$row}] = $row;
-}
-my @value_aliases = map { $value_rows[$row_for_value_id[$_]] } 0 .. $#value_names;
-die "Block value aliases are not ordered by generated value ID\n"
-    unless @value_aliases == @value_names;
 
 print <<'HEADER';
 /*
@@ -285,10 +278,6 @@ for (my $i = 0; $i < @alias_keys; $i += 20) {
     my $end = $i + 19 < $#alias_keys ? $i + 19 : $#alias_keys;
     print "        ", join(', ', map { $alias_value_id{$alias_keys[$_]} } $i .. $end), ",\n";
 }
-print "    };\n\n    private static final String[][] VALUE_ALIASES = {\n";
-for my $aliases (@value_aliases) {
-    print "        {", join(', ', map { qq{\"$_\"} } @$aliases), "},\n";
-}
 print "    };\n\n    private static final String[] SHORTCUT_KEYS = {\n";
 for (my $i = 0; $i < @shortcut_keys; $i += 6) {
     my $end = $i + 5 < $#shortcut_keys ? $i + 5 : $#shortcut_keys;
@@ -327,10 +316,6 @@ print <<'FOOTER';
     static UnicodeSet set(String valueAlias) {
         short valueId = value(valueAlias);
         return valueId == INVALID ? null : SETS[valueId];
-    }
-
-    static String[] valueAliases(int valueId) {
-        return VALUE_ALIASES[valueId].clone();
     }
 
     static UnicodeSet shortcutSet(String alias) {
