@@ -2021,11 +2021,11 @@ public class BytecodeCompiler implements Visitor {
             } else if (isLargeInteger) {
                 RuntimeScalar integerScalar;
                 try {
-                    integerScalar = new RuntimeScalar(Long.parseLong(value));
+                    integerScalar = new RuntimeScalar(Long.parseLong(value), value);
                 } catch (NumberFormatException overflow) {
                     BigInteger integerValue = new BigInteger(value);
                     integerScalar = integerValue.signum() >= 0 && integerValue.bitLength() <= 64
-                            ? new RuntimeScalar(integerValue)
+                            ? new RuntimeScalar(integerValue, value)
                             : new RuntimeScalar(Double.parseDouble(value), value);
                 }
                 int constIdx = addToConstantPool(integerScalar);

@@ -603,6 +603,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         initializeWithLong(value);
     }
 
+    /** Construct an exact integer literal while retaining its source spelling. */
+    public RuntimeScalar(long value, String numericLiteralText) {
+        initializeWithLong(value);
+        this.numericLiteralText = numericLiteralText;
+    }
+
     public RuntimeScalar(Long value) {
         initializeWithLong(value);
     }
@@ -611,6 +617,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.tainted = false;
         this.numericContextSeen = false;
         setIntegerValue(value);
+    }
+
+    /** Construct an exact large integer literal while retaining its source spelling. */
+    public RuntimeScalar(BigInteger value, String numericLiteralText) {
+        this.tainted = false;
+        this.numericContextSeen = false;
+        setIntegerValue(value);
+        this.numericLiteralText = numericLiteralText;
     }
 
     public RuntimeScalar(int value) {
@@ -5229,11 +5243,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     private void warnImprecisionForAutoOperation(int delta) {
         if (this.type != INTEGER && this.type != DOUBLE) return;
         if (imprecisionAutoWarningCount >= 2) return;
-        // INTEGER normally carries an exact Integer, Long, or BigInteger.
-        // Its unit-step operation is exact even beyond the IEEE-754 precision
-        // boundary; only the exceptional integer-tagged Double payload needs
-        // the NV warning probe below.
-        if (this.type == INTEGER && !(this.value instanceof Double)) return;
+        // Perl retains exact integer *literals* without issuing an NV warning
+        // when they cross the IEEE-754 precision boundary. A computed integer
+        // (including UV/IV boundary arithmetic) has no literal spelling and
+        // must still take the NV probe below; core op/inc.t expects the two
+        // warnings produced as it crosses that boundary.
+        if (this.type == INTEGER && numericLiteralText != null) return;
         double numericValue = getDouble();
         if (!Double.isFinite(numericValue) || numericValue + delta != numericValue) return;
         BigInteger exact = getSignedBigint();
