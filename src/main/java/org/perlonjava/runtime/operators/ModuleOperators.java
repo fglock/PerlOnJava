@@ -545,24 +545,6 @@ public class ModuleOperators {
                 // Search in INC directories
                 RuntimeArray incArray = GlobalVariable.getGlobalArray("main::INC");
 
-                // Make sure the jar files are in @INC - the Perl test files can remove it
-                boolean seen = false;
-                int incSize = incArray.size();
-                for (int i = 0; i < incSize; i++) {
-                    RuntimeScalar dir = incArray.get(i);
-                    // Handle tied scalars
-                    if (dir.type == RuntimeScalarType.TIED_SCALAR) {
-                        dir = dir.tiedFetch();
-                    }
-                    if (dir.toString().equals(GlobalContext.JAR_PERLLIB)) {
-                        seen = true;
-                        break;
-                    }
-                }
-                if (!seen) {
-                    incArray.push(new RuntimeScalar(GlobalContext.JAR_PERLLIB));
-                }
-
                 // Re-fetch the global array on every iteration. An @INC hook
                 // may replace @INC entirely; Perl continues with the entry at
                 // the current numeric position in that replacement.
