@@ -4656,15 +4656,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             method = InheritanceResolver.findMethodInHierarchy(methodName, perlClassName, null, 0);
         }
 
-        if (method != null && !isCodeDefined(method)
-                && method.value instanceof RuntimeCode forwardStub
-                && forwardStub.isDeclared) {
-            RuntimeScalar autoload = InheritanceResolver.findAutoloadForForwardStub(forwardStub.packageName);
-            if (autoload != null) {
-                method = autoload;
-            }
-        }
-
         if (method != null) {
             // System.out.println("call ->" + method + " " + currentPackage + " " + args + " AUTOLOAD: " + ((RuntimeCode) method.value).autoloadVariableName);
 
