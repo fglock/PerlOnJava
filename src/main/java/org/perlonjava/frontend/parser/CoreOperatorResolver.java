@@ -254,7 +254,25 @@ public class CoreOperatorResolver {
             throw new PerlParserException("dbmopen requires a hash and database arguments");
         }
         arguments.elements.add(1, new StringNode("PerlOnJava::DBM", operator.getIndex()));
-        return new OperatorNode("tie", arguments, currentIndex);
+        // dbmopen implicitly loads AnyDBM_File before tying.  The runtime
+        // DBM implementation is selected by PerlOnJava, but preserve the
+        // availability check so an empty @INC still reports that no DBM is
+        // available, as native Perl does.  ModuleOperators intentionally
+        // restores the bundled library path while requiring ordinary modules;
+        // dbmopen must check the caller's original @INC first.
+        OperatorNode tie = new OperatorNode("tie", arguments, currentIndex);
+        OperatorNode require = new OperatorNode(
+                "require",
+                ListNode.makeList(new StringNode("AnyDBM_File.pm", operator.getIndex())),
+                operator.getIndex());
+        Node inc = new OperatorNode("@", new IdentifierNode("INC", operator.getIndex()), operator.getIndex());
+        Node noDbm = new OperatorNode(
+                "die",
+                ListNode.makeList(new StringNode("No dbm on this machine", operator.getIndex())),
+                operator.getIndex());
+        Node loadDbm = new TernaryOperatorNode("?", new OperatorNode("!", inc, operator.getIndex()),
+                noDbm, require, operator.getIndex());
+        return new BlockNode(List.of(loadDbm, tie), currentIndex);
     }
 
     /** Lower dbmclose HASH to the existing untie implementation. */

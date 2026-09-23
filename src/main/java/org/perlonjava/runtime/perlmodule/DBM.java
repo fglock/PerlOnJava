@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.operators.ReferenceOperators;
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.nio.charset.StandardCharsets;
@@ -82,6 +83,9 @@ public final class DBM extends PerlModuleBase {
 
     public static RuntimeList TIEHASH(RuntimeArray args, int ctx) {
         if (args.size() < 3) throw new PerlCompilerException("Usage: DBM::TIEHASH(filename, mode)");
+        if (args.get(2).type == RuntimeScalarType.UNDEF) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in dbmopen"), new RuntimeScalar(""));
+        }
         String filename = args.get(1).toString();
         long mode = args.get(2).getLong();
         boolean readOnly = mode == 0;
