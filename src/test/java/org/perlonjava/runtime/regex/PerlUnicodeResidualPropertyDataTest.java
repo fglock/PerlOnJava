@@ -41,6 +41,22 @@ class PerlUnicodeResidualPropertyDataTest {
         assertTrue(contains(negative.ranges, 'G'));
     }
 
+    @Test
+    void pinsUnicode18BinaryPropertiesAheadOfTheOlderIcuData() {
+        // SMALL SEAL CHARACTER is new in Unicode 18.0.
+        assertContains("Grapheme_Base", 0x3FC3F);
+        assertContains("Ideographic", 0x3FC3F);
+        assertContains("ID_Start", 0x3FC3F);
+        assertContains("ID_Continue", 0x3FC3F);
+        assertContains("XID_Start", 0x3FC3F);
+        assertContains("XID_Continue", 0x3FC3F);
+    }
+
+    @Test
+    void preservesUnicode18LineBreakAdditionsAheadOfTheOlderIcuData() {
+        assertContains("Line_Break=Conditional_Japanese_Starter", 0x1B168);
+    }
+
     private static void assertContains(String property, int codePoint) {
         CharacterPropertyResolver.Result result =
                 UnicodeResolver.resolveJoniProperty(property, false, true);

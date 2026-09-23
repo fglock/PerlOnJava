@@ -17,10 +17,20 @@ public class BitwiseOperators {
     private static final BigInteger UV_MASK = BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE);
 
     private static BigInteger unsignedValue(RuntimeScalar scalar) {
-        return scalar.getBigint().and(UV_MASK);
+        BigInteger value = scalar.getBigint();
+        // Numeric bitwise operations are modulo 2^64.  Their own results are
+        // already stored in that range, so avoid rebuilding BigInteger's
+        // backing array just to apply the same mask on the next operation.
+        if (value.signum() >= 0 && value.bitLength() <= 64) {
+            return value;
+        }
+        return value.and(UV_MASK);
     }
 
     private static RuntimeScalar unsignedResult(BigInteger value) {
+        if (value.signum() >= 0 && value.bitLength() <= 64) {
+            return new RuntimeScalar(value);
+        }
         return new RuntimeScalar(value.and(UV_MASK));
     }
 
@@ -54,6 +64,17 @@ public class BitwiseOperators {
     private static RuntimeScalar unsignedShiftRight(BigInteger value, long shift) {
         if (shift >= 64) return RuntimeScalarCache.scalarZero;
         return unsignedResult(value.shiftRight((int) shift));
+    }
+
+    /**
+     * Shift an ordinary native integer as a Perl unsigned value.  Java long
+     * overflow supplies the required low 64-bit truncation; unsignedResult
+     * retains a BigInteger only when the resulting UV cannot be represented
+     * as a non-negative signed long.
+     */
+    private static RuntimeScalar nativeUnsignedShift(long value, long shift, boolean left) {
+        if (shift >= 64) return RuntimeScalarCache.scalarZero;
+        return unsignedResult(left ? value << (int) shift : value >>> (int) shift);
     }
 
     private static BigInteger exactInteger(RuntimeScalar scalar) {
@@ -525,13 +546,12 @@ public class BitwiseOperators {
         // Fast path: both INTEGER with non-negative shift within Java's 64-bit word.
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
-        if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER
-                && exactInteger(arg2) == null) {
+        if (hasNativeInteger(runtimeScalar) && hasNativeInteger(arg2)) {
             long shift = arg2.getLong();
             if (shift >= 0) {
-                return unsignedShiftLeft(unsignedValue(runtimeScalar), shift);
+                return nativeUnsignedShift(((Number) runtimeScalar.value).longValue(), shift, true);
             } else if (shift != Long.MIN_VALUE) {
-                return unsignedShiftRight(unsignedValue(runtimeScalar), -shift);
+                return nativeUnsignedShift(((Number) runtimeScalar.value).longValue(), -shift, false);
             }
             return RuntimeScalarCache.scalarZero;
         }
@@ -616,13 +636,12 @@ public class BitwiseOperators {
         // Fast path: both INTEGER with non-negative shift within Java's 64-bit word.
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
-        if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER
-                && exactInteger(arg2) == null) {
+        if (hasNativeInteger(runtimeScalar) && hasNativeInteger(arg2)) {
             long shift = arg2.getLong();
             if (shift >= 0) {
-                return unsignedShiftRight(unsignedValue(runtimeScalar), shift);
+                return nativeUnsignedShift(((Number) runtimeScalar.value).longValue(), shift, false);
             } else if (shift != Long.MIN_VALUE) {
-                return unsignedShiftLeft(unsignedValue(runtimeScalar), -shift);
+                return nativeUnsignedShift(((Number) runtimeScalar.value).longValue(), -shift, true);
             }
             return RuntimeScalarCache.scalarZero;
         }

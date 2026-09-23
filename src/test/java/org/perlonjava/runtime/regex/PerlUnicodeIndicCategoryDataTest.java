@@ -15,15 +15,15 @@ import org.junit.jupiter.api.Test;
 @Tag("unit")
 class PerlUnicodeIndicCategoryDataTest {
     @Test
-    void usesCurrentPerl544Unicode17Sources() {
-        assertEquals("17.0.0", PerlUnicodeIndicCategoryData.UNICODE_VERSION);
-        assertEquals("3fc122f4cf58b0c19268d5f810263b04ab4e1e67743386ec0e0ada9c76aec5be",
+    void usesCurrentImportedUnicodeSources() {
+        assertEquals("18.0.0", PerlUnicodeIndicCategoryData.UNICODE_VERSION);
+        assertEquals("a2b3aacf6b3e7bad4ca351ef985d9543825e20280ff280c25f646d9bc4ce304c",
                 PerlUnicodeIndicCategoryData.INDIC_SYLLABIC_CATEGORY_SHA256);
-        assertEquals("68cedc29a7e57f984d90fe2c7712f2e6d0c717e253db219607daea8997d6c480",
+        assertEquals("c9ad44d267c317ee0e1ec66cbd4d15033c2964f905d11fc8905915f9a5a9ae52",
                 PerlUnicodeIndicCategoryData.INDIC_POSITIONAL_CATEGORY_SHA256);
-        assertEquals("670d2bebb48649c04fabfbf033308073dcff47946324a8033237254c048b3b01",
+        assertEquals("06c4c8eaf7b0bf34abe73b113da1215bd784ac254d4c223600b90267caa4bbbd",
                 PerlUnicodeIndicCategoryData.PROP_VALUE_ALIASES_SHA256);
-        assertEquals("4441f573caf952ffece1d7c892e7715bd7136dfc26f96eb6f268bf1e474715fb",
+        assertEquals("83b8df695f9da543dba02b0be2b8bd72f0b52836ad264be113c6d285021ef025",
                 PerlUnicodeIndicCategoryData.PROPERTY_ALIASES_SHA256);
     }
 

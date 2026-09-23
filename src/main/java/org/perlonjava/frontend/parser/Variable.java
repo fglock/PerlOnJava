@@ -412,6 +412,16 @@ public class Variable {
             if (!parser.isInFieldInitializer && (currentSub == null || currentSub.isEmpty())) return;
         }
 
+        // Legacy typed fields consult %Type::FIELDS while parsing a following
+        // typed lexical access.  A bare %FIELDS expression creates that hash
+        // slot in Perl before the later expression is compiled.
+        if (sigil.equals("%") && varName.equals("FIELDS")) {
+            String fieldsName = NameNormalizer.normalizeVariableName(
+                    varName, parser.ctx.symbolTable.getCurrentPackage());
+            GlobalVariable.declareGlobalHash(fieldsName);
+            GlobalVariable.getGlobalHash(fieldsName);
+        }
+
         // Check if strict vars is enabled in the current scope
         if (!parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_VARS)) return;
 
