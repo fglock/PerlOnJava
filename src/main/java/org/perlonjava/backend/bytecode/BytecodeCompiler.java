@@ -2163,7 +2163,8 @@ public class BytecodeCompiler implements Visitor {
         // preserves Perl's "literal alias" semantics: `for ("abc") { $_ = 4 }`
         // must throw "Modification of a read-only value". See visit(NumberNode)
         // for the symmetric integer treatment. Fixes op/ref.t 232-234.
-        if (currentCallContext == RuntimeContextType.LIST
+        if ((currentCallContext == RuntimeContextType.LIST
+                || currentCallContext == RuntimeContextType.OBJECT)
                 && opcode != Opcodes.LOAD_VSTRING) {
             int cacheIdx = (opcode == Opcodes.LOAD_BYTE_STRING)
                     ? RuntimeScalarCache.getOrCreateByteStringIndex(node.value)

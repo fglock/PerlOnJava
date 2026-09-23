@@ -86,6 +86,18 @@ public class ReadOnlyAlias extends RuntimeScalarReadOnly {
         throw new PerlCompilerException("Modification of a read-only value attempted");
     }
 
+    @Override
+    public RuntimeScalar chop() {
+        vivify();
+        return new RuntimeScalar(); // unreachable
+    }
+
+    @Override
+    public RuntimeScalar chomp() {
+        vivify();
+        return new RuntimeScalar(); // unreachable
+    }
+
     private void restoreBeforeMutation() {
         if (restoreKey != null) {
             GlobalVariable.restoreForeachGlobalVariable(restoreKey, restoreValue);

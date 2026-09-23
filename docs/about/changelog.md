@@ -27,6 +27,9 @@ priorities and future plans.
 - Preserve Perl-compatible NUL method diagnostics and ignore declared but
   undefined destructors.
 
+- Preserve glob identity and literal immutability for method invocants on both
+  execution backends.
+
 - Restore `Hash::Util::FieldHash` `:all` imports and scalar `id` semantics,
   unblocking Cache::Ref's LRU implementation.
 

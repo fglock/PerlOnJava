@@ -4414,7 +4414,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             // recursion tracking, and scope cleanup see a real Perl frame.
                             try {
                                 RuntimeArray a = new RuntimeArray(args.length + 1);
-                                a.elements.add(runtimeScalar);
+                                a.elements.add(methodInvocantArgument(runtimeScalar));
                                 for (RuntimeBase arg : args) {
                                     arg.setArrayOfAlias(a);
                                 }
@@ -4473,7 +4473,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             
                             // Call the method with function-scoped mortal boundary
                             RuntimeArray a = new RuntimeArray(args.length + 1);
-                            a.elements.add(runtimeScalar);
+                            a.elements.add(methodInvocantArgument(runtimeScalar));
                             for (RuntimeBase arg : args) {
                                 arg.setArrayOfAlias(a);
                             }
@@ -4501,7 +4501,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Fall back without nesting through call(...) — avoids double refcount hold
         // (this outer frame already holds the invocant for the inlined-cache miss path).
         RuntimeArray aFallback = new RuntimeArray(args.length + 1);
-        aFallback.elements.add(runtimeScalar);
+        aFallback.elements.add(methodInvocantArgument(runtimeScalar));
         for (RuntimeBase arg : args) {
             arg.setArrayOfAlias(aFallback);
         }
@@ -4538,6 +4538,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return coerceScalarCallResult(
                     result, effectiveContext, callContext, !isLvalueCode(code));
         }
+    }
+
+    /** Preserve literal immutability when a constant becomes a method's $_[0]. */
+    private static RuntimeScalar methodInvocantArgument(RuntimeScalar invocant) {
+        if (invocant instanceof RuntimeScalarReadOnly && !(invocant instanceof ReadOnlyAlias)) {
+            return new ReadOnlyAlias(invocant);
+        }
+        return invocant;
     }
 
     /**
@@ -4614,7 +4622,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // A bare filehandle method call supplies a glob reference as $self,
             // matching the explicit \*FH form.
             args.elements.removeFirst();
-            return call(((RuntimeGlob) invocant.value).createReference(), method,
+            return call(invocant.createReference(), method,
                     currentSub, args, callContext);
         } else if (!invocant.getDefinedBoolean()) {
             if (indirectBlockMethod) {
