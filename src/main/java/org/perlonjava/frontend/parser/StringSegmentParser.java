@@ -1527,9 +1527,12 @@ public abstract class StringSegmentParser {
         //   $) = anchor + closing group (not $EGID)
         //   $( = anchor + opening group (not $GID)
         //   $| = anchor + alternation (not $OUTPUT_AUTOFLUSH)
+        // The lexer may combine the adjacent regex tokens as `|.`; it is the
+        // same anchor-plus-alternation spelling and must remain literal too.
         // In double-quoted strings, these SHOULD interpolate to their variable values.
         if (isRegex && "$".equals(sigil)
-                && (")".equals(nextToken.text) || "(".equals(nextToken.text) || "|".equals(nextToken.text))) {
+                && (")".equals(nextToken.text) || "(".equals(nextToken.text)
+                        || "|".equals(nextToken.text) || "|.".equals(nextToken.text))) {
             return false;
         }
 

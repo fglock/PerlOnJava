@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Fix regex interpolation of `$|.` anchors, restoring `String::Errf` formatting
+  with interpolated `/x` patterns on both execution backends.
+
 - Restore `Hash::Util::FieldHash` `:all` imports and scalar `id` semantics,
   unblocking Cache::Ref's LRU implementation.
 
