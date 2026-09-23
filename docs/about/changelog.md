@@ -21,6 +21,9 @@ priorities and future plans.
 - Restore strict-reference diagnostics for dynamic subroutine calls, including
   numeric scalar invocants and both execution backends.
 
+- Restore core method-lookup diagnostics for existing stashes and qualified
+  method names.
+
 - Restore `Hash::Util::FieldHash` `:all` imports and scalar `id` semantics,
   unblocking Cache::Ref's LRU implementation.
 

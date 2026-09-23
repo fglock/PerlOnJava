@@ -101,6 +101,10 @@ public class ReferenceOperators {
                 throw new PerlCompilerException("Can't bless an object reference");
             }
             int newBlessId = NameNormalizer.getBlessId(str);
+            // Blessing into a package materializes its stash in Perl.  Method
+            // lookup uses stash existence to decide whether to show the
+            // "perhaps you forgot to load" hint.
+            GlobalVariable.ensurePackageStash(str);
 
             // Phase D-W6.10: arm targeted refCount tracing for classes
             // matching the walker-gate heuristic (Class::MOP/Moose/Moo)

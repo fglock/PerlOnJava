@@ -4726,7 +4726,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 method = InheritanceResolver.findMethodInHierarchy(
                         shortMethod, targetPackage, methodName, 0);
                 if (method == null || !isCodeDefined(method)) {
-                    throw new PerlCompilerException("Undefined subroutine &" + methodName + " called");
+                    // A qualified method call still performs method lookup:
+                    // report it through the regular object-method diagnostic
+                    // (including the package-load hint), rather than as a
+                    // direct named subroutine invocation.
+                    perlClassName = targetPackage;
+                    methodName = shortMethod;
+                    method = null;
                 }
             }
         } else {
@@ -4774,7 +4780,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             qualifiedSuperIndex + "::SUPER::".length());
                 }
             }
-            if (ClassRegistry.isClass(perlClassName)) {
+            if (GlobalVariable.isPackageLoaded(perlClassName)) {
                 throw new PerlCompilerException("Can't locate object method \"" + errorMethodName
                         + "\" via package \"" + perlClassName + "\"");
             }

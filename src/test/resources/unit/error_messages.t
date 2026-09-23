@@ -1,6 +1,6 @@
 use strict;
 no warnings;
-use Test::More tests => 11;
+use Test::More tests => 13;
 
 # Helper subroutine to capture error messages
 sub capture_error {
@@ -70,5 +70,13 @@ foreach my $test (@tests) {
     like($error, $test->{expected}, "Error message matches expected pattern");
 }
 
-done_testing();
+my $loaded_package = bless {}, 'MethodErrorLoaded';
+eval { $loaded_package->missing };
+like($@, qr/^Can't locate object method "missing" via package "MethodErrorLoaded" at/,
+    'a package materialized by bless omits the load hint');
 
+eval { UNIVERSAL->MethodErrorMissing::missing };
+like($@, qr/^Can't locate object method "missing" via package "MethodErrorMissing" \(perhaps you forgot to load "MethodErrorMissing"\?\) at/,
+    'qualified missing methods use the method lookup diagnostic');
+
+done_testing();
