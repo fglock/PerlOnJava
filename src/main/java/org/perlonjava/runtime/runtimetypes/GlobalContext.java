@@ -371,6 +371,8 @@ public class GlobalContext {
         // can be inherited by JDBC-driven DBDs (DBD::SQLite, DBD::Mem, ...).
         // This runs at startup so the methods exist before any `use DBI`.
         DBI.initialize();
+        // Portable SQLite-backed implementation used by dbmopen/dbmclose.
+        DBM.initialize();
         // Filter::Util::Call will be loaded via XSLoader when needed
 
         // Reset method cache after initializing UNIVERSAL
