@@ -29,6 +29,32 @@ use Test::More;
        'a declared method stub uses an inherited AUTOLOAD');
 }
 
+{
+    package BracedSuperParent;
+    sub values { shift; join ' ', @_ }
+
+    package BracedSuperChild;
+    our @ISA = ('BracedSuperParent');
+    my @args = (bless([], 'BracedSuperChild'), 'one');
+
+    my $braced = SUPER::values {@args};
+    ::is($braced, 'one', 'SUPER method accepts braced list arguments');
+    my $empty = SUPER::values {} @args;
+    ::is($empty, 'one', 'empty braced SUPER arguments preserve following args');
+    my $trailing = SUPER::values {@args} 'two';
+    ::is($trailing, 'one two', 'braced SUPER arguments accept trailing args');
+}
+
+{
+    is('abc'->CORE::uc, 'ABC', 'qualified CORE method call materializes its wrapper');
+    like(eval { ''->missing; 1 } ? '' : $@,
+         qr/without a package or object reference/,
+         'empty string method receiver has the package-or-object diagnostic');
+    like(eval { new {}; 1 } ? '' : $@,
+         qr/without a package or object reference/,
+         'new with an empty hash receiver has the package-or-object diagnostic');
+}
+
 BEGIN {
     *LocalPopOverride::pop = sub { $main::pop_override_result = $_[0][0] };
 }

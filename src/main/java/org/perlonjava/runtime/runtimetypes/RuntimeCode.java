@@ -57,10 +57,16 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.runUnitcheckBlock
  */
 public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static final String INDIRECT_BLOCK_METHOD_PREFIX = "\uFDD0indirect-block:";
+    private static final String FIRST_ARGUMENT_METHOD_PREFIX = "\uFDD1first-argument:";
 
     /** Marks the parser's {@code method { BLOCK }} indirect-object form. */
     public static String indirectBlockMethodName(String methodName) {
         return INDIRECT_BLOCK_METHOD_PREFIX + methodName;
+    }
+
+    /** Marks a parser form whose first evaluated argument is the method receiver. */
+    public static String firstArgumentMethodName(String methodName) {
+        return FIRST_ARGUMENT_METHOD_PREFIX + methodName;
     }
     private static final ThreadLocal<Integer> SIGNATURE_CALL_DEPTH =
             ThreadLocal.withInitial(() -> 0);
@@ -4312,6 +4318,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                          RuntimeScalar currentSub,
                                          RuntimeBase[] args,
                                          int callContext) {
+        if ((method.type == RuntimeScalarType.STRING || method.type == RuntimeScalarType.BYTE_STRING)
+                && method.toString().startsWith(FIRST_ARGUMENT_METHOD_PREFIX)) {
+            String actualMethod = method.toString().substring(FIRST_ARGUMENT_METHOD_PREFIX.length());
+            RuntimeArray methodArgs = new RuntimeArray(args.length);
+            for (RuntimeBase arg : args) {
+                arg.setArrayOfAlias(methodArgs);
+            }
+            RuntimeScalar firstArgument = methodArgs.elements.isEmpty()
+                    ? new RuntimeScalar() : methodArgs.elements.removeFirst();
+            return call(firstArgument, new RuntimeScalar(actualMethod), currentSub,
+                    methodArgs, callContext);
+        }
         // Establish a MyVarCleanupStack boundary so that my-variables
         // registered by the called method's bytecode are cleaned up if
         // the method dies. Without this, the method's my-variable entries
@@ -4555,6 +4573,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     perlClassName = "Regexp";
                 } else {
                     // Not auto-blessed
+                    if (indirectBlockMethod && methodName.equals("new")) {
+                        throw new PerlCompilerException("Can't call method \"" + methodName
+                                + "\" without a package or object reference");
+                    }
                     throw new PerlCompilerException("Can't call method \"" + methodName + "\" on unblessed reference");
                 }
             } else {
@@ -4574,7 +4596,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         } else {
             perlClassName = invocant.toString();
             if (perlClassName.isEmpty()) {
-                throw new PerlCompilerException("Can't call method \"" + methodName + "\" on an undefined value");
+                throw new PerlCompilerException("Can't call method \"" + methodName
+                        + "\" without a package or object reference");
             }
             
             // Check if this string is a bareword filehandle (like IN, OUT, etc.)
@@ -4663,6 +4686,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 int sep = methodName.lastIndexOf("::");
                 String targetPackage = methodName.substring(0, sep);
                 String shortMethod   = methodName.substring(sep + 2);
+                if (targetPackage.equals("CORE")) {
+                    CoreSubroutineGenerator.generateWrapper(shortMethod);
+                }
                 method = InheritanceResolver.findMethodInHierarchy(
                         shortMethod, targetPackage, methodName, 0);
                 if (method == null || !isCodeDefined(method)) {
@@ -4739,6 +4765,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                    RuntimeScalar currentSub,
                                    RuntimeArray args,
                                    int callContext) {
+        if ((method.type == RuntimeScalarType.STRING || method.type == RuntimeScalarType.BYTE_STRING)
+                && method.toString().startsWith(FIRST_ARGUMENT_METHOD_PREFIX)) {
+            String actualMethod = method.toString().substring(FIRST_ARGUMENT_METHOD_PREFIX.length());
+            RuntimeScalar firstArgument = args.elements.isEmpty()
+                    ? new RuntimeScalar() : args.elements.removeFirst();
+            return call(firstArgument, new RuntimeScalar(actualMethod), currentSub, args, callContext);
+        }
         // Handle tied scalars: the invocant may be a TIED_SCALAR returned
         // from a tied hash / array FETCH. Unwrap before dispatch so
         // isReference / blessId checks see the real underlying value.

@@ -620,6 +620,34 @@ public class SubroutineParser {
                 // The block is evaluated and its result becomes the method invocant.
                 // Any following expressions become arguments to the method call.
                 if (nextTok.text.equals("{")) {
+                    // `SUPER::method { LIST } MORE` takes its receiver from
+                    // the first value of the complete braced/trailing list.
+                    // Preserve that dynamic list shape for both backends;
+                    // RuntimeCode extracts its first value immediately before
+                    // ordinary SUPER dispatch.
+                    if (subName.startsWith("SUPER::")) {
+                        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+                        List<Node> methodArgs = new ArrayList<>();
+                        if (!peek(parser).text.equals("}")) {
+                            Node blockExpr = ParseBlock.parseBlock(parser);
+                            if (blockExpr instanceof BlockNode block
+                                    && block.elements.size() == 1
+                                    && block.elements.getFirst() instanceof ListNode list) {
+                                methodArgs.addAll(list.elements);
+                            } else {
+                                methodArgs.add(blockExpr);
+                            }
+                        }
+                        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+                        methodArgs.addAll(consumeArgsWithPrototype(parser, "@").elements);
+                        String qualifiedSuper = parser.ctx.symbolTable.getCurrentPackage()
+                                + "::" + subName;
+                        Node methodCall = new BinaryOperatorNode("(",
+                                new IdentifierNode(RuntimeCode.firstArgumentMethodName(qualifiedSuper), currentIndex),
+                                new ListNode(methodArgs, currentIndex), currentIndex);
+                        return new BinaryOperatorNode("->", new StringNode("", currentIndex),
+                                methodCall, currentIndex);
+                    }
                     // A known subroutine followed by a block is the common
                     // callback form, e.g. Test::Fatal's
                     //     exception { compile()->(1) }
