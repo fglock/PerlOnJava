@@ -481,6 +481,7 @@ public class DestroyDispatch {
             // re-invoke DESTROY. Don't clear weak refs or cascade — the object
             // is still alive.
             if (referent.refCount > 0 && !state.destroyTargetRescued) {
+                warnIfResurrectedDuringGlobalDestruction(referent, className);
                 referent.needsReDestroy = true;
                 return;
             }
@@ -496,6 +497,7 @@ public class DestroyDispatch {
             // This triggers rescue detection because the old value ($source->{schema},
             // a weak ref to Schema) is being replaced by a strong ref to Schema.
             if (state.destroyTargetRescued) {
+                warnIfResurrectedDuringGlobalDestruction(referent, className);
                 // Object was rescued by DESTROY (e.g., Schema::DESTROY self-save).
                 //
                 // refCount has been set to 1 by setLargeRefCounted during rescue
@@ -584,6 +586,23 @@ public class DestroyDispatch {
                 ReachabilityWalker.sweepWeakRefs(false, false);
             }
         }
+    }
+
+    /**
+     * Perl warns when a destructor revives the object currently being finalized.
+     *
+     * Top-level temporaries may be finalized while the main scope is draining,
+     * immediately before GlobalDestruction switches ${^GLOBAL_PHASE} to DESTRUCT.
+     * The escaped reference nevertheless survives into global teardown, so the
+     * warning belongs at the resurrection point rather than behind a phase test.
+     */
+    private static void warnIfResurrectedDuringGlobalDestruction(RuntimeBase referent, String className) {
+        String name = className == null || className.isEmpty()
+                ? NameNormalizer.getBlessStr(referent.blessId) : className;
+        WarnDie.warn(new RuntimeScalar(
+                        "DESTROY created new reference to dead object '" + name
+                                + "' during global destruction.\n"),
+                new RuntimeScalar(""));
     }
 
     /**

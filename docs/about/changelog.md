@@ -30,6 +30,9 @@ priorities and future plans.
 - Preserve glob identity and literal immutability for method invocants on both
   execution backends.
 
+- Restore the global-destruction warning when a `DESTROY` method revives its
+  object.
+
 - Restore `Hash::Util::FieldHash` `:all` imports and scalar `id` semantics,
   unblocking Cache::Ref's LRU implementation.
 
