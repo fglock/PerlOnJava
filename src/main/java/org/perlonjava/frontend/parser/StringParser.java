@@ -1242,30 +1242,11 @@ public class StringParser {
         switch (operator) {
             case "`":
             case "qx": {
-                Node command = parseSystemCommand(parser.ctx, operator, rawStr);
-                String localName = parser.ctx.symbolTable.getCurrentPackage() + "::readpipe";
-                String name = GlobalVariable.isSubs.getOrDefault(localName, false)
-                        && GlobalVariable.isGlobalCodeRefDefined(localName)
-                        ? localName : "CORE::GLOBAL::readpipe";
-                if (!GlobalVariable.isGlobalCodeRefDefined(name)
-                        || (name.startsWith("CORE::GLOBAL::") && !RuntimeGlob.isGlobAssigned(name))) {
-                    return command;
-                }
-                OperatorNode codeRef = new OperatorNode("&", new IdentifierNode(name, rawStr.index), rawStr.index);
-                if (GlobalVariable.getGlobalCodeRef(name).value instanceof RuntimeCode code
-                        && "".equals(code.prototype)) {
-                    parser.throwError("Too many arguments");
-                }
-                codeRef.setAnnotation("directNamedCall", true);
-                codeRef.setAnnotation("parseTimeCodeRef", GlobalVariable.getGlobalCodeRef(name));
-                ListNode arguments = new ListNode(rawStr.index);
-                if (command instanceof OperatorNode op && op.operand instanceof ListNode args
-                        && !args.elements.isEmpty()) {
-                    arguments.elements.add(args.elements.getFirst());
-                } else {
-                    arguments.elements.add(command);
-                }
-                return new BinaryOperatorNode("(", codeRef, arguments, rawStr.index);
+                // Backticks and qx are not CORE::GLOBAL::readpipe override
+                // points.  Package-local readpipe dispatch is handled at
+                // runtime by SystemOperator, while a CORE::GLOBAL stash slot
+                // must not alter quote-like parsing (perl5 op/gv.t).
+                return parseSystemCommand(parser.ctx, operator, rawStr);
             }
             case "'":
             case "q":

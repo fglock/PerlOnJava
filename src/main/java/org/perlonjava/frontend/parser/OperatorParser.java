@@ -200,7 +200,7 @@ public class OperatorParser {
                             globRef,
                             new ListNode(parser.tokenIndex), currentTokenIndex);
                     readlineNode.setAnnotation("handleName", digitName);
-                    return readlineOverride(parser, globRef, readlineNode, currentTokenIndex);
+                    return readlineNode;
                 }
                 parser.tokenIndex = currentTokenIndex;
             }
@@ -230,7 +230,7 @@ public class OperatorParser {
                             // generated readline path updates runtime-local diagnostics.
                             readlineNode.setAnnotation("handleName", tokenText);
                         }
-                        return readlineOverride(parser, fileHandle, readlineNode, currentTokenIndex);
+                        return readlineNode;
                     }
                 }
             }
@@ -255,7 +255,7 @@ public class OperatorParser {
                             && opNode.operand instanceof IdentifierNode idNode) {
                         readlineNode.setAnnotation("handleName", "$" + idNode.name);
                     }
-                    return readlineOverride(parser, var, readlineNode, currentTokenIndex);
+                    return readlineNode;
                 }
             }
 
@@ -277,7 +277,7 @@ public class OperatorParser {
                             new ListNode(parser.tokenIndex), parser.tokenIndex);
                     // Annotate with handle name for error messages
                     readlineNode.setAnnotation("handleName", tokenText);
-                    return readlineOverride(parser, readlineNode.left, readlineNode, currentTokenIndex);
+                    return readlineNode;
                 }
             }
         }
@@ -294,34 +294,6 @@ public class OperatorParser {
         // Handle other cases like <>, <<>>, or <*.*> by parsing as a raw string
         return StringParser.parseRawString(parser, token.text);
     }
-
-    /**
-     * Diamond syntax bypasses ParsePrimary, so route it through an installed
-     * CORE::GLOBAL::readline CV here.  Pin the compile-time CV just as ordinary
-     * overridden operators do; this preserves aliases to constant subs and
-     * their prototype diagnostics.
-     */
-    private static Node readlineOverride(Parser parser, Node handle, BinaryOperatorNode fallback, int index) {
-        String localName = parser.ctx.symbolTable.getCurrentPackage() + "::readline";
-        String name = GlobalVariable.isSubs.getOrDefault(localName, false)
-                && GlobalVariable.isGlobalCodeRefDefined(localName)
-                ? localName : "CORE::GLOBAL::readline";
-        if (!GlobalVariable.isGlobalCodeRefDefined(name)
-                || (name.startsWith("CORE::GLOBAL::") && !RuntimeGlob.isGlobAssigned(name))) {
-            return fallback;
-        }
-        OperatorNode codeRef = new OperatorNode("&", new IdentifierNode(name, index), index);
-        if (GlobalVariable.getGlobalCodeRef(name).value instanceof RuntimeCode code
-                && "".equals(code.prototype)) {
-            parser.throwError("Too many arguments");
-        }
-        codeRef.setAnnotation("directNamedCall", true);
-        codeRef.setAnnotation("parseTimeCodeRef", GlobalVariable.getGlobalCodeRef(name));
-        ListNode arguments = new ListNode(index);
-        arguments.elements.add(handle);
-        return new BinaryOperatorNode("(", codeRef, arguments, index);
-    }
-
 
     static BinaryOperatorNode parsePrint(Parser parser, LexerToken token, int currentIndex) {
         Node handle;

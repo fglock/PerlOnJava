@@ -5973,6 +5973,23 @@ public class BytecodeCompiler implements Visitor {
                         lastResultReg = rd;
                         return;
                     }
+                    if (operandOp.operand instanceof BlockNode
+                            || operandOp.operand instanceof OperatorNode
+                            || operandOp.operand instanceof StringNode) {
+                        // Refgen \&{EXPR} creates or retrieves a CODE slot; it
+                        // is not an invocation of that slot.  In particular,
+                        // \&{''} remains a valid anonymous CODE reference even
+                        // in a lexical strict-refs scope (perl #94476).
+                        compileNode(operandOp.operand, -1, RuntimeContextType.SCALAR);
+                        int valueReg = lastResultReg;
+                        int rd = allocateOutputRegister();
+                        emit(Opcodes.CODE_DEREF_NONSTRICT);
+                        emitReg(rd);
+                        emitReg(valueReg);
+                        emit(addToStringPool(getCurrentPackage()));
+                        lastResultReg = rd;
+                        return;
+                    }
                     // For both \&name and \&$var (lexical subs), the & operator
                     // already produces a CODE value — no CREATE_REF wrapping needed.
                     // This matches the JVM backend's createCodeReference behavior.

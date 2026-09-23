@@ -3758,21 +3758,30 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             case ARRAYREFERENCE, HASHREFERENCE, REGEX ->
                     throw new PerlCompilerException("Not a subroutine reference");
+            case FORMAT -> throw new PerlCompilerException("Not a CODE reference");
             case GLOB, GLOBREFERENCE -> {
                 // Get the CODE slot from the glob
-                RuntimeGlob glob = (RuntimeGlob) value;
+                if (!(value instanceof RuntimeGlob glob)) {
+                    throw new PerlCompilerException("Not a CODE reference");
+                }
                 // A typeglob copied into a scalar retains the CODE slot that
                 // was visible at copy time, even after `undef *name` removes
                 // the named stash entry.
                 RuntimeScalar savedCode = glob.getSavedCodeSlot();
-                if (savedCode != null) {
+                if (savedCode != null && savedCode.type == CODE) {
                     yield savedCode;
                 }
                 // For detached globs (null globName, from stash delete), use local code slot
-                if (glob.globName == null) {
-                    yield glob.codeSlot != null ? glob.codeSlot : new RuntimeScalar();
+                if (glob.globName == null && glob.codeSlot != null
+                        && glob.codeSlot.type == CODE) {
+                    yield glob.codeSlot;
                 }
-                yield GlobalVariable.getGlobalCodeRef(glob.globName);
+                RuntimeScalar code = glob.globName == null
+                        ? null : GlobalVariable.getGlobalCodeRef(glob.globName);
+                if (code != null && code.type == CODE) {
+                    yield code;
+                }
+                throw new PerlCompilerException("Not a CODE reference");
             }
             default -> {
                 // Symbolic reference: treat the scalar's string value as a subroutine name
@@ -3819,20 +3828,32 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (deref.type == RuntimeScalarType.CODE) {
                     yield deref;
                 }
-                throw new PerlCompilerException("Not a subroutine reference");
+                throw new PerlCompilerException("Not a CODE reference");
             }
             case ARRAYREFERENCE, HASHREFERENCE, REGEX ->
                     throw new PerlCompilerException("Not a subroutine reference");
+            case FORMAT -> throw new PerlCompilerException("Not a CODE reference");
             case GLOB, GLOBREFERENCE -> {
-                RuntimeGlob glob = (RuntimeGlob) value;
+                // A glob-typed scalar may hold a direct IO/FORMAT slot rather
+                // than a RuntimeGlob.  It is not callable; importantly, do
+                // not cast the slot before producing Perl's CODE diagnostic.
+                if (!(value instanceof RuntimeGlob glob)) {
+                    throw new PerlCompilerException("Not a CODE reference");
+                }
                 RuntimeScalar savedCode = glob.getSavedCodeSlot();
-                if (savedCode != null) {
+                if (savedCode != null && savedCode.type == CODE) {
                     yield savedCode;
                 }
-                if (glob.globName == null) {
-                    yield glob.codeSlot != null ? glob.codeSlot : new RuntimeScalar();
+                if (glob.globName == null && glob.codeSlot != null
+                        && glob.codeSlot.type == CODE) {
+                    yield glob.codeSlot;
                 }
-                yield GlobalVariable.getGlobalCodeRef(glob.globName);
+                RuntimeScalar code = glob.globName == null
+                        ? null : GlobalVariable.getGlobalCodeRef(glob.globName);
+                if (code != null && code.type == CODE) {
+                    yield code;
+                }
+                throw new PerlCompilerException("Not a CODE reference");
             }
             default -> throw new PerlCompilerException("Not a subroutine reference");
         };

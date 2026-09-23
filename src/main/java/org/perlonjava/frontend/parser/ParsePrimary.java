@@ -230,11 +230,10 @@ public class ParsePrimary {
                 // An explicitly undef'd CODE slot leaves its typeglob present,
                 // but it no longer overrides the builtin.  In particular,
                 // glob must then resume its File::Glob::csh_glob fallback.
-                boolean evalVisibleOverride = parser.parsingEvalString
-                        && GlobalVariable.existsGlobalCodeRef(coreGlobalName);
                 boolean timeOverride = operator.equals("time")
                         && RuntimeGlob.isGlobAssigned(coreGlobalName);
-                if ((RuntimeGlob.isGlobAssigned(coreGlobalName) || evalVisibleOverride)
+                if (!operator.equals("readpipe")
+                        && RuntimeGlob.isGlobAssigned(coreGlobalName)
                         && (GlobalVariable.isGlobalCodeRefDefined(coreGlobalName) || timeOverride)) {
                     // Example: 'BEGIN { *CORE::GLOBAL::hex = sub { 456 } } print hex("123"), "\n"'
                     
