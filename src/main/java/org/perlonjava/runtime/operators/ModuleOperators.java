@@ -1083,6 +1083,12 @@ public class ModuleOperators {
         return true;
     }
 
+    /** Find an already-defined code slot without creating a placeholder CV. */
+    private static RuntimeScalar existingCodeRef(String name) {
+        RuntimeScalar code = GlobalVariable.globalCodeRefs.get(name);
+        return code == null ? new RuntimeScalar() : code;
+    }
+
     /**
      * Try to call an @INC hook to load a module.
      *
@@ -1124,13 +1130,13 @@ public class ModuleOperators {
                 // Try to find the INC method or AUTOLOAD
                 try {
                     // Try direct INC method first
-                    RuntimeScalar method = GlobalVariable.getGlobalCodeRefForFreshLookup(blessId + "::INC");
+                    RuntimeScalar method = existingCodeRef(blessId + "::INC");
                     if (method.defined().getBoolean() && method.type == RuntimeScalarType.CODE) {
                         codeRef = (RuntimeCode) method.value;
                         methodHook = true;
                     } else {
                         // Try AUTOLOAD
-                        method = GlobalVariable.getGlobalCodeRefForFreshLookup(blessId + "::AUTOLOAD");
+                        method = existingCodeRef(blessId + "::AUTOLOAD");
                         if (method.defined().getBoolean() && method.type == RuntimeScalarType.CODE) {
                             // Set up $AUTOLOAD variable
                             GlobalVariable.getGlobalVariable(blessId + "::AUTOLOAD").set(blessId + "::INC");
@@ -1162,7 +1168,7 @@ public class ModuleOperators {
                     arrayHook = hook;
                     selfArg = firstElem;
                     String blessId = NameNormalizer.getBlessStr(firstBlessId);
-                    RuntimeScalar method = GlobalVariable.getGlobalCodeRefForFreshLookup(blessId + "::INC");
+                    RuntimeScalar method = existingCodeRef(blessId + "::INC");
                     if (method.defined().getBoolean() && method.type == RuntimeScalarType.CODE) {
                         codeRef = (RuntimeCode) method.value;
                         methodHook = true;
@@ -1177,7 +1183,7 @@ public class ModuleOperators {
 
         if (codeRef == null && objectHook != null) {
             String blessId = NameNormalizer.getBlessStr(RuntimeScalarType.blessedId(objectHook));
-            RuntimeScalar incdir = GlobalVariable.getGlobalCodeRefForFreshLookup(blessId + "::INCDIR");
+            RuntimeScalar incdir = existingCodeRef(blessId + "::INCDIR");
             if (incdir.defined().getBoolean() && incdir.type == RuntimeScalarType.CODE) {
                 RuntimeArray args = new RuntimeArray();
                 args.push(selfArg);
