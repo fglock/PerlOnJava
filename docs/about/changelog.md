@@ -9,6 +9,9 @@ priorities and future plans.
 - Preserve localized standard-handle file descriptors when redirected output
   is active, restoring IO::Prompt::Tiny prompt reads on both execution backends.
 
+- Restore Unicode 18 identifier acceptance and case-insensitive regex debug
+  rendering for multi-character folds.
+
 - Fix regex interpolation of `$|.` anchors, restoring `String::Errf` formatting
   with interpolated `/x` patterns on both execution backends.
 

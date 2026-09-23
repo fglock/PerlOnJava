@@ -435,6 +435,7 @@ final class RegexDebugProgram {
                 for (byte value : encoded) bytes.add(value & 0xff);
                 codePoints.add((long)'s');
                 ignoreCase = true;
+                multiCharacterFoldExpansion |= branch.multiCharacterFoldExpansion();
                 cursor = branch.end();
                 break;
             }
@@ -506,6 +507,9 @@ final class RegexDebugProgram {
         }
         boolean expansion = selected.codePoints().size() > 1
                 && alternatives.get(0).codePoints().size() == 1;
+        for (LogicalExact candidate : alternatives) {
+            expansion |= candidate.multiCharacterFoldExpansion();
+        }
         return new LogicalExact(selected.bytes(), selected.codePoints(), join,
                 alternatives.get(0).lexicalOption(), true,
                 selected.singleByteFoldOpcode(), expansion,

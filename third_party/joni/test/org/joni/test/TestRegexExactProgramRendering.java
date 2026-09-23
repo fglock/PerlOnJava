@@ -94,7 +94,7 @@ public class TestRegexExactProgramRendering {
         assertDescription("(?iaa)[\\x{1E9E}]", Option.NONE,
                 "EXACTFAA <\\x{17f}\\x{17f}>");
         assertDescription("(?i)[\\x{1E9E}]", Option.NONE,
-                "EXACTF <ss>");
+                "EXACTFU <ss>");
         assertDescription("[\\x{7fffffffffffffff}]", Option.NONE,
                 "EXACT_REQ8 <\\x{7fffffffffffffff}>");
         assertDescription("(?i)[\\x{345}\\x{399}\\x{3B9}\\x{1FBE}]",

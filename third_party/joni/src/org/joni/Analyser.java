@@ -2202,11 +2202,17 @@ final class Analyser extends Parser {
 
     private void updateStringNodeCaseFold(Node node) {
         StringNode sn = (StringNode)node;
+        boolean singleSourceCharacter = sn.length(enc) == 1;
+        int sourceCodePoint = singleSourceCharacter
+                ? enc.mbcToCode(sn.bytes, sn.p, sn.end) : -1;
         byte[] toLower = enc.toLowerCaseTable();
         if (toLower != null) {
             updateStringNodeCaseFoldSingleByte(sn, toLower);
         } else {
             updateStringNodeCaseFoldMultiByte(sn);
+        }
+        if (singleSourceCharacter && PerlCaseFold.fullFoldLength(sourceCodePoint) > 1) {
+            sn.setDebugSingleSourceMultiFold();
         }
     }
 
@@ -2278,6 +2284,11 @@ final class Analyser extends Parser {
             snode = new StringNode();
 
             for (int j = 0; j < items[i].code.length; j++) snode.catCode(items[i].code[j], enc);
+            int sourceCodePoint = enc.mbcToCode(bytes, p, p + slen);
+            if (enc.strLength(bytes, p, p + slen) == 1
+                    && PerlCaseFold.fullFoldLength(sourceCodePoint) > 1) {
+                snode.setDebugSingleSourceMultiFold();
+            }
 
             ListNode an = newAlt(null, null);
             if (items[i].byteLen != slen) {
