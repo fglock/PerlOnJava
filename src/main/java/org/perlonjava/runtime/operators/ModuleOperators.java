@@ -150,12 +150,26 @@ public class ModuleOperators {
      * @return Result of execution (undef on error, with $@ or $! set)
      */
     private static RuntimeBase doFile(RuntimeScalar runtimeScalar, boolean setINC, boolean isRequire, int ctx) {
+        if (runtimeScalar == null || !runtimeScalar.getDefinedBoolean()
+                || runtimeScalar.toString().isEmpty()) {
+            throw new PerlCompilerException("Missing or undefined argument to "
+                    + (isRequire ? "require" : "do"));
+        }
         RuntimeScalar.checkTaint(runtimeScalar, isRequire ? "require" : "do");
         // Clear error variables at start
         GlobalVariable.setGlobalVariable("main::@", "");
         GlobalVariable.setGlobalVariable("main::!", "");
 
         String fileName = runtimeScalar.toString();
+        String sanitizedFileName = RuntimeIO.sanitizePathname(
+                isRequire ? "require" : "do", fileName);
+        if (sanitizedFileName == null) {
+            // sanitizePathname has emitted the Perl warning (when enabled) and
+            // set $! to ENOENT.  In particular, do FILE returns undef without
+            // setting $@, while require formats the corresponding failure.
+            return new RuntimeScalar();
+        }
+        fileName = sanitizedFileName;
         Path fullName = null;
         String code = null;
         String actualFileName = null;
@@ -936,22 +950,7 @@ public class ModuleOperators {
                 incHash.elements.remove(fileName);
                 throw new PerlCompilerException(message);
             } else if (err.isEmpty()) {
-                // Derive module name from filename for helpful error message
-                String moduleName = fileName;
-                if (moduleName.endsWith(".pm")) {
-                    moduleName = moduleName.substring(0, moduleName.length() - 3);
-                }
-                moduleName = moduleName.replace("/", "::");
-                
-                // Build @INC list for error message
-                RuntimeArray incArray = GlobalVariable.getGlobalArray("main::INC");
-                StringBuilder incList = new StringBuilder();
-                for (int i = 0; i < incArray.size(); i++) {
-                    if (i > 0) incList.append(" ");
-                    incList.append(incArray.get(i).toString());
-                }
-                
-                message = "Can't locate " + fileName + " in @INC (you may need to install the " + moduleName + " module) (@INC entries checked: " + incList + ")";
+                message = missingRequireMessage(fileName);
                 // Don't set %INC for file not found errors
                 throw new PerlCompilerException(message);
             } else {
@@ -991,6 +990,62 @@ public class ModuleOperators {
         // If module_true was disabled, result will be the module's actual return value
         return result;
         }
+    }
+
+    /** Format Perl's missing-require diagnostic without suggesting invalid module names. */
+    private static String missingRequireMessage(String fileName) {
+        String displayName = fileName.replace("\0", "\\0");
+        if (fileName.indexOf('\0') >= 0) {
+            return "Can't locate " + displayName + ": No such file or directory";
+        }
+        if (fileName.startsWith("/") || fileName.startsWith("./") || fileName.startsWith("../")) {
+            return "Can't locate " + displayName;
+        }
+
+        RuntimeArray incArray = GlobalVariable.getGlobalArray("main::INC");
+        StringBuilder incList = new StringBuilder();
+        for (int i = 0; i < incArray.size(); i++) {
+            if (i > 0) incList.append(" ");
+            incList.append(incArray.get(i).toString());
+        }
+
+        String advice = "";
+        if (fileName.endsWith(".h")) {
+            advice = " (change .h to .ph maybe?) (did you run h2ph?)";
+        } else if (fileName.endsWith(".ph")) {
+            advice = " (did you run h2ph?)";
+        } else if (isModuleFilename(fileName)) {
+            String moduleName = fileName.substring(0, fileName.length() - 3).replace("/", "::");
+            advice = " (you may need to install the " + moduleName + " module)";
+        }
+        return "Can't locate " + displayName + " in @INC" + advice
+                + " (@INC entries checked: " + incList + ")";
+    }
+
+    private static boolean isModuleFilename(String fileName) {
+        if (!fileName.endsWith(".pm")) return false;
+        String stem = fileName.substring(0, fileName.length() - 3);
+        if (stem.isEmpty()) return false;
+        String[] parts = stem.split("/", -1);
+        for (int partIndex = 0; partIndex < parts.length; partIndex++) {
+            String part = parts[partIndex];
+            if (part.isEmpty()) return false;
+            int offset = 0;
+            int first = part.codePointAt(offset);
+            // Perl permits numeric package components after the first :: (for
+            // example No::1Such), but still rejects a continuation-only
+            // Unicode character at a component's first position.
+            boolean validStart = first == '_' || Character.isUnicodeIdentifierStart(first)
+                    || (partIndex > 0 && first >= '0' && first <= '9');
+            if (!validStart) return false;
+            offset += Character.charCount(first);
+            while (offset < part.length()) {
+                int codePoint = part.codePointAt(offset);
+                if (!(codePoint == '_' || Character.isUnicodeIdentifierPart(codePoint))) return false;
+                offset += Character.charCount(codePoint);
+            }
+        }
+        return true;
     }
 
     /**

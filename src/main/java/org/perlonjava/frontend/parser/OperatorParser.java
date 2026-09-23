@@ -1837,6 +1837,16 @@ public class OperatorParser {
         token = peek(parser);
         Node operand;
 
+        // The diamond form is meaningful in ordinary expressions, but Perl
+        // rejects it specifically as a require argument rather than trying to
+        // load a file named after the input handle.
+        if (token.type == OPERATOR && token.text.equals("<")) {
+            int next = Whitespace.skipWhitespace(parser, parser.tokenIndex + 1, parser.tokens);
+            if (next < parser.tokens.size() && parser.tokens.get(next).text.equals(">")) {
+                parser.throwError("<> at require-statement should be quotes");
+            }
+        }
+
         // `require` version
         if (token.type == NUMBER) {
             consume(parser);
@@ -1844,7 +1854,12 @@ public class OperatorParser {
         } else if (token.text.matches("^v\\d+$")) {
             consume(parser);
             operand = StringParser.parseVstring(parser, token.text, parser.tokenIndex);
-        } else if (token.type == IDENTIFIER && !ParsePrimary.isIsQuoteLikeOperator(token.text)) {
+        } else if (token.type == IDENTIFIER
+                && !ParsePrimary.isIsQuoteLikeOperator(token.text)
+                // `require eval EXPR` has a computed filename.  Do not consume
+                // `eval` as a bare module name and leave EXPR unparsed.
+                && !token.text.equals("eval")
+                && !token.text.equals("evalbytes")) {
             // `require` bareword module name - parse directly without going through expression parser
             // This avoids treating module names like "Encode" as subroutine calls when a sub
             // with the same name exists in the current package (e.g., sub Encode in Image::ExifTool)
