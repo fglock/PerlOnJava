@@ -882,7 +882,11 @@ public class RuntimeIO extends RuntimeScalar {
             // Initialize ioHandle with CustomFileChannel
             fh.ioHandle = new CustomFileChannel(filePath, options);
 
-            // Fileno is assigned lazily when fileno() is called
+            // Reserve the virtual descriptor immediately.  Handles can be
+            // installed into a localized standard glob before fileno() is
+            // queried; lazy allocation in that case can collide with a later
+            // handle that does request its descriptor.
+            fh.assignFileno();
 
             // Add the handle to the LRU cache
             addHandle(fh.ioHandle);

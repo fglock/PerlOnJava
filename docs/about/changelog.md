@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve localized standard-handle file descriptors when redirected output
+  is active, restoring IO::Prompt::Tiny prompt reads on both execution backends.
+
 - Fix regex interpolation of `$|.` anchors, restoring `String::Errf` formatting
   with interpolated `/x` patterns on both execution backends.
 
