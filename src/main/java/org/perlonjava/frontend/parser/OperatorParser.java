@@ -1870,7 +1870,7 @@ public class OperatorParser {
             // with the same name exists in the current package (e.g., sub Encode in Image::ExifTool)
             // But don't intercept quote-like operators like q(), qq(), etc.
             int savedIndex = parser.tokenIndex;
-            String moduleName = IdentifierParser.parseSubroutineIdentifier(parser);
+            String moduleName = IdentifierParser.parseSubroutineIdentifier(parser, false, true);
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("require module name `" + moduleName + "`");
             if (moduleName == null) {
                 throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
