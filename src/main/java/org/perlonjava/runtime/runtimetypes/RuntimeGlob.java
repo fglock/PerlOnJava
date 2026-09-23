@@ -75,6 +75,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     // The name of the typeglob
     public String globName;
     public RuntimeScalar IO;
+    // Keep an anonymous source glob alive when its IO slot is assigned into a
+    // named glob (for example local *STDIN = $tempfile).  The named glob owns
+    // the IO slot but must also retain the source until the assignment scope
+    // ends, otherwise phantom fd recycling can close the live handle.
+    private RuntimeGlob retainedIoGlob;
     // The IO slot displaced by local *GLOB.  A subsequent selective FORMAT
     // assignment must retain it: `local *FH = *OTHER{FORMAT}` does not replace
     // FH's filehandle.
@@ -858,6 +863,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             }
 
             this.IO = value.IO;
+            this.retainedIoGlob = value;
             // Also update the global IO entry for this glob
             if (this.globName != null) {
                 RuntimeGlob targetIO = GlobalVariable.getGlobalIO(this.globName);
