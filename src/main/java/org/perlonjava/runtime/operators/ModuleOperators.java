@@ -545,6 +545,25 @@ public class ModuleOperators {
                 // Search in INC directories
                 RuntimeArray incArray = GlobalVariable.getGlobalArray("main::INC");
 
+                // The launcher may supply only project test paths. Keep the
+                // bundled library available for runtime loading, but do not
+                // claim this synthesized fallback as a user-searched @INC
+                // entry in Perl's diagnostic.
+                boolean syntheticBundledInc = false;
+                boolean seenBundledInc = false;
+                for (int i = 0; i < incArray.size(); i++) {
+                    RuntimeScalar dir = incArray.get(i);
+                    if (dir.type == RuntimeScalarType.TIED_SCALAR) dir = dir.tiedFetch();
+                    if (GlobalContext.JAR_PERLLIB.equals(dir.toString())) {
+                        seenBundledInc = true;
+                        break;
+                    }
+                }
+                if (!seenBundledInc) {
+                    incArray.push(new RuntimeScalar(GlobalContext.JAR_PERLLIB));
+                    syntheticBundledInc = true;
+                }
+
                 // Re-fetch the global array on every iteration. An @INC hook
                 // may replace @INC entirely; Perl continues with the entry at
                 // the current numeric position in that replacement.
@@ -557,7 +576,10 @@ public class ModuleOperators {
                     if (dirScalar.type == RuntimeScalarType.TIED_SCALAR) {
                         dirScalar = dirScalar.tiedFetch();
                     }
-                    incEntriesChecked.add(dirScalar.toString());
+                    if (!(syntheticBundledInc
+                            && GlobalContext.JAR_PERLLIB.equals(dirScalar.toString()))) {
+                        incEntriesChecked.add(dirScalar.toString());
+                    }
 
                     // For absolute/relative paths (starting with /, ./, ../), only try hooks
                     // Regular directory entries should be skipped for such paths
