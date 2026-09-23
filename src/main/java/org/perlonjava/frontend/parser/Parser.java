@@ -69,6 +69,7 @@ public class Parser {
             new IdentityHashMap<>();
     private final Map<LexicalSubWarningFrame, Set<String>> refaliasLexicals =
             new IdentityHashMap<>();
+    private final Map<String, Integer> priorLexicalMutations = new LinkedHashMap<>();
 
     /** The anonymous CV currently enclosing the subroutine being parsed. */
     public LexicalSubWarningFrame enclosingAnonymousClosureFrame() {
@@ -115,8 +116,9 @@ public class Parser {
     }
 
     /** Record a write parsed after a candidate CV in the same anonymous scope. */
-    public void noteLexicalConstantMutation(String name) {
+    public void noteLexicalConstantMutation(String name, int sourceIndex) {
         if (name == null) return;
+        priorLexicalMutations.putIfAbsent(name, sourceIndex);
         for (LexicalSubWarningFrame frame : lexicalSubWarningFrames) {
             if (!frame.anonymous) continue;
             List<Node> candidates = lexicalConstantCandidates
@@ -134,6 +136,14 @@ public class Parser {
             }
             return;
         }
+    }
+
+    public boolean hasPriorLexicalMutationBefore(Set<String> names, int sourceIndex) {
+        for (String name : names) {
+            Integer mutationIndex = priorLexicalMutations.get(name);
+            if (mutationIndex != null && mutationIndex < sourceIndex) return true;
+        }
+        return false;
     }
 
     // Format argument text is re-tokenized and may be parsed after the normal

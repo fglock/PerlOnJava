@@ -1003,6 +1003,15 @@ public class StatementParser {
 
         StatementResolver.parseStatementTerminator(parser);
 
+        boolean evalRequireOverride = parser.parsingEvalString
+                && GlobalVariable.isGlobalCodeRefDefined("CORE::GLOBAL::require");
+        if (evalRequireOverride && fullName == null && versionNode != null) {
+            RuntimeArray requireArgs = new RuntimeArray();
+            RuntimeArray.push(requireArgs, versionScalar);
+            RuntimeCode.apply(GlobalVariable.getGlobalCodeRefForFreshLookup("CORE::GLOBAL::require"),
+                    requireArgs, RuntimeContextType.VOID);
+        }
+
         if (fullName != null) {
             // execute the statement immediately, using:
             // `require "fullName.pm"`
@@ -1018,7 +1027,17 @@ public class StatementParser {
                 if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Use statement: " + fullName + " called from " + CallerStack.peek(0));
 
                 // execute 'require(fullName)'
-                RuntimeScalar ret = ModuleOperators.require(new RuntimeScalar(fullName));
+                RuntimeScalar ret;
+                if (evalRequireOverride) {
+                    RuntimeArray requireArgs = new RuntimeArray();
+                    RuntimeArray.push(requireArgs, new RuntimeScalar(fullName));
+                    RuntimeList result = RuntimeCode.apply(
+                            GlobalVariable.getGlobalCodeRefForFreshLookup("CORE::GLOBAL::require"),
+                            requireArgs, RuntimeContextType.SCALAR);
+                    ret = result.isEmpty() ? scalarUndef : result.getFirst();
+                } else {
+                    ret = ModuleOperators.require(new RuntimeScalar(fullName));
+                }
                 if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Use statement return: " + ret);
 
                 if (versionNode != null) {

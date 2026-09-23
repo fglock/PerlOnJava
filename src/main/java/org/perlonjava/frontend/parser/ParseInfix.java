@@ -280,7 +280,7 @@ public class ParseInfix {
             if (isAssignmentOperator(operator)) {
                 String mutatedLexical = directScalarLexicalName(left);
                 if (mutatedLexical != null) {
-                    parser.noteLexicalConstantMutation(mutatedLexical);
+                    parser.noteLexicalConstantMutation(mutatedLexical, operatorIndex);
                 }
                 String refaliasLexical = refaliasDeclarationName(right);
                 if (refaliasLexical != null) {
@@ -660,6 +660,10 @@ public class ParseInfix {
     }
 
     private static String directScalarLexicalName(Node node) {
+        if (node instanceof OperatorNode declaration
+                && ("my".equals(declaration.operator) || "state".equals(declaration.operator))) {
+            return directScalarLexicalName(declaration.operand);
+        }
         if (node instanceof OperatorNode op && "$".equals(op.operator)
                 && op.operand instanceof IdentifierNode id) {
             return "$" + id.name;

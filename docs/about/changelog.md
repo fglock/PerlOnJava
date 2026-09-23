@@ -18,6 +18,10 @@ priorities and future plans.
 - Restore `require` compatibility for dynamic `@INC` hooks, failed-open
   diagnostics, and hook-provided source locations on both execution backends.
 
+- Restore `op/override.t` compatibility for `CORE::GLOBAL` overrides in string
+  evals, v-string `require` versions, backticks, readline syntax, and
+  zero-prototype lexical closures.
+
 - Restore strict-reference diagnostics for dynamic subroutine calls, including
   numeric scalar invocants and both execution backends.
 

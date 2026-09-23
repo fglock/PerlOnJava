@@ -2753,7 +2753,10 @@ public class SubroutineParser {
                 && (lexicalConstantCvIsRefalias(parser, parser.tokenIndex, capturedNames)
                 || (capturedNames.size() == 1 && parser.hasRefaliasLexical(owner,
                 capturedNames.iterator().next())));
-        if (simpleLexical && !priorCapture && !refaliasLexical
+        int enclosingBlockStart = enclosingBlockStart(parser, parser.tokenIndex);
+        boolean priorMutation = isBeginBlock(parser, enclosingBlockStart)
+                && parser.hasPriorLexicalMutationBefore(capturedNames, enclosingBlockStart);
+        if (simpleLexical && !priorCapture && !priorMutation && !refaliasLexical
                 && !(optimizedLexical && unsafeLexical)) {
             node.setAnnotation("simpleLexicalConstantCandidate", true);
             if (optimizedLexical) {

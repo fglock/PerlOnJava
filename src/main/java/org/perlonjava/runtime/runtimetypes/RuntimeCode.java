@@ -3187,6 +3187,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Create an instance of ErrorMessageUtil with the file name and token list
                 evalCtx.errorUtil = new ErrorMessageUtil(evalCtx.compilerOptions.fileName, tokens);
                 Parser parser = new Parser(evalCtx, tokens); // Parse the tokens
+                parser.parsingEvalString = true;
                 BHooksEndOfScope.beginFileLoad(evalCompilerOptions.fileName);
                 try {
                     ast = parser.parse(); // Generate the abstract syntax tree (AST)
@@ -3736,6 +3737,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         ctx.unitcheckBlocks);
 
                 Parser parser = new Parser(evalCtx, tokens);
+                parser.parsingEvalString = true;
                 BHooksEndOfScope.beginFileLoad(evalCompilerOptions.fileName);
                 String savedRegexWarningBits = RegexQuoteMeta.getParserWarningBits();
                 RegexQuoteMeta.setParserWarningBits(lexicalEvalWarningBits);

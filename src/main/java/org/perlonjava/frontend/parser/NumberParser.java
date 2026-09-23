@@ -754,6 +754,19 @@ public class NumberParser {
 
     // parseNumber(RuntimeScalar, String) method - with optional operation context for warnings
     public static RuntimeScalar parseNumber(RuntimeScalar runtimeScalar, String operation) {
+        if (runtimeScalar.type == RuntimeScalarType.VSTRING
+                && runtimeScalar.value instanceof String vstring && !vstring.isEmpty()) {
+            StringBuilder decimal = new StringBuilder();
+            decimal.append((int) vstring.charAt(0));
+            if (vstring.length() > 1) {
+                decimal.append('.');
+                for (int i = 1; i < vstring.length(); i++) {
+                    if (i > 1) decimal.append('_');
+                    decimal.append(String.format("%03d", (int) vstring.charAt(i)));
+                }
+            }
+            return parseNumber(new RuntimeScalar(decimal.toString()), operation);
+        }
         String str = runtimeScalar.toString();
         if (str == null) {
             str = "";

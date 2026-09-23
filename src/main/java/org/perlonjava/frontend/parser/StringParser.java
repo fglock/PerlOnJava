@@ -20,6 +20,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.RuntimeGlob;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 import org.perlonjava.runtime.runtimetypes.WarningFlags;
@@ -1240,8 +1241,32 @@ public class StringParser {
 
         switch (operator) {
             case "`":
-            case "qx":
-                return parseSystemCommand(parser.ctx, operator, rawStr);
+            case "qx": {
+                Node command = parseSystemCommand(parser.ctx, operator, rawStr);
+                String localName = parser.ctx.symbolTable.getCurrentPackage() + "::readpipe";
+                String name = GlobalVariable.isSubs.getOrDefault(localName, false)
+                        && GlobalVariable.isGlobalCodeRefDefined(localName)
+                        ? localName : "CORE::GLOBAL::readpipe";
+                if (!GlobalVariable.isGlobalCodeRefDefined(name)
+                        || (name.startsWith("CORE::GLOBAL::") && !RuntimeGlob.isGlobAssigned(name))) {
+                    return command;
+                }
+                OperatorNode codeRef = new OperatorNode("&", new IdentifierNode(name, rawStr.index), rawStr.index);
+                if (GlobalVariable.getGlobalCodeRef(name).value instanceof RuntimeCode code
+                        && "".equals(code.prototype)) {
+                    parser.throwError("Too many arguments");
+                }
+                codeRef.setAnnotation("directNamedCall", true);
+                codeRef.setAnnotation("parseTimeCodeRef", GlobalVariable.getGlobalCodeRef(name));
+                ListNode arguments = new ListNode(rawStr.index);
+                if (command instanceof OperatorNode op && op.operand instanceof ListNode args
+                        && !args.elements.isEmpty()) {
+                    arguments.elements.add(args.elements.getFirst());
+                } else {
+                    arguments.elements.add(command);
+                }
+                return new BinaryOperatorNode("(", codeRef, arguments, rawStr.index);
+            }
             case "'":
             case "q":
                 return StringSingleQuoted.parseSingleQuotedString(rawStr);
@@ -1281,6 +1306,23 @@ public class StringParser {
                 // before passing to glob(). This ensures variables are interpolated.
                 Node interpolated = StringDoubleQuoted.parseDoubleQuotedString(
                         parser.ctx, rawStr, true, true, false, parser.getHeredocNodes(), parser);
+                String readlineName = "CORE::GLOBAL::readline";
+                if (rawStr.buffers.size() == 1
+                        && rawStr.buffers.getFirst().matches("[A-Za-z_][A-Za-z0-9_]*")
+                        && RuntimeGlob.isGlobAssigned(readlineName)
+                        && GlobalVariable.isGlobalCodeRefDefined(readlineName)) {
+                    RuntimeScalar readline = GlobalVariable.getGlobalCodeRef(readlineName);
+                    if (readline.value instanceof RuntimeCode code && "".equals(code.prototype)) {
+                        parser.throwError("Too many arguments");
+                    }
+                    OperatorNode codeRef = new OperatorNode("&",
+                            new IdentifierNode(readlineName, rawStr.index), rawStr.index);
+                    codeRef.setAnnotation("directNamedCall", true);
+                    codeRef.setAnnotation("parseTimeCodeRef", readline);
+                    ListNode arguments = new ListNode(rawStr.index);
+                    arguments.elements.add(interpolated);
+                    return new BinaryOperatorNode("(", codeRef, arguments, rawStr.index);
+                }
                 RuntimeScalar globOverride = findGlobOverride(parser);
                 if (globOverride != null) {
                     OperatorNode codeRefNode = new OperatorNode("&",

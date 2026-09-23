@@ -230,8 +230,12 @@ public class ParsePrimary {
                 // An explicitly undef'd CODE slot leaves its typeglob present,
                 // but it no longer overrides the builtin.  In particular,
                 // glob must then resume its File::Glob::csh_glob fallback.
-                if (RuntimeGlob.isGlobAssigned(coreGlobalName)
-                        && GlobalVariable.isGlobalCodeRefDefined(coreGlobalName)) {
+                boolean evalVisibleOverride = parser.parsingEvalString
+                        && GlobalVariable.existsGlobalCodeRef(coreGlobalName);
+                boolean timeOverride = operator.equals("time")
+                        && RuntimeGlob.isGlobAssigned(coreGlobalName);
+                if ((RuntimeGlob.isGlobAssigned(coreGlobalName) || evalVisibleOverride)
+                        && (GlobalVariable.isGlobalCodeRefDefined(coreGlobalName) || timeOverride)) {
                     // Example: 'BEGIN { *CORE::GLOBAL::hex = sub { 456 } } print hex("123"), "\n"'
                     
                     // Special handling for 'require' - need to convert bareword module name to string
@@ -245,6 +249,9 @@ public class ParsePrimary {
                             OperatorNode codeRef = new OperatorNode("&",
                                     new IdentifierNode(coreGlobalName, startIndex),
                                     startIndex);
+                            codeRef.setAnnotation("directNamedCall", true);
+                            codeRef.setAnnotation("parseTimeCodeRef",
+                                    GlobalVariable.getGlobalCodeRef(coreGlobalName));
                             // Defensive: ensure operand is a ListNode
                             ListNode operandList = (requireOp.operand instanceof ListNode)
                                     ? (ListNode) requireOp.operand
@@ -254,6 +261,20 @@ public class ParsePrimary {
                                     operandList,
                                     startIndex);
                         }
+                    }
+
+                    // A zero-prototype time override has no tokenized argument
+                    // to reparse.  Rewriting its token stream loses the call and
+                    // leaves the core time operator in the AST, so construct the
+                    // pinned direct-CV call explicitly.
+                    if (operator.equals("time")) {
+                        OperatorNode codeRef = new OperatorNode("&",
+                                new IdentifierNode(coreGlobalName, startIndex), startIndex);
+                        codeRef.setAnnotation("directNamedCall", true);
+                        codeRef.setAnnotation("parseTimeCodeRef",
+                                GlobalVariable.getGlobalCodeRef(coreGlobalName));
+                        return new BinaryOperatorNode("(", codeRef,
+                                new ListNode(startIndex), startIndex);
                     }
                     
                     // Skip whitespace to find the actual position of the operator token.
