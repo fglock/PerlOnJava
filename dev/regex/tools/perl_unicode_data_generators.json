@@ -35,7 +35,7 @@
          "generator" : "dev/regex/tools/generate_perl_unicode_block_data.pl",
          "name" : "block",
          "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeBlockData.java",
-         "output_sha256" : "48278fd65aeb579b2668ec5641bcdaf0dc9ca23c9aff1b592ea8894c5c11d64f",
+         "output_sha256" : "31b2b434cf0dde8665088ebb376d7b2c08ae394f40edd8f41892e2c296f99180",
          "perl_sources" : {
             "uni_keywords.h" : "2779e6971ce5bc772bab0cdc1638ebe77e16b1baaa817c38372c7b7f2592ed5c"
          },
@@ -152,7 +152,7 @@
          "generator" : "dev/regex/tools/generate_perl_unicode_residual_property_data.pl",
          "name" : "residual-property",
          "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeResidualPropertyData.java",
-         "output_sha256" : "ea2869b6922c6886c55244d63bab000fd9e2599baf0628d3c7c4912afa5b11a6",
+         "output_sha256" : "64ad35ab1c437b6eeba0536d3da4d8337e3a1bd504e4f0ce6c8b9d398a552817",
          "sources" : {
             "DCoreProperties.txt" : "09c928886a178fcafd93c29e4bd59073a058e5a100b716d425cb563ab50f68c9",
             "IdType.txt" : "fa24851acc669e58670e354e7b98a4ec8f52a809ec4f80524b6a60efdb868831",

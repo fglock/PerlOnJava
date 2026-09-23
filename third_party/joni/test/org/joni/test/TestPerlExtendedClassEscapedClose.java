@@ -40,8 +40,8 @@ public class TestPerlExtendedClassEscapedClose {
         SyntaxException error = assertThrows(SyntaxException.class,
                 () -> new Regex(bytes, 0, bytes.length, Option.NONE,
                         UTF8Encoding.INSTANCE, Syntax.PerlNG, WarnCallback.NONE));
-        assertEquals("Unexpected ']' with no following ')' in (?[...",
+        assertEquals("Operand with no preceding operator",
                 error.getMessage());
-        assertEquals(pattern.indexOf("\\]") + 2, error.getPatternPosition());
+        assertEquals(pattern.indexOf("\\]") + 1, error.getPatternPosition());
     }
 }

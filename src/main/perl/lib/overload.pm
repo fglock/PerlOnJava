@@ -22,6 +22,11 @@ our %ops = (
     special             => 'nomethod fallback =',
 );
 
+# A runtime bootstrap may install an overload table before its Perl module is
+# loaded.  The module sets this one-shot marker while replacing that table;
+# ordinary user redefinitions continue to use the normal warning path.
+our %PERLONJAVA_BOOTSTRAP_HANDOFF;
+
 my %ops_seen;
 @ops_seen{ map split(/ /), values %ops } = ();
 
@@ -47,7 +52,8 @@ sub OVERLOAD {
                 ${$sym} = $sub;
                 $sub = \&nil;
             }
-            if (defined &$sym
+            if (!$PERLONJAVA_BOOTSTRAP_HANDOFF{$package}
+                && defined &$sym
                 && (\&$sym != \&nil ||
                     defined $$sym && $$sym ne "")) {
                 warnings::warnif("redefine", "overload '$_' for $package redefined");

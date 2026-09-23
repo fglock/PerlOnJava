@@ -17,7 +17,7 @@ my $unicore = select_unicode_root(
         PropValueAliases.txt PropertyAliases.txt Unikemet.txt LineBreak.txt
         extracted/DBinaryProperties.txt emoji/emoji.txt
         auxiliary/GraphemeBreakProperty.txt auxiliary/WordBreakProperty.txt
-        auxiliary/SentenceBreakProperty.txt)],
+        auxiliary/SentenceBreakProperty.txt extracted/DNumType.txt)],
 );
 my $unicode_version = read_raw(File::Spec->catfile($unicore, 'version'));
 $unicode_version =~ s/\s+\z//;
@@ -36,6 +36,7 @@ my @sources = (
     ['auxiliary/GraphemeBreakProperty.txt', qr/^# GraphemeBreakProperty-\Q$unicode_version\E\.txt$/m],
     ['auxiliary/WordBreakProperty.txt', qr/^# WordBreakProperty-\Q$unicode_version\E\.txt$/m],
     ['auxiliary/SentenceBreakProperty.txt', qr/^# SentenceBreakProperty-\Q$unicode_version\E\.txt$/m],
+    ['extracted/DNumType.txt', qr/^# DerivedNumericType-\Q$unicode_version\E\.txt$/m],
 );
 for my $source (@sources) {
     my ($name, $version_pattern) = @$source;
@@ -60,6 +61,7 @@ my %property = (
     LB => { aliases => [qw(LB Line_Break)], default => 'Unknown' },
     WB => { aliases => [qw(WB Word_Break)], default => 'Other' },
     SB => { aliases => [qw(SB Sentence_Break)], default => 'Other' },
+    NT => { aliases => [qw(NT Numeric_Type)], default => 'None' },
 );
 my %binary_property = (
     ALPHA => { aliases => [qw(Alphabetic Alpha)] },
@@ -91,8 +93,10 @@ for my $line (split /\n/, $text{'PropValueAliases.txt'}) {
     $line =~ s/#.*$//;
     my @field = map { trim($_) } split /;/, $line;
     next unless @field >= 3 && ($field[0] eq 'GCB' || $field[0] eq 'InCB'
-        || $field[0] eq 'lb' || $field[0] eq 'WB' || $field[0] eq 'SB');
-    my $spec = $property{$field[0] eq 'lb' ? 'LB' : $field[0]};
+        || $field[0] eq 'lb' || $field[0] eq 'WB' || $field[0] eq 'SB'
+        || $field[0] eq 'nt');
+    my $spec = $property{$field[0] eq 'lb' ? 'LB'
+        : $field[0] eq 'nt' ? 'NT' : $field[0]};
     push @{$spec->{values}}, $field[2];
     push @{$spec->{short_values}}, $field[1];
     my $index = $#{$spec->{values}};
@@ -131,6 +135,9 @@ for my $line (split /\n/, $text{'auxiliary/WordBreakProperty.txt'}) {
 }
 for my $line (split /\n/, $text{'auxiliary/SentenceBreakProperty.txt'}) {
     add_range('SB', $1, $2) if $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*([A-Za-z_]+)/;
+}
+for my $line (split /\n/, $text{'extracted/DNumType.txt'}) {
+    add_range('NT', $1, $2) if $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*([A-Za-z_]+)/;
 }
 for my $line (split /\n/, $text{'DCoreProperties.txt'}) {
     add_range('InCB', $1, $2) if $line =~ /^([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;\s*InCB\s*;\s*([A-Za-z_]+)/;
@@ -298,7 +305,7 @@ for my $source (@sources) {
     print "    static final String ${constant}_SHA256 = \"$source->[1]\";\n";
 }
 print "\n";
-emit_property($_) for qw(GCB InCB IDTYPE KEHCORE LB WB SB);
+emit_property($_) for qw(GCB InCB IDTYPE KEHCORE LB WB SB NT);
 print "    private static final int[] HEX_RANGES = {\n"; emit_pairs(\@hex_ranges, '        '); print "    };\n";
 for my $key (sort keys %binary_property) {
     $binary_property{$key}{ranges} = coalesce($binary_property{$key}{ranges});
@@ -363,6 +370,7 @@ print <<'JAVA';
         if (LB.hasAlias(loose)) return LB;
         if (WB.hasAlias(loose)) return WB;
         if (SB.hasAlias(loose)) return SB;
+        if (NT.hasAlias(loose)) return NT;
         return null;
     }
     private static String loose(String value) {

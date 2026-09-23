@@ -2345,6 +2345,21 @@ public class UnicodeResolver {
         if (PerlUnicodeResidualPropertyData.isPropertyAlias(name)) {
             return resolvePerlResidualPropertyWildcard(name, wildcard);
         }
+        if (PerlUnicodeBlockData.isPropertyAlias(name)) {
+            UnicodeSet result = new UnicodeSet();
+            boolean matched = false;
+            for (int valueId = 0; valueId < PerlUnicodeBlockData.valueCount(); valueId++) {
+                if (!matchesPerlUnicodePropertyWildcard(
+                        wildcard, PerlUnicodeBlockData.valueAliases(valueId))) continue;
+                matched = true;
+                result.addAll(PerlUnicodeBlockData.set(valueId));
+            }
+            if (!matched) {
+                throw new IllegalArgumentException(
+                        "No Unicode property value wildcard matches " + name.trim());
+            }
+            return new PerlUnicodePropertyWildcard(result.freeze(), null, false);
+        }
         if (isPerlWordBreakProperty(name)) {
             return resolvePerlEnumeratedPropertyWildcard(
                     UProperty.WORD_BREAK, wildcard, "Word_Break",
@@ -2678,7 +2693,7 @@ public class UnicodeResolver {
                     PERL_UNICODE_SPACE_SET, false);
             case "whitespace" -> new PerlBarePropertyAlias(
                     PERL_UNICODE_SPACE_SET, false);
-            case "xposixalnum", "alnum" -> {
+            case "xposixalnum", "alnum", "isalnum" -> {
                 UnicodeSet alphabetic =
                         PerlUnicodeResidualPropertyData.binarySet("Alphabetic");
                 if (alphabetic == null) {
@@ -3122,21 +3137,8 @@ public class UnicodeResolver {
 
         UnicodeSet result = new UnicodeSet();
         for (int valueId = 0; valueId < PerlUnicodeBlockData.valueCount(); valueId++) {
-            String candidate = PerlUnicodeBlockData.canonicalValue(valueId);
-            boolean matches = valuePattern.matchesPropertyValue(candidate)
-                    || valuePattern.matchesPropertyValue(loosePropertyName(candidate));
-            int icuValue = unicodePropertyValue(UProperty.BLOCK, candidate);
-            for (int nameChoice = UProperty.NameChoice.SHORT;
-                    !matches && icuValue >= 0 && nameChoice <= UProperty.NameChoice.LONG;
-                    nameChoice++) {
-                String officialAlias = UCharacter.getPropertyValueName(
-                        UProperty.BLOCK, icuValue, nameChoice);
-                matches = officialAlias != null
-                        && (valuePattern.matchesPropertyValue(officialAlias)
-                            || valuePattern.matchesPropertyValue(
-                                    loosePropertyName(officialAlias)));
-            }
-            if (matches) {
+            if (matchesPerlUnicodePropertyWildcard(
+                    valuePattern, PerlUnicodeBlockData.valueAliases(valueId))) {
                 result.addAll(PerlUnicodeBlockData.set(valueId));
             }
         }

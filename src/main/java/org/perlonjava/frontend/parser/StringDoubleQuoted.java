@@ -595,7 +595,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
 
         if (property.equals("hyphen") || property.equals("ishyphen")) {
             boolean canonicalIsAlias = assignment.length == 1
-                    && (spelling.equals("IsHyphen") || spelling.equals("Is_Hyphen"));
+                    && (sourceProperty.equals("IsHyphen") || sourceProperty.equals("Is_Hyphen"));
             if (!canonicalIsAlias) {
                 reason = "Supplanted by Line_Break property values; "
                         + "see www.unicode.org/reports/tr14";
@@ -634,7 +634,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
     }
 
     private static String normalizeUnicodePropertyPart(String part) {
-        return part.replaceAll("[\\s_]", "")
+        return part.replaceAll("[\\s_-]", "")
                 .toLowerCase(java.util.Locale.ROOT);
     }
 
