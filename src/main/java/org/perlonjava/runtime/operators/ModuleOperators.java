@@ -14,8 +14,10 @@ import java.io.InputStream;
 import java.net.URL;
 import java.net.JarURLConnection;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.BasicFileAttributes;
 
 import static org.perlonjava.runtime.runtimetypes.ExceptionFormatter.findInnermostCause;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalHash;
@@ -492,7 +494,7 @@ public class ModuleOperators {
             if (tryDirectPath) {
                 // For absolute or explicit relative paths, resolve using RuntimeIO.getPath
                 filePath = RuntimeIO.resolvePath(fileName);
-                if (Files.exists(filePath) || !Files.notExists(filePath)) {
+                if (pathExistsOrIsInaccessible(filePath)) {
                     // Check if it's a directory
                     if (Files.isDirectory(filePath)) {
                         GlobalVariable.setGlobalVariable("main::!", "Is a directory");
@@ -653,7 +655,7 @@ public class ModuleOperators {
                             }
                         }
                         Path fullPath = dirPath.resolve(fileName);
-                        if (Files.exists(fullPath) || !Files.notExists(fullPath)) {
+                        if (pathExistsOrIsInaccessible(fullPath)) {
                             // Check if it's a directory
                             if (Files.isDirectory(fullPath)) {
                                 // Track that we found a directory (for EISDIR error)
@@ -838,6 +840,23 @@ public class ModuleOperators {
     }
 
     /** ClassLoader resources can represent directories; Perl require must skip them. */
+    /**
+     * Distinguish an absent pathname from one that the current effective UID
+     * cannot inspect.  {@link Files#exists(Path, java.nio.file.LinkOption...)}
+     * returns false for both, but Perl reports the latter as a failed open
+     * (with a colon-form diagnostic), not an @INC search miss.
+     */
+    private static boolean pathExistsOrIsInaccessible(Path path) {
+        try {
+            Files.readAttributes(path, BasicFileAttributes.class);
+            return true;
+        } catch (NoSuchFileException e) {
+            return false;
+        } catch (IOException | SecurityException e) {
+            return true;
+        }
+    }
+
     private static boolean isDirectoryResource(URL resource) {
         try {
             if (resource.openConnection() instanceof JarURLConnection jarConnection) {
