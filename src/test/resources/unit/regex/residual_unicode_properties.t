@@ -54,4 +54,34 @@ SKIP: {
         'kEH_Core wildcard matches');
 }
 
+SKIP: {
+    my $is_perlonjava = eval {
+        require PerlOnJava::Process;
+        PerlOnJava::Process::_is_perlonjava_runtime();
+    } || 0;
+    my $unicode_version = eval {
+        require Unicode::UCD;
+        Unicode::UCD::UnicodeVersion();
+    } // 'unknown';
+    skip "standard Perl uses Unicode $unicode_version", 8
+        if !$is_perlonjava && $unicode_version lt '18.0.0';
+
+    ok(chr(0x1DB1B) =~ qr/\p{Bidi_Mirrored=Yes}/,
+        'UCD 18 Bidi_Mirrored includes U+1DB1B');
+    ok(chr(0x1B168) =~ qr/\p{Line_Break=Conditional_Japanese_Starter}/,
+        'UCD 18 Line_Break includes U+1B168');
+    ok(chr(0x324DF) =~ qr/\p{Numeric_Type=Numeric}/,
+        'UCD 18 Numeric_Type includes U+324DF');
+    ok(chr(0x3FC3F) =~ qr/\p{Sentence_Break=OLetter}/,
+        'UCD 18 Sentence_Break includes U+3FC3F');
+    ok(chr(0x1B168) =~ qr/\p{Word_Break=Katakana}/,
+        'UCD 18 Word_Break includes U+1B168');
+    ok(chr(0x3FC3F) =~ qr/\p{XPosixAlpha}/,
+        'UCD 18 XPosixAlpha includes U+3FC3F');
+    ok(chr(0x3FC3F) =~ qr/\p{XPosixAlnum}/,
+        'UCD 18 XPosixAlnum includes U+3FC3F');
+    ok(chr(0x3FC3F) =~ qr/\p{Is_Alnum}/,
+        'UCD 18 Is_Alnum includes U+3FC3F');
+}
+
 done_testing;

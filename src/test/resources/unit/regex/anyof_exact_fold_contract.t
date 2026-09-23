@@ -34,7 +34,7 @@ my @cases = (
                                                 'EXACTFU_REQ8 <\x{430}>'],
     [1300, q{qr/(?i)[\x{2b9}]/},             'EXACT_REQ8 <\x{2b9}>'],
     [1303, q{qr/(?i)[\x{390}]/},             'EXACTFU_REQ8 <\x{3b9}\x{308}\x{301}>'],
-    [1304, q{qr/(?i)[\x{1E9E}]/},            'EXACTFU <ss>'],
+    [1304, q{qr/(?i)[\x{1E9E}]/},            'EXACTF <ss>'],
     [1305, q{qr/(?iaa)[\x{1E9E}]/},          'EXACTFAA <\x{17f}\x{17f}>'],
     [1306, q{qr/(?i)[\x{FB00}]/},            'EXACTFU <ff>'],
     [1307, q{qr/(?iaa)[\x{FB00}]/},          'EXACT_REQ8 <\x{fb00}>'],

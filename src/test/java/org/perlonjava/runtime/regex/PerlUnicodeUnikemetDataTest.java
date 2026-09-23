@@ -16,9 +16,9 @@ import org.junit.jupiter.api.Test;
 class PerlUnicodeUnikemetDataTest {
     @Test
     void preservesPinnedSourceMetadataAndCounts() {
-        assertEquals("17.0.0", PerlUnicodeUnikemetData.UNICODE_VERSION);
-        assertEquals("2025-07-21", PerlUnicodeUnikemetData.SOURCE_DATE);
-        assertEquals("76a3081265e6eb673873f9c93d6f36062e82c7ed027c5c1a592accfbe48c20a5",
+        assertEquals("18.0.0", PerlUnicodeUnikemetData.UNICODE_VERSION);
+        assertEquals("2026-05-19", PerlUnicodeUnikemetData.SOURCE_DATE);
+        assertEquals("a6c03de18f40f54df5bf3ea6c3152f23075ba8647520e98ea80e8e0352d65a33",
                 PerlUnicodeUnikemetData.UNIKEMET_SHA256);
         assertEquals(4, PerlUnicodeUnikemetData.NO_MIRROR_CODE_POINT_COUNT);
         assertEquals(44, PerlUnicodeUnikemetData.NO_ROTATE_CODE_POINT_COUNT);

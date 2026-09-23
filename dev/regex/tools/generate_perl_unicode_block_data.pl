@@ -152,6 +152,16 @@ for my $index (0 .. $#explicit) {
 die "Not every current Block value is reachable from Blocks.txt\n"
     unless @value_names == @value_rows && keys(%value_id_for_row) == @value_rows;
 
+# Preserve the source spellings independently from the loose lookup keys.  Perl
+# property-value wildcards apply their pattern to the published aliases, so an
+# anchored pattern such as \"\\ABengali_Sup\\z\" must still see the underscore.
+my @value_aliases;
+for my $row (keys %value_id_for_row) {
+    $value_aliases[$value_id_for_row{$row}] = $value_rows[$row];
+}
+die "Current Block aliases are incomplete\n"
+    unless @value_aliases == @value_names && !grep { !defined } @value_aliases;
+
 my @partition;
 my $cursor = 0;
 for my $range (@explicit) {
@@ -261,6 +271,10 @@ for (my $i = 0; $i < @value_names; $i += 6) {
     my $end = $i + 5 < $#value_names ? $i + 5 : $#value_names;
     print "        ", join(', ', map { qq{\"$value_names[$_]\"} } $i .. $end), ",\n";
 }
+print "    };\n\n    private static final String[][] VALUE_ALIASES = {\n";
+for my $aliases (@value_aliases) {
+    print "        {", join(', ', map { qq{\"$_\"} } @$aliases), "},\n";
+}
 print "    };\n\n    private static final int[] RANGES = {\n";
 for (my $i = 0; $i < @partition; $i += 3) {
     my $end = $i + 2 < $#partition ? $i + 2 : $#partition;
@@ -307,6 +321,10 @@ print <<'FOOTER';
 
     static String canonicalValue(int valueId) {
         return VALUE_NAMES[valueId];
+    }
+
+    static String[] valueAliases(int valueId) {
+        return VALUE_ALIASES[valueId].clone();
     }
 
     static UnicodeSet set(int valueId) {

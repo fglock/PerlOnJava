@@ -43,6 +43,29 @@ ok('A' =~ qr/\P{^XID_Start}/ && '0' !~ qr/\P{^XID_Start}/,
 ok('0' !~ qr/\p{^XID_Continue}/ && "\x{1F600}" =~ qr/\p{^XID_Continue}/,
     'inner caret complements XID_Continue');
 
+SKIP: {
+    my $is_perlonjava = eval {
+        require PerlOnJava::Process;
+        PerlOnJava::Process::_is_perlonjava_runtime();
+    } || 0;
+    my $unicode_version = eval {
+        require Unicode::UCD;
+        Unicode::UCD::UnicodeVersion();
+    } // 'unknown';
+    skip "standard Perl uses Unicode $unicode_version", 4
+        if !$is_perlonjava && $unicode_version lt '18.0.0';
+
+    my $u18_xid = chr(0x3FC3F);
+    ok($u18_xid =~ qr/\p{XID_Start}/,
+        'UCD 18 XID_Start includes U+3FC3F');
+    ok($u18_xid =~ qr/\p{XID_Continue}/,
+        'UCD 18 XID_Continue includes U+3FC3F');
+    ok($u18_xid !~ qr/\p{XID_Start=No}/,
+        'UCD 18 XID_Start false assignment excludes U+3FC3F');
+    ok($u18_xid !~ qr/\p{XID_Continue=No}/,
+        'UCD 18 XID_Continue false assignment excludes U+3FC3F');
+}
+
 my $bad = eval q{qr/\p{XIDCont}/; 1};
 ok(!defined $bad, 'non-Perl XIDCont abbreviation is rejected');
 like($@, qr{Can't find Unicode property definition "XIDCont"},
