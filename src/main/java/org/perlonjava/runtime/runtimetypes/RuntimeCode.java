@@ -2440,6 +2440,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
+     * A named forward declaration remains a method-table entry, but invoking
+     * it through a subclass still consults AUTOLOAD inherited by its declaring
+     * package. Imported stubs keep their source-package precedence instead.
+     */
+    private static RuntimeScalar findForwardStubInheritedAutoload(
+            RuntimeCode code, String packageName, String targetName) {
+        if (!code.isDeclared
+                || packageName == null || packageName.isEmpty()
+                || (code.sourcePackage != null && !code.sourcePackage.equals(code.packageName))) {
+            return null;
+        }
+        RuntimeScalar autoload = InheritanceResolver.findMethodInHierarchy(
+                "AUTOLOAD", packageName, null, 1, false);
+        if (!isCodeDefined(autoload)) {
+            return null;
+        }
+        getGlobalVariable(autoloadVarFor(autoload, packageName)).set(targetName);
+        return autoload;
+    }
+
+    /**
      * Check if AUTOLOAD exists for a given RuntimeCode's package.
      * Checks source package first (for imported subs), then current package.
      *
@@ -5816,6 +5837,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 String autoloadTargetName = autoloadPackage + "::" + autoloadSubName;
                 if (autoloadPackage != null && autoloadSubName != null && !autoloadTargetName.isEmpty()) {
+                    RuntimeScalar inheritedStubAutoload = findForwardStubInheritedAutoload(
+                            code, autoloadPackage, autoloadTargetName);
+                    if (inheritedStubAutoload != null) {
+                        curScalar = inheritedStubAutoload;
+                        continue;
+                    }
                     // If this is an imported forward declaration, check AUTOLOAD in the source package FIRST
                     // This matches Perl semantics where imported subs resolve via the exporting package's AUTOLOAD
                     if (code.sourcePackage != null && !code.sourcePackage.equals(code.packageName)) {

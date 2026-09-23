@@ -13,6 +13,22 @@ use Test::More;
        'parenthesis-free indirect method call remains supported');
 }
 
+{
+    package ForwardStubParent;
+    sub AUTOLOAD {
+        our $AUTOLOAD;
+        return "autoloaded $AUTOLOAD";
+    }
+
+    package ForwardStubChild;
+    our @ISA = ('ForwardStubParent');
+    sub missing;
+
+    package main;
+    is(ForwardStubChild->missing, 'autoloaded ForwardStubChild::missing',
+       'a declared method stub uses an inherited AUTOLOAD');
+}
+
 BEGIN {
     *LocalPopOverride::pop = sub { $main::pop_override_result = $_[0][0] };
 }
