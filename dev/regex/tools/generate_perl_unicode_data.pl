@@ -94,7 +94,7 @@ for my $relative (keys %source_hash) {
 for my $entry (@entries) {
     while (my ($relative, $hash) = each %{$entry->{sources} // {}}) {
         die "Conflicting SHA-256 pins for $relative\n"
-            if exists $source_hash{$relative} && $source_hash{$relative} ne $hash;
+            if !$refresh && exists $source_hash{$relative} && $source_hash{$relative} ne $hash;
         $source_hash{$relative} = $hash;
     }
 }
@@ -245,6 +245,14 @@ sub run_generator {
     my ($script, $source_root, $pinned_perl_root) = @_;
     local %ENV = %ENV;
     $ENV{PERLONJAVA_UNICODE_ROOT} = $source_root;
+    # Schema-2 provenance is verified by this orchestrator through the
+    # manifest/output hashes.  Tell legacy leaf generators to derive their
+    # expected UCD version from this selected current source tree instead of
+    # retaining their previous release's literal pin.
+    $ENV{PERLONJAVA_UNICODE_DATA_PIPELINE} = 1;
+    my $version_text = read_raw(File::Spec->catfile($source_root, 'version'));
+    $version_text =~ s/\s+\z//;
+    $ENV{PERLONJAVA_UNICODE_VERSION} = $version_text;
     if (defined $pinned_perl_root) {
         $ENV{PERLONJAVA_PERL_ROOT} = $pinned_perl_root;
     } else {

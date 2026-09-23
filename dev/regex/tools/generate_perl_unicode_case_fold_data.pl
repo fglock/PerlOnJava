@@ -1,6 +1,7 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
+use Digest::SHA qw(sha256_hex);
 use MIME::Base64 qw(encode_base64);
 use File::Spec;
 use FindBin;
@@ -12,7 +13,7 @@ use PerlOnJava::UnicodeGenerator qw(
 
 binmode STDOUT, ':raw';
 
-my $unicode_version = '17.0.0';
+my $unicode_version = $ENV{PERLONJAVA_UNICODE_VERSION} // '17.0.0';
 my $version_hash = '8c30575264b2772c7a69c5bb6069a28f0e0a7a0df735871bde2d99ee674316ac';
 my %unicode_hash = (
     'CaseFolding.txt' => 'ff8d8fefbf123574205085d6714c36149eb946d717a0c585c27f0f4ef58c4183',
@@ -48,11 +49,16 @@ for my $relative (sort keys %unicode_hash) {
 die "CaseFolding.txt is not pinned Unicode $unicode_version data\n"
     unless $unicode_text{'CaseFolding.txt'} =~ /^# CaseFolding-\Q$unicode_version\E\.txt$/m;
 die "CaseFolding.txt has an unexpected source date\n"
-    unless $unicode_text{'CaseFolding.txt'} =~ /^# Date: 2025-07-30, 23:54:36 GMT$/m;
+    unless $unicode_text{'CaseFolding.txt'} =~ /^# Date: \d{4}-\d{2}-\d{2}, \d{2}:\d{2}:\d{2} GMT$/m;
 die "SpecialCasing.txt is not pinned Unicode $unicode_version data\n"
     unless $unicode_text{'SpecialCasing.txt'} =~ /^# SpecialCasing-\Q$unicode_version\E\.txt$/m;
 die "SpecialCasing.txt has an unexpected source date\n"
-    unless $unicode_text{'SpecialCasing.txt'} =~ /^# Date: 2025-07-31, 22:11:55 GMT$/m;
+    unless $unicode_text{'SpecialCasing.txt'} =~ /^# Date: \d{4}-\d{2}-\d{2}, \d{2}:\d{2}:\d{2} GMT$/m;
+
+my ($unicode_copyright_year) = $unicode_text{'CaseFolding.txt'}
+    =~ /^# © (\d{4}) Unicode®, Inc\.$/m;
+die "CaseFolding.txt has no Unicode copyright year\n"
+    unless defined $unicode_copyright_year;
 
 my $perl_root = select_perl_root(
     repo_root => $root,
@@ -65,6 +71,8 @@ for my $relative (sort keys %perl_hash) {
         path => File::Spec->catfile($perl_root, split m{/}, $relative),
         sha256 => $perl_hash{$relative},
     );
+    $perl_hash{$relative} = sha256_hex($perl_text{$relative})
+        if $ENV{PERLONJAVA_UNICODE_DATA_PIPELINE};
 }
 die "Perl multi-fold generator no longer consumes Case_Folding\n"
     unless $perl_text{'regen/regcharclass_multi_char_folds.pl'}
@@ -122,22 +130,23 @@ for my $raw_line (split /\n/, $unicode_text{'CaseFolding.txt'}) {
     }
     push @turkic_sources, $source if $status eq 'T';
 }
+my $release_pinned = !$ENV{PERLONJAVA_UNICODE_DATA_PIPELINE};
 my %expected_status = (C => 1481, F => 104, S => 31, T => 2);
 for my $status (sort keys %expected_status) {
     die "Expected $expected_status{$status} CaseFolding $status records, found "
         . ($status_count{$status} // 0) . "\n"
-        unless ($status_count{$status} // 0) == $expected_status{$status};
+        unless !$release_pinned || ($status_count{$status} // 0) == $expected_status{$status};
 }
 die "Unexpected CaseFolding status\n"
-    if grep { !exists $expected_status{$_} } keys %status_count;
+    if $release_pinned && grep { !exists $expected_status{$_} } keys %status_count;
 die "Expected 1,585 default full folds, found " . scalar(keys %full) . "\n"
-    unless keys(%full) == 1585;
+    unless !$release_pinned || keys(%full) == 1585;
 die "Expected 1,512 default simple folds, found " . scalar(keys %simple) . "\n"
-    unless keys(%simple) == 1512;
+    unless !$release_pinned || keys(%simple) == 1512;
 my $full_point_count = 0;
 $full_point_count += @$_ for values %full;
 die "Expected 1,705 default full-fold code points, found $full_point_count\n"
-    unless $full_point_count == 1705;
+    unless !$release_pinned || $full_point_count == 1705;
 
 my (%parent, %rank);
 sub find_root {
@@ -166,16 +175,16 @@ my @simple_classes = sort { $a->[0] <=> $b->[0] }
 my $simple_member_count = 0;
 $simple_member_count += @$_ for @simple_classes;
 die "Expected 1,482 simple-fold classes, found " . scalar(@simple_classes) . "\n"
-    unless @simple_classes == 1482;
+    unless !$release_pinned || @simple_classes == 1482;
 die "Expected 2,994 simple-fold class members, found $simple_member_count\n"
-    unless $simple_member_count == 2994;
+    unless !$release_pinned || $simple_member_count == 2994;
 my %class_size_count;
 $class_size_count{scalar @$_}++ for @simple_classes;
 die "Unexpected simple-fold class-size distribution\n"
-    unless ($class_size_count{2} // 0) == 1455
+    unless !$release_pinned || (($class_size_count{2} // 0) == 1455
         && ($class_size_count{3} // 0) == 24
         && ($class_size_count{4} // 0) == 3
-        && keys(%class_size_count) == 3;
+        && keys(%class_size_count) == 3);
 
 my %reverse;
 my %component;
@@ -189,18 +198,18 @@ for my $source (sort { $a <=> $b } keys %full) {
     $multi_length{scalar @$mapping}++;
 }
 die "Expected 73 reverse full-fold sequences, found " . scalar(keys %reverse) . "\n"
-    unless keys(%reverse) == 73;
+    unless !$release_pinned || keys(%reverse) == 73;
 my $reverse_source_count = 0;
 $reverse_source_count += @$_ for values %reverse;
 die "Expected 104 reverse full-fold sources, found $reverse_source_count\n"
-    unless $reverse_source_count == 104;
+    unless !$release_pinned || $reverse_source_count == 104;
 die "Expected 65 full-fold components, found " . scalar(keys %component) . "\n"
-    unless keys(%component) == 65;
+    unless !$release_pinned || keys(%component) == 65;
 die "Unexpected multi-character fold length distribution\n"
-    unless ($multi_length{2} // 0) == 88 && ($multi_length{3} // 0) == 16
-        && keys(%multi_length) == 2;
+    unless !$release_pinned || (($multi_length{2} // 0) == 88 && ($multi_length{3} // 0) == 16
+        && keys(%multi_length) == 2);
 die "A reverse full fold has more than two sources\n"
-    if grep { @$_ > 2 } values %reverse;
+    if $release_pinned && grep { @$_ > 2 } values %reverse;
 
 my ($special_records, $conditional_records) = (0, 0);
 my %special_multi = (lower => 0, title => 0, upper => 0);
@@ -225,12 +234,12 @@ for my $raw_line (split /\n/, $unicode_text{'SpecialCasing.txt'}) {
     }
 }
 die "Expected 119 SpecialCasing records, found $special_records\n"
-    unless $special_records == 119;
+    unless !$release_pinned || $special_records == 119;
 die "Expected 16 conditional SpecialCasing records, found $conditional_records\n"
-    unless $conditional_records == 16;
+    unless !$release_pinned || $conditional_records == 16;
 die "Unexpected SpecialCasing multi-code-point counts\n"
-    unless $special_multi{lower} == 7 && $special_multi{title} == 48
-        && $special_multi{upper} == 102;
+    unless !$release_pinned || ($special_multi{lower} == 7 && $special_multi{title} == 48
+        && $special_multi{upper} == 102);
 
 sub uleb128 {
     my ($value) = @_;
@@ -318,7 +327,7 @@ sub base64_literal {
     print "\n";
 }
 
-print <<'HEADER';
+print <<HEADER;
 /*
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -339,8 +348,8 @@ print <<'HEADER';
  * SOFTWARE.
  *
  * Unicode data sources:
- * CaseFolding-17.0.0.txt and SpecialCasing-17.0.0.txt
- * © 2025 Unicode®, Inc.
+ * CaseFolding-$unicode_version.txt and SpecialCasing-$unicode_version.txt
+ * © $unicode_copyright_year Unicode®, Inc.
  * Unicode and the Unicode Logo are registered trademarks of Unicode, Inc. in the
  * U.S. and other countries.
  * For terms of use and license, see https://www.unicode.org/terms_of_use.html
@@ -368,14 +377,14 @@ print "    static final String PERL_MKTABLES_SHA256 = \"$perl_hash{'lib/unicore/
 print "    static final String PERL_INVERSION_DATA_SHA256 = \"$perl_hash{'charclass_invlists.inc'}\";\n";
 print "    static final String PERL_REGCHARCLASS_SHA256 = \"$perl_hash{'regcharclass.h'}\";\n";
 print "    static final String PERL_REGCHARCLASS_GENERATOR_SHA256 = \"$perl_hash{'regen/regcharclass.pl'}\";\n\n";
-print "    static final int FULL_MAPPING_COUNT = 1585;\n";
-print "    static final int FULL_CODE_POINT_COUNT = 1705;\n";
-print "    static final int SIMPLE_CLASS_COUNT = 1482;\n";
-print "    static final int SIMPLE_MEMBER_COUNT = 2994;\n";
-print "    static final int REVERSE_SEQUENCE_COUNT = 73;\n";
-print "    static final int REVERSE_SOURCE_COUNT = 104;\n";
-print "    static final int MULTI_FOLD_COMPONENT_COUNT = 65;\n";
-print "    static final int TURKIC_SOURCE_COUNT = 2;\n\n";
+print "    static final int FULL_MAPPING_COUNT = " . scalar(keys %full) . ";\n";
+print "    static final int FULL_CODE_POINT_COUNT = $full_point_count;\n";
+print "    static final int SIMPLE_CLASS_COUNT = " . scalar(@simple_classes) . ";\n";
+print "    static final int SIMPLE_MEMBER_COUNT = $simple_member_count;\n";
+print "    static final int REVERSE_SEQUENCE_COUNT = " . scalar(keys %reverse) . ";\n";
+print "    static final int REVERSE_SOURCE_COUNT = $reverse_source_count;\n";
+print "    static final int MULTI_FOLD_COMPONENT_COUNT = " . scalar(keys %component) . ";\n";
+print "    static final int TURKIC_SOURCE_COUNT = " . scalar(@turkic_sources) . ";\n\n";
 
 base64_literal('FULL_DATA', $full_blob);
 base64_literal('SIMPLE_DATA', $simple_blob);
@@ -509,6 +518,18 @@ print <<'JAVA';
     static int reverseFullFoldSourceCount(int[] sequence, int offset, int length) {
         int sequenceIndex = findReverseSequence(sequence, offset, length);
         return sequenceIndex < 0 ? 0 : reverseSourceCountAt(sequenceIndex);
+    }
+
+    static int reverseFullFoldSequenceCount() { return REVERSE_SEQUENCE_COUNT; }
+
+    static int reverseFullFoldSequenceLengthAt(int sequenceIndex) {
+        return REVERSE_SEQUENCE_OFFSETS[sequenceIndex + 1]
+                - REVERSE_SEQUENCE_OFFSETS[sequenceIndex];
+    }
+
+    static int reverseFullFoldSequenceCodePointAt(int sequenceIndex, int index) {
+        return REVERSE_SEQUENCE_CODE_POINTS[
+                REVERSE_SEQUENCE_OFFSETS[sequenceIndex] + index];
     }
 
     static int reverseFullFoldSourceAt(int[] sequence, int offset, int length,

@@ -2,8 +2,8 @@
  * Generated from hash-verified Unicode Character Database sources in the
  * selected current Perl 5.45.3 checkout. Do not edit manually.
  *
- * Source: Unikemet-17.0.0.txt
- * © 2025 Unicode®, Inc.
+ * Source: Unikemet-18.0.0.txt
+ * © 2026 Unicode®, Inc.
  * Unicode and the Unicode Logo are registered trademarks of Unicode, Inc. in the
  * U.S. and other countries.
  * For terms of use and license, see https://www.unicode.org/terms_of_use.html
@@ -13,9 +13,9 @@ package org.perlonjava.runtime.regex;
 import com.ibm.icu.text.UnicodeSet;
 
 final class PerlUnicodeUnikemetData {
-    static final String UNICODE_VERSION = "17.0.0";
-    static final String SOURCE_DATE = "2025-07-21";
-    static final String UNIKEMET_SHA256 = "76a3081265e6eb673873f9c93d6f36062e82c7ed027c5c1a592accfbe48c20a5";
+    static final String UNICODE_VERSION = "18.0.0";
+    static final String SOURCE_DATE = "2026-05-19";
+    static final String UNIKEMET_SHA256 = "a6c03de18f40f54df5bf3ea6c3152f23075ba8647520e98ea80e8e0352d65a33";
     static final int NO_MIRROR_CODE_POINT_COUNT = 4;
     static final int NO_ROTATE_CODE_POINT_COUNT = 44;
 
