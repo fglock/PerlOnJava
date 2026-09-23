@@ -575,6 +575,10 @@ public class MortalList {
     /** Scope-exit cleanup with a returned aggregate whose IO aliases must survive. */
     public static void scopeExitCleanupArray(RuntimeArray arr, RuntimeBase returned) {
         if (!isActive() || arr == null) return;
+        // A threads::shared array has canonical storage that outlives each
+        // runtime-local wrapper.  Its elements are released by mutations of
+        // that canonical storage, never by a child runtime's scope exit.
+        if (arr.threadShared) return;
         // See scopeExitCleanupHash: an active @_ alias does not end the
         // caller's lexical lifetime.  In particular, Const::Fast uses
         // SvREFCNT to decide whether it must clone a referenced aggregate.

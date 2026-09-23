@@ -76,6 +76,12 @@ my @contract = (
         sources => [qw(EastAsianWidth.txt LineBreak.txt ReadMe.txt UnicodeData.txt
             emoji/emoji.txt)],
     },
+    {
+        name => 'joni-indic-conjunct',
+        generator => 'dev/regex/tools/generate_joni_indic_conjunct_data.pl',
+        output => 'third_party/joni/src/org/joni/IndicConjunctData.java',
+        sources => ['DCoreProperties.txt'],
+    },
 );
 
 for my $contract (@contract) {
@@ -96,8 +102,7 @@ for my $contract (@contract) {
     my $output = read_raw(path($record->{output}));
     is sha256_hex($output), $record->{output_sha256},
         "$name checked-in output matches its manifest hash";
-    my $copyright = encode_utf8('© 2025 Unicode®, Inc.');
-    like $output, qr/\Q$copyright\E/,
+    like $output, qr/© 20[0-9]{2} Unicode®, Inc\./,
         "$name output retains Unicode copyright";
     like $output,
         qr/Unicode and the Unicode Logo are registered trademarks of Unicode, Inc\./,
@@ -117,7 +122,7 @@ my $unicode_root = $ENV{PERLONJAVA_UNICODE_ROOT}
     // File::Spec->catdir($repo, 'perl5', 'lib', 'unicore');
 SKIP: {
     my %required = map { $_ => 1 } ('version', map { @{$_->{sources}} } @contract);
-    skip 'complete selected Unicode source tree is unavailable', 18
+    skip 'complete selected Unicode source tree is unavailable', 6 * @contract
         if grep { !-f File::Spec->catfile($unicode_root, split m{/}) }
             sort keys %required;
     for my $contract (@contract) {

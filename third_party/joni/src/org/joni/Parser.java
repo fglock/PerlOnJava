@@ -3207,6 +3207,12 @@ class Parser extends Lexer {
         nodes[np] = cc;
     }
 
+    private void createIndicConjunctPropertyNode(Node[] nodes, int np, byte property) {
+        CClassNode cc = new CClassNode();
+        IndicConjunctData.addTo(cc, env, property);
+        nodes[np] = cc;
+    }
+
     private void quantifierNode(Node[]nodes, int np, int lower, int upper) {
         QuantifierNode qnf = new QuantifierNode(lower, upper, false);
         qnf.setTarget(nodes[np]);
@@ -3252,7 +3258,7 @@ class Parser extends Lexer {
         return np;
     }
 
-    private static final int NODE_COMMON_SIZE = 20;
+    private static final int NODE_COMMON_SIZE = 40;
     private Node parseExtendedGraphemeCluster() {
         final Node[] nodes = new Node[NODE_COMMON_SIZE];
         final int anyTargetPosition;
@@ -3321,22 +3327,57 @@ class Parser extends Lexer {
                     }
                     {
                         int incbList = coreAlts + 8;
-                        createPropertyNode(nodes, incbList + 0, UnicodeCodeRange.INCBCONSONANT);
+                        createIndicConjunctPropertyNode(nodes, incbList + 0, IndicConjunctData.CONSONANT);
                         int conjunctTail = incbList + 2;
-                        createPropertyNode(nodes, conjunctTail + 0, UnicodeCodeRange.INCBEXTEND);
+                        createIndicConjunctPropertyNode(nodes, conjunctTail + 0, IndicConjunctData.EXTEND);
                         quantifierNode(nodes, conjunctTail + 0, 0, QuantifierNode.REPEAT_INFINITE);
-                        createPropertyNode(nodes, conjunctTail + 1, UnicodeCodeRange.INCBLINKER);
+                        createIndicConjunctPropertyNode(nodes, conjunctTail + 1, IndicConjunctData.LINKER);
                         quantifierNode(nodes, conjunctTail + 1, 1, QuantifierNode.REPEAT_INFINITE);
-                        createPropertyNode(nodes, conjunctTail + 2, UnicodeCodeRange.INCBEXTEND);
-                        addPropertyToCC((CClassNode)nodes[conjunctTail + 2], UnicodeCodeRange.INCBLINKER, false);
+                        createIndicConjunctPropertyNode(nodes, conjunctTail + 2, IndicConjunctData.EXTEND);
+                        IndicConjunctData.addTo((CClassNode)nodes[conjunctTail + 2], env, IndicConjunctData.LINKER);
                         quantifierNode(nodes, conjunctTail + 2, 0, QuantifierNode.REPEAT_INFINITE);
-                        createPropertyNode(nodes, conjunctTail + 3, UnicodeCodeRange.INCBCONSONANT);
+                        createIndicConjunctPropertyNode(nodes, conjunctTail + 3, IndicConjunctData.CONSONANT);
                         createNodeFromArray(true, nodes, incbList + 1, conjunctTail);
                         quantifierNode(nodes, incbList + 1, 1, QuantifierNode.REPEAT_INFINITE);
                         createNodeFromArray(true, nodes, coreAlts + 5, incbList);
                     }
+                    {
+                        int linkerList = 20;
+                        createIndicConjunctPropertyNode(nodes, linkerList, IndicConjunctData.LINKER);
+                        int linkerTail = 21;
+                        createIndicConjunctPropertyNode(nodes, linkerTail, IndicConjunctData.EXTEND);
+                        IndicConjunctData.addTo((CClassNode)nodes[linkerTail], env, IndicConjunctData.LINKER);
+                        quantifierNode(nodes, linkerTail, 0, QuantifierNode.REPEAT_INFINITE);
+                        createIndicConjunctPropertyNode(nodes, linkerTail + 1, IndicConjunctData.CONSONANT);
+                        createNodeFromArray(true, nodes, coreAlts + 6, linkerList);
+                    }
+                    {
+                        int baseList = 23;
+                        cc = new CClassNode();
+                        nodes[baseList] = cc;
+                        if (enc.minLength() > 1) {
+                            addPropertyToCC(cc, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_CONTROL, false);
+                            cc.addCodeRange(env, 0x000A, 0x000A);
+                            cc.addCodeRange(env, 0x000D, 0x000D);
+                            cc.mbuf = CodeRangeBuffer.notCodeRangeBuff(env, cc.mbuf);
+                        } else {
+                            addPropertyToCC(cc, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_CONTROL, true);
+                            cc.bs.clear(0x0A);
+                            cc.bs.clear(0x0D);
+                        }
+                        int baseTail = 24;
+                        createIndicConjunctPropertyNode(nodes, baseTail, IndicConjunctData.EXTEND);
+                        quantifierNode(nodes, baseTail, 0, QuantifierNode.REPEAT_INFINITE);
+                        createIndicConjunctPropertyNode(nodes, baseTail + 1, IndicConjunctData.LINKER);
+                        quantifierNode(nodes, baseTail + 1, 1, QuantifierNode.REPEAT_INFINITE);
+                        createIndicConjunctPropertyNode(nodes, baseTail + 2, IndicConjunctData.EXTEND);
+                        IndicConjunctData.addTo((CClassNode)nodes[baseTail + 2], env, IndicConjunctData.LINKER);
+                        quantifierNode(nodes, baseTail + 2, 0, QuantifierNode.REPEAT_INFINITE);
+                        createIndicConjunctPropertyNode(nodes, baseTail + 3, IndicConjunctData.CONSONANT);
+                        createNodeFromArray(true, nodes, coreAlts + 7, baseList);
+                    }
                     cc = new CClassNode();
-                    nodes[coreAlts + 6] = cc;
+                    nodes[coreAlts + 8] = cc;
                     if (enc.minLength() > 1) {
                         addPropertyToCC(cc, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_CONTROL, false);
                         cc.addCodeRange(env, 0x000A, 0x000A);
@@ -3379,6 +3420,7 @@ class Parser extends Lexer {
             return enclose;
         }
     }
+
 
     private Node parseExpTkByte(boolean group) {
         StringNode node = new StringNode(bytes, token.backP, p); // tk_byte:

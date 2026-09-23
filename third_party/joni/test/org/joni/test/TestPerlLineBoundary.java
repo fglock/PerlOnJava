@@ -71,6 +71,7 @@ public class TestPerlLineBoundary {
         assertNoBoundary("\u2060", "A");
         assertNoBoundary("\u00a0", "A");
         assertNoBoundary("A", "\u00a0");
+        assertNoBoundary("\u2012", "\u00a0");
         assertBoundary(" ", "\u00a0");
         assertNoBoundary("A ", "]");
         assertNoBoundary("( ", "A");

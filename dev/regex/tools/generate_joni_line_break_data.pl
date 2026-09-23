@@ -9,19 +9,19 @@ use PerlOnJava::UnicodeGenerator qw(
     verify_unicode_notice
 );
 
-my $expected_version = '17.0.0';
-my $version_hash = '8c30575264b2772c7a69c5bb6069a28f0e0a7a0df735871bde2d99ee674316ac';
+my $expected_version = $ENV{PERLONJAVA_UNICODE_VERSION} // '18.0.0';
+my $version_hash = 'a0079d7556b20c2de1fdc3d492797a91b8ec8a06006f94460006185cb6380962';
 my %sources = (
     Line_Break => ['LineBreak.txt',
-        'e6a18fa91f8f6a6f8e534b1d3f128c21ada45bfe152eb6b1bcc5e15fd8ac92e6'],
+        'ae8cf1970c73f3f1a12d77852df96c4b2b1723ca8b388e36bb5739250c6849de'],
     General_Category => ['UnicodeData.txt',
-        '2e1efc1dcb59c575eedf5ccae60f95229f706ee6d031835247d843c11d96470c'],
+        '0736451de439ae7baf1425136617da495e09ee5afbe6e394374db7009ea08950'],
     East_Asian_Width => ['EastAsianWidth.txt',
-        'ea7ce50f3444a050333448dffef1cadd9325af55cbb764b4a2280faf52170a33'],
+        'a0cf29eacd00cfcaec4381c6b7c281685f18dbb4e7ff82b4076ccb342ca839aa'],
     Extended_Pictographic => ['emoji/emoji.txt',
-        '2cb2bb9455cda83e8481541ecf5b6dfda66a3bb89efa3fa7c5297eccf607b72b'],
+        '80d00f8e616a0ef27fd6b8de3b758c06383b5d917e2977709578e68baf733bf1'],
     UCD_ReadMe => ['ReadMe.txt',
-        '9fe1a90bd32659d7953616283dc2bffaa165518aae9ace026040c42c559ba606'],
+        'b0ea442f29dee90584aacd3665a6e1ce87ffc917a4d31f34e1916d2d6f7f9205'],
 );
 my $root = repo_root($FindBin::Bin);
 my $unicore = select_unicode_root(
@@ -96,7 +96,7 @@ sub parse_general_category {
 
 my (undef, $ucd_readme) = source_text('UCD_ReadMe');
 die "ReadMe.txt is not pinned Unicode $expected_version data\n"
-    unless $ucd_readme =~ /for Version \Q$expected_version\E of the Unicode Standard/;
+    unless $ucd_readme =~ /(?:for Version \Q$expected_version\E of the Unicode Standard|version \Q$expected_version\E of the\s+Unicode Character Database)/i;
 
 my @classes = qw(
     AI AK AL AP AS B2 BA BB BK CB CJ CL CM CP CR EB EM EX GL H2 H3 HH HL HY
@@ -109,7 +109,7 @@ my %maps = (
     Line_Break => parse_property_file('Line_Break', qr/^# LineBreak-\Q$expected_version\E\.txt/m, undef, 'XX'),
     General_Category => parse_general_category(),
     East_Asian_Width => parse_property_file('East_Asian_Width', qr/^# EastAsianWidth-\Q$expected_version\E\.txt/m, undef, 'N'),
-    Extended_Pictographic => parse_property_file('Extended_Pictographic', qr/^# Version: 17\.0$/m,
+    Extended_Pictographic => parse_property_file('Extended_Pictographic', qr/^# Version: 18\.0\.0$/m,
         'Extended_Pictographic', 'N'),
 );
 
@@ -191,15 +191,15 @@ print <<'HEADER';
  * SOFTWARE.
  *
  * Unicode data sources:
- * LineBreak-17.0.0.txt
+ * LineBreak-18.0.0.txt
  * SHA-256: e6a18fa91f8f6a6f8e534b1d3f128c21ada45bfe152eb6b1bcc5e15fd8ac92e6
- * UnicodeData-17.0.0.txt
+ * UnicodeData-18.0.0.txt
  * SHA-256: 2e1efc1dcb59c575eedf5ccae60f95229f706ee6d031835247d843c11d96470c
- * UCD ReadMe-17.0.0.txt (UnicodeData.txt license notice)
+ * UCD ReadMe-18.0.0.txt (UnicodeData.txt license notice)
  * SHA-256: 9fe1a90bd32659d7953616283dc2bffaa165518aae9ace026040c42c559ba606
- * EastAsianWidth-17.0.0.txt
+ * EastAsianWidth-18.0.0.txt
  * SHA-256: ea7ce50f3444a050333448dffef1cadd9325af55cbb764b4a2280faf52170a33
- * emoji-17.0.txt
+ * emoji-18.0.txt
  * SHA-256: 2cb2bb9455cda83e8481541ecf5b6dfda66a3bb89efa3fa7c5297eccf607b72b
  * © 2025 Unicode®, Inc.
  * Unicode and the Unicode Logo are registered trademarks of Unicode, Inc. in the
