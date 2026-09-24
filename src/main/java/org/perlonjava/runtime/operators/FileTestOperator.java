@@ -273,7 +273,8 @@ public class FileTestOperator {
         // Dereference before resolving tie magic, so -X $ref invokes FETCH on
         // the referenced tied scalar rather than treating the reference as a
         // filename.
-        if (fileHandle.type == RuntimeScalarType.REFERENCE) {
+        if (fileHandle.type == RuntimeScalarType.REFERENCE
+                && RuntimeScalarType.blessedId(fileHandle) == 0) {
             fileHandle = fileHandle.scalarDeref();
         }
         fileHandle = RuntimeScalar.fetchTiedOnce(fileHandle);
@@ -291,7 +292,7 @@ public class FileTestOperator {
         boolean allowGlobOverload = operator.equals("-l")
                 || (isIORef(fileHandle) && (operator.equals("-t")
                 || operator.equals("-T") || operator.equals("-B")));
-        if (blessId < 0 && (!fileHandleGlob || allowGlobOverload)) {
+        if (blessId != 0 && (!fileHandleGlob || allowGlobOverload)) {
             OverloadContext overloadContext = OverloadContext.prepare(blessId);
             if (overloadContext != null) {
                 // Perl has one file-test overload key, (-X.  The test
@@ -314,7 +315,7 @@ public class FileTestOperator {
                 // With no direct (-X method, file tests use the ordinary
                 // overload fallback (normally stringification).
                 RuntimeScalar converted = overloadContext.tryOverloadFallback(
-                        fileHandle, "(0+", "(\"\"", "(bool");
+                        fileHandle, "(\"\"", "(0+", "(bool");
                 if (converted != null) {
                     return fileTest(operator, converted);
                 }
@@ -323,6 +324,12 @@ public class FileTestOperator {
                     return overloaded;
                 }
             }
+        }
+        // Filehandles are references too, but their tests must continue below
+        // through the descriptor-backed path (including anonymous and unlinked
+        // temporary files). Stringify only ordinary object references.
+        if (RuntimeScalarType.isReference(fileHandle) && !fileHandleGlob && !isIORef(fileHandle)) {
+            return fileTest(operator, new RuntimeScalar(fileHandle.toString()));
         }
 
         // Check if the argument is a file handle (GLOB or GLOBREFERENCE)
