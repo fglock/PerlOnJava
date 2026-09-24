@@ -266,6 +266,28 @@ DISPATCHER
     return ($dispatcher, \@sections, $canonical_sha);
 }
 
+# Recent upstream mktables refers to Config::DEBUGGING as a compile-time
+# constant.  The host Perl used to run this importer may expose DEBUGGING only
+# through %Config (as Perl 5.42 does), which makes the upstream script fail at
+# compile time under strict subs.  Load Config first and install that constant
+# only when the host has not provided one, then run mktables with its original
+# argument list.  This leaves the checked-out upstream source untouched.
+my $mktables_compat_launcher = <<'MKTABLES_COMPAT';
+BEGIN {
+    *Config::DEBUGGING = sub () { $Config::Config{DEBUGGING} }
+        unless defined &Config::DEBUGGING;
+}
+my $script = shift @ARGV;
+do $script or die $@ || $!;
+MKTABLES_COMPAT
+
+sub run_unicode_mktables {
+    my ($generator_relative, @arguments) = @_;
+    my $generator = File::Spec->rel2abs($generator_relative);
+    return system($^X, '-MConfig', '-e', $mktables_compat_launcher,
+                  $generator, @arguments);
+}
+
 # Generate the Unicode property test fixture from a pristine copy of the
 # current upstream source data. Upstream deliberately does not commit TestProp.pl; its
 # normal build creates it with lib/unicore/mktables -maketest.
@@ -307,10 +329,10 @@ sub generate_unicode_testprop {
         return 0;
     }
     print "  Generating with current upstream Unicode data: $generator_relative\n";
-    my $result = system($^X, $generator_relative,
-                        '-C', $temporary_unicode,
-                        '-T', $generated,
-                        '-q');
+    my $result = run_unicode_mktables($generator_relative,
+                                      '-C', $temporary_unicode,
+                                      '-T', $generated,
+                                      '-q');
     my $generation_error = $!;
     unless (chdir $original_dir) {
         die "sync.pl: cannot restore working directory '$original_dir': $!\n";
@@ -458,7 +480,8 @@ sub generate_unicode_name_source {
         return 0;
     }
     print "  Generating Unicode Name.pl with $^X: $generator_relative\n";
-    my $result = system($^X, $generator_relative, '-C', $temporary_unicode, '-q');
+    my $result = run_unicode_mktables($generator_relative,
+                                      '-C', $temporary_unicode, '-q');
     my $generation_error = $!;
     unless (chdir $original_dir) {
         die "sync.pl: cannot restore working directory '$original_dir': $!\n";
