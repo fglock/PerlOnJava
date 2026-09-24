@@ -121,6 +121,10 @@ public class GlobalVariable {
         return globalState().pseudoConstants();
     }
 
+    private static Map<String, RuntimeScalar> globalCompactStashValues() {
+        return globalState().compactStashValues();
+    }
+
     private static Map<String, RuntimeScalar> pinnedCodeRefs() {
         return globalState().pinnedCodeRefs();
     }
@@ -1487,9 +1491,11 @@ public class GlobalVariable {
             return;
         }
         globalPseudoConstants().remove(key);
+        globalCompactStashValues().remove(key);
         String resolvedKey = resolveAliasedFqn(key);
         if (resolvedKey != key) {
             globalPseudoConstants().remove(resolvedKey);
+            globalCompactStashValues().remove(resolvedKey);
         }
     }
 
@@ -1498,6 +1504,26 @@ public class GlobalVariable {
             return;
         }
         globalPseudoConstants().keySet().removeIf(key -> key.startsWith(childPrefix));
+        globalCompactStashValues().keySet().removeIf(key -> key.startsWith(childPrefix));
+    }
+
+    public static void setGlobalCompactStashValue(String key, RuntimeScalar value) {
+        if (key == null || value == null) {
+            return;
+        }
+        globalCompactStashValues().put(resolveAliasedFqn(key), value);
+    }
+
+    public static RuntimeScalar getGlobalCompactStashValue(String key) {
+        if (key == null) {
+            return null;
+        }
+        RuntimeScalar value = globalCompactStashValues().get(key);
+        if (value != null) {
+            return value;
+        }
+        String resolvedKey = resolveAliasedFqn(key);
+        return resolvedKey.equals(key) ? null : globalCompactStashValues().get(resolvedKey);
     }
 
     public static boolean hasGlobalPseudoConstant(String key) {
@@ -1521,6 +1547,73 @@ public class GlobalVariable {
         }
         String resolvedKey = resolveAliasedFqn(key);
         return resolvedKey != key ? globalPseudoConstants().get(resolvedKey) : null;
+    }
+
+    /** Whether a compact pseudo-constant scalar has already been exported to another glob. */
+    public static boolean isPseudoConstantExported(String sourceName, RuntimeScalar pseudo) {
+        if (sourceName == null || pseudo == null) {
+            return false;
+        }
+        for (Map.Entry<String, RuntimeScalar> entry : globalPseudoConstants().entrySet()) {
+            if (!sourceName.equals(entry.getKey()) && entry.getValue() == pseudo) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * A CODE value stored in an eval lexical keeps its pseudo-constant glob
+     * materialized for that eval.  A transient use such as prototype(\&foo)
+     * does not call this method and therefore remains compact.
+     */
+    public static void promotePseudoConstantForEvalCodeAssignment(RuntimeScalar codeRef) {
+        if (RuntimeCode.getEvalDepth() <= 0 || codeRef == null
+                || codeRef.type != RuntimeScalarType.CODE
+                || !(codeRef.value instanceof RuntimeCode code)) {
+            return;
+        }
+        String key = code.referenceOriginFqn != null ? code.referenceOriginFqn
+                : codeRef.globalCodeRefFqn;
+        if (key == null) {
+            key = findPseudoConstantCodeRefName(code);
+        }
+        if (key == null) {
+            return;
+        }
+        RuntimeScalar compact = getGlobalPseudoConstant(key);
+        if (compact == null) {
+            compact = getGlobalCompactStashValue(key);
+        }
+        if (compact == null) {
+            return;
+        }
+        var scopes = PerlRuntime.current().executionState().evalPseudoConstantScopes;
+        if (scopes.isEmpty()) {
+            return;
+        }
+        var scope = scopes.peek();
+        if (scope.putIfAbsent(key, compact) == null) {
+            clearGlobalPseudoConstant(key);
+            // The compact proxy has no physical glob entry.  Once an eval
+            // lexical owns its CV, Perl's stash hash exposes the materialized
+            // full glob rather than undef.
+            code.isDeclared = true;
+            defineGlobalCodeRef(key).set(codeRef);
+        }
+    }
+
+    /** True while an eval-held CODE assignment has materialized this compact stash entry. */
+    public static boolean isEvalPromotedCompactStashEntry(String key) {
+        if (key == null) {
+            return false;
+        }
+        for (var scope : PerlRuntime.current().executionState().evalPseudoConstantScopes) {
+            if (scope.containsKey(key)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1877,7 +1970,10 @@ public class GlobalVariable {
             // compare by identity just as they do on Perl 5.  Synthesizing a
             // fresh RuntimeCode for every lookup made Moo mistake constants
             // that predated `use Moo` for newly installed methods.
-            return new RuntimeScalar(code);
+            code.referenceOriginFqn = resolvedKey;
+            RuntimeScalar codeReference = new RuntimeScalar(code);
+            codeReference.globalCodeRefFqn = resolvedKey;
+            return codeReference;
         }
 
         RuntimeScalar scalar = globalPseudoConstants().get(key);
@@ -1892,10 +1988,54 @@ public class GlobalVariable {
         }
 
         RuntimeCode runtimeCode = new RuntimeCode("", null);
-        runtimeCode.packageName = "constant";
-        runtimeCode.subName = "__ANON__";
+        int separator = key.lastIndexOf("::");
+        if (separator >= 0) {
+            runtimeCode.packageName = key.substring(0, separator);
+            runtimeCode.subName = key.substring(separator + 2);
+        } else {
+            runtimeCode.packageName = "main";
+            runtimeCode.subName = key;
+        }
+        runtimeCode.referenceOriginFqn = key;
         runtimeCode.constantValue = scalar.getList();
-        return new RuntimeScalar(runtimeCode);
+        RuntimeScalar codeReference = new RuntimeScalar(runtimeCode);
+        codeReference.globalCodeRefFqn = key;
+        return codeReference;
+    }
+
+    /**
+     * Finds the currently installed package name for a concrete CV.  A saved
+     * reference to a constant shares its CV with the package slot, but does
+     * not carry the slot name itself; retain that name before undefining it so
+     * later calls report Perl's named-CV diagnostic rather than __ANON__.
+     */
+    public static String findGlobalCodeRefName(RuntimeCode target) {
+        if (target == null) {
+            return null;
+        }
+        for (Map.Entry<String, RuntimeScalar> entry : globalCodeRefs.entrySet()) {
+            RuntimeScalar candidate = entry.getValue();
+            if (candidate != null && candidate.type == RuntimeScalarType.CODE
+                    && candidate.value == target) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+
+    /** Find the stash spelling for a synthesized pseudo-constant CV. */
+    public static String findPseudoConstantCodeRefName(RuntimeCode target) {
+        if (target == null || target.constantValue == null
+                || target.constantValue.elements.size() != 1) {
+            return null;
+        }
+        RuntimeBase constantValue = target.constantValue.elements.getFirst();
+        for (Map.Entry<String, RuntimeScalar> entry : globalPseudoConstants().entrySet()) {
+            if (entry.getValue() == constantValue) {
+                return entry.getKey();
+            }
+        }
+        return null;
     }
 
     /**
@@ -2699,6 +2839,22 @@ public class GlobalVariable {
         }
         
         return RuntimeScalarCache.scalarFalse;
+    }
+
+    /** Check a symbolic scalar dereference for definedness without creating its slot. */
+    public static RuntimeScalar definedGlobalScalarDeref(RuntimeScalar scalar, String packageName) {
+        if (scalar.type == RuntimeScalarType.REFERENCE) {
+            return scalar.scalarDeref().defined();
+        }
+        if (scalar.type == RuntimeScalarType.GLOB && scalar.value instanceof RuntimeGlob glob) {
+            return glob.getGlobScalarSlot().defined();
+        }
+        String varName = NameNormalizer.normalizeVariableName(scalar.toString(), packageName);
+        if (regexVariablePattern.matcher(varName).matches() && !varName.equals("main::0")) {
+            return getGlobalVariable(varName).defined();
+        }
+        RuntimeScalar value = globalVariables.get(varName);
+        return value == null ? RuntimeScalarCache.scalarFalse : value.defined();
     }
 
     /**

@@ -5,6 +5,7 @@ import org.perlonjava.backend.bytecode.InterpreterState;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Stack;
@@ -67,6 +68,9 @@ public final class ExecutionRuntimeState {
     public final Deque<Boolean> hasArgsStack = new ArrayDeque<>();
     public final Deque<Integer> callContextStack = new ArrayDeque<>();
     public int evalDepth;
+    /** Compact stash entries materialized by an eval-held CODE assignment. */
+    public final Deque<LinkedHashMap<String, RuntimeScalar>> evalPseudoConstantScopes =
+            new ArrayDeque<>();
     /** eval STRING / BEGIN nesting currently being parsed on this runtime. */
     public int evalBeginCompilationDepth;
     public int tailCallTrampolineDepth;

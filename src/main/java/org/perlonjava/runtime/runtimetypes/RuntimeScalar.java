@@ -1056,7 +1056,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 yield NumberParser.parseNumber(this);
             }
             case BOOLEAN -> (boolean) value ? scalarOne : scalarZero;
-            case GLOB -> scalarOne;  // Assuming globs are truthy, so 1
+            // A typeglob is truthy, but it is not a number.  In particular,
+            // compound numeric assignment must not silently replace a glob's
+            // value with 1 (Perl reports a coercion error instead).
+            case GLOB -> throw new PerlCompilerException("Can't coerce GLOB to number in numeric context");
             case JAVAOBJECT -> value != null ? scalarOne : scalarZero;
             case TIED_SCALAR -> this.tiedFetch().getNumber();
             case READONLY_SCALAR -> ((RuntimeScalar) this.value).getNumber();
@@ -1089,7 +1092,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 yield NumberParser.parseNumber(this);
             }
             case BOOLEAN -> (boolean) value ? scalarOne : scalarZero;
-            case GLOB -> scalarOne;
+            case GLOB -> throw new PerlCompilerException("Can't coerce GLOB to number in numeric context");
             case JAVAOBJECT -> value != null ? scalarOne : scalarZero;
             case TIED_SCALAR -> this.tiedFetch().getNumberNoOverload();
             case READONLY_SCALAR -> ((RuntimeScalar) this.value).getNumberNoOverload();
@@ -1193,7 +1196,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case UNDEF -> 0;
             case VSTRING -> 0;
             case BOOLEAN -> (boolean) value ? 1 : 0;
-            case GLOB -> 1;  // Assuming globs are truthy, so 1
+            case GLOB -> throw new PerlCompilerException("Can't coerce GLOB to integer in numeric context");
             case JAVAOBJECT -> value != null ? 1 : 0;
             case TIED_SCALAR -> this.tiedFetch().getInt();
             case READONLY_SCALAR -> ((RuntimeScalar) this.value).getInt();
@@ -1929,6 +1932,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (value != this) {
             clearLastReadlineHandleIfGlobValue();
         }
+        GlobalVariable.promotePseudoConstantForEvalCodeAssignment(value);
         boolean transferGrowingString = value != null && value != this
                 && value.transferableGrowingString;
         if (transferGrowingString) {
@@ -1973,6 +1977,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.numericContextSeen = value.numericContextSeen;
                 this.firstClassRegexScalar = value.firstClassRegexScalar;
                 this.formatPictureTainted = value.formatPictureTainted;
+                this.globalCodeRefFqn = value.globalCodeRefFqn;
                 RuntimePosLvalue.invalidatePos(this);
             } else {
                 this.type = value.type;
@@ -1983,6 +1988,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.numericContextSeen = value.numericContextSeen;
                 this.firstClassRegexScalar = value.firstClassRegexScalar;
                 this.formatPictureTainted = value.formatPictureTainted;
+                this.globalCodeRefFqn = value.globalCodeRefFqn;
             }
             refreshSubstrLvalues();
             notifyModifiedWatchers();
@@ -2330,6 +2336,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.numericContextSeen = value.numericContextSeen;
         this.firstClassRegexScalar = value.firstClassRegexScalar;
         this.formatPictureTainted = value.formatPictureTainted;
+        this.globalCodeRefFqn = value.globalCodeRefFqn;
         if (transferDetachedIoOwner) {
             value.ioOwner = false;
             this.ioOwner = true;
@@ -2743,6 +2750,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     /** Clear Perl's implicit last-read handle when a scalar holding a glob is replaced. */
     private void clearLastReadlineHandleIfGlobValue() {
+        // Statement-temporary register scalars routinely hold a glob while
+        // compiling/evaluating a no-op expression such as `*fh if 0`.  They
+        // are not the user-visible glob slot and must not disturb ${^LAST_FH}.
+        // Lexical lifetime cleanup is handled separately by scopeExitCleanup.
+        if (!isPackageGlobalRoot) {
+            return;
+        }
         if (!(value instanceof RuntimeGlob glob)) {
             return;
         }
@@ -3609,12 +3623,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOBREFERENCE -> {
                 // Some internal representations store PVIO as GLOBREFERENCE with a RuntimeIO value.
                 if (value instanceof RuntimeIO io) {
-                    if (io.globName != null) {
-                        RuntimeGlob actual = GlobalVariable.getExistingGlobalIO(io.globName);
-                        if (actual != null) {
-                            yield actual;
-                        }
-                    }
+                    // `*{ *FH{IO} }` creates an anonymous GV even if this
+                    // PVIO was once installed in a named handle. Reusing the
+                    // current named owner leaks unrelated later localizations
+                    // into its stringification and slot identity.
                     RuntimeGlob tmp = new RuntimeGlob("__ANON__::__ANONIO__");
                     tmp.setIO(io);
                     yield tmp;
@@ -3626,15 +3638,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // Perl allows postfix glob deref (->**) of PVIO by creating a temporary glob
                 // with the IO slot set to that handle.
                 if (value instanceof RuntimeIO io) {
-                    // If the IO has a known glob name (e.g., "main::STDOUT"), look up the
-                    // actual global glob so that operations like tie *{select()}, 'Class'
-                    // affect the real handle, not a temporary copy.
-                    if (io.globName != null) {
-                        RuntimeGlob actual = GlobalVariable.getExistingGlobalIO(io.globName);
-                        if (actual != null) {
-                            yield actual;
-                        }
-                    }
+                    // A PVIO glob dereference has anonymous-GV identity. In
+                    // particular, it must not inherit the name of a later
+                    // localized handle that happens to share this IO object.
                     RuntimeGlob tmp = new RuntimeGlob("__ANON__::__ANONIO__");
                     tmp.setIO(io);
                     yield tmp;
@@ -3674,6 +3680,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return switch (type) {
             case TIED_SCALAR -> tiedFetch().globDerefNonStrict(packageName);
             case READONLY_SCALAR -> ((RuntimeScalar) this.value).globDerefNonStrict(packageName);
+            case UNDEF -> throw new PerlCompilerException(
+                    "Can't use an undefined value as a symbol reference");
             case REFERENCE -> {
                 if (value instanceof RuntimeScalar scalar && scalar.type == GLOB) {
                     yield scalar.globDerefNonStrict(packageName);
@@ -3683,12 +3691,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOBREFERENCE -> {
                 // Some internal representations store PVIO as GLOBREFERENCE with a RuntimeIO value.
                 if (value instanceof RuntimeIO io) {
-                    if (io.globName != null) {
-                        RuntimeGlob actual = GlobalVariable.getExistingGlobalIO(io.globName);
-                        if (actual != null) {
-                            yield actual;
-                        }
-                    }
                     RuntimeGlob tmp = new RuntimeGlob("__ANON__::__ANONIO__");
                     tmp.setIO(io);
                     yield tmp;
@@ -3700,15 +3702,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // Perl allows postfix glob deref (->**) of PVIO by creating a temporary glob
                 // with the IO slot set to that handle.
                 if (value instanceof RuntimeIO io) {
-                    // If the IO has a known glob name (e.g., "main::STDOUT"), look up the
-                    // actual global glob so that operations like tie *{select()}, 'Class'
-                    // affect the real handle, not a temporary copy.
-                    if (io.globName != null) {
-                        RuntimeGlob actual = GlobalVariable.getExistingGlobalIO(io.globName);
-                        if (actual != null) {
-                            yield actual;
-                        }
-                    }
                     RuntimeGlob tmp = new RuntimeGlob("__ANON__::__ANONIO__");
                     tmp.setIO(io);
                     yield tmp;
@@ -3959,6 +3952,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     new RuntimeScalar(location),
                     "redefine");
         }
+        if (type == RuntimeScalarType.CODE && value instanceof RuntimeCode code
+                && !(code.isConstantCv && code.lexicalSubDisplayName)) {
+            return RuntimeCode.undefineCodeReference(this);
+        }
         if (type == RuntimeScalarType.CODE && value instanceof RuntimeCode code && globalCodeRefFqn != null) {
             boolean releasedCode = false;
             releaseAllClosureCaptureReferents(code);
@@ -4187,7 +4184,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // tell/read.  A lexical coercible glob must stop being observable once
         // that lexical leaves scope, even though the named STDOUT glob remains
         // alive in the symbol table.
-        if ((scalar.type == RuntimeScalarType.GLOB || scalar.type == RuntimeScalarType.GLOBREFERENCE)
+        if (RuntimeCode.getEvalDepth() == 0
+                && (scalar.type == RuntimeScalarType.GLOB || scalar.type == RuntimeScalarType.GLOBREFERENCE)
                 && scalar.value instanceof RuntimeGlob glob
                 && RuntimeIO.getLastAccessedHandle() != null) {
             RuntimeIO last = RuntimeIO.getLastAccessedHandle();

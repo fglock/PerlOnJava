@@ -110,6 +110,7 @@ public class PerlLanguageProvider {
             PerlRuntime.current().regexState.resetForTopLevel();
             GlobalContext.setThreadTaintMode(false);
             resetAllGlobals();
+            SpecialBlockParser.resetTopLevelState();
             WeakRefRegistry.resetState();
             ScalarRefRegistry.resetState();
             MortalList.clearSuspendedRoots();

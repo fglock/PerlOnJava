@@ -980,6 +980,15 @@ public class IOOperator {
             RuntimeScalar newGlob = new RuntimeScalar();
             newGlob.type = RuntimeScalarType.GLOBREFERENCE;
             RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(fh);
+            String lexicalName = RuntimeCode.findActiveLexicalName(fileHandle);
+            if (lexicalName == null) {
+                lexicalName = fileHandle.lexicalDisplayName;
+            }
+            if (lexicalName != null && lexicalName.startsWith("$")) {
+                // A lexical filehandle is an anonymous GV, but Perl retains
+                // its pad name for stringification across recursive calls.
+                anonGlob.setStringificationName("main::" + lexicalName);
+            }
             newGlob.value = anonGlob;
             // Register for GC-based fd recycling (mimics Perl's DESTROY on scope exit)
             RuntimeIO.registerGlobForFdRecycling(anonGlob, fh);

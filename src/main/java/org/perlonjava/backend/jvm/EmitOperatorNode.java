@@ -64,6 +64,20 @@ public class EmitOperatorNode {
 
             case "each" -> EmitOperator.handleEach(emitterVisitor, node);
 
+            case "lock" -> {
+                if (node.operand == null
+                        || (node.operand instanceof ListNode arguments
+                        && arguments.elements.isEmpty())) {
+                    throw new PerlCompilerException(node.tokenIndex,
+                            "Not enough arguments for lock", emitterVisitor.ctx.errorUtil);
+                }
+                // lock is parsed through its prototype and its runtime handler
+                // receives the call context followed by a RuntimeBase array.
+                // handleOpWithList produces a RuntimeList and omits the context,
+                // leaving an invalid JVM operand stack.
+                EmitOperator.handleOperator(emitterVisitor, node);
+            }
+
             // Variable declarations
             case "our", "state", "my" -> EmitVariable.handleMyOperator(emitterVisitor, node);
 

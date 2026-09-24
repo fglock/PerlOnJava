@@ -2667,6 +2667,9 @@ public class Opcodes {
      */
     public static final short CODE_DEREF_STRICT = 577;
 
+    /** Defined symbolic scalar dereference without slot vivification. */
+    public static final short DEFINED_SCALAR_DEREF = 578;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

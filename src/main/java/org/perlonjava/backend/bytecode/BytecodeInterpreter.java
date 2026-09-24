@@ -1477,7 +1477,7 @@ public class BytecodeInterpreter {
                             // TYPE AND REFERENCE OPERATORS (opcodes 102-105) - Delegated
                             // =================================================================
 
-                            case Opcodes.DEFINED, Opcodes.DEFINED_CODE, Opcodes.DEFINED_CODE_DYNAMIC, Opcodes.DEFINED_GLOB, Opcodes.REF, Opcodes.BLESS, Opcodes.BLESS_CLASS_INSTANCE, Opcodes.ISA, Opcodes.SMARTMATCH, Opcodes.PROTOTYPE,
+                            case Opcodes.DEFINED, Opcodes.DEFINED_CODE, Opcodes.DEFINED_CODE_DYNAMIC, Opcodes.DEFINED_GLOB, Opcodes.DEFINED_SCALAR_DEREF, Opcodes.REF, Opcodes.BLESS, Opcodes.BLESS_CLASS_INSTANCE, Opcodes.ISA, Opcodes.SMARTMATCH, Opcodes.PROTOTYPE,
                                  Opcodes.QUOTE_REGEX, Opcodes.QUOTE_REGEX_O -> {
                                 pc = executeTypeOps(opcode, bytecode, pc, registers, code);
                             }
@@ -3939,6 +3939,14 @@ public class BytecodeInterpreter {
                 String pkg = code.stringPool[pkgIdx];
                 RuntimeScalar scalar = registers[scalarReg].scalar();
                 registers[rd] = GlobalVariable.definedGlob(scalar, pkg);
+                return pc;
+            }
+            case Opcodes.DEFINED_SCALAR_DEREF -> {
+                int rd = bytecode[pc++];
+                int scalarReg = bytecode[pc++];
+                int pkgIdx = bytecode[pc++];
+                registers[rd] = GlobalVariable.definedGlobalScalarDeref(
+                        registers[scalarReg].scalar(), code.stringPool[pkgIdx]);
                 return pc;
             }
             case Opcodes.REF -> {

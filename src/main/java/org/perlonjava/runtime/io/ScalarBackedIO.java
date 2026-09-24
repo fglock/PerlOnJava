@@ -21,6 +21,10 @@ public class ScalarBackedIO implements IOHandle {
     private boolean isClosed = false;
     private CharsetDecoderHelper decoderHelper;
     private boolean appendMode = false;
+    // readline() commonly asks for one byte at a time.  Do not rescan and
+    // re-encode the complete scalar for every byte of a large in-memory file.
+    private String cachedContent;
+    private byte[] cachedContentBytes;
 
     public ScalarBackedIO(RuntimeScalar backingScalar) {
         this.backingScalar = backingScalar;
@@ -51,11 +55,11 @@ public class ScalarBackedIO implements IOHandle {
         }
 
         String content = backingScalar.toString();
-        if (!isByteMappable(content)) {
+        byte[] contentBytes = byteContent(content);
+        if (contentBytes == null) {
             reportNonByteScalar();
             return RuntimeScalarCache.scalarUndef;
         }
-        byte[] contentBytes = content.getBytes(StandardCharsets.ISO_8859_1);
 
         if (position >= contentBytes.length) {
             isEOF = true;
@@ -311,6 +315,20 @@ public class ScalarBackedIO implements IOHandle {
     /** Whether a Perl scalar can be represented by PerlIO::scalar's byte buffer. */
     public static boolean isByteMappable(String value) {
         return value.codePoints().noneMatch(codePoint -> codePoint > 0xFF);
+    }
+
+    private byte[] byteContent(String content) {
+        if (content == cachedContent) {
+            return cachedContentBytes;
+        }
+        if (!isByteMappable(content)) {
+            cachedContent = content;
+            cachedContentBytes = null;
+            return null;
+        }
+        cachedContent = content;
+        cachedContentBytes = content.getBytes(StandardCharsets.ISO_8859_1);
+        return cachedContentBytes;
     }
 
     /** Report the EINVAL/warnings::utf8 contract shared by open, read and write. */

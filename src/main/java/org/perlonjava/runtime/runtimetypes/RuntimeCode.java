@@ -311,11 +311,22 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static void incrementEvalDepth() {
-        PerlRuntime.current().executionState().evalDepth++;
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        state.evalDepth++;
+        state.evalPseudoConstantScopes.push(new java.util.LinkedHashMap<>());
     }
 
     public static void decrementEvalDepth() {
-        PerlRuntime.current().executionState().evalDepth--;
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        java.util.LinkedHashMap<String, RuntimeScalar> promotions =
+                state.evalPseudoConstantScopes.isEmpty() ? null : state.evalPseudoConstantScopes.pop();
+        if (promotions != null) {
+            for (var entry : promotions.entrySet()) {
+                GlobalVariable.clearGlobalPseudoConstant(entry.getKey());
+                GlobalVariable.setGlobalPseudoConstant(entry.getKey(), entry.getValue());
+            }
+        }
+        state.evalDepth--;
     }
 
     public static void adjustEvalDepth(int delta) {
@@ -2366,6 +2377,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
                         if (isCodeDefined(autoload)) {
                             return;
+                        }
+                        String packageName = fullSubName.substring(0, sep);
+                        RuntimeScalar inheritedAutoload = InheritanceResolver.findMethodInHierarchy(
+                                "AUTOLOAD", packageName, null, 1, false);
+                        if (isCodeDefined(inheritedAutoload)) {
+                            throw new PerlCompilerException(
+                                    "Use of inherited AUTOLOAD for non-method "
+                                            + fullSubName + "() is no longer allowed");
                         }
                     }
 
@@ -5958,13 +5977,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         curScalar = autoload;
                         continue;
                     }
+                    // A bare call never dispatches through @ISA.  Perl still
+                    // diagnoses the presence of an inherited AUTOLOAD
+                    // specifically, rather than treating it as an ordinary
+                    // missing subroutine.
+                    RuntimeScalar inheritedAutoload = InheritanceResolver.findMethodInHierarchy(
+                            "AUTOLOAD", autoloadPackage, null, 1, false);
+                    if (isCodeDefined(inheritedAutoload)) {
+                        throw new PerlCompilerException(
+                                "Use of inherited AUTOLOAD for non-method "
+                                        + autoloadTargetName + "() is no longer allowed");
+                    }
                 }
                 if (PerlRuntime.current().executionState().tailCallTrampolineDepth > 0) {
                     throw new PerlCompilerException("Goto undefined subroutine &"
                             + code.packageName + "::" + code.subName);
                 }
                 String displayName = code.lexicalForwardGlobPlaceholder && code.subName != null
-                        ? code.subName : autoloadTargetName;
+                        ? code.subName : code.referenceOriginFqn != null
+                                ? code.referenceOriginFqn : autoloadTargetName;
                 throw new PerlCompilerException("Undefined subroutine &" + displayName + " called");
             }
             String resolvedSubroutineName = code.packageName != null && code.subName != null
@@ -6660,7 +6691,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             // Does AUTOLOAD exist?
             // If subroutineName is empty, construct it from the RuntimeCode's package and sub name
-            String fullSubName = subroutineName;
+            String fullSubName = code.referenceOriginFqn != null
+                    ? code.referenceOriginFqn : subroutineName;
             if (fullSubName.isEmpty() && code.packageName != null && code.subName != null) {
                 fullSubName = code.packageName + "::" + code.subName;
             }
@@ -6695,6 +6727,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     getGlobalVariable(autoloadVarFor(autoload, lookupPkg)).set(fullSubName);
                     // Call AUTOLOAD
                     return apply(autoload, a, callContext);
+                }
+                String packageName = fullSubName.substring(0, fullSubName.lastIndexOf("::"));
+                RuntimeScalar inheritedAutoload = InheritanceResolver.findMethodInHierarchy(
+                        "AUTOLOAD", packageName, null, 1, false);
+                if (isCodeDefined(inheritedAutoload)) {
+                    throw new PerlCompilerException(
+                            "Use of inherited AUTOLOAD for non-method "
+                                    + fullSubName + "() is no longer allowed");
                 }
                 throw new PerlCompilerException(undefinedSubroutineMessage(subroutineName, fullSubName));
             }
@@ -7003,9 +7043,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
             // Does AUTOLOAD exist?
-            String fullSubName = (code.packageName != null && code.subName != null)
-                    ? code.packageName + "::" + code.subName
-                    : subroutineName;
+            String fullSubName = code.referenceOriginFqn != null
+                    ? code.referenceOriginFqn
+                    : (code.packageName != null && code.subName != null)
+                            ? code.packageName + "::" + code.subName
+                            : subroutineName;
 
             if (!fullSubName.isEmpty() && fullSubName.contains("::")) {
                 RuntimeScalar importedStubAutoload = findImportedStubAutoload(code, fullSubName);
@@ -7033,6 +7075,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     String lookupPkg = fullSubName.substring(0, fullSubName.lastIndexOf("::"));
                     getGlobalVariable(autoloadVarFor(autoload, lookupPkg)).set(fullSubName);
                     return apply(autoload, a, callContext);
+                }
+                String packageName = fullSubName.substring(0, fullSubName.lastIndexOf("::"));
+                RuntimeScalar inheritedAutoload = InheritanceResolver.findMethodInHierarchy(
+                        "AUTOLOAD", packageName, null, 1, false);
+                if (isCodeDefined(inheritedAutoload)) {
+                    throw new PerlCompilerException(
+                            "Use of inherited AUTOLOAD for non-method "
+                                    + fullSubName + "() is no longer allowed");
                 }
                 throw new PerlCompilerException(gotoErrorPrefix(subroutineName) + "ndefined subroutine &" + fullSubName + " called");
             }
@@ -7116,6 +7166,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Ensure the subroutine is fully compiled before returning the reference
             // This is important for compile-time usage (e.g., use overload qr => \&lexical_sub)
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
+            if (code.referenceOriginFqn == null) {
+                code.referenceOriginFqn = GlobalVariable.findGlobalCodeRefName(code);
+                if (code.referenceOriginFqn == null) {
+                    code.referenceOriginFqn = GlobalVariable.findPseudoConstantCodeRefName(code);
+                }
+            }
             if (code.compilerSupplier != null) {
                 code.compilerSupplier.get(); // Wait for compilation to finish
             }
@@ -7204,6 +7260,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 return new RuntimeScalar(); // undef
             }
+            // A constant.pm proxy occupies the stash hash as a scalar
+            // reference while also providing a callable code slot.  Preserve
+            // that origin for \&{*glob}: a later `*dest = \&source` must keep
+            // the destination's compact stash representation.
+            RuntimeScalar pseudoConstantCodeRef =
+                    GlobalVariable.createPseudoConstantCodeRef(glob.globName);
+            if (pseudoConstantCodeRef != null) {
+                if (pseudoConstantCodeRef.value instanceof RuntimeCode pseudoConstantCode) {
+                    pseudoConstantCode.referenceOriginFqn = glob.globName;
+                }
+                return pseudoConstantCodeRef;
+            }
             RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(glob.globName);
             
             // Return a snapshot of the current code reference
@@ -7214,9 +7282,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         String name = NameNormalizer.normalizeVariableName(runtimeScalar.toString(), packageName);
+        RuntimeScalar compactStashValue = GlobalVariable.getGlobalCompactStashValue(name);
+        if (compactStashValue != null) {
+            String compactType = switch (compactStashValue.type) {
+                case HASHREFERENCE -> "HASH";
+                case GLOBREFERENCE -> compactStashValue.value instanceof RuntimeIO ? "IO" : null;
+                case FORMAT -> "FORMAT";
+                default -> null;
+            };
+            if (compactType != null) {
+                throw new PerlCompilerException(
+                        "Cannot convert a reference to " + compactType + " to typeglob");
+            }
+        }
         // System.out.println("Creating code reference: " + name + " got: " + GlobalContext.getGlobalCodeRef(name));
         RuntimeScalar pseudoConstantCodeRef = GlobalVariable.createPseudoConstantCodeRef(name);
         if (pseudoConstantCodeRef != null) {
+            if (pseudoConstantCodeRef.value instanceof RuntimeCode pseudoConstantCode) {
+                pseudoConstantCode.referenceOriginFqn = name;
+            }
             return pseudoConstantCodeRef;
         }
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRefForNamedReference(name);
@@ -7256,6 +7340,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public static RuntimeScalar prototype(RuntimeScalar runtimeScalar, String packageName) {
         RuntimeScalar code = runtimeScalar;
+        if (code.type == RuntimeScalarType.CODE && code.value instanceof RuntimeCode runtimeCode
+                && runtimeCode.referenceOriginFqn != null) {
+            RuntimeScalar compact = GlobalVariable.getGlobalCompactStashValue(
+                    runtimeCode.referenceOriginFqn);
+            String compactType = compact == null ? null : switch (compact.type) {
+                case HASHREFERENCE -> "HASH";
+                case GLOBREFERENCE -> compact.value instanceof RuntimeIO ? "IO" : null;
+                case FORMAT -> "FORMAT";
+                default -> null;
+            };
+            if (compactType != null) {
+                throw new PerlCompilerException(
+                        "Cannot convert a reference to " + compactType + " to typeglob");
+            }
+        }
         if (code.type != RuntimeScalarType.CODE) {
             String name = NameNormalizer.normalizeVariableName(code.toString(), packageName);
             // System.out.println("Looking for prototype: " + name);
@@ -7438,6 +7537,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (code.isConstantCv && code.lexicalSubDisplayName) {
             return codeRef.undefine();
         }
+        if (code.referenceOriginFqn == null && codeRef.globalCodeRefFqn != null) {
+            code.referenceOriginFqn = codeRef.globalCodeRefFqn;
+        }
+        if (code.referenceOriginFqn == null) {
+            code.referenceOriginFqn = GlobalVariable.findGlobalCodeRefName(code);
+            if (code.referenceOriginFqn == null) {
+                code.referenceOriginFqn = GlobalVariable.findPseudoConstantCodeRefName(code);
+            }
+        }
+        if (code.referenceOriginFqn != null) {
+            int separator = code.referenceOriginFqn.lastIndexOf("::");
+            if (separator >= 0) {
+                code.packageName = code.referenceOriginFqn.substring(0, separator);
+                code.subName = code.referenceOriginFqn.substring(separator + 2);
+            }
+        }
+        // `undef &named_sub` retains a declared CODE slot even after its
+        // callable body is cleared.
+        code.isDeclared = true;
         code.clearPadConstantWeakRefs();
         code.methodHandle = null;
         code.subroutine = null;
@@ -7531,6 +7649,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     || callContext == RuntimeContextType.LVALUE_LIST) {
                 return lvalueConstantValue();
             }
+            // A stash-installed array constant is a list-returning CV.  In
+            // scalar context Perl returns the list length, while scalar
+            // constants (one element) retain their value.
+            if (callContext == RuntimeContextType.SCALAR && constantValue.size() > 1) {
+                return new RuntimeList(new RuntimeScalar(constantValue.size()));
+            }
             return isConstantCv
                     ? constantValue.cloneScalars() : new RuntimeList(constantValue);
         }
@@ -7557,8 +7681,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (lateResolved != null) {
                     return apply(lateResolved, a, callContext);
                 }
-                String fullSubName = "";
-                if (this.packageName != null && this.subName != null) {
+                String fullSubName = this.referenceOriginFqn == null ? "" : this.referenceOriginFqn;
+                if (fullSubName.isEmpty() && this.packageName != null && this.subName != null) {
                     fullSubName = this.packageName + "::" + this.subName;
                 }
                 if (!fullSubName.isEmpty()) {
@@ -7705,6 +7829,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     || callContext == RuntimeContextType.LVALUE_LIST) {
                 return lvalueConstantValue();
             }
+            if (callContext == RuntimeContextType.SCALAR && constantValue.size() > 1) {
+                return new RuntimeList(new RuntimeScalar(constantValue.size()));
+            }
             return isConstantCv
                     ? constantValue.cloneScalars() : new RuntimeList(constantValue);
         }
@@ -7719,9 +7846,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (lateResolved != null) {
                     return apply(lateResolved, a, callContext);
                 }
-                String fullSubName = (this.packageName != null && this.subName != null)
-                        ? this.packageName + "::" + this.subName
-                        : subroutineName;
+                String fullSubName = this.referenceOriginFqn != null
+                        ? this.referenceOriginFqn
+                        : (this.packageName != null && this.subName != null)
+                                ? this.packageName + "::" + this.subName
+                                : subroutineName;
                 if (fullSubName != null && !fullSubName.isEmpty() && fullSubName.contains("::")) {
                     if (this.sourcePackage != null && !this.sourcePackage.isEmpty()) {
                         String sourceAutoloadString = this.sourcePackage + "::AUTOLOAD";

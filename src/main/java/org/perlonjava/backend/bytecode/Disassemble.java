@@ -1408,6 +1408,14 @@ public class Disassemble {
                         sb.append("DEFINED_GLOB r").append(rd).append(" = defined(*r").append(rs)
                           .append(") pkg=").append(interpretedCode.stringPool[definedGlobPkgIdx]).append("\n");
                         break;
+                    case Opcodes.DEFINED_SCALAR_DEREF:
+                        rd = interpretedCode.bytecode[pc++];
+                        rs = interpretedCode.bytecode[pc++];
+                        int definedScalarPkgIdx = interpretedCode.bytecode[pc++];
+                        sb.append("DEFINED_SCALAR_DEREF r").append(rd).append(" = defined(${r")
+                          .append(rs).append("}) pkg=")
+                          .append(interpretedCode.stringPool[definedScalarPkgIdx]).append("\n");
+                        break;
                     case Opcodes.REF:
                         rd = interpretedCode.bytecode[pc++];
                         rs = interpretedCode.bytecode[pc++];

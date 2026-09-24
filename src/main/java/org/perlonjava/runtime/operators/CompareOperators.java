@@ -353,6 +353,14 @@ public class CompareOperators {
     public static RuntimeScalar equalTo(RuntimeScalar arg1, RuntimeScalar arg2) {
         arg1 = RuntimeScalar.fetchTiedOnce(arg1);
         arg2 = RuntimeScalar.fetchTiedOnce(arg2);
+        // A stash traversal can compare a typeglob with a coderef while
+        // locating the coderef's symbol (Attribute::Handlers::findsym).
+        // They are distinct reference identities; do not route this shape
+        // through the generic numeric coercion path, which rejects GLOBs.
+        if ((arg1.type == RuntimeScalarType.GLOB && arg2.type == RuntimeScalarType.CODE)
+                || (arg1.type == RuntimeScalarType.CODE && arg2.type == RuntimeScalarType.GLOB)) {
+            return scalarFalse;
+        }
         // Fast path: both INTEGER - skip blessedId check, getNumber()
         if (arg1.type == RuntimeScalarType.INTEGER && arg2.type == RuntimeScalarType.INTEGER) {
             return getScalarBoolean(compareIntegers(arg1, arg2) == 0);

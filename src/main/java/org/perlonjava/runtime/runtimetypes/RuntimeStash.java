@@ -113,7 +113,8 @@ public class RuntimeStash extends RuntimeHash {
             // Check if the format slot exists AND is defined (don't auto-create)
             boolean hasFormatSlot = GlobalVariable.isGlobalFormatDefined(fullKey);
 
-            boolean hasSlots = hasScalarSlot || hasArraySlot || hasHashSlot || hasCodeSlot || hasIOSlot || hasFormatSlot;
+            boolean hasSlots = hasScalarSlot || hasArraySlot || hasHashSlot || hasCodeSlot || hasIOSlot || hasFormatSlot
+                    || GlobalVariable.isEvalPromotedCompactStashEntry(fullKey);
 
             return new RuntimeStashEntry(namespace + key, hasSlots);
         }

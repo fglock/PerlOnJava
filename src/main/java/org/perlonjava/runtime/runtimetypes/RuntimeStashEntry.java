@@ -20,14 +20,27 @@ public class RuntimeStashEntry extends RuntimeGlob {
      */
     public RuntimeStashEntry(String globName, boolean isDefined) {
         super(globName);
+        RuntimeScalar codeSlot = GlobalVariable.globalCodeRefs.get(globName);
+        // A constant proxy deliberately has both a CODE slot and a compact
+        // stash representation.  It becomes a full glob only after that
+        // compact representation has been cleared by a real glob promotion.
+        boolean materializedCodeSlot = codeSlot != null
+                && codeSlot.type == CODE
+                && !GlobalVariable.hasGlobalPseudoConstant(globName);
         if (!isDefined) {
             type = RuntimeScalarType.UNDEF;
-        } else if (GlobalVariable.hasGlobalPseudoConstant(globName)) {
+        } else if (GlobalVariable.hasGlobalPseudoConstant(globName) && !materializedCodeSlot) {
             // The stash hash exposes a scalar-reference proxy constant as the
             // assigned reference even though globDeref() still provides the
             // symbol's complete typeglob.
             type = REFERENCE;
             value = GlobalVariable.getGlobalPseudoConstant(globName);
+        } else if (!materializedCodeSlot) {
+            RuntimeScalar compactValue = GlobalVariable.getGlobalCompactStashValue(globName);
+            if (compactValue != null) {
+                type = compactValue.type;
+                value = compactValue.value;
+            }
         }
         // System.out.println("Stash Entry create: " + globName + " " + isDefined);
     }
@@ -53,13 +66,14 @@ public class RuntimeStashEntry extends RuntimeGlob {
     public RuntimeScalar createReference() {
         RuntimeScalar pseudoConstant =
                 GlobalVariable.getGlobalPseudoConstant(this.globName);
-        RuntimeScalar codeSlot =
-                GlobalVariable.globalCodeRefs.get(this.globName);
+        RuntimeScalar codeSlot = GlobalVariable.globalCodeRefs.get(this.globName);
         if (pseudoConstant != null
                 && codeSlot != null
                 && codeSlot.type == CODE
                 && codeSlot.value instanceof RuntimeCode code
-                && code.constantValue != null) {
+                && (code.isConstantCv
+                        || ("constant".equals(code.packageName)
+                        && "__ANON__".equals(code.subName)))) {
             RuntimeScalar reference = new RuntimeScalar();
             reference.type = REFERENCE;
             reference.value = this;
@@ -83,6 +97,22 @@ public class RuntimeStashEntry extends RuntimeGlob {
     @Override
     public RuntimeGlob globDerefNonStrict(String packageName) {
         return GlobalVariable.getGlobalIO(this.globName);
+    }
+
+    /**
+     * `$stash->{name} = *source` reaches this overload directly because the
+     * compiler knows the RHS is a glob.  Preserve the assignment's compact
+     * stash value after the normal all-slot aliasing, so a later hash lookup
+     * still stringifies as the source fake GV.
+     */
+    @Override
+    public RuntimeScalar set(RuntimeGlob value) {
+        RuntimeScalar result = super.set(value);
+        if (value != null && value.globName != null) {
+            GlobalVariable.setGlobalCompactStashValue(
+                    this.globName, new RuntimeScalar(value));
+        }
+        return result;
     }
 
 // Note on Stash Operations:
@@ -126,7 +156,8 @@ public class RuntimeStashEntry extends RuntimeGlob {
         if (value.type == CODE
                 && value.value instanceof RuntimeCode code
                 && !code.defined()
-                && code.referenceOriginFqn != null) {
+                && code.referenceOriginFqn != null
+                && GlobalVariable.hasGlobalPseudoConstant(code.referenceOriginFqn)) {
             RuntimeScalar pseudoCode = GlobalVariable.createPseudoConstantCodeRef(
                     code.referenceOriginFqn);
             if (pseudoCode != null) {
@@ -181,6 +212,7 @@ public class RuntimeStashEntry extends RuntimeGlob {
         }
         if (value.type == ARRAYREFERENCE) {
             if (value.value instanceof RuntimeArray) {
+                GlobalVariable.setGlobalCompactStashValue(this.globName, value);
                 RuntimeArray targetArray = value.arrayDeref();
                 // Make the target array slot point to the same RuntimeArray object (aliasing)
                 GlobalVariable.globalArrays.put(this.globName, targetArray);
@@ -200,6 +232,18 @@ public class RuntimeStashEntry extends RuntimeGlob {
             case TIED_SCALAR:
                 return set(value.tiedFetch());
             case CODE:
+                // `*dest = \&source` preserves constant.pm's scalar-reference
+                // stash representation when source is a proxy constant.  The
+                // destination still receives a normal callable CODE slot; the
+                // side registry controls only the hash-view shape.
+                if (value.value instanceof RuntimeCode sourceCode
+                        && sourceCode.referenceOriginFqn != null) {
+                    RuntimeScalar sourcePseudo = GlobalVariable.getGlobalPseudoConstant(
+                            sourceCode.referenceOriginFqn);
+                    if (sourcePseudo != null) {
+                        GlobalVariable.setGlobalPseudoConstant(this.globName, sourcePseudo);
+                    }
+                }
                 RuntimeScalar codeContainer = GlobalVariable.defineGlobalCodeRef(this.globName);
                 if (value.value instanceof RuntimeCode code) {
                     code.cacheConstantCvValue();
@@ -217,6 +261,7 @@ public class RuntimeStashEntry extends RuntimeGlob {
                 return value;
             case FORMAT:
                 // Handle format assignments to typeglobs
+                GlobalVariable.setGlobalCompactStashValue(this.globName, value);
                 GlobalVariable.getGlobalFormatRef(this.globName).set(value);
                 return value;
             case GLOB:
@@ -275,10 +320,16 @@ public class RuntimeStashEntry extends RuntimeGlob {
                         this.set(GlobalVariable.getGlobalFormatRef(sourceGlobName));
                     }
                 }
+                // Slot aliasing above promotes the destination through
+                // RuntimeGlob.set(), which clears compact stash metadata.
+                // Record the original stash value only after that work so a
+                // later `$stash->{name}` still reports the assigned fake GV.
+                GlobalVariable.setGlobalCompactStashValue(this.globName, value);
                 return value;
             // Handle the case where a typeglob is assigned a reference to an array
             case HASHREFERENCE:
                 if (value.value instanceof RuntimeHash) {
+                    GlobalVariable.setGlobalCompactStashValue(this.globName, value);
                     GlobalVariable.getGlobalHash(this.globName).setFromList(((RuntimeHash) value.value).getList());
                 }
                 return value;
@@ -311,6 +362,7 @@ public class RuntimeStashEntry extends RuntimeGlob {
                 notifyCodeSlotChanged();
                 return value;
             case GLOBREFERENCE:
+                GlobalVariable.setGlobalCompactStashValue(this.globName, value);
                 // `$stash->{foo} = \*bar` creates a constant subroutine returning the glob
                 if (value.value instanceof RuntimeGlob glob) {
                     RuntimeCode code = createConstantCode();
@@ -486,6 +538,34 @@ public class RuntimeStashEntry extends RuntimeGlob {
      */
     @Override
     public String toString() {
+        if (GlobalVariable.isEvalPromotedCompactStashEntry(this.globName)) {
+            return "*" + this.globName;
+        }
+        if (GlobalVariable.hasGlobalPseudoConstant(this.globName)) {
+            // A pseudo constant remains compact in the stash until a coderef
+            // promotes it to a full GV. Perl exposes that compact form as a
+            // scalar reference when stringified.
+            return "SCALAR";
+        }
+        RuntimeScalar codeSlot = GlobalVariable.globalCodeRefs.get(this.globName);
+        if (codeSlot != null && codeSlot.type == CODE
+                && codeSlot.value instanceof RuntimeCode code
+                && code.prototype != null) {
+            // A declared sub with a prototype occupies the compact scalar
+            // form in the stash hash, whose value is the prototype itself.
+            return code.prototype;
+        }
+        if (codeSlot != null && codeSlot.type == CODE
+                && codeSlot.value instanceof RuntimeCode code
+                && code.isDeclared && !code.defined() && code.prototype == null) {
+            // Perl stores a prototype-less forward declaration in the stash's
+            // compact scalar form, displayed as the historical -1 sentinel.
+            return "-1";
+        }
+        if (type == GLOB && value instanceof RuntimeGlob sourceGlob
+                && sourceGlob != this && sourceGlob.globName != null) {
+            return sourceGlob.toString();
+        }
         // For stash entries, always return the glob representation
         // This matches Perl's behavior where stash entries stringify to "*PackageName::symbol"
         return "*" + this.globName;

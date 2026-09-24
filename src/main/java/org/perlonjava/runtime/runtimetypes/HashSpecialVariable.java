@@ -135,6 +135,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                     containsNamespace(GlobalVariable.globalArrays, prefix) ||
                     containsNamespace(GlobalVariable.globalHashes, prefix) ||
                     containsVisibleCodeWithPrefix(prefix) ||
+                    GlobalVariable.isEvalPromotedCompactStashEntry(prefix) ||
                     GlobalVariable.containsVisibleGlobalIORefWithPrefix(prefix) ||
                     containsNamespace(GlobalVariable.globalFormatRefs, prefix)) {
                 return new RuntimeStashEntry(prefix, true);
@@ -472,6 +473,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                 containsNamespace(GlobalVariable.globalArrays, prefix) ||
                 containsNamespace(GlobalVariable.globalHashes, prefix) ||
                 containsVisibleCodeWithPrefix(prefix) ||
+                GlobalVariable.isEvalPromotedCompactStashEntry(prefix) ||
                 GlobalVariable.containsVisibleGlobalIORefWithPrefix(prefix) ||
                 containsNamespace(GlobalVariable.globalFormatRefs, prefix);
     }
