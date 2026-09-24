@@ -138,3 +138,7 @@ src/main/java/org/perlonjava/core/Configuration.java
 /store[0-9]*
 /integer.[0-9]*
 /utfhash.po
+
+# Dist::Zilla's file test intentionally creates this literal fixture name
+# when run from the repository root.
+/fake out!
