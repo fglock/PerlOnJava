@@ -1587,7 +1587,11 @@ public class OperatorParser {
     private static void rejectIndirectMapArgumentToReturn(Parser parser) {
         int nameIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
         if (nameIndex >= parser.tokens.size() || parser.tokens.get(nameIndex).type != IDENTIFIER
-                || isReturnStatementModifier(parser.tokens.get(nameIndex).text)) {
+                || isReturnStatementModifier(parser.tokens.get(nameIndex).text)
+                // A core operator can validly consume a map expression, such as
+                // `return sort map { ... } LIST`. Only an ordinary bareword
+                // before map is an attempted indirect argument to return.
+                || ParserTables.CORE_PROTOTYPES.containsKey(parser.tokens.get(nameIndex).text)) {
             return;
         }
         int mapIndex = Whitespace.skipWhitespace(parser, nameIndex + 1, parser.tokens);

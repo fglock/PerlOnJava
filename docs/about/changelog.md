@@ -9,6 +9,8 @@ priorities and future plans.
 - Preserve deferred string content when `Clone::clone` copies scalar values,
   restoring Dist::Zilla::Plugin::TrialVersionComment on both backends.
 
+- Restore Mojolicious 9.49 loading by accepting valid `return sort map` pipelines.
+
 - Preserve localized standard-handle file descriptors when redirected output
   is active, restoring IO::Prompt::Tiny prompt reads on both execution backends.
 

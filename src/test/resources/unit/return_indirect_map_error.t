@@ -10,4 +10,13 @@ ok($ok, 'return statement modifiers remain valid');
 $ok = eval q{sub h { return sort grep { $_ } qw(b a); } 1;};
 ok($ok, 'return accepts a sort grep pipeline');
 
+$ok = eval q{
+    sub i {
+        my $ns = 'UnitReturnSortMap';
+        return sort map { /^(.+)::$/ ? "${ns}::$1" : () } keys %{"${ns}::"};
+    }
+    1;
+};
+ok($ok, 'return accepts Mojolicious sort map pipeline');
+
 done_testing;
