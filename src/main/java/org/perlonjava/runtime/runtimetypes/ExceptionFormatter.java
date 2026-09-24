@@ -204,17 +204,33 @@ public class ExceptionFormatter {
                                 }
                             }
                             // Eval source labels such as "(eval 1)" are reused by
-                            // independent loading files.  Their global source-map entry
-                            // can therefore describe a different eval.  The code frame's
-                            // package is the authoritative definition package for an eval
-                            // closure; retain source-map precision for ordinary files.
+                            // independent loading files. Their global source-map entry
+                            // can therefore describe a different eval. The active runtime
+                            // package is authoritative: it keeps a package declaration
+                            // inside eval STRING (and a generated exporter's target) rather
+                            // than the eval code's defining package.
                             boolean isEvalSource = frame.code().sourceName != null
                                     && frame.code().sourceName.startsWith("(eval ");
-                            if (isEvalSource && frame.packageName() != null
+                            String runtimePackage = InterpreterState.currentPackage.get().toString();
+                            String sourceMappedPackage = tokenIndex != null && frame.code().sourceName != null
+                                    ? ByteCodeSourceMapper.getPackageAtLocation(frame.code().sourceName, tokenIndex)
+                                    : null;
+                            if (isEvalSource && runtimePackage != null
+                                    && !runtimePackage.isEmpty() && !"main".equals(runtimePackage)) {
+                                pkg = runtimePackage;
+                            } else if (isEvalSource && frame.packageName() != null
                                     && !frame.packageName().isEmpty()) {
+                                // The parser records the package of this concrete eval
+                                // frame, unlike the global mapper's reused `(eval N)` key.
                                 pkg = frame.packageName();
-                            } else if (tokenIndex != null && frame.code().sourceName != null) {
-                                pkg = ByteCodeSourceMapper.getPackageAtLocation(frame.code().sourceName, tokenIndex);
+                            } else if (sourceMappedPackage != null && !sourceMappedPackage.isEmpty()) {
+                                // The forced interpreter backend leaves package state at its
+                                // default for package declarations compiled inside eval. Its
+                                // per-token parser metadata remains accurate in that case.
+                                pkg = sourceMappedPackage;
+                            } else if (isEvalSource && runtimePackage != null
+                                    && !runtimePackage.isEmpty()) {
+                                pkg = runtimePackage;
                             }
                             if (frame.code().isQuotedRegexCallback
                                     && frame.packageName() != null

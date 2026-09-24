@@ -580,6 +580,11 @@ public class EvalStringHandler {
                     adjustedRegistry  // Pass adjusted registry for variable capture
             );
             InterpretedCode evalCode = compiler.compile(ast, ctx);  // Pass ctx for context propagation
+            // Keep the package resolved while parsing this particular eval on its
+            // frame.  Eval filenames are only `(eval N)` and are reused by other
+            // source files, so the global source mapper cannot identify this eval
+            // when caller() later formats an interpreter stack.
+            evalCode.packageName = symbolTable.getCurrentPackage();
 
             evalTrace("EvalStringHandler compiled bytecodeLen=" + (evalCode != null ? evalCode.bytecode.length : -1) +
                     " src=" + (evalCode != null ? evalCode.sourceName : "null"));
