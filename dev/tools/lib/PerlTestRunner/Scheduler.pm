@@ -19,7 +19,7 @@ sub profile_for_test {
     # This test creates and executes progtmp* files containing #!./perl. Its
     # private cwd prevents cross-runner races; an exclusive barrier also keeps
     # it from competing with other work inside one resource-aware runner.
-    if ($normalized_file =~ m{(?:^|/)perl5_t/t/japh/abigail\.t$}) {
+    if ($normalized_file =~ m{(?:^|/)(?:perl5_t/t/)?japh/abigail\.t$}) {
         return {
             class => 'exclusive',
             weight => 3,
@@ -31,7 +31,7 @@ sub profile_for_test {
     # snapshot plus the regex corpus pressure consumes the whole supported
     # ten-unit production budget; smaller caller budgets clamp this weight so
     # the fixture still makes progress without overlapping other work.
-    if ($normalized_file =~ m{(?:^|/)perl5_t/t/re/pat_thr\.t$}) {
+    if ($normalized_file =~ m{(?:^|/)(?:perl5_t/t/)?re/pat_thr\.t$}) {
         return {
             class => 'heavy',
             weight => 10,
@@ -43,8 +43,8 @@ sub profile_for_test {
     # most two should share a ten-unit budget.  Keeping these non-exclusive
     # lets the runner use the other half for the complementary direct gate.
     if ($normalized_file =~ m{
-          (?:^|/)perl5_t/t/re/pat\.t$
-        | (?:^|/)perl5_t/t/re/anyof(?:_thr)?\.t$
+          (?:^|/)(?:perl5_t/t/)?re/pat\.t$
+        | (?:^|/)(?:perl5_t/t/)?re/anyof(?:_thr)?\.t$
     }x) {
         return {
             class => 'heavy',
@@ -58,11 +58,11 @@ sub profile_for_test {
     # leaving one unit available for an ordinary test.
     if ($normalized_file =~ m{
           (?:^|/)perl5/dist/threads/t/join\.t$
-        | (?:^|/)perl5_t/t/op/gv\.t$
-        | (?:^|/)perl5_t/t/re/pat_psycho(?:_thr)?\.t$
-        | (?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$
-        | (?:^|/)perl5_t/t/re/regexp_qr_embed_thr\.t$
-        | (?:^|/)perl5_t/t/re/speed(?:_thr)?\.t$
+        | (?:^|/)(?:perl5_t/t/)?op/gv\.t$
+        | (?:^|/)(?:perl5_t/t/)?re/pat_psycho(?:_thr)?\.t$
+        | (?:^|/)(?:perl5_t/t/)?re/pat_advanced(?:_thr)?\.t$
+        | (?:^|/)(?:perl5_t/t/)?re/regexp_qr_embed_thr\.t$
+        | (?:^|/)(?:perl5_t/t/)?re/speed(?:_thr)?\.t$
     }x) {
         return {
             class => 'heavy',

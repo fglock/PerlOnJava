@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use Exporter qw(import);
 
-our @EXPORT_OK = qw(timeout_for_test);
+our @EXPORT_OK = qw(timeout_for_test timeout_for_runner_test);
 
 sub timeout_for_test {
     my ($test_file, $base_timeout) = @_;
@@ -17,38 +17,52 @@ sub timeout_for_test {
     # blocking reads for each read/write combination. Keep custom timeouts
     # proportional for these two fixtures.
     return $base_timeout * 2
-        if $normalized_file =~ m{(?:^|/)perl5_t/t/io/(?:crlf_)?through\.t$};
+        if $normalized_file =~ m{(?:^|/)(?:perl5_t/t/)?io/(?:crlf_)?through\.t$};
 
     # tie_fetch_count exercises a large matrix of tied-hash fetches and can
     # exceed the default deadline under the compatibility-test load.
     return 1800
-        if $normalized_file =~ m{(?:^|/)perl5_t/t/op/tie_fetch_count\.t$}
+        if $normalized_file =~ m{(?:^|/)(?:perl5_t/t/)?op/tie_fetch_count\.t$}
         && $base_timeout < 1800;
 
     # Complete anyof maps take roughly 1,125 seconds even when isolated. The
     # floor is a watchdog, not a performance target, and preserves any larger
     # timeout supplied by the caller.
     return 2400
-        if $normalized_file =~ m{(?:^|/)perl5_t/t/re/anyof(?:_thr)?\.t$}
+        if $normalized_file =~ m{(?:^|/)(?:perl5_t/t/)?re/anyof(?:_thr)?\.t$}
         && $base_timeout < 2400;
 
     # A ten-worker production-load acceptance can push pat beyond the default
     # deadline. Resource-aware scheduling isolates pat_thr separately.
     return 900
-        if $normalized_file =~ m{(?:^|/)perl5_t/t/re/pat(?:_thr)?\.t$}
+        if $normalized_file =~ m{(?:^|/)(?:perl5_t/t/)?re/pat(?:_thr)?\.t$}
         && $base_timeout < 900;
 
     return 600 if $normalized_file =~ m{
-          (?:^|/)perl5_t/t/lib/croak\.t$
-        | (?:^|/)perl5_t/t/re/pat_psycho(?:_thr)?\.t$
-        | (?:^|/)perl5_t/t/op/gv\.t$
-        | (?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$
-        | (?:^|/)perl5_t/t/re/regexp_qr_embed_thr\.t$
-        | (?:^|/)perl5_t/t/re/speed(?:_thr)?\.t$
-        | (?:^|/)perl5_t/t/japh/abigail\.t$
+          (?:^|/)(?:perl5_t/t/)?lib/croak\.t$
+        | (?:^|/)(?:perl5_t/t/)?re/pat_psycho(?:_thr)?\.t$
+        | (?:^|/)(?:perl5_t/t/)?op/gv\.t$
+        | (?:^|/)(?:perl5_t/t/)?re/pat_advanced(?:_thr)?\.t$
+        | (?:^|/)(?:perl5_t/t/)?re/regexp_qr_embed_thr\.t$
+        | (?:^|/)(?:perl5_t/t/)?re/speed(?:_thr)?\.t$
+        | (?:^|/)(?:perl5_t/t/)?japh/abigail\.t$
     }x && $base_timeout < 600;
 
     return $base_timeout;
+}
+
+sub timeout_for_runner_test {
+    my ($test_file, $base_timeout) = @_;
+    my $test_timeout = timeout_for_test($test_file, $base_timeout);
+    (my $normalized_file = $test_file) =~ tr{\\}{/};
+
+    # Complete anyof maps are exceptionally expensive under a full UAT load.
+    # Keep the general policy floor, then provide sufficient runner headroom.
+    return 3600
+        if $normalized_file =~ m{(?:^|/)(?:perl5_t/t/)?re/anyof(?:_thr)?\.t$}
+        && $test_timeout < 3600;
+
+    return $test_timeout;
 }
 
 1;
