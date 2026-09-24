@@ -43,6 +43,9 @@ public class SystemOperator {
 
     // Shell syntax that prevents Perl's one-string command direct-exec fast path.
     private static final Pattern DIRECT_COMMAND_SHELL_METACHARACTERS = Pattern.compile("[*?\\[\\]{}()<>|&;`'\"\\$%]");
+    // A leading assignment is shell syntax on POSIX, even without another metacharacter.
+    private static final Pattern POSIX_LEADING_ENVIRONMENT_ASSIGNMENT =
+            Pattern.compile("^[A-Za-z_][A-Za-z0-9_]*=");
     private static final Pattern TAINTED_ENV_METACHARACTERS = Pattern.compile("[^A-Za-z0-9_./-]");
 
     private static String decodeSubprocessOutput(byte[] bytes) {
@@ -345,6 +348,13 @@ public class SystemOperator {
         }
 
         if (DIRECT_COMMAND_SHELL_METACHARACTERS.matcher(trimmed).find()) {
+            return null;
+        }
+
+        // In a one-string command, POSIX shells apply leading NAME=value words
+        // to the child environment. Passing these words directly to
+        // ProcessBuilder would instead try to execute NAME=value as a program.
+        if (POSIX_LEADING_ENVIRONMENT_ASSIGNMENT.matcher(trimmed).find()) {
             return null;
         }
 

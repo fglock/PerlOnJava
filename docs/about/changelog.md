@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore qx handling of leading POSIX environment assignments, unblocking
+  Getopt::Complete shell completion on both execution backends.
+
 - Preserve deferred string content when `Clone::clone` copies scalar values,
   restoring Dist::Zilla::Plugin::TrialVersionComment on both backends.
 
