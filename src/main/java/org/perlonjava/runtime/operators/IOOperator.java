@@ -1080,10 +1080,8 @@ public class IOOperator {
         return fh.close();
     }
 
-    private static boolean unopenedWarningsEnabled() {
-        return getGlobalVariable("main::" + Character.toString('W' - 'A' + 1)).getBoolean()
-                || Warnings.warningManager.isWarningEnabled("unopened")
-                || Warnings.warningManager.isWarningEnabled("all");
+    static boolean unopenedWarningsEnabled() {
+        return Warnings.isCategoryEnabledAtPerlXsCaller("unopened");
     }
 
     private static String filehandleShortName(RuntimeScalar handle) {

@@ -207,7 +207,20 @@ public class OperatorParser {
 
             // Check if the token looks like a Bareword file handle
             if (operand.type == IDENTIFIER) {
-                Node fileHandle = FileHandle.parseFileHandle(parser);
+                // A bareword in diamond syntax is a filehandle even before
+                // its IO slot has been opened.  In particular, `<y>` must
+                // execute an unopened read rather than become the glob
+                // pattern `y`.
+                Node fileHandle = FileHandle.parseFileHandle(parser, true);
+                // parseFileHandle intentionally rejects a few ambiguous
+                // barewords for print-style syntax. In diamond syntax the
+                // closing `>` has already made this unambiguously a handle,
+                // so ensure an unknown lowercase name receives its unopened
+                // IO slot too.
+                if (fileHandle == null && parser.tokens.get(parser.tokenIndex).text.equals(">")) {
+                    GlobalVariable.vivifyGlobalIO(FileHandle.normalizeBarewordHandle(parser, tokenText));
+                    fileHandle = FileHandle.parseBarewordHandle(parser, tokenText);
+                }
                 if (fileHandle != null) {
                     if (parser.tokens.get(parser.tokenIndex).text.equals(">")) {
                         TokenUtils.consume(parser); // Consume the '>' token

@@ -2089,6 +2089,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Handle target special types via switch dispatcher
         switch (this.type) {
             case TIED_SCALAR -> {
+                // A typeglob rejected in numeric context must fail before a
+                // tied STORE callback can observe the tentative assignment.
+                // This preserves eval's atomic assignment behavior for
+                // expressions such as `$tied = select STDOUT`.
+                if (value.type == GLOB && value.value instanceof RuntimeIO) {
+                    value.getNumber();
+                }
                 return this.tiedStore(value);
             }
             case READONLY_SCALAR -> {
@@ -2754,7 +2761,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // compiling/evaluating a no-op expression such as `*fh if 0`.  They
         // are not the user-visible glob slot and must not disturb ${^LAST_FH}.
         // Lexical lifetime cleanup is handled separately by scopeExitCleanup.
-        if (!isPackageGlobalRoot) {
+        if (!isPackageGlobalRoot && containerOwner == null) {
             return;
         }
         if (!(value instanceof RuntimeGlob glob)) {
@@ -3623,10 +3630,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOBREFERENCE -> {
                 // Some internal representations store PVIO as GLOBREFERENCE with a RuntimeIO value.
                 if (value instanceof RuntimeIO io) {
-                    // `*{ *FH{IO} }` creates an anonymous GV even if this
-                    // PVIO was once installed in a named handle. Reusing the
-                    // current named owner leaks unrelated later localizations
-                    // into its stringification and slot identity.
+                    if (io.globName != null) {
+                        RuntimeGlob actual = GlobalVariable.getExistingGlobalIO(io.globName);
+                        if (actual != null) {
+                            yield actual;
+                        }
+                    }
                     RuntimeGlob tmp = new RuntimeGlob("__ANON__::__ANONIO__");
                     tmp.setIO(io);
                     yield tmp;
@@ -3638,9 +3647,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // Perl allows postfix glob deref (->**) of PVIO by creating a temporary glob
                 // with the IO slot set to that handle.
                 if (value instanceof RuntimeIO io) {
-                    // A PVIO glob dereference has anonymous-GV identity. In
-                    // particular, it must not inherit the name of a later
-                    // localized handle that happens to share this IO object.
+                    if (io.globName != null) {
+                        RuntimeGlob actual = GlobalVariable.getExistingGlobalIO(io.globName);
+                        if (actual != null) {
+                            yield actual;
+                        }
+                    }
                     RuntimeGlob tmp = new RuntimeGlob("__ANON__::__ANONIO__");
                     tmp.setIO(io);
                     yield tmp;

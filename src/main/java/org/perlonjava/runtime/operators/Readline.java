@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.runtimetypes.*;
+import org.perlonjava.runtime.io.ClosedIOHandle;
 
 import java.nio.charset.StandardCharsets;
 
@@ -53,7 +54,7 @@ public class Readline {
                 if ("-".equals(fileHandle.toString()) || name.contains("ARGV")) {
                     return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef;
                 }
-                WarnDie.warn(new RuntimeScalar("readline() on unopened filehandle"), new RuntimeScalar("\n"));
+                WarnDie.warn(new RuntimeScalar("readline() on unopened filehandle"), new RuntimeScalar(""));
                 return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef;
             }
             fh = fileHandle.getRuntimeIO();
@@ -77,10 +78,15 @@ public class Readline {
             // rather than dying.  The diagnostic belongs to the `unopened`
             // warning category, so it must remain silent when that category
             // is disabled (including Perl's default warning state).
-            WarnDie.warnWithCategory(
-                    new RuntimeScalar("readline() on unopened filehandle"),
-                    new RuntimeScalar("\n"),
-                    "unopened");
+            // A named bareword handle records its spelling at compile time;
+            // Perl diagnoses that explicit operation even when it is reached
+            // through a dynamic typeglob assignment (`*x = <y>`).
+            if (sourceName != null || IOOperator.unopenedWarningsEnabled()) {
+                String handleName = sourceName == null || sourceName.isEmpty()
+                        ? "" : " " + sourceName;
+                WarnDie.warn(new RuntimeScalar("readline() on unopened filehandle" + handleName),
+                        new RuntimeScalar(""));
+            }
             return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef;
         }
 
@@ -88,6 +94,16 @@ public class Readline {
                 || !(fh.getDiagnosticReadlineHandleName().contains("[")
                 || fh.getDiagnosticReadlineHandleName().contains("{")))) {
             fh.setDiagnosticReadlineHandleName(sourceName);
+        }
+        if (!(fh instanceof TieHandle)
+                && (fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle)) {
+            if (sourceName != null || IOOperator.unopenedWarningsEnabled()) {
+                String handleName = sourceName == null || sourceName.isEmpty()
+                        ? "" : " " + sourceName;
+                WarnDie.warn(new RuntimeScalar("readline() on unopened filehandle" + handleName),
+                        new RuntimeScalar(""));
+            }
+            return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef;
         }
         // Perl's delayed warn/die filehandle context follows a scalar readline.
         // A list read is consumed as a scoped aggregate and must not leave

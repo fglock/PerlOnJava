@@ -862,7 +862,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case VSTRING:
             case DUALVAR:
                 RuntimeIO lastReadline = RuntimeIO.getLastAccessedHandle();
-                if (RuntimeCode.getEvalDepth() == 0 && lastReadline != null && this.globName != null
+                if (lastReadline != null && this.globName != null
                         && (this.globName.equals(lastReadline.globName)
                             || (this.IO != null && this.IO.value == lastReadline))) {
                     RuntimeIO.setLastAccessedHandle(null);
