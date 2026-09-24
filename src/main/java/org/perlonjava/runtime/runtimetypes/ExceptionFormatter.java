@@ -203,8 +203,17 @@ public class ExceptionFormatter {
                                     }
                                 }
                             }
-                            // Look up package from ByteCodeSourceMapper using tokenIndex
-                            if (tokenIndex != null && frame.code().sourceName != null) {
+                            // Eval source labels such as "(eval 1)" are reused by
+                            // independent loading files.  Their global source-map entry
+                            // can therefore describe a different eval.  The code frame's
+                            // package is the authoritative definition package for an eval
+                            // closure; retain source-map precision for ordinary files.
+                            boolean isEvalSource = frame.code().sourceName != null
+                                    && frame.code().sourceName.startsWith("(eval ");
+                            if (isEvalSource && frame.packageName() != null
+                                    && !frame.packageName().isEmpty()) {
+                                pkg = frame.packageName();
+                            } else if (tokenIndex != null && frame.code().sourceName != null) {
                                 pkg = ByteCodeSourceMapper.getPackageAtLocation(frame.code().sourceName, tokenIndex);
                             }
                             if (frame.code().isQuotedRegexCallback
