@@ -49,4 +49,15 @@ subtest 'scalar ref clones are independent' => sub {
     }
 };
 
+subtest 'clone preserves concatenated hash-slot strings' => sub {
+    my $original = { content => q{'} };
+    $original->{content} .= '0.001';
+    $original->{content} .= q{'};
+
+    my $copy = clone($original);
+
+    is($copy->{content}, q{'0.001'},
+        'clone preserves a string built through hash-slot concatenation');
+};
+
 done_testing;
