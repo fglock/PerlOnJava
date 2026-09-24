@@ -20,7 +20,7 @@ use PerlTestRunner::Scheduler qw(
     profile_for_test
     scheduling_priority
 );
-use PerlTestRunner::Timeouts qw(timeout_for_test);
+use PerlTestRunner::Timeouts qw(timeout_for_runner_test);
 
 # PerlOnJava Test Runner
 # Runs standard Perl tests against PerlOnJava and analyzes results
@@ -428,16 +428,7 @@ sub run_single_test {
     # deadline and can cross it when the full parallel corpus contends for CPU.
     # Give those known outliers a stable minimum wall-clock allowance while
     # preserving any larger timeout requested by the caller.
-    my $test_timeout = timeout_for_test($test_file, $timeout);
-
-    # Complete anyof maps are exceptionally expensive under a full UAT load.
-    # Keep the policy module's general floor, then give this runner enough
-    # wall-clock headroom to finish the complete map rather than truncating the
-    # corpus result during an otherwise healthy run.
-    if ($test_file =~ m{(?:^|/)perl5_t/t/re/anyof(?:_thr)?\.t$}
-            && $test_timeout < 3600) {
-        $test_timeout = 3600;
-    }
+    my $test_timeout = timeout_for_runner_test($test_file, $timeout);
 
     # These tests have their own watchdogs and scale them through this upstream
     # variable. Keep a caller's larger value, but do not let an internal
