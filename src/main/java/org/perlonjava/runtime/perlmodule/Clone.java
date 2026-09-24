@@ -165,11 +165,11 @@ public class Clone extends PerlModuleBase {
                 }
             }
             default -> {
-                // Scalar values (int, double, string, undef) — just copy
-                RuntimeScalar copy = new RuntimeScalar();
-                copy.type = scalar.type;
-                copy.value = scalar.value;
-                yield copy;
+                // Use RuntimeScalar's copy constructor so deferred string
+                // concatenation is materialized before the value is copied.
+                // Reading the raw value loses an unmaterialized growingString,
+                // which made Clone return empty values from hash slots.
+                yield new RuntimeScalar(scalar);
             }
         };
     }
