@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 use Test::More;
+use File::Temp qw(tempfile);
 
 # =============================================================================
 # destroy_edge_cases.t — DESTROY edge cases and special semantics
@@ -41,6 +42,35 @@ use Test::More;
     # Releasing the resurrected object may call DESTROY again (Perl 5 behavior)
     @saved = ();
     ok($destroy_count >= 1, "DESTROY may be called again after resurrection released");
+}
+
+# --- Global destruction warns when DESTROY revives its object ---
+SKIP: {
+    skip 'child-process timeout launcher is unavailable on Windows', 1 if $^O eq 'MSWin32';
+
+    my ($child_fh, $child_name) = tempfile(SUFFIX => '.pl');
+    print {$child_fh} <<'END_CHILD';
+sub DE_GlobalResurrection::DESTROY { $main::de_global_resurrection = $_[0] }
+bless [], 'DE_GlobalResurrection';
+END_CHILD
+    close($child_fh) or die "close child script: $!";
+
+    my ($output_fh, $output_name) = tempfile();
+    open(my $saved_stderr, '>&', \*STDERR) or die "save stderr: $!";
+    open(STDERR, '>&', $output_fh) or die "redirect stderr: $!";
+    system('timeout', '60', $^X, $child_name);
+    open(STDERR, '>&', $saved_stderr) or die "restore stderr: $!";
+    close($saved_stderr);
+
+    seek($output_fh, 0, 0);
+    my $output = do { local $/; <$output_fh> };
+    close($output_fh);
+    unlink($output_name);
+    unlink($child_name);
+
+    like($output,
+        qr/DESTROY created new reference to dead object 'DE_GlobalResurrection' during global destruction\./,
+        'global destruction warns when DESTROY revives its object');
 }
 
 # --- Exception in DESTROY becomes a warning ---

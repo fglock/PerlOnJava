@@ -503,7 +503,14 @@ public class InheritanceResolver {
         for (int i = startFromIndex; i < linearizedClasses.size(); i++) {
             String className = linearizedClasses.get(i);
             for (String lookupClassName : packageLookupAliases(className)) {
-                String effectiveClassName = GlobalVariable.resolveStashAlias(lookupClassName);
+                // `::` method dispatch has a distinct root-namespace fallback,
+                // represented here as main::::.  Generic stash normalization
+                // strips its main:: prefix and turns it back into :: whenever
+                // any unrelated stash alias exists, making main:::: methods
+                // unreachable after a glob alias assignment.
+                String effectiveClassName = "main::::".equals(lookupClassName)
+                        ? lookupClassName
+                        : GlobalVariable.resolveStashAlias(lookupClassName);
                 String normalizedClassMethodName = normalizeMethodName(methodName, effectiveClassName);
 
                 if (TRACE_METHOD_RESOLUTION) {

@@ -620,6 +620,34 @@ public class SubroutineParser {
                 // The block is evaluated and its result becomes the method invocant.
                 // Any following expressions become arguments to the method call.
                 if (nextTok.text.equals("{")) {
+                    // `SUPER::method { LIST } MORE` takes its receiver from
+                    // the first value of the complete braced/trailing list.
+                    // Preserve that dynamic list shape for both backends;
+                    // RuntimeCode extracts its first value immediately before
+                    // ordinary SUPER dispatch.
+                    if (subName.startsWith("SUPER::")) {
+                        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+                        List<Node> methodArgs = new ArrayList<>();
+                        if (!peek(parser).text.equals("}")) {
+                            Node blockExpr = ParseBlock.parseBlock(parser);
+                            if (blockExpr instanceof BlockNode block
+                                    && block.elements.size() == 1
+                                    && block.elements.getFirst() instanceof ListNode list) {
+                                methodArgs.addAll(list.elements);
+                            } else {
+                                methodArgs.add(blockExpr);
+                            }
+                        }
+                        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+                        methodArgs.addAll(consumeArgsWithPrototype(parser, "@").elements);
+                        String qualifiedSuper = parser.ctx.symbolTable.getCurrentPackage()
+                                + "::" + subName;
+                        Node methodCall = new BinaryOperatorNode("(",
+                                new IdentifierNode(RuntimeCode.firstArgumentMethodName(qualifiedSuper), currentIndex),
+                                new ListNode(methodArgs, currentIndex), currentIndex);
+                        return new BinaryOperatorNode("->", new StringNode("", currentIndex),
+                                methodCall, currentIndex);
+                    }
                     // A known subroutine followed by a block is the common
                     // callback form, e.g. Test::Fatal's
                     //     exception { compile()->(1) }
@@ -827,6 +855,11 @@ public class SubroutineParser {
 
     private static boolean isValidIndirectMethod(String subName, Parser parser) {
         if (subName.startsWith("CORE::")) return false;
+        // `method` is a feature-gated declaration keyword, but it also has
+        // legacy meaning in `method Package LIST` indirect-call syntax.
+        // StatementResolver has already claimed actual declarations, so this
+        // remaining spelling must be eligible for indirect dispatch.
+        if (subName.equals("method")) return true;
         if (!CORE_PROTOTYPES.containsKey(subName)) return true;
         // `try`, `catch`, `finally` are feature-gated.  When the `try`
         // feature is *off* they are not reserved and can participate in
@@ -2720,7 +2753,10 @@ public class SubroutineParser {
                 && (lexicalConstantCvIsRefalias(parser, parser.tokenIndex, capturedNames)
                 || (capturedNames.size() == 1 && parser.hasRefaliasLexical(owner,
                 capturedNames.iterator().next())));
-        if (simpleLexical && !priorCapture && !refaliasLexical
+        int enclosingBlockStart = enclosingBlockStart(parser, parser.tokenIndex);
+        boolean priorMutation = isBeginBlock(parser, enclosingBlockStart)
+                && parser.hasPriorLexicalMutationBefore(capturedNames, enclosingBlockStart);
+        if (simpleLexical && !priorCapture && !priorMutation && !refaliasLexical
                 && !(optimizedLexical && unsafeLexical)) {
             node.setAnnotation("simpleLexicalConstantCandidate", true);
             if (optimizedLexical) {

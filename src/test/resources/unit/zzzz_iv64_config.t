@@ -2,7 +2,7 @@ use strict;
 use warnings;
 
 use Config;
-use Test::More tests => 22;
+use Test::More tests => 23;
 
 is($Config{ivsize}, 8, 'Config advertises an eight-byte IV');
 is($Config{uvsize}, 8, 'Config advertises an eight-byte UV');
@@ -17,6 +17,7 @@ is($Config{ivtype}, 'long', 'Config IV type is long');
 is($Config{uvtype}, 'unsigned long', 'Config UV type is unsigned long');
 is($Config{i64type}, 'long', 'Config signed 64-bit type is long');
 is($Config{u64type}, 'unsigned long', 'Config unsigned 64-bit type is unsigned long');
+is(Config::DEBUGGING(), 0, 'Config reports that PerlOnJava is not a DEBUGGING build');
 is($Config{nv_preserves_uv_bits}, 53, 'Config reports double integer precision');
 is(9223372036854775807 + 1, '9223372036854775808', 'IV overflow becomes an exact UV');
 is(4294967295 * 4294967295, '18446744065119617025', 'multiplication remains exact through UV_MAX');

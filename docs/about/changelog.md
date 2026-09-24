@@ -18,6 +18,25 @@ priorities and future plans.
 - Restore `require` compatibility for dynamic `@INC` hooks, failed-open
   diagnostics, and hook-provided source locations on both execution backends.
 
+- Restore `op/override.t` compatibility for `CORE::GLOBAL` overrides in string
+  evals, v-string `require` versions, backticks, readline syntax, and
+  zero-prototype lexical closures.
+
+- Restore strict-reference diagnostics for dynamic subroutine calls, including
+  numeric scalar invocants and both execution backends.
+
+- Restore core method-lookup diagnostics for existing stashes and qualified
+  method names.
+
+- Preserve Perl-compatible NUL method diagnostics and ignore declared but
+  undefined destructors.
+
+- Preserve glob identity and literal immutability for method invocants on both
+  execution backends.
+
+- Restore the global-destruction warning when a `DESTROY` method revives its
+  object.
+
 - Restore `Hash::Util::FieldHash` `:all` imports and scalar `id` semantics,
   unblocking Cache::Ref's LRU implementation.
 

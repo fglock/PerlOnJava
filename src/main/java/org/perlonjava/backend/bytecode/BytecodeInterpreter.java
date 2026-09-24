@@ -2028,7 +2028,16 @@ public class BytecodeInterpreter {
                                 // scalar-context expression can retain its one-element
                                 // RuntimeList wrapper (notably during Moose's role
                                 // composition). Normalize it at the call boundary.
-                                RuntimeScalar invocant = registers[invocantReg].scalar();
+                                RuntimeBase rawInvocant = registers[invocantReg];
+                                RuntimeScalar invocant = rawInvocant.scalar();
+                                // A literal class name used as a method invocant
+                                // becomes $_[0].  Preserve its immutability instead
+                                // of normalizing it into a writable scalar before
+                                // RuntimeCode injects the argument.
+                                if (rawInvocant instanceof RuntimeScalarReadOnly
+                                        && !(rawInvocant instanceof ReadOnlyAlias)) {
+                                    invocant = new ReadOnlyAlias(invocant);
+                                }
                                 RuntimeScalar method = registers[methodReg].scalar();
                                 RuntimeScalar currentSub = registers[currentSubReg].scalar();
                                 RuntimeBase argsBase = registers[argsReg];

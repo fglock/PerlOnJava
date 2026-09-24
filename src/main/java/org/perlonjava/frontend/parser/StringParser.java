@@ -20,6 +20,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.RuntimeGlob;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 import org.perlonjava.runtime.runtimetypes.WarningFlags;
@@ -1240,8 +1241,13 @@ public class StringParser {
 
         switch (operator) {
             case "`":
-            case "qx":
+            case "qx": {
+                // Backticks and qx are not CORE::GLOBAL::readpipe override
+                // points.  Package-local readpipe dispatch is handled at
+                // runtime by SystemOperator, while a CORE::GLOBAL stash slot
+                // must not alter quote-like parsing (perl5 op/gv.t).
                 return parseSystemCommand(parser.ctx, operator, rawStr);
+            }
             case "'":
             case "q":
                 return StringSingleQuoted.parseSingleQuotedString(rawStr);
@@ -1281,6 +1287,23 @@ public class StringParser {
                 // before passing to glob(). This ensures variables are interpolated.
                 Node interpolated = StringDoubleQuoted.parseDoubleQuotedString(
                         parser.ctx, rawStr, true, true, false, parser.getHeredocNodes(), parser);
+                String readlineName = "CORE::GLOBAL::readline";
+                if (rawStr.buffers.size() == 1
+                        && rawStr.buffers.getFirst().matches("[A-Za-z_][A-Za-z0-9_]*")
+                        && RuntimeGlob.isGlobAssigned(readlineName)
+                        && GlobalVariable.isGlobalCodeRefDefined(readlineName)) {
+                    RuntimeScalar readline = GlobalVariable.getGlobalCodeRef(readlineName);
+                    if (readline.value instanceof RuntimeCode code && "".equals(code.prototype)) {
+                        parser.throwError("Too many arguments");
+                    }
+                    OperatorNode codeRef = new OperatorNode("&",
+                            new IdentifierNode(readlineName, rawStr.index), rawStr.index);
+                    codeRef.setAnnotation("directNamedCall", true);
+                    codeRef.setAnnotation("parseTimeCodeRef", readline);
+                    ListNode arguments = new ListNode(rawStr.index);
+                    arguments.elements.add(interpolated);
+                    return new BinaryOperatorNode("(", codeRef, arguments, rawStr.index);
+                }
                 RuntimeScalar globOverride = findGlobOverride(parser);
                 if (globOverride != null) {
                     OperatorNode codeRefNode = new OperatorNode("&",

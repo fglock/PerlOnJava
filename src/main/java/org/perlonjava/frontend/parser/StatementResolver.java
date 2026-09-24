@@ -217,7 +217,18 @@ public class StatementResolver {
                 }
 
                 case "method" -> {
-                    if (parser.ctx.symbolTable.isFeatureCategoryEnabled("class")) {
+                    // With the class feature enabled, `method` is still ambiguous with
+                    // Perl's long-standing indirect method-call syntax:
+                    //
+                    //     method Package (LIST)
+                    //
+                    // Only claim it as a declaration when its complete header is
+                    // followed by a declaration body (or a forward-declaration
+                    // semicolon).  Otherwise leave it to ParsePrimary, which turns
+                    // the form above into Package->method(LIST).
+                    if (parser.ctx.symbolTable.isFeatureCategoryEnabled("class")
+                            && (parser.parsingFutureAsyncAwaitSub
+                                || isMethodDeclaration(parser, currentIndex))) {
                         // Emit experimental warning for 'method' if warnings are enabled
                         if (parser.ctx.symbolTable.isWarningCategoryEnabled("experimental::class")) {
                             try {
@@ -1166,6 +1177,65 @@ public class StatementResolver {
 
         parseStatementTerminator(parser);
         return expression;
+    }
+
+    /**
+     * Returns whether the {@code method} token at {@code startIndex} begins a
+     * named class-method declaration rather than an indirect method call.
+     */
+    private static boolean isMethodDeclaration(Parser parser, int startIndex) {
+        int index = Whitespace.skipWhitespace(parser, startIndex + 1, parser.tokens);
+        if (index >= parser.tokens.size()
+                || parser.tokens.get(index).type != LexerTokenType.IDENTIFIER) {
+            return false;
+        }
+        index = Whitespace.skipWhitespace(parser, index + 1, parser.tokens);
+
+        // A declaration may have a signature.  Skip a balanced signature
+        // before inspecting what follows it.
+        if (index < parser.tokens.size() && parser.tokens.get(index).text.equals("(")) {
+            int depth = 0;
+            do {
+                String text = parser.tokens.get(index++).text;
+                if (text.equals("(")) {
+                    depth++;
+                } else if (text.equals(")")) {
+                    depth--;
+                }
+            } while (index < parser.tokens.size() && depth > 0);
+            if (depth != 0) {
+                return false;
+            }
+            index = Whitespace.skipWhitespace(parser, index, parser.tokens);
+        }
+
+        // Attribute parsing below remains authoritative.  Here we only need
+        // to recognise that attributes precede a real declaration body.
+        while (index < parser.tokens.size() && parser.tokens.get(index).text.equals(":")) {
+            index = Whitespace.skipWhitespace(parser, index + 1, parser.tokens);
+            if (index >= parser.tokens.size()
+                    || parser.tokens.get(index).type != LexerTokenType.IDENTIFIER) {
+                return false;
+            }
+            index = Whitespace.skipWhitespace(parser, index + 1, parser.tokens);
+            if (index < parser.tokens.size() && parser.tokens.get(index).text.equals("(")) {
+                int depth = 0;
+                do {
+                    String text = parser.tokens.get(index++).text;
+                    if (text.equals("(")) {
+                        depth++;
+                    } else if (text.equals(")")) {
+                        depth--;
+                    }
+                } while (index < parser.tokens.size() && depth > 0);
+                if (depth != 0) {
+                    return false;
+                }
+                index = Whitespace.skipWhitespace(parser, index, parser.tokens);
+            }
+        }
+        return index < parser.tokens.size()
+                && (parser.tokens.get(index).text.equals("{") || parser.tokens.get(index).text.equals(";"));
     }
 
     private static void warnStateSubCaptureInNamedSub(Parser parser, Node anonSub) {

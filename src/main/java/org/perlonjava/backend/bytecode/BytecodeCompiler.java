@@ -2163,7 +2163,8 @@ public class BytecodeCompiler implements Visitor {
         // preserves Perl's "literal alias" semantics: `for ("abc") { $_ = 4 }`
         // must throw "Modification of a read-only value". See visit(NumberNode)
         // for the symmetric integer treatment. Fixes op/ref.t 232-234.
-        if (currentCallContext == RuntimeContextType.LIST
+        if ((currentCallContext == RuntimeContextType.LIST
+                || currentCallContext == RuntimeContextType.OBJECT)
                 && opcode != Opcodes.LOAD_VSTRING) {
             int cacheIdx = (opcode == Opcodes.LOAD_BYTE_STRING)
                     ? RuntimeScalarCache.getOrCreateByteStringIndex(node.value)
@@ -5928,15 +5929,11 @@ public class BytecodeCompiler implements Visitor {
                 int valueReg = lastResultReg;
 
                 int rd = allocateOutputRegister();
-                // Only lvalue subroutine calls need the strict dereference
-                // here. Other dynamic CODE references retain their established
-                // dispatch path (including module-loading callbacks).
                 // A lazily materialized named sub compiles this body with its
                 // own symbol table.  Consult that table so a `use strict
                 // 'refs'` inside the body is visible here rather than the
                 // enclosing emitter context's earlier pragma snapshot.
-                if (symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS)
-                        && isCompilingLvalueSubroutine()) {
+                if (symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS)) {
                     emit(Opcodes.CODE_DEREF_STRICT);
                     emitReg(rd);
                     emitReg(valueReg);
@@ -5973,6 +5970,23 @@ public class BytecodeCompiler implements Visitor {
                         emit(Opcodes.NAMED_CODE_REFERENCE);
                         emitReg(rd);
                         emit(addToStringPool(subName));
+                        lastResultReg = rd;
+                        return;
+                    }
+                    if (operandOp.operand instanceof BlockNode
+                            || operandOp.operand instanceof OperatorNode
+                            || operandOp.operand instanceof StringNode) {
+                        // Refgen \&{EXPR} creates or retrieves a CODE slot; it
+                        // is not an invocation of that slot.  In particular,
+                        // \&{''} remains a valid anonymous CODE reference even
+                        // in a lexical strict-refs scope (perl #94476).
+                        compileNode(operandOp.operand, -1, RuntimeContextType.SCALAR);
+                        int valueReg = lastResultReg;
+                        int rd = allocateOutputRegister();
+                        emit(Opcodes.CODE_DEREF_NONSTRICT);
+                        emitReg(rd);
+                        emitReg(valueReg);
+                        emit(addToStringPool(getCurrentPackage()));
                         lastResultReg = rd;
                         return;
                     }

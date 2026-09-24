@@ -295,7 +295,6 @@ public class OperatorParser {
         return StringParser.parseRawString(parser, token.text);
     }
 
-
     static BinaryOperatorNode parsePrint(Parser parser, LexerToken token, int currentIndex) {
         Node handle;
         ListNode operand;
@@ -1849,7 +1848,7 @@ public class OperatorParser {
         if (token.type == NUMBER) {
             consume(parser);
             operand = parseNumber(parser, token);
-        } else if (token.text.matches("^v\\d+$")) {
+        } else if (token.text.matches("^v\\d+(?:\\.\\d+)*$")) {
             consume(parser);
             operand = StringParser.parseVstring(parser, token.text, parser.tokenIndex);
         } else if (token.type == IDENTIFIER

@@ -57,10 +57,16 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.runUnitcheckBlock
  */
 public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static final String INDIRECT_BLOCK_METHOD_PREFIX = "\uFDD0indirect-block:";
+    private static final String FIRST_ARGUMENT_METHOD_PREFIX = "\uFDD1first-argument:";
 
     /** Marks the parser's {@code method { BLOCK }} indirect-object form. */
     public static String indirectBlockMethodName(String methodName) {
         return INDIRECT_BLOCK_METHOD_PREFIX + methodName;
+    }
+
+    /** Marks a parser form whose first evaluated argument is the method receiver. */
+    public static String firstArgumentMethodName(String methodName) {
+        return FIRST_ARGUMENT_METHOD_PREFIX + methodName;
     }
     private static final ThreadLocal<Integer> SIGNATURE_CALL_DEPTH =
             ThreadLocal.withInitial(() -> 0);
@@ -1332,6 +1338,29 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return inner.type == GLOB || inner.type == GLOBREFERENCE;
     }
 
+    private static RuntimeGlob globInvocant(RuntimeScalar invocant) {
+        if ((invocant.type == GLOB || invocant.type == GLOBREFERENCE)
+                && invocant.value instanceof RuntimeGlob glob) {
+            return glob;
+        }
+        if (invocant.type == REFERENCE && invocant.value instanceof RuntimeScalar inner) {
+            while (inner.type == READONLY_SCALAR) {
+                inner = (RuntimeScalar) inner.value;
+            }
+            if ((inner.type == GLOB || inner.type == GLOBREFERENCE)
+                    && inner.value instanceof RuntimeGlob glob) {
+                return glob;
+            }
+        }
+        return null;
+    }
+
+    private static boolean isOpenGlobInvocant(RuntimeScalar invocant) {
+        // Handles both stash-backed RuntimeGlob values and direct RuntimeIO
+        // glob references (used by pipes, sockets, and selected handles).
+        return RuntimeIO.getRuntimeIO(invocant) != null;
+    }
+
     public static boolean isLvalueCode(RuntimeCode code) {
         return code != null && code.attributes != null && code.attributes.contains("lvalue");
     }
@@ -2440,6 +2469,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
+     * A named forward declaration remains a method-table entry, but invoking
+     * it through a subclass still consults AUTOLOAD inherited by its declaring
+     * package. Imported stubs keep their source-package precedence instead.
+     */
+    private static RuntimeScalar findForwardStubInheritedAutoload(
+            RuntimeCode code, String packageName, String targetName) {
+        if (!code.isDeclared
+                || packageName == null || packageName.isEmpty()
+                || (code.sourcePackage != null && !code.sourcePackage.equals(code.packageName))) {
+            return null;
+        }
+        RuntimeScalar autoload = InheritanceResolver.findMethodInHierarchy(
+                "AUTOLOAD", packageName, null, 1, false);
+        if (!isCodeDefined(autoload)) {
+            return null;
+        }
+        getGlobalVariable(autoloadVarFor(autoload, packageName)).set(targetName);
+        return autoload;
+    }
+
+    /**
      * Check if AUTOLOAD exists for a given RuntimeCode's package.
      * Checks source package first (for imported subs), then current package.
      *
@@ -3137,6 +3187,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Create an instance of ErrorMessageUtil with the file name and token list
                 evalCtx.errorUtil = new ErrorMessageUtil(evalCtx.compilerOptions.fileName, tokens);
                 Parser parser = new Parser(evalCtx, tokens); // Parse the tokens
+                parser.parsingEvalString = true;
                 BHooksEndOfScope.beginFileLoad(evalCompilerOptions.fileName);
                 try {
                     ast = parser.parse(); // Generate the abstract syntax tree (AST)
@@ -3686,6 +3737,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         ctx.unitcheckBlocks);
 
                 Parser parser = new Parser(evalCtx, tokens);
+                parser.parsingEvalString = true;
                 BHooksEndOfScope.beginFileLoad(evalCompilerOptions.fileName);
                 String savedRegexWarningBits = RegexQuoteMeta.getParserWarningBits();
                 RegexQuoteMeta.setParserWarningBits(lexicalEvalWarningBits);
@@ -4291,6 +4343,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                          RuntimeScalar currentSub,
                                          RuntimeBase[] args,
                                          int callContext) {
+        if ((method.type == RuntimeScalarType.STRING || method.type == RuntimeScalarType.BYTE_STRING)
+                && method.toString().startsWith(FIRST_ARGUMENT_METHOD_PREFIX)) {
+            String actualMethod = method.toString().substring(FIRST_ARGUMENT_METHOD_PREFIX.length());
+            RuntimeArray methodArgs = new RuntimeArray(args.length);
+            for (RuntimeBase arg : args) {
+                arg.setArrayOfAlias(methodArgs);
+            }
+            RuntimeScalar firstArgument = methodArgs.elements.isEmpty()
+                    ? new RuntimeScalar() : methodArgs.elements.removeFirst();
+            return call(firstArgument, new RuntimeScalar(actualMethod), currentSub,
+                    methodArgs, callContext);
+        }
         // Establish a MyVarCleanupStack boundary so that my-variables
         // registered by the called method's bytecode are cleaned up if
         // the method dies. Without this, the method's my-variable entries
@@ -4352,7 +4416,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             // recursion tracking, and scope cleanup see a real Perl frame.
                             try {
                                 RuntimeArray a = new RuntimeArray(args.length + 1);
-                                a.elements.add(runtimeScalar);
+                                a.elements.add(methodInvocantArgument(runtimeScalar));
                                 for (RuntimeBase arg : args) {
                                     arg.setArrayOfAlias(a);
                                 }
@@ -4411,7 +4475,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             
                             // Call the method with function-scoped mortal boundary
                             RuntimeArray a = new RuntimeArray(args.length + 1);
-                            a.elements.add(runtimeScalar);
+                            a.elements.add(methodInvocantArgument(runtimeScalar));
                             for (RuntimeBase arg : args) {
                                 arg.setArrayOfAlias(a);
                             }
@@ -4439,7 +4503,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Fall back without nesting through call(...) — avoids double refcount hold
         // (this outer frame already holds the invocant for the inlined-cache miss path).
         RuntimeArray aFallback = new RuntimeArray(args.length + 1);
-        aFallback.elements.add(runtimeScalar);
+        aFallback.elements.add(methodInvocantArgument(runtimeScalar));
         for (RuntimeBase arg : args) {
             arg.setArrayOfAlias(aFallback);
         }
@@ -4476,6 +4540,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return coerceScalarCallResult(
                     result, effectiveContext, callContext, !isLvalueCode(code));
         }
+    }
+
+    /** Preserve literal immutability when a constant becomes a method's $_[0]. */
+    private static RuntimeScalar methodInvocantArgument(RuntimeScalar invocant) {
+        if (invocant instanceof RuntimeScalarReadOnly && !(invocant instanceof ReadOnlyAlias)) {
+            return new ReadOnlyAlias(invocant);
+        }
+        return invocant;
     }
 
     /**
@@ -4521,7 +4593,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Handle all reference types (REFERENCE, ARRAYREFERENCE, HASHREFERENCE, etc.)
             int blessId = ((RuntimeBase) invocant.value).blessId;
             if (blessId == 0) {
-                if (invocant.type == GLOBREFERENCE || isReferenceToGlobInvocant(invocant)) {
+                if ((invocant.type == GLOBREFERENCE || isReferenceToGlobInvocant(invocant))
+                        && isOpenGlobInvocant(invocant)) {
                     // Auto-bless file handler to IO::File which inherits from both IO::Handle and IO::Seekable
                     // This allows GLOBs to call methods like seek, tell, etc.
                     perlClassName = "IO::File";
@@ -4534,16 +4607,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     perlClassName = "Regexp";
                 } else {
                     // Not auto-blessed
+                    if (indirectBlockMethod && methodName.equals("new")) {
+                        throw new PerlCompilerException("Can't call method \"" + methodName
+                                + "\" without a package or object reference");
+                    }
                     throw new PerlCompilerException("Can't call method \"" + methodName + "\" on unblessed reference");
                 }
             } else {
                 perlClassName = NameNormalizer.getBlessStr(blessId);
             }
         } else if (invocant.type == RuntimeScalarType.GLOB) {
-            // Bare typeglob used as method invocant (e.g., *FH->print(...))
-            // Auto-bless to IO::File, same as GLOBREFERENCE
-            perlClassName = "IO::File";
-            ModuleOperators.require(new RuntimeScalar("IO/File.pm"));
+            if (!isOpenGlobInvocant(invocant)) {
+                throw new PerlCompilerException("Can't call method \"" + methodName
+                        + "\" without a package or object reference");
+            }
+            // A bare filehandle method call supplies a glob reference as $self,
+            // matching the explicit \*FH form.
+            args.elements.removeFirst();
+            return call(invocant.createReference(), method,
+                    currentSub, args, callContext);
         } else if (!invocant.getDefinedBoolean()) {
             if (indirectBlockMethod) {
                 throw new PerlCompilerException("Can't call method \"" + methodName
@@ -4553,12 +4635,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         } else {
             perlClassName = invocant.toString();
             if (perlClassName.isEmpty()) {
-                throw new PerlCompilerException("Can't call method \"" + methodName + "\" on an undefined value");
+                throw new PerlCompilerException("Can't call method \"" + methodName
+                        + "\" without a package or object reference");
             }
             
             // Check if this string is a bareword filehandle (like IN, OUT, etc.)
             // If so, look up the glob and call the method on it
             String normalizedGlobName = NameNormalizer.normalizeVariableName(perlClassName, "main");
+            normalizedGlobName = GlobalVariable.resolveAliasedFqn(normalizedGlobName);
             if (GlobalVariable.isGlobalIODefined(normalizedGlobName)) {
                 // This is a filehandle - get the glob reference and recurse
                 RuntimeGlob glob = GlobalVariable.getGlobalIO(normalizedGlobName);
@@ -4568,7 +4652,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 return call(globRef, method, currentSub, args, callContext);
             }
             
-            if (perlClassName.endsWith("::")) {
+            if (perlClassName.equals("::")) {
+                // The root-package spelling `"::"->method` addresses the
+                // deliberately distinct main:::: namespace (perl5 op/method).
+                perlClassName = "main::::";
+            } else if (perlClassName.endsWith("::")) {
                 perlClassName = perlClassName.substring(0, perlClassName.length() - 2);
             }
             if (perlClassName.startsWith("::")) {
@@ -4642,10 +4730,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 int sep = methodName.lastIndexOf("::");
                 String targetPackage = methodName.substring(0, sep);
                 String shortMethod   = methodName.substring(sep + 2);
+                if (targetPackage.equals("CORE")) {
+                    CoreSubroutineGenerator.generateWrapper(shortMethod);
+                }
                 method = InheritanceResolver.findMethodInHierarchy(
                         shortMethod, targetPackage, methodName, 0);
                 if (method == null || !isCodeDefined(method)) {
-                    throw new PerlCompilerException("Undefined subroutine &" + methodName + " called");
+                    // A qualified method call still performs method lookup:
+                    // report it through the regular object-method diagnostic
+                    // (including the package-load hint), rather than as a
+                    // direct named subroutine invocation.
+                    perlClassName = targetPackage;
+                    methodName = shortMethod;
+                    method = null;
                 }
             }
         } else {
@@ -4693,7 +4790,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             qualifiedSuperIndex + "::SUPER::".length());
                 }
             }
-            if (ClassRegistry.isClass(perlClassName)) {
+            // Perl renders embedded NULs in a method name as the two visible
+            // characters "\\0" in method lookup diagnostics.
+            errorMethodName = errorMethodName.replace("\0", "\\0");
+            if (GlobalVariable.isPackageLoaded(perlClassName)) {
                 throw new PerlCompilerException("Can't locate object method \"" + errorMethodName
                         + "\" via package \"" + perlClassName + "\"");
             }
@@ -4718,6 +4818,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                    RuntimeScalar currentSub,
                                    RuntimeArray args,
                                    int callContext) {
+        if ((method.type == RuntimeScalarType.STRING || method.type == RuntimeScalarType.BYTE_STRING)
+                && method.toString().startsWith(FIRST_ARGUMENT_METHOD_PREFIX)) {
+            String actualMethod = method.toString().substring(FIRST_ARGUMENT_METHOD_PREFIX.length());
+            RuntimeScalar firstArgument = args.elements.isEmpty()
+                    ? new RuntimeScalar() : args.elements.removeFirst();
+            return call(firstArgument, new RuntimeScalar(actualMethod), currentSub, args, callContext);
+        }
         // Handle tied scalars: the invocant may be a TIED_SCALAR returned
         // from a tied hash / array FETCH. Unwrap before dispatch so
         // isReference / blessId checks see the real underlying value.
@@ -5816,6 +5923,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 String autoloadTargetName = autoloadPackage + "::" + autoloadSubName;
                 if (autoloadPackage != null && autoloadSubName != null && !autoloadTargetName.isEmpty()) {
+                    RuntimeScalar inheritedStubAutoload = findForwardStubInheritedAutoload(
+                            code, autoloadPackage, autoloadTargetName);
+                    if (inheritedStubAutoload != null) {
+                        curScalar = inheritedStubAutoload;
+                        continue;
+                    }
                     // If this is an imported forward declaration, check AUTOLOAD in the source package FIRST
                     // This matches Perl semantics where imported subs resolve via the exporting package's AUTOLOAD
                     if (code.sourcePackage != null && !code.sourcePackage.equals(code.packageName)) {

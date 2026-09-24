@@ -1,0 +1,19 @@
+--- perl5/lib/overload.pm
++++ src/main/perl/lib/overload.pm
+@@ -45,12 +45,15 @@
+             my $sym = $package . "::(" . $_;
+             if (not ref $sub) {
+                 ${$sym} = $sub;
+                 $sub = \&nil;
+             }
+-            if (defined &$sym
++            # PerlOnJava's class compilation initializes version's built-in
++            # overload slots before version.pm installs its operators.
++            # Those are not user redefinitions and must remain silent.
++            if ($package ne 'version' && defined &$sym
+                 && (\&$sym != \&nil ||
+                     defined $$sym && $$sym ne "")) {
+                 warnings::warnif("redefine", "overload '$_' for $package redefined");
+             }
+             #print STDERR "Setting '$ {'package'}::\cO$_' to \\&'$sub'.\n";
+             no warnings 'redefine';

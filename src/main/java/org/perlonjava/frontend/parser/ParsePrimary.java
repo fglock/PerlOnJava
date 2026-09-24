@@ -190,7 +190,11 @@ public class ParsePrimary {
                 case "say", "fc", "state", "evalbytes", "isa" -> parser.ctx.symbolTable.isFeatureCategoryEnabled(operator);
                 case "__SUB__" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("current_sub");
                 case "__CLASS__" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("class");
-                case "method" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("class");
+                // `method Package LIST` is legacy indirect method-call syntax,
+                // even where the class feature is enabled.  Anonymous methods
+                // start with a signature, attribute, or body instead.
+                case "method" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("class")
+                        && (peekTokenText.equals("(") || peekTokenText.equals(":") || peekTokenText.equals("{"));
                 case "try", "catch" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("try");
                 default -> true; // Most operators are always enabled
             };
@@ -226,8 +230,11 @@ public class ParsePrimary {
                 // An explicitly undef'd CODE slot leaves its typeglob present,
                 // but it no longer overrides the builtin.  In particular,
                 // glob must then resume its File::Glob::csh_glob fallback.
-                if (RuntimeGlob.isGlobAssigned(coreGlobalName)
-                        && GlobalVariable.isGlobalCodeRefDefined(coreGlobalName)) {
+                boolean timeOverride = operator.equals("time")
+                        && RuntimeGlob.isGlobAssigned(coreGlobalName);
+                if (!operator.equals("readpipe")
+                        && RuntimeGlob.isGlobAssigned(coreGlobalName)
+                        && (GlobalVariable.isGlobalCodeRefDefined(coreGlobalName) || timeOverride)) {
                     // Example: 'BEGIN { *CORE::GLOBAL::hex = sub { 456 } } print hex("123"), "\n"'
                     
                     // Special handling for 'require' - need to convert bareword module name to string
@@ -241,6 +248,9 @@ public class ParsePrimary {
                             OperatorNode codeRef = new OperatorNode("&",
                                     new IdentifierNode(coreGlobalName, startIndex),
                                     startIndex);
+                            codeRef.setAnnotation("directNamedCall", true);
+                            codeRef.setAnnotation("parseTimeCodeRef",
+                                    GlobalVariable.getGlobalCodeRef(coreGlobalName));
                             // Defensive: ensure operand is a ListNode
                             ListNode operandList = (requireOp.operand instanceof ListNode)
                                     ? (ListNode) requireOp.operand
@@ -250,6 +260,20 @@ public class ParsePrimary {
                                     operandList,
                                     startIndex);
                         }
+                    }
+
+                    // A zero-prototype time override has no tokenized argument
+                    // to reparse.  Rewriting its token stream loses the call and
+                    // leaves the core time operator in the AST, so construct the
+                    // pinned direct-CV call explicitly.
+                    if (operator.equals("time")) {
+                        OperatorNode codeRef = new OperatorNode("&",
+                                new IdentifierNode(coreGlobalName, startIndex), startIndex);
+                        codeRef.setAnnotation("directNamedCall", true);
+                        codeRef.setAnnotation("parseTimeCodeRef",
+                                GlobalVariable.getGlobalCodeRef(coreGlobalName));
+                        return new BinaryOperatorNode("(", codeRef,
+                                new ListNode(startIndex), startIndex);
                     }
                     
                     // Skip whitespace to find the actual position of the operator token.

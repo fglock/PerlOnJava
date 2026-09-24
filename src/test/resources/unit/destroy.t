@@ -104,6 +104,18 @@ subtest 'No DESTROY on blessed without DESTROY method' => sub {
     is($destroyed, 0, "no DESTROY called when class has none");
 };
 
+subtest 'No DESTROY call for a declared but undefined destructor' => sub {
+    package DeclaredMissingDestroy;
+    sub DESTROY;
+    package main;
+    my $output = '';
+    {
+        my $obj = bless {}, 'DeclaredMissingDestroy';
+        $output = 'survived';
+    }
+    is($output, 'survived', 'a forward declaration does not invoke an undefined DESTROY body');
+};
+
 subtest 'Re-bless to class without DESTROY' => sub {
     @HasDestroy::log = ();
     { package HasDestroy;
