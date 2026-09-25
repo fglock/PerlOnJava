@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve valid package and module version literals, restoring CPAN modules
+  that use zero-padded dotted versions, large bare v-versions, or repeated
+  identical `use VERSION` declarations across package changes.
+
 - Restore `op/ref.t` destructor reblessing semantics, invoking the new class's
   `DESTROY` method after an object is reblessed during destruction.
 
