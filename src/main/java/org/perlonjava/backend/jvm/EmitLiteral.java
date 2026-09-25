@@ -5,6 +5,7 @@ import org.perlonjava.app.cli.CompilerOptions;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.analysis.LValueVisitor;
 import org.perlonjava.frontend.analysis.ReturnTypeVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -527,7 +528,16 @@ public class EmitLiteral {
             emitterVisitor.ctx.javaClassInfo.releaseSpillRef(elementRef);
 
             // Add the element to the list
-            if (forceListSnapshot || contextType == RuntimeContextType.LVALUE_LIST) {
+            // A nested list assignment returns an aggregate whose writable
+            // element cells are the outer assignment's targets. Snapshot that
+            // result only; doing so for every LVALUE_LIST member would flatten
+            // an empty array target in `my ($head, @tail) = @_` before
+            // RuntimeList.setFromList() can assign its remaining arguments.
+            boolean snapshotListAssignmentResult = contextType == RuntimeContextType.LVALUE_LIST
+                    && element instanceof BinaryOperatorNode assignment
+                    && assignment.operator.equals("=")
+                    && LValueVisitor.getContext(assignment.left) == RuntimeContextType.LIST;
+            if (forceListSnapshot || snapshotListAssignmentResult) {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeDescriptorConstants.LIST_CLASS,
                         "addSnapshot", "(" + RuntimeDescriptorConstants.BASE_TYPE + ")V", false);
             } else if (contextType == RuntimeContextType.RUNTIME) {
