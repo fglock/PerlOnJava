@@ -1287,7 +1287,7 @@ public class BytecodeInterpreter {
                                         registers[rd] = rdScalar;
                                     }
                                 }
-                                registers[rs].addToScalar(rdScalar);
+                                RuntimeScalar.assignTo(registers[rs], rdScalar);
                             }
 
                             case Opcodes.COPY_DO_BLOCK_RESULT -> {
@@ -1335,11 +1335,11 @@ public class BytecodeInterpreter {
                                         || (sourceScalar.type == RuntimeScalarType.GLOBREFERENCE
                                             && target instanceof RuntimeScalar)) {
                                     targetScalar = (RuntimeScalar) target;
-                                    sourceScalar.addToScalar(targetScalar);
+                                    RuntimeScalar.assignTo(sourceScalar, targetScalar);
                                 } else {
                                     RuntimeBase source = registers[rs];
                                     targetScalar = new RuntimeScalar();
-                                    source.addToScalar(targetScalar);
+                                    RuntimeScalar.assignTo(source, targetScalar);
                                     // Replacing the register object must still
                                     // release the value owned by the old lexical
                                     // slot. This is especially important for

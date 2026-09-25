@@ -18,6 +18,22 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  * This class provides methods to manipulate and interact with typeglobs in the runtime environment.
  */
 public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference {
+    /**
+     * Select the value assigned to a typeglob.  A direct array expression is
+     * consumed as a list here (not as the array's scalar element count), which
+     * is why the traditional {@code local(*FH) = @_} idiom aliases the passed
+     * glob rather than assigning the number of arguments.
+     */
+    public static RuntimeScalar assignmentScalar(RuntimeBase value) {
+        if (value instanceof RuntimeArray array) {
+            return array.getList().scalar();
+        }
+        if (value instanceof RuntimeList list) {
+            return list.scalar();
+        }
+        return value.scalar();
+    }
+
     /** Namespace slots retained by {@code delete $stash->{"Pkg::"}} until assigned to a new stash. */
     NamespaceMove namespaceMove;
 

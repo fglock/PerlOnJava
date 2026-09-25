@@ -362,6 +362,25 @@ public class ErrorMessageUtil {
 
         String nearString = buildNearString(effectiveIndex, message, maxContextTokens, includeDelimiters);
 
+        // An incomplete expression at the end of the compilation unit has no
+        // source excerpt to quote.  Perl identifies that boundary explicitly;
+        // `near ""` is both less useful and prevents compile-time __DIE__
+        // handlers from recognizing the standard diagnostic.
+        int boundedIndex = Math.min(Math.max(effectiveIndex, 0), tokens.size() - 1);
+        if ("syntax error".equals(message)
+                && nearString.isEmpty()
+                && tokens.get(boundedIndex).type == LexerTokenType.EOF) {
+            int sourceIndex = boundedIndex - 1;
+            while (sourceIndex > 0
+                    && (tokens.get(sourceIndex).type == LexerTokenType.EOF
+                    || tokens.get(sourceIndex).type == LexerTokenType.NEWLINE
+                    || tokens.get(sourceIndex).type == LexerTokenType.WHITESPACE)) {
+                sourceIndex--;
+            }
+            SourceLocation eofLoc = getSourceLocationAccurate(sourceIndex);
+            return message + " at " + eofLoc.fileName() + " line " + eofLoc.lineNumber() + ", at EOF\n";
+        }
+
         String quotedNear = errorMessageQuote(nearString);
         // Perl prints a malformed quoted-string escape verbatim in its
         // syntax context (near "\L\L"), rather than re-escaping the

@@ -537,6 +537,16 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     materializedList.elements.add(new RuntimeScalar(iterator.next()));
                 }
 
+                // %^H is lexically cloned by perl.  Assigning an empty list
+                // in an inner hint scope therefore detaches that clone from a
+                // tied outer hint hash; it must not dispatch CLEAR on the
+                // outer tie object (which may deliberately omit CLEAR).
+                if (isHintHash && materializedList.elements.isEmpty()) {
+                    elements = newElementMap();
+                    type = PLAIN_HASH;
+                    yield new RuntimeArray();
+                }
+
                 // Now clear and repopulate from the materialized list
                 TieHash.tiedClear(this);
                 RuntimeArray result = new RuntimeArray();

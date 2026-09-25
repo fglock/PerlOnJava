@@ -27,6 +27,7 @@ import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
 import org.perlonjava.runtime.WarningBitsRegistry;
+import org.perlonjava.runtime.operators.WarnDie;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Constructor;
@@ -277,7 +278,19 @@ public class PerlLanguageProvider {
             BHooksEndOfScope.beginFileLoad(ctx.compilerOptions.fileName);
         }
         try {
-            ast = parser.parse(); // Generate the abstract syntax tree (AST)
+            try {
+                ast = parser.parse(); // Generate the abstract syntax tree (AST)
+            } catch (PerlCompilerException parseFailure) {
+                // A BEGIN block may install __DIE__ before parsing reaches a
+                // later syntax error.  Perl dispatches that compile-time
+                // failure through the handler; without one, retain the
+                // original parser exception and diagnostic unchanged.
+                RuntimeScalar dieHandler = GlobalVariable.getGlobalHash("main::SIG").get("__DIE__");
+                if (dieHandler != null && dieHandler.getDefinedBoolean()) {
+                    WarnDie.die(new RuntimeScalar(parseFailure.getMessage()), new RuntimeScalar(""));
+                }
+                throw parseFailure;
+            }
         } finally {
             if (trackEndOfScope) {
                 // Fire on_scope_end callbacks now that parsing is complete.

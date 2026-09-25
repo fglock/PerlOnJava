@@ -175,6 +175,11 @@ public class ListOperators {
         int sortLocalLevel = DynamicVariableManager.getLocalLevel();
         DynamicVariableManager.pushLocalVariable(varA);
         DynamicVariableManager.pushLocalVariable(varB);
+        // A surrounding foreach may temporarily alias $a or $b to a readonly
+        // list literal.  sort localizes those globals, so use the newly
+        // installed writable cells rather than the pre-localization aliases.
+        final RuntimeScalar localizedVarA = getGlobalVariable(packageName + "::a");
+        final RuntimeScalar localizedVarB = getGlobalVariable(packageName + "::b");
 
         try {
             // Sort the new array using the Perl comparator subroutine. Perl
@@ -184,8 +189,8 @@ public class ListOperators {
             array.elements.sort((a, b) -> {
                 try {
                     // Create $a, $b arguments for the comparator
-                    varA.set(a);
-                    varB.set(b);
+                    localizedVarA.set(a);
+                    localizedVarB.set(b);
 
                     // For $$-prototyped comparators, pass elements via @_;
                     // otherwise inherit the outer @_ so the block can use $_[N].

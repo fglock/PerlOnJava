@@ -273,7 +273,7 @@ public class CompileAssignment {
                     bc.throwCompilerException("Can't localize lexical variable " + varName);
                     return true;
                 }
-                int valueReg = sigil.equals("$")
+                int valueReg = (sigil.equals("$") || sigil.equals("*"))
                         ? compileLocalScalarRhs(bc, node.right)
                         : compileRhs(bc, node.right, rhsContext);
                 String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, bc.getCurrentPackage());
@@ -354,8 +354,7 @@ public class CompileAssignment {
                 bc.emitReg(globReg);
 
                 // Compile the RHS value
-                bc.compileNode(node.right, -1, rhsContext);
-                int valueReg = bc.lastResultReg;
+                int valueReg = compileLocalScalarRhs(bc, node.right);
 
                 // Store value to glob
                 bc.emit(Opcodes.STORE_GLOB);
@@ -1293,7 +1292,12 @@ public class CompileAssignment {
             // Regular assignment: $x = value (no optimization)
             // Compile RHS first
             if (!compileForwardCodeGlobAlias(bytecodeCompiler, node.left, node.right)) {
-                bytecodeCompiler.compileNode(node.right, -1, rhsContext);
+                if (node.left instanceof OperatorNode globTarget
+                        && globTarget.operator.equals("*")) {
+                    compileLocalScalarRhs(bytecodeCompiler, node.right);
+                } else {
+                    bytecodeCompiler.compileNode(node.right, -1, rhsContext);
+                }
             }
             int valueReg = bytecodeCompiler.lastResultReg;
 

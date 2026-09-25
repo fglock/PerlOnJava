@@ -81,7 +81,10 @@ my $one = threads->create(sub {
 });
 usleep(10_000) until $signal_ready;
 {
-    lock($signal_condition);
+    # The waiter sets $signal_ready before it enters cond_wait().  Taking its
+    # lock here waits until cond_wait() has atomically registered the waiter
+    # and released that lock, preventing a lost signal between those steps.
+    lock($signal_lock);
     $signal_value = 7;
     cond_signal($signal_condition);
 }
