@@ -204,6 +204,27 @@ END_CHILD
         "re-bless between DESTROY classes: new class's DESTROY fires");
 }
 
+# --- Re-bless while DESTROY is running ---
+{
+    my @log;
+    {
+        package DE_ReblessDuringDestroy_A;
+        sub DESTROY { push @log, "A" }
+    }
+    {
+        package DE_ReblessDuringDestroy_B;
+        sub DESTROY {
+            push @log, "B";
+            bless $_[0], 'DE_ReblessDuringDestroy_A';
+        }
+    }
+    {
+        my $obj = bless {}, 'DE_ReblessDuringDestroy_B';
+    }
+    is_deeply(\@log, ["B", "A"],
+        "re-blessing during DESTROY invokes the new class's DESTROY");
+}
+
 # --- Nested DESTROY: DESTROY that triggers another DESTROY ---
 {
     my @log;

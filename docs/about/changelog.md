@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore `op/ref.t` destructor reblessing semantics, invoking the new class's
+  `DESTROY` method after an object is reblessed during destruction.
+
 - Restore core compatibility for protected `DESTROY` invocants, tied hint-hash
   cloning, compile-time `__DIE__` diagnostics, and barehandle `eof` precedence.
 
