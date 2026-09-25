@@ -1011,6 +1011,13 @@ public class Opcodes {
     public static final short LOCAL_GLOB_REF = 549;
 
     /**
+     * Localize a package scalar whose name is supplied at runtime.
+     * Format: LOCAL_SCALAR_DYNAMIC rd rs
+     * Used for: local $$name
+     */
+    public static final short LOCAL_SCALAR_DYNAMIC = 554;
+
+    /**
      * Flip-flop operator: rd = ScalarFlipFlopOperator.evaluate(flipFlopId, rs1, rs2)
      * flipFlopId is a unique per-call-site int constant.
      * Format: FLIP_FLOP rd flipFlopId rs1 rs2 isExclusive

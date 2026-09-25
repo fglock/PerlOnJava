@@ -323,7 +323,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (promotions != null) {
             for (var entry : promotions.entrySet()) {
                 GlobalVariable.clearGlobalPseudoConstant(entry.getKey());
-                GlobalVariable.setGlobalPseudoConstant(entry.getKey(), entry.getValue());
+                RuntimeScalar saved = entry.getValue();
+                if (saved.type == RuntimeScalarType.ARRAYREFERENCE
+                        || saved.type == RuntimeScalarType.GLOBREFERENCE
+                        || saved.type == RuntimeScalarType.GLOB) {
+                    GlobalVariable.setGlobalCompactStashValue(entry.getKey(), saved);
+                } else {
+                    GlobalVariable.setGlobalPseudoConstant(entry.getKey(), saved);
+                }
             }
         }
         state.evalDepth--;

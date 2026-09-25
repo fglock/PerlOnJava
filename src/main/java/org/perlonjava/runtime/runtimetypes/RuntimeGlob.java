@@ -88,6 +88,24 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         return null;
     }
 
+    /** True when this call itself localized {@code *_}, even with no ARRAY slot. */
+    private static boolean isUnderscoreGlobLocalizedForCurrentCall() {
+        int currentArgsDepth = RuntimeCode.argsStackDepth();
+        for (int i = globSlotStack().size() - 1; i >= 0; i--) {
+            GlobSlotSnapshot snapshot = globSlotStack().get(i);
+            String name = snapshot.globName();
+            if (snapshot.argsStackDepth() == currentArgsDepth
+                    && name != null && name.endsWith("::_")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isUnderscoreGlobName(String name) {
+        return "_".equals(name) || "main::_".equals(name);
+    }
+
     // The name of the typeglob
     public String globName;
     // A full typeglob assignment aliases the visible GV identity as well as
@@ -1310,6 +1328,19 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 yield GlobalVariable.getGlobalVariable(this.globName).createReference();
             }
             case "ARRAY" -> {
+                // `*_{ARRAY}` inside a sub is the live @_ array for that
+                // invocation, not the package-global @_ slot.  This also
+                // preserves the frame-local array through a returned glob
+                // slot reference.
+                if (isUnderscoreGlobName(this.globName)
+                        && !PerlRuntime.current().executionState()
+                                .explicitlyUndefinedGlobArraySlots.contains(this.globName)
+                        && !isUnderscoreGlobLocalizedForCurrentCall()) {
+                    RuntimeArray currentArgs = RuntimeCode.getCurrentArgs();
+                    if (currentArgs != null) {
+                        yield currentArgs.createReference();
+                    }
+                }
                 // For anonymous globs (null globName), use local arraySlot
                 if (this.globName == null) {
                     if (this.arraySlot == null) {
@@ -1824,6 +1855,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // reference must retain the body so installing it through
         // `*Pkg::name = $ref` restores the contents.
         RuntimeArray oldArray = GlobalVariable.globalArrays.remove(this.globName);
+        if (isUnderscoreGlobName(this.globName)) {
+            PerlRuntime.current().executionState().explicitlyUndefinedGlobArraySlots.add(this.globName);
+        }
         if (oldArray != null && oldArray.refCount == -1) oldArray.undefine();
         // Keep an empty @ISA slot after undefining a glob. A later
         // `*Class::ISA = *Empty` must alias that empty source rather than

@@ -266,6 +266,23 @@ public class CompileAssignment {
         }
         if (localOperand instanceof OperatorNode sigilOp) {
             String sigil = sigilOp.operator;
+            // local $$name: the inner scalar evaluates to a package-variable
+            // name.  Localize only that scalar slot, rather than its whole
+            // typeglob, so sibling array/hash/code slots remain visible.
+            if (sigil.equals("$") && !(sigilOp.operand instanceof IdentifierNode)) {
+                bc.compileNode(sigilOp.operand, -1, RuntimeContextType.SCALAR);
+                int nameReg = bc.lastResultReg;
+                int valueReg = compileLocalScalarRhs(bc, node.right);
+                int localReg = bc.allocateRegister();
+                bc.emitWithToken(Opcodes.LOCAL_SCALAR_DYNAMIC, node.getIndex());
+                bc.emitReg(localReg);
+                bc.emitReg(nameReg);
+                bc.emit(Opcodes.SET_SCALAR);
+                bc.emitReg(localReg);
+                bc.emitReg(valueReg);
+                bc.lastResultReg = localReg;
+                return true;
+            }
             if ((sigil.equals("$") || sigil.equals("@") || sigil.equals("%") || sigil.equals("*"))
                     && sigilOp.operand instanceof IdentifierNode idNode) {
                 String varName = sigil + idNode.name;
@@ -1993,6 +2010,27 @@ public class CompileAssignment {
                                 bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_ARRAY);
                                 bytecodeCompiler.emitReg(arrayReg);
                                 bytecodeCompiler.emit(nameIdx);
+                            }
+                        } else if (arrayOp.operator.equals("$")
+                                && (arrayOp.operand instanceof OperatorNode
+                                || arrayOp.operand instanceof BlockNode)) {
+                            // ${expr}[index] = value: evaluate the scalar
+                            // expression first, then use it as an array
+                            // reference (or symbolic name under no strict
+                            // refs), just like the corresponding slice path.
+                            bytecodeCompiler.compileNode(arrayOp.operand, -1, RuntimeContextType.SCALAR);
+                            int scalarReg = bytecodeCompiler.lastResultReg;
+                            arrayReg = bytecodeCompiler.allocateRegister();
+                            if (bytecodeCompiler.isStrictRefsEnabled()) {
+                                bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                                bytecodeCompiler.emitReg(arrayReg);
+                                bytecodeCompiler.emitReg(scalarReg);
+                            } else {
+                                int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                                bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
+                                bytecodeCompiler.emitReg(arrayReg);
+                                bytecodeCompiler.emitReg(scalarReg);
+                                bytecodeCompiler.emit(pkgIdx);
                             }
                         } else {
                             bytecodeCompiler.throwCompilerException("Assignment requires scalar dereference: $var[index]");

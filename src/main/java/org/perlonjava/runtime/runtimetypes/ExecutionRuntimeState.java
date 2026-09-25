@@ -5,10 +5,12 @@ import org.perlonjava.backend.bytecode.InterpreterState;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Stack;
+import java.util.Set;
 
 /** Per-interpreter execution and dynamic-scope state migrated in Phase 5. */
 public final class ExecutionRuntimeState {
@@ -21,6 +23,8 @@ public final class ExecutionRuntimeState {
     final Stack<RuntimeHash> hashDynamicStates = new Stack<>();
     final Stack<RuntimeStash> stashDynamicStates = new Stack<>();
     final Stack<Object> globSlotStates = new Stack<>();
+    /** Glob ARRAY slots explicitly removed with {@code undef *glob}. */
+    final Set<String> explicitlyUndefinedGlobArraySlots = new HashSet<>();
     final Stack<Object> globalScalarStates = new Stack<>();
     final Stack<Object> globalArrayStates = new Stack<>();
     final Stack<Object> globalHashStates = new Stack<>();

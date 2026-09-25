@@ -6390,6 +6390,7 @@ public class BytecodeCompiler implements Visitor {
         // Track if any localization opcodes are emitted (including defer blocks which use DVM)
         if (opcode == Opcodes.LOCAL_SCALAR || opcode == Opcodes.LOCAL_ARRAY ||
                 opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB || opcode == Opcodes.LOCAL_GLOB_REF ||
+                opcode == Opcodes.LOCAL_SCALAR_DYNAMIC ||
                 opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL ||
                 opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.PUSH_CANCEL
                 || opcode == Opcodes.SAVE_REGEX_STATE) {
@@ -6406,6 +6407,7 @@ public class BytecodeCompiler implements Visitor {
         // Track if any localization opcodes are emitted (including defer blocks which use DVM)
         if (opcode == Opcodes.LOCAL_SCALAR || opcode == Opcodes.LOCAL_ARRAY ||
                 opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB || opcode == Opcodes.LOCAL_GLOB_REF ||
+                opcode == Opcodes.LOCAL_SCALAR_DYNAMIC ||
                 opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL ||
                 opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.PUSH_CANCEL
                 || opcode == Opcodes.SAVE_REGEX_STATE) {

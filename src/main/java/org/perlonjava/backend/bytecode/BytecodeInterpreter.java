@@ -1052,7 +1052,7 @@ public class BytecodeInterpreter {
 
                                 registers[levelReg] = new RuntimeScalar(
                                         DynamicVariableManager.getLocalLevel() - savedLocalLevel);
-                                registers[rd] = GlobalRuntimeScalar.makeLocal(name);
+                                registers[rd] = GlobalRuntimeScalar.makeLocalForForeach(name);
                             }
 
                             case Opcodes.POP_LOCAL_LEVEL -> {
@@ -3108,6 +3108,10 @@ public class BytecodeInterpreter {
 
                             case Opcodes.LOCAL_GLOB_DYNAMIC -> {
                                 pc = InlineOpcodeHandler.executeLocalGlobDynamic(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.LOCAL_SCALAR_DYNAMIC -> {
+                                pc = InlineOpcodeHandler.executeLocalScalarDynamic(bytecode, pc, registers);
                             }
 
                             case Opcodes.LOCAL_GLOB_REF -> {

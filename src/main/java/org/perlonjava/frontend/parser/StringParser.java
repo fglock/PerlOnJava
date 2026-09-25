@@ -1242,11 +1242,30 @@ public class StringParser {
         switch (operator) {
             case "`":
             case "qx": {
-                // Backticks and qx are not CORE::GLOBAL::readpipe override
-                // points.  Package-local readpipe dispatch is handled at
-                // runtime by SystemOperator, while a CORE::GLOBAL stash slot
-                // must not alter quote-like parsing (perl5 op/gv.t).
-                return parseSystemCommand(parser.ctx, operator, rawStr);
+                OperatorNode command = parseSystemCommand(parser.ctx, operator, rawStr);
+                String localReadpipeName = normalizeVariableName(
+                        "readpipe", parser.ctx.symbolTable.getCurrentPackage());
+                String readpipeName = null;
+                if (isCompileTimeReadpipeOverride(localReadpipeName)) {
+                    readpipeName = localReadpipeName;
+                } else if (isCompileTimeReadpipeOverride("CORE::GLOBAL::readpipe")) {
+                    readpipeName = "CORE::GLOBAL::readpipe";
+                }
+                if (readpipeName == null) {
+                    return command;
+                }
+
+                RuntimeScalar readpipe = GlobalVariable.getGlobalCodeRef(readpipeName);
+                if (readpipe.value instanceof RuntimeCode code && "".equals(code.prototype)) {
+                    parser.throwError("Too many arguments");
+                }
+                OperatorNode codeRef = new OperatorNode("&",
+                        new IdentifierNode(readpipeName, rawStr.index), rawStr.index);
+                codeRef.setAnnotation("directNamedCall", true);
+                codeRef.setAnnotation("parseTimeCodeRef", readpipe);
+                ListNode arguments = new ListNode(rawStr.index);
+                arguments.elements.add(((ListNode) command.operand).elements.getFirst());
+                return new BinaryOperatorNode("(", codeRef, arguments, rawStr.index);
             }
             case "'":
             case "q":
@@ -1287,11 +1306,22 @@ public class StringParser {
                 // before passing to glob(). This ensures variables are interpolated.
                 Node interpolated = StringDoubleQuoted.parseDoubleQuotedString(
                         parser.ctx, rawStr, true, true, false, parser.getHeredocNodes(), parser);
+                String localReadlineName = normalizeVariableName(
+                        "readline", parser.ctx.symbolTable.getCurrentPackage());
+                if (isCompileTimeReadpipeOverride(localReadlineName)) {
+                    RuntimeScalar readline = GlobalVariable.getGlobalCodeRef(localReadlineName);
+                    OperatorNode codeRef = new OperatorNode("&",
+                            new IdentifierNode(localReadlineName, rawStr.index), rawStr.index);
+                    codeRef.setAnnotation("directNamedCall", true);
+                    codeRef.setAnnotation("parseTimeCodeRef", readline);
+                    ListNode arguments = new ListNode(rawStr.index);
+                    arguments.elements.add(interpolated);
+                    return new BinaryOperatorNode("(", codeRef, arguments, rawStr.index);
+                }
                 String readlineName = "CORE::GLOBAL::readline";
                 if (rawStr.buffers.size() == 1
-                        && rawStr.buffers.getFirst().matches("[A-Za-z_][A-Za-z0-9_]*")
-                        && RuntimeGlob.isGlobAssigned(readlineName)
-                        && GlobalVariable.isGlobalCodeRefDefined(readlineName)) {
+                        && rawStr.buffers.getFirst().matches("(?:[A-Za-z_][A-Za-z0-9_]*|\\$[A-Za-z_][A-Za-z0-9_]*)")
+                        && isCompileTimeReadpipeOverride(readlineName)) {
                     RuntimeScalar readline = GlobalVariable.getGlobalCodeRef(readlineName);
                     if (readline.value instanceof RuntimeCode code && "".equals(code.prototype)) {
                         parser.throwError("Too many arguments");
@@ -1333,6 +1363,22 @@ public class StringParser {
             list.elements.add(new StringNode(rawStr.buffers.get(i), rawStr.index));
         }
         return new OperatorNode(operator, list, rawStr.index);
+    }
+
+    /**
+     * A CODE slot installed by a declaration or typeglob CODE assignment is a
+     * compile-time override.  Merely storing a scalar in a stash entry creates
+     * a glob too, but must leave qx syntax alone (as CORE::GLOBAL permits
+     * arbitrary non-CODE slots).
+     */
+    private static boolean isCompileTimeReadpipeOverride(String name) {
+        if (!RuntimeGlob.isGlobAssigned(name)
+                || !GlobalVariable.isGlobalCodeRefDefined(name)) {
+            return false;
+        }
+        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(name);
+        return GlobalVariable.isSubs.getOrDefault(name, false)
+                || (codeRef.value instanceof RuntimeCode code && code.isDeclared);
     }
 
     /**

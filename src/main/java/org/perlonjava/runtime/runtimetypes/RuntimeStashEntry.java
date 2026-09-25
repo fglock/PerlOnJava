@@ -35,7 +35,12 @@ public class RuntimeStashEntry extends RuntimeGlob {
             // symbol's complete typeglob.
             type = REFERENCE;
             value = GlobalVariable.getGlobalPseudoConstant(globName);
-        } else if (!materializedCodeSlot) {
+        } else {
+            // A stash entry can retain its compact hash-view value alongside
+            // a callable CODE slot.  Array-reference constants and fake globs
+            // rely on that value surviving calls and whole-glob localization;
+            // the CODE slot alone must not make the hash view stringify as the
+            // destination typeglob.
             RuntimeScalar compactValue = GlobalVariable.getGlobalCompactStashValue(globName);
             if (compactValue != null) {
                 type = compactValue.type;

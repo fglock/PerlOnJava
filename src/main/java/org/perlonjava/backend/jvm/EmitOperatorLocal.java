@@ -86,7 +86,7 @@ public class EmitOperatorLocal {
                     mv.visitLdcInsn(fullName);
                     mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                             "org/perlonjava/runtime/runtimetypes/GlobalRuntimeScalar",
-                            "makeLocal",
+                            idNode.name.equals("_") ? "makeLocalForForeach" : "makeLocal",
                             "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                             false);
 
