@@ -13,6 +13,9 @@ priorities and future plans.
 - Restore the public `YAML::Syck` API and legacy template parsing, including
   exports, file helpers, percent placeholders, duplicate keys, and tabs.
 
+- Synchronize shared aggregate traversal during thread destruction, preventing
+  intermittent `ConcurrentModificationException` failures in nested joins.
+
 - Restore `op/ref.t` destructor reblessing semantics, invoking the new class's
   `DESTROY` method after an object is reblessed during destruction.
 
