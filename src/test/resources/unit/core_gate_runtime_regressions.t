@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 6;
+use Test::More tests => 7;
 
 our $destroy_error;
 {
@@ -28,6 +28,16 @@ my $default_object = bless {}, 'CoreGate::DestroyDefault';
 undef $default_object;
 is($destroy_default, 'ok',
    'a DESTROY body can still assign to the default variable');
+
+our ($a, @b);
+my $sort_error;
+{
+    local $@;
+    eval { for $a (3) { @b = sort { die } 4, 5 } };
+    $sort_error = $@;
+}
+like($sort_error, qr/^Died at .* line \d+\./,
+     'sort localizes $a over a readonly foreach alias before propagating die');
 
 my $path = 'core_gate_runtime_regressions.tmp';
 open(my $writer, '>', $path) or die "open $path: $!";

@@ -170,16 +170,16 @@ public class ListOperators {
         final boolean stackedComparator = isStacked;
 
         // Create the sort variables
-        RuntimeScalar varA = getGlobalVariable(packageName + "::a");
-        RuntimeScalar varB = getGlobalVariable(packageName + "::b");
+        String varAName = packageName + "::a";
+        String varBName = packageName + "::b";
         int sortLocalLevel = DynamicVariableManager.getLocalLevel();
-        DynamicVariableManager.pushLocalVariable(varA);
-        DynamicVariableManager.pushLocalVariable(varB);
+        DynamicVariableManager.pushLocalVariable(new GlobalRuntimeScalar(varAName));
+        DynamicVariableManager.pushLocalVariable(new GlobalRuntimeScalar(varBName));
         // A surrounding foreach may temporarily alias $a or $b to a readonly
         // list literal.  sort localizes those globals, so use the newly
         // installed writable cells rather than the pre-localization aliases.
-        final RuntimeScalar localizedVarA = getGlobalVariable(packageName + "::a");
-        final RuntimeScalar localizedVarB = getGlobalVariable(packageName + "::b");
+        final RuntimeScalar localizedVarA = getGlobalVariable(varAName);
+        final RuntimeScalar localizedVarB = getGlobalVariable(varBName);
 
         try {
             // Sort the new array using the Perl comparator subroutine. Perl
