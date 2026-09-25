@@ -9,6 +9,13 @@ triggers:
 
 # Debugging PerlOnJava
 
+## Implementation and test cadence
+
+Read and follow [batching and validation guidance](references/testing-cadence.md)
+before planning iteration. Complete related implementation work before an
+expensive test run; use early focused checks when they resolve uncertainty.
+This guidance supersedes the older `make dev` and per-edit build examples below.
+
 Run repository `make` targets with high niceness (low CPU priority) so
 parallel development on the same host is not disrupted: use
 `nice -n 19 make <target>`, preserving any timeout and output-capture wrapper.

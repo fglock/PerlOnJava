@@ -5,6 +5,12 @@ description: Profile and optimize PerlOnJava runtime performance with Java Fligh
 
 # Profile PerlOnJava
 
+Read and follow [batching and validation guidance](../debug-perlonjava/references/testing-cadence.md).
+Complete one optimization hypothesis before rebuilding and measuring it; keep
+independent optimizations separate for attribution. Defer the full correctness
+suite until the candidate is ready. This guidance supersedes the older
+`make dev` and per-edit build examples below.
+
 Run repository `make` targets with high niceness (low CPU priority) so
 parallel development on the same host is not disrupted: use
 `nice -n 19 make <target>`, preserving any timeout and output-capture wrapper.

@@ -15,6 +15,10 @@ parallel development on the same host is not disrupted: use
 
 ## Establish ownership before editing
 
+Read and follow [batching and validation guidance](../debug-perlonjava/references/testing-cadence.md).
+Batch related changes within the identified ownership boundary before expensive
+validation; preserve the oracle, direct-engine, and backend acceptance gates.
+
 Reduce the failure, then place it at the narrowest correct boundary:
 
 | Symptom | Primary ownership |
