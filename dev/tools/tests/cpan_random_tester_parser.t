@@ -21,6 +21,14 @@ ok(defined $parser_source, 'extracted the CPAN result parser');
 eval $parser_source;
 die "cannot load CPAN result parser: $@" if $@;
 
+my ($canonical_source) = $source =~ /(sub canonical_module_for_archive \{.*?)(?=\n# Parse --modules)/s;
+ok(defined $canonical_source, 'extracted archive canonical-module normalization');
+eval $canonical_source;
+die "cannot load archive canonical-module normalization: $@" if $@;
+
+is(canonical_module_for_archive('FASTAid-v0.0.4'), 'FASTAid',
+    'versioned archive names with a v-prefix retain the real module name');
+
 my ($limit_source) = $source =~ /(sub effective_timeout_limits \{.*?)(?=\n# ─)/s;
 ok(defined $limit_source, 'extracted timeout-limit calculation');
 eval $limit_source;

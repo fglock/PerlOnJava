@@ -226,10 +226,7 @@ while (<$gz>) {
 
     $module_to_dist{$module} = $dist;
     $dist_to_module{$dist} //= $module;
-    my $canonical = $archive;
-    $canonical =~ s/-\d[\d._-]*$//;
-    $canonical =~ s/-/::/g;
-    $dist_to_canonical_module{$archive} //= $canonical;
+    $dist_to_canonical_module{$archive} //= canonical_module_for_archive($archive);
 }
 close $gz;
 
@@ -1195,6 +1192,17 @@ sub result_count_label {
 # ══════════════════════════════════════════════════════════════════════
 # Helpers
 # ══════════════════════════════════════════════════════════════════════
+
+# Convert a CPAN archive basename to its distribution's canonical module name.
+# CPAN uses both "Name-1.2" and "Name-v1.2" archive version forms; the latter
+# must remove the v-prefix before converting distribution separators to ::.
+sub canonical_module_for_archive {
+    my ($archive) = @_;
+    my $canonical = $archive;
+    $canonical =~ s/-v?\d[\d._-]*$//;
+    $canonical =~ s/-/::/g;
+    return $canonical;
+}
 
 # Parse --modules argument: either comma-separated list or file path
 sub parse_module_list {
