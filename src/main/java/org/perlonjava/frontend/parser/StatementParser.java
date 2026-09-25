@@ -886,7 +886,10 @@ public class StatementParser {
         // Parse Version string
         int currentIndex = parser.tokenIndex;
         RuntimeScalar versionScalar = scalarUndef;
-        Node versionNode = parseOptionalPackageVersion(parser);
+        // `use v5.40` is a Perl language-version declaration, not a module
+        // version requirement.  Its v-string retains its normal expression
+        // semantics; package and module versions preserve source spelling.
+        Node versionNode = parseOptionalPackageVersion(parser, packageName == null);
         if (versionNode != null) {
             if (TokenUtils.peek(parser).text.equals(",")) {
                 // no comma allowed after version
@@ -1260,6 +1263,11 @@ public class StatementParser {
         String requested = normalizeVersion(version);
         String previous = parser.ctx.symbolTable.getUseVersion();
         if (previous != null) {
+            // Repeating the same lexical version is valid.  CPAN modules
+            // commonly do this after changing packages within one file.
+            if (previous.equals(requested)) {
+                return;
+            }
             String message;
             if (versionAtLeast(requested, 5, 39)) {
                 message = "use VERSION of 5.39 or above is not permitted while another use VERSION is in scope";
@@ -1344,7 +1352,7 @@ public class StatementParser {
 
         // Parse Version string and store it in the symbol table
         validatePackageVersion(parser);
-        Node version = parseOptionalPackageVersion(parser);
+        Node version = parseOptionalPackageVersion(parser, false);
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("package version: " + version);
         if (version != null) {
             // Extract the actual version value from the node
@@ -1503,7 +1511,7 @@ public class StatementParser {
 
                 // Handle optional version number using the existing version parser
                 // This properly handles v-strings, floating point versions, etc.
-                Node versionNode = parseOptionalPackageVersion(parser);
+                Node versionNode = parseOptionalPackageVersion(parser, false);
                 if (versionNode != null) {
                     // System.err.println("DEBUG: :isa() has version requirement");
                     // Store version node for version checking
@@ -1701,14 +1709,30 @@ public class StatementParser {
      * @param parser The Parser instance
      * @return A String representing the package version, or null if not present
      */
-    public static Node parseOptionalPackageVersion(Parser parser) {
+    public static Node parseOptionalPackageVersion(Parser parser, boolean expressionVstring) {
         LexerToken token;
         token = TokenUtils.peek(parser);
         if (token.type == LexerTokenType.NUMBER) {
             return parseNumber(parser, TokenUtils.consume(parser));
         }
         if (token.type == LexerTokenType.IDENTIFIER && token.text.matches("v\\d+(\\.\\d+)*")) {
-            return parseVstring(parser, TokenUtils.consume(parser).text, parser.tokenIndex);
+            if (expressionVstring) {
+                return parseVstring(parser, TokenUtils.consume(parser).text, parser.tokenIndex);
+            }
+            // A version literal after `package`, `use`, or a class :isa
+            // attribute is not an ordinary Perl v-string expression.  Keep
+            // its source spelling so version comparison can interpret it as
+            // a version; parsing it as a v-string would turn v20171214 into
+            // an invalid Unicode code point and loses zero-padded components.
+            LexerToken versionToken = TokenUtils.consume(parser);
+            StringBuilder version = new StringBuilder(versionToken.text);
+            while (TokenUtils.peek(parser).text.equals(".")
+                    && parser.tokenIndex + 1 < parser.tokens.size()
+                    && parser.tokens.get(parser.tokenIndex + 1).type == LexerTokenType.NUMBER) {
+                version.append(TokenUtils.consume(parser).text);
+                version.append(TokenUtils.consume(parser).text);
+            }
+            return new StringNode(version.toString(), parser.tokenIndex);
         }
         return null;
     }
@@ -1750,7 +1774,7 @@ public class StatementParser {
             return;
         }
         if (version.matches("(?:0|[1-9]\\d*)(?:\\.\\d+)?")
-                || version.matches("v(?:0|[1-9]\\d*)(?:\\.(?:0|[1-9]\\d{0,2})){2,}")) {
+                || version.matches("v\\d+(?:\\.\\d{1,3}){2,}")) {
             return;
         }
 
@@ -1761,8 +1785,6 @@ public class StatementParser {
             String body = version.substring(1);
             if (body.contains("_")) {
                 diagnostic = "underscore";
-            } else if (hasLeadingZeroComponent(body)) {
-                diagnostic = "no leading zeros";
             } else if (!body.matches("\\d+(?:\\.\\d+)*") || body.chars().filter(c -> c == '.').count() < 2) {
                 diagnostic = "dotted-decimal versions require at least three parts";
             } else if (hasOversizedDottedComponent(body)) {
@@ -1783,15 +1805,6 @@ public class StatementParser {
         }
         throw new PerlCompilerException(parser.tokenIndex,
                 "Invalid version format (" + diagnostic + ")", parser.ctx.errorUtil);
-    }
-
-    private static boolean hasLeadingZeroComponent(String version) {
-        for (String component : version.split("\\.")) {
-            if (component.length() > 1 && component.startsWith("0")) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static boolean hasOversizedDottedComponent(String version) {
