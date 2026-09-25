@@ -17,6 +17,11 @@ triggers:
 
 # Interpreter/JVM Backend Parity Debugging
 
+Read and follow [batching and validation guidance](../debug-perlonjava/references/testing-cadence.md).
+Complete the related compiler, interpreter, and runtime changes before an
+expensive run, then check the focused regression on both backends. This
+guidance supersedes the older `make dev` and per-edit build examples below.
+
 Run repository `make` targets with high niceness (low CPU priority) so
 parallel development on the same host is not disrupted: use
 `nice -n 19 make <target>`, preserving any timeout and output-capture wrapper.

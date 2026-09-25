@@ -23,6 +23,11 @@ priority) so parallel development on the same host is not disrupted:
 
 ## When to Use
 
+Read and follow [batching and validation guidance](../debug-perlonjava/references/testing-cadence.md).
+Complete a coherent platform fix and its regression coverage before repeating
+full local or Windows CI validation. Use focused checks for uncertain platform
+assumptions; a local pass does not replace the required Windows evidence.
+
 - Tests pass locally on macOS/Linux but fail on Windows CI
 - Windows-specific path handling issues
 - Shell command differences between platforms

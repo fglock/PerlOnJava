@@ -142,3 +142,6 @@ src/main/java/org/perlonjava/core/Configuration.java
 # Dist::Zilla's file test intentionally creates this literal fixture name
 # when run from the repository root.
 /fake out!
+
+# Local checkout of the imported Perl 5 source tree.
+/perl5

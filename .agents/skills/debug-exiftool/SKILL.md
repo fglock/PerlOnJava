@@ -17,6 +17,13 @@ triggers:
 
 # Debugging Image::ExifTool Tests in PerlOnJava
 
+## Implementation and test cadence
+
+Read and follow [batching and validation guidance](../debug-perlonjava/references/testing-cadence.md).
+Trace related ExifTool failures to their shared runtime cause and complete that
+fix before rerunning expensive suites. Use reduced cases for uncertain behavior.
+This guidance supersedes the older `make dev` and per-edit build examples below.
+
 Run repository `make` targets with high niceness (low CPU priority) so
 parallel development on the same host is not disrupted: use
 `nice -n 19 make <target>`, preserving any timeout and output-capture wrapper.
