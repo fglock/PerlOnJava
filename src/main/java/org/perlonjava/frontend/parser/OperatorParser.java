@@ -207,6 +207,23 @@ public class OperatorParser {
 
             // Check if the token looks like a Bareword file handle
             if (operand.type == IDENTIFIER) {
+                // Do not resolve a possible handle until the source actually
+                // has the closing delimiter.  `<alpha beta>` is a glob pattern,
+                // not a read from `alpha`; parsing the latter eagerly
+                // autovivifies its IO glob and leaves a visible stash entry
+                // before the glob expression has run.
+                int nextTokenIndex = parser.tokenIndex + 1;
+                while (nextTokenIndex < parser.tokens.size()
+                        && parser.tokens.get(nextTokenIndex).type == WHITESPACE) {
+                    nextTokenIndex++;
+                }
+                boolean maybeBarewordHandle = nextTokenIndex < parser.tokens.size()
+                        && (parser.tokens.get(nextTokenIndex).text.equals(">")
+                        || parser.tokens.get(nextTokenIndex).text.equals("::"));
+                if (!maybeBarewordHandle) {
+                    parser.tokenIndex = currentTokenIndex;
+                    return StringParser.parseRawString(parser, token.text);
+                }
                 String readlineOverride = "CORE::GLOBAL::readline";
                 // A real override is selected before resolving an otherwise
                 // ordinary bareword handle.  Perl's pre-opened standard

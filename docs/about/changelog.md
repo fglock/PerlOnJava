@@ -19,6 +19,10 @@ priorities and future plans.
 - Restore core compatibility for protected `DESTROY` invocants, tied hint-hash
   cloning, compile-time `__DIE__` diagnostics, and barehandle `eof` precedence.
 
+- Restore core `gv`, `local`, and Unicode glob compatibility, including
+  localized magic-stash slices and glob patterns whose first word is not a
+  filehandle.
+
 - Restore qx handling of leading POSIX environment assignments, unblocking
   Getopt::Complete shell completion on both execution backends.
 

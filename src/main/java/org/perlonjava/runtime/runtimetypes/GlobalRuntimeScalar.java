@@ -184,10 +184,9 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                 // Tied path: the slot was never replaced. Restore the
                 // original value by dispatching STORE on the tied scalar.
                 if (saved.originalVariable != null
-                        && saved.originalVariable.type == RuntimeScalarType.TIED_SCALAR) {
-                    if (saved.savedTiedValue != null) {
-                        saved.originalVariable.tiedStore(saved.savedTiedValue);
-                    }
+                        && saved.originalVariable.type == RuntimeScalarType.TIED_SCALAR
+                        && saved.savedTiedValue != null) {
+                    saved.originalVariable.tiedStore(saved.savedTiedValue);
                     return;
                 }
 
