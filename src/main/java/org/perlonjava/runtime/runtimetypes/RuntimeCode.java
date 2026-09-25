@@ -538,6 +538,33 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return null;
     }
 
+    /**
+     * Track a JVM-generated method's Perl-visible self reference. Generated
+     * methods call each other directly and therefore do not enter the
+     * interpreter's {@link #activeCodeStack()}.
+     */
+    public static void pushJvmSelfReference(RuntimeScalar selfReference) {
+        if (selfReference != null) {
+            PerlRuntime.current().executionState().activeJvmSelfReferences.push(selfReference);
+        }
+    }
+
+    /** Remove the matching JVM-generated method self reference on return. */
+    public static void popJvmSelfReference(RuntimeScalar selfReference) {
+        if (selfReference == null) return;
+        Deque<RuntimeScalar> stack = PerlRuntime.current().executionState().activeJvmSelfReferences;
+        if (!stack.isEmpty() && stack.peek() == selfReference) {
+            stack.pop();
+        } else {
+            stack.removeFirstOccurrence(selfReference);
+        }
+    }
+
+    /** The innermost JVM-generated Perl subroutine, if any. */
+    public static RuntimeScalar getJvmSelfReference() {
+        return PerlRuntime.current().executionState().activeJvmSelfReferences.peek();
+    }
+
     /** True when an interpreter-owned Future::AsyncAwait frame is active. */
     public static boolean hasActiveFutureAsyncAwaitSub() {
         for (RuntimeCode active : activeCodeStack()) {

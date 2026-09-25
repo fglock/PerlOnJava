@@ -553,6 +553,17 @@ public class EmitterMethodCreator implements Opcodes {
             // Generate the subroutine block
             mv.visitCode();
 
+            // Direct JVM-to-JVM calls bypass RuntimeCode.apply(), so retain
+            // the generated method's self reference for dynamic wrappers
+            // such as &{"CORE::__SUB__"}.
+            mv.visitVarInsn(Opcodes.ALOAD, 0);
+            mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassInfo.javaClassName,
+                    "__SUB__", "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "pushJvmSelfReference",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V", false);
+
             // Initialize local variables with closure values from instance fields
             // Skip some indices because they are reserved for special arguments (this, "@_" and call
             // context)
@@ -1194,6 +1205,13 @@ public class EmitterMethodCreator implements Opcodes {
                 Local.localTeardown(dynamicIndex, mv);
             }
 
+            mv.visitVarInsn(Opcodes.ALOAD, 0);
+            mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassInfo.javaClassName,
+                    "__SUB__", "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "popJvmSelfReference",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V", false);
             mv.visitInsn(Opcodes.ARETURN); // Returns an Object
             mv.visitMaxs(0, 0); // Automatically computed
             mv.visitEnd();

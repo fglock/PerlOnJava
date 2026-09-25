@@ -24,6 +24,8 @@ import java.util.List;
  * @see HashLiteralNode
  */
 public class ListNode extends AbstractNode {
+    /** True when this list came from explicit grouping parentheses. */
+    public boolean parenthesized;
     /**
      * The list of element nodes contained in this list expression.
      * <p>
@@ -75,6 +77,7 @@ public class ListNode extends AbstractNode {
         this.tokenIndex = tokenIndex;
         this.elements = elements;
         this.handle = null;
+        this.parenthesized = false;
     }
 
     /**
@@ -89,6 +92,7 @@ public class ListNode extends AbstractNode {
         this.elements = new ArrayList<>();
         this.tokenIndex = tokenIndex;
         this.handle = null;
+        this.parenthesized = false;
     }
 
     /**
@@ -125,10 +129,10 @@ public class ListNode extends AbstractNode {
     public static ListNode makeList(Node left, Node right) {
         ListNode leftList = ListNode.makeList(left);
         ListNode rightList = ListNode.makeList(right);
-        int size = rightList.elements.size();
-        for (int i = 0; i < size; i++) {
-            leftList.elements.add(rightList.elements.get(i));
+        if (rightList.parenthesized && rightList.elements.size() == 1) {
+            rightList.elements.getFirst().setAnnotation("parenthesizedList", true);
         }
+        leftList.elements.addAll(rightList.elements);
         return leftList;
     }
 
@@ -175,4 +179,3 @@ public class ListNode extends AbstractNode {
         visitor.visit(this);
     }
 }
-

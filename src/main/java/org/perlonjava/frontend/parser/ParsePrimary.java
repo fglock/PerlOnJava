@@ -386,7 +386,10 @@ public class ParsePrimary {
         switch (token.text) {
             case "(":
                 // Parentheses create a list context and group expressions
-                return new ListNode(ListParser.parseList(parser, ")", 0), parser.tokenIndex);
+                ListNode parenthesizedList = new ListNode(
+                        ListParser.parseList(parser, ")", 0), parser.tokenIndex);
+                parenthesizedList.parenthesized = true;
+                return parenthesizedList;
 
             case "{":
                 // Curly braces create anonymous hash references

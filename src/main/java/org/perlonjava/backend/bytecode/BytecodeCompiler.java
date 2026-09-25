@@ -8821,6 +8821,13 @@ public class BytecodeCompiler implements Visitor {
                 emit(Opcodes.LOAD_UNDEF);
                 emitReg(targetLoop.resultReg);
             }
+        } else if (op.equals("last") && targetLoop.resultReg >= 0) {
+            // An explicit `last` (including switch's `break`) has no value.
+            // Registers persist across interpreter executions, so leaving the
+            // value-producing block's result register untouched here can
+            // return a prior iteration's object instead of undef.
+            emit(Opcodes.LOAD_UNDEF);
+            emitReg(targetLoop.resultReg);
         }
 
         // Emit the opcode and record the PC to be patched later

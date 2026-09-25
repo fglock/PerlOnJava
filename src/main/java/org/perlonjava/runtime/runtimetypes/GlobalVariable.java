@@ -1296,6 +1296,11 @@ public class GlobalVariable {
         invalidatePackageRootSnapshot();
     }
 
+    /** Replace a package CODE slot with the supplied code reference. */
+    public static void aliasGlobalCodeRef(String key, RuntimeScalar codeRef) {
+        globalCodeRefs.put(key, codeRef);
+    }
+
     /**
      * Temporarily aliases a package scalar without permanently labelling the
      * aliased value as package-global. Operators such as map and grep localize

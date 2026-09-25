@@ -4244,7 +4244,13 @@ public class BytecodeInterpreter {
                 int nameIdx = bytecode[pc++];
                 int persistId = bytecode[pc++];
                 RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
-                RuntimeArray array = (RuntimeArray) registers[sourceReg];
+                RuntimeBase source = registers[sourceReg];
+                // Whole-array refaliasing may provide the aggregate directly
+                // (for an array literal) or as the scalar array reference
+                // produced by a refalias expression.  Both denote the same
+                // installable state-array binding.
+                RuntimeArray array = source instanceof RuntimeArray direct
+                        ? direct : source.getFirst().arrayDeref();
                 StateVariable.aliasStateArray(codeRef, code.stringPool[nameIdx], persistId, array);
                 registers[rd] = array;
                 return pc;

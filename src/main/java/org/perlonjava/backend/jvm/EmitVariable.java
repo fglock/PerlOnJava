@@ -967,6 +967,29 @@ public class EmitVariable {
                     }
                 }
 
+                // A conditional can itself be the ref-alias target:
+                //   $condition ? \$left : $right = \$source
+                // The parser attaches the assignment outside the ternary, so
+                // this cannot be handled by the ordinary `\\target` branch
+                // below.  Select and lower the branch as a reference-alias
+                // target, after the RHS reference has been evaluated once.
+                if (node.left instanceof TernaryOperatorNode ternaryTarget
+                        && node.right instanceof OperatorNode reference
+                        && reference.operator.equals("\\")) {
+                    if (!ctx.symbolTable.isFeatureCategoryEnabled("refaliasing")) {
+                        throw new PerlCompilerException(node.tokenIndex, "Experimental aliasing via reference not enabled", ctx.errorUtil);
+                    }
+                    if (ctx.symbolTable.isWarningCategoryEnabled("experimental::refaliasing")) {
+                        WarnDie.warn(
+                                new RuntimeScalar("Aliasing via reference is experimental"),
+                                new RuntimeScalar(ctx.errorUtil.warningLocation(node.tokenIndex)));
+                    }
+                    emitReferenceAliasTarget(emitterVisitor, ternaryTarget, rhsSlot);
+                    if (ctx.contextType == RuntimeContextType.VOID) mv.visitInsn(Opcodes.POP);
+                    if (pooledRhs) ctx.javaClassInfo.releaseSpillSlot();
+                    return;
+                }
+
                 // Check for ref aliasing (\$y = $ref) BEFORE emitting LHS
                 if (nodeLeft != null && nodeLeft.operator.equals("\\")) {
                     // `\$b = \$a` requires "refaliasing"
@@ -992,6 +1015,12 @@ public class EmitVariable {
                     while (refAliasTarget instanceof ListNode listNode
                             && listNode.elements.size() == 1) {
                         refAliasTarget = listNode.elements.get(0);
+                    }
+                    if (refAliasTarget instanceof TernaryOperatorNode ternaryTarget) {
+                        emitReferenceAliasTarget(emitterVisitor, ternaryTarget, rhsSlot);
+                        if (ctx.contextType == RuntimeContextType.VOID) mv.visitInsn(Opcodes.POP);
+                        if (pooledRhs) ctx.javaClassInfo.releaseSpillSlot();
+                        return;
                     }
                     BinaryOperatorNode element = refAliasTarget instanceof BinaryOperatorNode binaryElement
                             ? binaryElement : null;
@@ -1085,21 +1114,58 @@ public class EmitVariable {
                                 ctx.javaClassInfo.releaseSpillSlot();
                             }
                             break;
-                        } else if ((symEntry == null || symEntry.decl().equals("our")) && varNode.operator.equals("$")) {
+                        } else if ((symEntry == null || symEntry.decl().equals("our"))
+                                && (varNode.operator.equals("$")
+                                || varNode.operator.equals("@")
+                                || varNode.operator.equals("%"))) {
                             String globalName = NameNormalizer.normalizeVariableName(
                                     varName.substring(1), ctx.symbolTable.getCurrentPackage());
                             mv.visitLdcInsn(globalName);
                             mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
+                            String dereferenceMethod;
+                            String dereferenceDescriptor;
+                            String aliasMethod;
+                            String aliasDescriptor;
+                            String loadMethod;
+                            String loadDescriptor;
+                            switch (varNode.operator) {
+                                case "$" -> {
+                                    dereferenceMethod = "scalarDeref";
+                                    dereferenceDescriptor = "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;";
+                                    aliasMethod = "aliasGlobalVariable";
+                                    aliasDescriptor = "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V";
+                                    loadMethod = "getGlobalVariable";
+                                    loadDescriptor = "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;";
+                                }
+                                case "@" -> {
+                                    dereferenceMethod = "arrayDeref";
+                                    dereferenceDescriptor = "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;";
+                                    aliasMethod = "aliasGlobalArray";
+                                    aliasDescriptor = "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)V";
+                                    loadMethod = "getGlobalArray";
+                                    loadDescriptor = "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;";
+                                }
+                                case "%" -> {
+                                    dereferenceMethod = "hashDeref";
+                                    dereferenceDescriptor = "()Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;";
+                                    aliasMethod = "aliasGlobalHash";
+                                    aliasDescriptor = "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)V";
+                                    loadMethod = "getGlobalHash";
+                                    loadDescriptor = "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;";
+                                }
+                                default -> throw new IllegalStateException(
+                                        "Unexpected ref aliasing target: " + varNode.operator);
+                            }
                             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "scalarDeref",
-                                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar", dereferenceMethod,
+                                    dereferenceDescriptor, false);
                             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                                    "org/perlonjava/runtime/runtimetypes/GlobalVariable", "aliasGlobalVariable",
-                                    "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V", false);
+                                    "org/perlonjava/runtime/runtimetypes/GlobalVariable", aliasMethod,
+                                    aliasDescriptor, false);
                             mv.visitLdcInsn(globalName);
                             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                                    "org/perlonjava/runtime/runtimetypes/GlobalVariable", "getGlobalVariable",
-                                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                                    "org/perlonjava/runtime/runtimetypes/GlobalVariable", loadMethod,
+                                    loadDescriptor, false);
                             if (pooledRhs) ctx.javaClassInfo.releaseSpillSlot();
                             break;
                         }
@@ -1352,12 +1418,17 @@ public class EmitVariable {
         MethodVisitor mv = ctx.mv;
         ListNode targets;
         OperatorNode listDeclaration = null;
+        boolean outerReferenceToList = false;
         if (node.left instanceof ListNode list) {
             targets = list;
         } else {
             OperatorNode reference = (OperatorNode) node.left;
             if (reference.operand instanceof ListNode list) {
                 targets = list;
+                // `\\(@array)` is a reference to a parenthesized target
+                // list.  It differs from `(\\@array)`, whose member
+                // reference aliases the aggregate itself.
+                outerReferenceToList = list.elements.size() == 1;
             } else {
                 listDeclaration = (OperatorNode) reference.operand;
                 targets = (ListNode) listDeclaration.operand;
@@ -1396,19 +1467,58 @@ public class EmitVariable {
 
         for (int i = 0; i < targets.elements.size(); i++) {
             Node target = targets.elements.get(i);
+            // \my(@array) and \state(@array) declare a parenthesized
+            // aggregate slot list; retain that information after the
+            // declaration is lifted around each member below.
+            boolean aggregateReferenceListTarget = listDeclaration != null || outerReferenceToList;
             if (listDeclaration != null && target instanceof OperatorNode) {
                 target = new OperatorNode(listDeclaration.operator, target, listDeclaration.tokenIndex);
             }
             if (target instanceof OperatorNode memberReference
                     && memberReference.operator.equals("\\")) {
                 target = memberReference.operand;
+                aggregateReferenceListTarget = target instanceof ListNode;
                 while (target instanceof ListNode memberList && memberList.elements.size() == 1) {
                     target = memberList.elements.getFirst();
                 }
             }
+            if (target instanceof ListNode groupedTarget
+                    && groupedTarget.parenthesized
+                    && groupedTarget.elements.size() == 1) {
+                target = groupedTarget.elements.getFirst();
+                aggregateReferenceListTarget = true;
+            }
+            if (Boolean.TRUE.equals(target.getAnnotation("parenthesizedList"))) {
+                aggregateReferenceListTarget = true;
+            }
+            // \my(@array) and \state(@array) are aggregate slot-list
+            // targets.  Preserve that meaning when their one-member ListNode
+            // is nested inside the declaration wrapper.
+            if (target instanceof OperatorNode declaration
+                    && (declaration.operator.equals("my") || declaration.operator.equals("state"))
+                    && declaration.operand instanceof ListNode declarationList
+                    && declarationList.elements.size() == 1
+                    && declarationList.elements.getFirst() instanceof OperatorNode declaredAggregate
+                    && declaredAggregate.operator.equals("@")) {
+                OperatorNode normalizedDeclaration = new OperatorNode(
+                        declaration.operator, declaredAggregate, declaration.tokenIndex);
+                normalizedDeclaration.annotations = declaration.annotations;
+                target = normalizedDeclaration;
+                aggregateReferenceListTarget = true;
+            }
+            if (target instanceof TernaryOperatorNode ternary
+                    && emitConditionalReferenceAliasTarget(emitterVisitor, ternary, rhsListSlot, i)) {
+                if (i < targets.elements.size() - 1) mv.visitInsn(Opcodes.POP);
+                continue;
+            }
             if (target instanceof OperatorNode aggregate
                     && aggregate.operator.equals("@")
                     && aggregate.operand instanceof IdentifierNode aggregateId) {
+                if (!aggregateReferenceListTarget) {
+                    emitDirectReferenceAliasTarget(emitterVisitor, aggregate, rhsListSlot, i);
+                    if (i < targets.elements.size() - 1) mv.visitInsn(Opcodes.POP);
+                    continue;
+                }
                 String arrayName = "@" + aggregateId.name;
                 SymbolTable.SymbolEntry entry = ctx.symbolTable.getSymbolEntry(arrayName);
                 if (entry != null) {
@@ -1463,6 +1573,38 @@ public class EmitVariable {
                 if (i < targets.elements.size() - 1) mv.visitInsn(Opcodes.POP);
                 continue;
             }
+            if (target instanceof OperatorNode hashTarget
+                    && hashTarget.operator.equals("%")
+                    && hashTarget.operand instanceof IdentifierNode hashId) {
+                mv.visitVarInsn(Opcodes.ALOAD, rhsListSlot);
+                mv.visitLdcInsn(i);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeArray", "get",
+                        "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "hashDeref",
+                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;", false);
+                String hashName = "%" + hashId.name;
+                SymbolTable.SymbolEntry entry = ctx.symbolTable.getSymbolEntry(hashName);
+                if (entry != null && (entry.decl().equals("my") || entry.decl().equals("state"))) {
+                    mv.visitInsn(Opcodes.DUP);
+                    mv.visitVarInsn(Opcodes.ASTORE, entry.index());
+                } else {
+                    String globalName = NameNormalizer.normalizeVariableName(
+                            hashId.name, ctx.symbolTable.getCurrentPackage());
+                    mv.visitLdcInsn(globalName);
+                    mv.visitInsn(Opcodes.SWAP);
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/GlobalVariable", "aliasGlobalHash",
+                            "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)V", false);
+                    mv.visitLdcInsn(globalName);
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/GlobalVariable", "getGlobalHash",
+                            "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;", false);
+                }
+                if (i < targets.elements.size() - 1) mv.visitInsn(Opcodes.POP);
+                continue;
+            }
             OperatorNode scalarTarget = target instanceof OperatorNode direct
                     && direct.operator.equals("$") ? direct : null;
             if (scalarTarget == null
@@ -1502,6 +1644,31 @@ public class EmitVariable {
                             "org/perlonjava/runtime/runtimetypes/GlobalVariable", "getGlobalVariable",
                             "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                 }
+                if (i < targets.elements.size() - 1) mv.visitInsn(Opcodes.POP);
+                continue;
+            }
+            if (target instanceof OperatorNode codeTarget
+                    && codeTarget.operator.equals("&")
+                    && codeTarget.operand instanceof IdentifierNode codeId) {
+                // A CODE reference is itself the installable value.  A
+                // parenthesized alias must therefore replace the package CV,
+                // not route through RuntimeScalar.aliasLvalueReference.
+                mv.visitVarInsn(Opcodes.ALOAD, rhsListSlot);
+                mv.visitLdcInsn(i);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeArray", "get",
+                        "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                String globalName = NameNormalizer.normalizeVariableName(
+                        codeId.name, ctx.symbolTable.getCurrentPackage());
+                mv.visitLdcInsn(globalName);
+                mv.visitInsn(Opcodes.SWAP);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/GlobalVariable", "aliasGlobalCodeRef",
+                        "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V", false);
+                mv.visitLdcInsn(globalName);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/GlobalVariable", "getGlobalCodeRef",
+                        "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                 if (i < targets.elements.size() - 1) mv.visitInsn(Opcodes.POP);
                 continue;
             }
@@ -1546,6 +1713,199 @@ public class EmitVariable {
                     "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
         }
         if (pooledRhsList) ctx.javaClassInfo.releaseSpillSlot();
+    }
+
+    /**
+     * Bind an already-evaluated reference to a scalar ref-alias target.
+     * Nested conditionals and explicit reference wrappers are target syntax,
+     * not value expressions: both branches therefore receive the same RHS
+     * reference and are evaluated in LVALUE context only when selected.
+     */
+    private static void emitReferenceAliasTarget(
+            EmitterVisitor emitterVisitor, Node target, int rhsSlot) {
+        EmitterContext ctx = emitterVisitor.ctx;
+        MethodVisitor mv = ctx.mv;
+        while (target instanceof ListNode listNode && listNode.elements.size() == 1) {
+            target = listNode.elements.getFirst();
+        }
+        if (target instanceof OperatorNode reference && reference.operator.equals("\\")) {
+            emitReferenceAliasTarget(emitterVisitor, reference.operand, rhsSlot);
+            return;
+        }
+        if (target instanceof TernaryOperatorNode ternary) {
+            Label falseLabel = new Label();
+            Label endLabel = new Label();
+            ternary.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                    EmitOperator.booleanConversionMethod(emitterVisitor, "getBoolean"), "()Z", false);
+            mv.visitJumpInsn(Opcodes.IFEQ, falseLabel);
+            emitReferenceAliasTarget(emitterVisitor, ternary.trueExpr, rhsSlot);
+            mv.visitJumpInsn(Opcodes.GOTO, endLabel);
+            mv.visitLabel(falseLabel);
+            emitReferenceAliasTarget(emitterVisitor, ternary.falseExpr, rhsSlot);
+            mv.visitLabel(endLabel);
+            return;
+        }
+        if (target instanceof OperatorNode scalar
+                && scalar.operator.equals("$")
+                && scalar.operand instanceof IdentifierNode id) {
+            String variableName = "$" + id.name;
+            SymbolTable.SymbolEntry entry = ctx.symbolTable.getSymbolEntry(variableName);
+            if (entry != null && (entry.decl().equals("my") || entry.decl().equals("state"))) {
+                mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "scalarDeref",
+                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                if (entry.decl().equals("state")) {
+                    mv.visitVarInsn(Opcodes.ALOAD, entry.index());
+                    mv.visitInsn(Opcodes.SWAP);
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "set",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                } else {
+                    mv.visitInsn(Opcodes.DUP);
+                    mv.visitVarInsn(Opcodes.ASTORE, entry.index());
+                }
+            } else {
+                String globalName = NameNormalizer.normalizeVariableName(id.name, ctx.symbolTable.getCurrentPackage());
+                mv.visitLdcInsn(globalName);
+                mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "scalarDeref",
+                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/GlobalVariable", "aliasGlobalVariable",
+                        "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V", false);
+                mv.visitLdcInsn(globalName);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/GlobalVariable", "getGlobalVariable",
+                        "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+            }
+            return;
+        }
+        target.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+        mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                "aliasLvalueReference",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
+    }
+
+    /**
+     * Preserve the selected branch's aggregate type for a conditional member
+     * of a ref-alias list.  Emitting the ternary in ordinary LVALUE context
+     * turns an @/% branch into a scalar temporary and makes aliasLvalueReference
+     * reject the selected aggregate at runtime.
+     */
+    private static boolean emitConditionalReferenceAliasTarget(
+            EmitterVisitor emitterVisitor, TernaryOperatorNode ternary, int rhsListSlot, int index) {
+        if (!isDirectReferenceAliasTarget(ternary.trueExpr)
+                || !isDirectReferenceAliasTarget(ternary.falseExpr)) {
+            return false;
+        }
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        Label falseLabel = new Label();
+        Label endLabel = new Label();
+        ternary.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                EmitOperator.booleanConversionMethod(emitterVisitor, "getBoolean"), "()Z", false);
+        mv.visitJumpInsn(Opcodes.IFEQ, falseLabel);
+        emitDirectReferenceAliasTarget(emitterVisitor, ternary.trueExpr, rhsListSlot, index);
+        mv.visitJumpInsn(Opcodes.GOTO, endLabel);
+        mv.visitLabel(falseLabel);
+        emitDirectReferenceAliasTarget(emitterVisitor, ternary.falseExpr, rhsListSlot, index);
+        mv.visitLabel(endLabel);
+        return true;
+    }
+
+    private static boolean isDirectReferenceAliasTarget(Node target) {
+        return target instanceof OperatorNode sigil
+                && (sigil.operator.equals("$") || sigil.operator.equals("@") || sigil.operator.equals("%"))
+                && sigil.operand instanceof IdentifierNode;
+    }
+
+    /**
+     * Emits one conditional scalar/array/hash member, leaving its assigned
+     * value on the stack.  A selected aggregate is one target, rather than a
+     * bare aggregate list member that consumes all remaining references.
+     */
+    private static void emitDirectReferenceAliasTarget(
+            EmitterVisitor emitterVisitor, Node target, int rhsListSlot, int index) {
+        EmitterContext ctx = emitterVisitor.ctx;
+        MethodVisitor mv = ctx.mv;
+        OperatorNode sigil = (OperatorNode) target;
+        IdentifierNode id = (IdentifierNode) sigil.operand;
+        String variableName = sigil.operator + id.name;
+        mv.visitVarInsn(Opcodes.ALOAD, rhsListSlot);
+        mv.visitLdcInsn(index);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeArray", "get",
+                "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        if (sigil.operator.equals("@")) {
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "arrayDeref",
+                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
+            SymbolTable.SymbolEntry entry = ctx.symbolTable.getSymbolEntry(variableName);
+            if (entry != null && (entry.decl().equals("my") || entry.decl().equals("state"))) {
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitVarInsn(Opcodes.ASTORE, entry.index());
+            } else {
+                String globalName = NameNormalizer.normalizeVariableName(id.name, ctx.symbolTable.getCurrentPackage());
+                mv.visitLdcInsn(globalName);
+                mv.visitInsn(Opcodes.SWAP);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/GlobalVariable", "aliasGlobalArray",
+                        "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)V", false);
+                mv.visitLdcInsn(globalName);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/GlobalVariable", "getGlobalArray",
+                        "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
+            }
+            return;
+        }
+        if (sigil.operator.equals("$")) {
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "scalarDeref",
+                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+            SymbolTable.SymbolEntry entry = ctx.symbolTable.getSymbolEntry(variableName);
+            if (entry != null && (entry.decl().equals("my") || entry.decl().equals("state"))) {
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitVarInsn(Opcodes.ASTORE, entry.index());
+            } else {
+                String globalName = NameNormalizer.normalizeVariableName(id.name, ctx.symbolTable.getCurrentPackage());
+                mv.visitLdcInsn(globalName);
+                mv.visitInsn(Opcodes.SWAP);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/GlobalVariable", "aliasGlobalVariable",
+                        "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V", false);
+                mv.visitLdcInsn(globalName);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/GlobalVariable", "getGlobalVariable",
+                        "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+            }
+            return;
+        }
+
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "hashDeref",
+                "()Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;", false);
+        SymbolTable.SymbolEntry entry = ctx.symbolTable.getSymbolEntry(variableName);
+        if (entry != null && (entry.decl().equals("my") || entry.decl().equals("state"))) {
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitVarInsn(Opcodes.ASTORE, entry.index());
+        } else {
+            String globalName = NameNormalizer.normalizeVariableName(id.name, ctx.symbolTable.getCurrentPackage());
+            mv.visitLdcInsn(globalName);
+            mv.visitInsn(Opcodes.SWAP);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/GlobalVariable", "aliasGlobalHash",
+                    "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)V", false);
+            mv.visitLdcInsn(globalName);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/GlobalVariable", "getGlobalHash",
+                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;", false);
+        }
     }
 
     /**
