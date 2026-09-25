@@ -2689,6 +2689,10 @@ public class Opcodes {
 
     /** Convert an array result to a list of its writable element cells. */
     public static final short ARRAY_LVALUE_LIST = 579;
+    /** Validate a CODE reference for ref-alias assignment. Format: rd valueReg. */
+    public static final short REFALIAS_CODE_REFERENCE = 581;
+    /** Validate and unwrap a scalar reference used by ref aliasing. */
+    public static final short REFALIAS_SCALAR_REFERENCE = 582;
 
     private Opcodes() {
     } // Utility class - no instantiation

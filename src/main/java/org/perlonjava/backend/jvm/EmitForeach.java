@@ -264,6 +264,13 @@ public class EmitForeach {
                     && (declaration.operator.equals("my") || declaration.operator.equals("our")
                     || declaration.operator.equals("state"))
                     && declaration.operand instanceof OperatorNode sigil) {
+                // The leading reference keeps the declaration nested instead
+                // of visiting it through the normal `for my ...` path above.
+                // Materialize that lexical slot before compiling the body so
+                // `for \\my @x` shadows an earlier package @x rather than
+                // continuing to resolve @x through the outer symbol table.
+                declaration.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                isDeclaredInFor = true;
                 actualVariable = sigil;
             }
 

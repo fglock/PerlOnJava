@@ -2907,7 +2907,8 @@ public class BytecodeInterpreter {
                                  Opcodes.ALARM_OP, Opcodes.DEREF_GLOB, Opcodes.DEREF_GLOB_NONSTRICT,
                                  Opcodes.LOAD_GLOB_DYNAMIC, Opcodes.DEREF_SCALAR_STRICT,
                                  Opcodes.DEREF_SCALAR_NONSTRICT, Opcodes.CODE_DEREF_NONSTRICT,
-                                 Opcodes.CODE_DEREF_STRICT,
+                                 Opcodes.CODE_DEREF_STRICT, Opcodes.REFALIAS_CODE_REFERENCE,
+                                 Opcodes.REFALIAS_SCALAR_REFERENCE,
                                  Opcodes.NAMED_CODE_REFERENCE, Opcodes.DIRECT_NAMED_CODE_CALL,
                                  Opcodes.FOREACH_DEREF_SCALAR, Opcodes.FOREACH_DEREF_ARRAY,
                                  Opcodes.FOREACH_DEREF_HASH -> {
@@ -4542,6 +4543,12 @@ public class BytecodeInterpreter {
             }
             case Opcodes.FOREACH_DEREF_HASH -> {
                 return SlowOpcodeHandler.executeForeachDerefHash(bytecode, pc, registers);
+            }
+            case Opcodes.REFALIAS_CODE_REFERENCE -> {
+                return SlowOpcodeHandler.executeRefAliasCodeReference(bytecode, pc, registers);
+            }
+            case Opcodes.REFALIAS_SCALAR_REFERENCE -> {
+                return SlowOpcodeHandler.executeRefAliasScalarReference(bytecode, pc, registers);
             }
             case Opcodes.DEREF_SCALAR_NONSTRICT -> {
                 return SlowOpcodeHandler.executeDerefScalarNonStrict(bytecode, pc, registers, code);

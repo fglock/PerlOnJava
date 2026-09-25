@@ -530,6 +530,20 @@ public class SlowOpcodeHandler {
         return pc;
     }
 
+    public static int executeRefAliasCodeReference(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        registers[rd] = registers[rs].scalar().refAliasCodeReference();
+        return pc;
+    }
+
+    public static int executeRefAliasScalarReference(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        registers[rd] = registers[rs].scalar().refAliasScalarReference();
+        return pc;
+    }
+
     /**
      * DEREF_SCALAR_NONSTRICT: rd = rs.scalarDerefNonStrict(pkg)
      * Format: DEREF_SCALAR_NONSTRICT rd rs pkgIdx
