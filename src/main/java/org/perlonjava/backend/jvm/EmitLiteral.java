@@ -537,9 +537,13 @@ public class EmitLiteral {
                     && element instanceof BinaryOperatorNode assignment
                     && assignment.operator.equals("=")
                     && LValueVisitor.getContext(assignment.left) == RuntimeContextType.LIST;
-            if (forceListSnapshot || snapshotListAssignmentResult) {
+            // Foreach aliases its source cells, including holes.  Its source
+            // is emitted in ordinary LIST context, so mark it explicitly.
+            boolean snapshotForeachSource = Boolean.TRUE.equals(node.getAnnotation("foreachSource"));
+            if (forceListSnapshot || snapshotListAssignmentResult || snapshotForeachSource) {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeDescriptorConstants.LIST_CLASS,
-                        "addSnapshot", "(" + RuntimeDescriptorConstants.BASE_TYPE + ")V", false);
+                        snapshotForeachSource ? "addSnapshotWithArrayHoles" : "addSnapshot",
+                        "(" + RuntimeDescriptorConstants.BASE_TYPE + ")V", false);
             } else if (contextType == RuntimeContextType.RUNTIME) {
                 // A dynamic-context aggregate is scalarized by its emitter for
                 // scalar callers and remains an aggregate for list callers.

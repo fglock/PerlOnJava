@@ -255,12 +255,38 @@ public class RuntimeList extends RuntimeBase {
             aggregate = nested;
         }
         if (aggregate instanceof RuntimeArray array) {
-            elements.addAll(array.elements);
+            for (int i = 0; i < array.size(); i++) {
+                elements.add(array.get(i));
+            }
             return;
         }
         Iterator<RuntimeScalar> iterator = value.iterator();
         while (iterator.hasNext()) {
             this.elements.add(iterator.next());
+        }
+    }
+
+    /** Snapshot a foreach source, preserving writable proxies for sparse array holes. */
+    public void addSnapshotWithArrayHoles(RuntimeBase value) {
+        if (value instanceof RuntimeList list) {
+            for (RuntimeBase element : list.elements) addSnapshotWithArrayHoles(element);
+            return;
+        }
+        RuntimeBase aggregate = value;
+        while (aggregate instanceof RuntimeScalar scalar
+                && scalar.value instanceof RuntimeBase nested
+                && nested != aggregate) {
+            aggregate = nested;
+        }
+        if (aggregate instanceof RuntimeArray array) {
+            for (int i = 0; i < array.size(); i++) {
+                elements.add(array.get(i));
+            }
+            return;
+        }
+        Iterator<RuntimeScalar> iterator = value.iterator();
+        while (iterator.hasNext()) {
+            elements.add(iterator.next());
         }
     }
 
