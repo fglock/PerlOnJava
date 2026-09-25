@@ -640,6 +640,9 @@ public class Opcodes {
      */
     public static final short ARRAY_SET_FROM_LIST = 95;
 
+    /** Replace array slots with the referents in a ref-alias RHS list. */
+    public static final short ARRAY_SET_FROM_REFERENCE_LIST = 578;
+
     /**
      * Set hash from list: hash_reg = RuntimeHash.createHash(list_reg) then copy elements
      */
@@ -2092,6 +2095,13 @@ public class Opcodes {
 
     /** Mark a persistent state scalar initialized. Format: name_idx persist_id. */
     public static final short STATE_MARK_INITIALIZED = 574;
+
+    /** Retrieve a persistent state array without initializing it. Format: rd name_idx persist_id. */
+    public static final short STATE_RETRIEVE_ARRAY = 579;
+
+    /** Replace a persistent state-array binding for whole-array refaliasing.
+     * Format: rd source_array_reg name_idx persist_id. */
+    public static final short STATE_ALIAS_ARRAY = 580;
 
     // Smartmatch operator (~~)
     // Format: SMARTMATCH rd rs1 rs2

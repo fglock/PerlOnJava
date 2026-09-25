@@ -1042,7 +1042,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             return tiedReturnValue;
         }
         boolean existed = elements.containsKey(key);
-        RuntimeScalar savedValue = existed ? new RuntimeScalar(elements.get(key)) : null;
+        // Preserve an aliased slot's identity across local scope unwind.
+        // Copying the scalar wrapper restores the same value but not the
+        // original referent, which is observable through refaliasing.
+        RuntimeScalar savedValue = existed ? elements.get(key) : null;
         RuntimeScalar returnValue = existed ? new RuntimeScalar(elements.get(key)) : new RuntimeScalar();
         RuntimeHash self = this;
 

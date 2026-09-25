@@ -468,6 +468,11 @@ public class ListParser {
                 // Looks like a subroutine call, not an infix `&`
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like subroutine call");
             } else if (token.text.equals("%") && (nextToken.text.equals("$") || nextToken.text.equals("{")
+                    // %+ and %- are Perl's named-capture hash variables. They
+                    // are tokenized as a '%' sigil followed by '+'/'-', so
+                    // keep them as a variable instead of treating '%' as
+                    // modulus at the start of a return/list expression.
+                    || nextToken.text.equals("+") || nextToken.text.equals("-")
                     || nextToken.type == LexerTokenType.IDENTIFIER
                     // Perl ignores an embedded NUL between a sigil and an
                     // identifier.  Treat this as a hash variable here so it

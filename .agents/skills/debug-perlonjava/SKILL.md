@@ -16,9 +16,10 @@ before planning iteration. Complete related implementation work before an
 expensive test run; use early focused checks when they resolve uncertainty.
 This guidance supersedes the older `make dev` and per-edit build examples below.
 
-Run repository `make` targets with high niceness (low CPU priority) so
+Run repository `make` targets with maximum niceness (lowest CPU priority) so
 parallel development on the same host is not disrupted: use
-`nice -n 19 make <target>`, preserving any timeout and output-capture wrapper.
+`nice -n 19 make <target>`, preserving that wrapper when adding a timeout or
+output-capture redirection.
 
 You are debugging failures in PerlOnJava, a Perl-to-JVM compiler with a bytecode interpreter fallback. This skill covers debugging workflows for test failures, regressions, and parity issues between backends.
 

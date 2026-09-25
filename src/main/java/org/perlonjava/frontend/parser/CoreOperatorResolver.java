@@ -130,6 +130,20 @@ public class CoreOperatorResolver {
             case "last", "next", "redo" -> OperatorParser.parseLast(parser, token, currentIndex);
             case "goto" -> OperatorParser.parseGoto(parser, currentIndex);
             case "return" -> OperatorParser.parseReturn(parser, currentIndex);
+            case "continue" -> {
+                OperatorNode continueNode = new OperatorNode(
+                        "next",
+                        new ListNode(currentIndex), currentIndex);
+                // `continue` in a when block is switch fall-through, whereas
+                // an explicit `next` remains ordinary loop control. Preserve
+                // the source spelling so parseWhenStatement can distinguish
+                // the two after this normalization.
+                continueNode.setAnnotation("whenContinue", true);
+                yield continueNode;
+            }
+            case "break" -> new OperatorNode(
+                    "last",
+                    new ListNode(currentIndex), currentIndex);
             case "eval", "evalbytes" -> OperatorParser.parseEval(parser, token.text);
             case "do" -> OperatorParser.parseDoOperator(parser);
             case "require" -> OperatorParser.parseRequire(parser);
