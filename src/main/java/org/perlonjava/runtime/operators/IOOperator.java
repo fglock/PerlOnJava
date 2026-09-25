@@ -980,6 +980,15 @@ public class IOOperator {
             RuntimeScalar newGlob = new RuntimeScalar();
             newGlob.type = RuntimeScalarType.GLOBREFERENCE;
             RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(fh);
+            String lexicalName = RuntimeCode.findActiveLexicalName(fileHandle);
+            if (lexicalName == null) {
+                lexicalName = fileHandle.lexicalDisplayName;
+            }
+            if (lexicalName != null && lexicalName.startsWith("$")) {
+                // A lexical filehandle is an anonymous GV, but Perl retains
+                // its pad name for stringification across recursive calls.
+                anonGlob.setStringificationName("main::" + lexicalName);
+            }
             newGlob.value = anonGlob;
             // Register for GC-based fd recycling (mimics Perl's DESTROY on scope exit)
             RuntimeIO.registerGlobForFdRecycling(anonGlob, fh);
@@ -1071,10 +1080,8 @@ public class IOOperator {
         return fh.close();
     }
 
-    private static boolean unopenedWarningsEnabled() {
-        return getGlobalVariable("main::" + Character.toString('W' - 'A' + 1)).getBoolean()
-                || Warnings.warningManager.isWarningEnabled("unopened")
-                || Warnings.warningManager.isWarningEnabled("all");
+    static boolean unopenedWarningsEnabled() {
+        return Warnings.isCategoryEnabledAtPerlXsCaller("unopened");
     }
 
     private static String filehandleShortName(RuntimeScalar handle) {

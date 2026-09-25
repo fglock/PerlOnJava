@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.runtimetypes.*;
+import org.perlonjava.runtime.io.ClosedIOHandle;
 
 import java.nio.charset.StandardCharsets;
 
@@ -53,7 +54,7 @@ public class Readline {
                 if ("-".equals(fileHandle.toString()) || name.contains("ARGV")) {
                     return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef;
                 }
-                WarnDie.warn(new RuntimeScalar("readline() on unopened filehandle"), new RuntimeScalar("\n"));
+                WarnDie.warn(new RuntimeScalar("readline() on unopened filehandle"), new RuntimeScalar(""));
                 return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef;
             }
             fh = fileHandle.getRuntimeIO();
@@ -62,14 +63,14 @@ public class Readline {
         }
 
         if (fh == null) {
-            if (sourceName != null && sourceName.contains("ARGV")) {
+            if (sourceName != null && (sourceName.equals("ARGV") || sourceName.endsWith("::ARGV"))) {
                 return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef;
             }
             // DATA exists as a special handle even in a source file that has no
             // __DATA__ section.  Perl returns undef silently in that case;
             // treating it as an ordinary unopened handle emits a spurious
             // warning for expressions such as `chop($line .= <DATA>)`.
-            if ("DATA".equals(RuntimeIO.getLastReadlineHandleName())) {
+            if (sourceName != null && (sourceName.equals("DATA") || sourceName.endsWith("::DATA"))) {
                 return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef;
             }
 
@@ -77,10 +78,15 @@ public class Readline {
             // rather than dying.  The diagnostic belongs to the `unopened`
             // warning category, so it must remain silent when that category
             // is disabled (including Perl's default warning state).
-            WarnDie.warnWithCategory(
-                    new RuntimeScalar("readline() on unopened filehandle"),
-                    new RuntimeScalar("\n"),
-                    "unopened");
+            // A named bareword handle records its spelling at compile time;
+            // Perl diagnoses that explicit operation even when it is reached
+            // through a dynamic typeglob assignment (`*x = <y>`).
+            if (sourceName != null || IOOperator.unopenedWarningsEnabled()) {
+                String handleName = sourceName == null || sourceName.isEmpty()
+                        ? "" : " " + sourceName;
+                WarnDie.warn(new RuntimeScalar("readline() on unopened filehandle" + handleName),
+                        new RuntimeScalar(""));
+            }
             return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef;
         }
 
@@ -88,6 +94,23 @@ public class Readline {
                 || !(fh.getDiagnosticReadlineHandleName().contains("[")
                 || fh.getDiagnosticReadlineHandleName().contains("{")))) {
             fh.setDiagnosticReadlineHandleName(sourceName);
+        }
+        if (!(fh instanceof TieHandle)
+                && (fh.ioHandle == null
+                || (fh.ioHandle instanceof ClosedIOHandle && fh.directoryIO == null))) {
+            // A qualified ARGV glob is an ordinary handle, but Perl's probe
+            // for it after the global ARGV machinery has been detached is
+            // silent rather than an unopened-handle diagnostic.
+            if (sourceName != null && sourceName.endsWith("::ARGV")) {
+                return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef;
+            }
+            if (sourceName != null || IOOperator.unopenedWarningsEnabled()) {
+                String handleName = sourceName == null || sourceName.isEmpty()
+                        ? "" : " " + sourceName;
+                WarnDie.warn(new RuntimeScalar("readline() on unopened filehandle" + handleName),
+                        new RuntimeScalar(""));
+            }
+            return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef;
         }
         // Perl's delayed warn/die filehandle context follows a scalar readline.
         // A list read is consumed as a scoped aggregate and must not leave
@@ -119,6 +142,14 @@ public class Readline {
         // Flush stdout and stderr before reading, in case we are displaying a prompt
         RuntimeIO.flushFileHandles();
 
+        // A filehandle opened on a directory is distinct from a dirhandle.
+        // Perl's readline reports EISDIR and returns undef in either record
+        // separator mode; it must not attempt to read the closed file stream.
+        if (runtimeIO.directoryIO != null) {
+            getGlobalVariable("main::!").set(21); // EISDIR
+            return externalUndef();
+        }
+
         // Check if the IO object is set up for reading
         // Set this as the last accessed handle for $. (INPUT_LINE_NUMBER) special variable
         RuntimeIO.setLastAccessedHandle(runtimeIO);
@@ -149,7 +180,10 @@ public class Readline {
             while (true) {
                 chunk = runtimeIO.ioHandle.read(8192);
                 String chunkStr = chunk.toString();
-                if (chunkStr.isEmpty()) break;
+                if (chunkStr.isEmpty()) {
+                    if (getGlobalVariable("main::!").getInt() == 21) return externalUndef();
+                    break;
+                }
                 if (chunk.type != RuntimeScalarType.BYTE_STRING) isByteData = false;
                 content.append(chunkStr);
             }
@@ -325,7 +359,8 @@ public class Readline {
         }
 
         // Return undef if we've reached EOF and no characters were read
-        if (line.isEmpty() && runtimeIO.eof().getBoolean()) {
+        if (line.isEmpty() && (runtimeIO.eof().getBoolean()
+                || getGlobalVariable("main::!").getInt() == 21)) {
             return externalUndef();
         }
 

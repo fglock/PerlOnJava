@@ -334,6 +334,10 @@ public class CustomFileChannel implements IOHandle {
      */
     @Override
     public RuntimeScalar doRead(int maxBytes, Charset charset) {
+        if (filePath != null && Files.isDirectory(filePath)) {
+            getGlobalVariable("main::!").set(21); // EISDIR
+            return new RuntimeScalar();
+        }
         try {
             byte[] buffer = new byte[maxBytes];
             ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
@@ -362,6 +366,11 @@ public class CustomFileChannel implements IOHandle {
             System.arraycopy(buffer, 0, result, 0, bytesRead);
             return new RuntimeScalar(result);
         } catch (IOException e) {
+            String msg = e.getMessage();
+            if (msg != null && msg.toLowerCase().contains("is a directory")) {
+                getGlobalVariable("main::!").set(21); // EISDIR
+                return new RuntimeScalar();
+            }
             return handleIOException(e, "Read operation failed");
         }
     }
@@ -818,9 +827,11 @@ public class CustomFileChannel implements IOHandle {
         } catch (IOException e) {
             String msg = e.getMessage();
             if (msg != null && msg.toLowerCase().contains("is a directory")) {
-                // Treat EISDIR as EOF - don't set $!
-                // This matches platforms that can "read directories as plain files"
-                return new RuntimeScalar("");
+                // A failed read from a directory is EISDIR.  Returning an
+                // empty string falsely represents successful EOF and makes
+                // readline return a defined value rather than undef.
+                getGlobalVariable("main::!").set(21);
+                return new RuntimeScalar();
             }
             getGlobalVariable("main::!").set(e.getMessage());
             return new RuntimeScalar(); // undef

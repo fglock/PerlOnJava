@@ -178,8 +178,16 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
             currentState.value = this.lvalue.value;
             currentState.blessId = this.lvalue.blessId;
             dynamicStateStack().push(currentState);
-            // Clear the current type and value
-            this.undefine();
+            // A localized hash slot is an ordinary scalar localization, not
+            // `undef &name`: it must become an actual undef value even when
+            // its previous value was CODE.  RuntimeScalar.undefine() retains
+            // a declared CODE identity for named subroutine slots, which
+            // would leave `local $SIG{__DIE__}` callable in the inner scope.
+            this.lvalue.type = RuntimeScalarType.UNDEF;
+            this.lvalue.value = null;
+            this.lvalue.globalCodeRefFqn = null;
+            this.type = RuntimeScalarType.UNDEF;
+            this.value = null;
         }
     }
 

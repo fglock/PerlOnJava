@@ -53,6 +53,16 @@ public class WarnDie {
         return "DEFAULT".equals(s) || "IGNORE".equals(s);
     }
 
+    /** A localized CODE slot may remain declared while its callable body is absent. */
+    private static boolean hasUsableSigHandler(RuntimeScalar sig) {
+        if (sig == null || !sig.getDefinedBoolean()) {
+            return false;
+        }
+        return sig.type != RuntimeScalarType.CODE
+                || !(sig.value instanceof RuntimeCode code)
+                || code.defined();
+    }
+
     private static Throwable unwrapException(Throwable throwable) {
         Throwable current = throwable;
 
@@ -130,7 +140,7 @@ public class WarnDie {
         }
 
         RuntimeScalar sig = getGlobalHash("main::SIG").get("__DIE__");
-        if (!sig.getDefinedBoolean() || isReservedSigString(sig)) {
+        if (!hasUsableSigHandler(sig) || isReservedSigString(sig)) {
             return e;
         }
 
@@ -215,7 +225,7 @@ public class WarnDie {
         }
 
         RuntimeScalar sig = getGlobalHash("main::SIG").get("__DIE__");
-        if (sig.getDefinedBoolean() && !isReservedSigString(sig)) {
+        if (hasUsableSigHandler(sig) && !isReservedSigString(sig)) {
             RuntimeArray args = new RuntimeArray();
             RuntimeArray.push(args, new RuntimeScalar(err));
 
@@ -354,7 +364,7 @@ public class WarnDie {
             }
         }
 
-        if (sig.getDefinedBoolean() && !isReservedSigString(sig)) {
+        if (hasUsableSigHandler(sig) && !isReservedSigString(sig)) {
             RuntimeArray args = new RuntimeArray();
             RuntimeArray.push(args, finalMessage);
 
@@ -640,7 +650,7 @@ public class WarnDie {
         // System.out.println("die :" + errVariable);
 
         RuntimeScalar sig = getGlobalHash("main::SIG").get("__DIE__");
-        if (sig.getDefinedBoolean() && !isReservedSigString(sig)) {
+        if (hasUsableSigHandler(sig) && !isReservedSigString(sig)) {
             RuntimeScalar sigHandler = new RuntimeScalar(sig);
 
             // Undefine $SIG{__DIE__} before calling the handler to avoid infinite recursion
@@ -730,7 +740,7 @@ public class WarnDie {
 
     private static RuntimeScalar snapshotWarningHandler() {
         RuntimeScalar handler = getGlobalHash("main::SIG").get("__WARN__");
-        if (handler == null || !handler.getDefinedBoolean() || isReservedSigString(handler)) {
+        if (!hasUsableSigHandler(handler) || isReservedSigString(handler)) {
             return null;
         }
         RuntimeScalar retained = new RuntimeScalar();

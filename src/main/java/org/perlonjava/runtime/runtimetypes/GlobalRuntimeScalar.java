@@ -16,10 +16,16 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                 PerlRuntime.current().executionState().globalScalarStates;
     }
     private final String fullName;
+    private final boolean replaceTiedValueOnLocalize;
 
     public GlobalRuntimeScalar(String fullName) {
+        this(fullName, false);
+    }
+
+    private GlobalRuntimeScalar(String fullName, boolean replaceTiedValueOnLocalize) {
         super();
         this.fullName = fullName;
+        this.replaceTiedValueOnLocalize = replaceTiedValueOnLocalize;
     }
 
     boolean localizes(String variableName) {
@@ -78,6 +84,17 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         return GlobalVariable.getGlobalVariable(fullName);
     }
 
+    /** Localize implicit foreach $_ without exposing outer scalar magic. */
+    public static RuntimeScalar makeLocalForForeach(String fullName) {
+        RuntimeScalar original = GlobalVariable.getGlobalVariable(fullName);
+        if (fullName.endsWith("::_") && original.type == RuntimeScalarType.TIED_SCALAR) {
+            var localMarker = new GlobalRuntimeScalar(fullName, true);
+            DynamicVariableManager.pushLocalVariable(localMarker);
+            return GlobalVariable.getGlobalVariable(fullName);
+        }
+        return makeLocal(fullName);
+    }
+
     public static void rejectReadonlyCaptureAssignment() {
         throw new PerlCompilerException("Modification of a read-only value attempted");
     }
@@ -95,7 +112,8 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         // value). This matches real Perl semantics and is required by
         // modules like File::chdir whose tied $CWD actually chdir's in
         // STORE. See dev/modules/git_modules_support.md.
-        if (originalVariable != null
+        if (!replaceTiedValueOnLocalize
+                && originalVariable != null
                 && originalVariable.type == RuntimeScalarType.TIED_SCALAR) {
             RuntimeScalar savedValue = originalVariable.tiedFetch();
             // Real Perl dispatches STORE(undef) on entry to localize so
@@ -166,10 +184,9 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                 // Tied path: the slot was never replaced. Restore the
                 // original value by dispatching STORE on the tied scalar.
                 if (saved.originalVariable != null
-                        && saved.originalVariable.type == RuntimeScalarType.TIED_SCALAR) {
-                    if (saved.savedTiedValue != null) {
-                        saved.originalVariable.tiedStore(saved.savedTiedValue);
-                    }
+                        && saved.originalVariable.type == RuntimeScalarType.TIED_SCALAR
+                        && saved.savedTiedValue != null) {
+                    saved.originalVariable.tiedStore(saved.savedTiedValue);
                     return;
                 }
 

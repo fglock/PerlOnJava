@@ -5339,9 +5339,17 @@ public class BytecodeCompiler implements Visitor {
             // General fallback for any lvalue expression (matches JVM backend behavior)
             // Handles: local $hash{key}, local $array[index], local $obj->method->{key}, etc.
             if (node.operand instanceof BinaryOperatorNode binOp) {
+                // A hash slice is itself the localizable lvalue list.  Compiling
+                // it in scalar context extracts its last element, so only that
+                // key is restored at scope exit (for example, `local
+                // @Flibbert::{<bar baz>}` used to leave `bar` behind).
+                boolean hashSlice = binOp.operator.equals("{")
+                        && binOp.left instanceof OperatorNode sliceOp
+                        && sliceOp.operator.equals("@");
                 beginLocalHashLvalueCompile();
                 try {
-                    compileNode(binOp, -1, RuntimeContextType.SCALAR);
+                    compileNode(binOp, -1,
+                            hashSlice ? RuntimeContextType.LIST : RuntimeContextType.SCALAR);
                 } finally {
                     endLocalHashLvalueCompile();
                 }
@@ -6390,6 +6398,7 @@ public class BytecodeCompiler implements Visitor {
         // Track if any localization opcodes are emitted (including defer blocks which use DVM)
         if (opcode == Opcodes.LOCAL_SCALAR || opcode == Opcodes.LOCAL_ARRAY ||
                 opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB || opcode == Opcodes.LOCAL_GLOB_REF ||
+                opcode == Opcodes.LOCAL_SCALAR_DYNAMIC ||
                 opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL ||
                 opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.PUSH_CANCEL
                 || opcode == Opcodes.SAVE_REGEX_STATE) {
@@ -6406,6 +6415,7 @@ public class BytecodeCompiler implements Visitor {
         // Track if any localization opcodes are emitted (including defer blocks which use DVM)
         if (opcode == Opcodes.LOCAL_SCALAR || opcode == Opcodes.LOCAL_ARRAY ||
                 opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB || opcode == Opcodes.LOCAL_GLOB_REF ||
+                opcode == Opcodes.LOCAL_SCALAR_DYNAMIC ||
                 opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL ||
                 opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.PUSH_CANCEL
                 || opcode == Opcodes.SAVE_REGEX_STATE) {

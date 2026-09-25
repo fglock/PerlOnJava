@@ -74,6 +74,12 @@ public class SpecialBlockParser {
         symbolTable = st;
     }
 
+    /** Reset parser-global BEGIN/use state between top-level programs. */
+    public static void resetTopLevelState() {
+        symbolTable = new ScopedSymbolTable();
+        compileTimeMutationScopes.remove();
+    }
+
     /**
      * Parses a special block.
      *

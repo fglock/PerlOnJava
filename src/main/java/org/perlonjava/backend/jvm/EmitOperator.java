@@ -12,6 +12,7 @@ import org.perlonjava.runtime.operators.OperatorHandler;
 import org.perlonjava.runtime.operators.ScalarGlobOperator;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
+import org.perlonjava.runtime.perlmodule.Version;
 
 /**
  * The EmitOperator class is responsible for handling various operators
@@ -1242,7 +1243,7 @@ public class EmitOperator {
             // Set $PackageName::VERSION at compile time using GlobalVariable
             String versionVarName = name + "::VERSION";
             GlobalVariable.getGlobalVariable(versionVarName)
-                    .set(new RuntimeScalar(version));
+                    .set(Version.packageDeclarationVersion(version));
         }
 
         // Set the current package in the symbol table.

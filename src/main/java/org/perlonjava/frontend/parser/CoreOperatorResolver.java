@@ -123,6 +123,7 @@ public class CoreOperatorResolver {
             case "delete", "exists" -> OperatorParser.parseDelete(parser, token, currentIndex);
             case "defined" -> OperatorParser.parseDefined(parser, token, currentIndex);
             case "scalar", "values", "keys", "each" -> OperatorParser.parseKeys(parser, token, currentIndex);
+            case "lock" -> parseLock(parser, token, currentIndex, coreQualified);
             case "our", "state", "my" ->
                     OperatorParser.parseVariableDeclaration(parser, token.text, currentIndex, sourceIndex);
             case "local" -> OperatorParser.parseLocal(parser, token, currentIndex);
@@ -239,6 +240,17 @@ public class CoreOperatorResolver {
             parser.ctx.symbolTable.setCurrentSubroutine(previousSubName);
             parser.parsingPrototypeOperator = previousPrototypeOperator;
         }
+    }
+
+    /** lock's prototype accepts several reference kinds, but the core op itself needs one. */
+    private static Node parseLock(
+            Parser parser, LexerToken token, int currentIndex, boolean coreQualified) {
+        LexerToken next = peek(parser);
+        if (next.type == LexerTokenType.EOF || next.text.equals(";")
+                || next.text.equals("}") || next.text.equals(")")) {
+            parser.throwError("Not enough arguments for lock");
+        }
+        return parseWithPrototype(parser, token, currentIndex, coreQualified);
     }
 
     /**

@@ -824,11 +824,10 @@ public class CompileBinaryOperator {
             // as RuntimeArray/RuntimeHash rather than scalarizing it to size.
             leftCtx = RuntimeContextType.OBJECT;
         }
-        bytecodeCompiler.compileNode(node.left, -1, leftCtx);
-        int rs1 = bytecodeCompiler.lastResultReg;
-
         // Anonymous lexical and aggregate-element handles have no globName,
         // but Perl includes their source spelling in $.-context diagnostics.
+        // Set it before resolving the handle: resolving a glob can otherwise
+        // retire the previous statement's one-shot diagnostic state.
         if (node.operator.equals("readline")) {
             Object handleName = node.getAnnotation("handleName");
             if (handleName instanceof String name) {
@@ -836,6 +835,9 @@ public class CompileBinaryOperator {
                 bytecodeCompiler.emit(bytecodeCompiler.addToStringPool(name));
             }
         }
+
+        bytecodeCompiler.compileNode(node.left, -1, leftCtx);
+        int rs1 = bytecodeCompiler.lastResultReg;
 
         int rightCtx;
         if (isListOp) {

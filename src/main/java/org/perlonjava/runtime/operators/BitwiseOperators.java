@@ -145,6 +145,15 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise OR operation.
      */
     public static RuntimeScalar bitwiseOr(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
+        // A real typeglob cannot be coerced into the numeric lvalue used by
+        // `*FH |= 0`.  Proxy/PVLV values deliberately remain eligible for the
+        // ordinary string-bitwise path, as they are mutable scalar lvalues.
+        if (runtimeScalar instanceof RuntimeGlob
+                && (arg2.type == RuntimeScalarType.INTEGER
+                    || arg2.type == RuntimeScalarType.DOUBLE
+                    || arg2.type == RuntimeScalarType.DUALVAR)) {
+            throw new PerlCompilerException("Can't coerce GLOB to integer in bitwise operation");
+        }
         // Fast path: both INTEGER - skip all checks (looksLikeNumber, tied)
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;

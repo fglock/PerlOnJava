@@ -1774,7 +1774,7 @@ public class StatementParser {
             return;
         }
         if (version.matches("(?:0|[1-9]\\d*)(?:\\.\\d+)?")
-                || version.matches("v\\d+(?:\\.\\d{1,3}){2,}")) {
+                || version.matches("v(?:0|[1-9]\\d*)(?:\\.\\d{1,3}){2,}")) {
             return;
         }
 
@@ -1785,6 +1785,8 @@ public class StatementParser {
             String body = version.substring(1);
             if (body.contains("_")) {
                 diagnostic = "underscore";
+            } else if (body.matches("0\\d+(?:\\.\\d+)*")) {
+                diagnostic = "no leading zeros";
             } else if (!body.matches("\\d+(?:\\.\\d+)*") || body.chars().filter(c -> c == '.').count() < 2) {
                 diagnostic = "dotted-decimal versions require at least three parts";
             } else if (hasOversizedDottedComponent(body)) {

@@ -1408,6 +1408,14 @@ public class Disassemble {
                         sb.append("DEFINED_GLOB r").append(rd).append(" = defined(*r").append(rs)
                           .append(") pkg=").append(interpretedCode.stringPool[definedGlobPkgIdx]).append("\n");
                         break;
+                    case Opcodes.DEFINED_SCALAR_DEREF:
+                        rd = interpretedCode.bytecode[pc++];
+                        rs = interpretedCode.bytecode[pc++];
+                        int definedScalarPkgIdx = interpretedCode.bytecode[pc++];
+                        sb.append("DEFINED_SCALAR_DEREF r").append(rd).append(" = defined(${r")
+                          .append(rs).append("}) pkg=")
+                          .append(interpretedCode.stringPool[definedScalarPkgIdx]).append("\n");
+                        break;
                     case Opcodes.REF:
                         rd = interpretedCode.bytecode[pc++];
                         rs = interpretedCode.bytecode[pc++];
@@ -1937,6 +1945,13 @@ public class Disassemble {
                         int lgdRd = interpretedCode.bytecode[pc++];
                         int lgdNameReg = interpretedCode.bytecode[pc++];
                         sb.append("LOCAL_GLOB_DYNAMIC r").append(lgdRd).append(" = pushLocalVariable(glob r").append(lgdNameReg).append(")\n");
+                        break;
+                    }
+                    case Opcodes.LOCAL_SCALAR_DYNAMIC: {
+                        int lsdRd = interpretedCode.bytecode[pc++];
+                        int lsdNameReg = interpretedCode.bytecode[pc++];
+                        sb.append("LOCAL_SCALAR_DYNAMIC r").append(lsdRd)
+                                .append(" = local $r").append(lsdNameReg).append("\n");
                         break;
                     }
                     case Opcodes.LOCAL_GLOB_REF: {

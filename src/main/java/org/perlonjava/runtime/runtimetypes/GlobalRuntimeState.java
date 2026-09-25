@@ -30,6 +30,8 @@ public final class GlobalRuntimeState {
     private final Map<String, Boolean> operatorOverrideGlobs = new HashMap<>();
     private final Map<String, RuntimeScalar> codeRefs = new HashMap<>();
     private final Map<String, RuntimeScalar> pseudoConstants = new HashMap<>();
+    /** Compact values stored directly in a package stash before GV promotion. */
+    private final Map<String, RuntimeScalar> compactStashValues = new HashMap<>();
     private final Map<String, RuntimeScalar> pinnedCodeRefs = new HashMap<>();
     private final Set<String> deletedCodeRefPins = new HashSet<>();
     private final Map<Integer, RuntimeScalar> compiledCodeRefs = new HashMap<>();
@@ -98,6 +100,10 @@ public final class GlobalRuntimeState {
 
     Map<String, RuntimeScalar> pseudoConstants() {
         return pseudoConstants;
+    }
+
+    Map<String, RuntimeScalar> compactStashValues() {
+        return compactStashValues;
     }
 
     Map<String, RuntimeScalar> pinnedCodeRefs() {
@@ -259,6 +265,7 @@ public final class GlobalRuntimeState {
         operatorOverrideGlobs.clear();
         codeRefs.clear();
         pseudoConstants.clear();
+        compactStashValues.clear();
         pinnedCodeRefs.clear();
         deletedCodeRefPins.clear();
         compiledCodeRefs.clear();
@@ -305,6 +312,7 @@ public final class GlobalRuntimeState {
         cloneMap(temporaryScalarAliases, target.temporaryScalarAliases, cloner, RuntimeScalar.class);
         cloneMap(codeRefs, target.codeRefs, cloner, RuntimeScalar.class);
         cloneMap(pseudoConstants, target.pseudoConstants, cloner, RuntimeScalar.class);
+        cloneMap(compactStashValues, target.compactStashValues, cloner, RuntimeScalar.class);
         cloneMap(pinnedCodeRefs, target.pinnedCodeRefs, cloner, RuntimeScalar.class);
         // Parsers register many inert glob placeholders (notably through eval).
         // Cloning all of them into every ithread makes snapshot cost quadratic

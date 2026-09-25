@@ -300,7 +300,11 @@ tasks.withType(Test).configureEach {
     // requires Java 24, where explicitly allowing it suppresses the terminal
     // deprecation banner while retaining the tested Netty allocation path.
     jvmArgs += '--sun-misc-unsafe-memory-access=allow'
-    maxHeapSize = '1g'
+    // The Perl test corpus loads sizeable bundled tables (for example
+    // I18N::LangTags via Test2).  A 1 GiB Gradle worker can be terminated by
+    // the host before it reports an OOME; keep it below the command-line
+    // default while providing enough headroom for one shard.
+    maxHeapSize = '2g'
 }
 
 // Enable native access for all Java execution tasks
@@ -340,6 +344,12 @@ tasks.withType(Test).configureEach { t ->
 tasks.register('testUnit', Test) {
     description = 'Runs fast unit tests only (from unit/ directory)'
     group = 'verification'
+
+    // A Test task registered outside Gradle's Java plugin defaults has no
+    // test classes.  Point this gate at the project test source set so it is
+    // a real full unit gate, not a successful NO-SOURCE no-op.
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
     
     useJUnitPlatform {
         includeTags 'unit'
@@ -695,9 +705,12 @@ tasks.named('processTestResources', Copy) {
 // round-robin the remaining tests. This keeps wall-time roughly balanced
 // even when one test dominates (e.g. unit/code_too_large.t).
 def parallelShards = 5
+def jperlTestShardProp = providers.environmentVariable('JPERL_TEST_SHARD').orElse('')
+def unitShardTasks = []
 
 (0..<parallelShards).each { index ->
-    tasks.register("testUnitShard${index}", Test) {
+    def workerTaskName = index == 2 ? 'testUnitShard2Worker' : "testUnitShard${index}"
+    def shardTask = tasks.register(workerTaskName, Test) {
         group = 'verification'
         description = "Runs shard ${index} of ${parallelShards} of unit tests"
         
@@ -711,14 +724,46 @@ def parallelShards = 5
         
         testClassesDirs = sourceSets.test.output.classesDirs
         classpath = sourceSets.test.runtimeClasspath
+
+        // PerlScriptExecutionTest partitions its parameterized Perl corpus
+        // using test.shard.index.  Other @Tag("unit") Java classes are not
+        // sharded, so running them in every task needlessly starts five copies
+        // of expensive stateful test infrastructure.  Keep them in shard 0;
+        // the remaining shards execute only their assigned Perl scripts.
+        if (index > 0) {
+            include '**/PerlScriptExecutionTest.class'
+        }
+
+        // testUnitParallel also runs the Joni gate.  It is a separate
+        // high-memory test JVM, so finish it before starting the Perl shards
+        // instead of racing its worker startup against a shard worker.
+        mustRunAfter tasks.named('testJoni')
+
+        // Diagnostic-only selector: retain the normal five-shard gate by
+        // default, while allowing a single lane to be reproduced without
+        // competing workers.
+        onlyIf {
+            jperlTestShardProp.get().isEmpty() || jperlTestShardProp.get() == "$index"
+        }
+    }
+    unitShardTasks.add(workerTaskName)
+
+    // Keep the historical task name callable while using a fresh Test task
+    // identity for shard 2.  Gradle's old task identity repeatedly loses its
+    // worker IPC channel before the JVM starts on this host.
+    if (index == 2) {
+        tasks.register('testUnitShard2') {
+            group = 'verification'
+            description = 'Compatibility alias for shard 2'
+            dependsOn shardTask
+        }
     }
 }
 
 tasks.register('testUnitParallel') {
     group = 'verification'
     description = 'Runs unit tests in parallel across multiple JVMs. Usage: gradle testUnitParallel --parallel'
-    def shardTasks = (0..<parallelShards).collect { "testUnitShard${it}" }
-    dependsOn shardTasks
+    dependsOn unitShardTasks
     dependsOn testJoni
     dependsOn verifyJoniPackaging
 }

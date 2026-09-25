@@ -13,11 +13,21 @@ priorities and future plans.
 - Restore the public `YAML::Syck` API and legacy template parsing, including
   exports, file helpers, percent placeholders, duplicate keys, and tabs.
 
+- Restore package v-string declarations as `version` objects, including
+  v-string comparisons and leading-zero diagnostics.
+
+- Synchronize shared aggregate traversal during thread destruction, preventing
+  intermittent `ConcurrentModificationException` failures in nested joins.
+
 - Restore `op/ref.t` destructor reblessing semantics, invoking the new class's
   `DESTROY` method after an object is reblessed during destruction.
 
 - Restore core compatibility for protected `DESTROY` invocants, tied hint-hash
   cloning, compile-time `__DIE__` diagnostics, and barehandle `eof` precedence.
+
+- Restore core `gv`, `local`, and Unicode glob compatibility, including
+  localized magic-stash slices and glob patterns whose first word is not a
+  filehandle.
 
 - Restore qx handling of leading POSIX environment assignments, unblocking
   Getopt::Complete shell completion on both execution backends.

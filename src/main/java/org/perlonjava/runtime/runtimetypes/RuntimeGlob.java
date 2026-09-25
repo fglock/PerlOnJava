@@ -88,8 +88,30 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         return null;
     }
 
+    /** True when this call itself localized {@code *_}, even with no ARRAY slot. */
+    private static boolean isUnderscoreGlobLocalizedForCurrentCall() {
+        int currentArgsDepth = RuntimeCode.argsStackDepth();
+        for (int i = globSlotStack().size() - 1; i >= 0; i--) {
+            GlobSlotSnapshot snapshot = globSlotStack().get(i);
+            String name = snapshot.globName();
+            if (snapshot.argsStackDepth() == currentArgsDepth
+                    && name != null && name.endsWith("::_")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isUnderscoreGlobName(String name) {
+        return "_".equals(name) || "main::_".equals(name);
+    }
+
     // The name of the typeglob
     public String globName;
+    // A full typeglob assignment aliases the visible GV identity as well as
+    // its slots.  NAME/PACKAGE keep reporting the destination's own symbol,
+    // while ordinary stringification reports the assigned source GV.
+    private String stringificationName;
     public RuntimeScalar IO;
     // Keep an anonymous source glob alive when its IO slot is assigned into a
     // named glob (for example local *STDIN = $tempfile).  The named glob owns
@@ -188,6 +210,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      */
     public RuntimeGlob createDetachedCopy() {
         RuntimeGlob copy = new RuntimeGlob(this.globName);
+        copy.stringificationName = this.stringificationName;
         copy.slotSnapshot = true;
         copy.IO = this.IO;  // Share the current IO reference
         // A copied typeglob retains the CODE slot that was visible when it was
@@ -513,6 +536,62 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case CODE:
                 String codeSlotName = GlobalVariable.resolveGlobAlias(this.globName);
                 boolean writesThroughGlobAlias = !codeSlotName.equals(this.globName);
+                // A target that already has any non-IO slot is a full GV.
+                // Exporting a proxy constant into it replaces only CODE; it
+                // must not turn the stash hash view back into a scalar proxy.
+                boolean destinationAlreadyPromoted =
+                        GlobalVariable.globalCodeRefs.containsKey(codeSlotName)
+                                || GlobalVariable.globalVariables.containsKey(codeSlotName)
+                                || GlobalVariable.globalArrays.containsKey(codeSlotName)
+                                || GlobalVariable.globalHashes.containsKey(codeSlotName)
+                                || GlobalVariable.globalFormatRefs.containsKey(codeSlotName);
+                // Exporting a proxy constant through a typeglob keeps the
+                // destination's stash entry as the same SCALAR reference,
+                // while its CODE slot remains callable.  This is how
+                // `*dest = \&source` differs from defining an ordinary sub.
+                if (value.value instanceof RuntimeCode sourceCode) {
+                    String sourcePseudoName = sourceCode.referenceOriginFqn;
+                    if (sourcePseudoName == null) {
+                        // A symbolic \&name can reuse the installed constant
+                        // CV directly.  That shared CV has no per-reference
+                        // origin, but its constant value still identifies the
+                        // pseudo-constant stash entry.
+                        sourcePseudoName = GlobalVariable.findPseudoConstantCodeRefName(sourceCode);
+                    }
+                    RuntimeScalar sourcePseudo = sourcePseudoName == null ? null
+                            : GlobalVariable.getGlobalPseudoConstant(sourcePseudoName);
+                    if (sourcePseudo != null && !destinationAlreadyPromoted) {
+                        boolean previouslyExported =
+                                GlobalVariable.isPseudoConstantExported(sourcePseudoName, sourcePseudo);
+                        if (previouslyExported) {
+                            // A second glob export of the same compact CV
+                            // forces the source and destination into full GVs
+                            // (gv.t's dangling-CV case).
+                            GlobalVariable.clearGlobalPseudoConstant(sourcePseudoName);
+                            GlobalVariable.clearGlobalPseudoConstant(codeSlotName);
+                            sourceCode.isDeclared = true;
+                            GlobalVariable.defineGlobalCodeRef(sourcePseudoName).set(value);
+                            // The receiving slot is part of the same second
+                            // export operation.  Materialize it too: leaving
+                            // it as a compact proxy makes \$::{dest} report
+                            // REF rather than Perl's full GLOB identity.
+                            GlobalVariable.defineGlobalCodeRef(codeSlotName).set(value);
+                        } else {
+                            GlobalVariable.setGlobalPseudoConstant(this.globName, sourcePseudo);
+                        }
+                    }
+                    // constant.pm's existing-symbol fallback installs a
+                    // temporary constant::_dummy CV into the destination
+                    // glob.  The CV is no longer anonymous once published:
+                    // retain the destination name for later undef/call
+                    // diagnostics (gv.t's runperl regression).
+                    if (sourceCode.referenceOriginFqn == null
+                            || ("constant".equals(sourceCode.packageName)
+                            && ("__ANON__".equals(sourceCode.subName)
+                            || "_dummy".equals(sourceCode.subName)))) {
+                        sourceCode.referenceOriginFqn = this.globName;
+                    }
+                }
                 if (value.value instanceof RuntimeCode aliasedCode
                         && !aliasedCode.defined()
                         && !aliasedCode.lexicalForwardGlobPlaceholder) {
@@ -550,6 +629,24 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 }
                 // Get or create the code ref container
                 RuntimeScalar codeContainer = GlobalVariable.defineGlobalCodeRef(codeSlotName);
+
+                // A non-local typeglob assignment is a redefinition for
+                // prototype purposes too.  Parser-time checks do not see
+                // `*name = sub {}`; preserve Perl's mismatch warning when a
+                // preceding forward declaration supplied a prototype.
+                if (!isLocalizedGlob(this.globName)
+                        && codeContainer.value instanceof RuntimeCode oldCode
+                        && value.value instanceof RuntimeCode newCode
+                        && oldCode != newCode
+                        && oldCode.prototype != null
+                        && oldCode.isDeclared
+                        && !oldCode.defined()
+                        && !java.util.Objects.equals(oldCode.prototype, newCode.prototype)) {
+                    WarnDie.warnWithCategory(
+                            new RuntimeScalar("Prototype mismatch: sub " + this.globName),
+                            RuntimeScalarCache.scalarEmptyString,
+                            "prototype");
+                }
 
                 // A runtime typeglob assignment replaces the CODE slot just as
                 // `*name = sub { ... }` does in Perl.  Emit the lexical
@@ -897,6 +994,19 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             return value.scalar();
         }
 
+        // `*dst = *src` leaves *dst{NAME} and *dst{PACKAGE} attached to dst,
+        // but the scalar glob value stringifies as the source GV. Preserve an
+        // already-propagated source identity through chains of assignments.
+        String sourceStringificationName = value.effectiveStringificationName();
+        this.stringificationName = sourceStringificationName;
+        // Some compiler paths obtain a lightweight glob wrapper for the
+        // lvalue while scalar reads later reach the canonical IO entry. Keep
+        // both views' GV identity synchronized.
+        RuntimeGlob canonicalTarget = GlobalVariable.peekGlobalIO(this.globName);
+        if (canonicalTarget != null) {
+            canonicalTarget.stringificationName = sourceStringificationName;
+        }
+
         if (isStashGlobName(this.globName) && isStashGlobName(value.globName)) {
             if (value.namespaceMove != null) {
                 GlobalVariable.installNamespaceMove(value.namespaceMove, this.globName);
@@ -941,7 +1051,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // RuntimeScalar at compile time. Replacing the map entry would leave cached references
         // pointing to the old (now orphaned) RuntimeScalar, causing calls to fail after
         // the stash entry is deleted.
-        RuntimeScalar sourceCode = GlobalVariable.getGlobalCodeRef(globName);
+        RuntimeScalar sourceCode = value.slotSnapshot
+                ? value.codeSlot
+                : GlobalVariable.getGlobalCodeRef(globName);
+        if (sourceCode == null) {
+            sourceCode = new RuntimeScalar();
+        }
         RuntimeScalar targetCode = GlobalVariable.getGlobalCodeRef(this.globName);
         targetCode.set(sourceCode);  // Copy value into existing RuntimeScalar
         // Invalidate the method resolution cache
@@ -1014,11 +1129,14 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // `@Fooo::ISA = (...)` visible through Baro even when neither side
         // had an ARRAY slot at alias time.  Ordinary absent ARRAY slots stay
         // unmaterialized so `defined *glob{ARRAY}` retains its Perl meaning.
-        if (GlobalVariable.existsGlobalArray(globName)
+        if ((value.slotSnapshot && value.arraySlot != null)
+                || GlobalVariable.existsGlobalArray(globName)
                 || this.globName.endsWith("::ISA")
                 || globName.endsWith("::ISA")) {
             RuntimeArray sourceArray;
-            if (this.globName.endsWith("::ISA") || globName.endsWith("::ISA")) {
+            if (value.slotSnapshot) {
+                sourceArray = value.arraySlot;
+            } else if (this.globName.endsWith("::ISA") || globName.endsWith("::ISA")) {
                 // Read the source slot directly.  Alias-group lookup here can
                 // see Target's old @ISA after `*Target::ISA = *Empty` and
                 // incorrectly retain its inherited classes.
@@ -1031,7 +1149,27 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             } else {
                 sourceArray = GlobalVariable.getGlobalArray(globName);
             }
+            if (sourceArray == null) {
+                sourceArray = GlobalVariable.markPackageGlobalRoot(new RuntimeArray());
+                sourceArray.markIsaArray();
+                GlobalVariable.globalArrays.put(globName, sourceArray);
+            }
+            // Parser-time references to @ISA keep the destination array
+            // object.  Retargeting only the map entry during `*Fooo::ISA =
+            // *Baro::ISA` leaves a later `@Fooo::ISA = ...` writing that old
+            // object while method lookup reads Baro's replacement.  Preserve
+            // the already-visible destination container and make the source
+            // name share it instead.
+            RuntimeArray destinationArray = GlobalVariable.globalArrays.get(this.globName);
+            if (destinationArray != null
+                    && this.globName.endsWith("::ISA")
+                    && globName.endsWith("::ISA")
+                    && destinationArray.size() == 0) {
+                sourceArray = destinationArray;
+                GlobalVariable.globalArrays.put(globName, sourceArray);
+            }
             GlobalVariable.markPackageGlobalRoot(sourceArray);
+            sourceArray.markIsaArray();
             GlobalVariable.globalArrays.put(this.globName, sourceArray);
             GlobalVariable.invalidatePackageRootSnapshot();
         }
@@ -1041,14 +1179,17 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // that mirrors the package's symbol table — getGlobSlot("HASH") returns
         // it unconditionally for stashes, so we must materialise the alias here
         // even if globalHashes hasn't been populated yet.
-        boolean sourceHasHash = GlobalVariable.existsGlobalHash(globName)
+        boolean sourceHasHash = (value.slotSnapshot && value.hashSlot != null)
+                || GlobalVariable.existsGlobalHash(globName)
                 || isStashGlobName(globName)
                 || (!isLocalizedGlob(this.globName)
                     && (globName.equals("main::!")
                         || globName.equals("main::+")
                         || globName.equals("main::-")));
         if (sourceHasHash) {
-            RuntimeHash sourceHash = GlobalVariable.getGlobalHash(globName);
+            RuntimeHash sourceHash = value.slotSnapshot
+                    ? value.hashSlot
+                    : GlobalVariable.getGlobalHash(globName);
             if ("main::ENV".equals(this.globName) || "ENV".equals(this.globName)) {
                 String sourceName = globName.startsWith("main::")
                         ? globName.substring(6) : globName;
@@ -1068,7 +1209,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // neither has been written yet. Without this, the second `*& = 0`
         // hits the original read-only `$&` instead of the freshly-aliased
         // scalar (refstack.t GH#15752).
-        RuntimeScalar sourceScalar = GlobalVariable.getGlobalVariable(globName);
+        RuntimeScalar sourceScalar = value.slotSnapshot
+                ? value.getGlobScalarSlot()
+                : GlobalVariable.getGlobalVariable(globName);
         GlobalVariable.markPackageGlobalRoot(sourceScalar);
         GlobalVariable.globalVariables.put(this.globName, sourceScalar);
         GlobalVariable.invalidatePackageRootSnapshot();
@@ -1185,6 +1328,19 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 yield GlobalVariable.getGlobalVariable(this.globName).createReference();
             }
             case "ARRAY" -> {
+                // `*_{ARRAY}` inside a sub is the live @_ array for that
+                // invocation, not the package-global @_ slot.  This also
+                // preserves the frame-local array through a returned glob
+                // slot reference.
+                if (isUnderscoreGlobName(this.globName)
+                        && !PerlRuntime.current().executionState()
+                                .explicitlyUndefinedGlobArraySlots.contains(this.globName)
+                        && !isUnderscoreGlobLocalizedForCurrentCall()) {
+                    RuntimeArray currentArgs = RuntimeCode.getCurrentArgs();
+                    if (currentArgs != null) {
+                        yield currentArgs.createReference();
+                    }
+                }
                 // For anonymous globs (null globName), use local arraySlot
                 if (this.globName == null) {
                     if (this.arraySlot == null) {
@@ -1439,7 +1595,17 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @return A string in the format "*globName".
      */
     public String toString() {
-        return "*" + this.globName;
+        return "*" + effectiveStringificationName();
+    }
+
+    private String effectiveStringificationName() {
+        return stringificationName != null ? stringificationName : globName;
+    }
+
+    /** Set a display-only GV name for a detached lexical or anonymous glob. */
+    public RuntimeGlob setStringificationName(String name) {
+        this.stringificationName = name;
+        return this;
     }
 
     /**
@@ -1689,6 +1855,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // reference must retain the body so installing it through
         // `*Pkg::name = $ref` restores the contents.
         RuntimeArray oldArray = GlobalVariable.globalArrays.remove(this.globName);
+        if (isUnderscoreGlobName(this.globName)) {
+            PerlRuntime.current().executionState().explicitlyUndefinedGlobArraySlots.add(this.globName);
+        }
         if (oldArray != null && oldArray.refCount == -1) oldArray.undefine();
         // Keep an empty @ISA slot after undefining a glob. A later
         // `*Class::ISA = *Empty` must alias that empty source rather than
@@ -1752,6 +1921,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         RuntimeArray savedArray = GlobalVariable.globalArrays.get(this.globName);
         RuntimeHash savedHash = GlobalVariable.globalHashes.get(this.globName);
         RuntimeScalar savedCode = GlobalVariable.globalCodeRefs.get(this.globName);
+        RuntimeScalar savedPseudoConstant =
+                GlobalVariable.getGlobalPseudoConstant(this.globName);
+        RuntimeScalar savedCompactStashValue =
+                GlobalVariable.getGlobalCompactStashValue(this.globName);
         java.util.List<String> codeAliasGroup = GlobalVariable.isInGlobAliasGroup(this.globName)
                 ? GlobalVariable.getGlobAliasGroup(this.globName) : java.util.List.of(this.globName);
         java.util.Map<String, RuntimeScalar> savedAliasedCodes = new java.util.HashMap<>();
@@ -1781,7 +1954,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         globSlotStack().push(new GlobSlotSnapshot(this.globName,
                 savedScalar, savedArray, savedHash,
                 savedCode, savedAliasedCodes, savedGlobAliasTarget, savedIO, savedSelectedHandle, savedIOVisible,
-                RuntimeCode.argsStackDepth()));
+                savedPseudoConstant, savedCompactStashValue, RuntimeCode.argsStackDepth()));
 
         // Replace global table entries with NEW empty objects instead of mutating the
         // existing ones in-place. This is critical because the existing objects may be
@@ -1880,6 +2053,17 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         GlobSlotSnapshot snap = globSlotStack().pop();
 
         GlobalVariable.restoreGlobAlias(snap.globName, snap.globAliasTarget);
+        // Whole-glob localization temporarily promotes the stash entry.  Its
+        // compact hash representation is a separate part of the GV state and
+        // must return with the saved slots (not remain cleared by the local
+        // assignment).
+        GlobalVariable.clearGlobalPseudoConstant(snap.globName);
+        if (snap.pseudoConstant != null) {
+            GlobalVariable.setGlobalPseudoConstant(snap.globName, snap.pseudoConstant);
+        }
+        if (snap.compactStashValue != null) {
+            GlobalVariable.setGlobalCompactStashValue(snap.globName, snap.compactStashValue);
+        }
 
         // Restore the saved IO object reference on this (old) glob.
         this.IO = snap.io;
@@ -1901,6 +2085,17 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // A null saved value means the slot did not exist before the local
         // scope; remove the placeholder we may have lazily created during the
         // scope so that `defined *glob{SLOT}` reports false again.
+        RuntimeScalar displacedScalar = GlobalVariable.globalVariables.get(snap.globName);
+        if (displacedScalar != null
+                && displacedScalar != snap.scalar
+                && displacedScalar.value instanceof RuntimeBase displacedBase
+                && hasDestroyMethod(displacedBase)) {
+            // Whole-glob localization installs a fresh scalar container.
+            // Replacing that map entry directly would otherwise bypass the
+            // normal reference-release path and suppress DESTROY for values
+            // assigned only within the local scope.
+            displacedScalar.set(new RuntimeScalar());
+        }
         if (snap.scalar != null) {
             GlobalVariable.markPackageGlobalRoot(snap.scalar);
             GlobalVariable.globalVariables.put(snap.globName, snap.scalar);
@@ -2009,6 +2204,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             RuntimeScalar io,
             RuntimeIO savedSelectedHandle,
             boolean ioWasVisible,
+            RuntimeScalar pseudoConstant,
+            RuntimeScalar compactStashValue,
             int argsStackDepth) {
+    }
+
+    private static boolean hasDestroyMethod(RuntimeBase base) {
+        String className = NameNormalizer.getBlessStr(base.blessId);
+        return className != null && DestroyDispatch.classHasDestroy(base.blessId, className);
     }
 }

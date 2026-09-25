@@ -207,7 +207,57 @@ public class OperatorParser {
 
             // Check if the token looks like a Bareword file handle
             if (operand.type == IDENTIFIER) {
-                Node fileHandle = FileHandle.parseFileHandle(parser);
+                // Do not resolve a possible handle until the source actually
+                // has the closing delimiter.  `<alpha beta>` is a glob pattern,
+                // not a read from `alpha`; parsing the latter eagerly
+                // autovivifies its IO glob and leaves a visible stash entry
+                // before the glob expression has run.
+                int nextTokenIndex = parser.tokenIndex + 1;
+                while (nextTokenIndex < parser.tokens.size()
+                        && parser.tokens.get(nextTokenIndex).type == WHITESPACE) {
+                    nextTokenIndex++;
+                }
+                boolean maybeBarewordHandle = nextTokenIndex < parser.tokens.size()
+                        && (parser.tokens.get(nextTokenIndex).text.equals(">")
+                        || parser.tokens.get(nextTokenIndex).text.equals("::"));
+                if (!maybeBarewordHandle) {
+                    parser.tokenIndex = currentTokenIndex;
+                    return StringParser.parseRawString(parser, token.text);
+                }
+                String readlineOverride = "CORE::GLOBAL::readline";
+                // A real override is selected before resolving an otherwise
+                // ordinary bareword handle.  Perl's pre-opened standard
+                // handles remain syntax, so a non-CODE stash entry cannot
+                // make `<STDOUT>` into a call (core_global_io_syntax.t).
+                if (!tokenText.equals("STDIN") && !tokenText.equals("STDOUT")
+                        && !tokenText.equals("STDERR")
+                        && isCompileTimeReadlineOverride(readlineOverride)) {
+                    parser.tokenIndex = currentTokenIndex;
+                    return StringParser.parseRawString(parser, token.text);
+                }
+                // A bareword in diamond syntax is a filehandle even before
+                // its IO slot has been opened.  In particular, `<y>` must
+                // execute an unopened read rather than become the glob
+                // pattern `y`.
+                Node fileHandle = FileHandle.parseFileHandle(parser, true);
+                // Preserve the existing quote-like parser's override dispatch
+                // for ambiguous barewords.  Named core handles such as
+                // <STDOUT> have already resolved above and remain reserved
+                // syntax even if a non-CODE stash entry exists.
+                if (fileHandle == null && parser.tokens.get(parser.tokenIndex).text.equals(">")
+                        && isCompileTimeReadlineOverride(readlineOverride)) {
+                    parser.tokenIndex = currentTokenIndex;
+                    return StringParser.parseRawString(parser, token.text);
+                }
+                // parseFileHandle intentionally rejects a few ambiguous
+                // barewords for print-style syntax. In diamond syntax the
+                // closing `>` has already made this unambiguously a handle,
+                // so ensure an unknown lowercase name receives its unopened
+                // IO slot too.
+                if (fileHandle == null && parser.tokens.get(parser.tokenIndex).text.equals(">")) {
+                    GlobalVariable.vivifyGlobalIO(FileHandle.normalizeBarewordHandle(parser, tokenText));
+                    fileHandle = FileHandle.parseBarewordHandle(parser, tokenText);
+                }
                 if (fileHandle != null) {
                     if (parser.tokens.get(parser.tokenIndex).text.equals(">")) {
                         TokenUtils.consume(parser); // Consume the '>' token
@@ -217,12 +267,24 @@ public class OperatorParser {
                                 new ListNode(parser.tokenIndex), parser.tokenIndex);
                         // Annotate with handle name for error messages (e.g., "FILE")
                         if (fileHandle instanceof IdentifierNode idNode) {
-                            String name = idNode.name;
-                            int colonIdx = name.lastIndexOf("::");
-                            if (colonIdx >= 0 && colonIdx + 2 < name.length()) {
-                                name = name.substring(colonIdx + 2);
-                            }
-                            readlineNode.setAnnotation("handleName", name);
+                            readlineNode.setAnnotation("handleName",
+                                    idNode.name.startsWith("main::")
+                                            ? idNode.name.substring("main::".length())
+                                            : idNode.name);
+                        } else if (fileHandle instanceof OperatorNode reference
+                                && "\\".equals(reference.operator)
+                                && reference.operand instanceof OperatorNode glob
+                                && "*".equals(glob.operator)
+                                && glob.operand instanceof IdentifierNode idNode) {
+                            // FileHandle represents a fully-qualified bareword
+                            // as \*pkg::HANDLE.  Keep the full spelling: ARGV
+                            // is only magical in the main package, so
+                            // <foo::ARGV> must remain an ordinary unopened
+                            // handle rather than diamond input.
+                            readlineNode.setAnnotation("handleName",
+                                    idNode.name.startsWith("main::")
+                                            ? idNode.name.substring("main::".length())
+                                            : idNode.name);
                         } else {
                             // Standard and other pre-resolved bareword handles may be
                             // represented by a glob expression rather than an
@@ -237,6 +299,14 @@ public class OperatorParser {
 
             // Check if the token is a dollar sign, indicating a variable
             if (tokenText.equals("$")) {
+                String readlineOverride = "CORE::GLOBAL::readline";
+                String localReadline = NameNormalizer.normalizeVariableName(
+                        "readline", parser.ctx.symbolTable.getCurrentPackage());
+                if (isCompileTimeReadlineOverride(localReadline)
+                        || isCompileTimeReadlineOverride(readlineOverride)) {
+                    parser.tokenIndex = currentTokenIndex;
+                    return StringParser.parseRawString(parser, token.text);
+                }
                 // Handle the case for <$fh>
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("diamond operator " + token.text + parser.tokens.get(parser.tokenIndex));
                 parser.tokenIndex++;
@@ -2105,6 +2175,21 @@ public class OperatorParser {
                 }
             }
         }
+    }
+
+    /**
+     * A visible CORE::GLOBAL stash entry is not itself an override: assigning
+     * a non-CODE value through {@code $CORE::GLOBAL::{readline}} still leaves
+     * the diamond operator's normal handle syntax intact.
+     */
+    private static boolean isCompileTimeReadlineOverride(String name) {
+        if (!RuntimeGlob.isGlobAssigned(name)
+                || !GlobalVariable.isGlobalCodeRefDefined(name)) {
+            return false;
+        }
+        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(name);
+        return GlobalVariable.isSubs.getOrDefault(name, false)
+                || (codeRef.value instanceof RuntimeCode code && code.isDeclared);
     }
 
     /**

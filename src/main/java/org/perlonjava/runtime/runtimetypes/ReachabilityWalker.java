@@ -641,11 +641,33 @@ public class ReachabilityWalker {
                                               Set<RuntimeBase> seen,
                                               java.util.ArrayDeque<RuntimeBase> todo) {
         if (cur instanceof RuntimeHash h) {
-            for (RuntimeScalar v : h.elements.values()) {
+            // Shared hashes are backed by Collections.synchronizedMap. Its
+            // iterators still require the caller to hold the map monitor;
+            // otherwise a concurrently running Perl thread can invalidate a
+            // destruction-time reachability walk.
+            java.util.List<RuntimeScalar> values;
+            if (h.threadShared) {
+                synchronized (h.elements) {
+                    values = new ArrayList<>(h.elements.values());
+                }
+            } else {
+                values = h.elements.values().stream().toList();
+            }
+            for (RuntimeScalar v : values) {
                 if (enqueueStrongScalar(v, target, seen, todo)) return true;
             }
         } else if (cur instanceof RuntimeArray a) {
-            for (RuntimeScalar v : a.elements) {
+            // See the hash case: iterating a synchronized list without
+            // taking its monitor is explicitly unsafe.
+            java.util.List<RuntimeScalar> values;
+            if (a.threadShared) {
+                synchronized (a.elements) {
+                    values = new ArrayList<>(a.elements);
+                }
+            } else {
+                values = a.elements;
+            }
+            for (RuntimeScalar v : values) {
                 if (enqueueStrongScalar(v, target, seen, todo)) return true;
             }
         } else if (cur instanceof RuntimeCode code) {

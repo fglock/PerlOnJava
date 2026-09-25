@@ -230,11 +230,9 @@ public class ParsePrimary {
                 // An explicitly undef'd CODE slot leaves its typeglob present,
                 // but it no longer overrides the builtin.  In particular,
                 // glob must then resume its File::Glob::csh_glob fallback.
-                boolean timeOverride = operator.equals("time")
-                        && RuntimeGlob.isGlobAssigned(coreGlobalName);
+                boolean coreGlobalOverride = isCompileTimeCoreGlobalOverride(coreGlobalName);
                 if (!operator.equals("readpipe")
-                        && RuntimeGlob.isGlobAssigned(coreGlobalName)
-                        && (GlobalVariable.isGlobalCodeRefDefined(coreGlobalName) || timeOverride)) {
+                        && coreGlobalOverride) {
                     // Example: 'BEGIN { *CORE::GLOBAL::hex = sub { 456 } } print hex("123"), "\n"'
                     
                     // Special handling for 'require' - need to convert bareword module name to string
@@ -309,6 +307,22 @@ public class ParsePrimary {
         // Default: treat as a subroutine call or bareword
         parser.tokenIndex = startIndex;   // backtrack
         return SubroutineParser.parseSubroutineCall(parser, false);
+    }
+
+    /**
+     * CORE::GLOBAL only overrides syntax when its CODE slot was actually
+     * declared or installed through a typeglob CODE assignment.  A scalar
+     * stored in the stash creates a visible glob too, but must not turn a
+     * builtin such as {@code lock} into a subroutine call.
+     */
+    private static boolean isCompileTimeCoreGlobalOverride(String name) {
+        if (!RuntimeGlob.isGlobAssigned(name)
+                || !GlobalVariable.isGlobalCodeRefDefined(name)) {
+            return false;
+        }
+        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(name);
+        return GlobalVariable.isSubs.getOrDefault(name, false)
+                || (codeRef.value instanceof RuntimeCode code && code.isDeclared);
     }
 
     static boolean isIsQuoteLikeOperator(String operator) {

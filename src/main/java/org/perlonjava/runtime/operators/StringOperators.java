@@ -555,6 +555,12 @@ public class StringOperators {
      * not turn concat-assignment into warning-aware concatenation.
      */
     public static RuntimeScalar stringConcatAssign(RuntimeScalar runtimeScalar, RuntimeScalar b) {
+        // Typeglobs stringify when merely observed, but they cannot be used as
+        // mutable string scalars.  Reject this before the generic concat path
+        // produces a string and the assignment overwrites the glob wrapper.
+        if (runtimeScalar instanceof RuntimeGlob) {
+            throw new PerlCompilerException("Can't coerce GLOB to string in string context");
+        }
         int blessId = RuntimeScalarType.blessedId(runtimeScalar);
         int blessId2 = RuntimeScalarType.blessedId(b);
         if (blessId < 0 || blessId2 < 0) {

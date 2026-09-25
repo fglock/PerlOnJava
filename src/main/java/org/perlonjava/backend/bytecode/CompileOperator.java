@@ -7,6 +7,7 @@ import org.perlonjava.runtime.NamedCharacterExpansionMap;
 import org.perlonjava.runtime.operators.ScalarGlobOperator;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
+import org.perlonjava.runtime.perlmodule.Version;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -696,6 +697,19 @@ public class CompileOperator {
                 bc.lastResultReg = rd;
                 return;
             }
+            if (operand instanceof OperatorNode opNode && opNode.operator.equals("$")
+                    && opNode.operand instanceof BlockNode) {
+                bc.compileNode(opNode.operand, -1, RuntimeContextType.SCALAR);
+                int scalarReg = bc.lastResultReg;
+                int pkgIdx = bc.addToStringPool(bc.getCurrentPackage());
+                int rd = bc.allocateOutputRegister();
+                bc.emit(Opcodes.DEFINED_SCALAR_DEREF);
+                bc.emitReg(rd);
+                bc.emitReg(scalarReg);
+                bc.emit(pkgIdx);
+                bc.lastResultReg = rd;
+                return;
+            }
             // defined(&name) - use stash lookup to match JVM backend/Perl 5 behavior
             if (operand instanceof OperatorNode opNode && opNode.operator.equals("&")
                     && opNode.operand instanceof IdentifierNode idNode) {
@@ -978,6 +992,11 @@ public class CompileOperator {
             case "~." -> emitSimpleUnaryScalar(bytecodeCompiler, node, Opcodes.BITWISE_NOT_STRING);
             case "defined" -> visitDefined(bytecodeCompiler, node);
             case "lock" -> {
+                if (node.operand == null
+                        || (node.operand instanceof ListNode arguments
+                        && arguments.elements.isEmpty())) {
+                    bytecodeCompiler.throwCompilerException("Not enough arguments for lock");
+                }
                 bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
                 int valueReg = bytecodeCompiler.lastResultReg;
                 int rd = bytecodeCompiler.allocateOutputRegister();
@@ -1210,7 +1229,8 @@ public class CompileOperator {
                     String version = bytecodeCompiler.symbolTable.getPackageVersion(packageName);
                     if (version != null) {
                         String versionVarName = packageName + "::VERSION";
-                        GlobalVariable.getGlobalVariable(versionVarName).set(new RuntimeScalar(version));
+                        GlobalVariable.getGlobalVariable(versionVarName)
+                                .set(Version.packageDeclarationVersion(version));
                     }
                     bytecodeCompiler.symbolTable.setCurrentPackage(packageName, isClass);
                     if (isClass) ClassRegistry.registerClass(packageName);

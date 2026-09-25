@@ -216,6 +216,11 @@ sub is_excluded_test_file {
     # for reference, but exclude them even when named directly.
     return 1 if $path =~ m{(?:^|/)perl5_t/t/bigmem/(?:stack|stack_over)\.t$};
 
+    # This imported microbenchmark enforces host-relative throughput thresholds.
+    # Its result varies with the host JVM and CPU rather than Perl compatibility,
+    # so retain its source for reference but exclude it from UAT, even by name.
+    return 1 if $path =~ m{(?:^|/)perl5_t/t/benchmark/gh7094-speed-up-keys-on-empty-hash\.t$};
+
     return 0;
 }
 

@@ -75,7 +75,8 @@ public class SprintfValueFormatter {
         // from the preliminary Inf/NaN check and the actual formatter.
         if (value.type == RuntimeScalarType.GLOB) {
             WarnDie.warnWithCategory(
-                    new RuntimeScalar("Argument \"" + value + "\" isn't numeric in sprintf"),
+                    new RuntimeScalar("Argument \"" + globNameForNumericWarning(value)
+                            + "\" isn't numeric in sprintf"),
                     RuntimeScalarCache.scalarEmptyString,
                     "numeric");
             value = RuntimeScalarCache.scalarZero;
@@ -218,5 +219,25 @@ public class SprintfValueFormatter {
         }
 
         return hex;
+    }
+
+    /**
+     * Perl renders non-ASCII glob names with explicit code-point escapes in
+     * numeric-conversion diagnostics, while ordinary glob stringification
+     * remains Unicode text.
+     */
+    private String globNameForNumericWarning(RuntimeScalar value) {
+        String name = value.toString();
+        StringBuilder escaped = new StringBuilder(name.length());
+        for (int offset = 0; offset < name.length();) {
+            int codePoint = name.codePointAt(offset);
+            if (codePoint >= 0x20 && codePoint <= 0x7e) {
+                escaped.appendCodePoint(codePoint);
+            } else {
+                escaped.append("\\x{").append(Integer.toHexString(codePoint)).append('}');
+            }
+            offset += Character.charCount(codePoint);
+        }
+        return escaped.toString();
     }
 }
