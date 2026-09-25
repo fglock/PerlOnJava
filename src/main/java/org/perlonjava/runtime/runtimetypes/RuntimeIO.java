@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
@@ -879,8 +880,17 @@ public class RuntimeIO extends RuntimeScalar {
             }
             Set<StandardOpenOption> options = fh.convertMode(mode);
 
-            // Initialize ioHandle with CustomFileChannel
-            fh.ioHandle = new CustomFileChannel(filePath, options);
+            // Windows rejects FileChannel.open(directory) with access denied,
+            // while Unix permits the open and reports EISDIR only when read.
+            // Model the Perl-visible behavior directly and keep this a file
+            // handle rather than silently turning it into a dirhandle.
+            if (Files.isDirectory(filePath)
+                    && options.contains(StandardOpenOption.READ)
+                    && !options.contains(StandardOpenOption.WRITE)) {
+                fh.ioHandle = new DirectoryReadErrorHandle();
+            } else {
+                fh.ioHandle = new CustomFileChannel(filePath, options);
+            }
 
             // Reserve the virtual descriptor immediately.  Handles can be
             // installed into a localized standard glob before fileno() is

@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve Perl-compatible `EISDIR` readline behavior for filehandles opened
+  on directories on Windows, and advertise PerlOnJava's non-real fork
+  capability through `Config`.
+
 - Preserve valid package and module version literals, restoring CPAN modules
   that use zero-padded dotted versions, large bare v-versions, or repeated
   identical `use VERSION` declarations across package changes.
