@@ -3367,6 +3367,26 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * ordinary dereference operators' autovivification semantics.
      */
     public RuntimeScalar foreachScalarReference() {
+        return refAliasScalarReference();
+    }
+
+    /**
+     * Validate and unwrap a scalar reference used as a ref-aliasing target.
+     * Unlike an ordinary scalar dereference, this neither autovivifies an
+     * undef value nor turns a glob reference into a glob value: ref aliasing
+     * installs the glob's scalar slot.
+     */
+    public RuntimeScalar refAliasScalarReference() {
+        // Ref-aliasing accepts a glob reference for a scalar target and
+        // aliases the glob's SCALAR slot (\$x = \*glob).  Keep that Perl
+        // special case while using the assignment-specific diagnostics for
+        // all ordinary reference mismatches.
+        if (type == GLOBREFERENCE && value instanceof RuntimeGlob glob) {
+            return glob.getGlobScalarSlot();
+        }
+        if (type == GLOB) {
+            return scalarDeref();
+        }
         requireForeachReference(REFERENCE, "SCALAR");
         return (RuntimeScalar) value;
     }
@@ -3379,6 +3399,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeHash foreachHashReference() {
         requireForeachReference(HASHREFERENCE, "HASH");
         return (RuntimeHash) value;
+    }
+
+    /** Validate a CODE reference before installing it through ref aliasing. */
+    public RuntimeScalar refAliasCodeReference() {
+        requireForeachReference(CODE, "CODE");
+        return this;
     }
 
     private void requireForeachReference(int expectedType, String expectedName) {

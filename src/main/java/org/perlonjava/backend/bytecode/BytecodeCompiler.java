@@ -5470,14 +5470,12 @@ public class BytecodeCompiler implements Visitor {
                 // Resolve annotated lexical-sub references through the pad.
                 String hiddenVarName = node.getAnnotation("hiddenVarName") instanceof String hidden
                         ? hidden : null;
-                // The preexisting marker is emitted precisely when a package
-                // CV existed at declaration time.  Other lexical forwards
-                // intentionally retain their global bridge so a later eval
-                // definition can fill them.
-                String hiddenVarKey = evalBlockDepth > 0
-                        && hiddenVarName != null
-                        && hiddenVarName.contains("__lexsub_preexisting_")
-                        ? "$" + hiddenVarName : null;
+                // Lexical sub declarations are always stored in their hidden
+                // pad cell.  The source spelling may be package-qualified,
+                // but it must never redirect a lexical reference through a
+                // package CV merely because this is not an eval or because
+                // the declaration was not preexisting.
+                String hiddenVarKey = hiddenVarName != null ? "$" + hiddenVarName : null;
                 if (hiddenVarKey != null && hasVariable(hiddenVarKey)
                         && !isOurVariable(hiddenVarKey)) {
                     lastResultReg = getVariableRegister(hiddenVarKey);
@@ -7233,7 +7231,8 @@ public class BytecodeCompiler implements Visitor {
         // from the global-variable check, leaving the body to read an
         // unrelated package slot.
         if (globalLoopVarName == null && globalLoopVariableNode instanceof OperatorNode sigilOp
-                && (sigilOp.operator.equals("$") || sigilOp.operator.equals("@") || sigilOp.operator.equals("%"))
+                && (sigilOp.operator.equals("$") || sigilOp.operator.equals("@")
+                        || sigilOp.operator.equals("%") || sigilOp.operator.equals("&"))
                 && sigilOp.operand instanceof IdentifierNode idNode) {
             String varName = sigilOp.operator + idNode.name;
             SymbolTable.SymbolEntry entry = symbolTable.getSymbolEntry(varName);
@@ -7294,6 +7293,21 @@ public class BytecodeCompiler implements Visitor {
                         || sigilOp.operator.equals("%"))
                 && sigilOp.operand instanceof IdentifierNode) {
             referenceAliasedVariable = sigilOp;
+        }
+        if (referenceAliasedVariable == null && node.variable instanceof OperatorNode referenceOp
+                && referenceOp.operator.equals("\\")
+                && referenceOp.operand instanceof OperatorNode codeOp
+                && codeOp.operator.equals("&")
+                && codeOp.operand instanceof OperatorNode scalarOp
+                && scalarOp.operator.equals("$")) {
+            referenceAliasedVariable = codeOp;
+        }
+        if (referenceAliasedVariable == null && node.variable instanceof OperatorNode referenceOp
+                && referenceOp.operator.equals("\\")
+                && referenceOp.operand instanceof OperatorNode codeOp
+                && codeOp.operator.equals("&")
+                && codeOp.operand instanceof IdentifierNode) {
+            referenceAliasedVariable = codeOp;
         }
         if (referenceAliasedVariable == null && node.variable instanceof OperatorNode referenceOp
                 && referenceOp.operator.equals("\\")
@@ -7360,6 +7374,12 @@ public class BytecodeCompiler implements Visitor {
             } else {
                 varReg = getVariableRegister(referenceAliasedVariable.operator + idNode.name);
             }
+        } else if (referenceAliasedVariable != null
+                && referenceAliasedVariable.operator.equals("&")
+                && referenceAliasedVariable.operand instanceof OperatorNode scalarOp
+                && scalarOp.operator.equals("$")) {
+            compileNode(scalarOp, -1, RuntimeContextType.SCALAR);
+            varReg = lastResultReg;
         }
         if (!multiVarRegs.isEmpty()) {
             varReg = multiVarRegs.get(0);
@@ -7424,8 +7444,10 @@ public class BytecodeCompiler implements Visitor {
                 emit(Opcodes.LOAD_GLOBAL_SCALAR);
             } else if (referenceAliasedVariable.operator.equals("@")) {
                 emit(Opcodes.LOAD_GLOBAL_ARRAY);
-            } else {
+            } else if (referenceAliasedVariable.operator.equals("%")) {
                 emit(Opcodes.LOAD_GLOBAL_HASH);
+            } else {
+                emit(Opcodes.LOAD_GLOBAL_CODE);
             }
             emitReg(savedGlobalReferenceLoopVarReg);
             emit(nameIdx);
@@ -7452,8 +7474,13 @@ public class BytecodeCompiler implements Visitor {
         // \\@x` and `for my \\%x` must make @x/%x visible in the loop body,
         // rather than falling through to an unrelated package variable.
         if (node.variable != null && node.variable instanceof OperatorNode varOp2) {
-            if ((varOp2.operator.equals("my") || varOp2.operator.equals("state"))
-                    && varOp2.operand instanceof OperatorNode sigilOp) {
+            OperatorNode declarationOp = varOp2;
+            if (declarationOp.operator.equals("\\")
+                    && declarationOp.operand instanceof OperatorNode nestedDeclaration) {
+                declarationOp = nestedDeclaration;
+            }
+            if ((declarationOp.operator.equals("my") || declarationOp.operator.equals("state"))
+                    && declarationOp.operand instanceof OperatorNode sigilOp) {
                 if ((sigilOp.operator.equals("$") || sigilOp.operator.equals("@") || sigilOp.operator.equals("%"))
                         && sigilOp.operand instanceof IdentifierNode) {
                     String varName = sigilOp.operator + ((IdentifierNode) sigilOp.operand).name;
@@ -7624,8 +7651,15 @@ public class BytecodeCompiler implements Visitor {
                 emitWithToken(Opcodes.FOREACH_DEREF_ARRAY, referenceAliasedVariable.getIndex());
                 emitReg(varReg);
                 emitReg(referenceReg);
-            } else {
+            } else if (referenceAliasedVariable.operator.equals("%")) {
                 emitWithToken(Opcodes.FOREACH_DEREF_HASH, referenceAliasedVariable.getIndex());
+                emitReg(varReg);
+                emitReg(referenceReg);
+            } else {
+                // CODE references are already the cells to install in the
+                // lexical sub's hidden scalar pad; unlike $/@/%, no
+                // additional dereference is required.
+                emit(Opcodes.ALIAS);
                 emitReg(varReg);
                 emitReg(referenceReg);
             }
@@ -7641,6 +7675,10 @@ public class BytecodeCompiler implements Visitor {
                     emitReg(varReg);
                 } else if (referenceAliasedVariable.operator.equals("%")) {
                     emit(Opcodes.ALIAS_GLOBAL_HASH);
+                    emit(nameIdx);
+                    emitReg(varReg);
+                } else {
+                    emit(Opcodes.STORE_GLOBAL_CODE);
                     emit(nameIdx);
                     emitReg(varReg);
                 }
@@ -7691,8 +7729,10 @@ public class BytecodeCompiler implements Visitor {
                 emit(Opcodes.ALIAS_GLOBAL_SCALAR);
             } else if (referenceAliasedVariable.operator.equals("@")) {
                 emit(Opcodes.ALIAS_GLOBAL_ARRAY);
-            } else {
+            } else if (referenceAliasedVariable.operator.equals("%")) {
                 emit(Opcodes.ALIAS_GLOBAL_HASH);
+            } else {
+                emit(Opcodes.STORE_GLOBAL_CODE);
             }
             emit(nameIdx);
             emitReg(savedGlobalReferenceLoopVarReg);
