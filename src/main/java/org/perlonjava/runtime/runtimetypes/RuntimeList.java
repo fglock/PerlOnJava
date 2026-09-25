@@ -255,9 +255,11 @@ public class RuntimeList extends RuntimeBase {
             aggregate = nested;
         }
         if (aggregate instanceof RuntimeArray array) {
-            for (int i = 0; i < array.size(); i++) {
-                elements.add(array.get(i));
-            }
+            // A foreach source aliases array slots, including sparse holes.
+            // Keep the slot references lazy: materializing every hole here
+            // turns generated sparse Unicode tables into millions of proxy
+            // allocations before the loop even begins.
+            elements.add(new ForeachArraySnapshot(array, array.size()));
             return;
         }
         Iterator<RuntimeScalar> iterator = value.iterator();
@@ -1027,6 +1029,132 @@ public class RuntimeList extends RuntimeBase {
                 throw new NoSuchElementException();
             }
             return currentIterator.next();
+        }
+    }
+
+    /**
+     * A fixed-length foreach view of an array. Each element is looked up only
+     * when the foreach iterator reaches it, retaining a writable proxy for a
+     * sparse hole without eagerly vivifying unrelated slots.
+     */
+    private static final class ForeachArraySnapshot extends RuntimeBase {
+        private final RuntimeArray array;
+        private final int length;
+
+        private ForeachArraySnapshot(RuntimeArray array, int length) {
+            this.array = array;
+            this.length = length;
+        }
+
+        @Override
+        public Iterator<RuntimeScalar> iterator() {
+            return new Iterator<>() {
+                private int index;
+
+                @Override
+                public boolean hasNext() {
+                    return index < length;
+                }
+
+                @Override
+                public RuntimeScalar next() {
+                    if (!hasNext()) throw new NoSuchElementException();
+                    return array.get(index++);
+                }
+            };
+        }
+
+        @Override
+        public RuntimeScalar scalar() {
+            return length == 0 ? scalarUndef : array.get(length - 1);
+        }
+
+        @Override
+        public void addToArray(RuntimeArray target) {
+            for (RuntimeScalar element : this) target.add(element);
+        }
+
+        @Override
+        public RuntimeList getList() {
+            RuntimeList result = new RuntimeList();
+            result.elements.add(this);
+            return result;
+        }
+
+        @Override
+        public RuntimeArray setArrayOfAlias(RuntimeArray target) {
+            for (RuntimeScalar element : this) target.add(element);
+            return target;
+        }
+
+        @Override
+        public int countElements() {
+            return length;
+        }
+
+        @Override
+        public boolean getBoolean() {
+            return scalar().getBoolean();
+        }
+
+        @Override
+        public boolean getDefinedBoolean() {
+            return scalar().getDefinedBoolean();
+        }
+
+        @Override
+        public RuntimeScalar createReference() {
+            return array.createReference();
+        }
+
+        @Override
+        public RuntimeBase undefine() {
+            return array.undefine();
+        }
+
+        @Override
+        public RuntimeScalar addToScalar(RuntimeScalar target) {
+            return target.set(scalar());
+        }
+
+        @Override
+        public RuntimeArray setFromList(RuntimeList list) {
+            return array.setFromList(list);
+        }
+
+        @Override
+        public RuntimeArray keys() {
+            return array.keys();
+        }
+
+        @Override
+        public RuntimeArray values() {
+            return array.values();
+        }
+
+        @Override
+        public RuntimeList each(int ctx) {
+            return array.each(ctx);
+        }
+
+        @Override
+        public RuntimeScalar chop() {
+            return array.chop();
+        }
+
+        @Override
+        public RuntimeScalar chomp() {
+            return array.chomp();
+        }
+
+        @Override
+        public void dynamicSaveState() {
+            // The view owns no state; dynamic localization belongs to its array.
+        }
+
+        @Override
+        public void dynamicRestoreState() {
+            // The view owns no state; dynamic localization belongs to its array.
         }
     }
 }
