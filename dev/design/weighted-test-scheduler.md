@@ -15,7 +15,9 @@ affect this scheduler's resource profiles.
 
 The previous scheduler split the corpus into a normal parallel phase followed
 by an exclusive serial phase. Long regex stress tests therefore started only
-after the ordinary corpus drained, leaving a long serial tail.
+after the ordinary corpus drained, leaving a long serial tail. Tests now share
+one weighted scheduler; private test overlays provide the isolation that the
+old serial lane supplied for the JAPH fixture.
 
 ## Policy
 
@@ -25,27 +27,24 @@ The caller's `--jobs` value is a scheduling-unit budget:
 - known CPU-, memory-, or subprocess-heavy semantic tests consume three units;
 - a heavy weight is clamped to the caller's budget, allowing all tests to run
   with `--jobs 1` or `--jobs 2`;
-- no current test has an exclusive semantic profile.
-
-The scheduler retains an explicit isolation mechanism in case a future test
-demonstrably cannot share a process environment. Such a profile is a barrier:
-it waits for active work to finish and cannot be bypassed. Timing sensitivity
-alone is not sufficient evidence for isolation.
+- test-specific filesystem isolation is handled by private overlays where
+  needed; no test is held in an exclusive scheduling lane.
 
 ## Admission Order
 
 All input is known before execution, so the scheduler uses a stable
 longest-processing-time heuristic:
 
-1. future exclusive barriers, if any;
-2. known heavy tests;
-3. ordinary tests.
+1. known heavy tests, ordered by duration tier (`re/anyof.t` first);
+2. ordinary tests.
 
-Original order is preserved within each class, and original test indices remain
-attached to results. If the next heavy test cannot fit the remaining budget, a
-lighter test may use that capacity. For example, a ten-unit budget admits three
-weight-three tests and one ordinary test. Starting long-running work early
-reduces the straggler tail while the more uniform short files fill gaps.
+Original order is preserved within each duration tier, and original test
+indices remain attached to results. If the next heavy test cannot fit the
+remaining budget, a lighter test may use that capacity. For example, a
+ten-unit budget admits `re/anyof.t`, then a compatible shorter heavy test, and
+uses any remaining unit for ordinary work. Starting the known longest-running
+work early reduces the straggler tail while the more uniform short files fill
+gaps.
 
 ## Safety Invariants
 
@@ -78,13 +77,19 @@ cleanup behavior.
   - Replaced normal/exclusive phases with one weighted budget.
   - Added stable long-running-first admission with lighter gap filling.
   - Removed timing-only benchmark scheduling and timeout accommodations.
-  - Added policy, capacity, isolation-barrier, low-budget, and Windows-path
-    tests.
+  - Added policy, capacity, low-budget, and Windows-path tests.
 - [x] Local validation (2026-08-17)
   - `make test-thread-tooling`: 4 files, 35 assertions passed.
   - Weighted runner smoke test: 3 files, 81 assertions passed at `--jobs 1`.
   - `make check-links`: 603 links checked, zero errors.
   - Full `make`: passed all five unit shards and Joni tests.
+- [x] Duration-tier admission (2026-09-25)
+  - Prioritized known longest fixtures, led by `re/anyof.t`.
+  - Preserved weighted gap filling and stable discovery order within tiers.
+  - Extended scheduler regression coverage.
+- [x] Remove obsolete exclusive lane (2026-09-25)
+  - JAPH private-overlay tests now run under the shared weighted scheduler.
+  - Removed exclusive profile/barrier handling and the serial test phase.
 
 ### Next Steps
 

@@ -9,6 +9,7 @@ our @EXPORT_OK = qw(
     next_runnable_index
     profile_for_test
     scheduling_priority
+    duration_priority
     test_can_start
 );
 
@@ -17,13 +18,12 @@ sub profile_for_test {
     (my $normalized_file = $test_file) =~ tr{\\}{/};
 
     # This test creates and executes progtmp* files containing #!./perl. Its
-    # private cwd prevents cross-runner races; an exclusive barrier also keeps
-    # it from competing with other work inside one resource-aware runner.
+    # private cwd prevents cross-runner races, so it can use the normal
+    # resource-aware scheduler like every other test.
     if ($normalized_file =~ m{(?:^|/)(?:perl5_t/t/)?japh/abigail\.t$}) {
         return {
-            class => 'exclusive',
+            class => 'heavy',
             weight => 3,
-            exclusive => 1,
         };
     }
 
@@ -35,13 +35,11 @@ sub profile_for_test {
         return {
             class => 'heavy',
             weight => 10,
-            exclusive => 0,
         };
     }
 
     # Direct pat and anyof runs sustain enough allocation/GC pressure that at
-    # most two should share a ten-unit budget.  Keeping these non-exclusive
-    # lets the runner use the other half for the complementary direct gate.
+    # most two should share a ten-unit budget.
     if ($normalized_file =~ m{
           (?:^|/)(?:perl5_t/t/)?re/pat\.t$
         | (?:^|/)(?:perl5_t/t/)?re/anyof(?:_thr)?\.t$
@@ -49,7 +47,6 @@ sub profile_for_test {
         return {
             class => 'heavy',
             weight => 5,
-            exclusive => 0,
         };
     }
 
@@ -67,7 +64,6 @@ sub profile_for_test {
         return {
             class => 'heavy',
             weight => 3,
-            exclusive => 0,
         };
     }
 
@@ -76,7 +72,6 @@ sub profile_for_test {
     return {
         class => 'normal',
         weight => 1,
-        exclusive => 0,
     };
 }
 
@@ -91,40 +86,49 @@ sub effective_weight {
 
 sub scheduling_priority {
     my ($profile) = @_;
-    return 0 if $profile->{exclusive};
     return 1 if ($profile->{weight} || 1) > 1;
     return 2;
 }
 
-sub test_can_start {
-    my ($profile, $budget, $active_weight, $active_count, $exclusive_active) = @_;
+sub duration_priority {
+    my ($test_file) = @_;
+    (my $normalized_file = $test_file) =~ tr{\\}{/};
 
-    return 0 if $exclusive_active;
-    return $active_count == 0 if $profile->{exclusive};
+    # Keep the known longest fixtures at the head of their resource class.
+    # anyof is the slowest compatibility test by a wide margin; putting it
+    # first lets it overlap with shorter work instead of becoming the final
+    # straggler.  The remaining entries are ordered by their observed runtime
+    # tiers, while unknown tests retain their discovery order.
+    return 0 if $normalized_file =~ m{(?:^|/)(?:perl5_t/t/)?re/anyof(?:_thr)?\.t$};
+    return 1 if $normalized_file =~ m{(?:^|/)(?:perl5_t/t/)?re/pat_thr\.t$};
+    return 2 if $normalized_file =~ m{(?:^|/)(?:perl5_t/t/)?re/pat\.t$};
+    return 3 if $normalized_file =~ m{
+          (?:^|/)perl5/dist/threads/t/join\.t$
+        | (?:^|/)(?:perl5_t/t/)?op/gv\.t$
+        | (?:^|/)(?:perl5_t/t/)?re/pat_(?:psycho|advanced)(?:_thr)?\.t$
+        | (?:^|/)(?:perl5_t/t/)?re/regexp_qr_embed_thr\.t$
+        | (?:^|/)(?:perl5_t/t/)?re/speed(?:_thr)?\.t$
+    }x;
+    return 100;
+}
+
+sub test_can_start {
+    my ($profile, $budget, $active_weight, $active_count) = @_;
 
     my $weight = effective_weight($profile, $budget);
     return $active_weight + $weight <= $budget;
 }
 
 sub next_runnable_index {
-    my ($tests, $budget, $active_weight, $active_count, $exclusive_active) = @_;
-
-    return if $exclusive_active;
+    my ($tests, $budget, $active_weight, $active_count) = @_;
     for my $index (0 .. $#$tests) {
         my $profile = $tests->[$index]{profile};
-
-        # An isolation case is a barrier: it may start only when the runner is
-        # idle, and later work must never leapfrog it.
-        if ($profile->{exclusive}) {
-            return $active_count == 0 ? $index : undef;
-        }
 
         return $index if test_can_start(
             $profile,
             $budget,
             $active_weight,
             $active_count,
-            $exclusive_active,
         );
     }
     return;
