@@ -10,6 +10,9 @@ priorities and future plans.
   that use zero-padded dotted versions, large bare v-versions, or repeated
   identical `use VERSION` declarations across package changes.
 
+- Restore the public `YAML::Syck` API and legacy template parsing, including
+  exports, file helpers, percent placeholders, duplicate keys, and tabs.
+
 - Restore `op/ref.t` destructor reblessing semantics, invoking the new class's
   `DESTROY` method after an object is reblessed during destruction.
 
