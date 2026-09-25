@@ -60,22 +60,17 @@ public class CompileAssignment {
             if (operator.operator.equals("glob")) {
                 return "Can't modify reference to glob in " + assignment;
             }
-            if (operator.operator.equals("local")) {
-                Node localTarget = operator.operand;
-                while (localTarget instanceof ListNode list && list.elements.size() == 1) {
-                    localTarget = list.elements.getFirst();
-                }
-                if (localTarget instanceof OperatorNode localArray && localArray.operator.equals("@")) {
-                    if (localArray.operand instanceof BlockNode) {
-                        return "Can't modify reference to array dereference in " + assignment;
-                    }
-                    return "Can't modify reference to localized parenthesized array in " + assignment;
-                }
-            }
             if (operator.operator.equals("%") && operator.operand instanceof BlockNode) {
                 return "Can't modify reference to hash dereference in " + assignment;
             }
             if (operator.operator.equals("%") && parenthesizedTarget) {
+                return "Can't modify reference to parenthesized hash in list assignment";
+            }
+            if ((operator.operator.equals("my") || operator.operator.equals("state"))
+                    && operator.operand instanceof ListNode declarationList
+                    && declarationList.elements.size() == 1
+                    && declarationList.elements.getFirst() instanceof OperatorNode declarationHash
+                    && declarationHash.operator.equals("%")) {
                 return "Can't modify reference to parenthesized hash in list assignment";
             }
         }
@@ -83,6 +78,47 @@ public class CompileAssignment {
                 && binary.right instanceof OperatorNode transliteration
                 && transliteration.operator.equals("tr")) {
             return "Can't modify transliteration (tr///) in scalar assignment";
+        }
+        return null;
+    }
+
+    private static boolean isReferenceAliasRhs(Node rhs) {
+        return rhs instanceof OperatorNode operator && operator.operator.equals("\\");
+    }
+
+    private static String invalidLocalizedArrayReferenceAlias(Node target, boolean listAssignment) {
+        while (target instanceof ListNode list && list.elements.size() == 1) {
+            target = list.elements.getFirst();
+        }
+        while (target instanceof OperatorNode reference && reference.operator.equals("\\")) {
+            target = reference.operand;
+            while (target instanceof ListNode list && list.elements.size() == 1) {
+                target = list.elements.getFirst();
+            }
+        }
+        if (!(target instanceof OperatorNode local) || !local.operator.equals("local")) {
+            return null;
+        }
+        Node localTarget = local.operand;
+        while (localTarget instanceof ListNode list && list.elements.size() == 1) {
+            localTarget = list.elements.getFirst();
+        }
+        if (!(localTarget instanceof OperatorNode localArray) || !localArray.operator.equals("@")) {
+            return null;
+        }
+        String assignment = listAssignment ? "list assignment" : "scalar assignment";
+        if (localArray.operand instanceof BlockNode) {
+            return "Can't modify reference to array dereference in " + assignment;
+        }
+        return "Can't modify reference to localized parenthesized array in " + assignment;
+    }
+
+    private static String invalidReferenceAliasTernary(TernaryOperatorNode ternary) {
+        for (Node branch : List.of(ternary.trueExpr, ternary.falseExpr)) {
+            if (branch instanceof OperatorNode reference && reference.operator.equals("\\")) {
+                String diagnostic = invalidReferenceAliasTarget(reference.operand, false, false);
+                if (diagnostic != null) return diagnostic;
+            }
         }
         return null;
     }
@@ -151,6 +187,11 @@ public class CompileAssignment {
         }
         if (target instanceof OperatorNode reference && reference.operator.equals("\\")) {
             compileReferenceAliasTarget(bc, reference.operand, referenceReg, tokenIndex, true);
+            return;
+        }
+        String invalidTargetDiagnostic = invalidReferenceAliasTarget(target, false, false);
+        if (invalidTargetDiagnostic != null) {
+            bc.throwCompilerException(invalidTargetDiagnostic);
             return;
         }
         if (target instanceof OperatorNode scalar
@@ -753,6 +794,14 @@ public class CompileAssignment {
 
         for (int i = 0; i < targets.elements.size(); i++) {
             Node target = targets.elements.get(i);
+            if (!isReferenceAliasRhs(node.right)
+                    && target instanceof OperatorNode declaration
+                    && (declaration.operator.equals("my") || declaration.operator.equals("state"))
+                    && declaration.operand instanceof OperatorNode declaredHash
+                    && declaredHash.operator.equals("%")) {
+                bc.throwCompilerException("Can't modify reference to parenthesized hash in list assignment");
+                return true;
+            }
             // A declaration wrapping the entire parenthesized target list,
             // as in \my(@array), is itself the slot-list spelling even though
             // its individual member no longer has a \ wrapper.
@@ -762,6 +811,14 @@ public class CompileAssignment {
                         listDeclaration.operator, target, listDeclaration.tokenIndex);
                 declarationTarget.annotations = listDeclaration.annotations;
                 target = declarationTarget;
+            }
+            if (!isReferenceAliasRhs(node.right)
+                    && target instanceof OperatorNode declaration
+                    && (declaration.operator.equals("my") || declaration.operator.equals("state"))
+                    && declaration.operand instanceof OperatorNode declaredHash
+                    && declaredHash.operator.equals("%")) {
+                bc.throwCompilerException("Can't modify reference to parenthesized hash in list assignment");
+                return true;
             }
             // Each member of a parenthesized refalias list is itself a
             // reference expression: (\$scalar, \(@array)).  Lower the target
@@ -784,6 +841,19 @@ public class CompileAssignment {
             }
             if (Boolean.TRUE.equals(target.getAnnotation("parenthesizedList"))) {
                 aggregateReferenceListTarget = true;
+            }
+            if (!isReferenceAliasRhs(node.right)) {
+                String localizedDiagnostic = invalidLocalizedArrayReferenceAlias(target, true);
+                if (localizedDiagnostic != null) {
+                    bc.throwCompilerException(localizedDiagnostic);
+                    return true;
+                }
+            }
+            String invalidTargetDiagnostic = invalidReferenceAliasTarget(
+                    target, true, outerReferenceToList);
+            if (invalidTargetDiagnostic != null) {
+                bc.throwCompilerException(invalidTargetDiagnostic);
+                return true;
             }
             // \my(@array) and \state(@array) retain the parenthesized
             // aggregate-list meaning even though the declaration wrapper sits
@@ -1180,11 +1250,6 @@ public class CompileAssignment {
                     && element.operator.equals("[")) {
                 bc.compileNode(element, -1, RuntimeContextType.LVALUE);
             } else {
-                String diagnostic = invalidReferenceAliasTarget(target, true, outerReferenceToList);
-                if (diagnostic != null) {
-                    bc.throwCompilerException(diagnostic);
-                    return true;
-                }
                 // Scalar targets and declaration wrappers are valid in the
                 // same parenthesized alias list as array/hash elements.
                 bc.compileNode(target, -1, RuntimeContextType.LVALUE);
@@ -2886,6 +2951,20 @@ public class CompileAssignment {
                         bytecodeCompiler.throwCompilerException(refAliasDiagnostic);
                         return;
                     }
+                    if (!isReferenceAliasRhs(node.right)) {
+                        String localizedDiagnostic = invalidLocalizedArrayReferenceAlias(
+                                refAliasTarget,
+                                leftOp.operand instanceof ListNode
+                                        || refAliasTarget instanceof OperatorNode referenceTarget
+                                        && referenceTarget.operator.equals("\\")
+                                        || refAliasTarget instanceof OperatorNode localTarget
+                                        && localTarget.operator.equals("local")
+                                        && localTarget.operand instanceof ListNode);
+                        if (localizedDiagnostic != null) {
+                            bytecodeCompiler.throwCompilerException(localizedDiagnostic);
+                            return;
+                        }
+                    }
                     BinaryOperatorNode element = refAliasTarget instanceof BinaryOperatorNode binaryElement
                             ? binaryElement : null;
                     if (element != null && (element.operator.equals("{") || element.operator.equals("["))) {
@@ -2941,6 +3020,13 @@ public class CompileAssignment {
                                 && declaredVariable.operand instanceof IdentifierNode candidateId
                                 ? candidateId : null;
                         if (declaredVariable != null && declaredId != null) {
+                        if (parenthesizedAggregateDeclaration
+                                && declaredVariable.operator.equals("%")
+                                && !isReferenceAliasRhs(node.right)) {
+                            bytecodeCompiler.throwCompilerException(
+                                    "Can't modify reference to parenthesized hash in list assignment");
+                            return;
+                        }
                         String varName = declaredVariable.operator + declaredId.name;
                         // The normal assignment path compiles the declaration
                         // while visiting its LHS. Ref aliasing bypasses that
@@ -3926,7 +4012,12 @@ public class CompileAssignment {
                 }
 
                 bytecodeCompiler.throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
-            } else if (node.left instanceof TernaryOperatorNode) {
+            } else if (node.left instanceof TernaryOperatorNode ternary) {
+                String invalidTernaryDiagnostic = invalidReferenceAliasTernary(ternary);
+                if (invalidTernaryDiagnostic != null) {
+                    bytecodeCompiler.throwCompilerException(invalidTernaryDiagnostic);
+                    return;
+                }
                 if (node.right instanceof OperatorNode reference
                         && reference.operator.equals("\\")) {
                     if (!bytecodeCompiler.symbolTable.isFeatureCategoryEnabled("refaliasing")) {
