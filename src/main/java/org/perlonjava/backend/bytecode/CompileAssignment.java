@@ -1573,7 +1573,11 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(globReg);
                     bytecodeCompiler.emitReg(valueReg);
 
-                    bytecodeCompiler.lastResultReg = globReg;
+                    // A typeglob assignment evaluates to its RHS, not the
+                    // target glob.  This matters for chained assignments:
+                    // *alias = *alias = \&source must feed the CODE ref into
+                    // the outer assignment, as the JVM backend does.
+                    bytecodeCompiler.lastResultReg = valueReg;
                 } else if (leftOp.operator.equals("*") && leftOp.operand instanceof BlockNode) {
                     // Dynamic typeglob assignment: *{EXPR} = value. EXPR can
                     // return a real glob reference (Role::Tiny's _getglob
@@ -1587,7 +1591,9 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(globReg);
                     bytecodeCompiler.emitReg(valueReg);
 
-                    bytecodeCompiler.lastResultReg = globReg;
+                    // Preserve the RHS as the assignment result (see the
+                    // named typeglob case above).
+                    bytecodeCompiler.lastResultReg = valueReg;
                 } else if (leftOp.operator.equals("*")) {
                     // Glob assignment where the glob comes from an expression, e.g. $ref->** = ...
                     // or 'name'->** = ...
@@ -1599,7 +1605,9 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(globReg);
                     bytecodeCompiler.emitReg(valueReg);
 
-                    bytecodeCompiler.lastResultReg = globReg;
+                    // Preserve the RHS as the assignment result (see the
+                    // named typeglob case above).
+                    bytecodeCompiler.lastResultReg = valueReg;
                 } else if (leftOp.operator.equals("+")) {
                     // Unary plus is transparent for lvalue assignment, matching LValueVisitor.
                     bytecodeCompiler.compileNode(leftOp.operand, -1, RuntimeContextType.LVALUE);
