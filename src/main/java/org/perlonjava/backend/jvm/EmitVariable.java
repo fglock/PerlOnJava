@@ -867,7 +867,22 @@ public class EmitVariable {
                 // The left value can be a variable, an operator or a subroutine call:
                 //   `pos`, `substr`, `vec`, `sub :lvalue`
 
-                node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));   // emit the value
+                boolean directArrayToGlob = node.left instanceof OperatorNode globTarget
+                        && (globTarget.operator.equals("*")
+                        || globTarget.operator.equals("local")
+                        && globTarget.operand instanceof OperatorNode localizedGlob
+                        && localizedGlob.operator.equals("*"))
+                        && node.right instanceof OperatorNode arrayRhs
+                        && arrayRhs.operator.equals("@");
+                node.right.accept(emitterVisitor.with(directArrayToGlob
+                        ? RuntimeContextType.LIST : RuntimeContextType.SCALAR));
+                if (directArrayToGlob) {
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeGlob",
+                            "assignmentScalar",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                            false);
+                }
 
                 boolean spillRhs = true;
                 int rhsSlot = -1;
@@ -1094,7 +1109,9 @@ public class EmitVariable {
                     mv.visitInsn(Opcodes.SWAP); // move the target first
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, leftDescriptor, "set", rightDescriptor, false);
                 } else {
-                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "addToScalar", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "assignTo",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                 }
 
                 if (pooledRhs) {
@@ -1352,9 +1369,9 @@ public class EmitVariable {
             branchExpr.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
             mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
             mv.visitInsn(Opcodes.SWAP);
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
-                    "addToScalar",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                    "assignTo",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
         }
     }

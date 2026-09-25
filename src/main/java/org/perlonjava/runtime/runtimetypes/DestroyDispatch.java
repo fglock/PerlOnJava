@@ -337,6 +337,7 @@ public class DestroyDispatch {
      */
     private static void doCallDestroy(RuntimeBase referent, String className) {
         LifecycleRuntimeState state = state();
+        int destroyBlessId = referent.blessId;
         // Use cached method if available
         RuntimeScalar destroyMethod = state.destroyMethodCache.get(referent.blessId);
         if (destroyMethod == null) {
@@ -473,6 +474,22 @@ public class DestroyDispatch {
             }
             args.elements.clear();
             args.elementsOwned = false;
+
+            // Reblessing an object while its DESTROY method is running starts
+            // a new destruction lifecycle for the new class.  The original
+            // one-shot guard belongs to the old class, so do not let it
+            // suppress the new class's DESTROY (op/ref.t's _B -> A case).
+            // Invoke it directly while the object is still protected by the
+            // current DESTROY frame; going through callDestroy() here would
+            // be treated as re-entrance and discarded.
+            if (referent.blessId != destroyBlessId) {
+                referent.destroyFired = false;
+                String reblessedClassName = NameNormalizer.getBlessStr(referent.blessId);
+                if (reblessedClassName != null && !reblessedClassName.isEmpty()) {
+                    doCallDestroy(referent, reblessedClassName);
+                    return;
+                }
+            }
 
             // Phase 3: Resurrection detection. If refCount > 0 at this point,
             // a strong ref to the object escaped DESTROY (e.g. Devel::StackTrace-

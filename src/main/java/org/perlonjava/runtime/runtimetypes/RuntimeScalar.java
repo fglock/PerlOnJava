@@ -1714,6 +1714,30 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     /**
+     * Store a Perl expression value into an assignment target.
+     *
+     * <p>{@link #addToScalar(RuntimeScalar)} is also used internally while
+     * releasing temporaries and restoring scopes.  The synthetic {@code $_[0]}
+     * passed to {@code DESTROY} is read-only to Perl code, but those lifecycle
+     * operations must still be able to copy and release it while another
+     * exception unwinds.  Keep the language-visible readonly check here, at
+     * compiler assignment sites only.</p>
+     */
+    public static RuntimeScalar assignTo(RuntimeBase value, RuntimeScalar target) {
+        // During global destruction the runtime's argument/default-variable
+        // aliases share this synthetic slot.  Perl permits a destructor to
+        // use ordinary $_ there (op/ref.t's IO::Handle destructor does so),
+        // while direct $_[0] assignment remains protected during normal
+        // execution.
+        boolean globalDestruction = "DESTRUCT".equals(
+                GlobalVariable.getGlobalVariable(GlobalContext.GLOBAL_PHASE).toString());
+        if (target.destroySelfArgument && target != value && !globalDestruction) {
+            throw new PerlCompilerException("Modification of a read-only value attempted");
+        }
+        return value.addToScalar(target);
+    }
+
+    /**
      * Vivifies this scalar as an lvalue. For plain scalars this is a no-op.
      * For hash/array element proxies (RuntimeBaseProxy subclasses), this creates
      * the actual entry in the parent container, matching Perl 5's behavior where

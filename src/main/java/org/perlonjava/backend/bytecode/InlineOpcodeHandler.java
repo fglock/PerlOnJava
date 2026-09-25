@@ -609,7 +609,7 @@ public class InlineOpcodeHandler {
         RuntimeScalar val = (valueBase instanceof RuntimeScalar)
                 ? (RuntimeScalar) valueBase : valueBase.scalar();
         RuntimeScalar element = arr.get(idx);
-        registers[rd] = element.set(val);
+        registers[rd] = RuntimeScalar.assignTo(val, element);
         return pc;
     }
 
@@ -1561,9 +1561,8 @@ public class InlineOpcodeHandler {
     public static int executeStoreGlob(int[] bytecode, int pc, RuntimeBase[] registers) {
         int globReg = bytecode[pc++];
         int valueReg = bytecode[pc++];
-        Object val = registers[valueReg];
-        RuntimeScalar scalarVal = (val instanceof RuntimeScalar)
-                ? (RuntimeScalar) val : ((RuntimeList) val).scalar();
+        RuntimeBase val = registers[valueReg];
+        RuntimeScalar scalarVal = RuntimeGlob.assignmentScalar(val);
         ((RuntimeGlob) registers[globReg]).set(scalarVal);
         return pc;
     }

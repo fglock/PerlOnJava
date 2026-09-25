@@ -1380,6 +1380,23 @@ public class OperatorParser {
         String operator = token.text;
         boolean explicitEmptyCall = parser.tokenIndex < parser.tokens.size()
                 && "(".equals(parser.tokens.get(parser.tokenIndex).text);
+        // A conventional bareword filehandle is the complete operand.  Parse
+        // it before the generic list parser so a following low-precedence
+        // operator remains outside the call: `eof F ? yes : no` means
+        // `(eof F) ? yes : no`, not `eof(F ? yes : no)`.
+        LexerToken nextToken = peek(parser);
+        if (!explicitEmptyCall && nextToken.type == IDENTIFIER
+                && nextToken.text.matches("^[A-Z_][A-Z0-9_]*$")) {
+            TokenUtils.consume(parser);
+            String name = nextToken.text;
+            GlobalVariable.vivifyGlobalIO(FileHandle.normalizeBarewordHandle(parser, name));
+            Node handle = FileHandle.parseBarewordHandle(parser, name);
+            if (handle == null) {
+                handle = new IdentifierNode(name, currentIndex);
+            }
+            return new BinaryOperatorNode(operator, handle,
+                    new ListNode(new java.util.ArrayList<>(), currentIndex), currentIndex);
+        }
         // Handle file-related operators with special handling for default handles
         ListNode operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
         boolean hadReadlineArgument = !operand.elements.isEmpty();

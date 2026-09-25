@@ -1,5 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.runtime.mro.InheritanceResolver;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -79,9 +81,38 @@ public class GlobalDestruction {
             }
         }
 
+        // Perl treats its standard output handle as an IO::Handle object at
+        // global destruction.  Closing the Java stream alone skips a Perl
+        // IO::Handle::DESTROY method, which is observable (and in particular
+        // may still use regex state and print to STDOUT).  Dispatch it before
+        // RuntimeIO.closeAllHandles() closes the stream.
+        destroyStandardOutputHandle(visited);
+
         // Releasing a global closure can enqueue the final decrement for a
         // captured lexical. Drain that decrement before global teardown ends.
         MortalList.flush();
+    }
+
+    private static void destroyStandardOutputHandle(Set<RuntimeBase> visited) {
+        RuntimeGlob stdout = GlobalVariable.getGlobalIO("main::STDOUT");
+        if (stdout.destroyFired) return;
+
+        int blessId = stdout.blessId;
+        if (blessId == 0) {
+            blessId = NameNormalizer.getBlessId("IO::Handle");
+            RuntimeScalar destroy = InheritanceResolver.findMethodInHierarchy(
+                    "DESTROY", "IO::Handle", null, 0);
+            if (destroy == null || !(destroy.value instanceof RuntimeCode code)
+                    || !code.defined()
+                    // The bundled fallback has no Perl-visible standard-handle
+                    // destructor semantics.  Dispatch only an application/module
+                    // definition, such as the override exercised by op/ref.t.
+                    || code.cvStartFile.startsWith("jar:")) return;
+            stdout.setBlessId(blessId);
+        }
+        if (!visited.add(stdout)) return;
+        stdout.refCount = Integer.MIN_VALUE;
+        DestroyDispatch.callDestroy(stdout);
     }
 
     /**
@@ -91,13 +122,19 @@ public class GlobalDestruction {
         if (val != null
                 && (val.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && val.value instanceof RuntimeBase base
-                && base.refCount >= 0) {
+                // A global object can be blessed before its class installs
+                // DESTROY.  Its initial transient cleanup then leaves the
+                // object untracked (or at MIN_VALUE), but a later method
+                // definition must still be observed at global destruction.
+                && (base.refCount >= 0 || (base.blessId != 0 && !base.destroyFired))) {
             destroyBaseIfTracked(base, visited);
         }
     }
 
     private static void destroyBaseIfTracked(RuntimeBase base, Set<RuntimeBase> visited) {
-        if (base == null || base.refCount < 0 || !visited.add(base)) {
+        if (base == null
+                || (base.refCount < 0 && (base.blessId == 0 || base.destroyFired))
+                || !visited.add(base)) {
             return;
         }
         if (base.blessId != 0 || WeakRefRegistry.hasWeakRefsTo(base) || base instanceof RuntimeCode) {
