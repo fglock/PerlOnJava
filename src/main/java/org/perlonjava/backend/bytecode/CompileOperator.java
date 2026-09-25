@@ -7,6 +7,7 @@ import org.perlonjava.runtime.NamedCharacterExpansionMap;
 import org.perlonjava.runtime.operators.ScalarGlobOperator;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
+import org.perlonjava.runtime.perlmodule.Version;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -1228,7 +1229,8 @@ public class CompileOperator {
                     String version = bytecodeCompiler.symbolTable.getPackageVersion(packageName);
                     if (version != null) {
                         String versionVarName = packageName + "::VERSION";
-                        GlobalVariable.getGlobalVariable(versionVarName).set(new RuntimeScalar(version));
+                        GlobalVariable.getGlobalVariable(versionVarName)
+                                .set(Version.packageDeclarationVersion(version));
                     }
                     bytecodeCompiler.symbolTable.setCurrentPackage(packageName, isClass);
                     if (isClass) ClassRegistry.registerClass(packageName);

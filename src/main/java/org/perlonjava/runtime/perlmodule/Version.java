@@ -79,6 +79,19 @@ public class Version extends PerlModuleBase {
     public static RuntimeList parse(RuntimeArray args, int ctx) {
         return parseInternal(args, ctx, false);
     }
+
+    /**
+     * Materialize the value installed in {@code $PACKAGE::VERSION} by a
+     * package declaration.  Perl stores a version object there, including for
+     * a bare v-string: its overloaded string value compares equal to the
+     * corresponding v-string while retaining the public {@code version} type.
+     */
+    public static RuntimeScalar packageDeclarationVersion(String source) {
+        RuntimeArray args = new RuntimeArray();
+        args.push(new RuntimeScalar("version"));
+        args.push(new RuntimeScalar(source));
+        return parse(args, RuntimeContextType.SCALAR).scalar();
+    }
     
     /**
      * Internal parse method with option to force qv mode.
@@ -534,27 +547,17 @@ public class Version extends PerlModuleBase {
             return new RuntimeScalar(swapped ? -cmp : cmp).getList();
         }
 
-        // Handle non-version objects - treat undef/empty as version 0
+        // Handle non-version objects - treat undef/empty as version 0.
+        // Do not stringify a bare v-string first: its Perl string value is
+        // the component-byte sequence, while parse() needs its VSTRING type
+        // to reconstruct v1.2.3. This is reached through the (cmp overload
+        // used to autogenerate eq/ne for package declaration version objects.
         if (!v1.isBlessed() || !NameNormalizer.getBlessStr(v1.blessId).equals("version")) {
-            String v1Str = v1.toString().trim();
-            if (v1Str.isEmpty()) {
-                v1Str = "0";
-            }
-            RuntimeArray parseArgs = new RuntimeArray();
-            parseArgs.push(new RuntimeScalar("version"));
-            parseArgs.push(new RuntimeScalar(v1Str));
-            v1 = parse(parseArgs, RuntimeContextType.SCALAR).scalar();
+            v1 = coerceComparisonVersion(v1);
         }
 
         if (!v2.isBlessed() || !NameNormalizer.getBlessStr(v2.blessId).equals("version")) {
-            String v2Str = v2.toString().trim();
-            if (v2Str.isEmpty()) {
-                v2Str = "0";
-            }
-            RuntimeArray parseArgs = new RuntimeArray();
-            parseArgs.push(new RuntimeScalar("version"));
-            parseArgs.push(new RuntimeScalar(v2Str));
-            v2 = parse(parseArgs, RuntimeContextType.SCALAR).scalar();
+            v2 = coerceComparisonVersion(v2);
         }
 
         // Get normalized versions
@@ -584,6 +587,18 @@ public class Version extends PerlModuleBase {
         }
 
         return new RuntimeScalar(cmp).getList();
+    }
+
+    private static RuntimeScalar coerceComparisonVersion(RuntimeScalar value) {
+        RuntimeScalar source = value;
+        if (source.type != VSTRING) {
+            String text = source.toString().trim();
+            source = new RuntimeScalar(text.isEmpty() ? "0" : text);
+        }
+        RuntimeArray parseArgs = new RuntimeArray();
+        parseArgs.push(new RuntimeScalar("version"));
+        parseArgs.push(source);
+        return parse(parseArgs, RuntimeContextType.SCALAR).scalar();
     }
 
     private static boolean isInfiniteVersion(RuntimeScalar value) {

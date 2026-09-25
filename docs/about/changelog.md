@@ -13,6 +13,9 @@ priorities and future plans.
 - Restore the public `YAML::Syck` API and legacy template parsing, including
   exports, file helpers, percent placeholders, duplicate keys, and tabs.
 
+- Restore package v-string declarations as `version` objects, including
+  v-string comparisons and leading-zero diagnostics.
+
 - Synchronize shared aggregate traversal during thread destruction, preventing
   intermittent `ConcurrentModificationException` failures in nested joins.
 
