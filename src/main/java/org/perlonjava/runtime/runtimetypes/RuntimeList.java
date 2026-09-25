@@ -274,13 +274,7 @@ public class RuntimeList extends RuntimeBase {
             for (RuntimeBase element : list.elements) addSnapshotWithArrayHoles(element);
             return;
         }
-        RuntimeBase aggregate = value;
-        while (aggregate instanceof RuntimeScalar scalar
-                && scalar.value instanceof RuntimeBase nested
-                && nested != aggregate) {
-            aggregate = nested;
-        }
-        if (aggregate instanceof RuntimeArray array) {
+        if (value instanceof RuntimeArray array) {
             for (int i = 0; i < array.size(); i++) {
                 elements.add(array.get(i));
             }

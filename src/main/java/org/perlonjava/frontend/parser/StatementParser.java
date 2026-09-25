@@ -1366,7 +1366,7 @@ public class StatementParser {
             if (versionString != null) {
                 // NumberNode retains source precision globally, but package
                 // version scalars use normal numeric stringification.
-                if (versionString.contains(".")) {
+                if (!versionString.startsWith("v") && versionString.contains(".")) {
                     versionString = versionString.replaceFirst("\\.?0+$", "");
                     if (versionString.isEmpty()) {
                         versionString = "0";
