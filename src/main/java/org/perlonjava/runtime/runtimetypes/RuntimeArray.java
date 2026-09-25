@@ -1532,6 +1532,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return result;
     }
 
+    /** Returns the array's actual element cells for a list-lvalue consumer. */
+    public RuntimeList getLvalueList() {
+        RuntimeList result = new RuntimeList();
+        result.elements.addAll(this.elements);
+        return result;
+    }
+
     /**
      * Gets the scalar value of the array.
      *

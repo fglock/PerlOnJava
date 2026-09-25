@@ -241,6 +241,23 @@ public class RuntimeList extends RuntimeBase {
      * their original values; only aggregate membership is copied.
      */
     public void addSnapshot(RuntimeBase value) {
+        if (value instanceof RuntimeList list) {
+            for (RuntimeBase element : list.elements) addSnapshot(element);
+            return;
+        }
+        // A dereferenced aggregate used as a list lvalue is represented by a
+        // scalar reference in some JVM lowering paths.  Preserve its element
+        // cells rather than treating the reference scalar as one slot.
+        RuntimeBase aggregate = value;
+        while (aggregate instanceof RuntimeScalar scalar
+                && scalar.value instanceof RuntimeBase nested
+                && nested != aggregate) {
+            aggregate = nested;
+        }
+        if (aggregate instanceof RuntimeArray array) {
+            elements.addAll(array.elements);
+            return;
+        }
         Iterator<RuntimeScalar> iterator = value.iterator();
         while (iterator.hasNext()) {
             this.elements.add(iterator.next());

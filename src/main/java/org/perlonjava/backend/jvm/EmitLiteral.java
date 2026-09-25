@@ -527,7 +527,7 @@ public class EmitLiteral {
             emitterVisitor.ctx.javaClassInfo.releaseSpillRef(elementRef);
 
             // Add the element to the list
-            if (forceListSnapshot) {
+            if (forceListSnapshot || contextType == RuntimeContextType.LVALUE_LIST) {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeDescriptorConstants.LIST_CLASS,
                         "addSnapshot", "(" + RuntimeDescriptorConstants.BASE_TYPE + ")V", false);
             } else if (contextType == RuntimeContextType.RUNTIME) {

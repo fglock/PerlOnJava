@@ -8584,7 +8584,12 @@ public class BytecodeCompiler implements Visitor {
         emit(Opcodes.CREATE_LIST);
         emitReg(listReg);
         boolean forceListSnapshot = Boolean.TRUE.equals(node.getAnnotation("forceListSnapshot"));
-        boolean flattenRuntimeAggregate = currentCallContext == RuntimeContextType.RUNTIME;
+        // A list used as an lvalue must expose the individual cells of an
+        // aggregate expression.  In particular, the result of
+        // `(@a = split //, "abc") = 1..10` is the three cells assigned by
+        // the inner array assignment, not the @a container itself.
+        boolean flattenRuntimeAggregate = currentCallContext == RuntimeContextType.RUNTIME
+                || currentCallContext == RuntimeContextType.LVALUE_LIST;
         emit((forceListSnapshot || flattenRuntimeAggregate)
                 ? -node.elements.size() - 1 : node.elements.size());
 

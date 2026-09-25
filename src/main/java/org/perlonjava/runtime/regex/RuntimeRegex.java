@@ -87,6 +87,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static final boolean DEBUG_REGEX = System.getenv("DEBUG_REGEX") != null;
     private static final ThreadLocal<Integer> DEFER_FAILED_COMPILE_DEBUG_FREE =
             ThreadLocal.withInitial(() -> 0);
+    private static final ThreadLocal<Integer> ACTIVE_DEBUG_MODE =
+            ThreadLocal.withInitial(() -> 0);
 
     private static final Pattern USER_DEFINED_PROPERTY_PATTERN =
             Pattern.compile("\\\\([pP])\\{((?:[A-Za-z_][A-Za-z0-9_]*::)*(?:Is|In)[A-Za-z_][A-Za-z0-9_]*)}");
@@ -164,6 +166,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private List<String> inlineModifierWarnings = new ArrayList<>();
     // 0 = off, 1 = debug, 2 = debugcolor. Captured at the regex call site.
     private int lexicalDebugMode;
+    private boolean splitWhitespaceDebug;
+
+    public static void setActiveDebugMode(int mode) { ACTIVE_DEBUG_MODE.set(mode); }
+    public static int activeDebugMode() { return ACTIVE_DEBUG_MODE.get(); }
+    public void markSplitWhitespaceDebug() {
+        splitWhitespaceDebug = true;
+        lexicalDebugMode = ACTIVE_DEBUG_MODE.get();
+    }
+    public void emitCompileDebugTraceForSplit() { emitCompileDebugTrace(true); }
     private boolean lexicalReStrict;
     private ParseDebugTrace failedParseDebugTrace = ParseDebugTrace.EMPTY;
     public RuntimeRegex() {
@@ -1768,6 +1779,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if ((lexicalDebugMode & LEXICAL_DEBUG_COMPILE) == 0) return;
         String patternDescription = debugPatternDescription();
         StringBuilder report = new StringBuilder();
+        String extflags = splitWhitespaceDebug ? "SKIPWHITE WHITE"
+                : patternDescription.equals(" ") ? "NULL"
+                : patternDescription.equals("^") ? "START_ONLY"
+                : patternDescription.isEmpty() ? "NULL"
+                : patternDescription.equals("\\s+") ? "WHITE" : "NULL";
+        report.append("r->extflags: ").append(extflags).append('\n');
         if ((lexicalDebugMode & LEXICAL_DEBUG_PARSE) != 0) {
             report.append(compileDebugPreamble(patternDescription));
             appendParseDebugTrace(report,

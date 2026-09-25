@@ -9,6 +9,8 @@ priorities and future plans.
 - Preserve Perl-compatible `EISDIR` readline behavior for filehandles opened
   on directories on Windows, and advertise PerlOnJava's non-real fork
   capability through `Config`.
+- Restore `op/split.t` nested array-assignment compatibility and split regex
+  debug extflags on both execution backends.
 
 - Preserve valid package and module version literals, restoring CPAN modules
   that use zero-padded dotted versions, large bare v-versions, or repeated

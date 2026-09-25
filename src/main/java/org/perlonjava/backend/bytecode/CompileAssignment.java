@@ -1430,6 +1430,12 @@ public class CompileAssignment {
                     // In scalar context, return the array size; in list context, return the array
                     if (outerContext == RuntimeContextType.SCALAR) {
                         bytecodeCompiler.lastResultReg = countReg;
+                    } else if (outerContext == RuntimeContextType.LVALUE_LIST) {
+                        int lvalueListReg = bytecodeCompiler.allocateRegister();
+                        bytecodeCompiler.emit(Opcodes.ARRAY_LVALUE_LIST);
+                        bytecodeCompiler.emitReg(lvalueListReg);
+                        bytecodeCompiler.emitReg(arrayReg);
+                        bytecodeCompiler.lastResultReg = lvalueListReg;
                     } else {
                         bytecodeCompiler.lastResultReg = arrayReg;
                     }
@@ -1689,6 +1695,12 @@ public class CompileAssignment {
                         // In scalar context, return array size; in list context, return the array
                         if (outerContext == RuntimeContextType.SCALAR) {
                             bytecodeCompiler.lastResultReg = countReg;
+                        } else if (outerContext == RuntimeContextType.LVALUE_LIST) {
+                            int lvalueListReg = bytecodeCompiler.allocateRegister();
+                            bytecodeCompiler.emit(Opcodes.ARRAY_LVALUE_LIST);
+                            bytecodeCompiler.emitReg(lvalueListReg);
+                            bytecodeCompiler.emitReg(arrayReg);
+                            bytecodeCompiler.lastResultReg = lvalueListReg;
                         } else {
                             bytecodeCompiler.lastResultReg = arrayReg;
                         }

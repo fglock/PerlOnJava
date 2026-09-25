@@ -4,6 +4,8 @@ import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.regex.RegexMatcher;
 import org.perlonjava.runtime.regex.RuntimeRegex;
+import org.perlonjava.runtime.perlmodule.Strict;
+import org.perlonjava.frontend.parser.SpecialBlockParser;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.math.BigInteger;
@@ -131,6 +133,12 @@ public class Operator {
             if (patternStr.equals(" ")) {
                 quotedRegex = RuntimeRegex.getQuotedRegex(new RuntimeScalar("\\s+"), new RuntimeScalar(unicodeStrings ? "u" : ""));
                 RuntimeRegex whitespaceRegex = (RuntimeRegex) quotedRegex.value;
+                if (RuntimeRegex.activeDebugMode() != 0
+                        || (SpecialBlockParser.getCurrentScope() != null
+                        && SpecialBlockParser.getCurrentScope().isStrictOptionEnabled(Strict.HINT_RE_DEBUG))) {
+                    whitespaceRegex.markSplitWhitespaceDebug();
+                    whitespaceRegex.emitCompileDebugTraceForSplit();
+                }
                 RegexMatcher leadingMatcher = whitespaceRegex.matcher(string, inputStr);
                 if (leadingMatcher.find() && leadingMatcher.start() == 0) {
                     inputStr = inputStr.substring(leadingMatcher.end());
