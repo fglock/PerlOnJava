@@ -11,8 +11,8 @@ use lib "$FindBin::Bin/../lib";
 use PerlTestRunner::Scheduler qw(profile_for_test);
 
 my $profile = profile_for_test('perl5_t/t/japh/abigail.t');
-is_deeply($profile, { class => 'exclusive', weight => 3, exclusive => 1 },
-    'mutating JAPH fixture is an exclusive scheduling barrier');
+is_deeply($profile, { class => 'heavy', weight => 3 },
+    'private-overlay JAPH fixture participates in weighted scheduling');
 
 my $root = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
 my $runner = File::Spec->catfile($root, 'dev', 'tools', 'perl_test_runner.pl');

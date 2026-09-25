@@ -19,6 +19,7 @@ use PerlTestRunner::Scheduler qw(
     next_runnable_index
     profile_for_test
     scheduling_priority
+    duration_priority
 );
 use PerlTestRunner::Timeouts qw(timeout_for_runner_test);
 
@@ -121,43 +122,39 @@ my @indexed_tests = map {
     }
 } 0 .. $#test_files;
 my $heavy_count = grep { $_->{profile}{class} eq 'heavy' } @indexed_tests;
-my $exclusive_count = grep { $_->{profile}{exclusive} } @indexed_tests;
 @indexed_tests = sort {
        scheduling_priority($a->{profile}) <=> scheduling_priority($b->{profile})
+    || duration_priority($a->{test_file}) <=> duration_priority($b->{test_file})
     || $a->{test_index} <=> $b->{test_index}
 } @indexed_tests;
 
 print "Found $total_files test files\n";
 print "Running tests with $jperl_path (${jobs}-unit resource budget, "
     . "${timeout}s base timeout; $heavy_count weighted heavy, "
-    . "$exclusive_count exclusive)\n";
+    . "all tests share the scheduling budget)\n";
 print "-" x 60, "\n";
 
 # Use one scheduling budget for the complete corpus. Ordinary tests consume one
-# unit, heavy semantic fixtures consume more, and true isolation cases wait for
-# an idle runner. Stable longest-first classes start known slow work early, then
+# unit and heavy semantic fixtures consume more. Stable longest-first classes
+# start known slow work early, then
 # use the more uniform ordinary files to fill the remaining resource budget.
 if (defined $cpu_heavy_jobs) {
-    my (@parallel_tests, @cpu_heavy_tests, @exclusive_tests);
+    my (@parallel_tests, @cpu_heavy_tests);
     for my $test (@indexed_tests) {
-        if (requires_exclusive_slot($test->{test_file})) {
-            push @exclusive_tests, $test;
-        } elsif (requires_cpu_heavy_slot($test->{test_file})) {
+        if (requires_cpu_heavy_slot($test->{test_file})) {
             push @cpu_heavy_tests, $test;
         } else {
             push @parallel_tests, $test;
         }
     }
     print "Running tests with $jperl_path (${jobs} parallel jobs, ${timeout}s base timeout; "
-        . scalar(@exclusive_tests) . " memory-sensitive tests run serially; "
         . scalar(@cpu_heavy_tests) . " CPU-heavy tests use ${cpu_heavy_jobs} jobs)\n";
     run_tests_parallel(\@parallel_tests, $test_dir, $jobs, $total_files);
-    run_tests_parallel(\@exclusive_tests, $test_dir, 1, $total_files);
     run_tests_parallel(\@cpu_heavy_tests, $test_dir, $cpu_heavy_jobs, $total_files);
 } else {
     print "Running tests with $jperl_path (${jobs}-unit resource budget, "
         . "${timeout}s base timeout; $heavy_count weighted heavy, "
-        . "$exclusive_count exclusive)\n";
+        . "all tests share the scheduling budget)\n";
     run_tests_weighted(\@indexed_tests, $test_dir, $jobs, $total_files);
 }
 
@@ -255,7 +252,6 @@ sub run_tests_weighted {
     my %children;
     my @test_queue = @$test_files;
     my $active_weight = 0;
-    my $exclusive_active = 0;
 
     # Don't use SIGCHLD handler - we'll poll instead
     local $SIG{CHLD} = 'DEFAULT';
@@ -267,7 +263,6 @@ sub run_tests_weighted {
                 $budget,
                 $active_weight,
                 scalar(keys %children),
-                $exclusive_active,
             );
             last unless defined $queue_index;
 
@@ -282,10 +277,6 @@ sub run_tests_weighted {
                 $queue_index,
             );
             $active_weight += $weight;
-            if ($profile->{exclusive}) {
-                $exclusive_active = 1;
-                last;
-            }
         }
 
         # Check for completed children
@@ -296,14 +287,12 @@ sub run_tests_weighted {
                 # Child has exited
                 my $test_info = delete $children{$pid};
                 $active_weight -= $test_info->{scheduler_weight};
-                $exclusive_active = 0 if $test_info->{exclusive};
                 process_test_result($test_info, $test_dir);
             } elsif ($res < 0) {
                 # Error - child doesn't exist
                 warn "Warning: Lost track of child $pid\n";
                 my $test_info = delete $children{$pid};
                 $active_weight -= $test_info->{scheduler_weight};
-                $exclusive_active = 0 if $test_info->{exclusive};
             }
         }
 
@@ -704,20 +693,6 @@ NATIVE_LAUNCHER
     return $result;
 }
 
-sub requires_exclusive_slot {
-    my ($test_file) = @_;
-    return $test_file =~ m{
-          (?:^|/)perl5/dist/threads/t/join\.t$
-        |
-          (?:^|/)perl5_t/t/op/gv\.t$
-        | (?:^|/)perl5_t/t/re/pat(?:_thr)?\.t$
-        | (?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$
-        | (?:^|/)perl5_t/t/re/regexp_qr_embed_thr\.t$
-        | (?:^|/)perl5_t/t/benchmark/gh7094-speed-up-keys-on-empty-hash\.t$
-        | (?:^|/)perl5_t/t/japh/abigail\.t$
-    }x;
-}
-
 sub requires_cpu_heavy_slot {
     my ($test_file) = @_;
     return $test_file =~ m{
@@ -764,7 +739,6 @@ sub start_test_job {
             start_time => time(),
             child_pid => $pid,
             scheduler_weight => $test->{scheduler_weight},
-            exclusive => $test->{profile}{exclusive},
         };
     }
 }
