@@ -403,6 +403,9 @@ public class BytecodeCompiler implements Visitor {
     // through these variables must update the aliased element in place, matching
     // Perl's `foreach my $x (@array)` and `foreach $x (@array)` semantics.
     private final Map<String, Integer> foreachAliasLexicalCounts = new HashMap<>();
+
+    /** Persistent identities for state arrays whose declaration may be skipped on re-entry. */
+    private final Map<String, Integer> stateArrayPersistIds = new HashMap<>();
     // Active package-global foreach aliases need their iterator register for
     // in-place compound assignment. An `our` declaration has a different,
     // older symbol-table register that must not be used while the loop alias
@@ -755,6 +758,20 @@ public class BytecodeCompiler implements Visitor {
 
     void registerVariable(String name, int reg) {
         symbolTable.addVariableWithIndex(name, reg, "my");
+    }
+
+    void registerStateArrayVariable(String name, int reg, int persistId) {
+        symbolTable.addVariableWithIndex(name, reg, "state");
+        stateArrayPersistIds.put(name, persistId);
+    }
+
+    private void retrieveStateArrayForRead(String name, int register) {
+        Integer persistId = stateArrayPersistIds.get(name);
+        if (persistId == null) return;
+        emit(Opcodes.STATE_RETRIEVE_ARRAY);
+        emitReg(register);
+        emit(addToStringPool(name));
+        emit(persistId);
     }
 
     boolean isForeachAliasLexical(String name) {
@@ -3606,7 +3623,7 @@ public class BytecodeCompiler implements Visitor {
                                 emitReg(undefReg);
                                 emit(nameIdx);
                                 emit(persistId);
-                                registerVariable(varName, reg);
+                                registerStateArrayVariable(varName, reg, persistId);
                             }
                             case "%" -> {
                                 emit(Opcodes.NEW_HASH);
@@ -5604,6 +5621,7 @@ public class BytecodeCompiler implements Visitor {
                 if (hasVariable(varName) && !isOurVariable(varName)) {
                     // Lexical array (my/state) - use existing register
                     arrayReg = getVariableRegister(varName);
+                    retrieveStateArrayForRead(varName, arrayReg);
                 } else if (hasVariable(varName) && isOurVariable(varName)) {
                     // 'our' array - must load from global table to see local() changes
                     arrayReg = allocateRegister();
@@ -6400,6 +6418,8 @@ public class BytecodeCompiler implements Visitor {
                 opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB || opcode == Opcodes.LOCAL_GLOB_REF ||
                 opcode == Opcodes.LOCAL_SCALAR_DYNAMIC ||
                 opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL ||
+                opcode == Opcodes.HASH_DELETE_LOCAL || opcode == Opcodes.ARRAY_DELETE_LOCAL ||
+                opcode == Opcodes.HASH_SLICE_DELETE_LOCAL || opcode == Opcodes.ARRAY_SLICE_DELETE_LOCAL ||
                 opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.PUSH_CANCEL
                 || opcode == Opcodes.SAVE_REGEX_STATE) {
             usesLocalization = true;
@@ -6417,6 +6437,8 @@ public class BytecodeCompiler implements Visitor {
                 opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB || opcode == Opcodes.LOCAL_GLOB_REF ||
                 opcode == Opcodes.LOCAL_SCALAR_DYNAMIC ||
                 opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL ||
+                opcode == Opcodes.HASH_DELETE_LOCAL || opcode == Opcodes.ARRAY_DELETE_LOCAL ||
+                opcode == Opcodes.HASH_SLICE_DELETE_LOCAL || opcode == Opcodes.ARRAY_SLICE_DELETE_LOCAL ||
                 opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.PUSH_CANCEL
                 || opcode == Opcodes.SAVE_REGEX_STATE) {
             usesLocalization = true;

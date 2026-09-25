@@ -339,7 +339,13 @@ public class RuntimeList extends RuntimeBase {
      */
     public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
         for (RuntimeBase elem : elements) {
-            elem.setArrayOfAlias(arr);
+            // A conditional expression evaluated in list context can produce
+            // no member.  Bytecode represents that absence as null while a
+            // list is being assembled; it must flatten as an empty list, not
+            // escape as a Java null dereference.
+            if (elem != null) {
+                elem.setArrayOfAlias(arr);
+            }
         }
         return arr;
     }

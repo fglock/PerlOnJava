@@ -184,9 +184,16 @@ public class StatementParser {
             // We need to parse the reference manually to avoid parsePrimary trying to parse
             // the following (...) as a function call or hash subscript.
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "\\");
+            boolean previousParsingTakeReference = parser.parsingTakeReference;
+            parser.parsingTakeReference = true;
             parser.parsingForLoopVariable = true;
-            Node operand = ParsePrimary.parsePrimary(parser);
-            parser.parsingForLoopVariable = false;
+            Node operand;
+            try {
+                operand = ParsePrimary.parsePrimary(parser);
+            } finally {
+                parser.parsingForLoopVariable = false;
+                parser.parsingTakeReference = previousParsingTakeReference;
+            }
             varNode = new OperatorNode("\\", operand, parser.tokenIndex);
         }
 
@@ -292,11 +299,19 @@ public class StatementParser {
                     "foreach on non-lexical iterator variable";
         }
         Node body;
+        boolean loopTopicalizer = isTopicalizerLoopVariable(varNode)
+                && parser.ctx.symbolTable.isFeatureCategoryEnabled("switch");
+        if (loopTopicalizer) {
+            parser.parsingGivenDepth++;
+        }
         try {
             parser.parsingRuntimeLoopBodyDepth++;
             body = ParseBlock.parseBlock(parser);
         } finally {
             parser.parsingRuntimeLoopBodyDepth--;
+            if (loopTopicalizer) {
+                parser.parsingGivenDepth--;
+            }
             parser.futureAsyncAwaitForbiddenContext = previousForbiddenContext;
         }
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
@@ -348,6 +363,14 @@ public class StatementParser {
     private static boolean isLexicalForeachVariable(Node varNode) {
         return varNode instanceof OperatorNode operator
                 && (operator.operator.equals("my") || operator.operator.equals("state"));
+    }
+
+    private static boolean isTopicalizerLoopVariable(Node varNode) {
+        if (varNode == null) return true;
+        return varNode instanceof OperatorNode variable
+                && variable.operator.equals("$")
+                && variable.operand instanceof IdentifierNode identifier
+                && identifier.name.equals("_");
     }
 
     /**
@@ -658,13 +681,34 @@ public class StatementParser {
         // that value across the control-flow jump instead of compiling it in
         // void context and replacing it with undef.
         Node whenResult = null;
+        boolean explicitLoopControl = false;
+        boolean continueWhen = false;
         for (int i = whenBlock.elements.size() - 1; i >= 0; i--) {
             Node element = whenBlock.elements.get(i);
             if (element != null) {
                 whenResult = element;
-                whenBlock.elements.remove(i);
+                // `continue` is normalized to `next` by CoreOperatorResolver,
+                // but in a when clause it means switch fall-through rather
+                // than loop control.  Drop it so the following when/default
+                // clause remains reachable. Other loop controls must stay in
+                // the body rather than becoming an implicit result.
+                continueWhen = element instanceof AbstractNode annotated
+                        && annotated.getBooleanAnnotation("whenContinue");
+                explicitLoopControl = element instanceof OperatorNode control
+                        && (control.operator.equals("last")
+                        || control.operator.equals("next")
+                        || control.operator.equals("redo"));
+                if (continueWhen || !explicitLoopControl) {
+                    whenBlock.elements.remove(i);
+                }
                 break;
             }
+        }
+        if (continueWhen || explicitLoopControl) {
+            return new IfNode("if", whenIsBoolean(whenCondition) ? whenCondition
+                    : new BinaryOperatorNode("~~",
+                    new OperatorNode("$", new IdentifierNode("_", index), index),
+                    whenCondition, index), whenBlock, null, index);
         }
         if (whenResult == null) {
             whenResult = new OperatorNode("undef", new ListNode(index), index);
@@ -751,6 +795,31 @@ public class StatementParser {
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
         return defaultBlock;
+    }
+
+    /** Parse an expression followed by Perl's postfix {@code when} modifier. */
+    public static Node parseWhenModifier(Parser parser, Node expression) {
+        int index = parser.tokenIndex;
+        if (parser.parsingGivenDepth == 0) {
+            parser.throwCleanError(index, "Can't \"when\" outside a topicalizer");
+        }
+        TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // when
+        Node condition;
+        if (TokenUtils.peek(parser).text.equals("(")) {
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
+            condition = parser.parseExpression(0);
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+        } else {
+            condition = parser.parseExpression(0);
+        }
+        BlockNode body = new BlockNode(List.of(expression), index, parser);
+        Node ifCondition = whenIsBoolean(condition) ? condition
+                : new BinaryOperatorNode("~~",
+                        new OperatorNode("$", new IdentifierNode("_", index), index),
+                        condition, index);
+        Node result = new IfNode("if", ifCondition, body, null, index);
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, ";");
+        return result;
     }
 
     /**

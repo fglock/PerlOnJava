@@ -2819,6 +2819,10 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeArraySetFromList(bytecode, pc, registers);
                             }
 
+                            case Opcodes.ARRAY_SET_FROM_REFERENCE_LIST -> {
+                                pc = InlineOpcodeHandler.executeArraySetFromReferenceList(bytecode, pc, registers);
+                            }
+
                             case Opcodes.SET_FROM_LIST -> {
                                 pc = InlineOpcodeHandler.executeSetFromList(bytecode, pc, registers);
                             }
@@ -2853,7 +2857,8 @@ public class BytecodeInterpreter {
                                  Opcodes.RETRIEVE_BEGIN_HASH, Opcodes.LOCAL_SCALAR, Opcodes.LOCAL_ARRAY,
                                  Opcodes.LOCAL_HASH, Opcodes.STATE_INIT_SCALAR, Opcodes.STATE_INIT_ARRAY,
                                  Opcodes.STATE_INIT_HASH, Opcodes.STATE_RETRIEVE_SCALAR,
-                                 Opcodes.STATE_IS_INITIALIZED, Opcodes.STATE_MARK_INITIALIZED -> {
+                                 Opcodes.STATE_RETRIEVE_ARRAY, Opcodes.STATE_IS_INITIALIZED,
+                                 Opcodes.STATE_MARK_INITIALIZED, Opcodes.STATE_ALIAS_ARRAY -> {
                                 pc = executeScopeOps(opcode, bytecode, pc, registers, code);
                             }
 
@@ -4223,6 +4228,25 @@ public class BytecodeInterpreter {
                     stateArr.setFromList(((RuntimeBase) registers[valueReg]).getList());
                     StateVariable.markInitializedStateVariable(codeRef, varName, persistId);
                 }
+                return pc;
+            }
+            case Opcodes.STATE_RETRIEVE_ARRAY -> {
+                int rd = bytecode[pc++];
+                int nameIdx = bytecode[pc++];
+                int persistId = bytecode[pc++];
+                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
+                registers[rd] = StateVariable.retrieveStateArray(codeRef, code.stringPool[nameIdx], persistId);
+                return pc;
+            }
+            case Opcodes.STATE_ALIAS_ARRAY -> {
+                int rd = bytecode[pc++];
+                int sourceReg = bytecode[pc++];
+                int nameIdx = bytecode[pc++];
+                int persistId = bytecode[pc++];
+                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
+                RuntimeArray array = (RuntimeArray) registers[sourceReg];
+                StateVariable.aliasStateArray(codeRef, code.stringPool[nameIdx], persistId, array);
+                registers[rd] = array;
                 return pc;
             }
             case Opcodes.STATE_INIT_HASH -> {

@@ -150,13 +150,25 @@ public class ParsePrimary {
             calledWithCore = true;
             operatorEnabled = true; // CORE:: functions are always enabled
             TokenUtils.consume(parser);  // consume "::"
+            // The whitespace skipper recognizes bare data markers and moves
+            // directly to EOF.  Inspect this raw token first so the qualified
+            // CORE spelling reaches the same data-section implementation.
+            if (parser.tokenIndex < parser.tokens.size()) {
+                LexerToken marker = parser.tokens.get(parser.tokenIndex);
+                if (marker.text.equals("__DATA__") || marker.text.equals("__END__")) {
+                    parser.tokenIndex = DataSection.parseDataSection(
+                            parser, parser.tokenIndex, parser.tokens, marker);
+                    return new ListNode(startIndex);
+                }
+            }
             token = TokenUtils.consume(parser); // consume the actual operator
             operator = token.text;
             // CORE::print::helper and CORE::foo'bar are ordinary qualified
             // subroutine names, not explicit calls to CORE::print or
             // CORE::foo.  Let the subroutine-name parser consume all package
             // components before deciding whether a CORE builtin was named.
-            String followingNameToken = parser.tokens.get(parser.tokenIndex).text;
+            String followingNameToken = parser.tokenIndex < parser.tokens.size()
+                    ? parser.tokens.get(parser.tokenIndex).text : "";
             if (followingNameToken.equals("::") || followingNameToken.equals("'")) {
                 parser.tokenIndex = startIndex;
                 return SubroutineParser.parseSubroutineCall(parser, false);

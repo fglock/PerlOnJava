@@ -189,6 +189,17 @@ public class StateVariable {
         }
     }
 
+    /** Replace a persistent state-array binding for whole-array refaliasing. */
+    public static void aliasStateArray(RuntimeScalar codeRef, String var, int id, RuntimeArray array) {
+        String beginVar = PersistentVariable.beginVariable(id, var.substring(1));
+        if (!codeRef.getDefinedBoolean()) {
+            GlobalVariable.aliasGlobalArray(beginVar, array);
+        } else {
+            ((RuntimeCode) codeRef.value).stateArray.put(beginVar, array);
+        }
+        markInitializedStateVariable(codeRef, var, id);
+    }
+
     /**
      * Retrieves a "state" hash variable.
      *
