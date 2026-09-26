@@ -2751,6 +2751,10 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeScalarToList(bytecode, pc, registers);
                             }
 
+                            case Opcodes.ARRAY_LVALUE_LIST -> {
+                                pc = InlineOpcodeHandler.executeArrayLvalueList(bytecode, pc, registers);
+                            }
+
                             case Opcodes.CREATE_LIST -> {
                                 pc = InlineOpcodeHandler.executeCreateList(bytecode, pc, registers);
                             }

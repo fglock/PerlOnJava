@@ -8564,7 +8564,9 @@ public class BytecodeCompiler implements Visitor {
             emit(Opcodes.CREATE_LIST);
             emitReg(listReg);
             boolean flattenRuntimeAggregate = currentCallContext == RuntimeContextType.RUNTIME;
-            emit((Boolean.TRUE.equals(node.getAnnotation("forceListSnapshot")) || flattenRuntimeAggregate)
+            emit((Boolean.TRUE.equals(node.getAnnotation("forceListSnapshot"))
+                    || Boolean.TRUE.equals(node.getAnnotation("foreachSource"))
+                    || flattenRuntimeAggregate)
                     ? -2 : 1); // count = 1
             emitReg(elemReg);
             lastResultReg = listReg;
@@ -8583,7 +8585,12 @@ public class BytecodeCompiler implements Visitor {
         int listReg = allocateRegister();
         emit(Opcodes.CREATE_LIST);
         emitReg(listReg);
-        boolean forceListSnapshot = Boolean.TRUE.equals(node.getAnnotation("forceListSnapshot"));
+        boolean forceListSnapshot = Boolean.TRUE.equals(node.getAnnotation("forceListSnapshot"))
+                || Boolean.TRUE.equals(node.getAnnotation("foreachSource"));
+        // Aggregate assignment results are converted to their writable cells
+        // by the assignment lowering itself.  Flattening every list compiled
+        // in LVALUE_LIST context also changes ordinary argument lists, such
+        // as `my ($class, @args) = @_` inside a module import method.
         boolean flattenRuntimeAggregate = currentCallContext == RuntimeContextType.RUNTIME;
         emit((forceListSnapshot || flattenRuntimeAggregate)
                 ? -node.elements.size() - 1 : node.elements.size());

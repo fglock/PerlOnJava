@@ -2677,6 +2677,9 @@ public class Opcodes {
     /** Defined symbolic scalar dereference without slot vivification. */
     public static final short DEFINED_SCALAR_DEREF = 578;
 
+    /** Convert an array result to a list of its writable element cells. */
+    public static final short ARRAY_LVALUE_LIST = 579;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

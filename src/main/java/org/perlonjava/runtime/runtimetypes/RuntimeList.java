@@ -248,6 +248,52 @@ public class RuntimeList extends RuntimeBase {
     }
 
     /**
+     * Snapshot a compiler-proven nested list-assignment target.  Unlike an
+     * ordinary list value, a dereferenced aggregate here supplies writable
+     * cells to the enclosing assignment.
+     */
+    public void addLvalueSnapshot(RuntimeBase value) {
+        // A dereferenced aggregate used as a list lvalue is represented by a
+        // scalar reference in some JVM lowering paths.  Preserve its element
+        // cells rather than treating the reference scalar as one slot.
+        RuntimeBase aggregate = value;
+        while (aggregate instanceof RuntimeScalar scalar
+                && scalar.value instanceof RuntimeBase nested
+                && nested != aggregate) {
+            aggregate = nested;
+        }
+        if (aggregate instanceof RuntimeArray array) {
+            // Ordinary nested list assignment needs concrete writable target
+            // cells.  The lazy foreach view is only valid for a foreach
+            // source; setFromList() deliberately recognizes RuntimeArray,
+            // not that iterator wrapper, as an aggregate lvalue.
+            for (int i = 0; i < array.size(); i++) {
+                elements.add(array.get(i));
+            }
+            return;
+        }
+        addSnapshot(value);
+    }
+
+    /** Snapshot a foreach source, preserving writable proxies for sparse array holes. */
+    public void addSnapshotWithArrayHoles(RuntimeBase value) {
+        if (value instanceof RuntimeList list) {
+            for (RuntimeBase element : list.elements) addSnapshotWithArrayHoles(element);
+            return;
+        }
+        if (value instanceof RuntimeArray array) {
+            for (int i = 0; i < array.size(); i++) {
+                elements.add(array.get(i));
+            }
+            return;
+        }
+        Iterator<RuntimeScalar> iterator = value.iterator();
+        while (iterator.hasNext()) {
+            elements.add(iterator.next());
+        }
+    }
+
+    /**
      * Adds an integer value to the list.
      *
      * @param value The integer value to add.
@@ -984,6 +1030,132 @@ public class RuntimeList extends RuntimeBase {
                 throw new NoSuchElementException();
             }
             return currentIterator.next();
+        }
+    }
+
+    /**
+     * A fixed-length foreach view of an array. Each element is looked up only
+     * when the foreach iterator reaches it, retaining a writable proxy for a
+     * sparse hole without eagerly vivifying unrelated slots.
+     */
+    private static final class ForeachArraySnapshot extends RuntimeBase {
+        private final RuntimeArray array;
+        private final int length;
+
+        private ForeachArraySnapshot(RuntimeArray array, int length) {
+            this.array = array;
+            this.length = length;
+        }
+
+        @Override
+        public Iterator<RuntimeScalar> iterator() {
+            return new Iterator<>() {
+                private int index;
+
+                @Override
+                public boolean hasNext() {
+                    return index < length;
+                }
+
+                @Override
+                public RuntimeScalar next() {
+                    if (!hasNext()) throw new NoSuchElementException();
+                    return array.get(index++);
+                }
+            };
+        }
+
+        @Override
+        public RuntimeScalar scalar() {
+            return length == 0 ? scalarUndef : array.get(length - 1);
+        }
+
+        @Override
+        public void addToArray(RuntimeArray target) {
+            for (RuntimeScalar element : this) target.add(element);
+        }
+
+        @Override
+        public RuntimeList getList() {
+            RuntimeList result = new RuntimeList();
+            result.elements.add(this);
+            return result;
+        }
+
+        @Override
+        public RuntimeArray setArrayOfAlias(RuntimeArray target) {
+            for (RuntimeScalar element : this) target.add(element);
+            return target;
+        }
+
+        @Override
+        public int countElements() {
+            return length;
+        }
+
+        @Override
+        public boolean getBoolean() {
+            return scalar().getBoolean();
+        }
+
+        @Override
+        public boolean getDefinedBoolean() {
+            return scalar().getDefinedBoolean();
+        }
+
+        @Override
+        public RuntimeScalar createReference() {
+            return array.createReference();
+        }
+
+        @Override
+        public RuntimeBase undefine() {
+            return array.undefine();
+        }
+
+        @Override
+        public RuntimeScalar addToScalar(RuntimeScalar target) {
+            return target.set(scalar());
+        }
+
+        @Override
+        public RuntimeArray setFromList(RuntimeList list) {
+            return array.setFromList(list);
+        }
+
+        @Override
+        public RuntimeArray keys() {
+            return array.keys();
+        }
+
+        @Override
+        public RuntimeArray values() {
+            return array.values();
+        }
+
+        @Override
+        public RuntimeList each(int ctx) {
+            return array.each(ctx);
+        }
+
+        @Override
+        public RuntimeScalar chop() {
+            return array.chop();
+        }
+
+        @Override
+        public RuntimeScalar chomp() {
+            return array.chomp();
+        }
+
+        @Override
+        public void dynamicSaveState() {
+            // The view owns no state; dynamic localization belongs to its array.
+        }
+
+        @Override
+        public void dynamicRestoreState() {
+            // The view owns no state; dynamic localization belongs to its array.
         }
     }
 }

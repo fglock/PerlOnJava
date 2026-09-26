@@ -197,6 +197,7 @@ public class Re extends PerlModuleBase {
     }
 
     private static void setDebugFlags(ScopedSymbolTable symbolTable, int flags) {
+        RuntimeRegex.setActiveDebugMode(flags);
         symbolTable.setLexicalRegexDebugFlags(flags);
         if ((flags & (RuntimeRegex.LEXICAL_DEBUG_COMPILE
                 | RuntimeRegex.LEXICAL_DEBUG_EXECUTE)) == 0) {

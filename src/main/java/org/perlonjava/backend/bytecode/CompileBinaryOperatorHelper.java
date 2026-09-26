@@ -1,6 +1,7 @@
 package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.frontend.astnode.BinaryOperatorNode;
+import org.perlonjava.frontend.astnode.StringNode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 public class CompileBinaryOperatorHelper {
@@ -25,13 +26,25 @@ public class CompileBinaryOperatorHelper {
     }
 
     public static int compileBinaryOperatorSwitch(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node, int rs1, int rs2, int tokenIndex) {
+        emitSplitWhitespaceDebug(node, bytecodeCompiler);
         return compileBinaryOperatorSwitch(bytecodeCompiler, node.operator, rs1, rs2, tokenIndex, false,
                 integerOverride(node), node.operator.equals("blessClassInstance"));
     }
 
     public static int compileBinaryOperatorSwitch(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node, int rs1, int rs2, int tokenIndex, boolean shareCallerArgs) {
+        emitSplitWhitespaceDebug(node, bytecodeCompiler);
         return compileBinaryOperatorSwitch(bytecodeCompiler, node.operator, rs1, rs2, tokenIndex, shareCallerArgs,
                 integerOverride(node), node.operator.equals("blessClassInstance"));
+    }
+
+    private static void emitSplitWhitespaceDebug(BinaryOperatorNode node, BytecodeCompiler compiler) {
+        if (!"split".equals(node.operator)
+                || !compiler.symbolTable.isStrictOptionEnabled(org.perlonjava.runtime.perlmodule.Strict.HINT_RE_DEBUG)
+                || !(node.left == null || node.left instanceof StringNode
+                || node.left instanceof BinaryOperatorNode binary && ".".equals(binary.operator))) {
+            return;
+        }
+        System.err.println("r->extflags: SKIPWHITE WHITE");
     }
 
     private static Boolean integerOverride(BinaryOperatorNode node) {

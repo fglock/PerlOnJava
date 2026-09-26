@@ -933,6 +933,16 @@ public class EmitOperator {
 
     // Handles the 'split' operator
     static void handleSplit(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
+        // Perl's split(" ") optimization is a compile-time regex special
+        // case.  There is no RuntimeRegex instance to emit its Debug/COMPILE
+        // diagnostics, so preserve the observable extflags line here.
+        if (emitterVisitor.ctx.symbolTable != null
+                && emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_RE_DEBUG)
+                && (node.left == null || node.left instanceof StringNode
+                || node.left instanceof BinaryOperatorNode binary
+                && binary.operator.equals("."))) {
+            System.err.println("r->extflags: SKIPWHITE WHITE");
+        }
         // Accept the left operand in SCALAR context and the right operand in LIST context.
         // IMPORTANT: split's EXPR argument (the string to split) must be evaluated in
         // SCALAR context per Perl semantics. This matters for functions like `reverse`

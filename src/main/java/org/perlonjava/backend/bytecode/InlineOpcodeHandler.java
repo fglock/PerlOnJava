@@ -960,6 +960,14 @@ public class InlineOpcodeHandler {
         return pc;
     }
 
+    /** Convert an array to a list retaining its writable element cells. */
+    public static int executeArrayLvalueList(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        registers[rd] = ((RuntimeArray) registers[rs]).getLvalueList();
+        return pc;
+    }
+
     /**
      * Create RuntimeList from registers.
      * Format: CREATE_LIST rd count rs1 rs2 ... rsN
