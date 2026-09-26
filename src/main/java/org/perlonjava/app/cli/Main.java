@@ -6,6 +6,7 @@ import org.perlonjava.runtime.runtimetypes.ErrorMessageUtil;
 import org.perlonjava.runtime.runtimetypes.DiamondIO;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlExitException;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeGlob;
@@ -177,7 +178,8 @@ public class Main {
             // A failed END block aborts compilation of the enclosing program.
             // SpecialBlockParser supplies the END-specific diagnostic; the CLI
             // owns the final top-level compilation-abort line.
-            if (errorMessage.contains("END failed--compilation aborted")
+            if ((t instanceof PerlCompilerException
+                    || errorMessage.contains("END failed--compilation aborted"))
                     && !errorMessage.contains("aborted due to compilation errors.")) {
                 errorMessage += "Execution of " + parsedArgs.fileName
                         + " aborted due to compilation errors.\n";

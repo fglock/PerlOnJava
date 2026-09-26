@@ -14,6 +14,20 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariab
  */
 public class SpecialBlock {
 
+    /** Identifies a failure raised while dispatching a deferred phaser. */
+    public static final class DeferredPhaseException extends RuntimeException {
+        private final String phase;
+
+        public DeferredPhaseException(String phase, Throwable cause) {
+            super(cause);
+            this.phase = phase;
+        }
+
+        public String phase() {
+            return phase;
+        }
+    }
+
     // Arrays to store different types of blocks
     public static RuntimeArray getEndBlocks() {
         return PerlRuntime.current().executionState().endBlocks;
@@ -98,7 +112,13 @@ public class SpecialBlock {
         while (!initBlocks.isEmpty()) {
             RuntimeScalar block = RuntimeArray.pop(initBlocks);
             if (block.getDefinedBoolean()) {
-                RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
+                try {
+                    RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
+                } catch (PerlExitException exit) {
+                    throw exit;
+                } catch (Throwable failure) {
+                    throw new DeferredPhaseException("INIT", failure);
+                }
             }
         }
     }
@@ -111,7 +131,13 @@ public class SpecialBlock {
         while (!checkBlocks.isEmpty()) {
             RuntimeScalar block = RuntimeArray.pop(checkBlocks);
             if (block.getDefinedBoolean()) {
-                RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
+                try {
+                    RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
+                } catch (PerlExitException exit) {
+                    throw exit;
+                } catch (Throwable failure) {
+                    throw new DeferredPhaseException("CHECK", failure);
+                }
             }
         }
     }
@@ -125,7 +151,13 @@ public class SpecialBlock {
         while (!unitcheckBlocks.isEmpty()) {
             RuntimeScalar block = RuntimeArray.pop(unitcheckBlocks);
             if (block.getDefinedBoolean()) {
-                RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
+                try {
+                    RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
+                } catch (PerlExitException exit) {
+                    throw exit;
+                } catch (Throwable failure) {
+                    throw new DeferredPhaseException("UNITCHECK", failure);
+                }
             }
         }
     }

@@ -281,7 +281,20 @@ public class PerlLanguageProvider {
         try {
             try {
                 ast = parser.parse(); // Generate the abstract syntax tree (AST)
+            } catch (PerlExitException exit) {
+                if (isTopLevelScript) {
+                    finishCompileTimeExit(ctx);
+                    throw new PerlExitException(
+                            GlobalVariable.getGlobalVariable("main::?").getInt());
+                }
+                throw exit;
             } catch (PerlCompilerException parseFailure) {
+                if (isTopLevelScript && parseFailure.getMessage() != null
+                        && parseFailure.getMessage().contains("failed--compilation aborted")) {
+                    writePhaserFailure(parseFailure.getMessage());
+                    finishCompileTimeExit(ctx);
+                    throw new PerlExitException(255);
+                }
                 // A BEGIN block may install __DIE__ before parsing reaches a
                 // later syntax error.  Perl dispatches that compile-time
                 // failure through the handler; without one, retain the
@@ -402,6 +415,56 @@ public class PerlLanguageProvider {
                 compilationLock.close();
             }
         }
+        }
+    }
+
+    /** Complete shutdown after exit from a compile-time phaser. */
+    private static void finishCompileTimeExit(EmitterContext ctx) {
+        runUnitcheckBlocks(ctx.unitcheckBlocks);
+        CallerStack.push("main", ctx.compilerOptions.fileName, 0);
+        try {
+            runCheckBlocks();
+        } finally {
+            CallerStack.pop();
+        }
+        MortalList.flush();
+        MortalList.flushDeferredCapturesBeforeEnd();
+        CallerStack.push("main", ctx.compilerOptions.fileName, 0);
+        try {
+            runEndBlocks(false);
+        } finally {
+            CallerStack.pop();
+            MortalList.flushDeferredCaptures();
+            RuntimeRegex.emitCurrentRuntimeDebugFreeTraces();
+        }
+        GlobalDestruction.runGlobalDestruction();
+        RuntimeIO.closeAllHandles();
+    }
+
+    /** Report a dying deferred phaser before draining the remaining queues. */
+    private static void finishDeferredPhaseFailure(
+            EmitterContext ctx, SpecialBlock.DeferredPhaseException failure) {
+        String message = ErrorMessageUtil.stringifyException(failure.getCause());
+        if (!message.endsWith("\n")) {
+            message += "\n";
+        }
+        message += failure.phase() + " failed--compilation aborted at "
+                + ctx.compilerOptions.fileName + " line 1.\n";
+        writePhaserFailure(message);
+        finishCompileTimeExit(ctx);
+        throw new PerlExitException(255);
+    }
+
+    private static void writePhaserFailure(String message) {
+        if (message.endsWith("\n") && !message.endsWith(".\n")) {
+            message = message.substring(0, message.length() - 1) + ".\n";
+        }
+        RuntimeIO stderr = GlobalVariable.getGlobalIO("main::STDERR").getRuntimeIO();
+        if (stderr != null) {
+            stderr.write(message);
+            stderr.flush();
+        } else {
+            System.err.print(message);
         }
     }
 
@@ -567,17 +630,31 @@ public class PerlLanguageProvider {
     }
 
     private static RuntimeList executeCodeImpl(RuntimeCode runtimeCode, Node ast, EmitterContext ctx, boolean isMainProgram, int callerContext) throws Exception {
-        runUnitcheckBlocks(ctx.unitcheckBlocks);
-        if (isMainProgram) {
-            // Push a CallerStack entry so caller() inside CHECK/INIT/END blocks
-            // sees the main program as their caller, matching Perl 5 behavior
-            // where these blocks run from the main program scope.
-            CallerStack.push("main", ctx.compilerOptions.fileName, 0);
-            try {
-                runCheckBlocks();
-            } finally {
-                CallerStack.pop();
+        try {
+            runUnitcheckBlocks(ctx.unitcheckBlocks);
+            if (isMainProgram) {
+                // Push a CallerStack entry so caller() inside CHECK/INIT/END blocks
+                // sees the main program as their caller, matching Perl 5 behavior
+                // where these blocks run from the main program scope.
+                CallerStack.push("main", ctx.compilerOptions.fileName, 0);
+                try {
+                    runCheckBlocks();
+                } finally {
+                    CallerStack.pop();
+                }
             }
+        } catch (PerlExitException exit) {
+            if (isMainProgram) {
+                finishCompileTimeExit(ctx);
+                throw new PerlExitException(
+                        GlobalVariable.getGlobalVariable("main::?").getInt());
+            }
+            throw exit;
+        } catch (SpecialBlock.DeferredPhaseException failure) {
+            if (isMainProgram) {
+                finishDeferredPhaseFailure(ctx, failure);
+            }
+            throw failure;
         }
         if (ctx.compilerOptions.compileOnly) {
             RuntimeIO.closeAllHandles();
@@ -708,6 +785,11 @@ public class PerlLanguageProvider {
                 System.out.println(errorMessage);
                 System.out.println("END failed--call queue aborted.");
             }
+        } catch (SpecialBlock.DeferredPhaseException failure) {
+            if (isMainProgram) {
+                finishDeferredPhaseFailure(ctx, failure);
+            }
+            throw failure;
         } catch (PerlExitException e) {
             // PerlExitException already ran END blocks and closed handles in WarnDie.exit()
             // Just re-throw for the caller to handle

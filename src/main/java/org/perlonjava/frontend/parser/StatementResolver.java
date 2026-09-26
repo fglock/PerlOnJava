@@ -90,7 +90,7 @@ public class StatementResolver {
                 case "CHECK", "INIT", "UNITCHECK", "BEGIN", "END", "ADJUST" -> {
                     // Check if next token is '{' - if not, this might be a lexical sub call
                     parser.tokenIndex++;
-                    if (peek(parser).text.equals("{")) {
+                    if (peek(parser).text.equals("{") || peek(parser).text.equals("(")) {
                         parser.tokenIndex = currentIndex;
                         yield SpecialBlockParser.parseSpecialBlock(parser);
                     }
