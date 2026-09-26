@@ -1840,6 +1840,9 @@ public class BytecodeCompiler implements Visitor {
             blockLoopInfo = new LoopInfo(node.labelName, blockLoopStartPc, !topicalizerLoopBody,
                     node.getBooleanAnnotation("givenBlock") || topicalizerLoopBody);
             blockLoopInfo.resultReg = outerResultReg;
+            // An implicit `last` from when/default must preserve the context
+            // in which this value-producing block was compiled.
+            blockLoopInfo.context = currentCallContext;
             blockLoopInfo.dynamicLocalLevelReg = localLevelReg;
             loopStack.push(blockLoopInfo);
         }
@@ -9060,12 +9063,14 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Preserve the final expression of a when clause as the result of its
-        // enclosing given block before jumping to that block's end.
+        // enclosing given block before jumping to that block's end. A given is
+        // an expression, so compile that result in the enclosing context rather
+        // than always collapsing list values to a scalar.
         if (implicitGivenLast) {
             Object resultAnnotation = node.getAnnotation("implicitGivenResult");
             Node result = resultAnnotation instanceof Node ? (Node) resultAnnotation : null;
             if (result != null) {
-                compileNode(result, -1, RuntimeContextType.SCALAR);
+                compileNode(result, -1, targetLoop.context);
                 if (targetLoop.resultReg >= 0 && lastResultReg >= 0) {
                     emitAliasWithTarget(targetLoop.resultReg, lastResultReg);
                 }
@@ -9118,6 +9123,7 @@ public class BytecodeCompiler implements Visitor {
         int cleanupScopeIndex;       // Lower bound for scopes bypassed by local loop control
         int dynamicLocalLevelReg;    // Saved DVM level for locals bypassed by loop control
         int resultReg;               // Result register for value-producing synthetic blocks
+        int context;                 // Context of a value-producing synthetic block
 
         LoopInfo(String label, int startPc, boolean isTrueLoop) {
             this(label, startPc, isTrueLoop, false);
@@ -9132,6 +9138,7 @@ public class BytecodeCompiler implements Visitor {
             this.cleanupScopeIndex = -1;
             this.dynamicLocalLevelReg = -1;
             this.resultReg = -1;
+            this.context = RuntimeContextType.VOID;
             this.breakPcs = new ArrayList<>();
             this.nextPcs = new ArrayList<>();
             this.redoPcs = new ArrayList<>();

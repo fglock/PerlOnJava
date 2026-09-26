@@ -229,14 +229,15 @@ public class EmitControlFlow {
         }
 
         // A when-clause's implicit last carries the clause's final value out
-        // of the synthetic given loop. Evaluate it explicitly in scalar
-        // context and leave it on the operand stack for the given block's
-        // result. Ordinary last remains valueless and follows the path below.
+        // of the synthetic given loop. Evaluate it in the enclosing given
+        // expression's context: `given` is an expression, so a list-valued
+        // when/default must remain a list when its caller expects one.
+        // Ordinary last remains valueless and follows the path below.
         if (implicitGivenLast) {
             Object resultAnnotation = node.getAnnotation("implicitGivenResult");
             Node result = resultAnnotation instanceof Node ? (Node) resultAnnotation : null;
             if (result != null) {
-                result.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                result.accept(emitterVisitor.with(loopLabels.context));
             } else {
                 EmitOperator.emitUndef(ctx.mv);
             }
