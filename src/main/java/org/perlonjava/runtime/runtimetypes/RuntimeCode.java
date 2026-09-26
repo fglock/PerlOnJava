@@ -1964,6 +1964,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Only a reference reached before its declaration needs to
                 // survive into that declaration after a forward jump.
                 && !scalar.localBindingExists
+                // A tied lexical's storage is declaration-local. Reusing it
+                // for a later shadowing declaration leaks the old tie into
+                // the new lexical cell.
+                && scalar.type != RuntimeScalarType.TIED_SCALAR
                 // A prior block invocation can have exposed its lexical to
                 // Internals::SvREADONLY.  That cell is no longer valid
                 // writable storage for the next invocation: retain the new

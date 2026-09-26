@@ -27,6 +27,9 @@ priorities and future plans.
 - Implement Unix `socketpair` through real POSIX descriptors, preserving
   bidirectional I/O, socket options, shutdown, and scope-exit EOF semantics.
 
+- Restore lexical lvalue alias isolation, `${^LAST_FH}` lexical filehandle
+  identity, and user-defined Unicode property diagnostics on both backends.
+
 - Preserve lexical-sub storage and CODE aliases across interpreter fallback,
   and reject writes to padded multi-variable foreach iterators on both backends.
 

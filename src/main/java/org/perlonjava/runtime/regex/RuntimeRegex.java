@@ -133,6 +133,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // Bare Is*/In* callbacks resolve in the package where the regex was
     // constructed, even when qr// is first matched later or in an ithread.
     private String userPropertyPackage = "main";
+    // A qr// created before RUN can contain a user property whose subroutine
+    // declaration has been pre-registered but whose body is not yet available.
+    // Keep that provenance until Joni materializes the deferred property.
+    private boolean userPropertyConstructedBeforeRun;
+    private static final ThreadLocal<Boolean> SOURCE_REGEX_COMPILED_BEFORE_RUN =
+            ThreadLocal.withInitial(() -> false);
     List<RuntimeRegexCallback> executableCallbacks = List.of();
     private boolean executableCallbacksReleased;
     public String patternString;
@@ -220,6 +226,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         copy.trustedCalloutCount = this.trustedCalloutCount;
         copy.compiledRegexCacheKey = this.compiledRegexCacheKey;
         copy.userPropertyPackage = this.userPropertyPackage;
+        copy.userPropertyConstructedBeforeRun = this.userPropertyConstructedBeforeRun;
         copy.setExecutableCallbacks(callbacks);
         copy.patternString = this.patternString;
         copy.debugPatternString = this.debugPatternString;
@@ -480,6 +487,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                         boolean lexicalReStrict, String sourceDiagnosticPattern,
                                         NamedCharacterExpansionMap preResolvedNamedCharacters) {
         String userPropertyPackage = currentUserPropertyPackage();
+        boolean userPropertyConstructedBeforeRun = SOURCE_REGEX_COMPILED_BEFORE_RUN.get();
         RuntimeScalar namedCharacterTranslator = preResolvedNamedCharacters == null
                 ? org.perlonjava.runtime.HintHashRegistry.getCompileTimeHint("charnames")
                 : null;
@@ -498,6 +506,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                 preResolvedNamedCharacters == null ? null
                                         : preResolvedNamedCharacters.sourceMode(),
                                 sourceDiagnosticPattern)));
+        regex.userPropertyConstructedBeforeRun = userPropertyConstructedBeforeRun;
         regex.materializeDefinedDeferredProperties();
         return regex;
     }
@@ -530,16 +539,19 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     private void materializeDefinedDeferredProperties() {
         if (recursivePattern != null) {
-            recursivePattern.materializeDefinedDeferredProperties();
+            recursivePattern.materializeDefinedDeferredProperties(
+                    userPropertyConstructedBeforeRun);
         }
         if (recursivePatternUnicode != null
                 && recursivePatternUnicode != recursivePattern) {
-            recursivePatternUnicode.materializeDefinedDeferredProperties();
+            recursivePatternUnicode.materializeDefinedDeferredProperties(
+                    userPropertyConstructedBeforeRun);
         }
         if (recursivePatternBytes != null
                 && recursivePatternBytes != recursivePattern
                 && recursivePatternBytes != recursivePatternUnicode) {
-            recursivePatternBytes.materializeDefinedDeferredProperties();
+            recursivePatternBytes.materializeDefinedDeferredProperties(
+                    userPropertyConstructedBeforeRun);
         }
     }
 
@@ -2387,13 +2399,23 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public static RuntimeScalar getQuotedRegexInPackage(
             RuntimeScalar patternString, RuntimeScalar modifiers,
             String lexicalPackage) {
+        return getQuotedRegexInPackage(patternString, modifiers, lexicalPackage, false);
+    }
+
+    /** Compile a JVM-emitted regex with its parser-time source lifecycle. */
+    public static RuntimeScalar getQuotedRegexInPackage(
+            RuntimeScalar patternString, RuntimeScalar modifiers,
+            String lexicalPackage, boolean sourceCompiledBeforeRun) {
         RuntimeScalar currentPackage = InterpreterState.currentPackage.get();
         String previousPackage = currentPackage.toString();
+        boolean previousSourceLifecycle = SOURCE_REGEX_COMPILED_BEFORE_RUN.get();
         currentPackage.set(lexicalPackage);
+        SOURCE_REGEX_COMPILED_BEFORE_RUN.set(sourceCompiledBeforeRun);
         try {
             return getQuotedRegex(patternString, modifiers);
         } finally {
             currentPackage.set(previousPackage);
+            SOURCE_REGEX_COMPILED_BEFORE_RUN.set(previousSourceLifecycle);
         }
     }
 
@@ -2974,13 +2996,24 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public static RuntimeScalar getQuotedRegexInPackage(
             RuntimeScalar patternString, RuntimeScalar modifiers,
             int callsiteId, String lexicalPackage) {
+        return getQuotedRegexInPackage(patternString, modifiers, callsiteId,
+                lexicalPackage, false);
+    }
+
+    /** Per-callsite variant retaining parser-time regex source lifecycle. */
+    public static RuntimeScalar getQuotedRegexInPackage(
+            RuntimeScalar patternString, RuntimeScalar modifiers,
+            int callsiteId, String lexicalPackage, boolean sourceCompiledBeforeRun) {
         RuntimeScalar currentPackage = InterpreterState.currentPackage.get();
         String previousPackage = currentPackage.toString();
+        boolean previousSourceLifecycle = SOURCE_REGEX_COMPILED_BEFORE_RUN.get();
         currentPackage.set(lexicalPackage);
+        SOURCE_REGEX_COMPILED_BEFORE_RUN.set(sourceCompiledBeforeRun);
         try {
             return getQuotedRegex(patternString, modifiers, callsiteId);
         } finally {
             currentPackage.set(previousPackage);
+            SOURCE_REGEX_COMPILED_BEFORE_RUN.set(previousSourceLifecycle);
         }
     }
 

@@ -575,8 +575,14 @@ public class IOOperator {
 
         // Update the last accessed filehandle
         RuntimeIO.setLastAccessedHandle(fh);
-        if (MyVarCleanupStack.isRegistered(fileHandle)
-                && fileHandle.value instanceof RuntimeGlob glob && glob.isSlotSnapshot()) {
+        // ${^LAST_FH} retains the lexical scalar that supplied a coercible
+        // filehandle, not merely its underlying glob.  A lexical `my $fh =
+        // *STDOUT` can also pass through a scalar wrapper. Direct named
+        // handles use the named glob path. A lexical coercible handle has a
+        // compiler-assigned lexical display name and must preserve its scalar
+        // identity so LAST_FH can return \$fh.
+        RuntimeGlob suppliedGlob = fileHandle.value instanceof RuntimeGlob glob ? glob : null;
+        if (suppliedGlob != null && fileHandle.lexicalDisplayName != null) {
             RuntimeIO.setLastAccessedScalar(fileHandle);
         } else {
             RuntimeIO.setLastAccessedScalar(null);

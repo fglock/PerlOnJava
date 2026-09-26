@@ -4,7 +4,7 @@ use feature 'switch';
 use Test::More;
 
 my $directory;
-given ('perl5_t/t/op') {
+given ('.') {
     when (-d) { $directory = 1 }
 }
 ok $directory, 'file test when condition is boolean';
