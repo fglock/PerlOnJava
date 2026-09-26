@@ -18,7 +18,10 @@ my $source = join ' ',
     'BEGIN { exit 7; }';
 
 my $stderr = gensym;
-my $pid = open3(undef, my $stdout, $stderr, 'timeout', '60', $launcher, '-e', $source);
+my @command = $^O eq 'MSWin32'
+    ? ($launcher, '-e', $source)
+    : ('timeout', '60', $launcher, '-e', $source);
+my $pid = open3(undef, my $stdout, $stderr, @command);
 my $out = do { local $/; <$stdout> // '' };
 my $err = do { local $/; <$stderr> // '' };
 waitpid($pid, 0);

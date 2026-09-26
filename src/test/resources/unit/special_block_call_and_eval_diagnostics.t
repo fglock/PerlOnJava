@@ -8,8 +8,10 @@ use Symbol qw(gensym);
 use Test::More;
 
 my $stderr = gensym;
-my $pid = open3(undef, my $stdout, $stderr, 'timeout', '60', $^X, '-e',
-    q!use re 'eval'; my $code = '(?{BEGIN{die})'; eval { 'a' =~ /^a$code/ }; print $@!);
+my @command = $^O eq 'MSWin32'
+    ? ($^X, '-e', q!use re 'eval'; my $code = '(?{BEGIN{die})'; eval { 'a' =~ /^a$code/ }; print $@!)
+    : ('timeout', '60', $^X, '-e', q!use re 'eval'; my $code = '(?{BEGIN{die})'; eval { 'a' =~ /^a$code/ }; print $@!);
+my $pid = open3(undef, my $stdout, $stderr, @command);
 my $diagnostic = do { local $/; <$stdout> // '' }
     . do { local $/; <$stderr> // '' };
 waitpid($pid, 0);
