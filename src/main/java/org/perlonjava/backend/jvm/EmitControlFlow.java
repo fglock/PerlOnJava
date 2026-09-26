@@ -731,6 +731,13 @@ public class EmitControlFlow {
         if (node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
             Node arg = labelNode.elements.getFirst();
 
+            // In statement position the parser represents bare __SUB__ as an
+            // identifier. Normalize it to the operator form consumed by the
+            // tail-call path below instead of treating it as a goto label.
+            if (arg instanceof IdentifierNode identifier && identifier.name.equals("__SUB__")) {
+                arg = new OperatorNode("__SUB__", null, identifier.tokenIndex);
+            }
+
             // Check if it's a static label (IdentifierNode)
             if (arg instanceof IdentifierNode) {
                 labelName = ((IdentifierNode) arg).name;
