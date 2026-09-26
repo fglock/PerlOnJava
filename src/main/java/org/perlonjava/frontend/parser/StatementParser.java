@@ -917,8 +917,11 @@ public class StatementParser {
         // rather than compiling it as an ordinary loop `next`.
         boolean continueWhen = removeWhenContinue(expression);
         List<Node> bodyElements = new ArrayList<>();
-        bodyElements.add(expression);
-        if (!continueWhen) {
+        if (continueWhen) {
+            bodyElements.add(expression);
+        } else {
+            // The synthetic last evaluates its annotation; retaining the
+            // expression in the body would run side effects twice.
             expression.setAnnotation("insideGivenBlock", true);
             OperatorNode implicitLast = new OperatorNode("last", new ListNode(index), index);
             implicitLast.setAnnotation("implicitGivenLast", true);

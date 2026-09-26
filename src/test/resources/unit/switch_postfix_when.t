@@ -12,6 +12,12 @@ my $postfix_value = do {
 };
 is $postfix_value, 5, 'matching postfix when exits the given expression';
 
+my $executions = 0;
+given (1) {
+    $executions++ when 1;
+}
+is $executions, 1, 'matching postfix when evaluates its expression once';
+
 my $continued = do {
     my $value = 0;
     given ('apple') {
