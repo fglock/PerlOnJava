@@ -2705,11 +2705,11 @@ public class Opcodes {
     public static final short DEFINED_SCALAR_DEREF = 578;
 
     /** Convert an array result to a list of its writable element cells. */
-    public static final short ARRAY_LVALUE_LIST = 579;
+    public static final short ARRAY_LVALUE_LIST = 615;
     /** Validate a CODE reference for ref-alias assignment. Format: rd valueReg. */
-    public static final short REFALIAS_CODE_REFERENCE = 581;
+    public static final short REFALIAS_CODE_REFERENCE = 616;
     /** Validate and unwrap a scalar reference used by ref aliasing. */
-    public static final short REFALIAS_SCALAR_REFERENCE = 582;
+    public static final short REFALIAS_SCALAR_REFERENCE = 617;
 
     /** Load a named typeglob without making the detached IO-preserving copy. */
     public static final short LOAD_GLOB_CANONICAL = 609;
