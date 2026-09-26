@@ -3197,7 +3197,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     true, // is boxed
                     ctx.errorUtil, // error message utility
                     evalCompilerOptions, // possibly modified for Unicode source
-                    ctx.unitcheckBlocks);
+                    new RuntimeArray());
             // Mark as eval string so goto &sub can emit proper error
             evalCtx.javaClassInfo.isInEvalString = true;
             // evalCtx.logDebug("evalStringHelper EmitterContext: " + evalCtx);
@@ -3252,7 +3252,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 registerDisabledWarnings(
                         generatedClass.getName().replace('.', '/'),
                         evalCtx.symbolTable.getDisabledWarningCategories());
-                runUnitcheckBlocks(ctx.unitcheckBlocks);
+                runUnitcheckBlocks(evalCtx.unitcheckBlocks);
             } catch (Throwable e) {
                 // Compilation error in eval-string
 
@@ -3760,7 +3760,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         true,
                         new ErrorMessageUtil(evalCompilerOptions.fileName, tokens),
                         evalCompilerOptions,
-                        ctx.unitcheckBlocks);
+                        new RuntimeArray());
 
                 Parser parser = new Parser(evalCtx, tokens);
                 parser.parsingEvalString = true;

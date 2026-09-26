@@ -544,7 +544,7 @@ public class EvalStringHandler {
                     false, // isBoxed
                     errorUtil,
                     opts,
-                    null  // unitcheckBlocks
+                    new RuntimeArray()  // unitcheckBlocks belong to this eval compilation unit
             );
 
             Parser parser = new Parser(ctx, tokens);
@@ -561,6 +561,10 @@ public class EvalStringHandler {
                 RegexQuoteMeta.setParserWarningBits(savedRegexWarningBits);
                 BHooksEndOfScope.endFileLoad(evalFileName);
             }
+
+            // UNITCHECK blocks registered by an eval STRING run as soon as
+            // that compilation unit has finished, before the eval body runs.
+            SpecialBlock.runUnitcheckBlocks(ctx.unitcheckBlocks);
 
             // (Captured variables and adjustedRegistry were computed above,
             //  before parsing, so the parser's symbol table could be seeded

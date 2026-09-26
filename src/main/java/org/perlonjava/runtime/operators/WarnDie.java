@@ -813,6 +813,13 @@ public class WarnDie {
         // is going to be given to exit(). You can modify $? in an END
         // subroutine to change the exit status of your program."
         getGlobalVariable("main::?").set(exitCode);
+        // A compile-time phaser may exit after earlier UNITCHECK and CHECK
+        // blocks have been queued.  The top-level parser must drain those
+        // queues before END, without entering INIT or the main body.
+        String phase = getGlobalVariable(GlobalContext.GLOBAL_PHASE).toString();
+        if ("START".equals(phase) || "CHECK".equals(phase)) {
+            throw new PerlExitException(exitCode);
+        }
         // Flush file-scoped lexical cleanup before END blocks
         MortalList.flush();
         // Match normal shutdown: destroy captures unrelated to END now, while
