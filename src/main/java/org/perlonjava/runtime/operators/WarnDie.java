@@ -123,8 +123,10 @@ public class WarnDie {
         }
         if (stderrIO != null) {
             stderrIO.write(message);
+            stderrIO.flush();
         } else {
             System.err.print(message);
+            System.err.flush();
         }
     }
 

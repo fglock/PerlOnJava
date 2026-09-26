@@ -95,6 +95,9 @@ public class SpecialBlockParser {
         // ignores it and warns instead of treating the parentheses as a call.
         if (TokenUtils.peek(parser).text.equals("(")) {
             StringParser.parseRawString(parser, "q");
+            String warning = "Prototype on " + blockName + " block ignored"
+                    + parser.ctx.errorUtil.warningLocation(parser.tokenIndex) + ".\n";
+            parser.recordSpecialBlockPrototypeWarning(warning);
             WarnDie.warn(
                     new RuntimeScalar("Prototype on " + blockName + " block ignored"),
                     new RuntimeScalar(parser.ctx.errorUtil.warningLocation(parser.tokenIndex)));
