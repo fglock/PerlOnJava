@@ -8,4 +8,18 @@ is($binmode->($fh, ':raw'), 1,
     'dynamic CORE::binmode reference invokes the runtime operator');
 close $fh;
 
+subtest 'bareword argument remains a string beside a same-named variable' => sub {
+    no strict qw(refs subs vars);
+
+    *mybinmode = \&CORE::binmode;
+    is &mybinmode(foo), undef,
+        'ampersand CORE alias receives the bareword argument';
+
+    # The later scalar reference must not retroactively turn the earlier
+    # unsigilled foo into $foo while compiling the enclosing scope.
+    if (0) {
+        is \&mylock(\$foo), \$foo, 'same-named scalar reference';
+    }
+};
+
 done_testing;

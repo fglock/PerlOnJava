@@ -2323,118 +2323,66 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(IdentifierNode node) {
-        // Variable reference
+        // An IdentifierNode without an enclosing sigil operator is a bareword.
+        // Variable references are always represented by an OperatorNode (for
+        // example, "$" around IdentifierNode("name")).  Do not resolve this
+        // bareword through a same-named $/@/% lexical: declaration collection
+        // sees later variables in the enclosing scope, while Perl still treats
+        // the earlier unsigilled token as a string.
         String varName = node.name;
 
-        // Check if this is a captured variable (with sigil)
-        // Try common sigils: $, @, %
-        String[] sigils = {"$", "@", "%"};
-        for (String sigil : sigils) {
-            String varNameWithSigil = sigil + varName;
-            if (capturedVarIndices != null && capturedVarIndices.containsKey(varNameWithSigil)) {
-                // Captured variable - use its pre-allocated register
-                lastResultReg = capturedVarIndices.get(varNameWithSigil);
+        // Synthetic compiler nodes may intentionally use an unsigilled
+        // identifier as a register name.  Preserve that representation, but
+        // never infer a variable by prepending a sigil.
+        if (hasVariable(varName)) {
+            lastResultReg = getVariableRegister(varName);
+            return;
+        }
+
+        // Barewords ending with :: are package name constants, always allowed
+        // under strict subs, e.g. Tie::RefHash:: is "Tie::RefHash".
+        if (varName.endsWith("::")) {
+            if (currentCallContext == RuntimeContextType.VOID) {
+                lastResultReg = -1;
                 return;
             }
+            String packageName = varName.substring(0, varName.length() - 2);
+            int rd = allocateOutputRegister();
+            emit(Opcodes.LOAD_STRING);
+            emitReg(rd);
+            emit(addToStringPool(packageName));
+            lastResultReg = rd;
+            return;
         }
-
-        // Check if it's a lexical variable (may have sigil or not)
-        if (hasVariable(varName)) {
-            // Lexical variable - already has a register
-            lastResultReg = getVariableRegister(varName);
-        } else {
-            // Try with sigils
-            boolean found = false;
-            for (String sigil : sigils) {
-                String varNameWithSigil = sigil + varName;
-                if (hasVariable(varNameWithSigil)) {
-                    lastResultReg = getVariableRegister(varNameWithSigil);
-                    found = true;
-                    break;
-                }
+        String normalizedBarewordName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
+        if (GlobalVariable.hasGlobalPseudoConstant(normalizedBarewordName)) {
+            if (currentCallContext == RuntimeContextType.VOID) {
+                lastResultReg = -1;
+                return;
             }
-
-            if (!found) {
-                // Not a lexical variable - could be a global or a bareword
-                // Check for strict subs violation (bareword without sigil)
-                if (!varName.startsWith("$") && !varName.startsWith("@") && !varName.startsWith("%")) {
-                    // Barewords ending with :: are package name constants, always allowed
-                    // e.g., Tie::RefHash:: is equivalent to "Tie::RefHash"
-                    if (varName.endsWith("::")) {
-                        if (currentCallContext == RuntimeContextType.VOID) {
-                            lastResultReg = -1;
-                            return;
-                        }
-                        String packageName = varName.substring(0, varName.length() - 2);
-                        int rd = allocateOutputRegister();
-                        emit(Opcodes.LOAD_STRING);
-                        emitReg(rd);
-                        int strIdx = addToStringPool(packageName);
-                        emit(strIdx);
-                        lastResultReg = rd;
-                        return;
-                    }
-                    String normalizedBarewordName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
-                    if (GlobalVariable.hasGlobalPseudoConstant(normalizedBarewordName)) {
-                        if (currentCallContext == RuntimeContextType.VOID) {
-                            lastResultReg = -1;
-                            return;
-                        }
-                        int rd = allocateOutputRegister();
-                        int nameIdx = addToStringPool(normalizedBarewordName);
-                        emit(Opcodes.LOAD_GLOBAL_SCALAR);
-                        emitReg(rd);
-                        emit(nameIdx);
-                        lastResultReg = rd;
-                        return;
-                    }
-                    // This is a bareword (no sigil)
-                    // A fully-qualified all-caps name is commonly a constant
-                    // supplied by an optional XS module.  Perl parses it even
-                    // when the guarded branch is disabled; do not reject the
-                    // source merely because that optional module is absent.
-                    boolean qualifiedConstant = varName.contains("::")
-                            && varName.matches(".*::[A-Z][A-Z0-9_]*");
-                    if (getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_STRICT_SUBS)
-                            && !qualifiedConstant) {
-                        throwCompilerException("Bareword \"" + varName + "\" not allowed while \"strict subs\" in use");
-                    }
-                    if (currentCallContext == RuntimeContextType.VOID) {
-                        lastResultReg = -1;
-                        return;
-                    }
-                    // Not strict - treat bareword as string literal
-                    int rd = allocateOutputRegister();
-                    emit(Opcodes.LOAD_STRING);
-                    emitReg(rd);
-                    int strIdx = addToStringPool(varName);
-                    emit(strIdx);
-                    lastResultReg = rd;
-                    return;
-                }
-
-                // Global variable
-                // Check strict vars before accessing
-                if (shouldBlockGlobalUnderStrictVars(varName)) {
-                    throwCompilerException("Global symbol \"" + varName + "\" requires explicit package name");
-                }
-
-                // Strip sigil and normalize name (e.g., "$x" → "main::x")
-                String bareVarName = varName.substring(1);  // Remove sigil
-                String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
-                // Use allocateRegister() instead of allocateOutputRegister() because
-                // LOAD_GLOBAL_SCALAR for special variables like $1 returns a proxy object.
-                // The ALIAS operation is needed to copy the value before RESTORE_REGEX_STATE.
-                int rd = allocateRegister();
-                int nameIdx = addToStringPool(normalizedName);
-
-                emit(Opcodes.LOAD_GLOBAL_SCALAR);
-                emitReg(rd);
-                emit(nameIdx);
-
-                lastResultReg = rd;
-            }
+            int rd = allocateOutputRegister();
+            int nameIdx = addToStringPool(normalizedBarewordName);
+            emit(Opcodes.LOAD_GLOBAL_SCALAR);
+            emitReg(rd);
+            emit(nameIdx);
+            lastResultReg = rd;
+            return;
         }
+        boolean qualifiedConstant = varName.contains("::")
+                && varName.matches(".*::[A-Z][A-Z0-9_]*");
+        if (getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_STRICT_SUBS)
+                && !qualifiedConstant) {
+            throwCompilerException("Bareword \"" + varName + "\" not allowed while \"strict subs\" in use");
+        }
+        if (currentCallContext == RuntimeContextType.VOID) {
+            lastResultReg = -1;
+            return;
+        }
+        int rd = allocateOutputRegister();
+        emit(Opcodes.LOAD_STRING);
+        emitReg(rd);
+        emit(addToStringPool(varName));
+        lastResultReg = rd;
     }
 
     /**
