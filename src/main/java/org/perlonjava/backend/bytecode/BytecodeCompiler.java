@@ -1845,6 +1845,10 @@ public class BytecodeCompiler implements Visitor {
             // in which this value-producing block was compiled.
             blockLoopInfo.context = currentCallContext;
             blockLoopInfo.dynamicLocalLevelReg = localLevelReg;
+            // A switch break leaves this block directly, bypassing lexical
+            // teardown for nested when bodies.  Preserve the enclosing block
+            // scope as the cleanup lower bound for both local backends.
+            blockLoopInfo.cleanupScopeIndex = scopeIndices.peek();
             loopStack.push(blockLoopInfo);
         }
 
@@ -9084,9 +9088,16 @@ public class BytecodeCompiler implements Visitor {
             // An explicit `last` (including switch's `break`) has no value.
             // Registers persist across interpreter executions, so leaving the
             // value-producing block's result register untouched here can
-            // return a prior iteration's object instead of undef.
-            emit(Opcodes.LOAD_UNDEF);
-            emitReg(targetLoop.resultReg);
+            // return a prior iteration's object. In list context it instead
+            // contributes an empty list, matching Perl's break semantics.
+            if (targetLoop.context == RuntimeContextType.LIST) {
+                emit(Opcodes.CREATE_LIST);
+                emitReg(targetLoop.resultReg);
+                emit(0);
+            } else {
+                emit(Opcodes.LOAD_UNDEF);
+                emitReg(targetLoop.resultReg);
+            }
         }
 
         // Emit the opcode and record the PC to be patched later

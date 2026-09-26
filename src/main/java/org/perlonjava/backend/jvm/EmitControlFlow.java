@@ -247,8 +247,20 @@ public class EmitControlFlow {
         // Handle return values based on context
         if (loopLabels.context != RuntimeContextType.VOID) {
             if ((operator.equals("next") || operator.equals("last")) && !implicitGivenLast) {
-                // For non-void contexts, ensure an 'undef' value is pushed to maintain stack consistency
-                EmitOperator.emitUndef(ctx.mv);
+                // A control transfer has no scalar value, but in list context
+                // it contributes an empty list.  Supplying scalar undef here
+                // corrupts a surrounding list expression after `break` from
+                // a given/when block.
+                if (loopLabels.context == RuntimeContextType.LIST) {
+                    ctx.mv.visitTypeInsn(Opcodes.NEW,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeList");
+                    ctx.mv.visitInsn(Opcodes.DUP);
+                    ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                            "<init>", "()V", false);
+                } else {
+                    EmitOperator.emitUndef(ctx.mv);
+                }
             }
         }
 

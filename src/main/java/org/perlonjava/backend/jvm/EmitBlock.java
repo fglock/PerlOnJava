@@ -453,6 +453,11 @@ public class EmitBlock {
                     topicalizerLoopBody ? false : isBareBlock);
             LoopLabels loopLabels = emitterVisitor.ctx.javaClassInfo.getInnermostLoopLabels();
             loopLabels.implicitWhenTarget = node.getBooleanAnnotation("givenBlock") || topicalizerLoopBody;
+            // An implicit `last` from a when, or an explicit `break`, jumps
+            // past this synthetic given block.  Record its lexical boundary
+            // so loop control tears down variables declared by nested when
+            // bodies before reaching that jump target.
+            loopLabels.cleanupScopeIndex = scopeIndex;
             if (localRecord.needsCleanup()) {
                 loopLabels.dynamicLocalLevelSlot = localRecord.dynamicIndex();
             }
