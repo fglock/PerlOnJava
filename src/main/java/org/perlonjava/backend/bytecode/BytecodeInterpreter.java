@@ -1168,7 +1168,7 @@ public class BytecodeInterpreter {
 
                                 if (iterator.hasNext()) {
                                     // See FOREACH_NEXT_OR_EXIT above for the rationale.
-                                    RuntimeScalar element = iterator.next();
+                                    RuntimeScalar element = ReadOnlyAlias.forForeach(iterator.next());
                                     registers[rd] = element;
                                     GlobalVariable.aliasForeachGlobalVariable(name, element);
                                     pc = bodyTarget;  // ABSOLUTE jump back to body start
@@ -1588,10 +1588,7 @@ public class BytecodeInterpreter {
                                     // Keep ScalarSpecialVariable cells live.  Foreach aliases
                                     // to match variables such as $' must observe later matches,
                                     // just like the JVM backend and Perl do.
-                                    RuntimeScalar elem = iterator.next();
-                                    if (elem instanceof RuntimeScalarReadOnly) {
-                                        elem = new ReadOnlyAlias(elem);
-                                    }
+                                    RuntimeScalar elem = ReadOnlyAlias.forForeach(iterator.next());
                                     registers[rd] = elem;
                                     pc = bodyTarget;  // ABSOLUTE jump back to body start
                                 } else {

@@ -609,6 +609,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * refgen must still bind to a distinct mutable cell.</p>
      */
     public static RuntimeScalar materializeLexicalCell(RuntimeScalar scalar) {
+        // A foreach literal alias deliberately occupies a lexical slot.  It
+        // is not an uninitialized declaration placeholder: retain its guard
+        // so a mutation reports Perl's read-only-value error.
+        if (scalar instanceof ReadOnlyAlias) {
+            return scalar;
+        }
         // Register recycling can leave the shared read-only undef placeholder
         // in a declaration skipped by control flow. It is not lexical storage
         // and must never become the target of a later refalias or assignment.

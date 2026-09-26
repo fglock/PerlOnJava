@@ -31,6 +31,12 @@ package org.perlonjava.runtime.runtimetypes;
  */
 public class ReadOnlyAlias extends RuntimeScalarReadOnly {
 
+    /** Preserve the source cell for reads while rejecting foreach mutation. */
+    public static RuntimeScalar forForeach(RuntimeScalar scalar) {
+        return scalar instanceof RuntimeScalarReadOnly && !(scalar instanceof ReadOnlyAlias)
+                ? new ReadOnlyAlias(scalar) : scalar;
+    }
+
     /** The original read-only scalar this aliases. Reads delegate to it. */
     private final RuntimeScalar src;
     private final String restoreKey;
@@ -139,5 +145,29 @@ public class ReadOnlyAlias extends RuntimeScalarReadOnly {
     @Override
     public RuntimeScalar set(boolean value) {
         return super.set(value);
+    }
+
+    @Override
+    public RuntimeScalar preAutoIncrement() {
+        vivify();
+        return this;
+    }
+
+    @Override
+    public RuntimeScalar postAutoIncrement() {
+        vivify();
+        return this;
+    }
+
+    @Override
+    public RuntimeScalar preAutoDecrement() {
+        vivify();
+        return this;
+    }
+
+    @Override
+    public RuntimeScalar postAutoDecrement() {
+        vivify();
+        return this;
     }
 }

@@ -578,6 +578,11 @@ public class EmitForeach {
                 mv.visitVarInsn(Opcodes.ALOAD, iteratorIndex);
                 mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true);
                 mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/ReadOnlyAlias",
+                        "forForeach",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
 
                 mv.visitLabel(endValueLabel);
 
@@ -598,6 +603,11 @@ public class EmitForeach {
             mv.visitVarInsn(Opcodes.ALOAD, iteratorIndex);
             mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true);
             mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/ReadOnlyAlias",
+                    "forForeach",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
 
             // Reference-alias loop variables bind to the referenced cell, not
             // to the RuntimeScalar that holds the reference.
