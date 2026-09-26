@@ -2494,10 +2494,14 @@ public class IOOperator {
             RuntimeScalar socketHandle = args[0].scalar();
             RuntimeScalar address = args[1].scalar();
 
+            if (socketHandle.type == RuntimeScalarType.UNDEF) {
+                throw new PerlCompilerException("Bad symbol for filehandle");
+            }
+
             RuntimeIO socketIO = socketHandle.getRuntimeIO();
             if (socketIO == null) {
                 getGlobalVariable("main::!").set("Invalid socket handle for bind");
-                return scalarFalse;
+                return scalarUndef;
             }
 
             // Parse Perl-style packed socket address (sockaddr_in format)
@@ -2514,7 +2518,7 @@ public class IOOperator {
                 parts = addressStr.split(":");
                 if (parts.length != 2) {
                     getGlobalVariable("main::!").set("Invalid address format for bind (expected sockaddr_in or host:port)");
-                    return scalarFalse;
+                    return scalarUndef;
                 }
             }
 
@@ -2524,15 +2528,17 @@ public class IOOperator {
                 port = Integer.parseInt(parts[1]);
             } catch (NumberFormatException e) {
                 getGlobalVariable("main::!").set("Invalid port number for bind");
-                return scalarFalse;
+                return scalarUndef;
             }
 
             // Delegate to RuntimeIO's bind method
             return socketIO.bind(host, port);
 
+        } catch (PerlCompilerException e) {
+            throw e;
         } catch (Exception e) {
             getGlobalVariable("main::!").set("Bind failed: " + e.getMessage());
-            return scalarFalse;
+            return scalarUndef;
         }
     }
 
@@ -2636,12 +2642,19 @@ public class IOOperator {
             RuntimeScalar newSocketHandle = args[0].scalar();
             RuntimeScalar listenSocketHandle = args[1].scalar();
 
+            // Perl vivifies NEWSOCKET before validating the listening
+            // handle, even if accept() ultimately returns undef.
+            ensureGlobDestination(newSocketHandle);
+            if (listenSocketHandle.type == RuntimeScalarType.UNDEF) {
+                throw new PerlCompilerException("Can't use an undefined value as a symbol reference");
+            }
+
             RuntimeIO listenRuntimeIO = listenSocketHandle.getRuntimeIO();
             SocketIO listenSocketIO = listenRuntimeIO == null
                     ? null : listenRuntimeIO.getSocketHandle();
             if (listenSocketIO == null) {
                 getGlobalVariable("main::!").set("Invalid listening socket handle for accept");
-                return scalarFalse;
+                return scalarUndef;
             }
 
             // Accept the connection - returns a new SocketIO for the client
@@ -2682,10 +2695,28 @@ public class IOOperator {
             // Return the packed sockaddr of the remote peer
             return clientSocketIO.getpeername();
 
+        } catch (PerlCompilerException e) {
+            throw e;
         } catch (Exception e) {
             getGlobalVariable("main::!").set("Accept failed: " + e.getMessage());
-            return scalarFalse;
+            return scalarUndef;
         }
+    }
+
+    /** Ensure an lvalue socket destination has Perl's anonymous glob shape. */
+    private static void ensureGlobDestination(RuntimeScalar target) {
+        if (target instanceof RuntimeScalarReadOnly
+                || target.type == RuntimeScalarType.READONLY_SCALAR) {
+            return;
+        }
+        if ((target.type == RuntimeScalarType.GLOB || target.type == RuntimeScalarType.GLOBREFERENCE)
+                && target.value instanceof RuntimeGlob) {
+            return;
+        }
+        RuntimeScalar globRef = new RuntimeScalar();
+        globRef.type = RuntimeScalarType.GLOBREFERENCE;
+        globRef.value = new RuntimeGlob(null);
+        target.set(globRef);
     }
 
     /**
