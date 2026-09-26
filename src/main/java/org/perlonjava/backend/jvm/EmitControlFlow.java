@@ -157,7 +157,8 @@ public class EmitControlFlow {
         LoopLabels loopLabels;
         boolean implicitGivenLast = node.getBooleanAnnotation("implicitGivenLast");
         boolean switchBreak = node.getBooleanAnnotation("switchBreak");
-        if (implicitGivenLast || switchBreak) {
+        Object switchControlOperator = node.getAnnotation("switchControlOperator");
+        if (implicitGivenLast || switchBreak || switchControlOperator instanceof String) {
             loopLabels = ctx.javaClassInfo.findInnermostImplicitWhenTarget();
         } else if (labelStr == null) {
             // Unlabeled next/last/redo target the nearest enclosing true loop.
@@ -169,7 +170,8 @@ public class EmitControlFlow {
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(next) operator: " + operator + " label: " + labelStr + " labels: " + loopLabels);
 
         // Check if we're trying to use next/last/redo in a pseudo-loop (do-while/bare block)
-        if (loopLabels != null && !loopLabels.isTrueLoop && !implicitGivenLast && !switchBreak) {
+        if (loopLabels != null && !loopLabels.isTrueLoop && !implicitGivenLast && !switchBreak
+                && !(switchControlOperator instanceof String)) {
             throw new PerlCompilerException(node.tokenIndex,
                     "Can't \"" + operator + "\" outside a loop block",
                     ctx.errorUtil);
@@ -209,11 +211,21 @@ public class EmitControlFlow {
             // Push lineNumber (from errorUtil if available)
             int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(node.tokenIndex) : 0;
             ctx.mv.visitLdcInsn(lineNumber);
+            if (switchControlOperator instanceof String spelling) {
+                ctx.mv.visitInsn(Opcodes.ACONST_NULL); // eval scope
+                ctx.mv.visitLdcInsn(spelling);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
+                        "<init>",
+                        "(Lorg/perlonjava/runtime/runtimetypes/ControlFlowType;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;)V",
+                        false);
+            } else {
             ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
                     "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
                     "<init>",
                     "(Lorg/perlonjava/runtime/runtimetypes/ControlFlowType;Ljava/lang/String;Ljava/lang/String;I)V",
                     false);
+            }
 
             // Return the tagged list via returnLabel so that local variable teardown
             // (popToLocalLevel) runs before the method exits. A direct ARETURN would

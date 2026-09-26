@@ -7,6 +7,7 @@ import org.perlonjava.core.Configuration;
 import org.perlonjava.frontend.analysis.ExtractValueVisitor;
 import org.perlonjava.frontend.analysis.LValueVisitor;
 import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
@@ -23,7 +24,9 @@ import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Stack;
 
 import static org.perlonjava.frontend.parser.NumberParser.parseNumber;
@@ -47,6 +50,114 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  * use declarations, and package declarations.
  */
 public class StatementParser {
+    /**
+     * Postfix modifiers are parsed after their statement, but their lowering
+     * evaluates the modifier condition first.  A lexical introduced by that
+     * condition is visible to following source, not to references which were
+     * already parsed in the preceding statement.  Preserve that source-order
+     * binding on scalar references so both backends can use the original pad
+     * slot when emitting the reordered AST.
+     */
+    private static void bindPostfixStatementLexicals(Node node,
+                                                      Map<String, SymbolTable.SymbolEntry> bindings) {
+        if (node == null || bindings.isEmpty()) return;
+        if (node instanceof OperatorNode op) {
+            if (op.operator.equals("$") && op.operand instanceof IdentifierNode identifier) {
+                SymbolTable.SymbolEntry entry = bindings.get("$" + identifier.name);
+                if (entry != null) op.setAnnotation("sourceOrderLexicalBinding", entry);
+            }
+            bindPostfixStatementLexicals(op.operand, bindings);
+            return;
+        }
+        if (node instanceof BinaryOperatorNode binary) {
+            bindPostfixStatementLexicals(binary.left, bindings);
+            bindPostfixStatementLexicals(binary.right, bindings);
+            return;
+        }
+        if (node instanceof TernaryOperatorNode ternary) {
+            bindPostfixStatementLexicals(ternary.condition, bindings);
+            bindPostfixStatementLexicals(ternary.trueExpr, bindings);
+            bindPostfixStatementLexicals(ternary.falseExpr, bindings);
+            return;
+        }
+        if (node instanceof IfNode conditional) {
+            bindPostfixStatementLexicals(conditional.condition, bindings);
+            bindPostfixStatementLexicals(conditional.thenBranch, bindings);
+            bindPostfixStatementLexicals(conditional.elseBranch, bindings);
+            return;
+        }
+        if (node instanceof BlockNode block) {
+            for (Node element : block.elements) bindPostfixStatementLexicals(element, bindings);
+            return;
+        }
+        if (node instanceof ListNode list) {
+            for (Node element : list.elements) bindPostfixStatementLexicals(element, bindings);
+            return;
+        }
+        if (node instanceof ArrayLiteralNode array) {
+            for (Node element : array.elements) bindPostfixStatementLexicals(element, bindings);
+            return;
+        }
+        if (node instanceof HashLiteralNode hash) {
+            for (Node element : hash.elements) bindPostfixStatementLexicals(element, bindings);
+        }
+    }
+
+    private static Map<String, SymbolTable.SymbolEntry> visibleLexicals(Parser parser) {
+        Map<String, SymbolTable.SymbolEntry> visible = new HashMap<>();
+        for (SymbolTable.SymbolEntry entry : parser.ctx.symbolTable.getAllVisibleVariables().values()) {
+            if ("my".equals(entry.decl()) || "state".equals(entry.decl())) {
+                visible.put(entry.name(), entry);
+            }
+        }
+        return visible;
+    }
+
+    /** Hoist declarations in a postfix-when condition without moving their initializer. */
+    private static Node hoistPostfixWhenConditionDeclarations(Node node, List<Node> declarations) {
+        if (node instanceof BinaryOperatorNode binary) {
+            if (binary.operator.equals("=") && binary.left instanceof OperatorNode declaration
+                    && declaration.operator.equals("my")) {
+                declarations.add(declaration);
+                binary.left = declaration.operand;
+            } else {
+                binary.left = hoistPostfixWhenConditionDeclarations(binary.left, declarations);
+            }
+            binary.right = hoistPostfixWhenConditionDeclarations(binary.right, declarations);
+            return binary;
+        }
+        if (node instanceof OperatorNode operator) {
+            operator.operand = hoistPostfixWhenConditionDeclarations(operator.operand, declarations);
+            return operator;
+        }
+        if (node instanceof ListNode list) {
+            for (int i = 0; i < list.elements.size(); i++) {
+                list.elements.set(i, hoistPostfixWhenConditionDeclarations(list.elements.get(i), declarations));
+            }
+            return list;
+        }
+        if (node instanceof BlockNode block) {
+            for (int i = 0; i < block.elements.size(); i++) {
+                block.elements.set(i, hoistPostfixWhenConditionDeclarations(block.elements.get(i), declarations));
+            }
+        }
+        return node;
+    }
+
+    /** A declaration before switch continue establishes scope but its initializer is skipped. */
+    private static void hoistPostfixWhenContinueDeclarations(Node node, List<Node> declarations) {
+        if (node instanceof ListNode list) {
+            for (int i = 0; i < list.elements.size(); i++) {
+                Node element = list.elements.get(i);
+                if (element instanceof BinaryOperatorNode assignment && assignment.operator.equals("=")
+                        && assignment.left instanceof OperatorNode declaration && declaration.operator.equals("my")) {
+                    declarations.add(declaration);
+                    list.elements.remove(i--);
+                }
+            }
+        }
+    }
+
     /** Mark the source-side subtree synthesized into a given block.  Backends
      * need this provenance to distinguish a legal internal goto from a jump
      * which enters the block and skips topicalizer setup. */
@@ -904,6 +1015,7 @@ public class StatementParser {
             parser.throwCleanError(index, "Can't \"when\" outside a topicalizer");
         }
         TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // when
+        Map<String, SymbolTable.SymbolEntry> lexicalsBeforeCondition = visibleLexicals(parser);
         Node condition;
         if (TokenUtils.peek(parser).text.equals("(")) {
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
@@ -912,11 +1024,31 @@ public class StatementParser {
         } else {
             condition = parser.parseExpression(0);
         }
+        List<Node> hoistedDeclarations = new ArrayList<>();
+        condition = hoistPostfixWhenConditionDeclarations(condition, hoistedDeclarations);
+        Map<String, SymbolTable.SymbolEntry> sourceOrderBindings = new HashMap<>();
+        for (Map.Entry<String, SymbolTable.SymbolEntry> entry : lexicalsBeforeCondition.entrySet()) {
+            SymbolTable.SymbolEntry after = parser.ctx.symbolTable.getSymbolEntry(entry.getKey());
+            if (after != null && after.index() != entry.getValue().index()) {
+                sourceOrderBindings.put(entry.getKey(), entry.getValue());
+                // Backends revisit the completed symbol table while emitting,
+                // so retain the earlier declaration's parser-assigned pad slot
+                // as well as its references.  The later condition declaration
+                // will then allocate its own slot when it is emitted.
+                if (entry.getValue().ast() != null) {
+                    entry.getValue().ast().setAnnotation("sourceOrderLexicalSlot", entry.getValue().index());
+                }
+            }
+        }
+        bindPostfixStatementLexicals(expression, sourceOrderBindings);
         // Postfix when has the same implicit given exit as a braced when.
         // A source `continue` is the exception: it falls through to the next
         // switch clause, so remove it (and unreachable trailing expressions)
         // rather than compiling it as an ordinary loop `next`.
         boolean continueWhen = removeWhenContinue(expression);
+        if (continueWhen) {
+            hoistPostfixWhenContinueDeclarations(expression, hoistedDeclarations);
+        }
         List<Node> bodyElements = new ArrayList<>();
         if (continueWhen) {
             bodyElements.add(expression);
@@ -936,7 +1068,9 @@ public class StatementParser {
                         condition, index);
         Node result = new IfNode("if", ifCondition, body, new ListNode(index), index);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ";");
-        return result;
+        if (hoistedDeclarations.isEmpty()) return result;
+        hoistedDeclarations.add(result);
+        return new ListNode(hoistedDeclarations, index);
     }
 
     /**

@@ -2225,6 +2225,23 @@ public class Disassemble {
                         sb.append("\n");
                         break;
                     }
+                    case Opcodes.CREATE_SWITCH_CONTINUE:
+                    case Opcodes.CREATE_SWITCH_BREAK: {
+                        rd = interpretedCode.bytecode[pc++];
+                        int cfLabelIdx = interpretedCode.bytecode[pc++];
+                        sb.append(opcode == Opcodes.CREATE_SWITCH_CONTINUE
+                                ? "CREATE_SWITCH_CONTINUE r" : "CREATE_SWITCH_BREAK r").append(rd)
+                                .append(" label=");
+                        if (cfLabelIdx == 255) {
+                            sb.append("<none>");
+                        } else if (interpretedCode.stringPool != null && cfLabelIdx < interpretedCode.stringPool.length) {
+                            sb.append("\"").append(interpretedCode.stringPool[cfLabelIdx]).append("\"");
+                        } else {
+                            sb.append(cfLabelIdx);
+                        }
+                        sb.append("\n");
+                        break;
+                    }
                     case Opcodes.CREATE_LAST_DYNAMIC:
                     case Opcodes.CREATE_NEXT_DYNAMIC:
                     case Opcodes.CREATE_REDO_DYNAMIC: {

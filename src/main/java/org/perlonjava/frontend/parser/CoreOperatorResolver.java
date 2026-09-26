@@ -139,6 +139,9 @@ public class CoreOperatorResolver {
                 // the source spelling so parseWhenStatement can distinguish
                 // the two after this normalization.
                 continueNode.setAnnotation("whenContinue", true);
+                if (parser.parsingGivenDepth == 0) {
+                    continueNode.setAnnotation("switchControlOperator", "continue");
+                }
                 yield continueNode;
             }
             case "break" -> {
@@ -150,6 +153,9 @@ public class CoreOperatorResolver {
                 // report its normal runtime diagnostic.
                 if (parser.parsingGivenDepth > 0) {
                     breakNode.setAnnotation("switchBreak", true);
+                }
+                if (parser.parsingGivenDepth == 0) {
+                    breakNode.setAnnotation("switchControlOperator", "break");
                 }
                 yield breakNode;
             }

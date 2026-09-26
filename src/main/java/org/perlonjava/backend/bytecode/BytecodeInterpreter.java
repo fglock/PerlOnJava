@@ -666,6 +666,29 @@ public class BytecodeInterpreter {
                                 if (retVal == null) {
                                     retVal = new RuntimeList();
                                 }
+                                // A switch-only control is normalized to a
+                                // NEXT/LAST marker.  It must fail at the eval
+                                // boundary rather than return from the whole
+                                // interpreter frame and bypass EVAL_CATCH.
+                                if (retVal instanceof RuntimeControlFlowList flow
+                                        && flow.isSwitchControl() && !evalCatchStack.isEmpty()) {
+                                    GlobalVariable.setGlobalVariable(
+                                            "main::@", flow.marker.buildErrorMessage() + ".\n");
+                                    if (!evalLocalLevelStack.isEmpty()) {
+                                        int relativeLevel = evalLocalLevelStack.pop();
+                                        DynamicVariableManager.popToLocalLevel(
+                                                savedLocalLevel + relativeLevel);
+                                    }
+                                    unwindEvalMethodInvocantHolds(
+                                            evalMethodInvocantHoldDepthStack, methodInvocantHolds);
+                                    pc = evalCatchStack.pop();
+                                    RuntimeCode.decrementEvalDepth();
+                                    if (frame.virtualEvalFrameDepth > 0) {
+                                        InterpreterState.pop();
+                                        frame.virtualEvalFrameDepth--;
+                                    }
+                                    break;
+                                }
                                 RuntimeCode.requireInterpreterLvalueReturn(code, retVal, callContext);
                                 RuntimeList retList = RuntimeCode.returnList(
                                         retVal, callContext, !RuntimeCode.isLvalueCode(code));
@@ -2010,7 +2033,8 @@ public class BytecodeInterpreter {
                                     }
                                     if (!handled) {
                                         ControlFlowType cfType = flow.getControlFlowType();
-                                        if ((cfType == ControlFlowType.GOTO || cfType == ControlFlowType.TAILCALL)
+                                        if ((cfType == ControlFlowType.GOTO || cfType == ControlFlowType.TAILCALL
+                                                || flow.isSwitchControl())
                                                 && !evalCatchStack.isEmpty()) {
                                             // Set $@ to the error message
                                             String errorMsg = flow.marker.buildErrorMessage();
@@ -2184,7 +2208,8 @@ public class BytecodeInterpreter {
                                     }
                                     if (!handled) {
                                         ControlFlowType cfType = flow.getControlFlowType();
-                                        if ((cfType == ControlFlowType.GOTO || cfType == ControlFlowType.TAILCALL)
+                                        if ((cfType == ControlFlowType.GOTO || cfType == ControlFlowType.TAILCALL
+                                                || flow.isSwitchControl())
                                                 && !evalCatchStack.isEmpty()) {
                                             String errorMsg = flow.marker.buildErrorMessage();
                                             GlobalVariable.setGlobalVariable("main::@", errorMsg);
@@ -2229,6 +2254,17 @@ public class BytecodeInterpreter {
 
                             case Opcodes.CREATE_NEXT -> {
                                 pc = InlineOpcodeHandler.executeCreateNext(bytecode, pc, registers, code);
+                            }
+
+                            case Opcodes.CREATE_SWITCH_CONTINUE, Opcodes.CREATE_SWITCH_BREAK -> {
+                                int rd = bytecode[pc++];
+                                int labelIdx = bytecode[pc++];
+                                String label = labelIdx == 255 ? null : code.stringPool[labelIdx];
+                                boolean isContinue = opcode == Opcodes.CREATE_SWITCH_CONTINUE;
+                                registers[rd] = new RuntimeControlFlowList(
+                                        isContinue ? ControlFlowType.NEXT : ControlFlowType.LAST,
+                                        label, code.sourceName, code.sourceLine, null,
+                                        isContinue ? "continue" : "break");
                             }
 
                             case Opcodes.CREATE_REDO -> {

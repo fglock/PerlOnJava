@@ -2711,6 +2711,12 @@ public class Opcodes {
     /** Validate and unwrap a scalar reference used by ref aliasing. */
     public static final short REFALIAS_SCALAR_REFERENCE = 617;
 
+    /** Create a NEXT marker retaining source spelling {@code continue}. Format: rd labelIdx. */
+    public static final short CREATE_SWITCH_CONTINUE = 618;
+
+    /** Create a LAST marker retaining source spelling {@code break}. Format: rd labelIdx. */
+    public static final short CREATE_SWITCH_BREAK = 619;
+
     /** Load a named typeglob without making the detached IO-preserving copy. */
     public static final short LOAD_GLOB_CANONICAL = 609;
 

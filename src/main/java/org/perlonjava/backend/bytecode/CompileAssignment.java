@@ -2252,6 +2252,13 @@ public class CompileAssignment {
 
                             // Now allocate register for new lexical variable and add to symbol table
                             int reg = bytecodeCompiler.addVariable(varName, "my");
+                            // Keep the register on the declaration syntax too.
+                            // Reordered postfix modifiers retain a parse-time
+                            // reference to this exact declaration so an
+                            // earlier source expression can bypass a later
+                            // same-named lexical binding.
+                            sigilOp.setAnnotation("bytecodeLexicalRegister", reg);
+                            leftOp.setAnnotation("bytecodeLexicalRegister", reg);
 
                             boolean hasAttrs = leftOp.annotations != null
                                     && leftOp.annotations.containsKey("attributes");

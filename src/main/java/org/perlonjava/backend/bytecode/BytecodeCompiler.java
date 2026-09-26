@@ -5586,6 +5586,29 @@ public class BytecodeCompiler implements Visitor {
             if (node.operand instanceof IdentifierNode) {
                 String varName = "$" + ((IdentifierNode) node.operand).name;
 
+                // See StatementParser.bindPostfixStatementLexicals().  The
+                // declaration AST has already allocated its stable bytecode
+                // pad register by the time the reordered postfix body is
+                // emitted, so load that original cell directly.
+                if (node.getAnnotation("sourceOrderLexicalBinding")
+                        instanceof SymbolTable.SymbolEntry binding
+                        && binding.ast() instanceof OperatorNode declaration) {
+                    Integer declarationRegister = declaration.getAnnotation("bytecodeLexicalRegister") instanceof Integer slot
+                            ? slot : null;
+                    if (declarationRegister == null) {
+                        // Parser pad indices are JVM local slots, not
+                        // interpreter registers. If this declaration has not
+                        // been emitted in this bytecode frame, use normal name
+                        // resolution rather than indexing a foreign register.
+                        declarationRegister = getVariableRegister(varName);
+                    }
+                    int bindingReg = declarationRegister;
+                    lastResultReg = bindingReg;
+                    emit(Opcodes.MATERIALIZE_LEXICAL_SCALAR);
+                    emitReg(lastResultReg);
+                    return;
+                }
+
                 // Lexical sub calls retain a package-qualified storage spelling
                 // when their declaration was installed at compile time.  That
                 // spelling is an implementation detail: the actual variable
@@ -9009,7 +9032,9 @@ public class BytecodeCompiler implements Visitor {
 
         // Find the target loop
         LoopInfo targetLoop = null;
-        if (implicitGivenLast || switchBreak) {
+        String switchControlOperator = node.getAnnotation("switchControlOperator") instanceof String value
+                ? value : null;
+        if (implicitGivenLast || switchBreak || switchControlOperator != null) {
             // A foreach topicalizer has a per-iteration switch target which
             // must win over the surrounding true loop.  A normal `last` still
             // selects that surrounding loop.
@@ -9049,7 +9074,9 @@ public class BytecodeCompiler implements Visitor {
             }
             // No matching loop found - non-local control flow
             // Emit CREATE_LAST/NEXT/REDO + RETURN to propagate via RuntimeControlFlowList
-            short createOp = op.equals("last") ? Opcodes.CREATE_LAST
+            short createOp = "continue".equals(switchControlOperator) ? Opcodes.CREATE_SWITCH_CONTINUE
+                    : "break".equals(switchControlOperator) ? Opcodes.CREATE_SWITCH_BREAK
+                    : op.equals("last") ? Opcodes.CREATE_LAST
                     : op.equals("next") ? Opcodes.CREATE_NEXT
                     : Opcodes.CREATE_REDO;
             int rd = allocateOutputRegister();
@@ -9064,7 +9091,8 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Check if this is a pseudo-loop (do-while/bare block) which doesn't support last/next/redo
-        if (!targetLoop.isTrueLoop && !implicitGivenLast && !switchBreak) {
+        if (!targetLoop.isTrueLoop && !implicitGivenLast && !switchBreak
+                && switchControlOperator == null) {
             throwCompilerException("Can't \"" + op + "\" outside a loop block", node.getIndex());
         }
 

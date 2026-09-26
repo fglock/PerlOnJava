@@ -392,6 +392,13 @@ public class EmitVariable {
             // ===== SYMBOL TABLE LOOKUP =====
             // Check if this variable is declared in the current lexical scope
             SymbolTable.SymbolEntry symbolEntry = emitterVisitor.ctx.symbolTable.getSymbolEntry(sigil + name);
+            // Postfix modifiers lower their condition before the source-side
+            // statement.  If that condition declared a same-named lexical,
+            // retain the binding which was visible when this reference was
+            // parsed rather than looking up the later declaration.
+            if (node.getAnnotation("sourceOrderLexicalBinding") instanceof SymbolTable.SymbolEntry binding) {
+                symbolEntry = binding;
+            }
 
             // Note: @_ is lexical in PerlOnJava (unlike standard Perl where it's package-scoped)
             boolean isDeclared = symbolEntry != null;
@@ -2604,7 +2611,20 @@ public class EmitVariable {
                         }
                     }
                     
-                    int varIndex = emitterVisitor.ctx.symbolTable.addVariable(var, operator, sigilNode);
+                    Integer sourceOrderSlot = sigilNode.getAnnotation("sourceOrderLexicalSlot") instanceof Integer slot
+                            ? slot : null;
+                    int varIndex;
+                    if (sourceOrderSlot != null) {
+                        // A postfix modifier can parse a same-named lexical
+                        // after this declaration while lowering evaluates that
+                        // modifier first.  Keep this declaration in its
+                        // parser-assigned pad slot; the later declaration will
+                        // subsequently replace the live name binding.
+                        emitterVisitor.ctx.symbolTable.addVariableWithIndex(var, sourceOrderSlot, operator);
+                        varIndex = sourceOrderSlot;
+                    } else {
+                        varIndex = emitterVisitor.ctx.symbolTable.addVariable(var, operator, sigilNode);
+                    }
                     sigilNode.setAnnotation("jvmLexicalSlot", varIndex);
                     node.setAnnotation("jvmLexicalSlot", varIndex);
                     // TODO optimization - SETVAR+MY can be combined

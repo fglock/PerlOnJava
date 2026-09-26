@@ -862,12 +862,27 @@ public class EmitterMethodCreator implements Opcodes {
                             false);
                     int evalControlFlowTypeSlot = ctx.symbolTable.allocateLocalVariable();
                     mv.visitVarInsn(Opcodes.ISTORE, evalControlFlowTypeSlot);
+                    // `continue` and `break` are switch-only controls. Their
+                    // normalized NEXT/LAST markers must be caught by eval even
+                    // though ordinary next/last may target an enclosing loop.
+                    Label ordinaryLoopControl = new Label();
+                    mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);
+                    mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
+                            "isSwitchControl", "()Z", false);
+                    mv.visitJumpInsn(Opcodes.IFEQ, ordinaryLoopControl);
+                    Label evalBoundaryError = new Label();
+                    mv.visitJumpInsn(Opcodes.GOTO, evalBoundaryError);
+                    mv.visitLabel(ordinaryLoopControl);
                     mv.visitVarInsn(Opcodes.ILOAD, evalControlFlowTypeSlot);
                     mv.visitInsn(Opcodes.ICONST_2); // LAST/NEXT/REDO propagate
                     mv.visitJumpInsn(Opcodes.IF_ICMPLE, normalReturn);
                     mv.visitVarInsn(Opcodes.ILOAD, evalControlFlowTypeSlot);
                     mv.visitLdcInsn(5);  // RETURN.ordinal() = 5
                     mv.visitJumpInsn(Opcodes.IF_ICMPEQ, normalReturn);  // RETURN → propagate
+
+                    mv.visitLabel(evalBoundaryError);
 
                     // GOTO and TAILCALL cannot cross an eval-block boundary.
                     mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);

@@ -30,6 +30,8 @@ public class ControlFlowMarker {
     public final Object argumentFrame;
     public final String namedTarget;
     public final String evalScope;
+    /** Original switch-only spelling (continue/break), when normalization used NEXT/LAST. */
+    public final String switchControlOperator;
 
     /**
      * Source file name where the control flow originated (for error messages)
@@ -58,6 +60,12 @@ public class ControlFlowMarker {
      */
     public ControlFlowMarker(ControlFlowType type, String label, String fileName, int lineNumber,
                              String evalScope) {
+        this(type, label, fileName, lineNumber, evalScope, null);
+    }
+
+    /** Constructor for control flow whose normalized opcode retains switch-only source spelling. */
+    public ControlFlowMarker(ControlFlowType type, String label, String fileName, int lineNumber,
+                             String evalScope, String switchControlOperator) {
         this.type = type;
         this.label = label;
         this.fileName = fileName;
@@ -68,6 +76,7 @@ public class ControlFlowMarker {
         this.argumentFrame = null;
         this.namedTarget = null;
         this.evalScope = evalScope;
+        this.switchControlOperator = switchControlOperator;
     }
 
     /**
@@ -95,6 +104,7 @@ public class ControlFlowMarker {
                 ? RuntimeCode.currentArgumentAliasFrame(args.elements.get(0)) : null;
         this.namedTarget = namedTarget;
         this.evalScope = evalScope;
+        this.switchControlOperator = null;
     }
 
     /**
@@ -138,9 +148,14 @@ public class ControlFlowMarker {
             }
         } else {
             // last/next/redo
-            String operation = type.name().toLowerCase();
+            String operation = switchControlOperator != null
+                    ? switchControlOperator : type.name().toLowerCase();
             if (label != null) {
                 return "Label not found for \"" + operation + " " + label + "\"" + location;
+            } else if ("continue".equals(switchControlOperator)) {
+                return "Can't \"continue\" outside a when block" + location;
+            } else if ("break".equals(switchControlOperator)) {
+                return "Can't \"break\" outside a given block" + location;
             } else {
                 return "Can't \"" + operation + "\" outside a loop block" + location;
             }
