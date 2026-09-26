@@ -5,6 +5,7 @@ import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.core.Configuration;
 import org.perlonjava.frontend.analysis.ExtractValueVisitor;
+import org.perlonjava.frontend.analysis.LValueVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
@@ -981,11 +982,12 @@ public class StatementParser {
      * Transforms:
      * given(EXPR) { when(COND1) { BLOCK1 } when(COND2) { BLOCK2 } default { BLOCK3 } }
      * <p>
-     * Into AST equivalent of:
-     * do { $_ = EXPR; when/default statements }
+     * Into AST equivalent of {@code local $_ = EXPR} followed by the
+     * when/default statements.  A scalar assignment whose left hand side is
+     * an assignable cell uses the existing one-pass topicalizing foreach
+     * lowering instead, preserving Perl's alias semantics for tied scalars.
      * <p>
      * Where when/default are parsed as regular statements that check $_.
-     * This is a pure AST transformation - no special emitter code needed.
      *
      * @param parser The Parser instance
      * @return A Node representing the given-when statement as transformed AST
@@ -1019,19 +1021,13 @@ public class StatementParser {
         HintHashRegistry.exitScope(); // Restore compile-time %^H
         int postBlockHintHashId = HintHashRegistry.snapshotCurrentHintHash();
 
-        // Create the complete block: { $_ = EXPR; blockContent }
+        // Create the given body first.  It remains an implicit-when target so
+        // `last` inserted by a matching when leaves this body rather than an
+        // enclosing source loop.
         List<Node> statements = new ArrayList<>();
-
-        // local $_ = condition  (given dynamically localizes the topic)
         Node dollarUnderscore = new OperatorNode("$",
                 new IdentifierNode("_", index),
                 index);
-        Node localTopic = new OperatorNode("local", dollarUnderscore, index);
-        statements.add(new BinaryOperatorNode("=",
-                localTopic,
-                condition,
-                index));
-
         // Add all the statements from the block
         markInsideGiven(blockContent);
         statements.addAll(blockContent.elements);
@@ -1043,7 +1039,38 @@ public class StatementParser {
         // to an outer loop or the program top level.
         givenBlock.isLoop = true;
         givenBlock.setAnnotation("postBlockHintHashId", postBlockHintHashId);
+
+        if (usesAssignableGivenTopic(condition)) {
+            // For1Node emits its BlockNode body inline.  Reuse the explicit
+            // topicalizer marker so both backends install the switch dispatch
+            // boundary around that inlined body.
+            givenBlock.setAnnotation("topicalizerLoopBody", true);
+            For1Node topicalizer = new For1Node(null, false, dollarUnderscore,
+                    condition, givenBlock, null, index);
+            topicalizer.needsArrayOfAlias = true;
+            return new BlockNode(List.of(
+                    new OperatorNode("local", dollarUnderscore, index),
+                    topicalizer), index, parser);
+        }
+
+        // Preserve the ordinary given lowering for rvalues, declarations,
+        // list expressions, and their expression-result/scoping semantics.
+        Node localTopic = new OperatorNode("local", dollarUnderscore, index);
+        statements.addFirst(new BinaryOperatorNode("=", localTopic, condition, index));
         return givenBlock;
+    }
+
+    /** A non-declaration scalar assignment is a Perl topicalizer lvalue. */
+    private static boolean usesAssignableGivenTopic(Node condition) {
+        if (!(condition instanceof BinaryOperatorNode assignment) || !assignment.operator.equals("=")) {
+            return false;
+        }
+        if (assignment.left instanceof OperatorNode declaration
+                && (declaration.operator.equals("my") || declaration.operator.equals("our")
+                || declaration.operator.equals("state"))) {
+            return false;
+        }
+        return LValueVisitor.getContext(assignment.left) == RuntimeContextType.SCALAR;
     }
 
     /**

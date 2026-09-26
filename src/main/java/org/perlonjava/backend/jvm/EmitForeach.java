@@ -6,6 +6,7 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.analysis.LValueVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.SymbolTable;
@@ -41,6 +42,32 @@ public class EmitForeach {
 
     // Set to true to enable debug output for loop control flow
     private static final boolean DEBUG_LOOP_CONTROL_FLOW = false;
+
+    /**
+     * Emits a foreach source before the loop localizes its topic.
+     *
+     * <p>A scalar assignment is an assignable foreach source in Perl.  Its
+     * ordinary expression result is the value returned by STORE, which is a
+     * copy for tied scalars; the iterator instead needs the left-hand cell so
+     * its topic remains tied.  Evaluate that assignment exactly once, then
+     * emit the scalar lvalue as the singleton source.  Other sources retain
+     * the normal list behaviour and slice handling.</p>
+     */
+    public static void emitForeachSource(EmitterVisitor emitterVisitor, Node source) {
+        source.setAnnotation("foreachSource", true);
+        try {
+            if (source instanceof BinaryOperatorNode assignment
+                    && assignment.operator.equals("=")
+                    && LValueVisitor.getContext(assignment.left) == RuntimeContextType.SCALAR) {
+                assignment.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                assignment.left.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+            } else {
+                source.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            }
+        } finally {
+            source.setAnnotation("foreachSource", false);
+        }
+    }
 
     private static void pushGotoLabelsForBlock(EmitterVisitor emitterVisitor, BlockNode blockNode) {
         // Pre-register labels for forward/backward goto inside this block.
@@ -122,12 +149,7 @@ public class EmitForeach {
             // A key/value hash slice used as a foreach source supplies its
             // values only.  Keep this marker narrowly scoped to emission so
             // ordinary %hash{...} expressions still return key/value pairs.
-            node.list.setAnnotation("foreachSource", true);
-            try {
-                node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
-            } finally {
-                node.list.setAnnotation("foreachSource", false);
-            }
+            emitForeachSource(emitterVisitor, node.list);
             preEvalListLocal = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
             mv.visitVarInsn(Opcodes.ASTORE, preEvalListLocal);
         }
