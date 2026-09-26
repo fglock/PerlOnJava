@@ -538,7 +538,7 @@ public class SpecialBlockParser {
             if (!message.endsWith("\n")) {
                 message += "\n";
             }
-            message += blockPhase + " failed--compilation aborted.";
+            message += blockPhase + " failed--compilation aborted";
             throw new PerlCompilerException(parser.tokenIndex, message, parser.ctx.errorUtil);
         } finally {
             if (preserveCallerPragmas) {
