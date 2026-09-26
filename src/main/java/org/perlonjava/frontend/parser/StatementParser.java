@@ -757,6 +757,19 @@ public class StatementParser {
      */
     private static boolean whenIsBoolean(Node node) {
         if (node instanceof BinaryOperatorNode b) {
+            if (b.operator.equals("->")) {
+                // Method calls in when() are predicates; their return values
+                // are not smartmatch RHS operands.
+                return true;
+            }
+            if (b.operator.equals("(") && b.left instanceof OperatorNode call
+                    && call.operator.equals("&")
+                    && call.getBooleanAnnotation("directNamedCall")) {
+                // A direct subroutine call is evaluated for truth, unlike a
+                // coderef (\&sub), which intentionally remains a smartmatch
+                // predicate and receives the topicalized value as its arg.
+                return true;
+            }
             return switch (b.operator) {
                 case "==", "!=", "<", ">", "<=", ">=", "<=>",
                      "eq", "ne", "equ", "neu", "lt", "gt", "le", "ge", "cmp",
