@@ -101,7 +101,11 @@ public class CoreSubroutineGenerator {
     private static boolean installWrapper(String fullName, String operatorName,
                                           String prototype, PerlSubroutine sub) {
         PerlSubroutine checkedSub = (args, ctx) -> {
-            validatePrototypeArity(operatorName, prototype, args.size());
+            // Bareword-only CORE entries such as chomp and chop have no
+            // prototype. Their generated stub owns the direct-call error.
+            if (prototype != null) {
+                validatePrototypeArity(operatorName, prototype, args.size());
+            }
             return sub.apply(args, ctx);
         };
         RuntimeCode code = new RuntimeCode(checkedSub, prototype);
