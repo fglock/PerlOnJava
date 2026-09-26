@@ -180,8 +180,11 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
             RuntimeScalar localized = new RuntimeScalar();
             parent.notePackageRootMutation();
             parent.elements.put(key, localized);
-            parent.markPackageRootedValue(localized);
-            this.lvalue = localized;
+            // %ENV wraps slots on insertion.  Re-fetch the installed element
+            // so subsequent assignment updates that wrapper rather than the
+            // detached temporary scalar passed to put().
+            this.lvalue = parent.elements.get(key);
+            parent.markPackageRootedValue(this.lvalue);
             this.type = RuntimeScalarType.UNDEF;
             this.value = null;
             this.blessId = 0;

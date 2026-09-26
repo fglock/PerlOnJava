@@ -74,6 +74,13 @@ ok(tainted($tainted_counter), 'post-decrement lvalue remains tainted');
 $text =~ /^(.*)$/;
 ok(!tainted($1), 'regex capture untaints validated input');
 
+{
+    $ENV{PATH} =~ /(.*)/s;
+    local $ENV{PATH} = $1;
+    ok(!tainted($ENV{PATH}),
+        'local %ENV assignment preserves an untainted capture');
+}
+
 my $tainted_pattern = "(abc)$empty_taint";
 'abc' =~ /$tainted_pattern/;
 ok(tainted($1), 'a tainted regex pattern taints its capture');
