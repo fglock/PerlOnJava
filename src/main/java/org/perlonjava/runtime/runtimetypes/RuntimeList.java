@@ -255,11 +255,13 @@ public class RuntimeList extends RuntimeBase {
             aggregate = nested;
         }
         if (aggregate instanceof RuntimeArray array) {
-            // A foreach source aliases array slots, including sparse holes.
-            // Keep the slot references lazy: materializing every hole here
-            // turns generated sparse Unicode tables into millions of proxy
-            // allocations before the loop even begins.
-            elements.add(new ForeachArraySnapshot(array, array.size()));
+            // Ordinary nested list assignment needs concrete writable target
+            // cells.  The lazy foreach view is only valid for a foreach
+            // source; setFromList() deliberately recognizes RuntimeArray,
+            // not that iterator wrapper, as an aggregate lvalue.
+            for (int i = 0; i < array.size(); i++) {
+                elements.add(array.get(i));
+            }
             return;
         }
         Iterator<RuntimeScalar> iterator = value.iterator();

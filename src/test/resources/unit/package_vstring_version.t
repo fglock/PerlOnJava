@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 3;
+use Test::More tests => 4;
 
 my $ok = eval q{
     package PackageVstringVersion;
@@ -15,6 +15,13 @@ my $zero_ok = eval q{
     v0.0.0 eq $PackageVstringZeroVersion::VERSION;
 };
 ok($zero_ok, 'package v-string VERSION preserves all-zero components');
+
+my $padded_ok = eval q{
+    package PackageVstringPaddedVersion;
+    package PackageVstringPaddedVersion v0.19.045;
+    v0.19.045 eq $PackageVstringPaddedVersion::VERSION;
+};
+ok($padded_ok, 'package v-string VERSION preserves zero-padded later components');
 
 eval q{ package PackageVstringInvalid v01.02.03; 1 };
 like($@, qr/no leading zeros/, 'package v-string rejects zero-padded components');
