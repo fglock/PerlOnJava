@@ -4056,8 +4056,8 @@ public class BytecodeCompiler implements Visitor {
                             }
 
                             Integer beginId2 = RuntimeCode.evalBeginIds().get(sigilOp);
-                            if (beginId2 != null || op.equals("state")) {
-                                int persistId = beginId2 != null ? beginId2 : sigilOp.id;
+                            if (beginId2 != null) {
+                                int persistId = beginId2;
                                 int reg = op.equals("state") ? allocateStateVariableRegister() : allocateRegister();
                                 int nameIdx = addToStringPool(varName);
 
@@ -4105,6 +4105,53 @@ public class BytecodeCompiler implements Visitor {
                                 // apply at runtime to that exact cell before its first use.
                                 emitVarAttrsIfNeeded(node, reg, sigil);
 
+                                varRegs.add(reg);
+                                wrapWithRef.add(isDeclaredReference);
+                            } else if (op.equals("state")) {
+                                // A state declaration list owns a state cell just like
+                                // the single-variable form.  RETRIEVE_BEGIN_* creates a
+                                // transient cell here, so a returned reference diverges
+                                // from the subsequently resolved state variable.
+                                int persistId = sigilOp.id;
+                                int reg = allocateStateVariableRegister();
+                                int nameIdx = addToStringPool(varName);
+                                int initialReg = allocateRegister();
+                                switch (sigil) {
+                                    case "$" -> {
+                                        emit(Opcodes.LOAD_UNDEF);
+                                        emitReg(initialReg);
+                                        emitWithToken(Opcodes.STATE_INIT_SCALAR, node.getIndex());
+                                        emitReg(reg);
+                                        emitReg(initialReg);
+                                        emit(nameIdx);
+                                        emit(persistId);
+                                        registerStateScalarVariable(varName, reg, persistId);
+                                    }
+                                    case "@" -> {
+                                        emit(Opcodes.NEW_ARRAY);
+                                        emitReg(initialReg);
+                                        emitWithToken(Opcodes.STATE_INIT_ARRAY, node.getIndex());
+                                        emitReg(reg);
+                                        emitReg(initialReg);
+                                        emit(nameIdx);
+                                        emit(persistId);
+                                        registerStateArrayVariable(varName, reg, persistId);
+                                    }
+                                    case "%" -> {
+                                        emit(Opcodes.NEW_HASH);
+                                        emitReg(initialReg);
+                                        emitWithToken(Opcodes.STATE_INIT_HASH, node.getIndex());
+                                        emitReg(reg);
+                                        emitReg(initialReg);
+                                        emit(nameIdx);
+                                        emit(persistId);
+                                        registerStateHashVariable(varName, reg, persistId);
+                                    }
+                                    default -> throwCompilerException(
+                                            "Unsupported variable type in state list declaration: " + sigil);
+                                }
+                                emitActiveLexicalBinding(reg, varName);
+                                emitVarAttrsIfNeeded(node, reg, sigil);
                                 varRegs.add(reg);
                                 wrapWithRef.add(isDeclaredReference);
                             } else {

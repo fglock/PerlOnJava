@@ -54,11 +54,21 @@ new unit tests. No existing tests were changed or deleted.
   lvref remains 203/203.
 - Files: `EmitForeach.java`, `BytecodeCompiler.java`, and the new unit test.
 
+## Completed: state declared-reference lists (2026-09-26)
+
+- Interpreter lowering for a state declaration list used transient BEGIN storage
+  rather than the declaration's state cell. Returned references therefore did
+  not identify the variables after lookup.
+- Added `state_declared_reference_list_identity.t`: blead passes 3/3, both
+  unfixed backends fail 3/3, and both fixed backends pass 3/3.
+- `JPERL_TEST_FILTER=state_declared_reference_list_identity` make passes;
+  `/tmp/decl-refs-state-fixed.log` restores `op/decl-refs.t` to 408/408.
+- Files: `BytecodeCompiler.java` and the new unit test.
+
 ## Next steps
 
 1. Fix remaining targeted regressions: universal 108/142 (unexpected tied
-   STORE), decl-refs 402/408 (state declaration reference identity),
-   magic 206/208, smartmatch 352/353, class/destruct 3/7
+   STORE), magic 206/208, smartmatch 352/353, class/destruct 3/7
    (baseline 4/7). Raw evidence: `/tmp/recovery-targeted.log`.
 2. Investigate the two Unicode-property files and compare fixture plans with
    local perl5/blead before interpreting count changes.
