@@ -641,7 +641,7 @@ public class Opcodes {
     public static final short ARRAY_SET_FROM_LIST = 95;
 
     /** Replace array slots with the referents in a ref-alias RHS list. */
-    public static final short ARRAY_SET_FROM_REFERENCE_LIST = 578;
+    public static final short ARRAY_SET_FROM_REFERENCE_LIST = 583;
 
     /**
      * Set hash from list: hash_reg = RuntimeHash.createHash(list_reg) then copy elements
