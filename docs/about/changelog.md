@@ -7,8 +7,8 @@ priorities and future plans.
 ## Work in progress
 
 - Preserve Perl-compatible `EISDIR` readline behavior for filehandles opened
-  on directories on Windows, and advertise PerlOnJava's non-real fork
-  capability through `Config`.
+  on directories on Windows, and ensure `Config` does not advertise unsupported
+  fork capabilities.
 - Restore `op/split.t` nested array-assignment compatibility and split regex
   debug extflags on both execution backends.
 

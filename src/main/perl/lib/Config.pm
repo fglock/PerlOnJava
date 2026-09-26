@@ -321,10 +321,10 @@ my $startperl = $is_windows
     d_readlink => 'define',
     d_symlink => _check_symlink_support(),
     d_fork => undef,  # No true fork in Java
-    # Consumers distinguish unavailable fork() from real fork() with this
-    # capability flag.  PerlOnJava has no process fork, but does provide the
-    # non-real execution classification through its managed runtime model.
-    d_pseudofork => 'define',
+    # PerlOnJava provides neither a real fork nor Perl's interpreter-level
+    # pseudo-fork emulation.  Advertising either capability causes callers
+    # to run process-isolation tests against an operation that always fails.
+    d_pseudofork => undef,
     d_alarm => 'define', # We now have alarm support with signal queue
     d_chown => _check_chown_support(),
     d_chroot => undef,
