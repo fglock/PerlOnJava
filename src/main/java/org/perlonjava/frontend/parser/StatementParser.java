@@ -776,8 +776,9 @@ public class StatementParser {
             return switch (b.operator) {
                 case "==", "!=", "<", ">", "<=", ">=", "<=>",
                      "eq", "ne", "equ", "neu", "lt", "gt", "le", "ge", "cmp",
-                     "&&", "||", "//", "and", "or", "xor",
                      "=~", "!~" -> true;
+                case "&&", "||", "//", "and", "or", "xor" ->
+                        logicalWhenIsBoolean(b);
                 default -> false;
             };
         }
@@ -795,6 +796,36 @@ public class StatementParser {
         }
         return false;
     }
+
+    /**
+     * Perl does not make a logical expression a {@code when} predicate merely
+     * because it contains a boolean operator.  For example,
+     * {@code when((1 == 1) && "bar")} remains a smartmatch against "bar".
+     * A logical expression is a predicate when it depends on the topic or on
+     * a capture produced from the topic.
+     */
+    private static boolean logicalWhenIsBoolean(BinaryOperatorNode node) {
+        return containsTopicOrCapture(node);
+    }
+
+    private static boolean containsTopicOrCapture(Node node) {
+        if (node == null) return false;
+        if (node instanceof OperatorNode operator) {
+            if (operator.operator.equals("$") && operator.operand instanceof IdentifierNode identifier) {
+                String name = identifier.name;
+                if (name.equals("_") || name.matches("[0-9]+")) return true;
+            }
+            return containsTopicOrCapture(operator.operand);
+        }
+        if (node instanceof BinaryOperatorNode binary) {
+            return containsTopicOrCapture(binary.left) || containsTopicOrCapture(binary.right);
+        }
+        if (node instanceof ListNode list) {
+            for (Node element : list.elements) if (containsTopicOrCapture(element)) return true;
+        }
+        return false;
+    }
+
 
     /**
      * Parses a default statement (part of given/when feature from Perl 5.10).
