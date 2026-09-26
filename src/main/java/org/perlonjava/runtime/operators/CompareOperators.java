@@ -809,6 +809,15 @@ public class CompareOperators {
      * @return A RuntimeScalar representing true if they match, false otherwise
      */
     public static RuntimeScalar smartmatch(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return smartmatch(arg1, arg2, false);
+    }
+
+    /**
+     * Smartmatch under {@code use integer}.  Perl keeps ordinary string
+     * smartmatches as string comparisons, but truncates a numeric comparison
+     * when either operand carries numeric state.
+     */
+    private static RuntimeScalar smartmatch(RuntimeScalar arg1, RuntimeScalar arg2, boolean useInteger) {
         arg1 = RuntimeScalar.fetchTiedOnce(arg1);
         arg2 = RuntimeScalar.fetchTiedOnce(arg2);
         int blessId = blessedId(arg1);
@@ -850,7 +859,7 @@ public class CompareOperators {
         if (arg2.type == RuntimeScalarType.REGEX && leftArray != null
                 && arg2.value instanceof RuntimeRegex regex) {
             for (RuntimeScalar candidate : leftArray) {
-                if (smartmatch(candidate, arg2).getBoolean()) return scalarTrue;
+                if (smartmatch(candidate, arg2, useInteger).getBoolean()) return scalarTrue;
             }
             return scalarFalse;
         }
@@ -911,7 +920,7 @@ public class CompareOperators {
             enterArrayPair(leftArray, rightArray);
             try {
                 for (int i = 0; i < leftArray.size(); i++) {
-                    if (!smartmatch(leftArray.get(i), rightArray.get(i)).getBoolean()) {
+                    if (!smartmatch(leftArray.get(i), rightArray.get(i), useInteger).getBoolean()) {
                         return scalarFalse;
                     }
                 }
@@ -945,7 +954,7 @@ public class CompareOperators {
                 // because that aggregate happens to contain the scalar.
                 if (!arg1.getDefinedBoolean()
                         && (arrayReferent(candidate) != null || hashReferent(candidate) != null)) continue;
-                if (smartmatch(arg1, candidate).getBoolean()) {
+                if (smartmatch(arg1, candidate, useInteger).getBoolean()) {
                     return scalarTrue;
                 }
             }
@@ -973,6 +982,9 @@ public class CompareOperators {
             if (ScalarUtils.looksLikeNumber(arg1) && ScalarUtils.looksLikeNumber(arg2)) {
                 RuntimeScalar num1 = arg1.getNumber();
                 RuntimeScalar num2 = arg2.getNumber();
+                if (useInteger && !(isStringSmartmatchOperand(arg1) && isStringSmartmatchOperand(arg2))) {
+                    return getScalarBoolean(num1.getInt() == num2.getInt());
+                }
                 if (num1.type == RuntimeScalarType.DOUBLE || num2.type == RuntimeScalarType.DOUBLE) {
                     return getScalarBoolean(num1.getDouble() == num2.getDouble());
                 } else {
@@ -984,6 +996,12 @@ public class CompareOperators {
         }
 
         return scalarFalse;
+    }
+
+    private static boolean isStringSmartmatchOperand(RuntimeScalar value) {
+        return value.type == RuntimeScalarType.STRING
+                || value.type == RuntimeScalarType.BYTE_STRING
+                || value.type == RuntimeScalarType.VSTRING;
     }
 
     private static RuntimeArray arrayReferent(RuntimeScalar value) {
@@ -1064,6 +1082,11 @@ public class CompareOperators {
      */
     public static RuntimeScalar smartmatch(RuntimeBase arg1, RuntimeBase arg2) {
         return smartmatch(smartmatchOperand(arg1), smartmatchOperand(arg2));
+    }
+
+    /** Entry point for compilers when the lexical {@code integer} hint is set. */
+    public static RuntimeScalar smartmatchInteger(RuntimeBase arg1, RuntimeBase arg2) {
+        return smartmatch(smartmatchOperand(arg1), smartmatchOperand(arg2), true);
     }
 
     private static RuntimeScalar smartmatchOperand(RuntimeBase operand) {

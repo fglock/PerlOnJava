@@ -2115,6 +2115,10 @@ public class Opcodes {
     // Effect: rd = CompareOperators.smartmatch(rs1, rs2)
     public static final short SMARTMATCH = 400;
 
+    // Format: INTEGER_SMARTMATCH rd rs1 rs2
+    // Effect: rd = CompareOperators.smartmatchInteger(rs1, rs2)
+    public static final short INTEGER_SMARTMATCH = 613;
+
     /**
      * Call subroutine sharing caller's @_: rd = RuntimeCode.apply(coderef_reg, args_reg, context)
      * Used for &func (no parens) which shares caller's @_ by alias.

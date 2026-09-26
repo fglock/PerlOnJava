@@ -27,6 +27,9 @@ priorities and future plans.
 - Implement Unix `socketpair` through real POSIX descriptors, preserving
   bidirectional I/O, socket options, shutdown, and scope-exit EOF semantics.
 
+- Restore `use integer` smartmatch semantics in `given`/`when`, including
+  numeric scalar, array, and regex dispatch on both execution backends.
+
 - Preserve Perl-compatible `EISDIR` readline behavior for filehandles opened
   on directories on Windows, and ensure `Config` does not advertise unsupported
   fork capabilities.

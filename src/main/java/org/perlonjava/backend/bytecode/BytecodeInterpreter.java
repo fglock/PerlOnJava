@@ -1506,7 +1506,7 @@ public class BytecodeInterpreter {
                             // TYPE AND REFERENCE OPERATORS (opcodes 102-105) - Delegated
                             // =================================================================
 
-                            case Opcodes.DEFINED, Opcodes.DEFINED_CODE, Opcodes.DEFINED_CODE_DYNAMIC, Opcodes.DEFINED_GLOB, Opcodes.DEFINED_SCALAR_DEREF, Opcodes.REF, Opcodes.BLESS, Opcodes.BLESS_CLASS_INSTANCE, Opcodes.ISA, Opcodes.SMARTMATCH, Opcodes.PROTOTYPE,
+                            case Opcodes.DEFINED, Opcodes.DEFINED_CODE, Opcodes.DEFINED_CODE_DYNAMIC, Opcodes.DEFINED_GLOB, Opcodes.DEFINED_SCALAR_DEREF, Opcodes.REF, Opcodes.BLESS, Opcodes.BLESS_CLASS_INSTANCE, Opcodes.ISA, Opcodes.SMARTMATCH, Opcodes.INTEGER_SMARTMATCH, Opcodes.PROTOTYPE,
                                  Opcodes.QUOTE_REGEX, Opcodes.QUOTE_REGEX_O -> {
                                 pc = executeTypeOps(opcode, bytecode, pc, registers, code);
                             }
@@ -4031,6 +4031,13 @@ public class BytecodeInterpreter {
                 int rs1 = bytecode[pc++];
                 int rs2 = bytecode[pc++];
                 registers[rd] = CompareOperators.smartmatch(registers[rs1], registers[rs2]);
+                return pc;
+            }
+            case Opcodes.INTEGER_SMARTMATCH -> {
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                registers[rd] = CompareOperators.smartmatchInteger(registers[rs1], registers[rs2]);
                 return pc;
             }
             case Opcodes.PROTOTYPE -> {

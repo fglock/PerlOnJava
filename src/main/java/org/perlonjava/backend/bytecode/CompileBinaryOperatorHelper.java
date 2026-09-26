@@ -177,7 +177,7 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emitReg(rs2);
             }
             case "~~" -> {
-                bytecodeCompiler.emit(Opcodes.SMARTMATCH);
+                bytecodeCompiler.emit(useInteger ? Opcodes.INTEGER_SMARTMATCH : Opcodes.SMARTMATCH);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);

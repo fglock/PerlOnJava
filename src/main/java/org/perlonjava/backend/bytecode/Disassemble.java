@@ -3011,6 +3011,13 @@ public class Disassemble {
                         sb.append("SMARTMATCH r").append(smRd).append(", r").append(smRs1).append(", r").append(smRs2).append("\n");
                         break;
                     }
+                    case Opcodes.INTEGER_SMARTMATCH: {
+                        int smRd = interpretedCode.bytecode[pc++];
+                        int smRs1 = interpretedCode.bytecode[pc++];
+                        int smRs2 = interpretedCode.bytecode[pc++];
+                        sb.append("INTEGER_SMARTMATCH r").append(smRd).append(", r").append(smRs1).append(", r").append(smRs2).append("\n");
+                        break;
+                    }
                     case Opcodes.AWAIT: {
                         int awaitRd = interpretedCode.bytecode[pc++];
                         int futureReg = interpretedCode.bytecode[pc++];

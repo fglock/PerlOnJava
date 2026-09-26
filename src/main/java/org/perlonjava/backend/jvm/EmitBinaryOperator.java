@@ -237,6 +237,15 @@ public class EmitBinaryOperator {
         }
         // stack: [left, right]
         ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, node.left.getIndex());
+        if (node.operator.equals("~~") && isIntegerEnabled(emitterVisitor, node)) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/operators/CompareOperators",
+                    "smartmatchInteger",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            EmitOperator.handleVoidContext(emitterVisitor);
+            return;
+        }
         emitOperator(node, emitterVisitor);
     }
 
