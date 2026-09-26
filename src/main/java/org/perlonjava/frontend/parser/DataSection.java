@@ -125,14 +125,31 @@ public class DataSection {
                 atLineStart = false;
                 continue;
             }
+            // CORE::__DATA__ and CORE::__END__ are alternate spellings of
+            // source markers. ParsePrimary recognizes them as such, so the
+            // pre-scan must create the DATA placeholder too.
+            if (atLineStart && token.text.equals("CORE")
+                    && i + 2 < tokens.size()
+                    && tokens.get(i + 1).type == LexerTokenType.OPERATOR
+                    && tokens.get(i + 1).text.equals("::")
+                    && tokens.get(i + 2).type == LexerTokenType.IDENTIFIER
+                    && isStandaloneMarker(tokens, i + 2)) {
+                String qualifiedMarker = tokens.get(i + 2).text;
+                if (qualifiedMarker.equals("__DATA__")) return pending;
+                if (qualifiedMarker.equals("__END__")) {
+                    return parser.isTopLevelScript ? "main" : null;
+                }
+            }
             switch (token.text) {
                 case "__DATA__" -> {
-                    if (atLineStart) return pending;
+                    if (atLineStart && isStandaloneMarker(tokens, i)) return pending;
                 }
                 case "__END__" -> {
                     // A non-top-level __END__ stops parsing but does not populate
                     // a DATA handle - see parseDataSection().
-                    if (atLineStart) return parser.isTopLevelScript ? "main" : null;
+                    if (atLineStart && isStandaloneMarker(tokens, i)) {
+                        return parser.isTopLevelScript ? "main" : null;
+                    }
                 }
                 case "package" -> {
                     String name = readPackageName(tokens, i + 1);
@@ -146,6 +163,16 @@ public class DataSection {
             atLineStart = false;
         }
         return null;
+    }
+
+    /** A source marker occupies the rest of its physical line. */
+    private static boolean isStandaloneMarker(List<LexerToken> tokens, int markerIndex) {
+        for (int i = markerIndex + 1; i < tokens.size(); i++) {
+            LexerToken token = tokens.get(i);
+            if (token.type == LexerTokenType.WHITESPACE) continue;
+            return token.type == LexerTokenType.NEWLINE || token.type == LexerTokenType.EOF;
+        }
+        return true;
     }
 
     /**
