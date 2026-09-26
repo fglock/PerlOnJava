@@ -135,7 +135,13 @@ public class ScalarBackedIO implements IOHandle {
 
     @Override
     public RuntimeScalar eof() {
-        return new RuntimeScalar(isEOF);
+        if (isEOF) {
+            return RuntimeScalarCache.scalarTrue;
+        }
+        byte[] contentBytes = byteContent(backingScalar.toString());
+        return contentBytes != null && position >= contentBytes.length
+                ? RuntimeScalarCache.scalarTrue
+                : RuntimeScalarCache.scalarFalse;
     }
 
     @Override

@@ -102,19 +102,37 @@ public class DataSection {
     private static String dataSectionPackage(Parser parser) {
         String pending = parser.ctx.symbolTable.getCurrentPackage();
         List<LexerToken> tokens = parser.tokens;
+        boolean atLineStart = true;
+        boolean inComment = false;
         for (int i = 0; i < tokens.size(); i++) {
             LexerToken token = tokens.get(i);
+            if (token.type == LexerTokenType.NEWLINE) {
+                atLineStart = true;
+                inComment = false;
+                continue;
+            }
+            if (inComment) {
+                continue;
+            }
+            if (token.type == LexerTokenType.WHITESPACE) {
+                continue;
+            }
+            if (token.type == LexerTokenType.OPERATOR && token.text.equals("#")) {
+                inComment = true;
+                continue;
+            }
             if (token.type != LexerTokenType.IDENTIFIER) {
+                atLineStart = false;
                 continue;
             }
             switch (token.text) {
                 case "__DATA__" -> {
-                    return pending;
+                    if (atLineStart) return pending;
                 }
                 case "__END__" -> {
                     // A non-top-level __END__ stops parsing but does not populate
                     // a DATA handle - see parseDataSection().
-                    return parser.isTopLevelScript ? "main" : null;
+                    if (atLineStart) return parser.isTopLevelScript ? "main" : null;
                 }
                 case "package" -> {
                     String name = readPackageName(tokens, i + 1);
@@ -125,6 +143,7 @@ public class DataSection {
                 default -> {
                 }
             }
+            atLineStart = false;
         }
         return null;
     }

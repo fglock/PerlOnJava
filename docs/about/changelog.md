@@ -27,6 +27,9 @@ priorities and future plans.
 - Implement Unix `socketpair` through real POSIX descriptors, preserving
   bidirectional I/O, socket options, shutdown, and scope-exit EOF semantics.
 
+- Preserve `DATA` handle semantics for commented marker text and empty
+  top-level data sections, restoring `eof(DATA)` behavior in `given`/`when`.
+
 - Restore `use integer` smartmatch semantics in `given`/`when`, including
   numeric scalar, array, and regex dispatch on both execution backends.
 
