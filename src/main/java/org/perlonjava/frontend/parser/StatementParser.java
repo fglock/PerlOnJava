@@ -757,6 +757,9 @@ public class StatementParser {
      */
     private static boolean whenIsBoolean(Node node) {
         if (node instanceof BinaryOperatorNode b) {
+            if (b.operator.equals("eof")) {
+                return true;
+            }
             if (b.operator.equals("->")) {
                 // Method calls in when() are predicates; their return values
                 // are not smartmatch RHS operands.
@@ -783,7 +786,10 @@ public class StatementParser {
                 // A bare m// in when is evaluated against the localized $_.
                 // Wrapping its boolean result in $_ ~~ ... would compare the
                 // topic to 0/1 instead of performing the regex predicate.
-                case "!", "not", "defined", "exists", "matchRegex" -> true;
+                case "!", "not", "defined", "exists", "matchRegex",
+                     "-b", "-c", "-d", "-e", "-f", "-g", "-k", "-l",
+                     "-o", "-p", "-r", "-s", "-S", "-t", "-u", "-w",
+                     "-x", "-z", "-M", "-A", "-C" -> true;
                 default -> false;
             };
         }
