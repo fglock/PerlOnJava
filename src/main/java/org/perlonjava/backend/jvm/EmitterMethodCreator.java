@@ -563,6 +563,11 @@ public class EmitterMethodCreator implements Opcodes {
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "pushJvmSelfReference",
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V", false);
+            mv.visitInsn(ctx.javaClassInfo.isSortComparator ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "pushJvmSortComparator",
+                    "(Z)V", false);
 
             // Initialize local variables with closure values from instance fields
             // Skip some indices because they are reserved for special arguments (this, "@_" and call
@@ -1212,6 +1217,10 @@ public class EmitterMethodCreator implements Opcodes {
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "popJvmSelfReference",
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V", false);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "popJvmSortComparator",
+                    "()V", false);
             mv.visitInsn(Opcodes.ARETURN); // Returns an Object
             mv.visitMaxs(0, 0); // Automatically computed
             mv.visitEnd();

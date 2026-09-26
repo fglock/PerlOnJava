@@ -429,6 +429,9 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             result = RuntimeCode.handleEscapingLoopControl(
                     result, generatedClassConstructor, classAdjustBlock);
             if (isSortComparator && result instanceof RuntimeControlFlowList flow) {
+                if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
+                    throw RuntimeCode.sortTailCallError();
+                }
                 throw new PerlCompilerException("Can't \"goto\" out of a pseudo block at "
                         + flow.marker.fileName + " line " + flow.marker.lineNumber + ".\n");
             }

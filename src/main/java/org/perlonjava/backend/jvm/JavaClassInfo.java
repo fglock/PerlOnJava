@@ -109,6 +109,8 @@ public class JavaClassInfo {
      * so the return value propagates to the enclosing subroutine.
      */
     public boolean isMapGrepBlock;
+    /** True when this generated method implements a sort BLOCK pseudo-block. */
+    public boolean isSortComparator;
 
     /**
      * True when this generated method belongs to a subroutine with the

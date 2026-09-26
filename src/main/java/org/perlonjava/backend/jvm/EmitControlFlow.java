@@ -514,12 +514,12 @@ public class EmitControlFlow {
      * Creates a TAILCALL marker with the coderef and arguments.
      *
      * @param emitterVisitor The visitor handling the bytecode emission
-     * @param subNode        The operator node for the subroutine reference (&NAME)
+     * @param subNode        The expression producing the target code reference
      * @param argsNode       The node representing the arguments
      * @param tokenIndex     The token index for error reporting
      * @param evalScope      The eval scope type ("eval-block", "eval-string", or null)
      */
-    static void handleGotoSubroutine(EmitterVisitor emitterVisitor, OperatorNode subNode, Node argsNode, int tokenIndex, String evalScope) {
+    static void handleGotoSubroutine(EmitterVisitor emitterVisitor, Node subNode, Node argsNode, int tokenIndex, String evalScope) {
         EmitterContext ctx = emitterVisitor.ctx;
 
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(goto &sub): Emitting TAILCALL marker");
@@ -561,7 +561,8 @@ public class EmitControlFlow {
         } else {
             ctx.mv.visitInsn(Opcodes.ACONST_NULL);
         }
-        String namedTarget = subNode.operand instanceof IdentifierNode id
+        String namedTarget = subNode instanceof OperatorNode opNode
+                && opNode.operand instanceof IdentifierNode id
                 ? org.perlonjava.runtime.runtimetypes.NameNormalizer.normalizeVariableName(
                         id.name, ctx.symbolTable.getCurrentPackage()) : null;
         if (namedTarget != null) ctx.mv.visitLdcInsn(namedTarget); else ctx.mv.visitInsn(Opcodes.ACONST_NULL);
@@ -570,6 +571,18 @@ public class EmitControlFlow {
                 "<init>",
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;)V",
                 false);
+
+        // An eval BLOCK is an execution boundary. Resolve here while its
+        // catch handler is active; returning the marker directly would let it
+        // escape past the eval and report an internal tail-call error.
+        if (evalScope != null) {
+            emitterVisitor.pushCallContext();
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "resolveTailCalls",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    false);
+        }
 
         if (pooledArgs) {
             ctx.javaClassInfo.releaseSpillSlot();
@@ -767,6 +780,34 @@ public class EmitControlFlow {
                             new IdentifierNode("_", opNode.tokenIndex), opNode.tokenIndex);
                     argsNode.elements.add(atUnderscore);
                     handleGotoSubroutine(emitterVisitor, opNode, argsNode, node.tokenIndex, evalScope3);
+                    return;
+                }
+
+                // `goto sub { ... }` tail-calls the anonymous coderef with
+                // the current argument array.  It is distinct from a dynamic
+                // label expression even though both begin with a non-label
+                // AST node.
+                if (arg instanceof SubroutineNode subroutineNode) {
+                    if (ctx.javaClassInfo.isSortComparator) {
+                        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                                "sortTailCallOutsideError",
+                                "()Lorg/perlonjava/runtime/runtimetypes/PerlCompilerException;",
+                                false);
+                        ctx.mv.visitInsn(Opcodes.ATHROW);
+                        return;
+                    }
+                    ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                            "checkSortTailCall", "()V", false);
+                    String evalScope3 = null;
+                    if (ctx.javaClassInfo.isInEvalBlock) evalScope3 = "eval-block";
+                    else if (ctx.javaClassInfo.isInEvalString) evalScope3 = "eval-string";
+                    ListNode argsNode = new ListNode(subroutineNode.tokenIndex);
+                    argsNode.elements.add(new OperatorNode("@",
+                            new IdentifierNode("_", subroutineNode.tokenIndex), subroutineNode.tokenIndex));
+                    handleGotoSubroutine(emitterVisitor, subroutineNode, argsNode,
+                            node.tokenIndex, evalScope3);
                     return;
                 }
 

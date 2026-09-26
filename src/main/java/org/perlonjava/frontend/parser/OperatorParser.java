@@ -1737,7 +1737,16 @@ public class OperatorParser {
         // resolve it as a call changes `goto skip` into `skip()` when test
         // helpers (or user code) provide that subroutine.
         LexerToken target = peek(parser);
-        if (target.type == IDENTIFIER) {
+        // `goto sub { ... }` tail-calls an anonymous coderef.  `sub` is
+        // normally dispatched by CoreOperatorResolver, but goto owns its
+        // operand parsing so the general list parser never gets that chance.
+        // Parse the anonymous sub here instead of mistaking the keyword for a
+        // static label and leaving its block behind as a syntax error.
+        if (target.text.equals("sub")) {
+            consume(parser);
+            operand = new ListNode(List.of(
+                    SubroutineParser.parseSubroutineDefinition(parser, false, null)), currentIndex);
+        } else if (target.type == IDENTIFIER) {
             consume(parser);
             operand = new ListNode(List.of(new IdentifierNode(target.text, currentIndex)), currentIndex);
         } else {

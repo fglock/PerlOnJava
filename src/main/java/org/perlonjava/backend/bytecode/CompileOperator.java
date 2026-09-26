@@ -2169,6 +2169,31 @@ public class CompileOperator {
                     return;
                 }
             }
+
+            // `goto sub { ... }` tail-calls an anonymous coderef with the
+            // current argument array.  Do not route it through GOTO_DYNAMIC:
+            // a coderef is a tail-call target here, not a computed label.
+            if (arg instanceof SubroutineNode) {
+                int outerContext = bc.currentCallContext;
+                bc.compileNode(arg, -1, RuntimeContextType.SCALAR);
+                int codeRefReg = bc.lastResultReg;
+                String evalScope = bc.getEvalScopeType();
+                int evalScopeIdx = evalScope == null ? -1 : bc.addToStringPool(evalScope);
+                int rd = bc.allocateOutputRegister();
+                bc.emit(Opcodes.GOTO_TAILCALL);
+                bc.emitReg(rd);
+                bc.emitReg(codeRefReg);
+                // A negative argument register preserves the current @_ array.
+                bc.emitReg(-1);
+                bc.emit(outerContext);
+                bc.emit(evalScopeIdx);
+                bc.emit(-1);
+                emitSubroutineExitCleanup(bc, rd);
+                bc.emitWithToken(Opcodes.RETURN, node.getIndex());
+                bc.emitReg(rd);
+                bc.lastResultReg = -1;
+                return;
+            }
             
             if (arg instanceof IdentifierNode) labelStr = ((IdentifierNode) arg).name;
             else {

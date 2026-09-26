@@ -2259,6 +2259,12 @@ public class BytecodeInterpreter {
                                 int evalScopeIdx = bytecode[pc++]; // -1 = not in eval
                                 int namedTargetIdx = bytecode[pc++]; // -1 = dynamic target
 
+                                // A tail call may not escape sort's pseudo
+                                // block. Do this at marker creation because
+                                // direct interpreter call paths can resolve a
+                                // marker before the caller sees it.
+                                RuntimeCode.checkSortTailCall();
+
                                 // Get coderef
                                 RuntimeBase codeRefBase = registers[coderefReg];
                                 RuntimeScalar codeRef = (codeRefBase instanceof RuntimeScalar)

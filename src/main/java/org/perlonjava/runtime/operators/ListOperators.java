@@ -236,13 +236,18 @@ public class ListOperators {
                         comparatorArgs = outerArgs != null ? outerArgs : new RuntimeArray();
                     }
 
-                    // Apply the Perl comparator subroutine with the arguments
+                    // Apply the Perl comparator subroutine with the arguments.
+                    // The thread-local depth tracks ordinary comparator
+                    // execution, while the runtime-state marker also covers
+                    // tail calls made by subroutines invoked from sort.
                     try {
                         RuntimeCode.enterSortComparator();
+                        RuntimeCode.enterSortComparatorInvocation();
                         RuntimeList result;
                         try {
                             result = RuntimeCode.apply(finalComparator, comparatorArgs, RuntimeContextType.SCALAR);
                         } finally {
+                            RuntimeCode.exitSortComparatorInvocation();
                             RuntimeCode.leaveSortComparator();
                         }
 

@@ -246,6 +246,7 @@ public class EmitSubroutine {
         JavaClassInfo newJavaClassInfo = new JavaClassInfo();
         newJavaClassInfo.isSubroutineBody = !node.useTryCatch;
         newJavaClassInfo.isSmartmatchPredicate = node.getBooleanAnnotation("smartmatchPredicate");
+        newJavaClassInfo.isSortComparator = node.getBooleanAnnotation("isSortComparator");
         // Eval blocks are compiled as separate methods, but a goto inside one
         // still observes labels structurally contained by the enclosing method.
         // Carry the loop-body set so it can reject an illegal entry before the
