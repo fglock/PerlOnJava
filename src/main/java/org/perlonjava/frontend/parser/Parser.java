@@ -204,6 +204,13 @@ public class Parser {
     // Nesting depth of given blocks currently being parsed. `when` and
     // `default` are only valid within a topicalizer.
     public int parsingGivenDepth = 0;
+    // A foreach that topicalizes $_ accepts when/default, but an eval nested
+    // directly in it needs Perl's distinct loop-topicalizer diagnostics.
+    public int parsingLoopTopicalizerDepth = 0;
+    // Each eval BLOCK remembers the surrounding given depth.  A break or
+    // continue at that depth belongs to the eval boundary, not to a caller's
+    // topicalizer; a deeper given declared inside the eval remains valid.
+    public final java.util.ArrayDeque<Integer> evalGivenDepthBaselines = new java.util.ArrayDeque<>();
     public boolean parsingTakeReference = false;
     // Format argument lines are parsed by a short-lived child parser.  Record
     // the lexical sub it resolved so the detached RuntimeFormat can retain

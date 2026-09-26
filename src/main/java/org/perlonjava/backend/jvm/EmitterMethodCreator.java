@@ -678,6 +678,13 @@ public class EmitterMethodCreator implements Opcodes {
             // Create a label for the return point
             ctx.javaClassInfo.returnLabel = new Label();
 
+            // The control-flow emitter must not resolve a switch-only
+            // continue/break in eval BLOCK code against a topicalizer from
+            // its caller.  useTryCatch is precisely the eval-BLOCK method
+            // boundary; retain that fact in the class metadata while emitting
+            // its AST so the marker reaches the eval catcher.
+            ctx.javaClassInfo.isInEvalBlock = useTryCatch;
+
             // Prepare to visit the AST to generate bytecode
             EmitterVisitor visitor = new EmitterVisitor(ctx);
 

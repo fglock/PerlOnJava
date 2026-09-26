@@ -154,6 +154,8 @@ public class ControlFlowMarker {
                 return "Label not found for \"" + operation + " " + label + "\"" + location;
             } else if ("continue".equals(switchControlOperator)) {
                 return "Can't \"continue\" outside a when block" + location;
+            } else if ("break-loop-topicalizer".equals(switchControlOperator)) {
+                return "Can't \"break\" in a loop topicalizer" + location;
             } else if ("break".equals(switchControlOperator)) {
                 return "Can't \"break\" outside a given block" + location;
             } else {

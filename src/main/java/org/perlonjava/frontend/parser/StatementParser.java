@@ -415,6 +415,7 @@ public class StatementParser {
                 && parser.ctx.symbolTable.isFeatureCategoryEnabled("switch");
         if (loopTopicalizer) {
             parser.parsingGivenDepth++;
+            parser.parsingLoopTopicalizerDepth++;
         }
         try {
             parser.parsingRuntimeLoopBodyDepth++;
@@ -423,6 +424,7 @@ public class StatementParser {
             parser.parsingRuntimeLoopBodyDepth--;
             if (loopTopicalizer) {
                 parser.parsingGivenDepth--;
+                parser.parsingLoopTopicalizerDepth--;
             }
             parser.futureAsyncAwaitForbiddenContext = previousForbiddenContext;
         }
@@ -1046,12 +1048,21 @@ public class StatementParser {
         // switch clause, so remove it (and unreachable trailing expressions)
         // rather than compiling it as an ordinary loop `next`.
         boolean continueWhen = removeWhenContinue(expression);
+        boolean directContinue = expression instanceof AbstractNode annotated
+                && annotated.getBooleanAnnotation("whenContinue");
         if (continueWhen) {
             hoistPostfixWhenContinueDeclarations(expression, hoistedDeclarations);
         }
         List<Node> bodyElements = new ArrayList<>();
         if (continueWhen) {
-            bodyElements.add(expression);
+            // A bare `continue when CONDITION` is itself the marker.  There
+            // is no containing statement-order node from which
+            // removeWhenContinue() can remove it, so retaining it would emit
+            // an ordinary `next` and incorrectly advance an enclosing loop.
+            // Nested expressions retain their prefix side effects.
+            if (!directContinue) {
+                bodyElements.add(expression);
+            }
         } else {
             // The synthetic last evaluates its annotation; retaining the
             // expression in the body would run side effects twice.

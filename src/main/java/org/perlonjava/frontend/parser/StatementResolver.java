@@ -751,8 +751,14 @@ public class StatementResolver {
                                     // sub is part of that closure's pad.  Its later
                                     // ordinary `sub name { ... }` definition must fill
                                     // this runtime cell, not a compiler-global one.
-                                    boolean runtimeLexicalSub = parser.ctx.symbolTable.isInSubroutineBody()
-                                            && parser.ctx.symbolTable.getCurrentSubroutine().isEmpty();
+                                    boolean runtimeLexicalSub = (parser.ctx.symbolTable.isInSubroutineBody()
+                                            && parser.ctx.symbolTable.getCurrentSubroutine().isEmpty())
+                                            // A state lexical forward declaration which shadows an
+                                            // existing package CV must keep its cell in the runtime
+                                            // lexical pad. Installing its eventual definition through
+                                            // a synthetic BEGIN instead captures the declaration in
+                                            // that BEGIN frame, leaving the real state cell undefined.
+                                            || (declaration.equals("state") && packageSubAlreadyDefined);
                                     if (runtimeLexicalSub) {
                                         varDecl.setAnnotation("runtimeLexicalSub", true);
                                         varDecl.setAnnotation("lexicalSubScopeIndex",

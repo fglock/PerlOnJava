@@ -2253,15 +2253,19 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeCreateNext(bytecode, pc, registers, code);
                             }
 
-                            case Opcodes.CREATE_SWITCH_CONTINUE, Opcodes.CREATE_SWITCH_BREAK -> {
+                            case Opcodes.CREATE_SWITCH_CONTINUE, Opcodes.CREATE_SWITCH_BREAK,
+                                    Opcodes.CREATE_SWITCH_BREAK_LOOP_TOPICALIZER -> {
                                 int rd = bytecode[pc++];
                                 int labelIdx = bytecode[pc++];
                                 String label = labelIdx == 255 ? null : code.stringPool[labelIdx];
                                 boolean isContinue = opcode == Opcodes.CREATE_SWITCH_CONTINUE;
+                                String switchControl = isContinue ? "continue"
+                                        : opcode == Opcodes.CREATE_SWITCH_BREAK_LOOP_TOPICALIZER
+                                        ? "break-loop-topicalizer" : "break";
                                 registers[rd] = new RuntimeControlFlowList(
                                         isContinue ? ControlFlowType.NEXT : ControlFlowType.LAST,
                                         label, code.sourceName, code.sourceLine, null,
-                                        isContinue ? "continue" : "break");
+                                        switchControl);
                             }
 
                             case Opcodes.CREATE_REDO -> {

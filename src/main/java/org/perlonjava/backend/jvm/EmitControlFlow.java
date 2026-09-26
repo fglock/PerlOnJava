@@ -158,7 +158,12 @@ public class EmitControlFlow {
         boolean implicitGivenLast = node.getBooleanAnnotation("implicitGivenLast");
         boolean switchBreak = node.getBooleanAnnotation("switchBreak");
         Object switchControlOperator = node.getAnnotation("switchControlOperator");
-        if (implicitGivenLast || switchBreak || switchControlOperator instanceof String) {
+        if (switchControlOperator instanceof String && ctx.javaClassInfo.isInEvalBlock) {
+            // Eval's synthetic bare block must not consume a switch-only
+            // marker. The generated eval method catches it and sets $@.
+            loopLabels = null;
+        } else if (implicitGivenLast || switchBreak
+                || (switchControlOperator instanceof String && !ctx.javaClassInfo.isInEvalBlock)) {
             loopLabels = ctx.javaClassInfo.findInnermostImplicitWhenTarget();
         } else if (labelStr == null) {
             // Unlabeled next/last/redo target the nearest enclosing true loop.

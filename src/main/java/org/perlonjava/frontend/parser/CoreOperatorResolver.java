@@ -139,7 +139,9 @@ public class CoreOperatorResolver {
                 // the source spelling so parseWhenStatement can distinguish
                 // the two after this normalization.
                 continueNode.setAnnotation("whenContinue", true);
-                if (parser.parsingGivenDepth == 0) {
+                boolean evalOutsideGiven = !parser.evalGivenDepthBaselines.isEmpty()
+                        && parser.parsingGivenDepth <= parser.evalGivenDepthBaselines.peek();
+                if (parser.parsingGivenDepth == 0 || evalOutsideGiven) {
                     continueNode.setAnnotation("switchControlOperator", "continue");
                 }
                 yield continueNode;
@@ -151,11 +153,15 @@ public class CoreOperatorResolver {
                 // `break` exits a synthetic given boundary. Outside a given it
                 // follows the existing ordinary-last path, which lets eval
                 // report its normal runtime diagnostic.
-                if (parser.parsingGivenDepth > 0) {
+                boolean evalOutsideGiven = !parser.evalGivenDepthBaselines.isEmpty()
+                        && parser.parsingGivenDepth <= parser.evalGivenDepthBaselines.peek();
+                if (parser.parsingGivenDepth > 0 && !evalOutsideGiven) {
                     breakNode.setAnnotation("switchBreak", true);
                 }
-                if (parser.parsingGivenDepth == 0) {
-                    breakNode.setAnnotation("switchControlOperator", "break");
+                if (parser.parsingGivenDepth == 0 || evalOutsideGiven) {
+                    breakNode.setAnnotation("switchControlOperator",
+                            evalOutsideGiven && parser.parsingLoopTopicalizerDepth > 0
+                                    ? "break-loop-topicalizer" : "break");
                 }
                 yield breakNode;
             }

@@ -1769,6 +1769,15 @@ public class SubroutineParser {
                             new IdentifierNode(storageName, parser.tokenIndex),
                             parser.tokenIndex);
                     varRef.setAnnotation("hiddenVarName", hiddenVarName);
+                    // State-sub storage is keyed by the declaration's
+                    // persistent ID. A later ordinary `sub name { ... }`
+                    // fulfills that declaration, so its compile-time
+                    // assignment must use the same key rather than the
+                    // default state slot.
+                    if (lexicalEntry.decl().equals("state")
+                            && varNode.operand instanceof OperatorNode innerNode) {
+                        varRef.id = innerNode.id;
+                    }
 
                     // A state forward declaration owns one cell per enclosing
                     // closure.  Define it only once in that cell; a my forward

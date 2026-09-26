@@ -9034,7 +9034,13 @@ public class BytecodeCompiler implements Visitor {
         LoopInfo targetLoop = null;
         String switchControlOperator = node.getAnnotation("switchControlOperator") instanceof String value
                 ? value : null;
-        if (implicitGivenLast || switchBreak || switchControlOperator != null) {
+        if (switchControlOperator != null && evalBlockDepth > 0) {
+            // An eval BLOCK is a control-flow boundary. Do not fall through
+            // to its synthetic bare-loop target: the switch marker must reach
+            // EVAL_CATCH and populate $@.
+            targetLoop = null;
+        } else if (implicitGivenLast || switchBreak
+                || (switchControlOperator != null && evalBlockDepth == 0)) {
             // A foreach topicalizer has a per-iteration switch target which
             // must win over the surrounding true loop.  A normal `last` still
             // selects that surrounding loop.
@@ -9075,6 +9081,8 @@ public class BytecodeCompiler implements Visitor {
             // No matching loop found - non-local control flow
             // Emit CREATE_LAST/NEXT/REDO + RETURN to propagate via RuntimeControlFlowList
             short createOp = "continue".equals(switchControlOperator) ? Opcodes.CREATE_SWITCH_CONTINUE
+                    : "break-loop-topicalizer".equals(switchControlOperator)
+                    ? Opcodes.CREATE_SWITCH_BREAK_LOOP_TOPICALIZER
                     : "break".equals(switchControlOperator) ? Opcodes.CREATE_SWITCH_BREAK
                     : op.equals("last") ? Opcodes.CREATE_LAST
                     : op.equals("next") ? Opcodes.CREATE_NEXT

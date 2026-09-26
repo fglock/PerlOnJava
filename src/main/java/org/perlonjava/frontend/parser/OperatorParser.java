@@ -126,9 +126,11 @@ public class OperatorParser {
             // This ensures source locations are saved with the correct context
             String previousSubroutine = parser.ctx.symbolTable.getCurrentSubroutine();
             parser.ctx.symbolTable.setCurrentSubroutine("(eval)");
+            parser.evalGivenDepthBaselines.push(parser.parsingGivenDepth);
             try {
                 block = ParseBlock.parseBlock(parser);
             } finally {
+                parser.evalGivenDepthBaselines.pop();
                 parser.ctx.symbolTable.setCurrentSubroutine(previousSubroutine);
             }
             TokenUtils.consume(parser, OPERATOR, "}");
@@ -1747,8 +1749,21 @@ public class OperatorParser {
             operand = new ListNode(List.of(
                     SubroutineParser.parseSubroutineDefinition(parser, false, null)), currentIndex);
         } else if (target.type == IDENTIFIER) {
+            // A bareword is a static label only when it is the complete goto
+            // operand.  Keywords can begin computed expressions: in
+            // `goto state $label = ...`, treating `state` as a label leaves
+            // the declaration behind and produces a syntax error.  This is
+            // the same complete-operand distinction used by last/next/redo.
+            int labelIndex = parser.tokenIndex;
             consume(parser);
-            operand = new ListNode(List.of(new IdentifierNode(target.text, currentIndex)), currentIndex);
+            LexerToken afterLabel = peek(parser);
+            parser.tokenIndex = labelIndex;
+            if (afterLabel.type == EOF || ListParser.isListTerminator(parser, afterLabel)) {
+                consume(parser);
+                operand = new ListNode(List.of(new IdentifierNode(target.text, labelIndex)), currentIndex);
+            } else {
+                operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
+            }
         } else {
             operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
         }

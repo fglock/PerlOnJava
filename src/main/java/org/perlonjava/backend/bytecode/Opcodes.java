@@ -2717,6 +2717,9 @@ public class Opcodes {
     /** Create a LAST marker retaining source spelling {@code break}. Format: rd labelIdx. */
     public static final short CREATE_SWITCH_BREAK = 619;
 
+    /** Create a LAST marker retaining loop-topicalizer break diagnostics. Format: rd labelIdx. */
+    public static final short CREATE_SWITCH_BREAK_LOOP_TOPICALIZER = 620;
+
     /** Load a named typeglob without making the detached IO-preserving copy. */
     public static final short LOAD_GLOB_CANONICAL = 609;
 

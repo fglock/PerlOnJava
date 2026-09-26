@@ -2226,11 +2226,14 @@ public class Disassemble {
                         break;
                     }
                     case Opcodes.CREATE_SWITCH_CONTINUE:
-                    case Opcodes.CREATE_SWITCH_BREAK: {
+                    case Opcodes.CREATE_SWITCH_BREAK:
+                    case Opcodes.CREATE_SWITCH_BREAK_LOOP_TOPICALIZER: {
                         rd = interpretedCode.bytecode[pc++];
                         int cfLabelIdx = interpretedCode.bytecode[pc++];
                         sb.append(opcode == Opcodes.CREATE_SWITCH_CONTINUE
-                                ? "CREATE_SWITCH_CONTINUE r" : "CREATE_SWITCH_BREAK r").append(rd)
+                                ? "CREATE_SWITCH_CONTINUE r"
+                                : opcode == Opcodes.CREATE_SWITCH_BREAK_LOOP_TOPICALIZER
+                                ? "CREATE_SWITCH_BREAK_LOOP_TOPICALIZER r" : "CREATE_SWITCH_BREAK r").append(rd)
                                 .append(" label=");
                         if (cfLabelIdx == 255) {
                             sb.append("<none>");
