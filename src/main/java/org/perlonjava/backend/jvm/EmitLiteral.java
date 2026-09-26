@@ -542,7 +542,8 @@ public class EmitLiteral {
             boolean snapshotForeachSource = Boolean.TRUE.equals(node.getAnnotation("foreachSource"));
             if (forceListSnapshot || snapshotListAssignmentResult || snapshotForeachSource) {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeDescriptorConstants.LIST_CLASS,
-                        snapshotForeachSource ? "addSnapshotWithArrayHoles" : "addSnapshot",
+                        snapshotForeachSource ? "addSnapshotWithArrayHoles"
+                                : snapshotListAssignmentResult ? "addLvalueSnapshot" : "addSnapshot",
                         "(" + RuntimeDescriptorConstants.BASE_TYPE + ")V", false);
             } else if (contextType == RuntimeContextType.RUNTIME) {
                 // A dynamic-context aggregate is scalarized by its emitter for

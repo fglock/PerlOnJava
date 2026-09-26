@@ -1779,12 +1779,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if ((lexicalDebugMode & LEXICAL_DEBUG_COMPILE) == 0) return;
         String patternDescription = debugPatternDescription();
         StringBuilder report = new StringBuilder();
-        String extflags = splitWhitespaceDebug ? "SKIPWHITE WHITE"
-                : patternDescription.equals(" ") ? "NULL"
-                : patternDescription.equals("^") ? "START_ONLY"
-                : patternDescription.isEmpty() ? "NULL"
-                : patternDescription.equals("\\s+") ? "WHITE" : "NULL";
-        report.append("r->extflags: ").append(extflags).append('\n');
+        if (splitWhitespaceDebug) {
+            report.append("r->extflags: SKIPWHITE WHITE\n");
+        }
         if ((lexicalDebugMode & LEXICAL_DEBUG_PARSE) != 0) {
             report.append(compileDebugPreamble(patternDescription));
             appendParseDebugTrace(report,
