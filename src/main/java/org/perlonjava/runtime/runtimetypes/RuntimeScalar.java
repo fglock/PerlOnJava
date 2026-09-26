@@ -626,6 +626,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (scalar == null || scalar == RuntimeScalarCache.scalarUndef) {
             return new RuntimeScalar();
         }
+        if (scalar.refCount == Integer.MIN_VALUE) {
+            // JVM local-slot reuse can assign a new declaration's initializer
+            // into a destroyed prior cell before refgen materializes it. Keep
+            // that new payload, but give the declaration a fresh scalar
+            // identity rather than exposing the destroyed referent.
+            return new RuntimeScalar(scalar);
+        }
         if (scalar instanceof RuntimeScalarReadOnly) {
             // Loop iterators and constants may occupy a lexical register.
             // They need a new writable cell, but must retain their current
@@ -648,10 +655,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public static RuntimeScalar initializeLexicalCell(RuntimeScalar scalar) {
         // Interpreter register arrays are reused between calls.  Preserve the
         // writable cell installed by a forward refalias, but never retain a
-        // read-only scalar left in the same register by an earlier frame
-        // (notably a literal signature argument).
+        // destroyed or read-only scalar left in the same register by an
+        // earlier frame (notably a literal signature argument).
         return scalar != null
                 && scalar.referencedByScalarReference
+                && scalar.refCount != Integer.MIN_VALUE
                 && !scalar.localBindingExists
                 && !(scalar instanceof RuntimeScalarReadOnly)
                 && scalar.type != RuntimeScalarType.READONLY_SCALAR
