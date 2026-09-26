@@ -10,6 +10,7 @@ import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.perlmodule.FilterUtilCall;
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
@@ -89,6 +90,18 @@ public class SpecialBlockParser {
     static Node parseSpecialBlock(Parser parser) {
         // Consume the block name token
         String blockName = TokenUtils.consume(parser).text;
+
+        // A phaser declaration may carry a prototype syntactically, but Perl
+        // ignores it and warns instead of treating the parentheses as a call.
+        if (TokenUtils.peek(parser).text.equals("(")) {
+            StringParser.parseRawString(parser, "q");
+            String warning = "Prototype on " + blockName + " block ignored"
+                    + parser.ctx.errorUtil.warningLocation(parser.tokenIndex) + ".\n";
+            parser.recordSpecialBlockPrototypeWarning(warning);
+            WarnDie.warn(
+                    new RuntimeScalar("Prototype on " + blockName + " block ignored"),
+                    new RuntimeScalar(parser.ctx.errorUtil.warningLocation(parser.tokenIndex)));
+        }
 
         // ADJUST blocks are only allowed inside class blocks
         if ("ADJUST".equals(blockName) && !parser.isInClassBlock) {
@@ -184,8 +197,20 @@ public class SpecialBlockParser {
             RuntimeCode.checkNestedEvalBeginLimit();
         }
 
-        // Execute other special blocks normally
-        runSpecialBlock(parser, blockName, block);
+        // Module::Install::DSL historically creates INIT from an eval inside
+        // BEGIN.  Perl treats that one phaser as BEGIN so old installers can
+        // bootstrap before runtime starts.
+        if ("INIT".equals(blockName) && parser.parsingEvalString
+                && "START".equals(GlobalVariable.getGlobalVariable(GLOBAL_PHASE).toString())
+                && "Module::Install::DSL".equals(parser.ctx.symbolTable.getCurrentPackage())) {
+            WarnDie.warn(
+                    new RuntimeScalar("Treating Module::Install::DSL::INIT block as BEGIN block as workaround"),
+                    new RuntimeScalar(parser.ctx.errorUtil.warningLocation(parser.tokenIndex)));
+            runSpecialBlock(parser, "BEGIN", block);
+        } else {
+            // Execute other special blocks normally
+            runSpecialBlock(parser, blockName, block);
+        }
         } finally {
             HintHashRegistry.exitSpecialBlockScope();
         }
@@ -533,9 +558,26 @@ public class SpecialBlockParser {
             RuntimeScalar codeRef = result.getFirst();
             switch (blockPhase) {
                 case "END" -> saveEndBlock(codeRef);
-                case "INIT" -> saveInitBlock(codeRef);
+                case "INIT" -> {
+                    saveInitBlock(codeRef);
+                    // An INIT compiled by eval STRING after runtime has begun
+                    // is no longer eligible for the program-start queue.
+                    if (parser.parsingEvalString
+                            && "RUN".equals(GlobalVariable.getGlobalVariable(GLOBAL_PHASE).toString())) {
+                        runInitBlocks();
+                    }
+                }
                 case "CHECK" -> saveCheckBlock(codeRef);
-                case "UNITCHECK" -> RuntimeArray.push(parser.ctx.unitcheckBlocks, codeRef);
+                case "UNITCHECK" -> {
+                    // Some embedding eval paths historically supplied no
+                    // queue.  Each parser still owns a real UNITCHECK queue;
+                    // initialize it here rather than losing a phaser to a
+                    // null runtime array.
+                    if (parser.ctx.unitcheckBlocks == null) {
+                        parser.ctx.unitcheckBlocks = new RuntimeArray();
+                    }
+                    RuntimeArray.push(parser.ctx.unitcheckBlocks, codeRef);
+                }
             }
         }
 

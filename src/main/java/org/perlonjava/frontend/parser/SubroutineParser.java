@@ -1658,6 +1658,16 @@ public class SubroutineParser {
                 case "CHECK":
                 case "INIT":
                 case "UNITCHECK":
+                    if (prototype != null) {
+                        WarnDie.warn(
+                                new RuntimeScalar("Prototype on " + subName + " block ignored"),
+                                new RuntimeScalar(parser.ctx.errorUtil.warningLocation(block.tokenIndex)));
+                    }
+                    if (attributes != null && !attributes.isEmpty()) {
+                        WarnDie.warn(
+                                new RuntimeScalar("Attribute on " + subName + " block ignored"),
+                                new RuntimeScalar(parser.ctx.errorUtil.warningLocation(block.tokenIndex)));
+                    }
                     SpecialBlockParser.runSpecialBlock(parser, subName, block);
                     ListNode noop = new ListNode(parser.tokenIndex);
                     noop.setAnnotation("compileTimeOnly", true);

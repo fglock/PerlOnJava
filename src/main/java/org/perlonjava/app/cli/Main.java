@@ -177,7 +177,8 @@ public class Main {
             // A failed END block aborts compilation of the enclosing program.
             // SpecialBlockParser supplies the END-specific diagnostic; the CLI
             // owns the final top-level compilation-abort line.
-            if (errorMessage.contains("END failed--compilation aborted")
+            if ((errorMessage.contains("END failed--compilation aborted")
+                    || errorMessage.contains("Prototype on BEGIN block ignored"))
                     && !errorMessage.contains("aborted due to compilation errors.")) {
                 errorMessage += "Execution of " + parsedArgs.fileName
                         + " aborted due to compilation errors.\n";

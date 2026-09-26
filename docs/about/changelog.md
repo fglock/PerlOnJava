@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore special-block phaser behavior, including compile-time execution,
+  lexical phaser-name calls, and Perl-compatible diagnostic boundaries.
+
 - Preserve Perl-compatible `EISDIR` readline behavior for filehandles opened
   on directories on Windows, and ensure `Config` does not advertise unsupported
   fork capabilities.

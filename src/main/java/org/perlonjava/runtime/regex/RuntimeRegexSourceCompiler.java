@@ -25,6 +25,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.SpecialBlock;
 import org.perlonjava.runtime.runtimetypes.WarningFlags;
 
 import java.util.ArrayList;
@@ -192,7 +193,7 @@ final class RuntimeRegexSourceCompiler {
             ErrorMessageUtil errors = new ErrorMessageUtil(sourceName, tokens);
             EmitterContext context = new EmitterContext(
                     new JavaClassInfo(), symbolTable, null, null,
-                    RuntimeContextType.SCALAR, false, errors, options, null);
+                    RuntimeContextType.SCALAR, false, errors, options, new RuntimeArray());
             SpecialBlockParser.setCurrentScope(symbolTable);
             // The synthetic qr// is an internal carrier for a pattern whose
             // constant segments have already passed through lexical
@@ -210,6 +211,10 @@ final class RuntimeRegexSourceCompiler {
                     hints.elements.put("qr", savedRegexConstant);
                 }
             }
+            // Runtime regex interpolation is an eval compilation unit. Its
+            // UNITCHECK phasers run once that synthetic source has parsed,
+            // before the callback is executed for the match.
+            SpecialBlock.runUnitcheckBlocks(context.unitcheckBlocks);
             InterpretedCode code = new BytecodeCompiler(
                     sourceName, sourceLine, errors, registry).compile(ast, context);
             int highestCapturedRegister = 2;
