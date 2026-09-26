@@ -5609,25 +5609,18 @@ public class BytecodeCompiler implements Visitor {
                     return;
                 }
 
-                // Lexical sub calls retain a package-qualified storage spelling
-                // when their declaration was installed at compile time.  That
-                // spelling is an implementation detail: the actual variable
-                // remains the hidden pad cell registered under its unqualified
-                // name.  In interpreter fallback, looking up the qualified
-                // spelling bypassed that cell and could reuse an unrelated
-                // register (including a visible package sub of the same name).
-                // Resolve annotated lexical-sub references through the pad.
+                // The parser selects either a runtime pad or compile-time
+                // storage for a lexical sub. Respect that selection: a
+                // qualified reference must not read an uninitialized pad just
+                // because both references carry the same diagnostic name.
                 String hiddenVarName = node.getAnnotation("hiddenVarName") instanceof String hidden
                         ? hidden : null;
-                // Lexical sub declarations are always stored in their hidden
-                // pad cell.  The source spelling may be package-qualified,
-                // but it must never redirect a lexical reference through a
-                // package CV merely because this is not an eval or because
-                // the declaration was not preexisting.
-                String hiddenVarKey = hiddenVarName != null ? "$" + hiddenVarName : null;
+                String hiddenVarKey = hiddenVarName != null
+                        && varName.equals("$" + hiddenVarName) ? varName : null;
                 if (hiddenVarKey != null && hasVariable(hiddenVarKey)
                         && !isOurVariable(hiddenVarKey)) {
                     lastResultReg = getVariableRegister(hiddenVarKey);
+                    retrieveStateScalarForRead(hiddenVarKey, lastResultReg);
                     return;
                 }
 
@@ -7650,6 +7643,16 @@ public class BytecodeCompiler implements Visitor {
             }
         }
 
+        boolean scalarBackedCodeLoop = referenceAliasedVariable != null
+                && referenceAliasedVariable.operator.equals("&")
+                && referenceAliasedVariable.operand instanceof OperatorNode;
+        int savedCodeLoopValueReg = -1;
+        if (scalarBackedCodeLoop) {
+            savedCodeLoopValueReg = allocateRegister();
+            emit(Opcodes.SET_SCALAR);
+            emitReg(savedCodeLoopValueReg);
+            emitReg(varReg);
+        }
         int savedLexicalLoopVarReg = -1;
         if (restoreLexicalLoopVar) {
             savedLexicalLoopVarReg = allocateRegister();
@@ -7881,10 +7884,9 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(varReg);
                 emitReg(referenceReg);
             } else {
-                // CODE references are already the cells to install in the
-                // lexical sub's hidden scalar pad; unlike $/@/%, no
-                // additional dereference is required.
-                emit(Opcodes.ALIAS);
+                // Store the CV in its existing scalar-backed binding so
+                // captured and compile-time references see the loop value.
+                emit(scalarBackedCodeLoop ? Opcodes.SET_SCALAR : Opcodes.ALIAS);
                 emitReg(varReg);
                 emitReg(referenceReg);
             }
@@ -7947,6 +7949,11 @@ public class BytecodeCompiler implements Visitor {
             emit(Opcodes.ALIAS);
             emitReg(varReg);
             emitReg(savedLexicalLoopVarReg);
+        }
+        if (savedCodeLoopValueReg >= 0) {
+            emit(Opcodes.SET_SCALAR);
+            emitReg(varReg);
+            emitReg(savedCodeLoopValueReg);
         }
         if (savedGlobalReferenceLoopVarReg >= 0) {
             int nameIdx = addToStringPool(globalLoopVarName);

@@ -1293,7 +1293,9 @@ public class CompileAssignment {
                 bc.emitWithToken(Opcodes.REFALIAS_CODE_REFERENCE, node.getIndex());
                 bc.emitReg(codeReg);
                 bc.emitReg(referenceReg);
-                bc.emit(Opcodes.ALIAS);
+                // The hidden scalar owns the CV binding. Replacing a read
+                // register leaves persistent and captured cells unchanged.
+                bc.emit(Opcodes.SET_SCALAR);
                 bc.emitReg(targetReg);
                 bc.emitReg(codeReg);
                 bc.lastResultReg = targetReg;
@@ -3581,7 +3583,7 @@ public class CompileAssignment {
                             bytecodeCompiler.emitWithToken(Opcodes.REFALIAS_CODE_REFERENCE, node.getIndex());
                             bytecodeCompiler.emitReg(codeReg);
                             bytecodeCompiler.emitReg(valueReg);
-                            bytecodeCompiler.emit(Opcodes.ALIAS);
+                            bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                             bytecodeCompiler.emitReg(targetReg);
                             bytecodeCompiler.emitReg(codeReg);
                             bytecodeCompiler.lastResultReg = targetReg;
@@ -3609,7 +3611,7 @@ public class CompileAssignment {
                             bytecodeCompiler.emitWithToken(Opcodes.REFALIAS_CODE_REFERENCE, node.getIndex());
                             bytecodeCompiler.emitReg(codeReg);
                             bytecodeCompiler.emitReg(valueReg);
-                            bytecodeCompiler.emit(Opcodes.ALIAS);
+                            bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                             bytecodeCompiler.emitReg(targetReg);
                             bytecodeCompiler.emitReg(codeReg);
                             bytecodeCompiler.lastResultReg = targetReg;
