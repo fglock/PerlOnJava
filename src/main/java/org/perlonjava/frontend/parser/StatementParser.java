@@ -691,7 +691,20 @@ public class StatementParser {
         Node whenResult = null;
         boolean explicitLoopControl = false;
         boolean continueWhen = false;
-        for (int i = whenBlock.elements.size() - 1; i >= 0; i--) {
+        // `continue` transfers immediately to the next when/default clause;
+        // any following source statements are unreachable. Detect it before
+        // choosing a final expression, since code such as `continue; 456`
+        // must not turn 456 into the implicit given result.
+        for (int i = 0; i < whenBlock.elements.size(); i++) {
+            Node element = whenBlock.elements.get(i);
+            if (element instanceof AbstractNode annotated
+                    && annotated.getBooleanAnnotation("whenContinue")) {
+                whenBlock.elements.subList(i, whenBlock.elements.size()).clear();
+                continueWhen = true;
+                break;
+            }
+        }
+        for (int i = whenBlock.elements.size() - 1; !continueWhen && i >= 0; i--) {
             Node element = whenBlock.elements.get(i);
             if (element != null) {
                 whenResult = element;
@@ -858,6 +871,27 @@ public class StatementParser {
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
         BlockNode defaultBlock = ParseBlock.parseBlock(parser);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+
+        // Like a matching when clause, default supplies the given expression's
+        // value and terminates the switch. Without this synthetic last a
+        // following statement in the given block overwrites default's result.
+        Node defaultResult = null;
+        for (int i = defaultBlock.elements.size() - 1; i >= 0; i--) {
+            Node element = defaultBlock.elements.get(i);
+            if (element != null) {
+                defaultResult = element;
+                defaultBlock.elements.remove(i);
+                break;
+            }
+        }
+        if (defaultResult == null) {
+            defaultResult = new OperatorNode("undef", new ListNode(index), index);
+        }
+        defaultResult.setAnnotation("insideGivenBlock", true);
+        OperatorNode implicitLast = new OperatorNode("last", new ListNode(index), index);
+        implicitLast.setAnnotation("implicitGivenLast", true);
+        implicitLast.setAnnotation("implicitGivenResult", defaultResult);
+        defaultBlock.elements.add(implicitLast);
 
         return defaultBlock;
     }

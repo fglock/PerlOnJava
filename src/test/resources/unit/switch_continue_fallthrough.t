@@ -5,15 +5,22 @@ no warnings 'experimental::smartmatch';
 use Test::More;
 
 my $result = do {
-    given (2) {
-        my $matched;
-        when (2) { $matched = 'first'; continue }
-        when (2) { "$matched second" }
-        default { 'default' }
+    given (1) {
+        when (/\d/) {
+            continue;
+            'unreachable';
+        }
+        default { 'fallback' }
     }
 };
+is $result, 'fallback', 'continue falls through despite trailing unreachable code';
 
-is($result, 'first second',
-    'continue in when falls through to the next matching clause');
+my $default_result = do {
+    given (0) {
+        default { 'fallback' }
+        'unreachable';
+    }
+};
+is $default_result, 'fallback', 'default exits the given block with its value';
 
 done_testing;
