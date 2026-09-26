@@ -36,6 +36,28 @@ import static org.perlonjava.frontend.parser.TokenUtils.peek;
 public class StatementResolver {
 
     /**
+     * A special block may have a prototype, but an ordinary call to a lexical
+     * sub named END (or another phaser name) must remain a call.  Distinguish
+     * the two forms without consuming tokens: only a parenthesized prototype
+     * immediately followed by a block starts a special-block declaration.
+     */
+    private static boolean hasSpecialBlockPrototype(Parser parser) {
+        int index = parser.tokenIndex;
+        int depth = 0;
+        while (index < parser.tokens.size()) {
+            String text = parser.tokens.get(index).text;
+            if (text.equals("(")) {
+                depth++;
+            } else if (text.equals(")") && --depth == 0) {
+                return index + 1 < parser.tokens.size()
+                        && parser.tokens.get(index + 1).text.equals("{");
+            }
+            index++;
+        }
+        return false;
+    }
+
+    /**
      * Builtins often followed by a string argument with no {@code ,} or {@code (} between
      * (e.g. {@code like "...\x{100}" ...}). During {@link #isHashLiteral} pre-scan, the opening
      * {@code "} must start quoted-string mode; otherwise {@code \x{...}} is seen as raw
@@ -90,7 +112,8 @@ public class StatementResolver {
                 case "CHECK", "INIT", "UNITCHECK", "BEGIN", "END", "ADJUST" -> {
                     // Check if next token is '{' - if not, this might be a lexical sub call
                     parser.tokenIndex++;
-                    if (peek(parser).text.equals("{") || peek(parser).text.equals("(")) {
+                    if (peek(parser).text.equals("{")
+                            || (peek(parser).text.equals("(") && hasSpecialBlockPrototype(parser))) {
                         parser.tokenIndex = currentIndex;
                         yield SpecialBlockParser.parseSpecialBlock(parser);
                     }
