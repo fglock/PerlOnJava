@@ -189,6 +189,76 @@ public class StateVariable {
         }
     }
 
+    /** Replace a persistent state-array binding for whole-array refaliasing. */
+    public static void aliasStateArray(RuntimeScalar codeRef, String var, int id, RuntimeArray array) {
+        String beginVar = PersistentVariable.beginVariable(id, var.substring(1));
+        if (!codeRef.getDefinedBoolean()) {
+            GlobalVariable.aliasGlobalArray(beginVar, array);
+        } else {
+            ((RuntimeCode) codeRef.value).stateArray.put(beginVar, array);
+        }
+        markInitializedStateVariable(codeRef, var, id);
+    }
+
+    /** JVM counterpart of {@link #aliasStateArray(RuntimeScalar, String, int, RuntimeArray)}. */
+    public static RuntimeArray aliasCurrentStateArray(RuntimeArray array, String var, int id) {
+        RuntimeScalar codeRef = RuntimeCode.getJvmSelfReference();
+        if (codeRef == null) {
+            codeRef = RuntimeScalarCache.scalarUndef;
+        }
+        if (isInitializedStateVariable(codeRef, var, id).getBoolean()) {
+            return retrieveStateArray(codeRef, var, id);
+        }
+        aliasStateArray(codeRef, var, id, array);
+        return array;
+    }
+
+    /** Replace a persistent state-hash binding for whole-hash refaliasing. */
+    public static void aliasStateHash(RuntimeScalar codeRef, String var, int id, RuntimeHash hash) {
+        String beginVar = PersistentVariable.beginVariable(id, var.substring(1));
+        if (!codeRef.getDefinedBoolean()) {
+            GlobalVariable.aliasGlobalHash(beginVar, hash);
+        } else {
+            ((RuntimeCode) codeRef.value).stateHash.put(beginVar, hash);
+        }
+        markInitializedStateVariable(codeRef, var, id);
+    }
+
+    /**
+     * JVM lowering has the aggregate reference on its operand stack, while
+     * the owning CV is tracked in RuntimeCode's JVM self-reference stack.
+     * Rebind the persistent state hash and return it for expression context.
+     */
+    public static RuntimeHash aliasCurrentStateHash(RuntimeHash hash, String var, int id) {
+        RuntimeScalar codeRef = RuntimeCode.getJvmSelfReference();
+        if (codeRef == null) {
+            codeRef = RuntimeScalarCache.scalarUndef;
+        }
+        if (isInitializedStateVariable(codeRef, var, id).getBoolean()) {
+            return retrieveStateHash(codeRef, var, id);
+        }
+        aliasStateHash(codeRef, var, id, hash);
+        return hash;
+    }
+
+    /**
+     * Rebind a state hash using the exact {@code __SUB__} selected by the
+     * compiler. This differs from the JVM active-frame stack for nested
+     * implementation blocks (such as a foreach body), which do not own an
+     * independent Perl state pad.
+     */
+    public static RuntimeHash aliasStateHashOnce(
+            RuntimeHash hash, RuntimeScalar codeRef, String var, int id) {
+        if (codeRef == null) {
+            codeRef = RuntimeScalarCache.scalarUndef;
+        }
+        if (isInitializedStateVariable(codeRef, var, id).getBoolean()) {
+            return retrieveStateHash(codeRef, var, id);
+        }
+        aliasStateHash(codeRef, var, id, hash);
+        return hash;
+    }
+
     /**
      * Retrieves a "state" hash variable.
      *

@@ -865,6 +865,44 @@ public class Variable {
             }
         }
 
+        // Perl also permits a dynamic CORE coderef spelling such as
+        // &CORE::$op(...).  The lexer presents this as CORE, ::, $, name;
+        // parse it as a symbolic coderef whose name is "CORE::" plus the
+        // runtime scalar value.
+        int coreNameIndex = parser.tokenIndex;
+        int coreSeparatorIndex = Whitespace.skipWhitespace(parser, coreNameIndex + 1, parser.tokens);
+        int coreScalarIndex = coreSeparatorIndex < parser.tokens.size()
+                ? Whitespace.skipWhitespace(parser, coreSeparatorIndex + 1, parser.tokens)
+                : parser.tokens.size();
+        if (nextToken.type == LexerTokenType.IDENTIFIER
+                && nextToken.text.equals("CORE")
+                && coreSeparatorIndex < parser.tokens.size()
+                && parser.tokens.get(coreSeparatorIndex).text.equals("::")
+                && coreScalarIndex < parser.tokens.size()
+                && parser.tokens.get(coreScalarIndex).text.equals("$")) {
+            parser.tokenIndex = coreNameIndex;
+            TokenUtils.consume(parser); // CORE
+            TokenUtils.peek(parser);
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "::");
+            TokenUtils.peek(parser);
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "$");
+            Node dynamicName = parseVariable(parser, "$");
+            Node qualifiedName = new BinaryOperatorNode(".",
+                    new StringNode("CORE::", index), dynamicName, index);
+            BlockNode codeRef = new BlockNode(List.of(qualifiedName), index);
+            Node list;
+            boolean shareArgs = false;
+            if (!TokenUtils.peek(parser).text.equals("(")) {
+                list = atUnderscore(parser);
+                shareArgs = true;
+            } else {
+                list = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
+            }
+            BinaryOperatorNode callNode = new BinaryOperatorNode("(", codeRef, list, index);
+            if (shareArgs) callNode.setAnnotation("shareCallerArgs", true);
+            return callNode;
+        }
+
         // IMPORTANT: Check for lexical subs BEFORE parsing as a variable
         // This handles &foo where foo is "our sub foo" or "my sub foo"
         LexerToken peeked = TokenUtils.peek(parser);
@@ -940,7 +978,9 @@ public class Variable {
                     // This becomes \&$hiddenVar which calls createCodeReference
                     // createCodeReference will detect the CODE value and return it directly
                     // But if the next token is '(', this is a call, not a reference take
-                    if (parser.parsingTakeReference && !TokenUtils.peek(parser).text.equals("(")) {
+                    if (parser.parsingTakeReference
+                            && (!TokenUtils.peek(parser).text.equals("(")
+                                || parser.parsingForLoopVariable)) {
                         return new OperatorNode("&", dollarOp, index);
                     }
 
@@ -962,18 +1002,53 @@ public class Variable {
         }
 
         // Set a flag to allow parentheses after a variable, as in &$sub(...)
+        boolean wasParsingForLoopVariable = parser.parsingForLoopVariable;
         parser.parsingForLoopVariable = true;
         // Parse the variable following the `&` sigil
         Node node = parseVariable(parser, token.text);
         // Reset the flag after parsing
-        parser.parsingForLoopVariable = false;
+        parser.parsingForLoopVariable = wasParsingForLoopVariable;
         annotateParseTimeCodeRef(parser, node);
+
+        // CORE's compile-time pseudo-functions are valid through ampersand
+        // syntax too (for example, &CORE::__FILE__).  parseVariable has
+        // already consumed the qualified name, so normalize these references
+        // directly to the corresponding core operator node.
+        if (node instanceof OperatorNode coreRef
+                && coreRef.operator.equals("&")
+                && coreRef.operand instanceof IdentifierNode identifier
+                && identifier.name.startsWith("CORE::")) {
+            String coreName = identifier.name.substring("CORE::".length());
+            if (coreName.equals("__FILE__") || coreName.equals("__LINE__")
+                    || coreName.equals("__PACKAGE__") || coreName.equals("__SUB__")) {
+                // An ampersand call still honours the empty prototype of the
+                // CORE pseudo-functions.  Previously this branch returned a
+                // compile-time value before consuming `(...)`, leaving its
+                // arguments to be parsed as a separate expression.
+                if (peek(parser).text.equals("(")) {
+                    TokenUtils.consume(parser);
+                    if (!peek(parser).text.equals(")")) {
+                        parser.throwError("Too many arguments for " + coreName);
+                    }
+                    TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+                }
+                var location = parser.ctx.errorUtil.getSourceLocationAccurate(index);
+                return switch (coreName) {
+                    case "__FILE__" -> new StringNode(location.fileName(), index);
+                    case "__LINE__" -> new NumberNode(Integer.toString(location.lineNumber()), index);
+                    case "__PACKAGE__" -> new StringNode(
+                            parser.ctx.symbolTable.getCurrentPackage(), index);
+                    default -> new OperatorNode(coreName, new ListNode(index), index);
+                };
+            }
+        }
 
         // If we are parsing a reference (e.g., \&sub or defined(&sub)),
         // return the node without adding parameters.
         // But if the next token is '(', this is a call like defined(&$sub("args")),
         // so we should parse the arguments and treat it as a call.
-        if (parser.parsingTakeReference && !peek(parser).text.equals("(")) {
+        if (parser.parsingTakeReference
+                && (!peek(parser).text.equals("(") || parser.parsingForLoopVariable)) {
             return node;
         }
 

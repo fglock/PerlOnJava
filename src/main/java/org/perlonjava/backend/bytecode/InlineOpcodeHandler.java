@@ -693,7 +693,11 @@ public class InlineOpcodeHandler {
         int rd = bytecode[pc++];
         int operandReg = bytecode[pc++];
         RuntimeBase operand = registers[operandReg];
-        registers[rd] = operand.scalar();
+        // A lexical array declared by a refalias expression can have its
+        // scope-cleanup slot cleared before a later loop iteration observes
+        // it. Perl observes that slot as an empty array, whose scalar value
+        // is zero; never dereference the cleared register as Java null.
+        registers[rd] = operand == null ? new RuntimeScalar(0) : operand.scalar();
         return pc;
     }
 
@@ -1272,6 +1276,14 @@ public class InlineOpcodeHandler {
         RuntimeList list = listBase.getList();
 
         array.setFromList(list);
+        return pc;
+    }
+
+    /** Format: ARRAY_SET_FROM_REFERENCE_LIST arrayReg listReg. */
+    public static int executeArraySetFromReferenceList(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int arrayReg = bytecode[pc++];
+        int listReg = bytecode[pc++];
+        ((RuntimeArray) registers[arrayReg]).setFromReferenceList(registers[listReg].getList());
         return pc;
     }
 

@@ -964,6 +964,27 @@ public class BytecodeInterpreter {
                                 registers[rd] = RuntimeScalarCache.scalarUndef;
                             }
 
+                            case Opcodes.MATERIALIZE_LEXICAL_SCALAR -> {
+                                int register = bytecode[pc++];
+                                // This is lexical storage, not an expression
+                                // result.  Centralize the writable-cell test:
+                                // a skipped declaration may inherit a pooled
+                                // read-only literal through register reuse.
+                                registers[register] = RuntimeScalar.materializeLexicalCell(
+                                        (RuntimeScalar) registers[register]);
+                            }
+
+                            case Opcodes.INITIALIZE_LEXICAL_SCALAR -> {
+                                int register = bytecode[pc++];
+                                // A temporary list register can be recycled for this
+                                // declaration. Only an existing scalar cell can carry a
+                                // forward refalias binding; any other value is replaced by
+                                // a fresh lexical scalar.
+                                registers[register] = registers[register] instanceof RuntimeScalar scalar
+                                        ? RuntimeScalar.initializeLexicalCell(scalar)
+                                        : new RuntimeScalar();
+                            }
+
                             case Opcodes.UNDEFINE_SCALAR -> {
                                 pc = InlineOpcodeHandler.executeUndefineScalar(bytecode, pc, registers);
                             }
@@ -2819,6 +2840,10 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeArraySetFromList(bytecode, pc, registers);
                             }
 
+                            case Opcodes.ARRAY_SET_FROM_REFERENCE_LIST -> {
+                                pc = InlineOpcodeHandler.executeArraySetFromReferenceList(bytecode, pc, registers);
+                            }
+
                             case Opcodes.SET_FROM_LIST -> {
                                 pc = InlineOpcodeHandler.executeSetFromList(bytecode, pc, registers);
                             }
@@ -2853,7 +2878,9 @@ public class BytecodeInterpreter {
                                  Opcodes.RETRIEVE_BEGIN_HASH, Opcodes.LOCAL_SCALAR, Opcodes.LOCAL_ARRAY,
                                  Opcodes.LOCAL_HASH, Opcodes.STATE_INIT_SCALAR, Opcodes.STATE_INIT_ARRAY,
                                  Opcodes.STATE_INIT_HASH, Opcodes.STATE_RETRIEVE_SCALAR,
-                                 Opcodes.STATE_IS_INITIALIZED, Opcodes.STATE_MARK_INITIALIZED -> {
+                                 Opcodes.STATE_RETRIEVE_ARRAY, Opcodes.STATE_IS_INITIALIZED,
+                                 Opcodes.STATE_MARK_INITIALIZED, Opcodes.STATE_ALIAS_ARRAY,
+                                 Opcodes.STATE_ALIAS_HASH, Opcodes.STATE_RETRIEVE_HASH -> {
                                 pc = executeScopeOps(opcode, bytecode, pc, registers, code);
                             }
 
@@ -2892,11 +2919,12 @@ public class BytecodeInterpreter {
                                 int rd = bytecode[pc++];
                                 registers[rd] = org.perlonjava.runtime.operators.WaitpidOperator.waitForChild();
                             }
-                            case Opcodes.EVAL_STRING, Opcodes.SELECT_OP, Opcodes.LOAD_GLOB, Opcodes.SLEEP_OP,
+                            case Opcodes.EVAL_STRING, Opcodes.SELECT_OP, Opcodes.LOAD_GLOB, Opcodes.LOAD_GLOB_CANONICAL, Opcodes.SLEEP_OP,
                                  Opcodes.ALARM_OP, Opcodes.DEREF_GLOB, Opcodes.DEREF_GLOB_NONSTRICT,
                                  Opcodes.LOAD_GLOB_DYNAMIC, Opcodes.DEREF_SCALAR_STRICT,
                                  Opcodes.DEREF_SCALAR_NONSTRICT, Opcodes.CODE_DEREF_NONSTRICT,
-                                 Opcodes.CODE_DEREF_STRICT,
+                                 Opcodes.CODE_DEREF_STRICT, Opcodes.REFALIAS_CODE_REFERENCE,
+                                 Opcodes.REFALIAS_SCALAR_REFERENCE,
                                  Opcodes.NAMED_CODE_REFERENCE, Opcodes.DIRECT_NAMED_CODE_CALL,
                                  Opcodes.FOREACH_DEREF_SCALAR, Opcodes.FOREACH_DEREF_ARRAY,
                                  Opcodes.FOREACH_DEREF_HASH -> {
@@ -4225,6 +4253,52 @@ public class BytecodeInterpreter {
                 }
                 return pc;
             }
+            case Opcodes.STATE_RETRIEVE_ARRAY -> {
+                int rd = bytecode[pc++];
+                int nameIdx = bytecode[pc++];
+                int persistId = bytecode[pc++];
+                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
+                registers[rd] = StateVariable.retrieveStateArray(codeRef, code.stringPool[nameIdx], persistId);
+                return pc;
+            }
+            case Opcodes.STATE_RETRIEVE_HASH -> {
+                int rd = bytecode[pc++];
+                int nameIdx = bytecode[pc++];
+                int persistId = bytecode[pc++];
+                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
+                registers[rd] = StateVariable.retrieveStateHash(codeRef, code.stringPool[nameIdx], persistId);
+                return pc;
+            }
+            case Opcodes.STATE_ALIAS_ARRAY -> {
+                int rd = bytecode[pc++];
+                int sourceReg = bytecode[pc++];
+                int nameIdx = bytecode[pc++];
+                int persistId = bytecode[pc++];
+                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
+                RuntimeBase source = registers[sourceReg];
+                // Whole-array refaliasing may provide the aggregate directly
+                // (for an array literal) or as the scalar array reference
+                // produced by a refalias expression.  Both denote the same
+                // installable state-array binding.
+                RuntimeArray array = source instanceof RuntimeArray direct
+                        ? direct : source.scalar().arrayDeref();
+                StateVariable.aliasStateArray(codeRef, code.stringPool[nameIdx], persistId, array);
+                registers[rd] = array;
+                return pc;
+            }
+            case Opcodes.STATE_ALIAS_HASH -> {
+                int rd = bytecode[pc++];
+                int sourceReg = bytecode[pc++];
+                int nameIdx = bytecode[pc++];
+                int persistId = bytecode[pc++];
+                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
+                RuntimeBase source = registers[sourceReg];
+                RuntimeHash hash = source instanceof RuntimeHash direct
+                        ? direct : source.scalar().hashDeref();
+                StateVariable.aliasStateHash(codeRef, code.stringPool[nameIdx], persistId, hash);
+                registers[rd] = hash;
+                return pc;
+            }
             case Opcodes.STATE_INIT_HASH -> {
                 int rd = bytecode[pc++];
                 int valueReg = bytecode[pc++];
@@ -4477,6 +4551,9 @@ public class BytecodeInterpreter {
             case Opcodes.LOAD_GLOB -> {
                 return SlowOpcodeHandler.executeLoadGlob(bytecode, pc, registers, code);
             }
+            case Opcodes.LOAD_GLOB_CANONICAL -> {
+                return SlowOpcodeHandler.executeLoadGlobCanonical(bytecode, pc, registers, code);
+            }
             case Opcodes.SLEEP_OP -> {
                 return SlowOpcodeHandler.executeSleep(bytecode, pc, registers);
             }
@@ -4506,6 +4583,12 @@ public class BytecodeInterpreter {
             }
             case Opcodes.FOREACH_DEREF_HASH -> {
                 return SlowOpcodeHandler.executeForeachDerefHash(bytecode, pc, registers);
+            }
+            case Opcodes.REFALIAS_CODE_REFERENCE -> {
+                return SlowOpcodeHandler.executeRefAliasCodeReference(bytecode, pc, registers);
+            }
+            case Opcodes.REFALIAS_SCALAR_REFERENCE -> {
+                return SlowOpcodeHandler.executeRefAliasScalarReference(bytecode, pc, registers);
             }
             case Opcodes.DEREF_SCALAR_NONSTRICT -> {
                 return SlowOpcodeHandler.executeDerefScalarNonStrict(bytecode, pc, registers, code);

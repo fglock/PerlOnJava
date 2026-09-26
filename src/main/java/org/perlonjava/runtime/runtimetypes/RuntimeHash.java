@@ -16,6 +16,11 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  * any type of Perl scalar value.
  */
 public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, DynamicState, Iterable<RuntimeScalar> {
+    /** Return an empty lexical cell when control flow skipped its declaration. */
+    public static RuntimeHash materializeLexicalCell(RuntimeHash hash) {
+        return hash != null ? hash : new RuntimeHash();
+    }
+
     public static final int PLAIN_HASH = 0;
     public static final int AUTOVIVIFY_HASH = 1;
     public static final int TIED_HASH = 2;
@@ -1042,7 +1047,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             return tiedReturnValue;
         }
         boolean existed = elements.containsKey(key);
-        RuntimeScalar savedValue = existed ? new RuntimeScalar(elements.get(key)) : null;
+        // Preserve an aliased slot's identity across local scope unwind.
+        // Copying the scalar wrapper restores the same value but not the
+        // original referent, which is observable through refaliasing.
+        RuntimeScalar savedValue = existed ? elements.get(key) : null;
         RuntimeScalar returnValue = existed ? new RuntimeScalar(elements.get(key)) : new RuntimeScalar();
         RuntimeHash self = this;
 

@@ -599,6 +599,57 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.type = UNDEF;
     }
 
+    /**
+     * Return a writable lexical storage cell, creating Perl undef storage for
+     * a declaration whose initializer was skipped by control flow.
+     *
+     * <p>The JVM backend keeps lexical variables in local slots. A forward
+     * jump can reach refgen before the declaration initialized that slot, but
+     * refgen must still bind to a distinct mutable cell.</p>
+     */
+    public static RuntimeScalar materializeLexicalCell(RuntimeScalar scalar) {
+        // Register recycling can leave the shared read-only undef placeholder
+        // in a declaration skipped by control flow. It is not lexical storage
+        // and must never become the target of a later refalias or assignment.
+        // A skipped declaration can also inherit a pooled literal from a
+        // recycled register.  Like scalarUndef, that literal is a read-only
+        // expression result rather than lexical storage.  Refgen must never
+        // expose it as a pad cell: later refaliasing would try to mutate the
+        // literal and fail with "Modification of a read-only value attempted".
+        if (scalar == null || scalar == RuntimeScalarCache.scalarUndef) {
+            return new RuntimeScalar();
+        }
+        if (scalar instanceof RuntimeScalarReadOnly) {
+            // Loop iterators and constants may occupy a lexical register.
+            // They need a new writable cell, but must retain their current
+            // value rather than being mistaken for a skipped declaration.
+            // A RuntimeScalar merely marked READONLY_SCALAR is different: it
+            // is a real lexical that Internals::SvREADONLY froze at runtime.
+            // Replacing it here would make a later reference escape a clone,
+            // allowing the next block invocation to mutate the prior cell.
+            RuntimeScalar writable = new RuntimeScalar();
+            writable.set(scalar);
+            return writable;
+        }
+        return scalar;
+    }
+
+    /**
+     * Initialize a scalar declaration without replacing a cell which an
+     * earlier control-flow path has already exposed through refaliasing.
+     */
+    public static RuntimeScalar initializeLexicalCell(RuntimeScalar scalar) {
+        // Interpreter register arrays are reused between calls.  Preserve the
+        // writable cell installed by a forward refalias, but never retain a
+        // read-only scalar left in the same register by an earlier frame
+        // (notably a literal signature argument).
+        return scalar != null
+                && scalar.referencedByScalarReference
+                && !(scalar instanceof RuntimeScalarReadOnly)
+                && scalar.type != RuntimeScalarType.READONLY_SCALAR
+                ? scalar : new RuntimeScalar();
+    }
+
     public RuntimeScalar(long value) {
         initializeWithLong(value);
     }
@@ -3367,6 +3418,28 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * ordinary dereference operators' autovivification semantics.
      */
     public RuntimeScalar foreachScalarReference() {
+        return refAliasScalarReference();
+    }
+
+    /**
+     * Validate and unwrap a scalar reference used as a ref-aliasing target.
+     * Unlike an ordinary scalar dereference, this neither autovivifies an
+     * undef value nor turns a glob reference into a glob value: ref aliasing
+     * installs the glob's scalar slot.
+     */
+    public RuntimeScalar refAliasScalarReference() {
+        // Ref-aliasing accepts a glob reference for a scalar target. The
+        // target becomes a scalar holding that glob (\$x = \*glob), rather
+        // than an alias of the glob's existing SCALAR slot.
+        if (type == GLOBREFERENCE && value instanceof RuntimeGlob glob) {
+            // LOAD_GLOB deliberately returns a detached copy for local
+            // filehandle lifetimes. A named typeglob alias, however, must
+            // retain the canonical stash identity observed by *name{GLOB}.
+            return glob.globName == null ? glob : GlobalVariable.getGlobalIO(glob.globName);
+        }
+        if (type == GLOB) {
+            return scalarDeref();
+        }
         requireForeachReference(REFERENCE, "SCALAR");
         return (RuntimeScalar) value;
     }
@@ -3379,6 +3452,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeHash foreachHashReference() {
         requireForeachReference(HASHREFERENCE, "HASH");
         return (RuntimeHash) value;
+    }
+
+    /** Validate a CODE reference before installing it through ref aliasing. */
+    public RuntimeScalar refAliasCodeReference() {
+        requireForeachReference(CODE, "CODE");
+        return this;
     }
 
     private void requireForeachReference(int expectedType, String expectedName) {

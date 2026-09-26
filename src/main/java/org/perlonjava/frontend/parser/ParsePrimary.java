@@ -150,13 +150,25 @@ public class ParsePrimary {
             calledWithCore = true;
             operatorEnabled = true; // CORE:: functions are always enabled
             TokenUtils.consume(parser);  // consume "::"
+            // The whitespace skipper recognizes bare data markers and moves
+            // directly to EOF.  Inspect this raw token first so the qualified
+            // CORE spelling reaches the same data-section implementation.
+            if (parser.tokenIndex < parser.tokens.size()) {
+                LexerToken marker = parser.tokens.get(parser.tokenIndex);
+                if (marker.text.equals("__DATA__") || marker.text.equals("__END__")) {
+                    parser.tokenIndex = DataSection.parseDataSection(
+                            parser, parser.tokenIndex, parser.tokens, marker);
+                    return new ListNode(startIndex);
+                }
+            }
             token = TokenUtils.consume(parser); // consume the actual operator
             operator = token.text;
             // CORE::print::helper and CORE::foo'bar are ordinary qualified
             // subroutine names, not explicit calls to CORE::print or
             // CORE::foo.  Let the subroutine-name parser consume all package
             // components before deciding whether a CORE builtin was named.
-            String followingNameToken = parser.tokens.get(parser.tokenIndex).text;
+            String followingNameToken = parser.tokenIndex < parser.tokens.size()
+                    ? parser.tokens.get(parser.tokenIndex).text : "";
             if (followingNameToken.equals("::") || followingNameToken.equals("'")) {
                 parser.tokenIndex = startIndex;
                 return SubroutineParser.parseSubroutineCall(parser, false);
@@ -374,7 +386,10 @@ public class ParsePrimary {
         switch (token.text) {
             case "(":
                 // Parentheses create a list context and group expressions
-                return new ListNode(ListParser.parseList(parser, ")", 0), parser.tokenIndex);
+                ListNode parenthesizedList = new ListNode(
+                        ListParser.parseList(parser, ")", 0), parser.tokenIndex);
+                parenthesizedList.parenthesized = true;
+                return parenthesizedList;
 
             case "{":
                 // Curly braces create anonymous hash references
@@ -445,6 +460,21 @@ public class ParsePrimary {
 
             case "\\":
                 // Reference operator: \$var, \@array, \%hash, \&sub
+                // `\state %hash` is a state declaration whose result is
+                // referenced, not a reference to the bareword `state` followed
+                // by a hash operator.  Normalizing it here gives both backends
+                // the ordinary `\(state %hash)` tree, including the stable
+                // persistent-id and lexical-scope registration performed by
+                // parseVariableDeclaration.
+                if (peek(parser).type == LexerTokenType.IDENTIFIER
+                        && peek(parser).text.equals("state")
+                        && parser.ctx.symbolTable.isFeatureCategoryEnabled("state")) {
+                    int stateIndex = parser.tokenIndex;
+                    TokenUtils.consume(parser, LexerTokenType.IDENTIFIER);
+                    OperatorNode declaration = OperatorParser.parseVariableDeclaration(
+                            parser, "state", stateIndex, stateIndex);
+                    return new OperatorNode(token.text, declaration, stateIndex);
+                }
                 // Set flag to prevent &sub from being called during parsing
                 parser.parsingTakeReference = true;
                 operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);

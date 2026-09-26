@@ -621,7 +621,7 @@ public class IOOperator {
         if (!status.getBoolean()) {
             return scalarUndef;
         }
-        return fileHandle;
+        return scalarTrue;
     }
 
     public static RuntimeScalar fileno(int ctx, RuntimeBase... args) {

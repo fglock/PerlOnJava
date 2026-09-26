@@ -15,6 +15,363 @@ import java.util.List;
 
 public class CompileAssignment {
 
+    /** Emit the runtime warning required by the experimental refaliasing feature. */
+    private static void emitReferenceAliasWarning(BytecodeCompiler bc, int tokenIndex) {
+        if (!bc.symbolTable.isWarningCategoryEnabled("experimental::refaliasing")) {
+            return;
+        }
+        int messageReg = bc.allocateRegister();
+        bc.emit(Opcodes.LOAD_STRING);
+        bc.emitReg(messageReg);
+        bc.emit(bc.addToStringPool("Aliasing via reference is experimental"));
+        int locationReg = bc.allocateRegister();
+        bc.emit(Opcodes.LOAD_STRING);
+        bc.emitReg(locationReg);
+        String location = bc.errorUtil != null ? bc.errorUtil.warningLocation(tokenIndex) : "";
+        bc.emit(bc.addToStringPool(location));
+        bc.emitWithToken(Opcodes.WARN, tokenIndex);
+        bc.emitReg(messageReg);
+        bc.emitReg(locationReg);
+    }
+
+    private static boolean isLexicalSubStorage(OperatorNode scalar) {
+        return scalar.getAnnotation("hiddenVarName") != null
+                || scalar.operand instanceof IdentifierNode id && id.name.contains("__lexsub_");
+    }
+
+    /** Return Perl's target-specific diagnostic for an invalid ref alias. */
+    private static String invalidReferenceAliasTarget(Node target, boolean listAssignment,
+                                                      boolean parenthesizedTarget) {
+        while (target instanceof ListNode list && list.elements.size() == 1) {
+            target = list.elements.getFirst();
+        }
+        if (target instanceof OperatorNode reference && reference.operator.equals("\\")) {
+            return invalidReferenceAliasTarget(reference.operand, listAssignment, parenthesizedTarget);
+        }
+        String assignment = listAssignment ? "list assignment" : "scalar assignment";
+        if (target instanceof BlockNode block
+                && Boolean.TRUE.equals(block.getAnnotation("blockIsDoBlock"))) {
+            return "Can't modify reference to do block in " + assignment;
+        }
+        if (target instanceof OperatorNode operator) {
+            if (operator.operator.equals("pos")) {
+                return "Can't modify reference to match position in " + assignment;
+            }
+            if (operator.operator.equals("glob")) {
+                return "Can't modify reference to glob in " + assignment;
+            }
+            if (operator.operator.equals("%") && operator.operand instanceof BlockNode) {
+                return "Can't modify reference to hash dereference in " + assignment;
+            }
+            if (operator.operator.equals("%") && parenthesizedTarget) {
+                return "Can't modify reference to parenthesized hash in list assignment";
+            }
+            if ((operator.operator.equals("my") || operator.operator.equals("state"))
+                    && operator.operand instanceof ListNode declarationList
+                    && declarationList.elements.size() == 1
+                    && declarationList.elements.getFirst() instanceof OperatorNode declarationHash
+                    && declarationHash.operator.equals("%")) {
+                return "Can't modify reference to parenthesized hash in list assignment";
+            }
+        }
+        if (target instanceof BinaryOperatorNode binary && binary.operator.equals("=~")
+                && binary.right instanceof OperatorNode transliteration
+                && transliteration.operator.equals("tr")) {
+            return "Can't modify transliteration (tr///) in scalar assignment";
+        }
+        return null;
+    }
+
+    private static boolean isReferenceAliasRhs(Node rhs) {
+        return rhs instanceof OperatorNode operator && operator.operator.equals("\\");
+    }
+
+    private static String invalidLocalizedArrayReferenceAlias(Node target, boolean listAssignment) {
+        while (target instanceof ListNode list && list.elements.size() == 1) {
+            target = list.elements.getFirst();
+        }
+        while (target instanceof OperatorNode reference && reference.operator.equals("\\")) {
+            target = reference.operand;
+            while (target instanceof ListNode list && list.elements.size() == 1) {
+                target = list.elements.getFirst();
+            }
+        }
+        if (!(target instanceof OperatorNode local) || !local.operator.equals("local")) {
+            return null;
+        }
+        Node localTarget = local.operand;
+        while (localTarget instanceof ListNode list && list.elements.size() == 1) {
+            localTarget = list.elements.getFirst();
+        }
+        if (!(localTarget instanceof OperatorNode localArray) || !localArray.operator.equals("@")) {
+            return null;
+        }
+        String assignment = listAssignment ? "list assignment" : "scalar assignment";
+        if (localArray.operand instanceof BlockNode) {
+            return "Can't modify reference to array dereference in " + assignment;
+        }
+        return "Can't modify reference to localized parenthesized array in " + assignment;
+    }
+
+    private static String invalidReferenceAliasTernary(TernaryOperatorNode ternary) {
+        for (Node branch : List.of(ternary.trueExpr, ternary.falseExpr)) {
+            if (branch instanceof OperatorNode reference && reference.operator.equals("\\")) {
+                String diagnostic = invalidReferenceAliasTarget(reference.operand, false, false);
+                if (diagnostic != null) return diagnostic;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * A conditional member of a ref-alias list can choose an aggregate
+     * lvalue.  Compiling the ternary as an ordinary LVALUE collapses that
+     * aggregate into a scalar temporary, which later makes
+     * ALIAS_LVALUE_REFERENCE reject it.  Keep the branch type visible and
+     * perform the corresponding alias operation in the selected branch.
+     */
+    private static boolean compileConditionalReferenceAliasTarget(
+            BytecodeCompiler bc, TernaryOperatorNode ternary, int rhsListReg, int index, int tokenIndex) {
+        if (!isDirectReferenceAliasTarget(ternary.trueExpr)
+                || !isDirectReferenceAliasTarget(ternary.falseExpr)) {
+            return false;
+        }
+        bc.compileNode(ternary.condition, -1, RuntimeContextType.SCALAR);
+        int conditionReg = bc.lastResultReg;
+        int ifFalsePos = bc.bytecode.size();
+        bc.emit(bc.gotoIfFalseOpcode());
+        bc.emitReg(conditionReg);
+        bc.emitInt(0);
+
+        compileDirectReferenceAliasTarget(bc, ternary.trueExpr, rhsListReg, index, tokenIndex);
+        int gotoEndPos = bc.bytecode.size();
+        bc.emit(Opcodes.GOTO);
+        bc.emitInt(0);
+
+        bc.patchIntOffset(ifFalsePos + 2, bc.bytecode.size());
+        compileDirectReferenceAliasTarget(bc, ternary.falseExpr, rhsListReg, index, tokenIndex);
+        bc.patchIntOffset(gotoEndPos + 1, bc.bytecode.size());
+        return true;
+    }
+
+    /**
+     * Bind an already-evaluated reference to a ref-alias assignment target.
+     *
+     * A target may select another target (with a ternary) or explicitly wrap
+     * it in {@code \}.  Keeping that selection here avoids treating the
+     * ternary as an ordinary value expression: each selected branch is lowered
+     * as an lvalue and receives the same reference.
+     */
+    private static void compileReferenceAliasTarget(
+            BytecodeCompiler bc, Node target, int referenceReg, int tokenIndex) {
+        compileReferenceAliasTarget(bc, target, referenceReg, tokenIndex, true);
+    }
+
+    private static void compileReferenceAliasTarget(
+            BytecodeCompiler bc, Node target, int referenceReg, int tokenIndex, boolean aliasBareScalar) {
+        if (target instanceof TernaryOperatorNode ternary) {
+            bc.compileNode(ternary.condition, -1, RuntimeContextType.SCALAR);
+            int conditionReg = bc.lastResultReg;
+            int ifFalsePos = bc.bytecode.size();
+            bc.emit(bc.gotoIfFalseOpcode());
+            bc.emitReg(conditionReg);
+            bc.emitInt(0);
+            compileReferenceAliasTarget(bc, ternary.trueExpr, referenceReg, tokenIndex, aliasBareScalar);
+            int gotoEndPos = bc.bytecode.size();
+            bc.emit(Opcodes.GOTO);
+            bc.emitInt(0);
+            bc.patchIntOffset(ifFalsePos + 2, bc.bytecode.size());
+            compileReferenceAliasTarget(bc, ternary.falseExpr, referenceReg, tokenIndex, aliasBareScalar);
+            bc.patchIntOffset(gotoEndPos + 1, bc.bytecode.size());
+            return;
+        }
+        if (target instanceof OperatorNode reference && reference.operator.equals("\\")) {
+            compileReferenceAliasTarget(bc, reference.operand, referenceReg, tokenIndex, true);
+            return;
+        }
+        String invalidTargetDiagnostic = invalidReferenceAliasTarget(target, false, false);
+        if (invalidTargetDiagnostic != null) {
+            bc.throwCompilerException(invalidTargetDiagnostic);
+            return;
+        }
+        if (target instanceof OperatorNode scalar
+                && scalar.operator.equals("$")
+                && scalar.operand instanceof IdentifierNode id) {
+            if (!aliasBareScalar) {
+                bc.compileNode(target, -1, RuntimeContextType.LVALUE);
+                int targetReg = bc.lastResultReg;
+                bc.emit(Opcodes.SET_SCALAR);
+                bc.emitReg(targetReg);
+                bc.emitReg(referenceReg);
+                bc.lastResultReg = targetReg;
+                return;
+            }
+            String variableName = "$" + id.name;
+            int referentReg = bc.allocateRegister();
+            bc.emitWithToken(Opcodes.REFALIAS_SCALAR_REFERENCE, tokenIndex);
+            bc.emitReg(referentReg);
+            bc.emitReg(referenceReg);
+            if (bc.hasVariable(variableName) && !bc.isOurVariable(variableName)) {
+                int targetReg = bc.getVariableRegister(variableName);
+                emitStateAwareScalarReferenceAlias(bc, variableName, targetReg, referentReg);
+                bc.lastResultReg = targetReg;
+            } else {
+                int nameIdx = bc.addToStringPool(NameNormalizer.normalizeVariableName(id.name, bc.getCurrentPackage()));
+                bc.emit(Opcodes.ALIAS_GLOBAL_SCALAR);
+                bc.emit(nameIdx);
+                bc.emitReg(referentReg);
+                int targetReg = bc.allocateRegister();
+                bc.emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                bc.emitReg(targetReg);
+                bc.emit(nameIdx);
+                bc.lastResultReg = targetReg;
+            }
+            return;
+        }
+        bc.compileNode(target, -1, RuntimeContextType.LVALUE);
+        int targetReg = bc.lastResultReg;
+        bc.emit(Opcodes.ALIAS_LVALUE_REFERENCE);
+        bc.emitReg(targetReg);
+        bc.emitReg(referenceReg);
+        bc.lastResultReg = targetReg;
+    }
+
+    /**
+     * State scalar declarations own a persistent cell.  A refalias can seed
+     * that cell once, but a later execution must not replace it with a new
+     * referent (including a skipped lexical pad slot reached by goto).
+     */
+    private static void emitStateAwareScalarReferenceAlias(
+            BytecodeCompiler bc, String variableName, int targetReg, int referentReg) {
+        Integer persistId = bc.getStateScalarPersistId(variableName);
+        if (persistId == null) {
+            bc.emit(Opcodes.ALIAS);
+            bc.emitReg(targetReg);
+            bc.emitReg(referentReg);
+            return;
+        }
+
+        int nameIdx = bc.addToStringPool(variableName);
+        bc.emit(Opcodes.STATE_RETRIEVE_SCALAR);
+        bc.emitReg(targetReg);
+        bc.emit(nameIdx);
+        bc.emit(persistId);
+        int initializedReg = bc.allocateRegister();
+        bc.emit(Opcodes.STATE_IS_INITIALIZED);
+        bc.emitReg(initializedReg);
+        bc.emit(nameIdx);
+        bc.emit(persistId);
+        bc.emit(bc.gotoIfTrueOpcode());
+        bc.emitReg(initializedReg);
+        int initializedJump = bc.bytecode.size();
+        bc.emitInt(0);
+        bc.emit(Opcodes.SET_SCALAR);
+        bc.emitReg(targetReg);
+        bc.emitReg(referentReg);
+        bc.emit(Opcodes.STATE_MARK_INITIALIZED);
+        bc.emit(nameIdx);
+        bc.emit(persistId);
+        bc.patchIntOffset(initializedJump, bc.bytecode.size());
+    }
+
+    private static boolean isDirectReferenceAliasTarget(Node target) {
+        return target instanceof OperatorNode sigil
+                && (sigil.operator.equals("$") || sigil.operator.equals("@") || sigil.operator.equals("%"))
+                && sigil.operand instanceof IdentifierNode;
+    }
+
+    /**
+     * Compile one conditional scalar/array/hash target and leave its value in
+     * lastResultReg.  Unlike a bare {@code @array} member of a ref-alias list,
+     * an aggregate selected by a conditional is one lvalue and consumes one
+     * aggregate reference (for example {@code $ok ? @left : %right}).
+     */
+    private static void compileDirectReferenceAliasTarget(
+            BytecodeCompiler bc, Node target, int rhsListReg, int index, int tokenIndex) {
+        OperatorNode sigil = (OperatorNode) target;
+        IdentifierNode id = (IdentifierNode) sigil.operand;
+        String variableName = sigil.operator + id.name;
+        int indexReg = bc.allocateRegister();
+        bc.emit(Opcodes.LOAD_INT);
+        bc.emitReg(indexReg);
+        bc.emit(index);
+        int referenceReg = bc.allocateRegister();
+        bc.emit(Opcodes.ARRAY_GET);
+        bc.emitReg(referenceReg);
+        bc.emitReg(rhsListReg);
+        bc.emitReg(indexReg);
+
+        if (sigil.operator.equals("@")) {
+            int arrayReg = bc.allocateRegister();
+            bc.emitWithToken(Opcodes.FOREACH_DEREF_ARRAY, tokenIndex);
+            bc.emitReg(arrayReg);
+            bc.emitReg(referenceReg);
+            if (bc.hasVariable(variableName) && !bc.isOurVariable(variableName)) {
+                int targetReg = bc.getVariableRegister(variableName);
+                bc.emit(Opcodes.ALIAS);
+                bc.emitReg(targetReg);
+                bc.emitReg(arrayReg);
+                bc.lastResultReg = targetReg;
+            } else {
+                int nameIdx = bc.addToStringPool(NameNormalizer.normalizeVariableName(id.name, bc.getCurrentPackage()));
+                bc.emit(Opcodes.ALIAS_GLOBAL_ARRAY);
+                bc.emit(nameIdx);
+                bc.emitReg(arrayReg);
+                int targetReg = bc.allocateRegister();
+                bc.emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                bc.emitReg(targetReg);
+                bc.emit(nameIdx);
+                bc.lastResultReg = targetReg;
+            }
+            return;
+        }
+
+        if (sigil.operator.equals("$")) {
+            int derefReg = bc.allocateRegister();
+            bc.emitWithToken(Opcodes.REFALIAS_SCALAR_REFERENCE, tokenIndex);
+            bc.emitReg(derefReg);
+            bc.emitReg(referenceReg);
+            if (bc.hasVariable(variableName) && !bc.isOurVariable(variableName)) {
+                int targetReg = bc.getVariableRegister(variableName);
+                emitStateAwareScalarReferenceAlias(bc, variableName, targetReg, derefReg);
+                bc.lastResultReg = targetReg;
+            } else {
+                int nameIdx = bc.addToStringPool(NameNormalizer.normalizeVariableName(id.name, bc.getCurrentPackage()));
+                bc.emit(Opcodes.ALIAS_GLOBAL_SCALAR);
+                bc.emit(nameIdx);
+                bc.emitReg(derefReg);
+                int targetReg = bc.allocateRegister();
+                bc.emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                bc.emitReg(targetReg);
+                bc.emit(nameIdx);
+                bc.lastResultReg = targetReg;
+            }
+            return;
+        }
+
+        int hashReg = bc.allocateRegister();
+        bc.emitWithToken(Opcodes.FOREACH_DEREF_HASH, tokenIndex);
+        bc.emitReg(hashReg);
+        bc.emitReg(referenceReg);
+        if (bc.hasVariable(variableName) && !bc.isOurVariable(variableName)) {
+            int targetReg = bc.getVariableRegister(variableName);
+            bc.emit(Opcodes.ALIAS);
+            bc.emitReg(targetReg);
+            bc.emitReg(hashReg);
+            bc.lastResultReg = targetReg;
+        } else {
+            int nameIdx = bc.addToStringPool(NameNormalizer.normalizeVariableName(id.name, bc.getCurrentPackage()));
+            bc.emit(Opcodes.ALIAS_GLOBAL_HASH);
+            bc.emit(nameIdx);
+            bc.emitReg(hashReg);
+            int targetReg = bc.allocateRegister();
+            bc.emit(Opcodes.LOAD_GLOBAL_HASH);
+            bc.emitReg(targetReg);
+            bc.emit(nameIdx);
+            bc.lastResultReg = targetReg;
+        }
+    }
+
     /**
      * Resolve the value inside {@code *{EXPR}} to the glob it names.
      * A glob reference must retain its referenced stash slot; only a plain
@@ -126,42 +483,947 @@ public class CompileAssignment {
         return bc.lastResultReg;
     }
 
-    /** Compile a parenthesized reference-alias assignment element by element. */
-    private static boolean compileReferenceAliasListAssignment(
+    /** Compile whole-array refaliasing for {@code \state @array = ARRAYREF}. */
+    private static boolean compileStateArrayReferenceAliasAssignment(
             BytecodeCompiler bc, BinaryOperatorNode node) {
-        if (!(node.left instanceof OperatorNode referenceOp)
-                || !referenceOp.operator.equals("\\")
-                || !(referenceOp.operand instanceof ListNode targets)
-                || targets.elements.size() <= 1) {
+        if (!(node.left instanceof OperatorNode reference) || !reference.operator.equals("\\")
+                || !(reference.operand instanceof OperatorNode declaration)
+                || !declaration.operator.equals("state")
+                || !(declaration.operand instanceof OperatorNode array)
+                || !array.operator.equals("@")
+                || !(array.operand instanceof IdentifierNode identifier)) {
             return false;
         }
         if (!bc.symbolTable.isFeatureCategoryEnabled("refaliasing")) {
             bc.throwCompilerException("Experimental aliasing via reference not enabled");
             return true;
         }
+        emitReferenceAliasWarning(bc, node.getIndex());
+
+        String varName = "@" + identifier.name;
+        int persistId = array.id;
+        int nameIdx = bc.addToStringPool(varName);
+        int arrayReg = bc.allocateStateVariableRegister();
+        int initializedReg = bc.allocateRegister();
+        bc.emitWithToken(Opcodes.STATE_RETRIEVE_ARRAY, node.getIndex());
+        bc.emitReg(arrayReg);
+        bc.emit(nameIdx);
+        bc.emit(persistId);
+        bc.emit(Opcodes.STATE_IS_INITIALIZED);
+        bc.emitReg(initializedReg);
+        bc.emit(nameIdx);
+        bc.emit(persistId);
+        bc.emit(bc.gotoIfTrueOpcode());
+        bc.emitReg(initializedReg);
+        int initializedJump = bc.bytecode.size();
+        bc.emitInt(0);
+
+        int referenceReg = compileRhs(bc, node.right, RuntimeContextType.SCALAR);
+        int sourceArrayReg = referenceReg;
+        if (!(node.right instanceof ArrayLiteralNode)) {
+            sourceArrayReg = bc.allocateRegister();
+            bc.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+            bc.emitReg(sourceArrayReg);
+            bc.emitReg(referenceReg);
+        }
+        bc.emit(Opcodes.STATE_ALIAS_ARRAY);
+        bc.emitReg(arrayReg);
+        bc.emitReg(sourceArrayReg);
+        bc.emit(nameIdx);
+        bc.emit(persistId);
+        bc.patchIntOffset(initializedJump, bc.bytecode.size());
+        bc.emitActiveLexicalBinding(arrayReg, varName);
+        bc.registerStateArrayVariable(varName, arrayReg, persistId);
+        bc.lastResultReg = arrayReg;
+        return true;
+    }
+
+    /** Compile whole-hash refaliasing for {@code \state %hash = HASHREF}. */
+    private static boolean compileStateHashReferenceAliasAssignment(
+            BytecodeCompiler bc, BinaryOperatorNode node) {
+        IdentifierNode identifier = null;
+        int persistId = -1;
+        if (node.left instanceof OperatorNode reference && reference.operator.equals("\\")
+                && reference.operand instanceof OperatorNode declaration
+                && declaration.operator.equals("state")
+                && declaration.operand instanceof OperatorNode hash
+                && hash.operator.equals("%")
+                && hash.operand instanceof IdentifierNode declaredIdentifier) {
+            identifier = declaredIdentifier;
+            persistId = hash.id;
+        } else if (node.left instanceof BinaryOperatorNode hash
+                && hash.operator.equals("%")
+                && hash.left instanceof OperatorNode reference
+                && reference.operator.equals("\\")
+                && reference.operand instanceof IdentifierNode state
+                && state.name.equals("state")
+                && hash.right instanceof IdentifierNode declaredIdentifier) {
+            // The parser represents `\state %hash` as `(% (\\ state) hash)`.
+            identifier = declaredIdentifier;
+            persistId = reference.id;
+        }
+        if (identifier == null) {
+            return false;
+        }
+        if (!bc.symbolTable.isFeatureCategoryEnabled("refaliasing")) {
+            bc.throwCompilerException("Experimental aliasing via reference not enabled");
+            return true;
+        }
+        emitReferenceAliasWarning(bc, node.getIndex());
+
+        String varName = "%" + identifier.name;
+        int nameIdx = bc.addToStringPool(varName);
+        int hashReg = bc.allocateStateVariableRegister();
+        int initializedReg = bc.allocateRegister();
+        bc.emitWithToken(Opcodes.STATE_RETRIEVE_HASH, node.getIndex());
+        bc.emitReg(hashReg);
+        bc.emit(nameIdx);
+        bc.emit(persistId);
+        bc.emit(Opcodes.STATE_IS_INITIALIZED);
+        bc.emitReg(initializedReg);
+        bc.emit(nameIdx);
+        bc.emit(persistId);
+        bc.emit(bc.gotoIfTrueOpcode());
+        bc.emitReg(initializedReg);
+        int initializedJump = bc.bytecode.size();
+        bc.emitInt(0);
+
+        int referenceReg = compileRhs(bc, node.right, RuntimeContextType.SCALAR);
+        int sourceHashReg = referenceReg;
+        if (!(node.right instanceof HashLiteralNode)) {
+            sourceHashReg = bc.allocateRegister();
+            bc.emitWithToken(Opcodes.FOREACH_DEREF_HASH, node.getIndex());
+            bc.emitReg(sourceHashReg);
+            bc.emitReg(referenceReg);
+        }
+        bc.emit(Opcodes.STATE_ALIAS_HASH);
+        bc.emitReg(hashReg);
+        bc.emitReg(sourceHashReg);
+        bc.emit(nameIdx);
+        bc.emit(persistId);
+        bc.patchIntOffset(initializedJump, bc.bytecode.size());
+        bc.emitActiveLexicalBinding(hashReg, varName);
+        bc.registerStateHashVariable(varName, hashReg, persistId);
+        bc.lastResultReg = hashReg;
+        return true;
+    }
+
+    /**
+     * Compile {@code \@array[indices] = REFERENCES}, including its localized
+     * form. A slice is one ref-alias target per index, not one target whose
+     * RHS is the aggregate list. This path is also required when a large file
+     * falls back from the JVM emitter to the bytecode interpreter.
+     */
+    private static boolean compileArraySliceReferenceAliasAssignment(
+            BytecodeCompiler bc, BinaryOperatorNode node) {
+        if (!(node.left instanceof OperatorNode reference) || !reference.operator.equals("\\")) {
+            return false;
+        }
+        Node target = reference.operand;
+        while (target instanceof ListNode list && list.elements.size() == 1) {
+            target = list.elements.getFirst();
+        }
+        OperatorNode local = target instanceof OperatorNode op && op.operator.equals("local") ? op : null;
+        Node sliceTarget = local == null ? target : local.operand;
+        if (!(sliceTarget instanceof BinaryOperatorNode slice)
+                || !slice.operator.equals("[")
+                || !(slice.left instanceof OperatorNode arrayOp)
+                || !arrayOp.operator.equals("@")
+                || !(arrayOp.operand instanceof IdentifierNode arrayId)
+                || !(slice.right instanceof ArrayLiteralNode indices)) {
+            return false;
+        }
+        if (!bc.symbolTable.isFeatureCategoryEnabled("refaliasing")) {
+            bc.throwCompilerException("Experimental aliasing via reference not enabled");
+            return true;
+        }
+        emitReferenceAliasWarning(bc, node.getIndex());
+
+        int rhsReg = compileRhs(bc, node.right, RuntimeContextType.LIST);
+        int rhsListReg;
+        if (node.right instanceof OperatorNode rhsArray && rhsArray.operator.equals("@")) {
+            rhsListReg = rhsReg;
+        } else {
+            rhsListReg = bc.allocateRegister();
+            bc.emit(Opcodes.SCALAR_TO_LIST);
+            bc.emitReg(rhsListReg);
+            bc.emitReg(rhsReg);
+        }
+
+        String arrayName = "@" + arrayId.name;
+        int arrayReg;
+        if (bc.hasVariable(arrayName) && !bc.isOurVariable(arrayName)) {
+            arrayReg = bc.getVariableRegister(arrayName);
+        } else {
+            arrayReg = bc.allocateRegister();
+            int nameIdx = bc.addToStringPool(NameNormalizer.normalizeVariableName(
+                    arrayId.name, bc.getCurrentPackage()));
+            bc.emit(Opcodes.LOAD_GLOBAL_ARRAY);
+            bc.emitReg(arrayReg);
+            bc.emit(nameIdx);
+        }
+
+        for (int i = 0; i < indices.elements.size(); i++) {
+            bc.compileNode(indices.elements.get(i), -1, RuntimeContextType.SCALAR);
+            int indexReg = bc.lastResultReg;
+            if (local != null) {
+                int discardedReg = bc.allocateRegister();
+                bc.emit(Opcodes.ARRAY_DELETE_LOCAL);
+                bc.emitReg(discardedReg);
+                bc.emitReg(arrayReg);
+                bc.emitReg(indexReg);
+            }
+            int targetReg = bc.allocateRegister();
+            bc.emit(Opcodes.ARRAY_GET_LVALUE);
+            bc.emitReg(targetReg);
+            bc.emitReg(arrayReg);
+            bc.emitReg(indexReg);
+
+            int rhsIndexReg = bc.allocateRegister();
+            bc.emit(Opcodes.LOAD_INT);
+            bc.emitReg(rhsIndexReg);
+            bc.emit(i);
+            int referenceReg = bc.allocateRegister();
+            bc.emit(Opcodes.ARRAY_GET);
+            bc.emitReg(referenceReg);
+            bc.emitReg(rhsListReg);
+            bc.emitReg(rhsIndexReg);
+            bc.emit(Opcodes.ALIAS_LVALUE_REFERENCE);
+            bc.emitReg(targetReg);
+            bc.emitReg(referenceReg);
+            bc.lastResultReg = targetReg;
+        }
+        return true;
+    }
+
+    /**
+     * Compile {@code \@hash{keys} = REFERENCES}, including its localized
+     * form. As with array slices, each hash member needs its own lvalue proxy
+     * and RHS reference when the JVM backend falls back to bytecode.
+     */
+    private static boolean compileHashSliceReferenceAliasAssignment(
+            BytecodeCompiler bc, BinaryOperatorNode node) {
+        if (!(node.left instanceof OperatorNode reference) || !reference.operator.equals("\\")) {
+            return false;
+        }
+        Node target = reference.operand;
+        while (target instanceof ListNode list && list.elements.size() == 1) {
+            target = list.elements.getFirst();
+        }
+        OperatorNode local = target instanceof OperatorNode op && op.operator.equals("local") ? op : null;
+        Node sliceTarget = local == null ? target : local.operand;
+        if (!(sliceTarget instanceof BinaryOperatorNode slice)
+                || !slice.operator.equals("{")
+                || !(slice.left instanceof OperatorNode hashOp)
+                || !hashOp.operator.equals("@")
+                || !(hashOp.operand instanceof IdentifierNode hashId)
+                || !(slice.right instanceof HashLiteralNode keys)) {
+            return false;
+        }
+        if (!bc.symbolTable.isFeatureCategoryEnabled("refaliasing")) {
+            bc.throwCompilerException("Experimental aliasing via reference not enabled");
+            return true;
+        }
+        emitReferenceAliasWarning(bc, node.getIndex());
+
+        int rhsReg = compileRhs(bc, node.right, RuntimeContextType.LIST);
+        int rhsListReg;
+        if (node.right instanceof OperatorNode rhsArray && rhsArray.operator.equals("@")) {
+            rhsListReg = rhsReg;
+        } else {
+            rhsListReg = bc.allocateRegister();
+            bc.emit(Opcodes.SCALAR_TO_LIST);
+            bc.emitReg(rhsListReg);
+            bc.emitReg(rhsReg);
+        }
+
+        String hashName = "%" + hashId.name;
+        int hashReg;
+        if (bc.hasVariable(hashName) && !bc.isOurVariable(hashName)) {
+            hashReg = bc.getVariableRegister(hashName);
+        } else {
+            hashReg = bc.allocateRegister();
+            int nameIdx = bc.addToStringPool(NameNormalizer.normalizeVariableName(
+                    hashId.name, bc.getCurrentPackage()));
+            bc.emit(Opcodes.LOAD_GLOBAL_HASH);
+            bc.emitReg(hashReg);
+            bc.emit(nameIdx);
+        }
+
+        for (int i = 0; i < keys.elements.size(); i++) {
+            Node key = keys.elements.get(i);
+            int keyReg;
+            if (key instanceof IdentifierNode identifier) {
+                keyReg = bc.allocateRegister();
+                bc.emit(Opcodes.LOAD_STRING);
+                bc.emitReg(keyReg);
+                bc.emit(bc.addToStringPool(identifier.name));
+            } else {
+                bc.compileNode(key, -1, RuntimeContextType.SCALAR);
+                keyReg = bc.lastResultReg;
+            }
+            if (local != null) {
+                int discardedReg = bc.allocateRegister();
+                bc.emit(Opcodes.HASH_DELETE_LOCAL);
+                bc.emitReg(discardedReg);
+                bc.emitReg(hashReg);
+                bc.emitReg(keyReg);
+            }
+            int targetReg = bc.allocateRegister();
+            bc.emit(Opcodes.HASH_GET_FOR_LOCAL);
+            bc.emitReg(targetReg);
+            bc.emitReg(hashReg);
+            bc.emitReg(keyReg);
+
+            int rhsIndexReg = bc.allocateRegister();
+            bc.emit(Opcodes.LOAD_INT);
+            bc.emitReg(rhsIndexReg);
+            bc.emit(i);
+            int referenceReg = bc.allocateRegister();
+            bc.emit(Opcodes.ARRAY_GET);
+            bc.emitReg(referenceReg);
+            bc.emitReg(rhsListReg);
+            bc.emitReg(rhsIndexReg);
+            bc.emit(Opcodes.ALIAS_LVALUE_REFERENCE);
+            bc.emitReg(targetReg);
+            bc.emitReg(referenceReg);
+            bc.lastResultReg = targetReg;
+        }
+        return true;
+    }
+
+    /** Compile a parenthesized reference-alias assignment element by element. */
+    private static boolean compileReferenceAliasListAssignment(
+            BytecodeCompiler bc, BinaryOperatorNode node, int resultContext) {
+        ListNode targets;
+        OperatorNode listDeclaration = null;
+        boolean outerReferenceToList = false;
+        boolean mixedDirectScalarMembers = false;
+        if (node.left instanceof ListNode list
+                && !list.elements.isEmpty()
+                && (list.elements.stream().allMatch(CompileAssignment::isReferenceAliasMember)
+                || isMixedDirectScalarReferenceList(list))) {
+            // The parser represents both (\$scalar) and
+            // (\$scalar, \(@array)) as ListNodes whose members retain their
+            // own reference operator.  A single member still needs the list
+            // assignment lowering: its RHS must be consumed in list context.
+            targets = list;
+            mixedDirectScalarMembers = isMixedDirectScalarReferenceList(list);
+        } else {
+            if (!(node.left instanceof OperatorNode referenceOp) || !referenceOp.operator.equals("\\")) {
+                return false;
+            }
+            if (referenceOp.operand instanceof ListNode list) {
+                targets = list;
+                // `\\(@array)` is a reference to a parenthesized target
+                // list.  It differs from `(\\@array)`, whose member
+                // reference aliases the aggregate itself.
+                outerReferenceToList = list.elements.size() == 1;
+            } else if (referenceOp.operand instanceof OperatorNode declaration
+                    && (declaration.operator.equals("my") || declaration.operator.equals("state"))
+                    && declaration.operand instanceof ListNode list) {
+                targets = list;
+                listDeclaration = declaration;
+            } else {
+                return false;
+            }
+        }
+        if (targets.elements.isEmpty()) return false;
+        if (!bc.symbolTable.isFeatureCategoryEnabled("refaliasing")) {
+            bc.throwCompilerException("Experimental aliasing via reference not enabled");
+            return true;
+        }
+        emitReferenceAliasWarning(bc, node.getIndex());
+
+        // `\\state(@array) = ...` must retrieve the persistent aggregate
+        // before evaluating its RHS.  Compiling the declaration through the
+        // ordinary LVALUE path uses STATE_INIT_ARRAY, which marks the state
+        // variable initialized with a temporary empty array before refaliasing
+        // gets a chance to install its slots.  Besides being eager on later
+        // executions, that leaves an invalid lexical register after the block.
+        if (listDeclaration != null && listDeclaration.operator.equals("state")
+                && targets.elements.size() == 1
+                && targets.elements.getFirst() instanceof OperatorNode stateArray
+                && stateArray.operator.equals("@")
+                && stateArray.operand instanceof IdentifierNode stateArrayId) {
+            String varName = "@" + stateArrayId.name;
+            int persistId = stateArray.id;
+            int nameIdx = bc.addToStringPool(varName);
+            int arrayReg = bc.allocateStateVariableRegister();
+            int initializedReg = bc.allocateRegister();
+            bc.emitWithToken(Opcodes.STATE_RETRIEVE_ARRAY, node.getIndex());
+            bc.emitReg(arrayReg);
+            bc.emit(nameIdx);
+            bc.emit(persistId);
+            bc.emit(Opcodes.STATE_IS_INITIALIZED);
+            bc.emitReg(initializedReg);
+            bc.emit(nameIdx);
+            bc.emit(persistId);
+            bc.emit(bc.gotoIfTrueOpcode());
+            bc.emitReg(initializedReg);
+            int initializedJump = bc.bytecode.size();
+            bc.emitInt(0);
+
+            int rhsReg = compileRhs(bc, node.right, RuntimeContextType.LIST);
+            int rhsListReg = bc.allocateRegister();
+            bc.emit(Opcodes.SCALAR_TO_LIST);
+            bc.emitReg(rhsListReg);
+            bc.emitReg(rhsReg);
+            bc.emit(Opcodes.ARRAY_SET_FROM_REFERENCE_LIST);
+            bc.emitReg(arrayReg);
+            bc.emitReg(rhsListReg);
+            bc.emit(Opcodes.STATE_MARK_INITIALIZED);
+            bc.emit(nameIdx);
+            bc.emit(persistId);
+            bc.patchIntOffset(initializedJump, bc.bytecode.size());
+            bc.emitActiveLexicalBinding(arrayReg, varName);
+            bc.registerStateArrayVariable(varName, arrayReg, persistId);
+            bc.lastResultReg = arrayReg;
+            return true;
+        }
 
         // A reference to a parenthesized list produces one reference per
         // target. SET_FROM_LIST would copy values, rather than replace slots.
         int rhsReg = compileRhs(bc, node.right, RuntimeContextType.LIST);
-        int rhsListReg = bc.allocateRegister();
-        bc.emit(Opcodes.SCALAR_TO_LIST);
-        bc.emitReg(rhsListReg);
-        bc.emitReg(rhsReg);
+        int rhsListReg;
+        if (node.right instanceof OperatorNode arrayRhs && arrayRhs.operator.equals("@")) {
+            // A direct array expression is already the flattened sequence we
+            // need.  SCALAR_TO_LIST deliberately preserves aggregates by
+            // wrapping them, which would make ARRAY_GET scalarize the array
+            // to its element count rather than retrieve its references.
+            rhsListReg = rhsReg;
+        } else {
+            rhsListReg = bc.allocateRegister();
+            bc.emit(Opcodes.SCALAR_TO_LIST);
+            bc.emitReg(rhsListReg);
+            bc.emitReg(rhsReg);
+        }
 
         for (int i = 0; i < targets.elements.size(); i++) {
             Node target = targets.elements.get(i);
-            if (!(target instanceof BinaryOperatorNode element)
-                    || !(element.operator.equals("[") || element.operator.equals("{"))) {
-                bc.throwCompilerException("Assignment to unsupported ref aliasing target");
+            boolean referenceAliasMember = target instanceof OperatorNode memberReference
+                    && memberReference.operator.equals("\\");
+            if (!referenceAliasMember && mixedDirectScalarMembers) {
+                // In a mixed list such as `(\$alias, $reference) = \(1, 2)`,
+                // only the explicitly wrapped member aliases its referent.
+                // The plain member receives the RHS reference as an ordinary
+                // list-assignment value.
+                int indexReg = bc.allocateRegister();
+                bc.emit(Opcodes.LOAD_INT);
+                bc.emitReg(indexReg);
+                bc.emit(i);
+                int valueReg = bc.allocateRegister();
+                bc.emit(Opcodes.ARRAY_GET);
+                bc.emitReg(valueReg);
+                bc.emitReg(rhsListReg);
+                bc.emitReg(indexReg);
+                bc.compileNode(target, -1, RuntimeContextType.LVALUE);
+                int targetReg = bc.lastResultReg;
+                bc.emit(Opcodes.SET_SCALAR);
+                bc.emitReg(targetReg);
+                bc.emitReg(valueReg);
+                bc.lastResultReg = targetReg;
+                continue;
+            }
+            if (!isReferenceAliasRhs(node.right)
+                    && target instanceof OperatorNode declaration
+                    && (declaration.operator.equals("my") || declaration.operator.equals("state"))
+                    && declaration.operand instanceof OperatorNode declaredHash
+                    && declaredHash.operator.equals("%")) {
+                bc.throwCompilerException("Can't modify reference to parenthesized hash in list assignment");
                 return true;
             }
-            if (element.operator.equals("[")
+            // A declaration wrapping the entire parenthesized target list,
+            // as in \my(@array), is itself the slot-list spelling even though
+            // its individual member no longer has a \ wrapper.
+            boolean aggregateReferenceListTarget = listDeclaration != null || outerReferenceToList;
+            if (listDeclaration != null && target instanceof OperatorNode) {
+                OperatorNode declarationTarget = new OperatorNode(
+                        listDeclaration.operator, target, listDeclaration.tokenIndex);
+                declarationTarget.annotations = listDeclaration.annotations;
+                target = declarationTarget;
+            }
+            if (!isReferenceAliasRhs(node.right)
+                    && target instanceof OperatorNode declaration
+                    && (declaration.operator.equals("my") || declaration.operator.equals("state"))
+                    && declaration.operand instanceof OperatorNode declaredHash
+                    && declaredHash.operator.equals("%")) {
+                bc.throwCompilerException("Can't modify reference to parenthesized hash in list assignment");
+                return true;
+            }
+            // Each member of a parenthesized refalias list is itself a
+            // reference expression: (\$scalar, \(@array)).  Lower the target
+            // beneath that wrapper, while preserving declaration wrappers
+            // above it.  Treating the wrapper as an ordinary lvalue copies a
+            // temporary reference instead of installing the requested alias.
+            if (target instanceof OperatorNode memberReference
+                    && memberReference.operator.equals("\\")) {
+                target = memberReference.operand;
+                aggregateReferenceListTarget = target instanceof ListNode;
+                while (target instanceof ListNode memberList && memberList.elements.size() == 1) {
+                    target = memberList.elements.getFirst();
+                }
+            }
+            if (target instanceof ListNode groupedTarget
+                    && groupedTarget.parenthesized
+                    && groupedTarget.elements.size() == 1) {
+                target = groupedTarget.elements.getFirst();
+                aggregateReferenceListTarget = true;
+            }
+            if (Boolean.TRUE.equals(target.getAnnotation("parenthesizedList"))) {
+                aggregateReferenceListTarget = true;
+            }
+            if (!isReferenceAliasRhs(node.right)) {
+                String localizedDiagnostic = invalidLocalizedArrayReferenceAlias(target, true);
+                if (localizedDiagnostic != null) {
+                    bc.throwCompilerException(localizedDiagnostic);
+                    return true;
+                }
+            }
+            String invalidTargetDiagnostic = invalidReferenceAliasTarget(
+                    target, true, outerReferenceToList);
+            if (invalidTargetDiagnostic != null) {
+                bc.throwCompilerException(invalidTargetDiagnostic);
+                return true;
+            }
+            // \my(@array) and \state(@array) retain the parenthesized
+            // aggregate-list meaning even though the declaration wrapper sits
+            // between the reference and its one-member ListNode.
+            if (target instanceof OperatorNode declaration
+                    && (declaration.operator.equals("my") || declaration.operator.equals("state"))
+                    && declaration.operand instanceof ListNode declarationList
+                    && declarationList.elements.size() == 1
+                    && declarationList.elements.getFirst() instanceof OperatorNode declaredAggregate
+                    && declaredAggregate.operator.equals("@")) {
+                OperatorNode normalizedDeclaration = new OperatorNode(
+                        declaration.operator, declaredAggregate, declaration.tokenIndex);
+                normalizedDeclaration.annotations = declaration.annotations;
+                target = normalizedDeclaration;
+                aggregateReferenceListTarget = true;
+            }
+            if (target instanceof OperatorNode local
+                    && local.operator.equals("local")
+                    && local.operand instanceof OperatorNode localScalar
+                    && localScalar.operator.equals("$")
+                    && localScalar.operand instanceof IdentifierNode localId) {
+                int indexReg = bc.allocateRegister();
+                bc.emit(Opcodes.LOAD_INT);
+                bc.emitReg(indexReg);
+                bc.emit(i);
+                int referenceReg = bc.allocateRegister();
+                bc.emit(Opcodes.ARRAY_GET);
+                bc.emitReg(referenceReg);
+                bc.emitReg(rhsListReg);
+                bc.emitReg(indexReg);
+                int derefReg = bc.allocateRegister();
+                bc.emitWithToken(Opcodes.REFALIAS_SCALAR_REFERENCE, node.getIndex());
+                bc.emitReg(derefReg);
+                bc.emitReg(referenceReg);
+
+                String globalName = NameNormalizer.normalizeVariableName(
+                        localId.name, bc.getCurrentPackage());
+                int nameIdx = bc.addToStringPool(globalName);
+                int targetReg = bc.allocateRegister();
+                bc.emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+                bc.emitReg(targetReg);
+                bc.emit(nameIdx);
+                bc.emit(Opcodes.ALIAS_GLOBAL_SCALAR);
+                bc.emit(nameIdx);
+                bc.emitReg(derefReg);
+                bc.emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                bc.emitReg(targetReg);
+                bc.emit(nameIdx);
+                bc.lastResultReg = targetReg;
+                continue;
+            }
+            if (target instanceof OperatorNode local
+                    && local.operator.equals("local")
+                    && local.operand instanceof OperatorNode localArray
+                    && localArray.operator.equals("@")
+                    && localArray.operand instanceof IdentifierNode localId) {
+                // `(\local @array) = \@source` aliases the localized array
+                // container itself.  It is not an array slot-list target, so
+                // do not dereference the array reference as though it held
+                // scalar element references.
+                String globalName = NameNormalizer.normalizeVariableName(
+                        localId.name, bc.getCurrentPackage());
+                int nameIdx = bc.addToStringPool(globalName);
+                int targetReg = bc.allocateRegister();
+                bc.emitWithToken(Opcodes.LOCAL_ARRAY, node.getIndex());
+                bc.emitReg(targetReg);
+                bc.emit(nameIdx);
+                int indexReg = bc.allocateRegister();
+                bc.emit(Opcodes.LOAD_INT);
+                bc.emitReg(indexReg);
+                bc.emit(i);
+                int referenceReg = bc.allocateRegister();
+                bc.emit(Opcodes.ARRAY_GET);
+                bc.emitReg(referenceReg);
+                bc.emitReg(rhsListReg);
+                bc.emitReg(indexReg);
+                int arrayReg = bc.allocateRegister();
+                bc.emitWithToken(Opcodes.FOREACH_DEREF_ARRAY, node.getIndex());
+                bc.emitReg(arrayReg);
+                bc.emitReg(referenceReg);
+                bc.emit(Opcodes.ALIAS_GLOBAL_ARRAY);
+                bc.emit(nameIdx);
+                bc.emitReg(arrayReg);
+                bc.emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                bc.emitReg(targetReg);
+                bc.emit(nameIdx);
+                bc.lastResultReg = targetReg;
+                continue;
+            }
+            if (target instanceof OperatorNode local
+                    && local.operator.equals("local")
+                    && local.operand instanceof OperatorNode localHash
+                    && localHash.operator.equals("%")
+                    && localHash.operand instanceof IdentifierNode localId) {
+                String globalName = NameNormalizer.normalizeVariableName(
+                        localId.name, bc.getCurrentPackage());
+                int nameIdx = bc.addToStringPool(globalName);
+                int targetReg = bc.allocateRegister();
+                bc.emitWithToken(Opcodes.LOCAL_HASH, node.getIndex());
+                bc.emitReg(targetReg);
+                bc.emit(nameIdx);
+                int indexReg = bc.allocateRegister();
+                bc.emit(Opcodes.LOAD_INT);
+                bc.emitReg(indexReg);
+                bc.emit(i);
+                int referenceReg = bc.allocateRegister();
+                bc.emit(Opcodes.ARRAY_GET);
+                bc.emitReg(referenceReg);
+                bc.emitReg(rhsListReg);
+                bc.emitReg(indexReg);
+                int hashReg = bc.allocateRegister();
+                bc.emitWithToken(Opcodes.FOREACH_DEREF_HASH, node.getIndex());
+                bc.emitReg(hashReg);
+                bc.emitReg(referenceReg);
+                bc.emit(Opcodes.ALIAS_GLOBAL_HASH);
+                bc.emit(nameIdx);
+                bc.emitReg(hashReg);
+                bc.emit(Opcodes.LOAD_GLOBAL_HASH);
+                bc.emitReg(targetReg);
+                bc.emit(nameIdx);
+                bc.lastResultReg = targetReg;
+                continue;
+            }
+            if (target instanceof OperatorNode declaration
+                    && (declaration.operator.equals("my") || declaration.operator.equals("state"))
+                    && declaration.operand instanceof OperatorNode declaredScalar
+                    && declaredScalar.operator.equals("$")
+                    && declaredScalar.operand instanceof IdentifierNode declaredId) {
+                String varName = "$" + declaredId.name;
+                int targetReg;
+                if (declaration.operator.equals("state")) {
+                    int stateNameIdx = bc.addToStringPool(varName);
+                    int statePersistId = declaredScalar.id;
+                    targetReg = bc.allocateStateVariableRegister();
+                    bc.emit(Opcodes.STATE_RETRIEVE_SCALAR);
+                    bc.emitReg(targetReg);
+                    bc.emit(stateNameIdx);
+                    bc.emit(statePersistId);
+                    bc.registerStateScalarVariable(varName, targetReg, statePersistId);
+                    bc.emitActiveLexicalBinding(targetReg, varName);
+                } else {
+                    bc.compileNode(declaration, -1, RuntimeContextType.LVALUE);
+                    if (!bc.hasVariable(varName)) {
+                        bc.throwCompilerException("Variable " + varName + " not found for ref aliasing");
+                        return true;
+                    }
+                    targetReg = bc.getVariableRegister(varName);
+                }
+                int indexReg = bc.allocateRegister();
+                bc.emit(Opcodes.LOAD_INT);
+                bc.emitReg(indexReg);
+                bc.emit(i);
+                int referenceReg = bc.allocateRegister();
+                bc.emit(Opcodes.ARRAY_GET);
+                bc.emitReg(referenceReg);
+                bc.emitReg(rhsListReg);
+                bc.emitReg(indexReg);
+                int derefReg = bc.allocateRegister();
+                bc.emitWithToken(Opcodes.REFALIAS_SCALAR_REFERENCE, node.getIndex());
+                bc.emitReg(derefReg);
+                bc.emitReg(referenceReg);
+                // State storage is retrieved again on subsequent executions.
+                // Initialize its persistent cell once; refaliasing a later
+                // RHS must not replace the original referent.
+                int initializedJump = -1;
+                int stateNameIdx = -1;
+                int statePersistId = -1;
+                if (declaration.operator.equals("state")) {
+                    stateNameIdx = bc.addToStringPool(varName);
+                    statePersistId = declaredScalar.id;
+                    int initializedReg = bc.allocateRegister();
+                    bc.emit(Opcodes.STATE_IS_INITIALIZED);
+                    bc.emitReg(initializedReg);
+                    bc.emit(stateNameIdx);
+                    bc.emit(statePersistId);
+                    bc.emit(bc.gotoIfTrueOpcode());
+                    bc.emitReg(initializedReg);
+                    initializedJump = bc.bytecode.size();
+                    bc.emitInt(0);
+                }
+                bc.emit(declaration.operator.equals("state")
+                        ? Opcodes.SET_SCALAR : Opcodes.ALIAS);
+                bc.emitReg(targetReg);
+                bc.emitReg(derefReg);
+                if (declaration.operator.equals("state")) {
+                    bc.emit(Opcodes.STATE_MARK_INITIALIZED);
+                    bc.emit(stateNameIdx);
+                    bc.emit(statePersistId);
+                    bc.patchIntOffset(initializedJump, bc.bytecode.size());
+                }
+                if (declaration.operator.equals("my")) {
+                    bc.emit(Opcodes.REGISTER_MY_VAR);
+                    bc.emitReg(targetReg);
+                    bc.emitActiveLexicalBinding(targetReg, varName);
+                }
+                bc.lastResultReg = targetReg;
+                continue;
+            }
+            if (target instanceof OperatorNode declaration
+                    && (declaration.operator.equals("my") || declaration.operator.equals("state"))
+                    && declaration.operand instanceof OperatorNode declaredHash
+                    && declaredHash.operator.equals("%")
+                    && declaredHash.operand instanceof IdentifierNode declaredId) {
+                // A parenthesized declaration such as `(\my %hash)` is one
+                // aggregate target.  Materialize its lexical storage before
+                // replacing that container with the corresponding hash
+                // referent from the RHS list.
+                bc.compileNode(declaration, -1, RuntimeContextType.LVALUE);
+                String varName = "%" + declaredId.name;
+                if (!bc.hasVariable(varName)) {
+                    bc.throwCompilerException("Variable " + varName + " not found for ref aliasing");
+                    return true;
+                }
+                int indexReg = bc.allocateRegister();
+                bc.emit(Opcodes.LOAD_INT);
+                bc.emitReg(indexReg);
+                bc.emit(i);
+                int referenceReg = bc.allocateRegister();
+                bc.emit(Opcodes.ARRAY_GET);
+                bc.emitReg(referenceReg);
+                bc.emitReg(rhsListReg);
+                bc.emitReg(indexReg);
+                int hashReg = bc.allocateRegister();
+                bc.emitWithToken(Opcodes.FOREACH_DEREF_HASH, node.getIndex());
+                bc.emitReg(hashReg);
+                bc.emitReg(referenceReg);
+                int targetReg = bc.getVariableRegister(varName);
+                bc.emit(declaration.operator.equals("state") ? Opcodes.SET_SCALAR : Opcodes.ALIAS);
+                bc.emitReg(targetReg);
+                bc.emitReg(hashReg);
+                bc.lastResultReg = targetReg;
+                continue;
+            }
+            if (target instanceof TernaryOperatorNode ternary
+                    && compileConditionalReferenceAliasTarget(bc, ternary, rhsListReg, i, node.getIndex())) {
+                continue;
+            }
+            if (target instanceof TernaryOperatorNode ternary) {
+                int indexReg = bc.allocateRegister();
+                bc.emit(Opcodes.LOAD_INT);
+                bc.emitReg(indexReg);
+                bc.emit(i);
+                int referenceReg = bc.allocateRegister();
+                bc.emit(Opcodes.ARRAY_GET);
+                bc.emitReg(referenceReg);
+                bc.emitReg(rhsListReg);
+                bc.emitReg(indexReg);
+                compileReferenceAliasTarget(bc, ternary, referenceReg, node.getIndex());
+                continue;
+            }
+            if (target instanceof OperatorNode scalarTarget
+                    && scalarTarget.operator.equals("$")
+                    && scalarTarget.operand instanceof IdentifierNode scalarId) {
+                int indexReg = bc.allocateRegister();
+                bc.emit(Opcodes.LOAD_INT);
+                bc.emitReg(indexReg);
+                bc.emit(i);
+                int referenceReg = bc.allocateRegister();
+                bc.emit(Opcodes.ARRAY_GET);
+                bc.emitReg(referenceReg);
+                bc.emitReg(rhsListReg);
+                bc.emitReg(indexReg);
+                int derefReg = bc.allocateRegister();
+                bc.emitWithToken(Opcodes.REFALIAS_SCALAR_REFERENCE, node.getIndex());
+                bc.emitReg(derefReg);
+                bc.emitReg(referenceReg);
+                String varName = "$" + scalarId.name;
+                if (bc.hasVariable(varName) && !bc.isOurVariable(varName)) {
+                    int targetReg = bc.getVariableRegister(varName);
+                    bc.emit(Opcodes.ALIAS);
+                    bc.emitReg(targetReg);
+                    bc.emitReg(derefReg);
+                    bc.lastResultReg = targetReg;
+                } else {
+                    String globalName = NameNormalizer.normalizeVariableName(
+                            scalarId.name, bc.getCurrentPackage());
+                    int nameIdx = bc.addToStringPool(globalName);
+                    bc.emit(Opcodes.ALIAS_GLOBAL_SCALAR);
+                    bc.emit(nameIdx);
+                    bc.emitReg(derefReg);
+                    int targetReg = bc.allocateRegister();
+                    bc.emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                    bc.emitReg(targetReg);
+                    bc.emit(nameIdx);
+                    bc.lastResultReg = targetReg;
+                }
+                continue;
+            }
+            if (target instanceof OperatorNode codeTarget
+                    && codeTarget.operator.equals("&")
+                    && codeTarget.operand instanceof OperatorNode hiddenScalar
+                    && hiddenScalar.operator.equals("$")
+                    && isLexicalSubStorage(hiddenScalar)) {
+                int indexReg = bc.allocateRegister();
+                bc.emit(Opcodes.LOAD_INT);
+                bc.emitReg(indexReg);
+                bc.emit(i);
+                int referenceReg = bc.allocateRegister();
+                bc.emit(Opcodes.ARRAY_GET);
+                bc.emitReg(referenceReg);
+                bc.emitReg(rhsListReg);
+                bc.emitReg(indexReg);
+                bc.compileNode(hiddenScalar, -1, RuntimeContextType.SCALAR);
+                int targetReg = bc.lastResultReg;
+                int codeReg = bc.allocateRegister();
+                bc.emitWithToken(Opcodes.REFALIAS_CODE_REFERENCE, node.getIndex());
+                bc.emitReg(codeReg);
+                bc.emitReg(referenceReg);
+                bc.emit(Opcodes.ALIAS);
+                bc.emitReg(targetReg);
+                bc.emitReg(codeReg);
+                bc.lastResultReg = targetReg;
+                continue;
+            }
+            if (target instanceof OperatorNode codeTarget
+                    && codeTarget.operator.equals("&")
+                    && codeTarget.operand instanceof IdentifierNode codeId) {
+                // A CODE reference is already the value to install.  Unlike
+                // scalar/aggregate aliases, there is no referent slot to
+                // dereference: replace the package CV itself.
+                int indexReg = bc.allocateRegister();
+                bc.emit(Opcodes.LOAD_INT);
+                bc.emitReg(indexReg);
+                bc.emit(i);
+                int referenceReg = bc.allocateRegister();
+                bc.emit(Opcodes.ARRAY_GET);
+                bc.emitReg(referenceReg);
+                bc.emitReg(rhsListReg);
+                bc.emitReg(indexReg);
+                int nameIdx = bc.addToStringPool(NameNormalizer.normalizeVariableName(
+                        codeId.name, bc.getCurrentPackage()));
+                int codeReg = bc.allocateRegister();
+                bc.emitWithToken(Opcodes.REFALIAS_CODE_REFERENCE, node.getIndex());
+                bc.emitReg(codeReg);
+                bc.emitReg(referenceReg);
+                bc.emit(Opcodes.STORE_GLOBAL_CODE);
+                bc.emit(nameIdx);
+                bc.emitReg(codeReg);
+                int targetReg = bc.allocateRegister();
+                bc.emit(Opcodes.LOAD_GLOBAL_CODE);
+                bc.emitReg(targetReg);
+                bc.emit(nameIdx);
+                bc.lastResultReg = targetReg;
+                continue;
+            }
+            OperatorNode aggregateTarget = target instanceof OperatorNode directAggregate
+                    && directAggregate.operator.equals("@") ? directAggregate : null;
+            if (aggregateTarget == null && target instanceof OperatorNode declaration
+                    && (declaration.operator.equals("my") || declaration.operator.equals("state"))
+                    && declaration.operand instanceof OperatorNode declaredAggregate
+                    && declaredAggregate.operator.equals("@")) {
+                bc.compileNode(declaration, -1, RuntimeContextType.LVALUE);
+                aggregateTarget = declaredAggregate;
+            }
+            if (aggregateTarget != null
+                    && aggregateTarget.operator.equals("@")
+                    && aggregateTarget.operand instanceof IdentifierNode aggregateId) {
+                if (!aggregateReferenceListTarget) {
+                    compileDirectReferenceAliasTarget(bc, aggregateTarget, rhsListReg, i, node.getIndex());
+                    continue;
+                }
+                String arrayName = "@" + aggregateId.name;
+                int arrayReg;
+                if (bc.hasVariable(arrayName) && !bc.isOurVariable(arrayName)) {
+                    arrayReg = bc.getVariableRegister(arrayName);
+                } else {
+                    arrayReg = bc.allocateRegister();
+                    int nameIdx = bc.addToStringPool(NameNormalizer.normalizeVariableName(
+                            aggregateId.name, bc.getCurrentPackage()));
+                    bc.emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                    bc.emitReg(arrayReg);
+                    bc.emit(nameIdx);
+                }
+                // An aggregate member consumes every remaining RHS reference,
+                // matching Perl's (\$scalar, \(@array)) list assignment.
+                int remainingReferencesReg = bc.allocateRegister();
+                bc.emit(Opcodes.LIST_SLICE_FROM);
+                bc.emitReg(remainingReferencesReg);
+                bc.emitReg(rhsListReg);
+                bc.emit(i);
+                bc.emit(Opcodes.ARRAY_SET_FROM_REFERENCE_LIST);
+                bc.emitReg(arrayReg);
+                bc.emitReg(remainingReferencesReg);
+                bc.lastResultReg = arrayReg;
+                continue;
+            }
+            if (target instanceof OperatorNode hashTarget
+                    && hashTarget.operator.equals("%")
+                    && hashTarget.operand instanceof IdentifierNode hashId) {
+                int indexReg = bc.allocateRegister();
+                bc.emit(Opcodes.LOAD_INT);
+                bc.emitReg(indexReg);
+                bc.emit(i);
+                int referenceReg = bc.allocateRegister();
+                bc.emit(Opcodes.ARRAY_GET);
+                bc.emitReg(referenceReg);
+                bc.emitReg(rhsListReg);
+                bc.emitReg(indexReg);
+                int hashReg = bc.allocateRegister();
+                bc.emitWithToken(Opcodes.FOREACH_DEREF_HASH, node.getIndex());
+                bc.emitReg(hashReg);
+                bc.emitReg(referenceReg);
+                String hashName = "%" + hashId.name;
+                if (bc.hasVariable(hashName) && !bc.isOurVariable(hashName)) {
+                    int targetReg = bc.getVariableRegister(hashName);
+                    bc.emit(Opcodes.ALIAS);
+                    bc.emitReg(targetReg);
+                    bc.emitReg(hashReg);
+                    bc.lastResultReg = targetReg;
+                } else {
+                    int nameIdx = bc.addToStringPool(NameNormalizer.normalizeVariableName(
+                            hashId.name, bc.getCurrentPackage()));
+                    bc.emit(Opcodes.ALIAS_GLOBAL_HASH);
+                    bc.emit(nameIdx);
+                    bc.emitReg(hashReg);
+                    int targetReg = bc.allocateRegister();
+                    bc.emit(Opcodes.LOAD_GLOBAL_HASH);
+                    bc.emitReg(targetReg);
+                    bc.emit(nameIdx);
+                    bc.lastResultReg = targetReg;
+                }
+                continue;
+            }
+            if (target instanceof BinaryOperatorNode element
+                    && element.operator.equals("[")
                     && element.left instanceof OperatorNode arrayOp
                     && arrayOp.operator.equals("$")
                     && arrayOp.operand instanceof IdentifierNode) {
                 bc.handleArrayElementLvalueAccess(element, arrayOp);
-            } else {
+            } else if (target instanceof BinaryOperatorNode element
+                    && element.operator.equals("{")) {
                 bc.compileNode(element, -1, RuntimeContextType.LVALUE);
+            } else if (target instanceof BinaryOperatorNode element
+                    && element.operator.equals("[")) {
+                bc.compileNode(element, -1, RuntimeContextType.LVALUE);
+            } else {
+                // Scalar targets and declaration wrappers are valid in the
+                // same parenthesized alias list as array/hash elements.
+                bc.compileNode(target, -1, RuntimeContextType.LVALUE);
             }
             int targetReg = bc.lastResultReg;
 
@@ -179,8 +1441,57 @@ public class CompileAssignment {
             bc.emitReg(targetReg);
             bc.emitReg(referenceReg);
         }
-        bc.lastResultReg = rhsListReg;
+        // Like ordinary list assignment, a ref-alias list expression yields
+        // the flattened RHS in list context and its element count in scalar
+        // context.  rhsListReg is a RuntimeList, so LIST_TO_COUNT—not the
+        // RuntimeArray-specific ARRAY_SIZE—must perform that conversion.
+        if (resultContext == RuntimeContextType.SCALAR
+                || resultContext == RuntimeContextType.RUNTIME) {
+            int countReg = bc.allocateRegister();
+            bc.emit(Opcodes.LIST_TO_COUNT);
+            bc.emitReg(countReg);
+            bc.emitReg(rhsListReg);
+            bc.lastResultReg = countReg;
+        } else if (resultContext == RuntimeContextType.LVALUE_LIST) {
+            // An assignment expression used as an outer list lvalue exposes
+            // temporary reference cells.  Do not return the real RHS cells:
+            // a subsequent assignment would then overwrite its source
+            // references.  Copy the list's scalar entries, preserving their
+            // reference values while making the outer assignment disposable.
+            int temporaryListReg = bc.allocateRegister();
+            bc.emit(Opcodes.COPY_DO_BLOCK_RESULT);
+            bc.emitReg(temporaryListReg);
+            bc.emitReg(rhsListReg);
+            bc.lastResultReg = temporaryListReg;
+        } else {
+            bc.lastResultReg = rhsListReg;
+        }
         return true;
+    }
+
+    private static boolean isReferenceAliasMember(Node element) {
+        return element instanceof OperatorNode operator && operator.operator.equals("\\");
+    }
+
+    private static boolean isMixedDirectScalarReferenceList(ListNode list) {
+        boolean hasReferenceScalar = false;
+        boolean hasPlainScalar = false;
+        for (Node element : list.elements) {
+            if (element instanceof OperatorNode reference
+                    && reference.operator.equals("\\")
+                    && isDirectScalarTarget(reference.operand)) {
+                hasReferenceScalar = true;
+            } else if (isDirectScalarTarget(element)) {
+                hasPlainScalar = true;
+            }
+        }
+        return hasReferenceScalar && hasPlainScalar;
+    }
+
+    private static boolean isDirectScalarTarget(Node node) {
+        return node instanceof OperatorNode scalar
+                && scalar.operator.equals("$")
+                && scalar.operand instanceof IdentifierNode;
     }
 
     private static boolean handleLocalAssignment(BytecodeCompiler bc, BinaryOperatorNode node, OperatorNode leftOp, int rhsContext) {
@@ -757,6 +2068,7 @@ public class CompileAssignment {
      * Handles all forms of assignment including my/our/local, scalars, arrays, hashes, and slices.
      */
     public static void compileAssignmentOperator(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {
+        node = normalizeLocalizedDeclaredReferenceSlice(node);
         if (node.left instanceof OperatorNode leftOperator
                 && leftOperator.operator.equals("substr")
                 && leftOperator.operand instanceof ListNode arguments
@@ -769,6 +2081,24 @@ public class CompileAssignment {
         // Use LValueVisitor to properly determine context for all LHS patterns
         // including $array[index], $hash{key}, etc.
         int rhsContext = LValueVisitor.getContext(node);
+        if (node.left instanceof OperatorNode referenceOp
+                && referenceOp.operator.equals("\\")
+                && (referenceOp.operand instanceof ListNode
+                || referenceOp.operand instanceof OperatorNode declaration
+                && (declaration.operator.equals("my") || declaration.operator.equals("state"))
+                && declaration.operand instanceof ListNode)) {
+            // A parenthesized ref-alias target consumes references from its
+            // RHS list even when it contains only one target.
+            rhsContext = RuntimeContextType.LIST;
+        }
+        if (node.left instanceof OperatorNode referenceOp
+                && referenceOp.operator.equals("\\")
+                && isLocalizedArraySliceReferenceTarget(referenceOp.operand)) {
+            // `\\local @a[0,1] = (\\$tmp) x 2` aliases one RHS
+            // reference per slice member.  Scalar context collapses the
+            // repeat to its count, so preserve the RHS list here.
+            rhsContext = RuntimeContextType.LIST;
+        }
         if (rhsContext == RuntimeContextType.VOID) {
             // VOID means not a valid L-value, but we still compile it - default to LIST
             rhsContext = RuntimeContextType.LIST;
@@ -802,7 +2132,11 @@ public class CompileAssignment {
             return;
         }
 
-        if (compileReferenceAliasListAssignment(bytecodeCompiler, node)) {
+        if (compileStateArrayReferenceAliasAssignment(bytecodeCompiler, node)
+                || compileStateHashReferenceAliasAssignment(bytecodeCompiler, node)
+                || compileArraySliceReferenceAliasAssignment(bytecodeCompiler, node)
+                || compileHashSliceReferenceAliasAssignment(bytecodeCompiler, node)
+                || compileReferenceAliasListAssignment(bytecodeCompiler, node, outerContext)) {
             return;
         }
 
@@ -842,7 +2176,11 @@ public class CompileAssignment {
                                 bytecodeCompiler.emitReg(reg);
                                 bytecodeCompiler.emitReg(valueReg);
 
-                                bytecodeCompiler.registerVariable(varName, reg);
+                                if (leftOp.operator.equals("state")) {
+                                    bytecodeCompiler.registerStateScalarVariable(varName, reg, beginId);
+                                } else {
+                                    bytecodeCompiler.registerVariable(varName, reg);
+                                }
 
                                 bytecodeCompiler.emitVarAttrsIfNeeded(leftOp, reg, "$");
 
@@ -886,7 +2224,7 @@ public class CompileAssignment {
                                 bytecodeCompiler.patchIntOffset(initializedJump, bytecodeCompiler.bytecode.size());
                                 bytecodeCompiler.emitActiveLexicalBinding(reg, varName);
 
-                                bytecodeCompiler.registerVariable(varName, reg);
+                                bytecodeCompiler.registerStateScalarVariable(varName, reg, persistId);
 
                                 // Runtime attribute dispatch for state variables with attributes
                                 bytecodeCompiler.emitVarAttrsIfNeeded(leftOp, reg, "$");
@@ -910,9 +2248,11 @@ public class CompileAssignment {
                                 // When attributes are present (e.g., my $x : TieLoop = $i),
                                 // we must create the scalar first, dispatch attributes (which
                                 // may tie the variable), then assign the value so STORE fires.
-                                bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                                bytecodeCompiler.emit(Opcodes.INITIALIZE_LEXICAL_SCALAR);
                                 bytecodeCompiler.emitReg(reg);
-                                bytecodeCompiler.emitLexicalAlias(reg, varName);
+                                if (!leftOp.getBooleanAnnotation("signatureParameterDeclaration")) {
+                                    bytecodeCompiler.emitLexicalAlias(reg, varName);
+                                }
                                 bytecodeCompiler.emit(Opcodes.REGISTER_MY_VAR);
                                 bytecodeCompiler.emitReg(reg);
                                 bytecodeCompiler.emitVarAttrsIfNeeded(leftOp, reg, "$");
@@ -921,9 +2261,11 @@ public class CompileAssignment {
                                 bytecodeCompiler.emitReg(valueReg);
                                 emitReleaseConsumedRhsTemp(bytecodeCompiler, node.right, valueReg, reg);
                             } else {
-                                bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                                bytecodeCompiler.emit(Opcodes.INITIALIZE_LEXICAL_SCALAR);
                                 bytecodeCompiler.emitReg(reg);
-                                bytecodeCompiler.emitLexicalAlias(reg, varName);
+                                if (!leftOp.getBooleanAnnotation("signatureParameterDeclaration")) {
+                                    bytecodeCompiler.emitLexicalAlias(reg, varName);
+                                }
                                 bytecodeCompiler.emit(Opcodes.REGISTER_MY_VAR);
                                 bytecodeCompiler.emitReg(reg);
                                 bytecodeCompiler.emit(Opcodes.SET_SCALAR);
@@ -981,10 +2323,30 @@ public class CompileAssignment {
                                 return;
                             }
 
-                            int arrayReg = bytecodeCompiler.allocateRegister();
+                            // A state aggregate must retain a non-recyclable register: the
+                            // declaration can be skipped on later loop iterations while
+                            // reads in the same lexical scope still need its persistent cell.
+                            int arrayReg = leftOp.operator.equals("state")
+                                    ? bytecodeCompiler.allocateStateVariableRegister()
+                                    : bytecodeCompiler.allocateRegister();
 
                             bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
                             int listReg = bytecodeCompiler.lastResultReg;
+
+                            if (leftOp.operator.equals("state")) {
+                                int persistId = sigilOp.id;
+                                int nameIdx = bytecodeCompiler.addToStringPool(varName);
+                                bytecodeCompiler.emitWithToken(Opcodes.STATE_INIT_ARRAY, node.getIndex());
+                                bytecodeCompiler.emitReg(arrayReg);
+                                bytecodeCompiler.emitReg(listReg);
+                                bytecodeCompiler.emit(nameIdx);
+                                bytecodeCompiler.emit(persistId);
+                                bytecodeCompiler.emitActiveLexicalBinding(arrayReg, varName);
+                                bytecodeCompiler.registerStateArrayVariable(varName, arrayReg, persistId);
+                                bytecodeCompiler.emitVarAttrsIfNeeded(leftOp, arrayReg, "@");
+                                bytecodeCompiler.lastResultReg = arrayReg;
+                                return;
+                            }
 
                             int countReg = -1;
                             if (outerContext == RuntimeContextType.SCALAR) {
@@ -1189,7 +2551,7 @@ public class CompileAssignment {
                                         varReg = bytecodeCompiler.addVariable(varName, "my");
                                         switch (sigil) {
                                             case "$" -> {
-                                                bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                                                bytecodeCompiler.emit(Opcodes.INITIALIZE_LEXICAL_SCALAR);
                                                 bytecodeCompiler.emitReg(varReg);
                                             }
                                             case "@" -> {
@@ -1201,7 +2563,9 @@ public class CompileAssignment {
                                                 bytecodeCompiler.emitReg(varReg);
                                             }
                                         }
-                                        bytecodeCompiler.emitLexicalAlias(varReg, varName);
+                                        if (!leftOp.getBooleanAnnotation("signatureParameterDeclaration")) {
+                                            bytecodeCompiler.emitLexicalAlias(varReg, varName);
+                                        }
                                         bytecodeCompiler.emit(Opcodes.REGISTER_MY_VAR);
                                         bytecodeCompiler.emitReg(varReg);
                                         bytecodeCompiler.emitVarAttrsIfNeeded(leftOp, varReg, sigil);
@@ -1470,6 +2834,29 @@ public class CompileAssignment {
                     } else {
                         bytecodeCompiler.lastResultReg = hashReg;
                     }
+                } else if ((leftOp.operator.equals("my") || leftOp.operator.equals("state"))
+                        && leftOp.operand instanceof ListNode listNode) {
+                    // `my ($a, $b) = ...` is a declaration list, not a
+                    // scalar assignment to the declaration wrapper. Compile
+                    // it once to establish its lexical cells, then assign
+                    // through those cells exactly like an ordinary list LHS.
+                    // This preserves aliases installed before a forward goto
+                    // reaches the declaration.
+                    bytecodeCompiler.compileNode(leftOp, -1, RuntimeContextType.LVALUE_LIST);
+                    int lhsListReg = bytecodeCompiler.lastResultReg;
+
+                    int rhsListReg = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emit(Opcodes.SCALAR_TO_LIST);
+                    bytecodeCompiler.emitReg(rhsListReg);
+                    bytecodeCompiler.emitReg(valueReg);
+
+                    int resultReg = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emit(Opcodes.SET_FROM_LIST);
+                    bytecodeCompiler.emitReg(resultReg);
+                    bytecodeCompiler.emitReg(lhsListReg);
+                    bytecodeCompiler.emitReg(rhsListReg);
+                    bytecodeCompiler.lastResultReg = resultReg;
+                    return;
                 } else if (leftOp.operator.equals("our")) {
                     // Assignment to our variable: our $x = value or our @x = value or our %x = value
                     // Compile the our declaration first (which loads the global into a register)
@@ -1755,13 +3142,59 @@ public class CompileAssignment {
                     if (!bytecodeCompiler.symbolTable.isFeatureCategoryEnabled("refaliasing")) {
                         bytecodeCompiler.throwCompilerException("Experimental aliasing via reference not enabled");
                     }
+                    emitReferenceAliasWarning(bytecodeCompiler, node.getIndex());
                     Node refAliasTarget = leftOp.operand;
-                    while (refAliasTarget instanceof ListNode listNode && listNode.elements.size() == 1
-                            || refAliasTarget instanceof OperatorNode scalarElement
-                            && scalarElement.operator.equals("$")) {
-                        refAliasTarget = refAliasTarget instanceof ListNode listNode
-                                ? listNode.elements.get(0)
-                                : ((OperatorNode) refAliasTarget).operand;
+                    if (leftOp.operand instanceof ListNode
+                            || leftOp.operand instanceof OperatorNode declaration
+                            && (declaration.operator.equals("my") || declaration.operator.equals("state"))
+                            && declaration.operand instanceof ListNode) {
+                        // Parenthesized alias targets consume the first RHS
+                        // reference.  A scalar reference such as `\\3` is
+                        // still a one-element list here; only a direct array
+                        // is already indexable without wrapping.
+                        if (!(node.right instanceof OperatorNode rhsArray
+                                && rhsArray.operator.equals("@"))) {
+                            int listReg = bytecodeCompiler.allocateRegister();
+                            bytecodeCompiler.emit(Opcodes.SCALAR_TO_LIST);
+                            bytecodeCompiler.emitReg(listReg);
+                            bytecodeCompiler.emitReg(valueReg);
+                            valueReg = listReg;
+                        }
+                        int indexReg = bytecodeCompiler.allocateRegister();
+                        bytecodeCompiler.emit(Opcodes.LOAD_INT);
+                        bytecodeCompiler.emitReg(indexReg);
+                        bytecodeCompiler.emit(0);
+                        int firstReferenceReg = bytecodeCompiler.allocateRegister();
+                        bytecodeCompiler.emit(Opcodes.ARRAY_GET);
+                        bytecodeCompiler.emitReg(firstReferenceReg);
+                        bytecodeCompiler.emitReg(valueReg);
+                        bytecodeCompiler.emitReg(indexReg);
+                        valueReg = firstReferenceReg;
+                    }
+                    while (refAliasTarget instanceof ListNode listNode
+                            && listNode.elements.size() == 1) {
+                        refAliasTarget = listNode.elements.get(0);
+                    }
+                    String refAliasDiagnostic = invalidReferenceAliasTarget(
+                            refAliasTarget, leftOp.operand instanceof ListNode,
+                            leftOp.operand instanceof ListNode);
+                    if (refAliasDiagnostic != null) {
+                        bytecodeCompiler.throwCompilerException(refAliasDiagnostic);
+                        return;
+                    }
+                    if (!isReferenceAliasRhs(node.right)) {
+                        String localizedDiagnostic = invalidLocalizedArrayReferenceAlias(
+                                refAliasTarget,
+                                leftOp.operand instanceof ListNode
+                                        || refAliasTarget instanceof OperatorNode referenceTarget
+                                        && referenceTarget.operator.equals("\\")
+                                        || refAliasTarget instanceof OperatorNode localTarget
+                                        && localTarget.operator.equals("local")
+                                        && localTarget.operand instanceof ListNode);
+                        if (localizedDiagnostic != null) {
+                            bytecodeCompiler.throwCompilerException(localizedDiagnostic);
+                            return;
+                        }
                     }
                     BinaryOperatorNode element = refAliasTarget instanceof BinaryOperatorNode binaryElement
                             ? binaryElement : null;
@@ -1781,40 +3214,376 @@ public class CompileAssignment {
                         bytecodeCompiler.lastResultReg = targetReg;
                         return;
                     }
+                    // Conditional and other computed scalar lvalues select a
+                    // concrete slot when compiled in LVALUE context.  Alias
+                    // that selected slot instead of rejecting the enclosing
+                    // reference expression.
+                    if (refAliasTarget instanceof BinaryOperatorNode computedLvalue) {
+                        bytecodeCompiler.compileNode(computedLvalue, -1, RuntimeContextType.LVALUE);
+                        int targetReg = bytecodeCompiler.lastResultReg;
+                        bytecodeCompiler.emit(Opcodes.ALIAS_LVALUE_REFERENCE);
+                        bytecodeCompiler.emitReg(targetReg);
+                        bytecodeCompiler.emitReg(valueReg);
+                        bytecodeCompiler.lastResultReg = targetReg;
+                        return;
+                    }
+                    if (refAliasTarget instanceof TernaryOperatorNode computedLvalue) {
+                        compileReferenceAliasTarget(
+                                bytecodeCompiler, computedLvalue, valueReg, node.getIndex());
+                        return;
+                    }
                     // A lexical declaration can appear inside the parenthesized
                     // ref-alias target: \(my $lex) = \$package_scalar.
                     if (refAliasTarget instanceof OperatorNode declaration
-                            && declaration.operator.equals("my")
-                            && declaration.operand instanceof OperatorNode declaredScalar
-                            && declaredScalar.operator.equals("$")
-                            && declaredScalar.operand instanceof IdentifierNode declaredId) {
-                        String varName = "$" + declaredId.name;
-                        // The normal assignment path compiles the declaration
-                        // while visiting its LHS. Ref aliasing bypasses that
-                        // path, so allocate and register the lexical cell here
-                        // before replacing it with the RHS referent.
-                        bytecodeCompiler.compileNode(declaration, -1, RuntimeContextType.LVALUE);
-                        if (!bytecodeCompiler.hasVariable(varName)) {
-                            bytecodeCompiler.throwCompilerException("Variable " + varName + " not found for ref aliasing");
+                            && (declaration.operator.equals("my")
+                            || declaration.operator.equals("state"))) {
+                        Node declaredNode = declaration.operand;
+                        boolean parenthesizedAggregateDeclaration = declaredNode instanceof ListNode;
+                        if (declaredNode instanceof ListNode declaredList
+                                && declaredList.elements.size() == 1) {
+                            declaredNode = declaredList.elements.getFirst();
+                        }
+                        OperatorNode declaredVariable = declaredNode instanceof OperatorNode candidate
+                                && (candidate.operator.equals("$")
+                                || candidate.operator.equals("@")
+                                || candidate.operator.equals("%")) ? candidate : null;
+                        IdentifierNode declaredId = declaredVariable != null
+                                && declaredVariable.operand instanceof IdentifierNode candidateId
+                                ? candidateId : null;
+                        if (declaredVariable != null && declaredId != null) {
+                        if (parenthesizedAggregateDeclaration
+                                && declaredVariable.operator.equals("%")
+                                && !isReferenceAliasRhs(node.right)) {
+                            bytecodeCompiler.throwCompilerException(
+                                    "Can't modify reference to parenthesized hash in list assignment");
                             return;
                         }
-                        int targetReg = bytecodeCompiler.getVariableRegister(varName);
+                        String varName = declaredVariable.operator + declaredId.name;
+                        // The ordinary declaration opcode initializes a state
+                        // cell as undef. For refaliasing, retrieve the state
+                        // cell without marking it initialized; the alias store
+                        // below performs that one-time initialization.
+                        int targetReg;
+                        if (declaration.operator.equals("state")
+                                && declaredVariable.operator.equals("$")) {
+                            int stateNameIdx = bytecodeCompiler.addToStringPool(varName);
+                            int statePersistId = declaredVariable.id;
+                            targetReg = bytecodeCompiler.allocateStateVariableRegister();
+                            bytecodeCompiler.emit(Opcodes.STATE_RETRIEVE_SCALAR);
+                            bytecodeCompiler.emitReg(targetReg);
+                            bytecodeCompiler.emit(stateNameIdx);
+                            bytecodeCompiler.emit(statePersistId);
+                            bytecodeCompiler.registerStateScalarVariable(varName, targetReg, statePersistId);
+                            bytecodeCompiler.emitActiveLexicalBinding(targetReg, varName);
+                        } else {
+                            bytecodeCompiler.compileNode(declaration, -1, RuntimeContextType.LVALUE);
+                            if (!bytecodeCompiler.hasVariable(varName)) {
+                                bytecodeCompiler.throwCompilerException("Variable " + varName + " not found for ref aliasing");
+                                return;
+                            }
+                            targetReg = bytecodeCompiler.getVariableRegister(varName);
+                        }
+                        if (parenthesizedAggregateDeclaration && declaredVariable.operator.equals("@")) {
+                            int referenceListReg = bytecodeCompiler.allocateRegister();
+                            bytecodeCompiler.emit(Opcodes.SCALAR_TO_LIST);
+                            bytecodeCompiler.emitReg(referenceListReg);
+                            bytecodeCompiler.emitReg(valueReg);
+                            bytecodeCompiler.emit(Opcodes.ARRAY_SET_FROM_REFERENCE_LIST);
+                            bytecodeCompiler.emitReg(targetReg);
+                            bytecodeCompiler.emitReg(referenceListReg);
+                            bytecodeCompiler.lastResultReg = targetReg;
+                            return;
+                        }
+                        boolean directAggregateLiteral = (declaredVariable.operator.equals("@")
+                                && node.right instanceof ArrayLiteralNode)
+                                || (declaredVariable.operator.equals("%")
+                                && node.right instanceof HashLiteralNode);
+                        int sourceReg = valueReg;
+                        if (!directAggregateLiteral) {
+                            sourceReg = bytecodeCompiler.allocateRegister();
+                            short derefOpcode = switch (declaredVariable.operator) {
+                                case "$" -> Opcodes.REFALIAS_SCALAR_REFERENCE;
+                                case "@" -> Opcodes.FOREACH_DEREF_ARRAY;
+                                case "%" -> Opcodes.FOREACH_DEREF_HASH;
+                                default -> throw new IllegalStateException("Unexpected declaration sigil");
+                            };
+                            bytecodeCompiler.emitWithToken(derefOpcode, node.getIndex());
+                            bytecodeCompiler.emitReg(sourceReg);
+                            bytecodeCompiler.emitReg(valueReg);
+                        }
+                        // State refaliasing initializes its persistent cell
+                        // once, just like ordinary state assignment. A later
+                        // execution must retain the first referent rather
+                        // than rebinding it to the current RHS.
+                        int initializedJump = -1;
+                        int stateNameIdx = -1;
+                        int statePersistId = -1;
+                        if (declaration.operator.equals("state")) {
+                            stateNameIdx = bytecodeCompiler.addToStringPool(varName);
+                            statePersistId = declaredVariable.id;
+                            int initializedReg = bytecodeCompiler.allocateRegister();
+                            bytecodeCompiler.emit(Opcodes.STATE_IS_INITIALIZED);
+                            bytecodeCompiler.emitReg(initializedReg);
+                            bytecodeCompiler.emit(stateNameIdx);
+                            bytecodeCompiler.emit(statePersistId);
+                            bytecodeCompiler.emit(bytecodeCompiler.gotoIfTrueOpcode());
+                            bytecodeCompiler.emitReg(initializedReg);
+                            initializedJump = bytecodeCompiler.bytecode.size();
+                            bytecodeCompiler.emitInt(0);
+                        }
+                        bytecodeCompiler.emit(declaration.operator.equals("state")
+                                ? Opcodes.SET_SCALAR : Opcodes.ALIAS);
+                        bytecodeCompiler.emitReg(targetReg);
+                        bytecodeCompiler.emitReg(sourceReg);
+                        if (declaration.operator.equals("state")) {
+                            bytecodeCompiler.emit(Opcodes.STATE_MARK_INITIALIZED);
+                            bytecodeCompiler.emit(stateNameIdx);
+                            bytecodeCompiler.emit(statePersistId);
+                            bytecodeCompiler.patchIntOffset(initializedJump, bytecodeCompiler.bytecode.size());
+                        }
+                        // A `my` declaration initially registers its empty
+                        // storage for scope cleanup. Refaliasing replaces the
+                        // register binding, so register the final binding too.
+                        // This applies to scalars and hashes as well as arrays:
+                        // otherwise cleanup can retain the old cell and a later
+                        // loop iteration reads a cleared register.
+                        if (declaration.operator.equals("my")) {
+                            bytecodeCompiler.emit(Opcodes.REGISTER_MY_VAR);
+                            bytecodeCompiler.emitReg(targetReg);
+                            bytecodeCompiler.emitActiveLexicalBinding(targetReg, varName);
+                        }
+                        bytecodeCompiler.lastResultReg = targetReg;
+                        return;
+                        }
+                    }
+                    // `\local $global = $ref` first installs a dynamically
+                    // localized scalar slot, then aliases that temporary slot
+                    // to the referent.  The ordinary local-assignment path
+                    // cannot be used because it would copy the reference
+                    // value instead of replacing the slot.
+                    if (refAliasTarget instanceof OperatorNode localizedSlice
+                            && localizedSlice.operator.equals("local")
+                            && localizedSlice.operand instanceof OperatorNode localVariable
+                            && (localVariable.operator.equals("$")
+                            || localVariable.operator.equals("@")
+                            || localVariable.operator.equals("%"))
+                            && localVariable.operand instanceof IdentifierNode localId) {
+                        String globalName = NameNormalizer.normalizeVariableName(
+                                localId.name, bytecodeCompiler.getCurrentPackage());
+                        int nameIdx = bytecodeCompiler.addToStringPool(globalName);
+                        int localReg = bytecodeCompiler.allocateRegister();
+                        short localOpcode = switch (localVariable.operator) {
+                            case "$" -> Opcodes.LOCAL_SCALAR;
+                            case "@" -> Opcodes.LOCAL_ARRAY;
+                            case "%" -> Opcodes.LOCAL_HASH;
+                            default -> throw new IllegalStateException("Unexpected localized sigil");
+                        };
+                        bytecodeCompiler.emitWithToken(localOpcode, node.getIndex());
+                        bytecodeCompiler.emitReg(localReg);
+                        bytecodeCompiler.emit(nameIdx);
                         int derefReg = bytecodeCompiler.allocateRegister();
-                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_SCALAR_STRICT, node.getIndex());
+                        short derefOpcode = switch (localVariable.operator) {
+                            case "$" -> Opcodes.REFALIAS_SCALAR_REFERENCE;
+                            case "@" -> Opcodes.FOREACH_DEREF_ARRAY;
+                            case "%" -> Opcodes.FOREACH_DEREF_HASH;
+                            default -> throw new IllegalStateException("Unexpected localized sigil");
+                        };
+                        bytecodeCompiler.emitWithToken(derefOpcode, node.getIndex());
                         bytecodeCompiler.emitReg(derefReg);
                         bytecodeCompiler.emitReg(valueReg);
-                        bytecodeCompiler.emit(Opcodes.ALIAS);
-                        bytecodeCompiler.emitReg(targetReg);
+                        short aliasOpcode = switch (localVariable.operator) {
+                            case "$" -> Opcodes.ALIAS_GLOBAL_SCALAR;
+                            case "@" -> Opcodes.ALIAS_GLOBAL_ARRAY;
+                            case "%" -> Opcodes.ALIAS_GLOBAL_HASH;
+                            default -> throw new IllegalStateException("Unexpected localized sigil");
+                        };
+                        bytecodeCompiler.emit(aliasOpcode);
+                        bytecodeCompiler.emit(nameIdx);
                         bytecodeCompiler.emitReg(derefReg);
+                        short loadOpcode = switch (localVariable.operator) {
+                            case "$" -> Opcodes.LOAD_GLOBAL_SCALAR;
+                            case "@" -> Opcodes.LOAD_GLOBAL_ARRAY;
+                            case "%" -> Opcodes.LOAD_GLOBAL_HASH;
+                            default -> throw new IllegalStateException("Unexpected localized sigil");
+                        };
+                        bytecodeCompiler.emit(loadOpcode);
+                        bytecodeCompiler.emitReg(localReg);
+                        bytecodeCompiler.emit(nameIdx);
+                        bytecodeCompiler.lastResultReg = localReg;
+                        return;
+                    }
+                    if (refAliasTarget instanceof OperatorNode localizedElement
+                            && localizedElement.operator.equals("local")
+                            && localizedElement.operand != null) {
+                        Node localTarget = localizedElement.operand;
+                        if (localTarget instanceof ListNode localList
+                                && localList.elements.size() == 1) {
+                            localTarget = localList.elements.getFirst();
+                        }
+                        if (localTarget instanceof BinaryOperatorNode localElement
+                                && localElement.operator.equals("{")) {
+                            bytecodeCompiler.beginLocalHashLvalueCompile();
+                            try {
+                                bytecodeCompiler.compileNode(localElement, -1,
+                                        RuntimeContextType.LVALUE);
+                            } finally {
+                                bytecodeCompiler.endLocalHashLvalueCompile();
+                            }
+                            int targetReg = bytecodeCompiler.lastResultReg;
+                            bytecodeCompiler.emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                            bytecodeCompiler.emitReg(targetReg);
+                            bytecodeCompiler.emit(Opcodes.ALIAS_LVALUE_REFERENCE);
+                            bytecodeCompiler.emitReg(targetReg);
+                            bytecodeCompiler.emitReg(valueReg);
+                            bytecodeCompiler.lastResultReg = targetReg;
+                            return;
+                    }
+                    if (refAliasTarget instanceof OperatorNode localizedListElement
+                            && localizedListElement.operator.equals("local")
+                            && localizedListElement.operand instanceof BinaryOperatorNode localSlice
+                            && localSlice.operator.equals("[")
+                            && localSlice.left instanceof OperatorNode arraySlice
+                            && arraySlice.operator.equals("@")
+                            && arraySlice.operand instanceof IdentifierNode arrayId
+                            && localSlice.right instanceof ArrayLiteralNode indices) {
+                        String arrayName = "@" + arrayId.name;
+                        int arrayReg;
+                        if (bytecodeCompiler.hasVariable(arrayName)) {
+                            arrayReg = bytecodeCompiler.getVariableRegister(arrayName);
+                        } else {
+                            arrayReg = bytecodeCompiler.allocateRegister();
+                            int nameIdx = bytecodeCompiler.addToStringPool(
+                                    NameNormalizer.normalizeVariableName(
+                                            arrayId.name, bytecodeCompiler.getCurrentPackage()));
+                            bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                            bytecodeCompiler.emitReg(arrayReg);
+                            bytecodeCompiler.emit(nameIdx);
+                        }
+                        for (int i = 0; i < indices.elements.size(); i++) {
+                            bytecodeCompiler.compileNode(indices.elements.get(i), -1,
+                                    RuntimeContextType.SCALAR);
+                            int indexReg = bytecodeCompiler.lastResultReg;
+                            int discardedReg = bytecodeCompiler.allocateRegister();
+                            bytecodeCompiler.emit(Opcodes.ARRAY_DELETE_LOCAL);
+                            bytecodeCompiler.emitReg(discardedReg);
+                            bytecodeCompiler.emitReg(arrayReg);
+                            bytecodeCompiler.emitReg(indexReg);
+                            int targetReg = bytecodeCompiler.allocateRegister();
+                            bytecodeCompiler.emit(Opcodes.ARRAY_GET);
+                            bytecodeCompiler.emitReg(targetReg);
+                            bytecodeCompiler.emitReg(arrayReg);
+                            bytecodeCompiler.emitReg(indexReg);
+                            int rhsIndexReg = bytecodeCompiler.allocateRegister();
+                            bytecodeCompiler.emit(Opcodes.LOAD_INT);
+                            bytecodeCompiler.emitReg(rhsIndexReg);
+                            bytecodeCompiler.emit(i);
+                            int referenceReg = bytecodeCompiler.allocateRegister();
+                            bytecodeCompiler.emit(Opcodes.ARRAY_GET);
+                            bytecodeCompiler.emitReg(referenceReg);
+                            bytecodeCompiler.emitReg(valueReg);
+                            bytecodeCompiler.emitReg(rhsIndexReg);
+                            bytecodeCompiler.emit(Opcodes.ALIAS_LVALUE_REFERENCE);
+                            bytecodeCompiler.emitReg(targetReg);
+                            bytecodeCompiler.emitReg(referenceReg);
+                            bytecodeCompiler.lastResultReg = targetReg;
+                        }
+                        return;
+                    }
+                    if (refAliasTarget instanceof OperatorNode local
+                            && local.operator.equals("local")
+                            && local.operand instanceof BinaryOperatorNode localElement
+                            && localElement.operator.equals("[")) {
+                        int arrayReg = CompileExistsDelete.compileArrayForExistsDelete(
+                                bytecodeCompiler, localElement);
+                        int indexReg = CompileExistsDelete.compileArrayIndex(
+                                bytecodeCompiler, localElement);
+                        int discardedReg = bytecodeCompiler.allocateRegister();
+                        bytecodeCompiler.emit(Opcodes.ARRAY_DELETE_LOCAL);
+                        bytecodeCompiler.emitReg(discardedReg);
+                        bytecodeCompiler.emitReg(arrayReg);
+                        bytecodeCompiler.emitReg(indexReg);
+                        int targetReg = bytecodeCompiler.allocateRegister();
+                        bytecodeCompiler.emit(Opcodes.ARRAY_GET);
+                        bytecodeCompiler.emitReg(targetReg);
+                        bytecodeCompiler.emitReg(arrayReg);
+                        bytecodeCompiler.emitReg(indexReg);
+                        bytecodeCompiler.emit(Opcodes.ALIAS_LVALUE_REFERENCE);
+                        bytecodeCompiler.emitReg(targetReg);
+                        bytecodeCompiler.emitReg(valueReg);
+                        bytecodeCompiler.lastResultReg = targetReg;
+                        return;
+                    }
+                    if (refAliasTarget instanceof OperatorNode local
+                            && local.operator.equals("local")
+                            && local.operand instanceof ListNode localList
+                            && localList.elements.size() == 1
+                            && localList.elements.getFirst() instanceof BinaryOperatorNode localElement
+                            && localElement.operator.equals("[")) {
+                        int arrayReg = CompileExistsDelete.compileArrayForExistsDelete(
+                                bytecodeCompiler, localElement);
+                        int indexReg = CompileExistsDelete.compileArrayIndex(
+                                bytecodeCompiler, localElement);
+                        int discardedReg = bytecodeCompiler.allocateRegister();
+                        bytecodeCompiler.emit(Opcodes.ARRAY_DELETE_LOCAL);
+                        bytecodeCompiler.emitReg(discardedReg);
+                        bytecodeCompiler.emitReg(arrayReg);
+                        bytecodeCompiler.emitReg(indexReg);
+                        int targetReg = bytecodeCompiler.allocateRegister();
+                        bytecodeCompiler.emit(Opcodes.ARRAY_GET);
+                        bytecodeCompiler.emitReg(targetReg);
+                        bytecodeCompiler.emitReg(arrayReg);
+                        bytecodeCompiler.emitReg(indexReg);
+                        bytecodeCompiler.emit(Opcodes.ALIAS_LVALUE_REFERENCE);
+                        bytecodeCompiler.emitReg(targetReg);
+                        bytecodeCompiler.emitReg(valueReg);
                         bytecodeCompiler.lastResultReg = targetReg;
                         return;
                     }
                     // Handle ref aliasing: \$y = $ref, \@y = $ref, \%y = $ref
-                    if (leftOp.operand instanceof OperatorNode varNode
-                            && (varNode.operator.equals("$") || varNode.operator.equals("@") || varNode.operator.equals("%"))) {
+                    if (refAliasTarget instanceof OperatorNode codeTarget
+                            && codeTarget.operator.equals("&")
+                            && codeTarget.operand instanceof OperatorNode hiddenScalar
+                            && hiddenScalar.operator.equals("$")
+                            && isLexicalSubStorage(hiddenScalar)) {
+                            bytecodeCompiler.compileNode(hiddenScalar, -1, RuntimeContextType.SCALAR);
+                            int targetReg = bytecodeCompiler.lastResultReg;
+                            int codeReg = bytecodeCompiler.allocateRegister();
+                            bytecodeCompiler.emitWithToken(Opcodes.REFALIAS_CODE_REFERENCE, node.getIndex());
+                            bytecodeCompiler.emitReg(codeReg);
+                            bytecodeCompiler.emitReg(valueReg);
+                            bytecodeCompiler.emit(Opcodes.ALIAS);
+                            bytecodeCompiler.emitReg(targetReg);
+                            bytecodeCompiler.emitReg(codeReg);
+                            bytecodeCompiler.lastResultReg = targetReg;
+                            return;
+                        }
+                    }
+                    if (refAliasTarget instanceof OperatorNode varNode
+                            && (varNode.operator.equals("$") || varNode.operator.equals("@")
+                            || varNode.operator.equals("%") || varNode.operator.equals("&"))) {
                         String varName;
                         if (varNode.operand instanceof IdentifierNode idNode) {
                             varName = varNode.operator + idNode.name;
+                        } else if (varNode.operator.equals("&")
+                                && varNode.operand instanceof OperatorNode scalarTarget
+                                && scalarTarget.operator.equals("$")) {
+                            // `&$slot` is a scalar-backed CODE lvalue.  This
+                            // includes lexical subs, whose parser-visible
+                            // target is an `&` around a hidden scalar pad.
+                            // Install the already-evaluated CODE reference in
+                            // that scalar cell instead of rejecting the
+                            // non-Identifier operand.
+                            bytecodeCompiler.compileNode(scalarTarget, -1, RuntimeContextType.SCALAR);
+                            int targetReg = bytecodeCompiler.lastResultReg;
+                            int codeReg = bytecodeCompiler.allocateRegister();
+                            bytecodeCompiler.emitWithToken(Opcodes.REFALIAS_CODE_REFERENCE, node.getIndex());
+                            bytecodeCompiler.emitReg(codeReg);
+                            bytecodeCompiler.emitReg(valueReg);
+                            bytecodeCompiler.emit(Opcodes.ALIAS);
+                            bytecodeCompiler.emitReg(targetReg);
+                            bytecodeCompiler.emitReg(codeReg);
+                            bytecodeCompiler.lastResultReg = targetReg;
+                            return;
                         } else {
                             bytecodeCompiler.throwCompilerException("Assignment to unsupported ref aliasing target");
                             return;
@@ -1822,36 +3591,93 @@ public class CompileAssignment {
 
                         if (bytecodeCompiler.hasVariable(varName) && !bytecodeCompiler.isOurVariable(varName)) {
                             int targetReg = bytecodeCompiler.getVariableRegister(varName);
-                            int derefReg = bytecodeCompiler.allocateRegister();
-                            switch (varNode.operator) {
-                                case "$" -> bytecodeCompiler.emitWithToken(Opcodes.DEREF_SCALAR_STRICT, node.getIndex());
-                                case "@" -> bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                                case "%" -> bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-                                default -> throw new IllegalStateException("Unexpected ref aliasing target: " + varNode.operator);
+                            boolean directAggregateLiteral = (varNode.operator.equals("@")
+                                    && node.right instanceof ArrayLiteralNode)
+                                    || (varNode.operator.equals("%")
+                                    && node.right instanceof HashLiteralNode);
+                            int sourceReg = valueReg;
+                            if (!directAggregateLiteral) {
+                                sourceReg = bytecodeCompiler.allocateRegister();
+                                switch (varNode.operator) {
+                                    case "$" -> bytecodeCompiler.emitWithToken(Opcodes.REFALIAS_SCALAR_REFERENCE, node.getIndex());
+                                    case "@" -> bytecodeCompiler.emitWithToken(Opcodes.FOREACH_DEREF_ARRAY, node.getIndex());
+                                    case "%" -> bytecodeCompiler.emitWithToken(Opcodes.FOREACH_DEREF_HASH, node.getIndex());
+                                    default -> throw new IllegalStateException("Unexpected ref aliasing target: " + varNode.operator);
+                                }
+                                bytecodeCompiler.emitReg(sourceReg);
+                                bytecodeCompiler.emitReg(valueReg);
                             }
-                            bytecodeCompiler.emitReg(derefReg);
-                            bytecodeCompiler.emitReg(valueReg);
-                            // Alias: make targetReg share the same object as derefReg
-                            bytecodeCompiler.emit(Opcodes.ALIAS);
-                            bytecodeCompiler.emitReg(targetReg);
-                            bytecodeCompiler.emitReg(derefReg);
-                            bytecodeCompiler.lastResultReg = targetReg;
+                            // A state scalar has a persistent backing cell.  Rebinding
+                            // only its current register would lose that cell after this
+                            // invocation, so install the referent in the persistent
+                            // scalar instead.  Ordinary lexicals retain refaliasing's
+                            // register-alias semantics.
+                            if (varNode.operator.equals("$")) {
+                                emitStateAwareScalarReferenceAlias(
+                                        bytecodeCompiler, varName, targetReg, sourceReg);
+                            } else {
+                                bytecodeCompiler.emit(Opcodes.ALIAS);
+                                bytecodeCompiler.emitReg(targetReg);
+                                bytecodeCompiler.emitReg(sourceReg);
+                            }
+                            // `\$left = \$right` is itself a reference
+                            // expression.  Keep the original RHS reference
+                            // for callers such as foo(\$left = \$right),
+                            // rather than returning the dereferenced cell.
+                            bytecodeCompiler.lastResultReg = valueReg;
                         } else {
                             String globalName = NameNormalizer.normalizeVariableName(
                                     varName.substring(1), bytecodeCompiler.getCurrentPackage());
-                            int derefReg = bytecodeCompiler.allocateRegister();
-                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_SCALAR_STRICT, node.getIndex());
-                            bytecodeCompiler.emitReg(derefReg);
-                            bytecodeCompiler.emitReg(valueReg);
+                            if (varNode.operator.equals("&")) {
+                                int nameIdx = bytecodeCompiler.addToStringPool(globalName);
+                                int codeReg = bytecodeCompiler.allocateRegister();
+                                bytecodeCompiler.emitWithToken(Opcodes.REFALIAS_CODE_REFERENCE, node.getIndex());
+                                bytecodeCompiler.emitReg(codeReg);
+                                bytecodeCompiler.emitReg(valueReg);
+                                bytecodeCompiler.emit(Opcodes.STORE_GLOBAL_CODE);
+                                bytecodeCompiler.emit(nameIdx);
+                                bytecodeCompiler.emitReg(codeReg);
+                                int targetReg = bytecodeCompiler.allocateRegister();
+                                bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_CODE);
+                                bytecodeCompiler.emitReg(targetReg);
+                                bytecodeCompiler.emit(nameIdx);
+                                bytecodeCompiler.lastResultReg = targetReg;
+                                return;
+                            }
+                            boolean directAggregateLiteral = (varNode.operator.equals("@")
+                                    && node.right instanceof ArrayLiteralNode)
+                                    || (varNode.operator.equals("%")
+                                    && node.right instanceof HashLiteralNode);
+                            int sourceReg = valueReg;
+                            if (!directAggregateLiteral) {
+                                sourceReg = bytecodeCompiler.allocateRegister();
+                                short derefOpcode = switch (varNode.operator) {
+                                    case "$" -> Opcodes.REFALIAS_SCALAR_REFERENCE;
+                                    case "@" -> Opcodes.FOREACH_DEREF_ARRAY;
+                                    case "%" -> Opcodes.FOREACH_DEREF_HASH;
+                                    default -> throw new IllegalStateException(
+                                            "Unexpected ref aliasing target: " + varNode.operator);
+                                };
+                                bytecodeCompiler.emitWithToken(derefOpcode, node.getIndex());
+                                bytecodeCompiler.emitReg(sourceReg);
+                                bytecodeCompiler.emitReg(valueReg);
+                            }
                             int nameIdx = bytecodeCompiler.addToStringPool(globalName);
-                            bytecodeCompiler.emit(Opcodes.ALIAS_GLOBAL_SCALAR);
+                            short aliasOpcode = switch (varNode.operator) {
+                                case "$" -> Opcodes.ALIAS_GLOBAL_SCALAR;
+                                case "@" -> Opcodes.ALIAS_GLOBAL_ARRAY;
+                                case "%" -> Opcodes.ALIAS_GLOBAL_HASH;
+                                default -> throw new IllegalStateException(
+                                        "Unexpected ref aliasing target: " + varNode.operator);
+                            };
+                            bytecodeCompiler.emit(aliasOpcode);
                             bytecodeCompiler.emit(nameIdx);
-                            bytecodeCompiler.emitReg(derefReg);
-                            int targetReg = bytecodeCompiler.allocateRegister();
-                            bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_SCALAR);
-                            bytecodeCompiler.emitReg(targetReg);
-                            bytecodeCompiler.emit(nameIdx);
-                            bytecodeCompiler.lastResultReg = targetReg;
+                            bytecodeCompiler.emitReg(sourceReg);
+                            // The assignment expression is the original RHS
+                            // reference; callers can use it as a reference in
+                            // a surrounding expression without observing the
+                            // newly installed aggregate directly.
+                            bytecodeCompiler.lastResultReg = valueReg;
                         }
                     } else {
                         bytecodeCompiler.throwCompilerException("Assignment to unsupported ref aliasing target: " + leftOp.operator);
@@ -2453,8 +4279,36 @@ public class CompileAssignment {
                     }
                 }
 
+                if (leftBin.operator.equals("=~")
+                        && leftBin.left instanceof OperatorNode reference
+                        && reference.operator.equals("\\")
+                        && leftBin.right instanceof OperatorNode transliteration
+                        && transliteration.operator.equals("tr")) {
+                    bytecodeCompiler.throwCompilerException(
+                            "Can't modify transliteration (tr///) in scalar assignment");
+                    return;
+                }
+
                 bytecodeCompiler.throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
-            } else if (node.left instanceof TernaryOperatorNode) {
+            } else if (node.left instanceof TernaryOperatorNode ternary) {
+                String invalidTernaryDiagnostic = invalidReferenceAliasTernary(ternary);
+                if (invalidTernaryDiagnostic != null) {
+                    bytecodeCompiler.throwCompilerException(invalidTernaryDiagnostic);
+                    return;
+                }
+                if (node.right instanceof OperatorNode reference
+                        && reference.operator.equals("\\")) {
+                    if (!bytecodeCompiler.symbolTable.isFeatureCategoryEnabled("refaliasing")) {
+                        bytecodeCompiler.throwCompilerException("Experimental aliasing via reference not enabled");
+                        return;
+                    }
+                    emitReferenceAliasWarning(bytecodeCompiler, node.getIndex());
+                    bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.SCALAR);
+                    int referenceReg = bytecodeCompiler.lastResultReg;
+                    compileReferenceAliasTarget(
+                            bytecodeCompiler, (TernaryOperatorNode) node.left, referenceReg, node.getIndex(), false);
+                    return;
+                }
                 LValueVisitor.getContext(node.left);
                 bytecodeCompiler.compileNode(node.left, -1, rhsContext);
                 int lvalueReg = bytecodeCompiler.lastResultReg;
@@ -2528,6 +4382,47 @@ public class CompileAssignment {
             } else {
                 bytecodeCompiler.throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
             }
+    }
+
+    /**
+     * The parser represents {@code local \(@a[...]) = \(@src)} as a local
+     * singleton slice list annotated {@code isDeclaredReference}.  The
+     * ref-alias lowerers use the equivalent canonical form
+     * {@code \local @a[...]}; normalize this parser spelling so each
+     * localized slice proxy consumes one RHS reference.
+     */
+    private static BinaryOperatorNode normalizeLocalizedDeclaredReferenceSlice(BinaryOperatorNode node) {
+        if (!(node.left instanceof OperatorNode local) || !local.operator.equals("local")
+                || !local.getBooleanAnnotation("isDeclaredReference")
+                || !(local.operand instanceof ListNode list) || list.elements.size() != 1
+                || !(list.elements.getFirst() instanceof BinaryOperatorNode slice)
+                || !(slice.operator.equals("[") || slice.operator.equals("{"))) {
+            return node;
+        }
+        OperatorNode canonicalLocal = new OperatorNode("local", slice, local.getIndex());
+        canonicalLocal.annotations = local.annotations;
+        OperatorNode reference = new OperatorNode("\\", canonicalLocal, local.getIndex());
+        return new BinaryOperatorNode(node.operator, reference, node.right, node.tokenIndex);
+    }
+
+
+    private static boolean isLocalizedArraySlice(Node target) {
+        if (target instanceof ListNode list && list.elements.size() == 1) {
+            target = list.elements.getFirst();
+        }
+        return target instanceof BinaryOperatorNode slice
+                && slice.operator.equals("[")
+                && slice.left instanceof OperatorNode aggregate
+                && aggregate.operator.equals("@");
+    }
+
+    private static boolean isLocalizedArraySliceReferenceTarget(Node target) {
+        while (target instanceof ListNode list && list.elements.size() == 1) {
+            target = list.elements.getFirst();
+        }
+        return target instanceof OperatorNode local
+                && local.operator.equals("local")
+                && isLocalizedArraySlice(local.operand);
     }
 
     static int resolveArrayForDollarHash(BytecodeCompiler bytecodeCompiler, OperatorNode dollarHashOp) {

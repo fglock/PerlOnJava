@@ -211,6 +211,22 @@ public class CoreSubroutineGenerator {
                     WaitpidOperator.waitForChild().getList();
             case "wantarray" -> (args, ctx) ->
                     Operator.wantarray(ctx).getList();
+            case "__SUB__" -> (args, ctx) -> {
+                // A CORE::__SUB__ wrapper is itself a RuntimeCode frame, so
+                // the Perl subroutine whose identity is requested is its
+                // caller, not the wrapper's own CV. JVM-generated wrappers
+                // are invoked without an extra active-code frame, so their
+                // caller is already at depth zero.
+                RuntimeCode caller = RuntimeCode.getActiveCodeAt(1);
+                if (caller == null || caller.__SUB__ == null) {
+                    caller = RuntimeCode.getActiveCodeAt(0);
+                }
+                RuntimeScalar self = caller == null ? null : caller.__SUB__;
+                if (self == null) {
+                    self = RuntimeCode.getJvmSelfReference();
+                }
+                return RuntimeCode.selfReferenceMaybeNull(self).getList();
+            };
             case "fork" -> (args, ctx) ->
                     SystemOperator.fork(ctx).getList();
             default -> (args, ctx) ->
@@ -427,6 +443,7 @@ public class CoreSubroutineGenerator {
         return switch (name) {
             // I/O operators
             case "open" -> IOOperator.open(ctx, args).getList();
+            case "binmode" -> IOOperator.binmode(ctx, args).getList();
             case "close" -> IOOperator.close(ctx, args).getList();
             case "fileno" -> IOOperator.fileno(ctx, args).getList();
             case "flock" -> IOOperator.flock(ctx, args).getList();

@@ -22,6 +22,11 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.TIED_SCALAR;
  */
 public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference, DynamicState {
 
+    /** Return an empty lexical cell when control flow skipped its declaration. */
+    public static RuntimeArray materializeLexicalCell(RuntimeArray array) {
+        return array != null ? array : new RuntimeArray();
+    }
+
     /** Outstanding {@code $#array} proxies; retained only for lexical teardown. */
     private List<RuntimeArraySizeLvalue> arraySizeLvalues;
 
@@ -985,7 +990,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             index = elements.size() + index;
         }
         boolean existed = index >= 0 && index < elements.size() && elements.get(index) != null;
-        RuntimeScalar savedValue = existed ? new RuntimeScalar(elements.get(index)) : null;
+        // local must restore the original slot, not a scalar copy of it.  An
+        // array entry can be ref-aliased (for example, `$a[0]` aliased to
+        // `$_`), and copying the wrapper here loses that alias identity when
+        // the dynamic scope exits.
+        RuntimeScalar savedValue = existed ? elements.get(index) : null;
         RuntimeScalar returnValue = existed ? new RuntimeScalar(elements.get(index)) : new RuntimeScalar();
         int savedSize = elements.size();
         RuntimeArray self = this;
@@ -1388,6 +1397,41 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         this.elementsAliased = true;
         this.ownedAliasElements = null;
         return this;
+    }
+
+    /** Replace this array's slots with the scalar referents supplied by a ref-alias list. */
+    public RuntimeArray setFromReferenceList(RuntimeList list) {
+        if (type == AUTOVIVIFY_ARRAY) {
+            AutovivificationArray.vivify(this);
+            return setFromReferenceList(list);
+        }
+        if (type != PLAIN_ARRAY) {
+            throw new PerlCompilerException("Assignment to unsupported ref aliasing target");
+        }
+        RuntimeArray references = new RuntimeArray();
+        references.setFromList(list);
+        notePackageRootMutation();
+        MortalList.deferDestroyForContainerClear(this.elements);
+        this.elements.clear();
+        for (RuntimeScalar reference : references.elements) {
+            RuntimeScalar referent = reference.scalarDeref();
+            this.elements.add(referent);
+            markPackageRootedValue(referent);
+            referent.refCountOwned = false;
+        }
+        this.elementsOwned = false;
+        this.elementsAliased = true;
+        this.ownedAliasElements = null;
+        return this;
+    }
+
+    /** Return the references from {@code start} onward for refalias list assignment. */
+    public RuntimeList referenceListFrom(int start) {
+        RuntimeList result = new RuntimeList();
+        for (int i = Math.max(0, start); i < elements.size(); i++) {
+            result.elements.add(elements.get(i));
+        }
+        return result;
     }
 
     /**

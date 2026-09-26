@@ -462,6 +462,15 @@ public class SlowOpcodeHandler {
         return pc;
     }
 
+    /** Load the canonical named typeglob, for operations where its identity is observable. */
+    public static int executeLoadGlobCanonical(
+            int[] bytecode, int pc, RuntimeBase[] registers, InterpretedCode code) {
+        int rd = bytecode[pc++];
+        int nameIdx = bytecode[pc++];
+        registers[rd] = GlobalVariable.getGlobalIO(code.stringPool[nameIdx]);
+        return pc;
+    }
+
     /**
      * LOAD_GLOB_DYNAMIC: rd = GlobalVariable.getGlobalIO(normalize(nameReg, pkg))
      * Format: LOAD_GLOB_DYNAMIC rd nameReg pkgIdx
@@ -527,6 +536,20 @@ public class SlowOpcodeHandler {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         registers[rd] = registers[rs].scalar().foreachHashReference();
+        return pc;
+    }
+
+    public static int executeRefAliasCodeReference(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        registers[rd] = registers[rs].scalar().refAliasCodeReference();
+        return pc;
+    }
+
+    public static int executeRefAliasScalarReference(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        registers[rd] = registers[rs].scalar().refAliasScalarReference();
         return pc;
     }
 

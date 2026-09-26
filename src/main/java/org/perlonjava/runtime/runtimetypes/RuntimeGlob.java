@@ -1398,7 +1398,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case "FORMAT" -> GlobalVariable.getGlobalFormatRef(this.globName);
             case "GLOB" -> {
                 // *glob{GLOB} returns a reference to the glob itself (\*glob)
-                yield this.createReference();
+                // LOAD_GLOB may have supplied a detached snapshot for IO
+                // lifetime purposes. A named GLOB slot is nevertheless the
+                // canonical stash glob, whose identity is observable.
+                RuntimeGlob glob = this.globName == null ? this : GlobalVariable.getGlobalIO(this.globName);
+                yield glob.createReference();
             }
             default -> new RuntimeScalar();
         };

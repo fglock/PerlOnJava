@@ -2024,13 +2024,22 @@ public class SubroutineParser {
                     collector.requiresAllRuntimeLexicals();
         }
 
-        // Named subs nested in a signatured subroutine can mutate an outer
-        // aggregate from a default expression.  The nested body is compiled
+        // A named sub nested in a signatured subroutine can mutate an outer
+        // aggregate from a default expression. The nested body is compiled
         // independently, so its collector cannot see the enclosing signature
         // declaration as a local declaration; retain visible aggregates for
         // that closure even when selective capture found no direct reference.
-        if (usedVars != null && parser.parsingSignaturedSubroutine) {
+        //
+        // Do not apply that rule to the signatured sub itself: its own
+        // signature parameters are visible while this method runs, but they
+        // are local declarations, not closure cells. Capturing them shifts
+        // the hidden lexical-sub pads which a direct lexical call resolves.
+        // Keep this semantic decision on the block so the interpreter's
+        // independently compiled closure can use the identical policy.
+        if (usedVars != null && parser.parsingSignaturedSubroutine
+                && block.getAnnotation("signatureMinArgs") == null) {
             usedVars = null;
+            block.setAnnotation("captureAllOuterLexicals", Boolean.TRUE);
         }
 
         ArrayList<Class> classList = new ArrayList<>();
@@ -2101,6 +2110,16 @@ public class SubroutineParser {
                     variableName = NameNormalizer.normalizeVariableName(
                             entry.name().substring(1),
                             entry.perlPackage());
+                } else if (entryAst != null
+                        && entryAst.getBooleanAnnotation("lexicalSubStorage")) {
+                    // File-scope `my sub` declarations install their hidden
+                    // scalar storage in the declaring package while their
+                    // compile-time BEGIN wrapper runs. Capturing a synthetic
+                    // BEGIN-package cell here loses the installed CODE value
+                    // when a named sub later calls that lexical sub.
+                    variableName = NameNormalizer.normalizeVariableName(
+                            entry.name().substring(1),
+                            parser.ctx.symbolTable.getCurrentPackage());
                 } else {
                     OperatorNode ast = entry.ast();
                     // For state variables, the persistent-variable id is already

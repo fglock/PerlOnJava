@@ -105,6 +105,11 @@ public class FindDeclarationVisitor implements Visitor {
                 || "lock".equals(node.operator)) {
             containsLocalOperator = true;
             operatorNode = node;
+        } else if (node.operand != null) {
+            // A local declaration can be structurally wrapped, notably by
+            // reference aliasing (`\\local $a[0] = \\$tmp`).  Descend through
+            // wrappers so the enclosing block emits its dynamic-local unwind.
+            node.operand.accept(this);
         }
     }
 

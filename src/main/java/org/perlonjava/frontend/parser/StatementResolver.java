@@ -48,7 +48,8 @@ public class StatementResolver {
             "skip", "warning_like", "warning_is", "warnings_like");
 
     private static final Set<String> CORE_QUALIFIED_CONTROL_STATEMENTS = Set.of(
-            "if", "unless", "for", "foreach", "while", "until", "given");
+            "if", "unless", "for", "foreach", "while", "until", "given",
+            "when", "default");
 
     /**
      * Parses a single statement from the parser's token stream.
@@ -128,11 +129,13 @@ public class StatementResolver {
                         ? StatementParser.parseGivenStatement(parser)
                         : null;
 
-                case "when" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("switch")
+                case "when" -> (coreQualifiedControl
+                        || parser.ctx.symbolTable.isFeatureCategoryEnabled("switch"))
                         ? StatementParser.parseWhenStatement(parser)
                         : null;
 
-                case "default" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("switch")
+                case "default" -> (coreQualifiedControl
+                        || parser.ctx.symbolTable.isFeatureCategoryEnabled("switch"))
                         ? StatementParser.parseDefaultStatement(parser)
                         : null;
 
@@ -1167,6 +1170,8 @@ public class StatementResolver {
                     }
                     yield result;
                 }
+
+                case "when" -> StatementParser.parseWhenModifier(parser, expression);
 
                 default -> {
                     parser.throwError("Not implemented: " + token);
