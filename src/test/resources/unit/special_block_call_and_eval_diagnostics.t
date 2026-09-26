@@ -22,4 +22,21 @@ state sub END { shift }
 is(eval { END('lexical END call') }, 'lexical END call',
     'a lexical END sub call is not parsed as a special-block declaration');
 
+my @prototype_command = $^O eq 'MSWin32'
+    ? ($^X, '-e', q!BEGIN() {10} foreach my $p (sort {lc($a) cmp lc($b)} keys %v)!)
+    : ('timeout', '60', $^X, '-e', q!BEGIN() {10} foreach my $p (sort {lc($a) cmp lc($b)} keys %v)!);
+my $prototype_stderr = gensym;
+my $prototype_pid = open3(undef, my $prototype_stdout, $prototype_stderr, @prototype_command);
+my $prototype_diagnostic = do { local $/; <$prototype_stdout> // '' }
+    . do { local $/; <$prototype_stderr> // '' };
+waitpid($prototype_pid, 0);
+like($prototype_diagnostic,
+    qr/\APrototype on BEGIN block ignored at -e line 1\.\nsyntax error at -e line 1, at EOF\nExecution of -e aborted due to compilation errors\./,
+    'a special-block prototype warning is retained through a terminal parse error');
+
+require Config;
+sub stash_cv_shape { 42 }
+is(ref($main::{stash_cv_shape}), 'CODE',
+    'a code-only stash entry retains its CODE shape');
+
 done_testing;

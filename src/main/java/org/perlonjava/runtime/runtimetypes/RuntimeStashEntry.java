@@ -478,12 +478,6 @@ public class RuntimeStashEntry extends RuntimeGlob {
             return null;
         }
 
-        // Typeglob assignment (e.g. *foo = sub {}) upgrades the stash entry to a
-        // full GV. A bare full GV is not a reference, so ref($stash{name}) is "".
-        if (GlobalVariable.globalGlobs.getOrDefault(this.globName, false)) {
-            return null;
-        }
-
         boolean hasNonCodeSlot =
                 GlobalVariable.globalVariables.containsKey(this.globName)
                         || GlobalVariable.globalArrays.containsKey(this.globName)

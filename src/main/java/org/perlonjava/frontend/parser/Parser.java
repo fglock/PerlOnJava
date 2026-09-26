@@ -188,6 +188,11 @@ public class Parser {
     // List to store completed format nodes after template parsing.
     private final List<FormatNode> completedFormatNodes = new ArrayList<>();
     private final List<String> deferredDiagnostics = new ArrayList<>();
+    // A special-block prototype warning is emitted immediately, but Perl also
+    // retains it when a later terminal parser error aborts the same unit.
+    // Keep the already-formatted text separately from recoverable errors: a
+    // successful unit must remain a warning rather than a compile failure.
+    private final List<String> specialBlockPrototypeWarnings = new ArrayList<>();
     // Current index in the token list.
     public int tokenIndex = 0;
     // Flags to indicate special parsing states.
@@ -426,9 +431,30 @@ public class Parser {
             // reported after parsing.  If a later syntax error aborts parsing,
             // retain those earlier diagnostics ahead of the terminal error,
             // matching Perl's multi-error compile output.
-            if (!deferredDiagnostics.isEmpty()) {
+            if (!deferredDiagnostics.isEmpty() || !specialBlockPrototypeWarnings.isEmpty()) {
+                String terminalDiagnostic = exception.getMessage();
+                // A prototype-bearing special block followed by incomplete
+                // source reaches EOF after the warning.  Perl reports the
+                // EOF form rather than the generic empty-context form.
+                if (!specialBlockPrototypeWarnings.isEmpty()
+                        && TokenUtils.peek(this).type == LexerTokenType.EOF
+                        && terminalDiagnostic != null
+                        && terminalDiagnostic.startsWith("syntax error at ")
+                        && (terminalDiagnostic.contains(", near \"\"")
+                            || terminalDiagnostic.contains(", at EOF\n"))) {
+                    ErrorMessageUtil.SourceLocation location =
+                            ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
+                    if (terminalDiagnostic.contains(", near \"\"")) {
+                        terminalDiagnostic = "syntax error at " + location.fileName()
+                                + " line " + location.lineNumber() + ", at EOF\n";
+                    }
+                    if (!terminalDiagnostic.contains("aborted due to compilation errors.")) {
+                        terminalDiagnostic += "Execution of " + location.fileName()
+                                + " aborted due to compilation errors.\n";
+                    }
+                }
                 throw new PerlCompilerException(
-                        String.join("", deferredDiagnostics) + exception.getMessage());
+                        String.join("", deferredDiagnostics) + terminalDiagnostic);
             }
             throw exception;
         } finally {
@@ -478,6 +504,11 @@ public class Parser {
             String fileName = ctx.errorUtil.getSourceLocationAccurate(Math.max(0, tokenIndex - 1)).fileName();
             deferredDiagnostics.add(fileName + " has too many errors.\n");
         }
+    }
+
+    /** Retain an emitted special-block prototype warning for a later fatal parse error. */
+    public void recordSpecialBlockPrototypeWarning(String diagnostic) {
+        specialBlockPrototypeWarnings.add(diagnostic);
     }
 
     /** Number of recoverable compile diagnostics accumulated so far. */

@@ -291,7 +291,7 @@ public class PerlLanguageProvider {
             } catch (PerlCompilerException parseFailure) {
                 if (isTopLevelScript && parseFailure.getMessage() != null
                         && parseFailure.getMessage().contains("failed--compilation aborted")) {
-                    writePhaserFailure(parseFailure.getMessage());
+                    writePhaserFailure(ctx, parseFailure.getMessage());
                     finishCompileTimeExit(ctx);
                     throw new PerlExitException(255);
                 }
@@ -450,14 +450,22 @@ public class PerlLanguageProvider {
         }
         message += failure.phase() + " failed--compilation aborted at "
                 + ctx.compilerOptions.fileName + " line 1.\n";
-        writePhaserFailure(message);
+        writePhaserFailure(ctx, message);
         finishCompileTimeExit(ctx);
         throw new PerlExitException(255);
     }
 
-    private static void writePhaserFailure(String message) {
+    private static void writePhaserFailure(EmitterContext ctx, String message) {
         if (message.endsWith("\n") && !message.endsWith(".\n")) {
             message = message.substring(0, message.length() - 1) + ".\n";
+        }
+        if (message.contains("END failed--compilation aborted")
+                && !message.contains("aborted due to compilation errors.")) {
+            if (!message.endsWith("\n")) {
+                message += "\n";
+            }
+            message += "Execution of " + ctx.compilerOptions.fileName
+                    + " aborted due to compilation errors.\n";
         }
         RuntimeIO stderr = GlobalVariable.getGlobalIO("main::STDERR").getRuntimeIO();
         if (stderr != null) {

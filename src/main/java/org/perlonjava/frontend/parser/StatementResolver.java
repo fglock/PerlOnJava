@@ -49,8 +49,12 @@ public class StatementResolver {
             if (text.equals("(")) {
                 depth++;
             } else if (text.equals(")") && --depth == 0) {
-                return index + 1 < parser.tokens.size()
-                        && parser.tokens.get(index + 1).text.equals("{");
+                int next = index + 1;
+                while (next < parser.tokens.size()
+                        && parser.tokens.get(next).type == LexerTokenType.WHITESPACE) {
+                    next++;
+                }
+                return next < parser.tokens.size() && parser.tokens.get(next).text.equals("{");
             }
             index++;
         }
