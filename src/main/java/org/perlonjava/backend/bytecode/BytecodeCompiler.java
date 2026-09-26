@@ -404,8 +404,12 @@ public class BytecodeCompiler implements Visitor {
     // Perl's `foreach my $x (@array)` and `foreach $x (@array)` semantics.
     private final Map<String, Integer> foreachAliasLexicalCounts = new HashMap<>();
 
+    /** Persistent identities for state scalars whose declaration may be skipped on re-entry. */
+    private final Map<String, Integer> stateScalarPersistIds = new HashMap<>();
     /** Persistent identities for state arrays whose declaration may be skipped on re-entry. */
     private final Map<String, Integer> stateArrayPersistIds = new HashMap<>();
+    /** Persistent identities for state hashes whose declaration may be skipped on re-entry. */
+    private final Map<String, Integer> stateHashPersistIds = new HashMap<>();
     // Active package-global foreach aliases need their iterator register for
     // in-place compound assignment. An `our` declaration has a different,
     // older symbol-table register that must not be used while the loop alias
@@ -751,13 +755,62 @@ public class BytecodeCompiler implements Visitor {
     }
 
     int addVariable(String name, String declType) {
+        // A lexical pad slot can be reached by a forward goto before its
+        // declaration executes.  It must not share a register with a
+        // temporary emitted in an earlier statement, because that temporary
+        // may run after the jump and overwrite a refalias-installed cell.
         int reg = allocateRegister();
         symbolTable.addVariableWithIndex(name, reg, declType);
         return reg;
     }
 
+    /**
+     * Reinstall a lexical register recorded on a reusable AST node.
+     *
+     * <p>Generated class and async bodies can be compiled more than once,
+     * first while building their JVM form and later for interpreter execution.
+     * The AST retains its lexical-register annotation across those passes. A
+     * fresh compiler must therefore restore both the lexical binding and its
+     * register-allocation high-water mark; otherwise it can emit a reference
+     * past the interpreted frame or resolve a later use as a strict package
+     * variable.</p>
+     */
+    private int reuseLexicalRegister(String name, String declType, int reg) {
+        symbolTable.addVariableWithIndex(name, reg, declType);
+        nextRegister = Math.max(nextRegister, reg + 1);
+        maxRegisterEverUsed = Math.max(maxRegisterEverUsed, reg);
+        return reg;
+    }
+
     void registerVariable(String name, int reg) {
         symbolTable.addVariableWithIndex(name, reg, "my");
+    }
+
+    void registerStateScalarVariable(String name, int reg, int persistId) {
+        symbolTable.addVariableWithIndex(name, reg, "state");
+        stateScalarPersistIds.put(name, persistId);
+    }
+
+    boolean isStateVariable(String name) {
+        SymbolTable.SymbolEntry entry = symbolTable.getSymbolEntry(name);
+        return entry != null && "state".equals(entry.decl());
+    }
+
+    Integer getStateScalarPersistId(String name) {
+        // State registrations can outlive a symbol-table declaration entry in
+        // nested lexical-sub compilation.  The persist-ID map is populated
+        // only by registerStateScalarVariable(), so it is the stable source
+        // of truth for code generation that must preserve the state cell.
+        return stateScalarPersistIds.get(name);
+    }
+
+    private void retrieveStateScalarForRead(String name, int register) {
+        Integer persistId = stateScalarPersistIds.get(name);
+        if (persistId == null || !isStateVariable(name)) return;
+        emit(Opcodes.STATE_RETRIEVE_SCALAR);
+        emitReg(register);
+        emit(addToStringPool(name));
+        emit(persistId);
     }
 
     void registerStateArrayVariable(String name, int reg, int persistId) {
@@ -767,8 +820,22 @@ public class BytecodeCompiler implements Visitor {
 
     private void retrieveStateArrayForRead(String name, int register) {
         Integer persistId = stateArrayPersistIds.get(name);
-        if (persistId == null) return;
+        if (persistId == null || !isStateVariable(name)) return;
         emit(Opcodes.STATE_RETRIEVE_ARRAY);
+        emitReg(register);
+        emit(addToStringPool(name));
+        emit(persistId);
+    }
+
+    void registerStateHashVariable(String name, int reg, int persistId) {
+        symbolTable.addVariableWithIndex(name, reg, "state");
+        stateHashPersistIds.put(name, persistId);
+    }
+
+    private void retrieveStateHashForRead(String name, int register) {
+        Integer persistId = stateHashPersistIds.get(name);
+        if (persistId == null || !isStateVariable(name)) return;
+        emit(Opcodes.STATE_RETRIEVE_HASH);
         emitReg(register);
         emit(addToStringPool(name));
         emit(persistId);
@@ -1501,7 +1568,14 @@ public class BytecodeCompiler implements Visitor {
         // eval body can reference any visible lexical dynamically at
         // runtime, so we must still capture everything.
         Set<String> usedVars = null;
-        if (ast != null) {
+        // SubroutineParser marks a named body nested in a signatured outer
+        // subroutine when it must retain every outer lexical. Its own
+        // signatured body must still be narrowed: its signature parameters
+        // are local declarations, and treating them as captures shifts the
+        // hidden lexical-sub pad cells used by direct lexical calls.
+        boolean captureAllOuterLexicals = ast instanceof AbstractNode node
+                && node.getBooleanAnnotation("captureAllOuterLexicals");
+        if (ast != null && !captureAllOuterLexicals) {
             Set<String> used = new HashSet<>();
             VariableCollectorVisitor collector = new VariableCollectorVisitor(used);
             ast.accept(collector);
@@ -3613,7 +3687,7 @@ public class BytecodeCompiler implements Visitor {
                                 emitReg(undefReg);
                                 emit(nameIdx);
                                 emit(persistId);
-                                registerVariable(varName, reg);
+                                registerStateScalarVariable(varName, reg, persistId);
                             }
                             case "@" -> {
                                 emit(Opcodes.NEW_ARRAY);
@@ -3633,7 +3707,7 @@ public class BytecodeCompiler implements Visitor {
                                 emitReg(undefReg);
                                 emit(nameIdx);
                                 emit(persistId);
-                                registerVariable(varName, reg);
+                                registerStateHashVariable(varName, reg, persistId);
                             }
                             default -> throwCompilerException("Unsupported variable type: " + sigil);
                         }
@@ -3656,14 +3730,30 @@ public class BytecodeCompiler implements Visitor {
                     }
 
                     // Regular lexical variable (not captured, not state)
-                    int reg = addVariable(varName, "my");
+                    // An AST can first be compiled in a transient BEGIN wrapper and
+                    // then in its owning compilation unit.  Those are independent
+                    // register files, so an ordinary declaration must allocate a
+                    // fresh slot on the later pass.  Synthetic class constructors
+                    // are the deliberate exception: their reusable generated AST
+                    // is compiled again for interpreter execution and carries an
+                    // explicit marker from ClassTransformer.
+                    Integer recordedReg = sigilOp.getBooleanAnnotation("reuseBytecodeLexicalRegister")
+                            && sigilOp.getAnnotation("bytecodeLexicalRegister") instanceof Integer existingReg
+                            ? existingReg : null;
+                    int reg = recordedReg != null
+                            ? reuseLexicalRegister(varName, "my", recordedReg)
+                            : addVariable(varName, "my");
                     sigilOp.setAnnotation("bytecodeLexicalRegister", reg);
                     node.setAnnotation("bytecodeLexicalRegister", reg);
 
                     // Normal initialization: load undef/empty array/empty hash
                     switch (sigil) {
                         case "$" -> {
-                            emit(Opcodes.LOAD_UNDEF);
+                            // A forward goto may have materialized this pad
+                            // cell and installed it in a refalias before the
+                            // declaration statement runs. Retain that cell;
+                            // on ordinary first execution this creates undef.
+                            emit(Opcodes.INITIALIZE_LEXICAL_SCALAR);
                             emitReg(reg);
                         }
                         case "@" -> {
@@ -3676,7 +3766,13 @@ public class BytecodeCompiler implements Visitor {
                         }
                         default -> throwCompilerException("Unsupported variable type: " + sigil);
                     }
-                    emitLexicalAlias(reg, varName);
+                    // Signatures bind argument values into fresh lexical
+                    // storage.  They must not reuse an active cell of the
+                    // same name (which can be a read-only literal argument
+                    // from another interpreter frame).
+                    if (!node.getBooleanAnnotation("signatureParameterDeclaration")) {
+                        emitLexicalAlias(reg, varName);
+                    }
                     emit(Opcodes.REGISTER_MY_VAR);
                     emitReg(reg);
 
@@ -3978,21 +4074,33 @@ public class BytecodeCompiler implements Visitor {
                                         emitReg(reg);
                                         emit(nameIdx);
                                         emit(persistId);
-                                        registerVariable(varName, reg);
+                                        if (op.equals("state")) {
+                                            registerStateScalarVariable(varName, reg, persistId);
+                                        } else {
+                                            registerVariable(varName, reg);
+                                        }
                                     }
                                     case "@" -> {
                                         emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
                                         emitReg(reg);
                                         emit(nameIdx);
                                         emit(persistId);
-                                        registerVariable(varName, reg);
+                                        if (op.equals("state")) {
+                                            registerStateArrayVariable(varName, reg, persistId);
+                                        } else {
+                                            registerVariable(varName, reg);
+                                        }
                                     }
                                     case "%" -> {
                                         emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
                                         emitReg(reg);
                                         emit(nameIdx);
                                         emit(persistId);
-                                        registerVariable(varName, reg);
+                                        if (op.equals("state")) {
+                                            registerStateHashVariable(varName, reg, persistId);
+                                        } else {
+                                            registerVariable(varName, reg);
+                                        }
                                     }
                                     default ->
                                             throwCompilerException("Unsupported variable type in list declaration: " + sigil);
@@ -4008,12 +4116,21 @@ public class BytecodeCompiler implements Visitor {
                                 wrapWithRef.add(isDeclaredReference);
                             } else {
                                 // Regular lexical variable (not captured, not state)
-                                int reg = addVariable(varName, op);
+                                Integer recordedReg = sigilOp.getBooleanAnnotation("reuseBytecodeLexicalRegister")
+                                        && sigilOp.getAnnotation("bytecodeLexicalRegister") instanceof Integer existingReg
+                                        ? existingReg : null;
+                                int reg = recordedReg != null
+                                        ? reuseLexicalRegister(varName, op, recordedReg)
+                                        : addVariable(varName, op);
+                                sigilOp.setAnnotation("bytecodeLexicalRegister", reg);
 
                                 // Initialize the variable
                                 switch (sigil) {
                                     case "$" -> {
-                                        emit(Opcodes.LOAD_UNDEF);
+                                        // Preserve a forward-materialized
+                                        // scalar cell so a prior refalias
+                                        // survives arrival at this `my`.
+                                        emit(Opcodes.INITIALIZE_LEXICAL_SCALAR);
                                         emitReg(reg);
                                     }
                                     case "@" -> {
@@ -5485,6 +5602,19 @@ public class BytecodeCompiler implements Visitor {
                 if (hasVariable(varName) && !isOurVariable(varName)) {
                     // Lexical variable (my/state) - use existing register
                     lastResultReg = getVariableRegister(varName);
+                    retrieveStateScalarForRead(varName, lastResultReg);
+                    // A lexical declaration can be skipped by control flow
+                    // (including a forward goto). Every access to the visible
+                    // pad slot must therefore obtain a mutable Perl undef
+                    // cell. Refgen and lvalue-list contexts need the same
+                    // cell, not a null register or a read-only temporary.
+                    emit(Opcodes.MATERIALIZE_LEXICAL_SCALAR);
+                    emitReg(lastResultReg);
+                    // Keep the live pad cell discoverable when a forward jump
+                    // reaches refgen before the declaration statement. The
+                    // declaration later reuses this binding only if refgen
+                    // actually exposed it.
+                    emitActiveLexicalBinding(lastResultReg, varName);
                 } else if (hasVariable(varName) && isOurVariable(varName)) {
                     // 'our' variable - must load from global table to see local() changes
                     // This ensures 'local $Pkg::Var' modifications are visible inside subroutines.
@@ -5725,6 +5855,7 @@ public class BytecodeCompiler implements Visitor {
                 if (hasVariable(varName) && !isOurVariable(varName)) {
                     // Lexical hash (my/state) - use existing register
                     hashReg = getVariableRegister(varName);
+                    retrieveStateHashForRead(varName, hashReg);
                 } else if (hasVariable(varName) && isOurVariable(varName)) {
                     // 'our' hash - must load from global table to see local() changes
                     hashReg = allocateRegister();
@@ -6022,6 +6153,24 @@ public class BytecodeCompiler implements Visitor {
                     return;
                 }
 
+                // A direct named glob refalias (\*name) needs the canonical
+                // stash glob. Ordinary LOAD_GLOB intentionally returns a
+                // detached IO-preserving snapshot for local *FH idioms.
+                if (node.operand instanceof OperatorNode operandOp
+                        && operandOp.operator.equals("*")
+                        && operandOp.operand instanceof IdentifierNode idNode) {
+                    int globReg = allocateRegister();
+                    emit(Opcodes.LOAD_GLOB_CANONICAL);
+                    emitReg(globReg);
+                    emit(addToStringPool(NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage())));
+                    int refReg = allocateOutputRegister();
+                    emit(Opcodes.CREATE_REF);
+                    emitReg(refReg);
+                    emitReg(globReg);
+                    lastResultReg = refReg;
+                    return;
+                }
+
                 // Compile most operands in LIST context to get the actual value.
                 // Example: \@array should get a reference to the array itself,
                 // not its size (which would happen in SCALAR context). Assignment
@@ -6086,6 +6235,28 @@ public class BytecodeCompiler implements Visitor {
                     valueReg = lastResultReg;
                 }
 
+                // A jump may bypass a lexical declaration before direct
+                // refgen reaches it. Materialize that pad slot only for a
+                // named scalar lexical: aggregate-element proxies and tied
+                // non-vivifying references must keep their missing-slot
+                // semantics.
+                if (!Boolean.TRUE.equals(node.getAnnotation("nonVivifyingReference"))
+                        && node.operand instanceof OperatorNode scalarOp
+                        && scalarOp.operator.equals("$")
+                        && scalarOp.operand instanceof IdentifierNode identifierNode) {
+                    String variableName = "$" + identifierNode.name;
+                    if (hasVariable(variableName) && !isOurVariable(variableName)) {
+                        // Refgen is the first observable use of a declaration
+                        // skipped by control flow. Materialize an unread cell,
+                        // but do not reinitialize an already-declared lexical:
+                        // its registration is the strong owner of a \$lexical
+                        // referent, including while a separate weak reference
+                        // to it exists.
+                        emit(Opcodes.MATERIALIZE_LEXICAL_SCALAR);
+                        emitReg(valueReg);
+                    }
+                }
+
                 // Allocate register for reference
                 int rd = allocateOutputRegister();
 
@@ -6113,6 +6284,26 @@ public class BytecodeCompiler implements Visitor {
         emit(Opcodes.BIND_ACTIVE_LEXICAL);
         emitReg(register);
         emit(addToStringPool(variableName));
+    }
+
+    /**
+     * A closure captures lexical storage, not a transient expression result.
+     * A scalar declaration can be bypassed before a lexical sub is installed,
+     * leaving its register null or holding a pooled literal. Materialize the
+     * pad cell before CREATE_CLOSURE so later calls share writable storage.
+     */
+    private void materializeScalarClosureCaptures(
+            List<String> closureVarNames, List<Integer> closureVarIndices) {
+        for (int i = 0; i < closureVarNames.size(); i++) {
+            String variableName = closureVarNames.get(i);
+            if (!variableName.startsWith("$") || isOurVariable(variableName)) {
+                continue;
+            }
+            int register = closureVarIndices.get(i);
+            emit(Opcodes.MATERIALIZE_LEXICAL_SCALAR);
+            emitReg(register);
+            emitActiveLexicalBinding(register, variableName);
+        }
     }
 
     boolean tracksRuntimeRegexLexicals() {
@@ -6785,6 +6976,7 @@ public class BytecodeCompiler implements Visitor {
             emit(constIdx);
         } else {
             // Create a closure capturing the current register values.
+            materializeScalarClosureCaptures(closureVarNames, closureVarIndices);
             int templateIdx = addToConstantPool(subCode);
             emit(Opcodes.CREATE_CLOSURE);
             emitReg(codeReg);
@@ -7001,6 +7193,7 @@ public class BytecodeCompiler implements Visitor {
                 prototype.isClosurePrototype = true;
                 Attributes.transferCompileTimeAttributes(subCode, prototype);
             }
+            materializeScalarClosureCaptures(closureVarNames, closureVarIndices);
             int templateIdx = addToConstantPool(subCode);
             emit(Opcodes.CREATE_CLOSURE);
             emitReg(codeReg);

@@ -8,6 +8,7 @@ import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.ReturnTypeVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.operators.OperatorHandler;
 import org.perlonjava.runtime.operators.ScalarGlobOperator;
 import org.perlonjava.runtime.perlmodule.Strict;
@@ -1955,6 +1956,29 @@ public class EmitOperator {
                     EmitLiteral.emitNumberForReference(emitterVisitor.ctx, numberNode);
                 } else {
                     node.operand.accept(emitterVisitor.with(contextType));
+                }
+
+                // A forward jump can bypass a lexical declaration and leave
+                // its JVM local slot null. Direct refgen (\$lexical) must
+                // nevertheless create and retain a writable Perl undef cell.
+                // Keep this scoped to named lexical scalar operands: element
+                // proxies and non-vivifying references deliberately retain
+                // their own missing-slot behavior.
+                if (!Boolean.TRUE.equals(node.getAnnotation("nonVivifyingReference"))
+                        && node.operand instanceof OperatorNode scalarOp
+                        && scalarOp.operator.equals("$")
+                        && scalarOp.operand instanceof IdentifierNode identifier) {
+                    SymbolTable.SymbolEntry lexical = emitterVisitor.ctx.symbolTable
+                            .getSymbolEntry("$" + identifier.name);
+                    if (lexical != null && !"our".equals(lexical.decl())) {
+                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                                "materializeLexicalCell",
+                                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                false);
+                        emitterVisitor.ctx.mv.visitInsn(Opcodes.DUP);
+                        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, lexical.index());
+                    }
                 }
 
                 // Always create a proper reference - don't special case CODE references

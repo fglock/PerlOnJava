@@ -479,6 +479,36 @@ public class EmitVariable {
                 // ===== LEXICAL VARIABLE ACCESS =====
                 // Variable is lexical (my/state/@_/BEGIN-captured-our), load it from JVM local variable slot
                 mv.visitVarInsn(Opcodes.ALOAD, symbolEntry.index());
+                if (sigil.equals("$") && !"our".equals(symbolEntry.decl())) {
+                    // Control flow can bypass a lexical declaration, leaving
+                    // its JVM local slot null. A lexical scalar access still
+                    // denotes a writable Perl undef cell, including under
+                    // refgen and lvalue-list contexts. Store the materialized
+                    // cell back so subsequent aliases retain its identity.
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                            "materializeLexicalCell",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                            false);
+                    mv.visitInsn(Opcodes.DUP);
+                    mv.visitVarInsn(Opcodes.ASTORE, symbolEntry.index());
+                } else if (sigil.equals("@") && !"our".equals(symbolEntry.decl())) {
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeArray",
+                            "materializeLexicalCell",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
+                            false);
+                    mv.visitInsn(Opcodes.DUP);
+                    mv.visitVarInsn(Opcodes.ASTORE, symbolEntry.index());
+                } else if (sigil.equals("%") && !"our".equals(symbolEntry.decl())) {
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeHash",
+                            "materializeLexicalCell",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;",
+                            false);
+                    mv.visitInsn(Opcodes.DUP);
+                    mv.visitVarInsn(Opcodes.ASTORE, symbolEntry.index());
+                }
             }
 
             // ===== CONTEXT CONVERSION =====
@@ -800,6 +830,11 @@ public class EmitVariable {
     }
 
     static void handleAssignOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
+        BinaryOperatorNode normalized = normalizeLocalizedDeclaredReferenceSlice(node);
+        if (normalized != node) {
+            handleAssignOperator(emitterVisitor, normalized);
+            return;
+        }
         EmitterContext ctx = emitterVisitor.ctx;
 
         if (node.left instanceof OperatorNode leftOperator
@@ -1098,13 +1133,45 @@ public class EmitVariable {
                             }
 
                             if (symEntry.decl().equals("state")) {
-                                // The local is a view of persistent state.
-                                // Replace the cell's value, not that view.
-                                mv.visitVarInsn(Opcodes.ALOAD, symEntry.index());
-                                mv.visitInsn(Opcodes.SWAP);
-                                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "set",
-                                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                                // State aggregates are persistent bindings, not
+                                // scalar views. Rebind their owning CV's map so
+                                // subsequent iterations retrieve the aliased
+                                // container instead of the initial empty one.
+                                switch (varNode.operator) {
+                                    case "$" -> {
+                                        mv.visitVarInsn(Opcodes.ALOAD, symEntry.index());
+                                        mv.visitInsn(Opcodes.SWAP);
+                                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                                "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "set",
+                                                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                                    }
+                                    case "@" -> {
+                                        mv.visitLdcInsn(varName);
+                                        mv.visitLdcInsn(varNode.id);
+                                        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                                "org/perlonjava/runtime/runtimetypes/StateVariable",
+                                                "aliasCurrentStateArray",
+                                                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
+                                                false);
+                                        mv.visitVarInsn(Opcodes.ASTORE, symEntry.index());
+                                        mv.visitVarInsn(Opcodes.ALOAD, symEntry.index());
+                                    }
+                                    case "%" -> {
+                                        new OperatorNode("__SUB__", null, varNode.tokenIndex)
+                                                .accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                                        mv.visitLdcInsn(varName);
+                                        mv.visitLdcInsn(varNode.id);
+                                        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                                "org/perlonjava/runtime/runtimetypes/StateVariable",
+                                                "aliasStateHashOnce",
+                                                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;",
+                                                false);
+                                        mv.visitVarInsn(Opcodes.ASTORE, symEntry.index());
+                                        mv.visitVarInsn(Opcodes.ALOAD, symEntry.index());
+                                    }
+                                    default -> throw new IllegalStateException(
+                                            "Unexpected state refalias target: " + varNode.operator);
+                                }
                             } else {
                                 mv.visitInsn(Opcodes.DUP);
                                 mv.visitVarInsn(Opcodes.ASTORE, symEntry.index());
@@ -1276,6 +1343,23 @@ public class EmitVariable {
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("SET end");
     }
 
+    /** Normalize parser-local declared-reference slice syntax into the
+     * localized ref-alias form consumed by the slice emitter. */
+    private static BinaryOperatorNode normalizeLocalizedDeclaredReferenceSlice(BinaryOperatorNode node) {
+        if (!(node.left instanceof OperatorNode local) || !local.operator.equals("local")
+                || !local.getBooleanAnnotation("isDeclaredReference")
+                || !(local.operand instanceof ListNode list) || list.elements.size() != 1
+                || !(list.elements.getFirst() instanceof BinaryOperatorNode slice)
+                || !(slice.operator.equals("[") || slice.operator.equals("{"))) {
+            return node;
+        }
+        OperatorNode canonicalLocal = new OperatorNode("local", slice, local.getIndex());
+        canonicalLocal.annotations = local.annotations;
+        OperatorNode reference = new OperatorNode("\\", canonicalLocal, local.getIndex());
+        return new BinaryOperatorNode(node.operator, reference, node.right, node.tokenIndex);
+    }
+
+
     /**
      * Checks whether a ternary branch is a LIST assignment expression (e.g. {@code @arr = expr}).
      * LIST assignments in scalar context return a cached read-only element count, which cannot
@@ -1318,7 +1402,8 @@ public class EmitVariable {
             // Parenthesized reference targets retain their individual `\\`
             // wrappers in a ListNode even when there is only one member.
             // That one-member form still consumes the RHS as a list.
-            return targets.elements.stream().allMatch(element -> element instanceof OperatorNode operator
+            return !targets.elements.isEmpty()
+                    && targets.elements.stream().allMatch(element -> element instanceof OperatorNode operator
                     && operator.operator.equals("\\"));
         }
         if (!(left instanceof OperatorNode referenceOp) || !referenceOp.operator.equals("\\")) {
@@ -1673,8 +1758,20 @@ public class EmitVariable {
                 String hashName = "%" + hashId.name;
                 SymbolTable.SymbolEntry entry = ctx.symbolTable.getSymbolEntry(hashName);
                 if (entry != null && (entry.decl().equals("my") || entry.decl().equals("state"))) {
-                    mv.visitInsn(Opcodes.DUP);
-                    mv.visitVarInsn(Opcodes.ASTORE, entry.index());
+                    if (entry.decl().equals("state")) {
+                        mv.visitLdcInsn(hashName);
+                        mv.visitLdcInsn(hashTarget.id);
+                        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/runtimetypes/StateVariable",
+                                "aliasCurrentStateHash",
+                                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;",
+                                false);
+                        mv.visitVarInsn(Opcodes.ASTORE, entry.index());
+                        mv.visitVarInsn(Opcodes.ALOAD, entry.index());
+                    } else {
+                        mv.visitInsn(Opcodes.DUP);
+                        mv.visitVarInsn(Opcodes.ASTORE, entry.index());
+                    }
                 } else {
                     String globalName = NameNormalizer.normalizeVariableName(
                             hashId.name, ctx.symbolTable.getCurrentPackage());
@@ -1758,11 +1855,15 @@ public class EmitVariable {
                         "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "hashDeref",
                         "()Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;", false);
                 if (entry.decl().equals("state")) {
+                    mv.visitLdcInsn(hashName);
+                    mv.visitLdcInsn(declaredHash.id);
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/StateVariable",
+                            "aliasCurrentStateHash",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;",
+                            false);
+                    mv.visitVarInsn(Opcodes.ASTORE, entry.index());
                     mv.visitVarInsn(Opcodes.ALOAD, entry.index());
-                    mv.visitInsn(Opcodes.SWAP);
-                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                            "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "set",
-                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                 } else {
                     mv.visitInsn(Opcodes.DUP);
                     mv.visitVarInsn(Opcodes.ASTORE, entry.index());
@@ -2029,8 +2130,20 @@ public class EmitVariable {
                 "()Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;", false);
         SymbolTable.SymbolEntry entry = ctx.symbolTable.getSymbolEntry(variableName);
         if (entry != null && (entry.decl().equals("my") || entry.decl().equals("state"))) {
-            mv.visitInsn(Opcodes.DUP);
-            mv.visitVarInsn(Opcodes.ASTORE, entry.index());
+            if (entry.decl().equals("state")) {
+                mv.visitLdcInsn(variableName);
+                mv.visitLdcInsn(sigil.id);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/StateVariable",
+                        "aliasCurrentStateHash",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;",
+                        false);
+                mv.visitVarInsn(Opcodes.ASTORE, entry.index());
+                mv.visitVarInsn(Opcodes.ALOAD, entry.index());
+            } else {
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitVarInsn(Opcodes.ASTORE, entry.index());
+            }
         } else {
             String globalName = NameNormalizer.normalizeVariableName(id.name, ctx.symbolTable.getCurrentPackage());
             mv.visitLdcInsn(globalName);
@@ -2470,7 +2583,17 @@ public class EmitVariable {
 
                     if (operator.equals("my")) {
                         Integer beginId = RuntimeCode.evalBeginIds().get(sigilNode);
-                        if (beginId == null) {
+                        if (beginId == null && sigil.equals("$")) {
+                            // A forward goto can have reached refgen before
+                            // this declaration. Keep that aliased pad cell;
+                            // otherwise initialize the lexical as undef.
+                            ctx.mv.visitVarInsn(Opcodes.ALOAD, varIndex);
+                            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                                    "initializeLexicalCell",
+                                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                    false);
+                        } else if (beginId == null) {
                             ctx.mv.visitTypeInsn(Opcodes.NEW, className);
                             ctx.mv.visitInsn(Opcodes.DUP);
                             ctx.mv.visitMethodInsn(

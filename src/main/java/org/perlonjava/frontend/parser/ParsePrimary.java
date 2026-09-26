@@ -460,6 +460,21 @@ public class ParsePrimary {
 
             case "\\":
                 // Reference operator: \$var, \@array, \%hash, \&sub
+                // `\state %hash` is a state declaration whose result is
+                // referenced, not a reference to the bareword `state` followed
+                // by a hash operator.  Normalizing it here gives both backends
+                // the ordinary `\(state %hash)` tree, including the stable
+                // persistent-id and lexical-scope registration performed by
+                // parseVariableDeclaration.
+                if (peek(parser).type == LexerTokenType.IDENTIFIER
+                        && peek(parser).text.equals("state")
+                        && parser.ctx.symbolTable.isFeatureCategoryEnabled("state")) {
+                    int stateIndex = parser.tokenIndex;
+                    TokenUtils.consume(parser, LexerTokenType.IDENTIFIER);
+                    OperatorNode declaration = OperatorParser.parseVariableDeclaration(
+                            parser, "state", stateIndex, stateIndex);
+                    return new OperatorNode(token.text, declaration, stateIndex);
+                }
                 // Set flag to prevent &sub from being called during parsing
                 parser.parsingTakeReference = true;
                 operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);

@@ -8,6 +8,41 @@ use Test::More;
 my ($left, $right) = (1, 2);
 
 {
+    my $weak_alias_target;
+    our $weak_alias_reference;
+    no warnings 'experimental::builtin';
+    builtin::weaken($weak_alias_reference = \$weak_alias_target);
+    \$weak_alias_target = $weak_alias_reference;
+    is ref($weak_alias_reference), 'SCALAR',
+        'weak reference to a live lexical remains valid for scalar ref aliasing';
+}
+
+{
+    use feature 'declared_refs';
+    my @localized_alias_source = (100, 200, 300);
+    my @localized_alias_array = (1, 2, 3);
+    my %localized_alias_hash = (one => 10, two => 20, three => 30);
+    {
+        local \(@localized_alias_array[0, 1, 2]) = \(@localized_alias_source);
+        local \(@localized_alias_hash{qw(one two three)}) = \(@localized_alias_source);
+        $localized_alias_source[0]++;
+        is "@localized_alias_array", '101 200 300',
+            'localized array slice aliases each referenced source slot';
+        is "$localized_alias_hash{one} $localized_alias_hash{two} $localized_alias_hash{three}", '101 200 300',
+            'localized hash slice aliases each referenced source slot';
+    }
+    is "@localized_alias_array", '1 2 3', 'localized array slice restores its slots';
+    is "$localized_alias_hash{one} $localized_alias_hash{two} $localized_alias_hash{three}", '10 20 30',
+        'localized hash slice restores its slots';
+}
+
+{
+    no feature 'refaliasing';
+    () = (1, 2);
+    pass 'empty list assignment does not require the refaliasing feature';
+}
+
+{
     use warnings 'experimental::refaliasing';
     my @warnings;
     local $SIG{__WARN__} = sub { push @warnings, shift };
@@ -196,5 +231,138 @@ my ($first_ref, $second_ref, $third_ref) = \($first, $second, $third);
 is $first_ref, \$first, 'outer assignment changes only the ref-alias expression temporaries';
 is $second_ref, \$second, 'outer assignment preserves the second source reference';
 is $third_ref, \$third, 'outer assignment preserves the aggregate source reference';
+
+our ($mixed_alias_value, $mixed_reference_value);
+(\$mixed_alias_value, $mixed_reference_value) = \(1, 2);
+is "$mixed_alias_value $$mixed_reference_value", '1 2',
+    'mixed ref-alias and ordinary scalar list members retain their distinct semantics';
+
+{
+    my @state_hash_values;
+    for my $iteration (1, 2) {
+        \state %state_alias_hash = { value => $iteration };
+        push @state_hash_values, $state_alias_hash{value};
+    }
+    is_deeply \@state_hash_values, [1, 1],
+        'state hash ref alias retains its initial hash binding across iterations';
+}
+
+{
+    my ($original, $temporary);
+    my %localized_hash;
+    \$localized_hash{value} = \$original;
+    {
+        \local $localized_hash{value} = \$temporary;
+    }
+    is \$localized_hash{value}, \$original,
+        'localized hash ref alias restores the original scalar slot identity';
+}
+
+{
+    no strict 'vars';
+    for \my $topic(\$for1, \$for2) {
+        push @for, \$topic;
+    }
+    @for = ();
+    for \$::a(\$for1, \$for2) {
+        push @for, \$::a;
+    }
+    @for = ();
+    for \my @a([1,2], [3,4]) {
+        push @for, @a;
+    }
+    is_deeply \@for, [1, 2, 3, 4],
+        'foreach declared array alias refreshes each iteration before a global push';
+}
+
+{
+    no strict 'refs';
+    no strict 'vars';
+    \$lvref_glob_target = \*lvref_glob_source;
+    is *lvref_glob_target{SCALAR}, *lvref_glob_source{GLOB},
+        'refaliasing a scalar to a glob installs the glob scalar slot';
+}
+
+{
+    my @state_scalar_results;
+    for (1, 2) {
+        \my $state_scalar_lexical = \3,
+        \my($state_scalar_grouped_lexical) = \3,
+        \state $state_scalar_direct = \3,
+        \state($state_scalar_grouped) = \3 if $_ == 1;
+        \state $state_scalar_loop_value = \$_;
+        if ($_ == 2) {
+            push @state_scalar_results,
+                $state_scalar_lexical,
+                $state_scalar_grouped_lexical,
+                $state_scalar_direct,
+                $state_scalar_grouped,
+                $state_scalar_loop_value;
+        }
+    }
+    is_deeply \@state_scalar_results, [undef, undef, 3, 3, 1],
+        'mixed lexical and state scalar refaliases retain their scope and initialization semantics';
+}
+
+{
+    \state @state_shadowed_loop_alias = [qw(stale values)];
+    my @state_shadowed_loop_results;
+    for \my @state_shadowed_loop_alias([qw(one two)], [qw(three four)]) {
+        push @state_shadowed_loop_results, @state_shadowed_loop_alias;
+    }
+    is_deeply \@state_shadowed_loop_results, [qw(one two three four)],
+        'foreach lexical array alias shadows a same-named state array';
+}
+
+sub forward_jump_refalias_value {
+    my @forward_alias_array;
+    goto install_forward_aliases;
+
+write_forward_aliases:
+    @forward_alias_array[0, 1] = qw(a b);
+    my ($forward_right, $forward_left) = @forward_alias_array[0, 1];
+    return join ' ', @forward_alias_array;
+
+install_forward_aliases:
+    \(@forward_alias_array) = \($forward_left, $forward_right);
+    goto write_forward_aliases;
+}
+
+is forward_jump_refalias_value(), 'b a',
+    'forward-jump refalias materializes lexical scalar cells before binding them';
+
+{
+    use feature 'lexical_subs', 'signatures', 'state';
+    no warnings 'experimental::lexical_subs', 'experimental::signatures';
+    my $state_refalias_seed;
+    my sub state_refalias_skipped_pad ($arg) {
+        state $state_refalias_value = ++$state_refalias_seed;
+        return $state_refalias_seed if $arg == 3;
+        goto skipped_state_refalias_declaration if $arg == 2;
+        my $state_refalias_skipped_pad;
+    skipped_state_refalias_declaration:
+        \$state_refalias_value = \$state_refalias_skipped_pad if $arg == 2;
+    }
+    state_refalias_skipped_pad(1);
+    is ref state_refalias_skipped_pad(2), 'SCALAR',
+        'state refalias can bind a pad slot reached before its declaration';
+    is state_refalias_skipped_pad(3), 1,
+        'state refalias retains its initialized state after a skipped-pad alias';
+}
+
+{
+    use feature 'lexical_subs';
+    no warnings 'experimental::lexical_subs';
+    my $closure_state_seed;
+    my sub closure_state_refalias_capture {
+        state $closure_state_value = ++$closure_state_seed;
+        \($closure_state_value) = \($closure_state_seed);
+        return $closure_state_seed;
+    }
+    is closure_state_refalias_capture(), 1,
+        'lexical sub captures a writable outer scalar before state refaliasing';
+    is closure_state_refalias_capture(), 1,
+        'lexical sub preserves its captured scalar and state cell across calls';
+}
 
 done_testing;

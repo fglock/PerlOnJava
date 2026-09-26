@@ -22,6 +22,11 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.TIED_SCALAR;
  */
 public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference, DynamicState {
 
+    /** Return an empty lexical cell when control flow skipped its declaration. */
+    public static RuntimeArray materializeLexicalCell(RuntimeArray array) {
+        return array != null ? array : new RuntimeArray();
+    }
+
     /** Outstanding {@code $#array} proxies; retained only for lexical teardown. */
     private List<RuntimeArraySizeLvalue> arraySizeLvalues;
 
