@@ -767,7 +767,10 @@ public class StatementParser {
         }
         if (node instanceof OperatorNode o) {
             return switch (o.operator) {
-                case "!", "not", "defined", "exists" -> true;
+                // A bare m// in when is evaluated against the localized $_.
+                // Wrapping its boolean result in $_ ~~ ... would compare the
+                // topic to 0/1 instead of performing the regex predicate.
+                case "!", "not", "defined", "exists", "matchRegex" -> true;
                 default -> false;
             };
         }
