@@ -27,6 +27,9 @@ priorities and future plans.
 - Implement Unix `socketpair` through real POSIX descriptors, preserving
   bidirectional I/O, socket options, shutdown, and scope-exit EOF semantics.
 
+- Preserve lexical-sub storage and CODE aliases across interpreter fallback,
+  and reject writes to padded multi-variable foreach iterators on both backends.
+
 - Restore scalar flip-flop semantics for `..`/`...` in `when` predicates and
   subroutines whose caller context is determined at runtime.
 

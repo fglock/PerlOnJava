@@ -7851,8 +7851,11 @@ public class BytecodeCompiler implements Visitor {
                 emitInt(0);
 
                 patchJump(undefPatch, bytecode.size());
-                emit(Opcodes.LOAD_UNDEF);
+                // Preserve the read-only alias just as ITERATOR_NEXT does
+                // for an explicit undef element.
+                emit(Opcodes.LOAD_CONST);
                 emitReg(targetReg);
+                emit(addToConstantPool(ReadOnlyAlias.forForeach(RuntimeScalarCache.scalarUndef)));
                 patchJump(assignedPatch, bytecode.size());
             }
             emit(Opcodes.GOTO);

@@ -578,13 +578,14 @@ public class EmitForeach {
                 mv.visitVarInsn(Opcodes.ALOAD, iteratorIndex);
                 mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true);
                 mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+                mv.visitLabel(endValueLabel);
+                // Padding is the same read-only undef rvalue as an explicit
+                // undef in the source list, not a writable loop temporary.
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/ReadOnlyAlias",
                         "forForeach",
                         "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                         false);
-
-                mv.visitLabel(endValueLabel);
 
                 // Assign to variable
                 Node varNode = varList.elements.get(i);

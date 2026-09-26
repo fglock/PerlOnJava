@@ -41,11 +41,24 @@ new unit tests. No existing tests were changed or deleted.
 - `/tmp/lexical-binding-final.log`: lvref 203/203, state 171/171,
   coreamp 32/32, switch 197/197, lexsub 159/160 (historical baseline restored).
 
+## Completed: foreach padding (2026-09-26)
+
+- Both backends now protect padded multi-variable foreach iterators with the
+  same read-only alias semantics used for explicit undef list elements.
+- Added `foreach_multivar_padding_readonly.t`: blead passes 3/3, unfixed JVM
+  and interpreter fail two assertions, and both fixed backends pass 3/3.
+- `JPERL_TEST_FILTER=foreach` make passes. Evidence:
+  `/tmp/foreach-padding-build.log`, `/tmp/foreach-padding-parent-{jvm,interpreter}.log`,
+  `/tmp/foreach-padding-fixed-{jvm,interpreter}.log`.
+- `/tmp/foreach-padding-core.log`: for-many restored to baseline 73/81;
+  lvref remains 203/203.
+- Files: `EmitForeach.java`, `BytecodeCompiler.java`, and the new unit test.
+
 ## Next steps
 
 1. Fix remaining targeted regressions: universal 108/142 (unexpected tied
-   STORE), decl-refs 402/408 (state declaration reference identity), for-many
-   71/81 (baseline 73/81), magic 206/208, smartmatch 352/353, class/destruct 3/7
+   STORE), decl-refs 402/408 (state declaration reference identity),
+   magic 206/208, smartmatch 352/353, class/destruct 3/7
    (baseline 4/7). Raw evidence: `/tmp/recovery-targeted.log`.
 2. Investigate the two Unicode-property files and compare fixture plans with
    local perl5/blead before interpreting count changes.
