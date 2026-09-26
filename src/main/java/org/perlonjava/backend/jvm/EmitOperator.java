@@ -933,15 +933,10 @@ public class EmitOperator {
 
     // Handles the 'split' operator
     static void handleSplit(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
-        // Perl's split(" ") optimization is a compile-time regex special
-        // case.  There is no RuntimeRegex instance to emit its Debug/COMPILE
-        // diagnostics, so preserve the observable extflags line here.
         if (emitterVisitor.ctx.symbolTable != null
-                && emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_RE_DEBUG)
-                && (node.left == null || node.left instanceof StringNode
-                || node.left instanceof BinaryOperatorNode binary
-                && binary.operator.equals("."))) {
-            System.err.println("r->extflags: SKIPWHITE WHITE");
+                && emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_RE_DEBUG)) {
+            String extflags = splitDebugExtflags(node);
+            if (extflags != null) System.err.println("r->extflags: " + extflags);
         }
         // Accept the left operand in SCALAR context and the right operand in LIST context.
         // IMPORTANT: split's EXPR argument (the string to split) must be evaluated in
@@ -995,6 +990,27 @@ public class EmitOperator {
         } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             handleScalarContext(emitterVisitor, node);
         }
+    }
+
+    private static String splitDebugExtflags(BinaryOperatorNode node) {
+        if (node.left == null || node.left instanceof StringNode
+                || node.left instanceof BinaryOperatorNode binary && binary.operator.equals(".")) {
+            return "SKIPWHITE WHITE";
+        }
+        if (!(node.left instanceof OperatorNode regex) || !regex.operator.equals("quoteRegex")
+                || !(regex.operand instanceof ListNode operands) || operands.elements.isEmpty()) {
+            return null;
+        }
+        if (operands.elements.get(0) instanceof StringNode pattern) {
+            return switch (pattern.value) {
+                case "\\s+" -> "WHITE";
+                case "^" -> "START_ONLY";
+                default -> "NULL";
+            };
+        }
+        // Explicit qr// and interpolated regex syntax are never the implicit
+        // split(" ") optimization, even when they evaluate to one space.
+        return "NULL";
     }
 
     /**

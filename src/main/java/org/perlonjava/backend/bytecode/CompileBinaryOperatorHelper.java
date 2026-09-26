@@ -1,7 +1,6 @@
 package org.perlonjava.backend.bytecode;
 
-import org.perlonjava.frontend.astnode.BinaryOperatorNode;
-import org.perlonjava.frontend.astnode.StringNode;
+import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 public class CompileBinaryOperatorHelper {
@@ -26,25 +25,43 @@ public class CompileBinaryOperatorHelper {
     }
 
     public static int compileBinaryOperatorSwitch(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node, int rs1, int rs2, int tokenIndex) {
-        emitSplitWhitespaceDebug(node, bytecodeCompiler);
+        emitSplitDebug(node, bytecodeCompiler);
         return compileBinaryOperatorSwitch(bytecodeCompiler, node.operator, rs1, rs2, tokenIndex, false,
                 integerOverride(node), node.operator.equals("blessClassInstance"));
     }
 
     public static int compileBinaryOperatorSwitch(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node, int rs1, int rs2, int tokenIndex, boolean shareCallerArgs) {
-        emitSplitWhitespaceDebug(node, bytecodeCompiler);
+        emitSplitDebug(node, bytecodeCompiler);
         return compileBinaryOperatorSwitch(bytecodeCompiler, node.operator, rs1, rs2, tokenIndex, shareCallerArgs,
                 integerOverride(node), node.operator.equals("blessClassInstance"));
     }
 
-    private static void emitSplitWhitespaceDebug(BinaryOperatorNode node, BytecodeCompiler compiler) {
+    private static void emitSplitDebug(BinaryOperatorNode node, BytecodeCompiler compiler) {
         if (!"split".equals(node.operator)
-                || !compiler.symbolTable.isStrictOptionEnabled(org.perlonjava.runtime.perlmodule.Strict.HINT_RE_DEBUG)
-                || !(node.left == null || node.left instanceof StringNode
-                || node.left instanceof BinaryOperatorNode binary && ".".equals(binary.operator))) {
+                || !compiler.symbolTable.isStrictOptionEnabled(org.perlonjava.runtime.perlmodule.Strict.HINT_RE_DEBUG)) {
             return;
         }
-        System.err.println("r->extflags: SKIPWHITE WHITE");
+        String extflags = splitDebugExtflags(node);
+        if (extflags != null) System.err.println("r->extflags: " + extflags);
+    }
+
+    private static String splitDebugExtflags(BinaryOperatorNode node) {
+        if (node.left == null || node.left instanceof StringNode
+                || node.left instanceof BinaryOperatorNode binary && ".".equals(binary.operator)) {
+            return "SKIPWHITE WHITE";
+        }
+        if (!(node.left instanceof OperatorNode regex) || !"quoteRegex".equals(regex.operator)
+                || !(regex.operand instanceof ListNode operands) || operands.elements.isEmpty()) {
+            return null;
+        }
+        if (operands.elements.get(0) instanceof StringNode pattern) {
+            return switch (pattern.value) {
+                case "\\s+" -> "WHITE";
+                case "^" -> "START_ONLY";
+                default -> "NULL";
+            };
+        }
+        return "NULL";
     }
 
     private static Boolean integerOverride(BinaryOperatorNode node) {
