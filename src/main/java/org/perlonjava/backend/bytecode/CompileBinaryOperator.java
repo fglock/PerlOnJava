@@ -1167,7 +1167,12 @@ public class CompileBinaryOperator {
                     o.equals("keys") || o.equals("values") || o.equals("each")) return true;
         }
         if (node instanceof BinaryOperatorNode bin) {
-            return bin.operator.equals("(") || bin.operator.equals("()");
+            if (bin.operator.equals("(") || bin.operator.equals("()")) return true;
+            // A hash/array slice is list-valued even though its outer node is
+            // a subscript operator. Preserve it for smartmatch type dispatch.
+            return (bin.operator.equals("{") || bin.operator.equals("["))
+                    && bin.left instanceof OperatorNode sigil
+                    && sigil.operator.equals("@");
         }
         return false;
     }

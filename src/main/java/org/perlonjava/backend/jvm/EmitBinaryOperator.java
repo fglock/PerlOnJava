@@ -266,8 +266,16 @@ public class EmitBinaryOperator {
         if (node instanceof OperatorNode operator) {
             return operator.operator.equals("@") || operator.operator.equals("%");
         }
-        return node instanceof BinaryOperatorNode binary
-                && (binary.operator.equals("(") || binary.operator.equals("()"));
+        if (node instanceof BinaryOperatorNode binary) {
+            if (binary.operator.equals("(") || binary.operator.equals("()")) return true;
+            // @hash{keys} and @array[indices] are aggregate values for
+            // smartmatch dispatch; evaluating them in scalar context loses
+            // every value except the final slice member.
+            return (binary.operator.equals("{") || binary.operator.equals("["))
+                    && binary.left instanceof OperatorNode sigil
+                    && sigil.operator.equals("@");
+        }
+        return false;
     }
 
     private static void emitIntegerBinaryOperator(EmitterVisitor emitterVisitor,
