@@ -77,6 +77,17 @@ public class ParsePrimary {
                 if (token.text.getBytes(StandardCharsets.UTF_8).length >= 1020) {
                     parser.throwCleanError("Identifier too long");
                 }
+                if (parser.ctx.compilerOptions.isByteStringSource) {
+                    for (int i = 0; i < token.text.length(); ) {
+                        int codePoint = token.text.codePointAt(i);
+                        if (codePoint > 0x7f) {
+                            parser.throwCleanError("Unrecognized character "
+                                    + String.format("\\x%02X", codePoint)
+                                    + "; marked by <-- HERE after $x =<-- HERE near column 5");
+                        }
+                        i += Character.charCount(codePoint);
+                    }
+                }
                 return parseIdentifier(parser, startIndex, token, operator);
             case NUMBER:
                 // Handle numeric literals (integers, floats, hex, octal, binary)

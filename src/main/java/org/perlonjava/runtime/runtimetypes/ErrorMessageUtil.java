@@ -19,6 +19,7 @@ public class ErrorMessageUtil {
     private int lastLineNumber;
     private volatile int[] physicalLineNumbers;
     private volatile SourceDirectiveIndex sourceDirectiveIndex;
+    private final List<int[]> literalQuoteRanges = new ArrayList<>();
 
     /**
      * Constructs an ErrorMessageUtil with the specified file name and list of tokens.
@@ -32,6 +33,19 @@ public class ErrorMessageUtil {
         this.tokens = tokens;
         this.tokenIndex = -1;
         this.lastLineNumber = 1;
+    }
+
+    /** Register a literal quote body whose apparent #line comments are data, not directives. */
+    public void addLiteralQuoteRange(int startInclusive, int endExclusive) {
+        literalQuoteRanges.add(new int[]{startInclusive, endExclusive});
+        sourceDirectiveIndex = null;
+    }
+
+    /** Preserve parser-identified literal spans when code generation resets locations. */
+    public void copyLiteralQuoteRangesTo(ErrorMessageUtil target) {
+        for (int[] range : literalQuoteRanges) {
+            target.addLiteralQuoteRange(range[0], range[1]);
+        }
     }
 
     /**
@@ -662,10 +676,21 @@ public class ErrorMessageUtil {
         String currentFileName = originalFileName;
         int physicalLine = 1;
         boolean atBeginningOfLine = true;
+        int literalQuoteRangeIndex = 0;
 
         for (int i = 0; i < tokens.size(); i++) {
             LexerToken token = tokens.get(i);
             if (token.type == LexerTokenType.EOF) break;
+            while (literalQuoteRangeIndex < literalQuoteRanges.size()
+                    && literalQuoteRanges.get(literalQuoteRangeIndex)[1] <= i) {
+                literalQuoteRangeIndex++;
+            }
+            boolean insideLiteralQuote = literalQuoteRangeIndex < literalQuoteRanges.size()
+                    && literalQuoteRanges.get(literalQuoteRangeIndex)[0] <= i;
+            if (insideLiteralQuote) {
+                if (token.type == LexerTokenType.NEWLINE) physicalLine++;
+                continue;
+            }
             if (token.type == LexerTokenType.NEWLINE) {
                 physicalLine++;
                 atBeginningOfLine = true;

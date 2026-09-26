@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore `lex.t` compatibility for quote-like `#line` mapping, byte-source
+  eval diagnostics, evalled substitutions, constant stash entries, and both
+  execution backends.
+
 - Preserve Perl-compatible `EISDIR` readline behavior for filehandles opened
   on directories on Windows, and ensure `Config` does not advertise unsupported
   fork capabilities.

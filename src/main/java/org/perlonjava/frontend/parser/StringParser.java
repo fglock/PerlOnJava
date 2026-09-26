@@ -717,6 +717,11 @@ public class StringParser {
             if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("regex e-modifier: " + replaceStr);
             Parser blockParser = new Parser(ctx, new Lexer(replaceStr).tokenize(), parser.getHeredocNodes());
             replace = ParseBlock.parseBlock(blockParser);
+            int trailing = Whitespace.skipWhitespace(blockParser, blockParser.tokenIndex, blockParser.tokens);
+            if (trailing < blockParser.tokens.size()
+                    && blockParser.tokens.get(trailing).type != LexerTokenType.EOF) {
+                throw new PerlCompilerException("Bad evalled substitution pattern");
+            }
         } else if (rawStr.secondBufferStartDelim != '\'') {
             // handle string interpolaton
             rawStr.buffers.removeFirst();   // consume the first buffer
@@ -1208,6 +1213,9 @@ public class StringParser {
             default -> false;
         };
         rawStr = parseRawStrings(parser, parser.ctx, parser.tokens, parser.tokenIndex, stringParts, isRegex);
+        if (operator.equals("q")) {
+            parser.ctx.errorUtil.addLiteralQuoteRange(parser.tokenIndex, rawStr.next);
+        }
         parser.tokenIndex = rawStr.next;
 
         // A bracket-delimited regex followed by a second closing bracket is

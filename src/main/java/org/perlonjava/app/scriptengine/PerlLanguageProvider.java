@@ -352,8 +352,11 @@ public class PerlLanguageProvider {
 
         // Create the Java class from the AST
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("createClassWithMethod");
-        // Create a new instance of ErrorMessageUtil, resetting the line counter
+        // Reset per-compilation location state while retaining quote spans the
+        // parser identified as literal data rather than #line directives.
+        ErrorMessageUtil parsedErrorUtil = ctx.errorUtil;
         ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
+        parsedErrorUtil.copyLiteralQuoteRangesTo(ctx.errorUtil);
         // Snapshot the symbol table after parsing.
         // The parser records lexical declarations (e.g., `for my $p (...)`) and pragma state
         // (strict/warnings/features) into ctx.symbolTable. Resetting to a fresh global snapshot
