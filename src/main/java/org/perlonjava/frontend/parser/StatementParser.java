@@ -755,8 +755,11 @@ public class StatementParser {
                     index);
         }
 
-        // Return as an if statement
-        return new IfNode("if", ifCondition, whenBlock, null, index);
+        // A false when contributes an empty list, unlike a plain if without
+        // an else (which returns its false condition).  This distinction is
+        // observable when the given block is embedded in a list; scalar
+        // context naturally turns the empty list into undef.
+        return new IfNode("if", ifCondition, whenBlock, new ListNode(index), index);
     }
 
     /**
