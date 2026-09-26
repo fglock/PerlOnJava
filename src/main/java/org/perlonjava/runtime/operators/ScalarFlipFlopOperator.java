@@ -1,6 +1,9 @@
 package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeBase;
+import org.perlonjava.runtime.runtimetypes.PerlRange;
+import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -74,5 +77,13 @@ public class ScalarFlipFlopOperator {
             }
         }
         return new RuntimeScalar(ff.currentState ? String.valueOf(ff.currentSequence) : "");  // Return sequence or empty string
+    }
+
+    /** Resolve a range operator in a subroutine whose caller context is only known at runtime. */
+    public static RuntimeBase evaluateInContext(int id, RuntimeScalar left, RuntimeScalar right, int context) {
+        if (RuntimeContextType.isListLike(context)) {
+            return PerlRange.createRange(left, right);
+        }
+        return evaluate(id, left, right);
     }
 }

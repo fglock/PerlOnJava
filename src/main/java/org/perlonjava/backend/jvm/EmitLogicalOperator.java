@@ -74,6 +74,25 @@ public class EmitLogicalOperator {
         EmitOperator.handleVoidContext(emitterVisitor);
     }
 
+    static void emitRuntimeRangeOrFlipFlop(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
+        EmitterContext ctx = emitterVisitor.ctx;
+        MethodVisitor mv = ctx.mv;
+        int flipFlopId = ScalarFlipFlopOperator.allocateId();
+        ScalarFlipFlopOperator.flipFlops().putIfAbsent(flipFlopId,
+                new ScalarFlipFlopOperator(node.operator.equals("...")));
+
+        mv.visitLdcInsn(flipFlopId);
+        emitFlipFlopOperand(emitterVisitor, node.left);
+        emitFlipFlopOperand(emitterVisitor, node.right);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                "currentRawCallContext", "()I", false);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/operators/ScalarFlipFlopOperator", "evaluateInContext",
+                "(ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                false);
+        EmitOperator.handleVoidContext(emitterVisitor);
+    }
+
     /**
      * Emits bytecode for a flip-flop operand, with special handling for regex patterns.
      * If the operand is a quoteRegex node, it's emitted as a match operation instead.

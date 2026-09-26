@@ -510,6 +510,8 @@ public class EmitBinaryOperator {
     static void handleRangeOrFlipFlop(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             EmitLogicalOperator.emitFlipFlopOperator(emitterVisitor, node);
+        } else if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME) {
+            EmitLogicalOperator.emitRuntimeRangeOrFlipFlop(emitterVisitor, node);
         } else {
             EmitOperator.handleRangeOperator(emitterVisitor, node);
         }

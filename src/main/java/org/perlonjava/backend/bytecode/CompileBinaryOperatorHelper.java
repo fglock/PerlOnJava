@@ -78,6 +78,26 @@ public class CompileBinaryOperatorHelper {
                 useIntegerOverride, false);
     }
 
+    /** Compile a range where a subroutine's list/scalar context may be dynamic. */
+    public static int compileRangeOrFlipFlop(BytecodeCompiler bytecodeCompiler, String operator,
+            int rs1, int rs2, int tokenIndex, int context) {
+        if (RuntimeContextType.isListLike(context)) {
+            return compileBinaryOperatorSwitch(bytecodeCompiler, "..", rs1, rs2, tokenIndex);
+        }
+
+        int rd = bytecodeCompiler.allocateOutputRegister();
+        int flipFlopId = org.perlonjava.runtime.operators.ScalarFlipFlopOperator.allocateId();
+        org.perlonjava.runtime.operators.ScalarFlipFlopOperator.flipFlops().putIfAbsent(
+                flipFlopId, new org.perlonjava.runtime.operators.ScalarFlipFlopOperator(operator.equals("...")));
+        bytecodeCompiler.emit(context == RuntimeContextType.RUNTIME
+                ? Opcodes.RUNTIME_RANGE_OR_FLIP_FLOP : Opcodes.FLIP_FLOP);
+        bytecodeCompiler.emitReg(rd);
+        bytecodeCompiler.emit(flipFlopId);
+        bytecodeCompiler.emitReg(rs1);
+        bytecodeCompiler.emitReg(rs2);
+        return rd;
+    }
+
     private static int compileBinaryOperatorSwitch(BytecodeCompiler bytecodeCompiler, String operator, int rs1, int rs2, int tokenIndex, boolean shareCallerArgs, Boolean useIntegerOverride, boolean classConstructionBless) {
         // Allocate result register
         int rd = bytecodeCompiler.allocateOutputRegister();
@@ -551,8 +571,7 @@ public class CompileBinaryOperatorHelper {
             }
             case "..." -> {
                 // Flip-flop operator (.. and ...) - per-call-site state via unique ID
-                // Note: numeric range (..) is handled earlier in visitBinaryOperator for list context;
-                // this case handles scalar-context flip-flop.
+                // Numeric ranges are selected by the caller when list context is known.
                 int flipFlopId = org.perlonjava.runtime.operators.ScalarFlipFlopOperator.allocateId();
                 org.perlonjava.runtime.operators.ScalarFlipFlopOperator op =
                         new org.perlonjava.runtime.operators.ScalarFlipFlopOperator(operator.equals("..."));

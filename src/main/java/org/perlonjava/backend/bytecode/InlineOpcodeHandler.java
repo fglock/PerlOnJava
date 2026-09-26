@@ -1605,6 +1605,17 @@ public class InlineOpcodeHandler {
         return pc;
     }
 
+    public static int executeRuntimeRangeOrFlipFlop(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int flipFlopId = bytecode[pc++];
+        int rs1 = bytecode[pc++];
+        int rs2 = bytecode[pc++];
+        int context = registers[2].scalar().getInt();
+        registers[rd] = ScalarFlipFlopOperator.evaluateInContext(
+                flipFlopId, registers[rs1].scalar(), registers[rs2].scalar(), context);
+        return pc;
+    }
+
     public static int executeLocalGlob(int[] bytecode, int pc, RuntimeBase[] registers, InterpretedCode code) {
         int rd = bytecode[pc++];
         int nameIdx = bytecode[pc++];

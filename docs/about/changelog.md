@@ -27,6 +27,9 @@ priorities and future plans.
 - Implement Unix `socketpair` through real POSIX descriptors, preserving
   bidirectional I/O, socket options, shutdown, and scope-exit EOF semantics.
 
+- Restore scalar flip-flop semantics for `..`/`...` in `when` predicates and
+  subroutines whose caller context is determined at runtime.
+
 - Restore logical `when` predicate selection, preserving smartmatch semantics
   for non-topical logical expressions and boolean context for topic/captures.
 

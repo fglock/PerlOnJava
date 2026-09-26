@@ -2120,6 +2120,12 @@ public class Opcodes {
     public static final short INTEGER_SMARTMATCH = 613;
 
     /**
+     * Select a list range or scalar flip-flop using the active subroutine call
+     * context. Format: RUNTIME_RANGE_OR_FLIP_FLOP rd flip_flop_id rs1 rs2.
+     */
+    public static final short RUNTIME_RANGE_OR_FLIP_FLOP = 614;
+
+    /**
      * Call subroutine sharing caller's @_: rd = RuntimeCode.apply(coderef_reg, args_reg, context)
      * Used for &func (no parens) which shares caller's @_ by alias.
      * Same format as CALL_SUB but uses the sharing apply() overload in slow path.

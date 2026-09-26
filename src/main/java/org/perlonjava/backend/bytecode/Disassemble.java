@@ -1966,6 +1966,16 @@ public class Disassemble {
                         sb.append("FLIP_FLOP r").append(ffRd).append(" = flipFlop(").append(ffId).append(", r").append(ffRs1).append(", r").append(ffRs2).append(")\n");
                         break;
                     }
+                    case Opcodes.RUNTIME_RANGE_OR_FLIP_FLOP: {
+                        int ffRd = interpretedCode.bytecode[pc++];
+                        int ffId = interpretedCode.bytecode[pc++];
+                        int ffRs1 = interpretedCode.bytecode[pc++];
+                        int ffRs2 = interpretedCode.bytecode[pc++];
+                        sb.append("RUNTIME_RANGE_OR_FLIP_FLOP r").append(ffRd)
+                                .append(" = rangeOrFlipFlop(").append(ffId).append(", r")
+                                .append(ffRs1).append(", r").append(ffRs2).append(")\n");
+                        break;
+                    }
                     case Opcodes.LOCAL_GLOB:
                         sb.append("LOCAL_GLOB r").append(interpretedCode.bytecode[pc++]).append(" = pushLocalVariable(glob '").append(interpretedCode.stringPool[interpretedCode.bytecode[pc++]]).append("')\n");
                         break;

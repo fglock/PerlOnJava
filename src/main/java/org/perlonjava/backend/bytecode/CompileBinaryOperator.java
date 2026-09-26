@@ -868,13 +868,14 @@ public class CompileBinaryOperator {
         int rs2 = bytecodeCompiler.lastResultReg;
 
         // Emit opcode based on operator (delegated to helper method)
-        // In list context, both forms are range operators.  The distinction
-        // between `..` and `...` only belongs to scalar flip-flop semantics.
-        // Keeping `...` here used to emit FLIP_FLOP even for array-slice
-        // indices such as @array[1...4], collapsing the slice to one element.
-        int rd = node.operator.equals("...") && outerCtx != RuntimeContextType.SCALAR
-                ? CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(
-                        bytecodeCompiler, "..", rs1, rs2, node.getIndex())
+        // In list context, both forms are range operators.  In scalar context
+        // both are stateful flip-flops; `...` only changes when the right
+        // operand starts being considered.  Subroutine bodies start in
+        // RUNTIME context, so defer that choice to the opcode handler.
+        boolean rangeOrFlipFlop = node.operator.equals("..") || node.operator.equals("...");
+        int rd = rangeOrFlipFlop
+                ? CompileBinaryOperatorHelper.compileRangeOrFlipFlop(
+                        bytecodeCompiler, node.operator, rs1, rs2, node.getIndex(), outerCtx)
                 : CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(
                         bytecodeCompiler, node, rs1, rs2, node.getIndex());
 

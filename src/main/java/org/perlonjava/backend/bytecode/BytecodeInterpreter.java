@@ -3142,6 +3142,10 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeFlipFlop(bytecode, pc, registers);
                             }
 
+                            case Opcodes.RUNTIME_RANGE_OR_FLIP_FLOP -> {
+                                pc = InlineOpcodeHandler.executeRuntimeRangeOrFlipFlop(bytecode, pc, registers);
+                            }
+
                             case Opcodes.LOCAL_GLOB -> {
                                 pc = InlineOpcodeHandler.executeLocalGlob(bytecode, pc, registers, code);
                             }

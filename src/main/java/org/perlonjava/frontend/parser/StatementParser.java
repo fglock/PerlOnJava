@@ -776,6 +776,7 @@ public class StatementParser {
             return switch (b.operator) {
                 case "==", "!=", "<", ">", "<=", ">=", "<=>",
                      "eq", "ne", "equ", "neu", "lt", "gt", "le", "ge", "cmp",
+                     "..", "...",
                      "=~", "!~" -> true;
                 case "&&", "||", "//", "and", "or", "xor" ->
                         logicalWhenIsBoolean(b);
