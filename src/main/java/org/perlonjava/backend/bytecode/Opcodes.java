@@ -2710,6 +2710,9 @@ public class Opcodes {
     /** Initialize a scalar declaration, retaining an already ref-aliased cell. Format: register. */
     public static final short INITIALIZE_LEXICAL_SCALAR = 611;
 
+    /** Remove an active lexical binding when its declaring scope exits. Format: register nameStringIdx. */
+    public static final short UNBIND_ACTIVE_LEXICAL = 612;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

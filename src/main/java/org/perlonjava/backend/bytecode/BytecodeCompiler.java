@@ -937,6 +937,7 @@ public class BytecodeCompiler implements Visitor {
     private void emitScopeCleanup(int scopeIdx, boolean flush) {
         // Gather variable indices to determine if cleanup is needed.
         java.util.List<Integer> scalarIndices = symbolTable.getMyScalarIndicesInScope(scopeIdx);
+        java.util.Map<Integer, String> scalarNames = symbolTable.getMyScalarNamesInScope(scopeIdx);
         java.util.List<Integer> hashIndices = symbolTable.getMyHashIndicesInScope(scopeIdx);
         java.util.List<Integer> arrayIndices = symbolTable.getMyArrayIndicesInScope(scopeIdx);
 
@@ -965,6 +966,14 @@ public class BytecodeCompiler implements Visitor {
         // 1. IO fd recycling for anonymous filehandle globs
         // 2. refCount decrement for blessed references with DESTROY
         for (int reg : scalarIndices) {
+            // Remove the active eval lexical binding while the register still
+            // contains its cell.  SCOPE_EXIT_CLEANUP clears it afterwards.
+            String name = scalarNames.get(reg);
+            if (name != null && !preserveImplicitReturn) {
+                emit(Opcodes.UNBIND_ACTIVE_LEXICAL);
+                emitReg(reg);
+                emit(addToStringPool(name));
+            }
             emit(preserveImplicitReturn
                     ? Opcodes.RETURN_SCOPE_CLEANUP : Opcodes.SCOPE_EXIT_CLEANUP);
             emitReg(reg);

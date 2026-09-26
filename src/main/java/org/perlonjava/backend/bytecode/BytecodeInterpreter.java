@@ -505,6 +505,12 @@ public class BytecodeInterpreter {
                                 }
                             }
 
+                            case Opcodes.UNBIND_ACTIVE_LEXICAL -> {
+                                int reg = bytecode[pc++];
+                                int nameIdx = bytecode[pc++];
+                                code.unbindActiveLexical(code.stringPool[nameIdx], registers[reg]);
+                            }
+
                             case Opcodes.RETURN_SCOPE_CLEANUP -> {
                                 int reg = bytecode[pc++];
                                 int returnReg = bytecode[pc++];

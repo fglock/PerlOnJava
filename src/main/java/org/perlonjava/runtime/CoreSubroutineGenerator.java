@@ -100,11 +100,65 @@ public class CoreSubroutineGenerator {
      */
     private static boolean installWrapper(String fullName, String operatorName,
                                           String prototype, PerlSubroutine sub) {
-        RuntimeCode code = new RuntimeCode(sub, prototype);
+        PerlSubroutine checkedSub = (args, ctx) -> {
+            validatePrototypeArity(operatorName, prototype, args.size());
+            return sub.apply(args, ctx);
+        };
+        RuntimeCode code = new RuntimeCode(checkedSub, prototype);
         code.packageName = "CORE";
         code.subName = operatorName;
         GlobalVariable.getGlobalCodeRef(fullName).set(new RuntimeScalar(code));
         return true;
+    }
+
+    /**
+     * CORE wrappers are reached through symbolic code references, after the
+     * parser has already lost the call site's prototype information.  Preserve
+     * Perl's arity diagnostics before dispatching to their Java implementation.
+     */
+    private static void validatePrototypeArity(String name, String prototype, int actual) {
+        int minimum = 0;
+        int maximum = 0;
+        boolean optional = false;
+        boolean unlimited = false;
+
+        for (int i = 0; i < prototype.length(); i++) {
+            char token = prototype.charAt(i);
+            if (token == ';') {
+                optional = true;
+                continue;
+            }
+            if (token == '@' || token == '%') {
+                unlimited = true;
+                continue;
+            }
+            if (token == '\\') {
+                if (++i < prototype.length() && prototype.charAt(i) == '[') {
+                    while (i < prototype.length() && prototype.charAt(i) != ']') {
+                        i++;
+                    }
+                }
+                maximum++;
+                if (!optional) minimum++;
+                continue;
+            }
+            if (token == '_') {
+                // '_' supplies $_ when omitted, but accepts one explicit arg.
+                maximum++;
+                continue;
+            }
+            if (token == '$' || token == '*' || token == '&' || token == '+') {
+                maximum++;
+                if (!optional) minimum++;
+            }
+        }
+
+        if (actual < minimum) {
+            throw new PerlCompilerException("Not enough arguments for " + name);
+        }
+        if (!unlimited && actual > maximum) {
+            throw new PerlCompilerException("Too many arguments for " + name);
+        }
     }
 
     /**

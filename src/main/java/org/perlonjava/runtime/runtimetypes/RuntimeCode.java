@@ -1900,6 +1900,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         RuntimeBase activeCell = findBoundActiveLexical(this, variableName);
         if (activeCell instanceof RuntimeScalar scalar
                 && scalar.referencedByScalarReference
+                // An ordinary `\$lexical` has already registered its pad cell.
+                // Only a reference reached before its declaration needs to
+                // survive into that declaration after a forward jump.
+                && !scalar.localBindingExists
                 // A prior block invocation can have exposed its lexical to
                 // Internals::SvREADONLY.  That cell is no longer valid
                 // writable storage for the next invocation: retain the new
@@ -1932,6 +1936,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public void bindActiveLexical(String variableName, RuntimeBase cell) {
         tagGeneratedLexicalSubCell(variableName, cell);
         registerActiveLexical(this, variableName, cell);
+    }
+
+    /** Drop a binding only when the departing scope still owns that exact cell. */
+    public void unbindActiveLexical(String variableName, RuntimeBase cell) {
+        PerlRuntime runtime = PerlRuntime.current();
+        for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
+            if (sameLogicalCode(frame.code(), this)
+                    && frame.cells().get(variableName) == cell) {
+                frame.cells().remove(variableName);
+                return;
+            }
+        }
     }
 
     /**

@@ -646,6 +646,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // (notably a literal signature argument).
         return scalar != null
                 && scalar.referencedByScalarReference
+                && !scalar.localBindingExists
                 && !(scalar instanceof RuntimeScalarReadOnly)
                 && scalar.type != RuntimeScalarType.READONLY_SCALAR
                 ? scalar : new RuntimeScalar();

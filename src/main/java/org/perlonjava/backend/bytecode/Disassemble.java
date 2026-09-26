@@ -42,6 +42,12 @@ public class Disassemble {
                         int secReg = interpretedCode.bytecode[pc++];
                         sb.append("SCOPE_EXIT_CLEANUP r").append(secReg).append("\n");
                         break;
+                    case Opcodes.UNBIND_ACTIVE_LEXICAL:
+                        int ualReg = interpretedCode.bytecode[pc++];
+                        int ualName = interpretedCode.bytecode[pc++];
+                        sb.append("UNBIND_ACTIVE_LEXICAL r").append(ualReg)
+                                .append(" ").append(interpretedCode.stringPool[ualName]).append("\n");
+                        break;
                     case Opcodes.RETURN_SCOPE_CLEANUP:
                         int rscReg = interpretedCode.bytecode[pc++];
                         int rscReturnReg = interpretedCode.bytecode[pc++];
