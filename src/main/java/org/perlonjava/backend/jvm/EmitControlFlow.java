@@ -155,7 +155,10 @@ public class EmitControlFlow {
 
         // Find loop labels by name.
         LoopLabels loopLabels;
-        if (labelStr == null) {
+        boolean implicitGivenLast = node.getBooleanAnnotation("implicitGivenLast");
+        if (implicitGivenLast) {
+            loopLabels = ctx.javaClassInfo.findInnermostImplicitWhenTarget();
+        } else if (labelStr == null) {
             // Unlabeled next/last/redo target the nearest enclosing true loop.
             // This avoids mis-targeting bare/labeled blocks like SKIP: { ... }.
             loopLabels = ctx.javaClassInfo.findInnermostTrueLoopLabels();
@@ -165,7 +168,7 @@ public class EmitControlFlow {
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(next) operator: " + operator + " label: " + labelStr + " labels: " + loopLabels);
 
         // Check if we're trying to use next/last/redo in a pseudo-loop (do-while/bare block)
-        if (loopLabels != null && !loopLabels.isTrueLoop) {
+        if (loopLabels != null && !loopLabels.isTrueLoop && !implicitGivenLast) {
             throw new PerlCompilerException(node.tokenIndex,
                     "Can't \"" + operator + "\" outside a loop block",
                     ctx.errorUtil);
@@ -229,7 +232,6 @@ public class EmitControlFlow {
         // of the synthetic given loop. Evaluate it explicitly in scalar
         // context and leave it on the operand stack for the given block's
         // result. Ordinary last remains valueless and follows the path below.
-        boolean implicitGivenLast = node.getBooleanAnnotation("implicitGivenLast");
         if (implicitGivenLast) {
             Object resultAnnotation = node.getAnnotation("implicitGivenResult");
             Node result = resultAnnotation instanceof Node ? (Node) resultAnnotation : null;

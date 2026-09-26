@@ -693,6 +693,22 @@ public class EmitForeach {
 
             pushGotoLabelsForBlock(emitterVisitor, blockNode);
 
+            // emitFor1 expands a BlockNode inline instead of delegating to
+            // EmitBlock.  Preserve the synthetic switch boundary that an
+            // implicit-$_ foreach needs for `when`: its synthesized `last`
+            // finishes this iteration's dispatch, while source loop control
+            // continues to select currentLoopLabels.
+            Label topicalizerEnd = null;
+            boolean topicalizerLoopBody = blockNode.getBooleanAnnotation("topicalizerLoopBody");
+            if (topicalizerLoopBody) {
+                topicalizerEnd = new Label();
+                LoopLabels topicalizerLabels = new LoopLabels(
+                        null, topicalizerEnd, topicalizerEnd, topicalizerEnd,
+                        RuntimeContextType.VOID, false, false);
+                topicalizerLabels.implicitWhenTarget = true;
+                emitterVisitor.ctx.javaClassInfo.pushLoopLabels(topicalizerLabels);
+            }
+
             java.util.List<Node> list = blockNode.elements;
             int lastNonNullIndex = -1;
             for (int i = list.size() - 1; i >= 0; i--) {
@@ -728,6 +744,11 @@ public class EmitForeach {
                 emitRegistryCheck(mv, currentLoopLabels, redoLabel, continueLabel, loopEnd);
             }
             emitterVisitor.ctx.javaClassInfo.statementTokenIndex = savedStatementTokenIndex;
+
+            if (topicalizerLoopBody) {
+                mv.visitLabel(topicalizerEnd);
+                emitterVisitor.ctx.javaClassInfo.popLoopLabels();
+            }
 
             popGotoLabelsForBlock(emitterVisitor, blockNode);
 

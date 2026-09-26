@@ -375,6 +375,16 @@ public class JavaClassInfo {
         return null;
     }
 
+    /** Find the synthetic switch boundary used by a when clause. */
+    public LoopLabels findInnermostImplicitWhenTarget() {
+        for (LoopLabels loopLabels : loopLabelStack) {
+            if (loopLabels != null && loopLabels.implicitWhenTarget) {
+                return loopLabels;
+            }
+        }
+        return null;
+    }
+
     public void pushGotoLabels(String labelName, Label gotoLabel) {
         gotoLabelStack.push(new GotoLabels(labelName, gotoLabel));
     }

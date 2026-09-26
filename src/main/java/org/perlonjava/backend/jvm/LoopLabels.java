@@ -78,6 +78,9 @@ public class LoopLabels {
      */
     public boolean isUnlabeledControlFlowTarget;
 
+    /** True for a boundary selected by a when clause's synthesized last. */
+    public boolean implicitWhenTarget;
+
     /**
      * Creates a new LoopLabels instance with all necessary label information.
      *

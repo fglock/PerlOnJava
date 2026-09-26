@@ -314,6 +314,14 @@ public class StatementParser {
             }
             parser.futureAsyncAwaitForbiddenContext = previousForbiddenContext;
         }
+        // A foreach whose iterator topicalizes $_ accepts when/default just
+        // like given.  Its implicit when exit ends the switch dispatch for
+        // this iteration, not the enclosing foreach loop.  Keep that target
+        // explicit so backends can distinguish it from source `last`/`next`.
+        if (loopTopicalizer && body instanceof BlockNode block) {
+            block.isLoop = true;
+            block.setAnnotation("topicalizerLoopBody", true);
+        }
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
         // Parse optional continue block

@@ -440,6 +440,7 @@ public class EmitBlock {
             // However, a *bare* block with loop control (e.g. `{ ...; redo }` or
             // `{ ... } continue { ... }`) is itself a valid target for *unlabeled*
             // last/next/redo, matching Perl semantics.
+            boolean topicalizerLoopBody = node.getBooleanAnnotation("topicalizerLoopBody");
             boolean isBareBlock = node.labelName == null;
             emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
                     node.labelName,
@@ -447,9 +448,10 @@ public class EmitBlock {
                     redoLabel,
                     nextLabel,
                     emitterVisitor.ctx.contextType,
-                    isBareBlock,
-                    isBareBlock);
+                    topicalizerLoopBody ? false : isBareBlock,
+                    topicalizerLoopBody ? false : isBareBlock);
             LoopLabels loopLabels = emitterVisitor.ctx.javaClassInfo.getInnermostLoopLabels();
+            loopLabels.implicitWhenTarget = node.getBooleanAnnotation("givenBlock") || topicalizerLoopBody;
             if (localRecord.needsCleanup()) {
                 loopLabels.dynamicLocalLevelSlot = localRecord.dynamicIndex();
             }

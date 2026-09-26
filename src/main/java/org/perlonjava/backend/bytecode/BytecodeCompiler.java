@@ -1826,6 +1826,7 @@ public class BytecodeCompiler implements Visitor {
         int blockControlNextPatch = -1;
         int blockControlRedoPatch = -1;
         if (node.isLoop) {
+            boolean topicalizerLoopBody = node.getBooleanAnnotation("topicalizerLoopBody");
             blockLoopStartPc = bytecode.size();
             emit(Opcodes.PUSH_CONTROL_BLOCK);
             emit(addToStringPool(node.labelName != null ? node.labelName : ""));
@@ -1836,7 +1837,8 @@ public class BytecodeCompiler implements Visitor {
             // For a bare block, `node.labelName` is null and the block is a
             // valid target for unlabeled last/next/redo (matches JVM
             // EmitBlock's pushLoopLabels(... isBareBlock, isBareBlock)).
-            blockLoopInfo = new LoopInfo(node.labelName, blockLoopStartPc, true);
+            blockLoopInfo = new LoopInfo(node.labelName, blockLoopStartPc, !topicalizerLoopBody,
+                    node.getBooleanAnnotation("givenBlock") || topicalizerLoopBody);
             blockLoopInfo.resultReg = outerResultReg;
             blockLoopInfo.dynamicLocalLevelReg = localLevelReg;
             loopStack.push(blockLoopInfo);
@@ -9050,7 +9052,18 @@ public class BytecodeCompiler implements Visitor {
 
         // Find the target loop
         LoopInfo targetLoop = null;
-        if (labelStr == null) {
+        if (implicitGivenLast) {
+            // A foreach topicalizer has a per-iteration switch target which
+            // must win over the surrounding true loop.  A normal `last` still
+            // selects that surrounding loop.
+            for (int i = loopStack.size() - 1; i >= 0; i--) {
+                LoopInfo loop = loopStack.get(i);
+                if (loop.implicitWhenTarget) {
+                    targetLoop = loop;
+                    break;
+                }
+            }
+        } else if (labelStr == null) {
             // Unlabeled: find innermost true loop (skip do-while/bare blocks)
             for (int i = loopStack.size() - 1; i >= 0; i--) {
                 LoopInfo loop = loopStack.get(i);
@@ -9094,7 +9107,7 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Check if this is a pseudo-loop (do-while/bare block) which doesn't support last/next/redo
-        if (!targetLoop.isTrueLoop) {
+        if (!targetLoop.isTrueLoop && !implicitGivenLast) {
             throwCompilerException("Can't \"" + op + "\" outside a loop block", node.getIndex());
         }
 
@@ -9152,15 +9165,21 @@ public class BytecodeCompiler implements Visitor {
         final List<Integer> nextPcs;  // PCs to patch for next
         final List<Integer> redoPcs;  // PCs to patch for redo
         final boolean isTrueLoop;    // True for for/while/foreach; false for do-while/bare blocks
+        final boolean implicitWhenTarget; // given or foreach topicalizer dispatch boundary
         int continuePc;              // PC for next (continue block or increment)
         int cleanupScopeIndex;       // Lower bound for scopes bypassed by local loop control
         int dynamicLocalLevelReg;    // Saved DVM level for locals bypassed by loop control
         int resultReg;               // Result register for value-producing synthetic blocks
 
         LoopInfo(String label, int startPc, boolean isTrueLoop) {
+            this(label, startPc, isTrueLoop, false);
+        }
+
+        LoopInfo(String label, int startPc, boolean isTrueLoop, boolean implicitWhenTarget) {
             this.label = label;
             this.startPc = startPc;
             this.isTrueLoop = isTrueLoop;
+            this.implicitWhenTarget = implicitWhenTarget;
             this.continuePc = -1;  // Will be set later
             this.cleanupScopeIndex = -1;
             this.dynamicLocalLevelReg = -1;
