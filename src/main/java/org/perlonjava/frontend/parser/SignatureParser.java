@@ -756,7 +756,10 @@ public class SignatureParser {
 
         // Add the extraction assignment with 'my' declaration
         // my $named = (delete $h{named}) // default
-        Node myParam = new OperatorNode("my", paramVariable, parser.tokenIndex);
+        OperatorNode myParam = new OperatorNode("my", paramVariable, parser.tokenIndex);
+        // Signature parameters are value bindings, not ordinary declarations
+        // that may inherit a Devel::LexAlias/forward-refalias replacement.
+        myParam.setAnnotation("signatureParameterDeclaration", true);
         statements.add(new BinaryOperatorNode("=", myParam, extractionValue, parser.tokenIndex));
 
         // Return a list node containing the hash declaration (if first time) and the extraction
@@ -983,11 +986,13 @@ public class SignatureParser {
 
     private Node generateParameterAssignment() {
         // my ($a, $b, @rest) = @_
+        OperatorNode declaration = new OperatorNode("my",
+                new ListNode(parameterVariables, parser.tokenIndex),
+                parser.tokenIndex);
+        declaration.setAnnotation("signatureParameterDeclaration", true);
         return new BinaryOperatorNode(
                 "=",
-                new OperatorNode("my",
-                        new ListNode(parameterVariables, parser.tokenIndex),
-                        parser.tokenIndex),
+                declaration,
                 atUnderscore(parser),
                 parser.tokenIndex);
     }

@@ -1732,7 +1732,17 @@ public class OperatorParser {
         }
         Node operand;
         // Handle 'goto' keyword - operand is optional (bare `goto` is a runtime error)
-        operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
+        // A bareword after goto is always a label, even if a subroutine with
+        // the same name is already visible.  Letting the general list parser
+        // resolve it as a call changes `goto skip` into `skip()` when test
+        // helpers (or user code) provide that subroutine.
+        LexerToken target = peek(parser);
+        if (target.type == IDENTIFIER) {
+            consume(parser);
+            operand = new ListNode(List.of(new IdentifierNode(target.text, currentIndex)), currentIndex);
+        } else {
+            operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
+        }
         // Always return a goto operator - the emitter handles &sub vs LABEL distinction
         return new OperatorNode("goto", operand, currentIndex);
     }

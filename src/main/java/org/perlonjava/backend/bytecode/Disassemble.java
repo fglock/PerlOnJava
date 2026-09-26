@@ -197,6 +197,14 @@ public class Disassemble {
                         rd = interpretedCode.bytecode[pc++];
                         sb.append("LOAD_UNDEF_READONLY r").append(rd).append("\n");
                         break;
+                    case Opcodes.MATERIALIZE_LEXICAL_SCALAR:
+                        rd = interpretedCode.bytecode[pc++];
+                        sb.append("MATERIALIZE_LEXICAL_SCALAR r").append(rd).append("\\n");
+                        break;
+                    case Opcodes.INITIALIZE_LEXICAL_SCALAR:
+                        rd = interpretedCode.bytecode[pc++];
+                        sb.append("INITIALIZE_LEXICAL_SCALAR r").append(rd).append("\\n");
+                        break;
                     case Opcodes.MY_SCALAR:
                         rd = interpretedCode.bytecode[pc++];
                         src = interpretedCode.bytecode[pc++];
@@ -1313,6 +1321,12 @@ public class Disassemble {
                         rs2 = interpretedCode.bytecode[pc++];  // list register
                         sb.append("ARRAY_SET_FROM_LIST r").append(rs1).append(".setFromList(r").append(rs2).append(")\n");
                         break;
+                    case Opcodes.ARRAY_SET_FROM_REFERENCE_LIST:
+                        rs1 = interpretedCode.bytecode[pc++];  // array register
+                        rs2 = interpretedCode.bytecode[pc++];  // reference list register
+                        sb.append("ARRAY_SET_FROM_REFERENCE_LIST r").append(rs1)
+                                .append(".setFromReferenceList(r").append(rs2).append(")\n");
+                        break;
                     case Opcodes.SET_FROM_LIST:
                         rd = interpretedCode.bytecode[pc++];
                         rs1 = interpretedCode.bytecode[pc++];  // lhs list
@@ -1648,9 +1662,11 @@ public class Disassemble {
                         sb.append("SELECT_OP r").append(rd).append(" = select(r").append(rs).append(")\n");
                         break;
                     case Opcodes.LOAD_GLOB:
+                    case Opcodes.LOAD_GLOB_CANONICAL:
                         rd = interpretedCode.bytecode[pc++];
                         nameIdx = interpretedCode.bytecode[pc++];
-                        sb.append("LOAD_GLOB r").append(rd).append(" = *").append(interpretedCode.stringPool[nameIdx]).append("\n");
+                        sb.append(opcode == Opcodes.LOAD_GLOB ? "LOAD_GLOB r" : "LOAD_GLOB_CANONICAL r")
+                                .append(rd).append(" = *").append(interpretedCode.stringPool[nameIdx]).append("\n");
                         break;
                     case Opcodes.TIME_OP:
                         rd = interpretedCode.bytecode[pc++];
@@ -1686,6 +1702,12 @@ public class Disassemble {
                         rd = interpretedCode.bytecode[pc++];
                         rs = interpretedCode.bytecode[pc++];
                         sb.append("DEREF_ARRAY r").append(rd).append(" = @{r").append(rs).append("}\n");
+                        break;
+                    case Opcodes.REFALIAS_SCALAR_REFERENCE:
+                        rd = interpretedCode.bytecode[pc++];
+                        rs = interpretedCode.bytecode[pc++];
+                        sb.append("REFALIAS_SCALAR_REFERENCE r").append(rd)
+                                .append(" = refalias_scalar(r").append(rs).append(")\n");
                         break;
                     case Opcodes.DEREF_HASH:
                         rd = interpretedCode.bytecode[pc++];
@@ -2933,6 +2955,31 @@ public class Disassemble {
                         sb.append("STATE_RETRIEVE_SCALAR r").append(stateRd)
                                 .append(", name=").append(stateName)
                                 .append(", persist=").append(statePersist).append("\n");
+                        break;
+                    }
+                    case Opcodes.STATE_RETRIEVE_ARRAY:
+                    case Opcodes.STATE_RETRIEVE_HASH: {
+                        String name = opcode == Opcodes.STATE_RETRIEVE_ARRAY
+                                ? "STATE_RETRIEVE_ARRAY" : "STATE_RETRIEVE_HASH";
+                        int stateRd = interpretedCode.bytecode[pc++];
+                        int stateName = interpretedCode.bytecode[pc++];
+                        int statePersist = interpretedCode.bytecode[pc++];
+                        sb.append(name).append(" r").append(stateRd)
+                                .append(", name=").append(stateName)
+                                .append(", persist=").append(statePersist).append("\\n");
+                        break;
+                    }
+                    case Opcodes.STATE_ALIAS_ARRAY:
+                    case Opcodes.STATE_ALIAS_HASH: {
+                        String name = opcode == Opcodes.STATE_ALIAS_ARRAY
+                                ? "STATE_ALIAS_ARRAY" : "STATE_ALIAS_HASH";
+                        int stateRd = interpretedCode.bytecode[pc++];
+                        int sourceReg = interpretedCode.bytecode[pc++];
+                        int stateName = interpretedCode.bytecode[pc++];
+                        int statePersist = interpretedCode.bytecode[pc++];
+                        sb.append(name).append(" r").append(stateRd).append(" = r")
+                                .append(sourceReg).append(", name=").append(stateName)
+                                .append(", persist=").append(statePersist).append("\\n");
                         break;
                     }
                     case Opcodes.STATE_IS_INITIALIZED: {
