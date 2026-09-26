@@ -499,6 +499,15 @@ public class RuntimeStashEntry extends RuntimeGlob {
                 && codeRef.type == CODE
                 && codeRef.value instanceof RuntimeCode code
                 && (code.defined() || code.isDeclared)) {
+            // A zero-prototype literal sub is represented in Perl's stash as
+            // its compact scalar constant until something promotes the name
+            // to a full glob.  Keep the CODE slot callable, but expose the
+            // scalar payload to ref($::{name}).
+            if (code.isConstantCv && code.constantValue != null
+                    && code.constantValue.elements.size() == 1
+                    && code.constantValue.elements.getFirst() instanceof RuntimeScalar scalar) {
+                return scalar;
+            }
             return codeRef;
         }
         return null;
