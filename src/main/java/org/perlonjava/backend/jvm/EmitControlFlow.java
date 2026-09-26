@@ -156,7 +156,8 @@ public class EmitControlFlow {
         // Find loop labels by name.
         LoopLabels loopLabels;
         boolean implicitGivenLast = node.getBooleanAnnotation("implicitGivenLast");
-        if (implicitGivenLast) {
+        boolean switchBreak = node.getBooleanAnnotation("switchBreak");
+        if (implicitGivenLast || switchBreak) {
             loopLabels = ctx.javaClassInfo.findInnermostImplicitWhenTarget();
         } else if (labelStr == null) {
             // Unlabeled next/last/redo target the nearest enclosing true loop.
@@ -168,7 +169,7 @@ public class EmitControlFlow {
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(next) operator: " + operator + " label: " + labelStr + " labels: " + loopLabels);
 
         // Check if we're trying to use next/last/redo in a pseudo-loop (do-while/bare block)
-        if (loopLabels != null && !loopLabels.isTrueLoop && !implicitGivenLast) {
+        if (loopLabels != null && !loopLabels.isTrueLoop && !implicitGivenLast && !switchBreak) {
             throw new PerlCompilerException(node.tokenIndex,
                     "Can't \"" + operator + "\" outside a loop block",
                     ctx.errorUtil);

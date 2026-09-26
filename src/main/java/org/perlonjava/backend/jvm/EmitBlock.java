@@ -441,7 +441,8 @@ public class EmitBlock {
             // `{ ... } continue { ... }`) is itself a valid target for *unlabeled*
             // last/next/redo, matching Perl semantics.
             boolean topicalizerLoopBody = node.getBooleanAnnotation("topicalizerLoopBody");
-            boolean isBareBlock = node.labelName == null;
+            boolean isBareBlock = node.labelName == null
+                    && !node.getBooleanAnnotation("givenBlock");
             emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
                     node.labelName,
                     nextLabel,

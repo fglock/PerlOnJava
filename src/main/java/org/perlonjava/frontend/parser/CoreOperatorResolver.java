@@ -141,9 +141,18 @@ public class CoreOperatorResolver {
                 continueNode.setAnnotation("whenContinue", true);
                 yield continueNode;
             }
-            case "break" -> new OperatorNode(
-                    "last",
-                    new ListNode(currentIndex), currentIndex);
+            case "break" -> {
+                OperatorNode breakNode = new OperatorNode(
+                        "last",
+                        new ListNode(currentIndex), currentIndex);
+                // `break` exits a synthetic given boundary. Outside a given it
+                // follows the existing ordinary-last path, which lets eval
+                // report its normal runtime diagnostic.
+                if (parser.parsingGivenDepth > 0) {
+                    breakNode.setAnnotation("switchBreak", true);
+                }
+                yield breakNode;
+            }
             case "eval", "evalbytes" -> OperatorParser.parseEval(parser, token.text);
             case "do" -> OperatorParser.parseDoOperator(parser);
             case "require" -> OperatorParser.parseRequire(parser);

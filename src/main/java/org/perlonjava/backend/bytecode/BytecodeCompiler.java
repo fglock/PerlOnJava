@@ -1837,7 +1837,8 @@ public class BytecodeCompiler implements Visitor {
             // For a bare block, `node.labelName` is null and the block is a
             // valid target for unlabeled last/next/redo (matches JVM
             // EmitBlock's pushLoopLabels(... isBareBlock, isBareBlock)).
-            blockLoopInfo = new LoopInfo(node.labelName, blockLoopStartPc, !topicalizerLoopBody,
+            blockLoopInfo = new LoopInfo(node.labelName, blockLoopStartPc,
+                    !topicalizerLoopBody && !node.getBooleanAnnotation("givenBlock"),
                     node.getBooleanAnnotation("givenBlock") || topicalizerLoopBody);
             blockLoopInfo.resultReg = outerResultReg;
             // An implicit `last` from when/default must preserve the context
@@ -8908,6 +8909,7 @@ public class BytecodeCompiler implements Visitor {
      */
     void handleLoopControlOperator(OperatorNode node, String op) {
         boolean implicitGivenLast = node.getBooleanAnnotation("implicitGivenLast");
+        boolean switchBreak = node.getBooleanAnnotation("switchBreak");
         // Extract label if present
         String labelStr = null;
         boolean isDynamicLabel = false;
@@ -9003,7 +9005,7 @@ public class BytecodeCompiler implements Visitor {
 
         // Find the target loop
         LoopInfo targetLoop = null;
-        if (implicitGivenLast) {
+        if (implicitGivenLast || switchBreak) {
             // A foreach topicalizer has a per-iteration switch target which
             // must win over the surrounding true loop.  A normal `last` still
             // selects that surrounding loop.
@@ -9058,7 +9060,7 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Check if this is a pseudo-loop (do-while/bare block) which doesn't support last/next/redo
-        if (!targetLoop.isTrueLoop && !implicitGivenLast) {
+        if (!targetLoop.isTrueLoop && !implicitGivenLast && !switchBreak) {
             throwCompilerException("Can't \"" + op + "\" outside a loop block", node.getIndex());
         }
 
