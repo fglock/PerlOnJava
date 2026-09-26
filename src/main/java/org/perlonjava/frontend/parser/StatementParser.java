@@ -911,14 +911,65 @@ public class StatementParser {
         } else {
             condition = parser.parseExpression(0);
         }
-        BlockNode body = new BlockNode(List.of(expression), index, parser);
+        // Postfix when has the same implicit given exit as a braced when.
+        // A source `continue` is the exception: it falls through to the next
+        // switch clause, so remove it (and unreachable trailing expressions)
+        // rather than compiling it as an ordinary loop `next`.
+        boolean continueWhen = removeWhenContinue(expression);
+        List<Node> bodyElements = new ArrayList<>();
+        bodyElements.add(expression);
+        if (!continueWhen) {
+            expression.setAnnotation("insideGivenBlock", true);
+            OperatorNode implicitLast = new OperatorNode("last", new ListNode(index), index);
+            implicitLast.setAnnotation("implicitGivenLast", true);
+            implicitLast.setAnnotation("implicitGivenResult", expression);
+            bodyElements.add(implicitLast);
+        }
+        BlockNode body = new BlockNode(bodyElements, index, parser);
         Node ifCondition = whenIsBoolean(condition) ? condition
                 : new BinaryOperatorNode("~~",
                         new OperatorNode("$", new IdentifierNode("_", index), index),
                         condition, index);
-        Node result = new IfNode("if", ifCondition, body, null, index);
+        Node result = new IfNode("if", ifCondition, body, new ListNode(index), index);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ";");
         return result;
+    }
+
+    /**
+     * Removes a switch {@code continue} and source statements after it from a
+     * postfix-when expression.  The parser represents comma-separated source
+     * expressions as ListNodes and {@code do { ... }} with nested blocks, so
+     * walk statement-order containers and truncate at the first marker.
+     */
+    private static boolean removeWhenContinue(Node node) {
+        if (node == null) return false;
+        if (node instanceof AbstractNode annotated
+                && annotated.getBooleanAnnotation("whenContinue")) {
+            return true;
+        }
+        if (node instanceof BlockNode block) {
+            return removeWhenContinueFromElements(block.elements);
+        }
+        if (node instanceof ListNode list) {
+            return removeWhenContinueFromElements(list.elements);
+        }
+        if (node instanceof OperatorNode operator) {
+            return removeWhenContinue(operator.operand);
+        }
+        if (node instanceof BinaryOperatorNode binary) {
+            return removeWhenContinue(binary.left) || removeWhenContinue(binary.right);
+        }
+        return false;
+    }
+
+    private static boolean removeWhenContinueFromElements(List<Node> elements) {
+        for (int i = 0; i < elements.size(); i++) {
+            if (removeWhenContinue(elements.get(i))) {
+                elements.subList(i, elements.size()).clear();
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
