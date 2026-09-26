@@ -1963,6 +1963,8 @@ public class Disassemble {
                         int ffId = interpretedCode.bytecode[pc++];
                         int ffRs1 = interpretedCode.bytecode[pc++];
                         int ffRs2 = interpretedCode.bytecode[pc++];
+                        boolean ffLeftLine = interpretedCode.bytecode[pc++] != 0;
+                        boolean ffRightLine = interpretedCode.bytecode[pc++] != 0;
                         sb.append("FLIP_FLOP r").append(ffRd).append(" = flipFlop(").append(ffId).append(", r").append(ffRs1).append(", r").append(ffRs2).append(")\n");
                         break;
                     }
@@ -1971,6 +1973,8 @@ public class Disassemble {
                         int ffId = interpretedCode.bytecode[pc++];
                         int ffRs1 = interpretedCode.bytecode[pc++];
                         int ffRs2 = interpretedCode.bytecode[pc++];
+                        boolean ffLeftLine = interpretedCode.bytecode[pc++] != 0;
+                        boolean ffRightLine = interpretedCode.bytecode[pc++] != 0;
                         sb.append("RUNTIME_RANGE_OR_FLIP_FLOP r").append(ffRd)
                                 .append(" = rangeOrFlipFlop(").append(ffId).append(", r")
                                 .append(ffRs1).append(", r").append(ffRs2).append(")\n");

@@ -875,7 +875,8 @@ public class CompileBinaryOperator {
         boolean rangeOrFlipFlop = node.operator.equals("..") || node.operator.equals("...");
         int rd = rangeOrFlipFlop
                 ? CompileBinaryOperatorHelper.compileRangeOrFlipFlop(
-                        bytecodeCompiler, node.operator, rs1, rs2, node.getIndex(), outerCtx)
+                        bytecodeCompiler, node.operator, rs1, rs2, node.getIndex(), outerCtx,
+                        node.left instanceof NumberNode, node.right instanceof NumberNode)
                 : CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(
                         bytecodeCompiler, node, rs1, rs2, node.getIndex());
 

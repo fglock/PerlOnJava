@@ -65,10 +65,23 @@ new unit tests. No existing tests were changed or deleted.
   `/tmp/decl-refs-state-fixed.log` restores `op/decl-refs.t` to 408/408.
 - Files: `BytecodeCompiler.java` and the new unit test.
 
+## Completed: numeric scalar flip-flop endpoints (2026-09-26)
+
+- Numeric literal endpoints in scalar `..`/`...` now compare with `$.`, as
+  Perl requires, instead of behaving as unconditionally true values.
+- The endpoint metadata is carried by both JVM emission and interpreter
+  bytecode; list-context ranges retain literal bounds.
+- Added `scalar_flipflop_numeric_endpoints.t`: blead passes 3/3, both unfixed
+  backends fail the original check, and both fixed backends pass 3/3.
+- `JPERL_TEST_FILTER=scalar_flipflop_numeric_endpoints` make passes;
+  `/tmp/smartmatch-flipflop-fixed.log` restores `op/smartmatch.t` to 353/353.
+- Files: shared flip-flop runtime, JVM/interpreter lowering, opcode
+  disassembly, and the new unit test.
+
 ## Next steps
 
 1. Fix remaining targeted regressions: universal 108/142 (unexpected tied
-   STORE), magic 206/208, smartmatch 352/353, class/destruct 3/7
+   STORE), magic 206/208, class/destruct 3/7
    (baseline 4/7). Raw evidence: `/tmp/recovery-targeted.log`.
 2. Investigate the two Unicode-property files and compare fixture plans with
    local perl5/blead before interpreting count changes.

@@ -1598,10 +1598,13 @@ public class InlineOpcodeHandler {
         int flipFlopId = bytecode[pc++];
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
+        boolean leftIsLineNumberEndpoint = bytecode[pc++] != 0;
+        boolean rightIsLineNumberEndpoint = bytecode[pc++] != 0;
         registers[rd] = ScalarFlipFlopOperator.evaluate(
                 flipFlopId,
                 registers[rs1].scalar(),
-                registers[rs2].scalar());
+                registers[rs2].scalar(),
+                leftIsLineNumberEndpoint, rightIsLineNumberEndpoint);
         return pc;
     }
 
@@ -1610,9 +1613,12 @@ public class InlineOpcodeHandler {
         int flipFlopId = bytecode[pc++];
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
+        boolean leftIsLineNumberEndpoint = bytecode[pc++] != 0;
+        boolean rightIsLineNumberEndpoint = bytecode[pc++] != 0;
         int context = registers[2].scalar().getInt();
         registers[rd] = ScalarFlipFlopOperator.evaluateInContext(
-                flipFlopId, registers[rs1].scalar(), registers[rs2].scalar(), context);
+                flipFlopId, registers[rs1].scalar(), registers[rs2].scalar(), context,
+                leftIsLineNumberEndpoint, rightIsLineNumberEndpoint);
         return pc;
     }
 

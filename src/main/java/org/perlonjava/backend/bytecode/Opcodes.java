@@ -1023,7 +1023,7 @@ public class Opcodes {
     /**
      * Flip-flop operator: rd = ScalarFlipFlopOperator.evaluate(flipFlopId, rs1, rs2)
      * flipFlopId is a unique per-call-site int constant.
-     * Format: FLIP_FLOP rd flipFlopId rs1 rs2 isExclusive
+     * Format: FLIP_FLOP rd flipFlopId rs1 rs2 leftIsLineNumber rightIsLineNumber
      */
     public static final short FLIP_FLOP = 341;
 
@@ -2121,7 +2121,8 @@ public class Opcodes {
 
     /**
      * Select a list range or scalar flip-flop using the active subroutine call
-     * context. Format: RUNTIME_RANGE_OR_FLIP_FLOP rd flip_flop_id rs1 rs2.
+     * context. Format: RUNTIME_RANGE_OR_FLIP_FLOP rd flip_flop_id rs1 rs2
+     * leftIsLineNumber rightIsLineNumber.
      */
     public static final short RUNTIME_RANGE_OR_FLIP_FLOP = 614;
 

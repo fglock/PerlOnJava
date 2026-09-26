@@ -4,6 +4,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.PerlRange;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -52,9 +53,19 @@ public class ScalarFlipFlopOperator {
      * @return A RuntimeScalar representing the current sequence count or an empty string.
      */
     public static RuntimeScalar evaluate(int id, RuntimeScalar left, RuntimeScalar right) {
+        return evaluate(id, left, right, false, false);
+    }
+
+    /**
+     * Numeric literals used as scalar flip-flop endpoints compare with the
+     * current input line number ({@code $.}), rather than merely supplying a
+     * truthy numeric value. List-context ranges retain their literal bounds.
+     */
+    public static RuntimeScalar evaluate(int id, RuntimeScalar left, RuntimeScalar right,
+            boolean leftIsLineNumberEndpoint, boolean rightIsLineNumberEndpoint) {
         ScalarFlipFlopOperator ff = flipFlops().get(id);
-        boolean leftOperand = left.getBoolean();
-        boolean rightOperand = right.getBoolean();
+        boolean leftOperand = endpointMatches(left, leftIsLineNumberEndpoint);
+        boolean rightOperand = endpointMatches(right, rightIsLineNumberEndpoint);
         if (!ff.currentState) {
             // If current state is false, evaluate the left operand
             if (leftOperand) {
@@ -81,9 +92,20 @@ public class ScalarFlipFlopOperator {
 
     /** Resolve a range operator in a subroutine whose caller context is only known at runtime. */
     public static RuntimeBase evaluateInContext(int id, RuntimeScalar left, RuntimeScalar right, int context) {
+        return evaluateInContext(id, left, right, context, false, false);
+    }
+
+    public static RuntimeBase evaluateInContext(int id, RuntimeScalar left, RuntimeScalar right,
+            int context, boolean leftIsLineNumberEndpoint, boolean rightIsLineNumberEndpoint) {
         if (RuntimeContextType.isListLike(context)) {
             return PerlRange.createRange(left, right);
         }
-        return evaluate(id, left, right);
+        return evaluate(id, left, right, leftIsLineNumberEndpoint, rightIsLineNumberEndpoint);
+    }
+
+    private static boolean endpointMatches(RuntimeScalar operand, boolean isLineNumberEndpoint) {
+        if (!isLineNumberEndpoint) return operand.getBoolean();
+        RuntimeScalar inputLine = GlobalVariable.getGlobalVariable("main::.");
+        return inputLine.getInt() == operand.getInt();
     }
 }
