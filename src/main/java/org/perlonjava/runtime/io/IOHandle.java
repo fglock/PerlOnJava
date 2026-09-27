@@ -249,6 +249,10 @@ public interface IOHandle {
         return RuntimeIO.handleIOError("Accept operation is not supported.");
     }
 
+    default RuntimeScalar shutdown(int how) {
+        return RuntimeIO.handleIOError("Shutdown operation is not supported.");
+    }
+
     default RuntimeScalar seek(long pos, int whence) {
         // Clear unget buffer when seeking, as position changes
         clearUngetBuffer();

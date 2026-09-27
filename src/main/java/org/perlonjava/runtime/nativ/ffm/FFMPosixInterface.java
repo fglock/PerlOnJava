@@ -298,6 +298,14 @@ public interface FFMPosixInterface {
      * @return 0 on success, -1 on error (check errno)
      */
     int pipe(int[] fds);
+
+    default int socketpair(int domain, int type, int protocol, int[] fds) {
+        return -1;
+    }
+
+    default int shutdown(int fd, int how) {
+        return -1;
+    }
     
     /**
      * Duplicate a file descriptor.

@@ -284,6 +284,7 @@ public class RuntimeStashEntry extends RuntimeGlob {
                     // must appear assigned for the parser to route require
                     // through the override.
                     GlobalVariable.globalGlobs.put(this.globName, true);
+                    GlobalVariable.markExplicitGlobAssignment(this.globName);
 
                     if (sourceGlobName == null) {
                         // Detached glob (e.g. returned by delete $stash->{name}):
@@ -482,16 +483,17 @@ public class RuntimeStashEntry extends RuntimeGlob {
         if (codeRef != null
                 && codeRef.type == CODE
                 && codeRef.value instanceof RuntimeCode code
-                && code.isConstantCv) {
-            // Constant CVs are compact scalar stash entries from declaration
-            // time. The body may still be lazily materialized, in which case
-            // an undef scalar preserves the externally visible SCALAR shape.
+                && code.isConstantCv
+                && code.prototype != null) {
+            // An explicit-prototype constant CV is a compact scalar stash
+            // entry. An ordinary constant-bodied sub has no prototype and
+            // remains a CODE entry in the stash.
             return new RuntimeScalar().createReference();
         }
 
         // Typeglob assignment (e.g. *foo = sub {}) upgrades the stash entry to a
         // full GV. A bare full GV is not a reference, so ref($stash{name}) is "".
-        if (GlobalVariable.globalGlobs.getOrDefault(this.globName, false)) {
+        if (GlobalVariable.explicitGlobAssignments.getOrDefault(this.globName, false)) {
             return null;
         }
 
@@ -509,15 +511,6 @@ public class RuntimeStashEntry extends RuntimeGlob {
                 && codeRef.type == CODE
                 && codeRef.value instanceof RuntimeCode code
                 && (code.defined() || code.isDeclared)) {
-            // A zero-prototype literal sub is represented in Perl's stash as
-            // its compact scalar constant until something promotes the name
-            // to a full glob.  Keep the CODE slot callable, but expose the
-            // scalar payload to ref($::{name}).
-            if (code.isConstantCv && code.constantValue != null
-                    && code.constantValue.elements.size() == 1
-                    && code.constantValue.elements.getFirst() instanceof RuntimeScalar scalar) {
-                return scalar;
-            }
             return codeRef;
         }
         return null;
