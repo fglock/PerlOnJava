@@ -9,6 +9,10 @@ priorities and future plans.
 - Preserve integer-mode auto-increment and decrement through aggregate lvalue
   proxies, restoring Pod::Simple numbered-list validation.
 
+- Restore `op/sort.t` compatibility for dynamic and glob comparators,
+  scalar method-list expressions, comparator control flow, and temporary
+  argument lifetimes on both execution backends.
+
 - Restore `lex.t` compatibility for quote-like `#line` mapping, byte-source
   eval diagnostics, evalled substitutions, constant stash entries, and both
   execution backends.
