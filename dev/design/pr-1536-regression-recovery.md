@@ -78,29 +78,33 @@ new unit tests. No existing tests were changed or deleted.
 - Files: shared flip-flop runtime, JVM/interpreter lowering, opcode
   disassembly, and the new unit test.
 
+## Completed: final regression recovery (2026-09-27)
+
+- Restored the Unicode-property regressions and the shared-reference thread
+  teardown regression. The permanent project-owned coverage includes
+  `threads_shared_recursive_lock.t`; the relevant focused tests pass on blead
+  Perl, JVM, and interpreter backends.
+- Ran the full unfiltered `nice -n 19 make` from the rebased commit; it passed.
+- Ran the frozen-source full UAT at
+  `/tmp/test_20260927_uat_final_rebased.log`: 575 files, 680,740 assertions,
+  zero timeouts, and zero incomplete files.
+- Compared that UAT against `test_20260925_220000_pkg.log`. It reports zero
+  regression files and 783 additional passing assertions. The historical
+  September 26 lvref log retains its historical regressions and is not the
+  final-run evidence.
+- Rebasing produced `d73d5eb74`; PR #1536 was updated and is currently ready
+  for review. The subsequent empty CI-retrigger commit changes no source tree.
+
 ## Next steps
 
-1. Fix remaining targeted regressions: universal 108/142 (unexpected tied
-   STORE), magic 206/208, class/destruct 3/7
-   (baseline 4/7). Raw evidence: `/tmp/recovery-targeted.log`.
-2. Investigate the two Unicode-property files and compare fixture plans with
-   local perl5/blead before interpreting count changes.
-3. Restore baseline coverage for perf/opcount and perf/optree; resolve the
-   branch-added exclusion test consistently with the prohibition on changing
-   existing tests. No exclusion changes have been made in this recovery phase.
-4. Reproduce the twelve published CI failures on the current branch; distinguish
-   already-fixed failures from remaining runtime and platform problems.
-5. Audit temporary committed artifacts and changelog, then run unfiltered make,
-   backend gates, and full frozen-source UAT. Compare with both historical logs
-   using per-file regressions, missing rows, and new-invalid checks.
-6. Update existing PR 1536 only after local acceptance and require both CI jobs
-   to pass on its final head. No push or PR update has occurred in this phase.
+1. Obtain Linux and Windows CI success for the final PR head. GitHub Actions
+   has not attached a run to the current head despite synchronize and reopen
+   events; do not claim PR acceptance until that external check completes.
 
 ## Open issues
 
-Full UAT and CI acceptance are not yet achieved. The one remaining lexsub
-failure is the historical debugger/goto test 73, not a newly accepted regression.
-Do not claim a full gate from the filtered builds above.
+Local acceptance is complete. The only remaining acceptance condition is the
+missing GitHub Actions run for the published PR head.
 
 ## References
 
