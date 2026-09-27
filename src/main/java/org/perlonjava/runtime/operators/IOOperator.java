@@ -3725,7 +3725,11 @@ public class IOOperator {
             int type = args[3].scalar().getInt();
             int protocol = args[4].scalar().getInt();
 
-            if (domain == Socket.AF_UNIX) {
+            // Windows has no POSIX socketpair(2).  Like blead Perl's
+            // my_socketpair(), use the loopback transport below to emulate
+            // AF_UNIX there; native descriptors remain required on POSIX for
+            // true socketpair semantics.
+            if (domain == Socket.AF_UNIX && !FFMPosix.isWindows()) {
                 int[] fds = new int[2];
                 if (FFMPosix.get().socketpair(domain, type, protocol, fds) != 0) {
                     getGlobalVariable("main::!").set(FFMPosix.get().errno());
