@@ -49,18 +49,26 @@ public class NativeFdIOHandle implements IOHandle {
 
     @Override
     public RuntimeScalar write(String string) {
+        return writeSome(string) >= 0 ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
+    }
+
+    @Override
+    public int writeSome(String string) {
         if (closed) {
-            return RuntimeIO.handleIOError("write to closed filehandle");
+            RuntimeIO.handleIOError("write to closed filehandle");
+            return -1;
         }
         try {
             byte[] bytes = string.getBytes(StandardCharsets.ISO_8859_1);
             int written = FFMPosix.get().nativeWrite(nativeFd, bytes, bytes.length);
             if (written == -1) {
-                return RuntimeIO.handleIOError("write failed: " + FFMPosix.get().strerror(FFMPosix.get().errno()));
+                RuntimeIO.handleIOError(FFMPosix.get().errno());
+                return -1;
             }
-            return RuntimeScalarCache.scalarTrue;
+            return written;
         } catch (Exception e) {
-            return RuntimeIO.handleIOError("write failed: " + e.getMessage());
+            RuntimeIO.handleIOError("write failed: " + e.getMessage());
+            return -1;
         }
     }
 
@@ -118,7 +126,8 @@ public class NativeFdIOHandle implements IOHandle {
 
     @Override
     public RuntimeScalar syswrite(String data) {
-        return write(data);
+        int written = writeSome(data);
+        return written < 0 ? RuntimeScalarCache.scalarUndef : new RuntimeScalar(written);
     }
 
     @Override

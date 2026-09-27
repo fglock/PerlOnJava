@@ -5,6 +5,7 @@ import org.perlonjava.backend.bytecode.FutureAsyncAwaitRuntime;
 import org.perlonjava.runtime.io.ClosedIOHandle;
 import org.perlonjava.runtime.io.IOHandle;
 import org.perlonjava.runtime.io.LayeredIOHandle;
+import org.perlonjava.runtime.io.NativeSocketIOHandle;
 import org.perlonjava.runtime.io.SocketIO;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.StringOperators;
@@ -4525,14 +4526,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         while (handle instanceof LayeredIOHandle layered) {
             handle = layered.getDelegate();
         }
-        return handle instanceof SocketIO;
+        return handle instanceof SocketIO || handle instanceof NativeSocketIOHandle;
     }
 
     private static boolean isStreamSocketIOHandle(IOHandle handle) {
         while (handle instanceof LayeredIOHandle layered) {
             handle = layered.getDelegate();
         }
-        return handle instanceof SocketIO socket && !socket.isDatagramSocket();
+        if (handle instanceof SocketIO socket) {
+            return !socket.isDatagramSocket();
+        }
+        return handle instanceof NativeSocketIOHandle socket
+                && socket.socketType() != org.perlonjava.runtime.perlmodule.Socket.SOCK_DGRAM;
     }
 
     private static boolean isAcceptedSocket(RuntimeScalar scalar) {

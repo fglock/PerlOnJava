@@ -67,6 +67,8 @@ public class FFMPosixLinux implements FFMPosixInterface {
     private static MethodHandle ttynameHandle;
     // Method handles for low-level FD operations
     private static MethodHandle pipeHandle;
+    private static MethodHandle socketpairHandle;
+    private static MethodHandle shutdownHandle;
     private static MethodHandle openHandle;
     private static MethodHandle closeHandle;
     private static MethodHandle readHandle;
@@ -326,6 +328,15 @@ public class FFMPosixLinux implements FFMPosixInterface {
                 stdlib.find("pipe").orElseThrow(),
                 FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS),
                 captureErrno
+            );
+            socketpairHandle = linker.downcallHandle(
+                stdlib.find("socketpair").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT,
+                        ValueLayout.JAVA_INT, ValueLayout.ADDRESS), captureErrno
+            );
+            shutdownHandle = linker.downcallHandle(
+                stdlib.find("shutdown").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT), captureErrno
             );
             
             // int dup(int oldfd)
@@ -908,6 +919,42 @@ public class FFMPosixLinux implements FFMPosixInterface {
             return 0;
         } catch (Throwable e) {
             setErrno(24); // EMFILE
+            return -1;
+        }
+    }
+
+    @Override
+    public int socketpair(int domain, int type, int protocol, int[] fds) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment pairBuf = arena.allocate(ValueLayout.JAVA_INT, 2);
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            int result = (int) socketpairHandle.invokeExact(capturedState, domain, type, protocol, pairBuf);
+            if (result != 0) {
+                setErrno(capturedState.get(ValueLayout.JAVA_INT, errnoOffset));
+                return -1;
+            }
+            fds[0] = pairBuf.getAtIndex(ValueLayout.JAVA_INT, 0);
+            fds[1] = pairBuf.getAtIndex(ValueLayout.JAVA_INT, 1);
+            return 0;
+        } catch (Throwable e) {
+            setErrno(5);
+            return -1;
+        }
+    }
+
+    @Override
+    public int shutdown(int fd, int how) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            int result = (int) shutdownHandle.invokeExact(capturedState, fd, how);
+            if (result != 0) {
+                setErrno(capturedState.get(ValueLayout.JAVA_INT, errnoOffset));
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(5);
             return -1;
         }
     }

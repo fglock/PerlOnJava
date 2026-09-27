@@ -13,6 +13,9 @@ priorities and future plans.
 - Restore special-block phaser behavior, including compile-time execution,
   lexical phaser-name calls, and Perl-compatible diagnostic boundaries.
 
+- Implement Unix `socketpair` through real POSIX descriptors, preserving
+  bidirectional I/O, socket options, shutdown, and scope-exit EOF semantics.
+
 - Preserve Perl-compatible `EISDIR` readline behavior for filehandles opened
   on directories on Windows, and ensure `Config` does not advertise unsupported
   fork capabilities.

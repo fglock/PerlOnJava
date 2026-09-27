@@ -3225,7 +3225,7 @@ public class IOOperator {
                 return scalarFalse;
             }
 
-            return socketIO.getSocketHandle().shutdown(how);
+            return socketIO.ioHandle.shutdown(how);
 
         } catch (Exception e) {
             getGlobalVariable("main::!").set("shutdown failed: " + e.getMessage());
@@ -3342,6 +3342,10 @@ public class IOOperator {
 
             // Handle socket option retrieval
             SocketIO socketIOHandle = socketIO.getSocketHandle();
+            if (socketIO.ioHandle instanceof NativeSocketIOHandle nativeSocket
+                    && level == Socket.SOL_SOCKET && optname == Socket.SO_TYPE) {
+                return new RuntimeScalar(packInt(nativeSocket.socketType()));
+            }
             if (socketIOHandle != null) {
 
                 // Use Java's native socket option support via SocketIO
@@ -3719,6 +3723,20 @@ public class IOOperator {
             RuntimeScalar sock2Handle = args[1].scalar();
             int domain = args[2].scalar().getInt();
             int type = args[3].scalar().getInt();
+            int protocol = args[4].scalar().getInt();
+
+            if (domain == Socket.AF_UNIX) {
+                int[] fds = new int[2];
+                if (FFMPosix.get().socketpair(domain, type, protocol, fds) != 0) {
+                    getGlobalVariable("main::!").set(FFMPosix.get().errno());
+                    return scalarFalse;
+                }
+                RuntimeIO io1 = new NativeSocketIOHandle(fds[0], type).registerInIOSystem();
+                RuntimeIO io2 = new NativeSocketIOHandle(fds[1], type).registerInIOSystem();
+                setSocketOnHandle(sock1Handle, io1);
+                setSocketOnHandle(sock2Handle, io2);
+                return scalarTrue;
+            }
 
             if (type == Socket.SOCK_DGRAM) {
                 ProtocolFamily family = domain == Socket.AF_INET6
