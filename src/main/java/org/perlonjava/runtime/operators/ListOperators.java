@@ -148,18 +148,36 @@ public class ListOperators {
 
         // If comparator is a string (subroutine name), resolve it to a code reference
         RuntimeScalar comparator = perlComparatorClosure;
+        String symbolicComparatorName = null;
         if (comparator.type == RuntimeScalarType.STRING ||
                 comparator.type == RuntimeScalarType.BYTE_STRING) {
             String subName = comparator.toString();
-            if (!subName.contains("::")) {
+            if (subName.startsWith("::")) {
+                subName = "main" + subName;
+            } else if (!subName.contains("::")) {
                 subName = packageName + "::" + subName;
             }
+            symbolicComparatorName = subName;
             // Snapshot the active CV at sort entry. Typeglob assignment can
             // replace the CODE slot's RuntimeScalar in place; retaining that
             // mutable slot would switch comparators halfway through a sort.
             comparator = new RuntimeScalar(GlobalVariable.getGlobalCodeRefForDirectCall(subName));
         }
+        // A typeglob (and a reference to one) is also a valid sort
+        // comparator.  Resolve its CODE slot before inspecting the
+        // prototype: otherwise a $$ comparator is invoked with the enclosing
+        // @_ rather than the two sort elements and silently returns zero.
+        if ((comparator.type == RuntimeScalarType.GLOB
+                || comparator.type == RuntimeScalarType.GLOBREFERENCE
+                || comparator.type == RuntimeScalarType.REFERENCE)
+                && comparator.value instanceof RuntimeGlob glob) {
+            RuntimeScalar savedCode = glob.getSavedCodeSlot();
+            comparator = savedCode != null ? savedCode
+                    : glob.globName != null ? GlobalVariable.getGlobalCodeRefForDirectCall(glob.globName)
+                    : glob.codeSlot != null ? glob.codeSlot : comparator;
+        }
         final RuntimeScalar finalComparator = comparator;
+        final String finalSymbolicComparatorName = symbolicComparatorName;
 
         // Check if comparator has $$ prototype (stacked comparator)
         // In Perl 5, $$-prototyped sort subs receive elements via @_ instead of $a/$b
@@ -188,48 +206,80 @@ public class ListOperators {
             // package variables with those conventional names.
             array.elements.sort((a, b) -> {
                 try {
-                    // Create $a, $b arguments for the comparator
-                    localizedVarA.set(a);
-                    localizedVarB.set(b);
+                    // Perl aliases the localized package variables to the
+                    // compared list cells.  Copying their values loses
+                    // lvalue behavior (`sort { $a = 10 } $#array, ...`) and
+                    // keeps the final compared references rooted in the
+                    // temporary cells after the sort has returned.
+                    RuntimeScalar comparatorA = a.type == RuntimeScalarType.TIED_SCALAR
+                            ? a.tiedFetch() : a;
+                    RuntimeScalar comparatorB = b.type == RuntimeScalarType.TIED_SCALAR
+                            ? b.tiedFetch() : b;
+                    GlobalVariable.aliasTemporaryGlobalVariable(varAName, comparatorA);
+                    GlobalVariable.aliasTemporaryGlobalVariable(varBName, comparatorB);
 
                     // For $$-prototyped comparators, pass elements via @_;
                     // otherwise inherit the outer @_ so the block can use $_[N].
                     RuntimeArray comparatorArgs;
                     if (stackedComparator) {
                         comparatorArgs = new RuntimeArray();
-                        comparatorArgs.push(a);
-                        comparatorArgs.push(b);
+                        // @_ is an alias frame, not an owning container.
+                        // push() would take counted references to the two
+                        // compared values, but this short-lived RuntimeArray
+                        // has no normal container teardown path.  In
+                        // particular that leaked objects retained by a
+                        // comparator's \@_ reference until JVM GC.  Populate
+                        // the temporary call frame with the same non-owning
+                        // alias semantics used for ordinary Perl arguments.
+                        comparatorArgs.setFromListAliased(new RuntimeList(a, b));
                     } else {
                         comparatorArgs = outerArgs != null ? outerArgs : new RuntimeArray();
                     }
 
                     // Apply the Perl comparator subroutine with the arguments
-                    RuntimeList result = RuntimeCode.apply(finalComparator, comparatorArgs, RuntimeContextType.SCALAR);
+                    try {
+                        RuntimeCode.enterSortComparator();
+                        RuntimeList result;
+                        try {
+                            result = RuntimeCode.apply(finalComparator, comparatorArgs, RuntimeContextType.SCALAR);
+                        } finally {
+                            RuntimeCode.leaveSortComparator();
+                        }
 
-                    // Check for control flow markers that tried to escape the
-                    // sort block. Preserve upstream's source location detail.
-                    if (result.isNonLocalGoto()) {
-                        RuntimeControlFlowList controlFlow = (RuntimeControlFlowList) result;
-                        ControlFlowType cfType = controlFlow.getControlFlowType();
-                        String keyword = switch (cfType) {
-                            case GOTO, TAILCALL -> "goto";
-                            case LAST -> "last";
-                            case NEXT -> "next";
-                            case REDO -> "redo";
-                            case RETURN -> "return";
-                        };
-                        ControlFlowMarker marker = controlFlow.marker;
-                        throw new PerlCompilerException("Can't \"" + keyword
-                                + "\" out of a pseudo block at " + marker.fileName
-                                + " line " + marker.lineNumber + ".\n");
+                        // Check for control flow markers that tried to escape the
+                        // sort block. Preserve upstream's source location detail.
+                        if (result.isNonLocalGoto()) {
+                            RuntimeControlFlowList controlFlow = (RuntimeControlFlowList) result;
+                            ControlFlowType cfType = controlFlow.getControlFlowType();
+                            String keyword = switch (cfType) {
+                                case GOTO, TAILCALL -> "goto";
+                                case LAST -> "last";
+                                case NEXT -> "next";
+                                case REDO -> "redo";
+                                case RETURN -> "return";
+                            };
+                            ControlFlowMarker marker = controlFlow.marker;
+                            throw new PerlCompilerException("Can't \"" + keyword
+                                    + "\" out of a pseudo block at " + marker.fileName
+                                    + " line " + marker.lineNumber + ".\n");
+                        }
+
+                        // Retrieve the comparison result and return it as an integer
+                        return result.getFirst().getInt();
+                    } finally {
+                        GlobalVariable.restoreTemporaryGlobalVariable(varAName, localizedVarA, false);
+                        GlobalVariable.restoreTemporaryGlobalVariable(varBName, localizedVarB, false);
                     }
-
-                    // Retrieve the comparison result and return it as an integer
-                    return result.getFirst().getInt();
                 } catch (PerlExitException e) {
                     // exit() should propagate immediately - don't wrap it
                     throw e;
                 } catch (PerlCompilerException e) {
+                    if (finalSymbolicComparatorName != null
+                            && e.getMessage() != null
+                            && e.getMessage().startsWith("Undefined subroutine &")) {
+                        throw new PerlCompilerException("Undefined sort subroutine \""
+                                + finalSymbolicComparatorName + "\" called at ");
+                    }
                     // Propagate Perl errors directly so eval {} can catch them
                     throw e;
                 } catch (Exception e) {
