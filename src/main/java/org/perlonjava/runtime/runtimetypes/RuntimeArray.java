@@ -1414,7 +1414,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         MortalList.deferDestroyForContainerClear(this.elements);
         this.elements.clear();
         for (RuntimeScalar reference : references.elements) {
-            RuntimeScalar referent = reference.scalarDeref();
+            // This is refaliasing, not an ordinary dereference.  In
+            // particular, a reference made after a skipped lexical
+            // declaration must retain that cell until the declaration runs.
+            RuntimeScalar referent = reference.refAliasScalarReference();
             this.elements.add(referent);
             markPackageRootedValue(referent);
             referent.refCountOwned = false;

@@ -148,7 +148,7 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
     /** Replace this hash slot with the scalar referenced by a refaliasing RHS. */
     public RuntimeScalar aliasToReference(RuntimeScalar reference) {
         if (parent.threadShared) SharedPerlStorage.validateStoredValue(reference);
-        RuntimeScalar referent = reference.scalarDeref();
+        RuntimeScalar referent = reference.refAliasScalarReference();
         parent.notePackageRootMutation();
         parent.elements.put(key, referent);
         parent.markKeyByte(key, byteKey);

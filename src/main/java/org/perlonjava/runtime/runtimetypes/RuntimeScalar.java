@@ -3482,7 +3482,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return scalarDeref();
         }
         requireForeachReference(REFERENCE, "SCALAR");
-        return (RuntimeScalar) value;
+        RuntimeScalar referent = (RuntimeScalar) value;
+        // Refaliasing, rather than reference creation, is what gives a
+        // forward lexical cell its declaration identity.  Preserve one
+        // declaration initialization for this referent.  An ordinary escaped
+        // reference never reaches this path, so it cannot leak into a later
+        // shadowing lexical.
+        referent.retainMaterializedForwardReference = true;
+        return referent;
     }
 
     public RuntimeArray foreachArrayReference() {

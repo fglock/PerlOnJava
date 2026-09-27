@@ -56,7 +56,7 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
     /** Replace this array slot with the scalar referenced by a refaliasing RHS. */
     public RuntimeScalar aliasToReference(RuntimeScalar reference) {
         if (parent.threadShared) SharedPerlStorage.validateStoredValue(reference);
-        RuntimeScalar referent = reference.scalarDeref();
+        RuntimeScalar referent = reference.refAliasScalarReference();
         if (key < 0) {
             throw new PerlCompilerException(
                     "Modification of non-creatable array value attempted, subscript " + key);
