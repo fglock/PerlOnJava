@@ -365,6 +365,30 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
     }
 
     /**
+     * Performs a pre-increment while lexical {@code use integer} is active.
+     * The proxy must update its backing aggregate slot, just like the normal
+     * auto-increment path, rather than mutating only the transient proxy.
+     */
+    @Override
+    public RuntimeScalar integerPreAutoIncrement() {
+        vivify();
+        RuntimeScalar ret = lvalue.integerPreAutoIncrement();
+        this.type = lvalue.type;
+        this.value = lvalue.value;
+        return ret;
+    }
+
+    /** Performs a postfix increment while lexical {@code use integer} is active. */
+    @Override
+    public RuntimeScalar integerPostAutoIncrement() {
+        vivify();
+        RuntimeScalar ret = lvalue.integerPostAutoIncrement();
+        this.type = lvalue.type;
+        this.value = lvalue.value;
+        return ret;
+    }
+
+    /**
      * Performs a pre-decrement operation on the underlying scalar.
      *
      * @return The updated underlying scalar after pre-decrement.
@@ -386,6 +410,26 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
     public RuntimeScalar postAutoDecrement() {
         vivify();
         RuntimeScalar ret = lvalue.postAutoDecrement();
+        this.type = lvalue.type;
+        this.value = lvalue.value;
+        return ret;
+    }
+
+    /** Performs a pre-decrement while lexical {@code use integer} is active. */
+    @Override
+    public RuntimeScalar integerPreAutoDecrement() {
+        vivify();
+        RuntimeScalar ret = lvalue.integerPreAutoDecrement();
+        this.type = lvalue.type;
+        this.value = lvalue.value;
+        return ret;
+    }
+
+    /** Performs a postfix decrement while lexical {@code use integer} is active. */
+    @Override
+    public RuntimeScalar integerPostAutoDecrement() {
+        vivify();
+        RuntimeScalar ret = lvalue.integerPostAutoDecrement();
         this.type = lvalue.type;
         this.value = lvalue.value;
         return ret;
