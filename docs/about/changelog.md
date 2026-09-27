@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve integer-mode auto-increment and decrement through aggregate lvalue
+  proxies, restoring Pod::Simple numbered-list validation.
+
 - Restore `lex.t` compatibility for quote-like `#line` mapping, byte-source
   eval diagnostics, evalled substitutions, constant stash entries, and both
   execution backends.
