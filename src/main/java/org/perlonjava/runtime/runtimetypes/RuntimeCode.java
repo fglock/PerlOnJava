@@ -1959,11 +1959,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // repeated declaration execution still receives a fresh lexical.
         RuntimeBase activeCell = findBoundActiveLexical(this, variableName);
         if (activeCell instanceof RuntimeScalar scalar
-                && scalar.referencedByScalarReference
-                // An ordinary `\$lexical` has already registered its pad cell.
-                // Only a reference reached before its declaration needs to
-                // survive into that declaration after a forward jump.
-                && !scalar.localBindingExists
                 // A tied lexical's storage is declaration-local. Reusing it
                 // for a later shadowing declaration leaks the old tie into
                 // the new lexical cell.
@@ -1973,7 +1968,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // writable storage for the next invocation: retain the new
                 // declaration cell instead of resurrecting the readonly one.
                 && !(scalar instanceof RuntimeScalarReadOnly)
-                && scalar.type != RuntimeScalarType.READONLY_SCALAR) {
+                && scalar.type != RuntimeScalarType.READONLY_SCALAR
+                && scalar.consumeMaterializedForwardReference()) {
             cell = scalar;
         }
         if (lexicalAliases != null) {

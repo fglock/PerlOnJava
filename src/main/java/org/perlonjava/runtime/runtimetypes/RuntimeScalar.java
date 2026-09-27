@@ -588,6 +588,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public boolean referencedByScalarReference;
 
     /**
+     * A reference was made after control flow materialized this lexical slot
+     * before its declaration ran. The next declaration must retain that pad
+     * cell so the forward reference remains an alias; ordinary escaped
+     * {@code \$lexical} references must not set this marker.
+     */
+    private boolean retainMaterializedForwardReference;
+
+    /** True only while this scalar represents a lexical slot skipped by control flow. */
+    private boolean materializedBeforeLexicalDeclaration;
+
+    /**
      * True when {@link #createReference()} promoted an otherwise-unbound
      * scalar temporary into selective reference counting. Such a referent has
      * no hidden lexical, closure, global, or aggregate owner, so weakening its
@@ -624,7 +635,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // expose it as a pad cell: later refaliasing would try to mutate the
         // literal and fail with "Modification of a read-only value attempted".
         if (scalar == null || scalar == RuntimeScalarCache.scalarUndef) {
-            return new RuntimeScalar();
+            RuntimeScalar materialized = new RuntimeScalar();
+            materialized.materializedBeforeLexicalDeclaration = true;
+            return materialized;
         }
         if (scalar.refCount == Integer.MIN_VALUE) {
             // JVM local-slot reuse can assign a new declaration's initializer
@@ -649,21 +662,33 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     /**
-     * Initialize a scalar declaration without replacing a cell which an
-     * earlier control-flow path has already exposed through refaliasing.
+     * Initialize a scalar declaration without replacing a cell retained by
+     * a reference made after control flow skipped that declaration.
      */
     public static RuntimeScalar initializeLexicalCell(RuntimeScalar scalar) {
         // Interpreter register arrays are reused between calls.  Preserve the
         // writable cell installed by a forward refalias, but never retain a
         // destroyed or read-only scalar left in the same register by an
         // earlier frame (notably a literal signature argument).
-        return scalar != null
-                && scalar.referencedByScalarReference
+        boolean retainForwardReference = scalar != null
+                && scalar.retainMaterializedForwardReference
                 && scalar.refCount != Integer.MIN_VALUE
-                && !scalar.localBindingExists
                 && !(scalar instanceof RuntimeScalarReadOnly)
-                && scalar.type != RuntimeScalarType.READONLY_SCALAR
-                ? scalar : new RuntimeScalar();
+                && scalar.type != RuntimeScalarType.READONLY_SCALAR;
+        if (retainForwardReference) {
+            scalar.retainMaterializedForwardReference = false;
+            scalar.materializedBeforeLexicalDeclaration = false;
+            return scalar;
+        }
+        return new RuntimeScalar();
+    }
+
+    /** Consume the one declaration-retention permit created by forward refgen. */
+    public boolean consumeMaterializedForwardReference() {
+        if (!retainMaterializedForwardReference) return false;
+        retainMaterializedForwardReference = false;
+        materializedBeforeLexicalDeclaration = false;
+        return true;
     }
 
     public RuntimeScalar(long value) {
@@ -4003,6 +4028,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // store the RuntimeGlob directly, losing the reference to this container.
     // Internals::SvREADONLY needs the container to set/get readonly status.
     public RuntimeScalar createReference() {
+        if (materializedBeforeLexicalDeclaration) {
+            retainMaterializedForwardReference = true;
+        }
         referencedByScalarReference = true;
         boolean isRegisteredLexical =
                 this.refCount == -1 && MyVarCleanupStack.isRegistered(this);
