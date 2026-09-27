@@ -997,6 +997,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (callContext == RuntimeContextType.LVALUE_LIST
                 && !(retVal instanceof RuntimeControlFlowList)) {
             RuntimeList result = new RuntimeList();
+            if (retVal instanceof RuntimeList list && list.keyValueHashSlice) {
+                // A key/value slice used as a foreach source aliases values,
+                // never its read-only key literals.
+                for (int i = 1; i < list.elements.size(); i += 2) {
+                    result.elements.add(list.elements.get(i));
+                }
+                return result;
+            }
             if (retVal instanceof RuntimeArray array && array.lvalueSliceContainer) {
                 result.elements.addAll(array.elements);
                 return result;
@@ -1061,6 +1069,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             throw new PerlCompilerException("Can't return a readonly value from lvalue subroutine");
         }
         if (value instanceof RuntimeList list) {
+            // A list lvalue may be a key/value hash slice returned to foreach.
+            // foreach aliases its writable value cells and never assigns to the
+            // alternating key literals; direct assignment is rejected at the
+            // call site by the compiler.
+            if (callContext == RuntimeContextType.LVALUE_LIST) {
+                return;
+            }
             for (RuntimeBase element : list.elements) {
                 requireWritableLvalueReturn(callContext, element);
             }
@@ -1492,6 +1507,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // Attributes associated with the subroutine
     public List<String> attributes = new ArrayList<>();
     public boolean isTryExpressionWrapper = false;
+    /** A :lvalue CV whose direct result is a %hash{...} key/value slice. */
+    public boolean returnsKeyValueHashSlice = false;
     // Method context information for next::method support
     public String packageName;
     public String subName;

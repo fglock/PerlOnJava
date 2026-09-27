@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore `op/kvhslice.t` compatibility for empty key/value slices, scalar
+  warnings, invalid lvalue diagnostics, `foreach` aliases, and hash prototypes
+  on both execution backends.
+
 - Preserve integer-mode auto-increment and decrement through aggregate lvalue
   proxies, restoring Pod::Simple numbered-list validation.
 

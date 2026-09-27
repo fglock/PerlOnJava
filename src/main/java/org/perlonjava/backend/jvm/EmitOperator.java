@@ -470,6 +470,12 @@ public class EmitOperator {
 
     // Handle an operator that was parsed using a Perl prototype.
     static void handleOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
+        if ((node.operator.equals("keys") || node.operator.equals("values") || node.operator.equals("each"))
+                && isKeyValueHashSlice(node.operand)) {
+            throw new PerlCompilerException(node.tokenIndex,
+                    "Experimental " + node.operator + " on scalar is now forbidden",
+                    emitterVisitor.ctx.errorUtil);
+        }
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
         EmitterVisitor listVisitor = emitterVisitor.with(RuntimeContextType.LIST);
         if (node.operand instanceof ListNode operand) {
@@ -525,6 +531,16 @@ public class EmitOperator {
                 emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
             }
         }
+    }
+
+    private static boolean isKeyValueHashSlice(Node node) {
+        if (node instanceof ListNode list && list.elements.size() == 1) {
+            return isKeyValueHashSlice(list.elements.getFirst());
+        }
+        return node instanceof BinaryOperatorNode access
+                && access.operator.equals("{")
+                && access.left instanceof OperatorNode sigil
+                && sigil.operator.equals("%");
     }
 
     // Handles the 'die' built-in function, which throws an exception.

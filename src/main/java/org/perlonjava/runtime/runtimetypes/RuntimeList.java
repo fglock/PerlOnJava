@@ -10,6 +10,9 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  * It provides methods to manipulate and access a dynamic list of Perl values.
  */
 public class RuntimeList extends RuntimeBase {
+    /** Alternating key/value elements produced by %hash{...}. */
+    public boolean keyValueHashSlice;
+
     // List to hold the elements of the list.
     public List<RuntimeBase> elements;
     // Set only on lists acquired for RuntimeScalar.getList(). Such a list can

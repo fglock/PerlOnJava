@@ -41,7 +41,14 @@ public class EmitBinaryOperatorNode {
             case "." -> EmitOperator.handleConcatOperator(emitterVisitor, node);
 
             // Dereference operators
-            case "->" -> Dereference.handleArrowOperator(emitterVisitor, node);
+            case "->" -> {
+                if (node.left instanceof org.perlonjava.frontend.astnode.OperatorNode sigil
+                        && sigil.operator.equals("%")) {
+                    throw new PerlCompilerException(node.tokenIndex,
+                            "Can't use a hash as a reference", emitterVisitor.ctx.errorUtil);
+                }
+                Dereference.handleArrowOperator(emitterVisitor, node);
+            }
             case "[" -> Dereference.handleArrayElementOperator(emitterVisitor, node, "get");
             case "{" -> Dereference.handleHashElementOperator(emitterVisitor, node, "get");
             case "(" -> EmitSubroutine.handleApplyOperator(emitterVisitor, node);

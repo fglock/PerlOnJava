@@ -1785,6 +1785,7 @@ public class CompileOperator {
 
     private static void visitKeys(BytecodeCompiler bc, OperatorNode node) {
         if (node.operand == null) bc.throwCompilerException("keys requires a hash argument");
+        rejectKeyValueHashSliceAggregate(bc, node, "keys");
         bc.compileNode(node.operand, -1, RuntimeContextType.LIST);
         int hashReg = bc.lastResultReg;
         int rd = bc.allocateOutputRegister();
@@ -1841,6 +1842,7 @@ public class CompileOperator {
 
     private static void visitValues(BytecodeCompiler bc, OperatorNode node) {
         if (node.operand == null) bc.throwCompilerException("values requires a hash argument");
+        rejectKeyValueHashSliceAggregate(bc, node, "values");
         bc.compileNode(node.operand, -1, RuntimeContextType.LIST);
         int hashReg = bc.lastResultReg;
         int rd = bc.allocateOutputRegister();
@@ -2027,11 +2029,18 @@ public class CompileOperator {
 
     private static void visitEach(BytecodeCompiler bc, OperatorNode node) {
         if (node.operand == null) bc.throwCompilerException("each requires an argument");
+        rejectKeyValueHashSliceAggregate(bc, node, "each");
         bc.compileNode(node.operand, -1, RuntimeContextType.LIST);
         int containerReg = bc.lastResultReg;
         int rd = bc.allocateOutputRegister();
         bc.emitWithToken(Opcodes.EACH, node.getIndex()); bc.emitReg(rd); bc.emitReg(containerReg); bc.emit(bc.currentCallContext);
         bc.lastResultReg = rd;
+    }
+
+    private static void rejectKeyValueHashSliceAggregate(BytecodeCompiler bc, OperatorNode node, String operator) {
+        if (BytecodeCompiler.isKeyValueHashSlice(node.operand)) {
+            bc.throwCompilerException("Experimental " + operator + " on scalar is now forbidden");
+        }
     }
 
     private static void visitGlob(BytecodeCompiler bc, OperatorNode node) {

@@ -742,6 +742,7 @@ public class Dereference {
                  *      StringNode: a
                  *      StringNode: b
                  */
+                emitKeyValueHashSliceScalarWarning(emitterVisitor, node, sigilNode);
                 // Rewrite the variable node from `%` to `%`
                 OperatorNode varNode = new OperatorNode("%", sigilNode.operand, sigilNode.tokenIndex);
 
@@ -1466,5 +1467,40 @@ public class Dereference {
         } else {
             EmitOperator.handleVoidContext(emitterVisitor);
         }
+    }
+
+    private static void emitKeyValueHashSliceScalarWarning(
+            EmitterVisitor emitterVisitor, BinaryOperatorNode node, OperatorNode sigilNode) {
+        if (emitterVisitor.ctx.contextType != RuntimeContextType.SCALAR
+                || !(sigilNode.operand instanceof IdentifierNode identifier)) {
+            return;
+        }
+        String keys = "...";
+        if (node.right instanceof HashLiteralNode keyNode
+                && keyNode.elements.size() == 1
+                && keyNode.elements.getFirst() instanceof StringNode key) {
+            keys = "\"" + key.value + "\"";
+        }
+        String hashName = identifier.name;
+        String message = "%" + hashName + "{" + keys
+                + "} in scalar context better written as $" + hashName + "{" + keys + "}";
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(message);
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "<init>",
+                "(Ljava/lang/String;)V", false);
+        mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(emitterVisitor.ctx.errorUtil.warningLocation(node.tokenIndex));
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "<init>",
+                "(Ljava/lang/String;)V", false);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/operators/WarnDie", "warn",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                false);
+        mv.visitInsn(Opcodes.POP);
     }
 }

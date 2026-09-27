@@ -810,11 +810,23 @@ public class EmitVariable {
                     "Can't modify substr in scalar assignment", ctx.errorUtil);
         }
 
+        if (isKeyValueHashSlice(node.left)) {
+            throw new PerlCompilerException(node.tokenIndex,
+                    "Can't modify key/value hash slice in list assignment", ctx.errorUtil);
+        }
+
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("SET " + node);
         MethodVisitor mv = ctx.mv;
         // Determine the assign type based on the left side.
         // Inspect the AST and get the L-value context: SCALAR or LIST
         int lvalueContext = LValueVisitor.getContext(node);
+        if (isKeyValueHashSliceLvalueSub(node.left)) {
+            String assignmentKind = lvalueContext == RuntimeContextType.SCALAR
+                    ? "scalar" : "list";
+            throw new PerlCompilerException(node.tokenIndex,
+                    "Can't modify key/value hash slice in " + assignmentKind + " assignment",
+                    ctx.errorUtil);
+        }
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("SET Lvalue context: " + lvalueContext);
         // Execute the right side first: assignment is right-associative
 
@@ -1191,6 +1203,29 @@ public class EmitVariable {
      * LIST assignments in scalar context return a cached read-only element count, which cannot
      * be used as an lvalue target. Scalar assignments return the variable itself (writable).
      */
+    private static boolean isKeyValueHashSlice(Node node) {
+        if (node instanceof ListNode list && list.elements.size() == 1) {
+            return isKeyValueHashSlice(list.elements.getFirst());
+        }
+        return node instanceof BinaryOperatorNode access
+                && access.operator.equals("{")
+                && access.left instanceof OperatorNode sigil
+                && sigil.operator.equals("%");
+    }
+
+    private static boolean isKeyValueHashSliceLvalueSub(Node node) {
+        while (node instanceof ListNode list && list.elements.size() == 1) {
+            node = list.elements.getFirst();
+        }
+        if (!(node instanceof BinaryOperatorNode call) || !call.operator.equals("(")
+                || !(call.left instanceof OperatorNode codeOp) || !codeOp.operator.equals("&")) {
+            return false;
+        }
+        return codeOp.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef
+                && codeRef.value instanceof RuntimeCode code
+                && code.returnsKeyValueHashSlice;
+    }
+
     private static boolean isListAssignBranch(Node expr) {
         if (expr instanceof BinaryOperatorNode binop && binop.operator.equals("=")) {
             int innerContext = LValueVisitor.getContext(binop);

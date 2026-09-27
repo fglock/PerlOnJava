@@ -1900,6 +1900,7 @@ public class SubroutineParser {
         // In Perl 5, declared subs (even forward declarations) are visible via *{glob}{CODE}.
         if (codeRef.value instanceof RuntimeCode declaredCode) {
             declaredCode.isDeclared = true;
+            declaredCode.returnsKeyValueHashSlice = hasKeyValueHashSliceResult(block);
         }
 
         // Perl increments a package's mro generation whenever a named sub is
@@ -2991,6 +2992,20 @@ public class SubroutineParser {
             Warnings.warnWithCategory("illegalproto",
                     "Missing ']' in prototype for " + name + " : " + proto, loc);
         }
+    }
+
+    private static boolean hasKeyValueHashSliceResult(Node block) {
+        if (!(block instanceof BlockNode body) || body.elements == null || body.elements.isEmpty()) {
+            return false;
+        }
+        Node result = body.elements.getLast();
+        while (result instanceof ListNode list && list.elements.size() == 1) {
+            result = list.elements.getFirst();
+        }
+        return result instanceof BinaryOperatorNode access
+                && access.operator.equals("{")
+                && access.left instanceof OperatorNode sigil
+                && sigil.operator.equals("%");
     }
 
     /**
