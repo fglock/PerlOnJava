@@ -106,12 +106,11 @@ public class RuntimeSigHash extends RuntimeHash {
             if (baseSignal.startsWith("_")) {
                 throw new PerlCompilerException("No such hook: " + visibleKey);
             }
-            // A malformed OS signal name is a Perl warning, routed through
-            // __WARN__, but its hash entry remains usable.  Signal extensions
-            // rely on this behavior when warnings are locally disabled.
-            if (Warnings.warningManager.isWarningEnabled("signal")) {
-                WarnDie.warn(new RuntimeScalar("No such signal: SIG" + visibleKey), new RuntimeScalar());
-            }
+            // A malformed OS signal name is a lexical `signal` warning. Use
+            // the category-aware path so `no warnings 'signal'` applies while
+            // preserving the usable slot required by signal extensions.
+            WarnDie.warnWithCategory(new RuntimeScalar("No such signal: SIG" + visibleKey),
+                    new RuntimeScalar(), "signal");
         }
         super.put(key, value);
     }

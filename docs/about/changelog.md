@@ -17,6 +17,9 @@ priorities and future plans.
   scalar method-list expressions, comparator control flow, and temporary
   argument lifetimes on both execution backends.
 
+- Restore BEGIN-captured container aliases, localized hash closure destruction,
+  and lexical `no warnings 'signal'` handling on both execution backends.
+
 - Restore `lex.t` compatibility for quote-like `#line` mapping, byte-source
   eval diagnostics, evalled substitutions, constant stash entries, and both
   execution backends.

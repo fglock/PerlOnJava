@@ -5671,8 +5671,13 @@ public class BytecodeCompiler implements Visitor {
                     return;
                 }
 
-                if (hasVariable(varName) && !isOurVariable(varName)) {
-                    // Lexical variable (my/state) - use existing register
+                if (hasVariable(varName) && (!isOurVariable(varName)
+                        || !isDynamicOurVariable(varName))) {
+                    // Lexicals and BEGIN-capture aliases use their existing register.
+                    // BEGIN captures are represented as synthetic `our` declarations so
+                    // that the parser can carry them across the compile-time boundary,
+                    // but their _BEGIN_ package marks them as closure storage rather
+                    // than a real package variable.
                     lastResultReg = getVariableRegister(varName);
                     retrieveStateScalarForRead(varName, lastResultReg);
                     // A lexical declaration can be skipped by control flow
@@ -5687,7 +5692,7 @@ public class BytecodeCompiler implements Visitor {
                     // declaration later reuses this binding only if refgen
                     // actually exposed it.
                     emitActiveLexicalBinding(lastResultReg, varName);
-                } else if (hasVariable(varName) && isOurVariable(varName)) {
+                } else if (hasVariable(varName) && isDynamicOurVariable(varName)) {
                     // 'our' variable - must load from global table to see local() changes
                     // This ensures 'local $Pkg::Var' modifications are visible inside subroutines.
                     //
@@ -5818,11 +5823,13 @@ public class BytecodeCompiler implements Visitor {
                 }
 
                 int arrayReg;
-                if (hasVariable(varName) && !isOurVariable(varName)) {
-                    // Lexical array (my/state) - use existing register
+                if (hasVariable(varName) && (!isOurVariable(varName)
+                        || !isDynamicOurVariable(varName))) {
+                    // Lexical arrays and synthetic BEGIN-capture aliases use
+                    // their closure register rather than a package lookup.
                     arrayReg = getVariableRegister(varName);
                     retrieveStateArrayForRead(varName, arrayReg);
-                } else if (hasVariable(varName) && isOurVariable(varName)) {
+                } else if (hasVariable(varName) && isDynamicOurVariable(varName)) {
                     // 'our' array - must load from global table to see local() changes
                     arrayReg = allocateRegister();
                     String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) node.operand).name, getCurrentPackage());
@@ -5924,11 +5931,13 @@ public class BytecodeCompiler implements Visitor {
                 String varName = "%" + ((IdentifierNode) node.operand).name;
 
                 int hashReg;
-                if (hasVariable(varName) && !isOurVariable(varName)) {
-                    // Lexical hash (my/state) - use existing register
+                if (hasVariable(varName) && (!isOurVariable(varName)
+                        || !isDynamicOurVariable(varName))) {
+                    // Lexical hashes and synthetic BEGIN-capture aliases use
+                    // their closure register rather than a package lookup.
                     hashReg = getVariableRegister(varName);
                     retrieveStateHashForRead(varName, hashReg);
-                } else if (hasVariable(varName) && isOurVariable(varName)) {
+                } else if (hasVariable(varName) && isDynamicOurVariable(varName)) {
                     // 'our' hash - must load from global table to see local() changes
                     hashReg = allocateRegister();
                     String globalHashName = NameNormalizer.normalizeVariableName(((IdentifierNode) node.operand).name, getCurrentPackage());

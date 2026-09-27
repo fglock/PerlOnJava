@@ -1577,6 +1577,14 @@ public class CompileAssignment {
                 bc.emit(Opcodes.SET_SCALAR);
                 bc.emitReg(elemReg);
                 bc.emitReg(valueReg);
+                // snapshotLocalScalarRhs created an independent temporary so
+                // local() can replace the element without invalidating an
+                // RHS that aliases it.  Once the localized slot owns the
+                // value, consume that temporary ownership; otherwise an
+                // interpreted closure retains an extra invisible CODE owner.
+                bc.emit(Opcodes.RELEASE_CONSUMED_TEMP);
+                bc.emitReg(valueReg);
+                bc.emitReg(elemReg);
                 bc.lastResultReg = elemReg;
             }
             return true;
@@ -1909,6 +1917,12 @@ public class CompileAssignment {
                 bc.emit(Opcodes.SET_SCALAR);
                 bc.emitReg(elemReg);
                 bc.emitReg(valueReg);
+                // The scalar RHS above is always a local-assignment snapshot.
+                // Transfer its temporary reference ownership to the newly
+                // localized element after the store.
+                bc.emit(Opcodes.RELEASE_CONSUMED_TEMP);
+                bc.emitReg(valueReg);
+                bc.emitReg(elemReg);
                 bc.lastResultReg = elemReg;
                 return true;
             }

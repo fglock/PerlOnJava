@@ -223,12 +223,27 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
                 // Reinstall the saved slot so its original scalar identity
                 // remains observable after the dynamic scope unwinds.
                 parent.notePackageRootMutation();
-                parent.elements.put(key, previousState);
+                RuntimeScalar displaced = parent.elements.put(key, previousState);
                 parent.markPackageRootedValue(previousState);
                 this.lvalue = previousState;
                 this.type = this.lvalue.type;
                 this.value = this.lvalue.value;
                 this.blessId = this.lvalue.blessId;
+
+                // The localized slot can hold a closure that is no longer
+                // reachable after the saved hash entry is restored. Release
+                // it only after restoration, so a DESTROY method observes the
+                // restored dynamic value (notably a restored %SIG handler).
+                if (displaced != null && displaced != previousState) {
+                    // Replacing a localized element has the same ownership
+                    // effect as deleting a hash element.  In particular, a
+                    // CODE slot can be the last counted owner of a closure;
+                    // deferDecrementIfTracked then releases its captures when
+                    // the closure's reference count reaches zero.
+                    MortalList.deferDecrementIfTracked(displaced);
+                    MortalList.deferIoOwnerRelease(displaced);
+                    MortalList.flush();
+                }
             }
         }
     }
