@@ -478,6 +478,17 @@ public class RuntimeStashEntry extends RuntimeGlob {
             return null;
         }
 
+        RuntimeScalar codeRef = GlobalVariable.globalCodeRefs.get(this.globName);
+        if (codeRef != null
+                && codeRef.type == CODE
+                && codeRef.value instanceof RuntimeCode code
+                && code.isConstantCv) {
+            // Constant CVs are compact scalar stash entries from declaration
+            // time. The body may still be lazily materialized, in which case
+            // an undef scalar preserves the externally visible SCALAR shape.
+            return new RuntimeScalar().createReference();
+        }
+
         // Typeglob assignment (e.g. *foo = sub {}) upgrades the stash entry to a
         // full GV. A bare full GV is not a reference, so ref($stash{name}) is "".
         if (GlobalVariable.globalGlobs.getOrDefault(this.globName, false)) {
@@ -494,11 +505,19 @@ public class RuntimeStashEntry extends RuntimeGlob {
             return null;
         }
 
-        RuntimeScalar codeRef = GlobalVariable.globalCodeRefs.get(this.globName);
         if (codeRef != null
                 && codeRef.type == CODE
                 && codeRef.value instanceof RuntimeCode code
                 && (code.defined() || code.isDeclared)) {
+            // A zero-prototype literal sub is represented in Perl's stash as
+            // its compact scalar constant until something promotes the name
+            // to a full glob.  Keep the CODE slot callable, but expose the
+            // scalar payload to ref($::{name}).
+            if (code.isConstantCv && code.constantValue != null
+                    && code.constantValue.elements.size() == 1
+                    && code.constantValue.elements.getFirst() instanceof RuntimeScalar scalar) {
+                return scalar;
+            }
             return codeRef;
         }
         return null;

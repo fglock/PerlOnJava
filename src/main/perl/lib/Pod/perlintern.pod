@@ -50,7 +50,7 @@ The rough perl equivalent is C<$myarray[$key]>.
 =back
 
 =for hackers
-Declared at embed.fnc, line 881; documented at inline.h, line 123
+Declared at embed.fnc, line 963; documented at inline.h, line 124
 
 =over 4
 
@@ -86,7 +86,7 @@ initialized.
 =back
 
 =for hackers
-Declared at embed.fnc, line 891; documented at inline.h, line 169
+Declared at embed.fnc, line 973; documented at inline.h, line 170
 
 =over 4
 
@@ -116,7 +116,7 @@ Approximate Perl equivalent: C<splice(@myarray, $key, 1, $val)>.
 =back
 
 =for hackers
-Declared at embed.fnc, line 909; documented at inline.h, line 78
+Declared at embed.fnc, line 991; documented at inline.h, line 78
 
 =over 4
 
@@ -162,7 +162,7 @@ Implements the deprecated L<perlapi/C<GIMME>>.
 =back
 
 =for hackers
-Declared at embed.fnc, line 1311; documented at pp_ctl.c, line 1632
+Declared at embed.fnc, line 1398; documented at pp_ctl.c, line 1635
 
 =over 4
 
@@ -181,7 +181,7 @@ Implements C<LEAVE_SCOPE> which you should use instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 1959; documented at scope.c, line 1098
+Declared at embed.fnc, line 2057; documented at scope.c, line 1176
 
 =over 4
 
@@ -202,7 +202,7 @@ should not be called directly and has no user serviceable parts.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2044; documented at scope.c, line 1945
+Declared at embed.fnc, line 2142; documented at scope.c, line 2040
 
 =over 4
 
@@ -235,8 +235,8 @@ L<perlapi/C<SAVEDESTRUCTOR_X>> instead of this function.
 =back
 
 =for hackers
-mortal_svfunc_x declared at embed.fnc, line 2217; all in group documented at scope.c, line 1929
-MORTALSVFUNC_X declared at scope.c, line 1930
+mortal_svfunc_x declared at embed.fnc, line 2325; all in group documented at scope.c, line 2024
+MORTALSVFUNC_X declared at scope.c, line 2025
 
 =over 4
 
@@ -255,7 +255,7 @@ Implements L<perlapi/C<LEAVE>>
 =back
 
 =for hackers
-Declared at embed.fnc, line 2768; documented at scope.c, line 152
+Declared at embed.fnc, line 2877; documented at scope.c, line 160
 
 =over 4
 
@@ -274,7 +274,7 @@ Implements L<perlapi/C<ENTER>>
 =back
 
 =for hackers
-Declared at embed.fnc, line 2802; documented at scope.c, line 125
+Declared at embed.fnc, line 2912; documented at scope.c, line 131
 
 =over 4
 
@@ -293,7 +293,7 @@ Implements C<SAVEADELETE>.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3084; documented at scope.c, line 851
+Declared at embed.fnc, line 3192; documented at scope.c, line 918
 
 =over 4
 
@@ -315,7 +315,7 @@ on the argument when the current pseudo block is finished.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3111; documented at scope.c, line 386
+Declared at embed.fnc, line 3219; documented at scope.c, line 409
 
 =over 4
 
@@ -338,7 +338,7 @@ contents, freeing new value.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3113; documented at scope.c, line 404
+Declared at embed.fnc, line 3221; documented at scope.c, line 428
 
 =over 4
 
@@ -360,7 +360,7 @@ restore a global SV to its prior contents, freeing new value.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3115; documented at scope.c, line 347
+Declared at embed.fnc, line 3223; documented at scope.c, line 369
 
 =over 4
 
@@ -379,7 +379,7 @@ Implements C<SAVEHDELETE>.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3120; documented at scope.c, line 827
+Declared at embed.fnc, line 3228; documented at scope.c, line 894
 
 =over 4
 
@@ -398,7 +398,7 @@ Implements C<SAVEHINTS>.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3130; documented at scope.c, line 897
+Declared at embed.fnc, line 3238; documented at scope.c, line 967
 
 =over 4
 
@@ -417,7 +417,28 @@ Implements C<SAVEOP>.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3141; documented at scope.h, line 316
+Declared at embed.fnc, line 3249; documented at scope.h, line 316
+
+=over 4
+
+=item C<save_padsv>
+X<save_padsv>
+
+Saves the value in the pad at the given index to be restored on scope exit.
+Before this value is restored back in, whatever is currently there has its
+reference count decremented by one.
+
+=over 3
+
+ void       save_padsv(      PADOFFSET padix)
+ void  Perl_save_padsv(pTHX_ PADOFFSET padix)
+
+=back
+
+=back
+
+=for hackers
+Declared at embed.fnc, line 3250; documented at scope.c, line 856
 
 =over 4
 
@@ -436,7 +457,7 @@ Implements C<SAVEPADSVANDMORTALIZE>.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3142; documented at scope.c, line 735
+Declared at embed.fnc, line 3251; documented at scope.c, line 761
 
 =over 4
 
@@ -460,7 +481,7 @@ C<SAVEFREESV>.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3148; documented at scope.c, line 773
+Declared at embed.fnc, line 3257; documented at scope.c, line 801
 
 =over 4
 
@@ -485,7 +506,7 @@ or be prematurely freed.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3157; documented at scope.c, line 367
+Declared at embed.fnc, line 3266; documented at scope.c, line 389
 
 =over 4
 
@@ -513,7 +534,7 @@ S<C<'local $x = $y'>>), and that will handle the magic.
 =back
 
 =for hackers
-Declared at embed.fnc, line 6102; documented at scope.c, line 280
+Declared at embed.fnc, line 6294; documented at scope.c, line 300
 
 =over 4
 
@@ -534,7 +555,7 @@ Set the SvFLAGS specified by mask to the values in val
 =back
 
 =for hackers
-Declared at embed.fnc, line 3160; documented at scope.c, line 447
+Declared at embed.fnc, line 3269; documented at scope.c, line 471
 
 =over 4
 
@@ -557,7 +578,7 @@ contents, freeing new value.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3169; documented at scope.c, line 425
+Declared at embed.fnc, line 3278; documented at scope.c, line 449
 
 =over 4
 
@@ -576,12 +597,25 @@ Implements C<SAVEVPTR>.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3180; documented at scope.c, line 710
+Declared at embed.fnc, line 3289; documented at scope.c, line 736
 
 =head1 Casting
 X<NUM2PTR>
 
-There are currently no internal API items in Casting
+=over 4
+
+=item C<Null>
+X<Null>
+
+C<Null> is provided for backwards compatibility with
+existing code, and should not be used for new code.
+
+Null pointer of type C<type>
+
+=back
+
+=for hackers
+Declared and documented at handy.h, line 21
 
 =head1 Character case changing
 
@@ -682,7 +716,7 @@ C<classnum> is one of the classes defined in F<handy.h> for this purpose.
 =back
 
 =for hackers
-Declared and documented at handy.h, line 1607
+Declared and documented at handy.h, line 1696
 
 =over 4
 
@@ -702,15 +736,99 @@ C<L</CC_mask_>>.
 =back
 
 =for hackers
-Declared and documented at handy.h, line 1613
+Declared and documented at handy.h, line 1702
 
 =head1 Compiler and Preprocessor information
 
-There are currently no internal API items in Compiler and Preprocessor information
+=over 4
+
+=item C<DEBUG_ONLY>
+X<DEBUG_ONLY>
+
+Add this symbol following a formal parameter in both a function's definition,
+and its F<embed.fnc> entry to indicate that, while this parameter is passed to
+the function, the function only uses it in DEBUGGING builds.
+
+Thus it is like C<L</UNUSED>>, but indicates the parameter actually is used in
+DEBUGGING builds.
+
+Perl will arrange for the suppression of any warnings the compiler would
+otherwise raise about the parameter being present but not used, which it would
+if there are no code paths through the function in non-DEBUGGING builds that
+reference the parameter.
+
+If there are conditions besides the DEBUGGING one where the parameter actually
+does get used, it is better practice to not use this mechanism, but to instead
+use L<C<PERL_UNUSED_ARG>|perlapi/PERL_UNUSED_ARG> in the conditionally compiled
+sections that don't use it.
+
+You need to add C<DEBUG_ONLY> in both places.  If you forget one, there are
+likely platforms on which the warning won't be suppressed.
+
+=back
+
+=for hackers
+Declared and documented at perl.h, line 617
+
+=over 4
+
+=item C<UNUSED>
+X<UNUSED>
+
+Add this symbol following a formal parameter in both a function's definition,
+and its F<embed.fnc> entry to indicate that, while this parameter is passed to
+the function, the function doesn't actually use it.
+
+Perl will arrange for the suppression of any warnings the compiler would
+otherwise raise about the parameter being present but not used, which it would
+if there are no code paths through the function that reference the parameter.
+
+If there are Configurations where the parameter actually does get used, it is
+better practice to not use this mechanism, but to instead use
+L<C<PERL_UNUSED_ARG>|perlapi/PERL_UNUSED_ARG> in the conditionally compiled
+sections that don't use it.
+
+You need to add C<UNUSED> in both places.  If you forget one, there are likely
+platforms on which the warning won't be suppressed.
+
+An example is:
+ : embed.fnc entry
+ Adpt|void|vfatal_warner|U32 err UNUSED|const char *pat|va_list *args
+
+ // First line of function defintion
+ Perl_vfatal_warner(pTHX_ U32 err UNUSED,const char*pat,va_list*args){
+
+=back
+
+=for hackers
+Declared and documented at perl.h, line 592
 
 =head1 Compiler directives
 
-There are currently no internal API items in Compiler directives
+=over 4
+
+=item C<PREVENT_LVALUE>
+X<PREVENT_LVALUE>
+
+This returns its input C<x>, but forces a compilation error if called from an
+lvalue context.  Its main use is to be placed in a macro that otherwise could 
+be used to change the value of C<x>, but doing so is undesirable.
+
+A common example is when there are getter and setter macros for C<x>, and the
+setter has error checking that shouldn't be short circuited.  Wrapping C<x>
+with this macro in the getter call forces the setter one to be used to change
+C<x>.
+
+=over 3
+
+ bool  PREVENT_LVALUE(x)
+
+=back
+
+=back
+
+=for hackers
+Declared and documented at handy.h, line 1493
 
 =head1 Compile-time scope hooks
 
@@ -736,7 +854,7 @@ entry you ask for.
 =back
 
 =for hackers
-Declared and documented at op.h, line 805
+Declared and documented at op.h, line 824
 
 =over 4
 
@@ -757,7 +875,7 @@ Return the BHK's flags.
 =back
 
 =for hackers
-Declared and documented at op.h, line 802
+Declared and documented at op.h, line 821
 
 =over 4
 
@@ -779,7 +897,7 @@ preprocessing token; the type of C<arg> depends on C<which>.
 =back
 
 =for hackers
-Declared and documented at op.h, line 827
+Declared and documented at op.h, line 846
 
 =head1 Concurrency
 
@@ -878,7 +996,7 @@ Described in L<perlguts>.
 =back
 
 =for hackers
-CVf_SLABBED all in group documented at pod/perlguts.pod, line 5162
+CVf_SLABBED all in group documented at pod/perlguts.pod, line 5527
 CvROOT 
 CvSTART 
 CX_CUR 
@@ -901,7 +1019,26 @@ CXt_WHEN
 CXINC 
 cxstack 
 cxstack_ix 
-dounwind declared at embed.fnc, line 1299
+dounwind declared at embed.fnc, line 1386
+
+=over 4
+
+=item C<GET_aTHX_if_NULL>
+X<GET_aTHX_if_NULL>
+
+Sets C<aTHX> to the current context value if C<aTHX> points to NULL on entry.
+Otherwise it has no effect.
+
+=over 3
+
+   GET_aTHX_if_NULL()
+
+=back
+
+=back
+
+=for hackers
+Declared and documented at perl.h, line 289
 
 =over 4
 
@@ -922,7 +1059,7 @@ used except through C<PerlProc_fork>.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2269; documented at util.c, line 2759
+Declared at embed.fnc, line 2377; documented at util.c, line 2898
 
 =over 4
 
@@ -933,7 +1070,7 @@ Described in L<perlguts>.
 =back
 
 =for hackers
-Documented at pod/perlguts.pod, line 4246
+Documented at pod/perlguts.pod, line 4611
 
 =head1 COPs and Hint Hashes
 
@@ -967,7 +1104,7 @@ C<name>, if any.
 =back
 
 =for hackers
-Declared at embed.fnc, line 1052; documented at op.c, line 16301
+Declared at embed.fnc, line 1138; documented at op.c, line 16857
 
 =head1 CV Handling
 
@@ -1000,7 +1137,7 @@ reference will be properly reclaimed or duplicated when the CV itself is.
 =back
 
 =for hackers
-Declared and documented at cv.h, line 257
+Declared and documented at cv.h, line 327
 
 =over 4
 
@@ -1018,7 +1155,7 @@ Helper macro to turn off the C<CvREFCOUNTED_ANYSV> flag.
 =back
 
 =for hackers
-Declared and documented at cv.h, line 273
+Declared and documented at cv.h, line 343
 
 =over 4
 
@@ -1036,7 +1173,7 @@ Helper macro to turn on the C<CvREFCOUNTED_ANYSV> flag.
 =back
 
 =for hackers
-Declared and documented at cv.h, line 269
+Declared and documented at cv.h, line 339
 
 =over 4
 
@@ -1099,7 +1236,7 @@ should print 123:
 =back
 
 =for hackers
-Declared and documented at cv.h, line 336
+Declared and documented at cv.h, line 432
 
 =over 4
 
@@ -1171,7 +1308,7 @@ See L<perlinterp/"Exception handing"> for further details.
 =back
 
 =for hackers
-Declared at embed.fnc, line 5337; documented at pp_ctl.c, line 3821
+Declared at embed.fnc, line 5518; documented at pp_ctl.c, line 3998
 
 =head1 Debugging
 
@@ -1224,7 +1361,7 @@ Implements B<-Dt> perl command line option on OP C<o>.
 =back
 
 =for hackers
-Declared at embed.fnc, line 1147; documented at dump.c, line 3593
+Declared at embed.fnc, line 1233; documented at dump.c, line 3783
 
 =over 4
 
@@ -1243,7 +1380,7 @@ C<-DP> command line option.
 =back
 
 =for hackers
-Declared at embed.fnc, line 4658; documented at dump.c, line 3868
+Declared at embed.fnc, line 4805; documented at dump.c, line 4059
 
 =over 4
 
@@ -1263,7 +1400,7 @@ option.
 =back
 
 =for hackers
-Declared at embed.fnc, line 1148; documented at dump.c, line 3889
+Declared at embed.fnc, line 1234; documented at dump.c, line 4080
 
 =over 4
 
@@ -1277,6 +1414,23 @@ functions with no normal arguments, and used by L</C<comma_aDEPTH>> itself.
 
 =for hackers
 Declared and documented at perl.h, line 83
+
+=over 4
+
+=item C<DEBUG_L_FLAG>
+
+Described in L<perlguts>.
+
+=over 3
+
+ U32  DEBUG_L_FLAG
+
+=back
+
+=back
+
+=for hackers
+Documented at pod/perlguts.pod, line 3236
 
 =over 4
 
@@ -1307,7 +1461,7 @@ Deallocates a backtrace received from get_c_backtrace.
 =back
 
 =for hackers
-Declared at embed.fnc, line 6558; documented at util.c, line 6526
+Declared at embed.fnc, line 6750; documented at util.c, line 6724
 
 =over 4
 
@@ -1332,7 +1486,7 @@ returning at most C<depth> frames.
 =back
 
 =for hackers
-Declared at embed.fnc, line 6560; documented at util.c, line 6283
+Declared at embed.fnc, line 6752; documented at util.c, line 6479
 
 =over 4
 
@@ -1358,7 +1512,7 @@ thread's copy.
 =back
 
 =for hackers
-Declared and documented at intrpvar.h, line 564
+Declared and documented at intrpvar.h, line 568
 
 =over 4
 
@@ -1382,7 +1536,7 @@ thread's copy.
 =back
 
 =for hackers
-Declared and documented at intrpvar.h, line 575
+Declared and documented at intrpvar.h, line 579
 
 =over 4
 
@@ -1404,8 +1558,8 @@ Described in L<perlguts>.
 =back
 
 =for hackers
-runops_debug declared at embed.fnc, line 3071; all in group documented at pod/perlguts.pod, line 2753
-runops_standard declared at embed.fnc, line 3072
+runops_debug declared at embed.fnc, line 3179; all in group documented at pod/perlguts.pod, line 3022
+runops_standard declared at embed.fnc, line 3180
 
 =head1 Declaration and Initialization of Globals
 
@@ -1557,6 +1711,48 @@ Declared and documented at INTERN.h, line 75
 
 =over 4
 
+=item C<closest_cop>
+X<closest_cop>
+
+Returns the closest COP to the current OP (C<curop>), given the last COP
+seen (C<cop>), a starting OP (C<o>), and a traversal option (C<opnext>).
+
+The function walks the optree from the starting OP, calling itself
+recursively if required, until the walk is exhausted. The best candidate
+COP should then be returned.
+
+This function is typically used by C<Perl_sv_mess> to find the correct
+source code file name and line number to emit in a warning or fatal
+message, or by C<pp_caller> to populate its return values.
+
+The most recently seen COP (C<cop>) is unsuitable in situations such as:
+
+=over
+
+=item *
+C<caller()> needs the most recent COP in a sub I<caller's> context.
+
+=item *
+A closer COP existed, but was nulled out during compilation.
+
+=back
+
+=over 3
+
+ const COP *       closest_cop(      const COP *cop, const OP *o,
+                                     const OP *curop, bool opnext)
+ const COP *  Perl_closest_cop(pTHX_ const COP *cop, const OP *o,
+                                     const OP *curop, bool opnext)
+
+=back
+
+=back
+
+=for hackers
+Declared at embed.fnc, line 1107; documented at util.c, line 1535
+
+=over 4
+
 =item C<sv_peek>
 X<sv_peek>
 
@@ -1572,9 +1768,14 @@ Implements C<SvPEEK>
 =back
 
 =for hackers
-Declared at embed.fnc, line 3523; documented at dump.c, line 448
+Declared at embed.fnc, line 3660; documented at dump.c, line 473
 
 =head1 Embedding, Threads, and Interpreter Cloning
+
+See also L</Mutex locking macros> for macros to make many libc functions
+thread-safe
+
+
 
 =over 4
 
@@ -1592,7 +1793,7 @@ dump the contents of a CV
 =back
 
 =for hackers
-Declared at embed.fnc, line 5241; documented at pad.c, line 1872
+Declared at embed.fnc, line 5422; documented at pad.c, line 1923
 
 =over 4
 
@@ -1615,7 +1816,7 @@ finished its job, so it can forget the slab.
 =back
 
 =for hackers
-Declared at embed.fnc, line 1110; documented at pad.c, line 496
+Declared at embed.fnc, line 1196; documented at pad.c, line 499
 
 =over 4
 
@@ -1636,7 +1837,7 @@ Dump the contents of a padlist
 =back
 
 =for hackers
-Declared at embed.fnc, line 1191; documented at pad.c, line 1800
+Declared at embed.fnc, line 1278; documented at pad.c, line 1851
 
 =over 4
 
@@ -1655,7 +1856,7 @@ Implements L<perlapi/C<PERL_GET_CONTEXT>>, which you should use instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 6741; documented at inline.h, line 5090
+Declared at embed.fnc, line 6933; documented at inline.h, line 5181
 
 =over 4
 
@@ -1674,7 +1875,7 @@ Stub that provides shutdown hook.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2568; documented at perl.c, line 485
+Declared at embed.fnc, line 2676; documented at perl.c, line 506
 
 =over 4
 
@@ -1700,7 +1901,7 @@ is done.  Returns the offset of the allocated pad slot.
 =back
 
 =for hackers
-Declared at embed.fnc, line 5222; documented at pad.c, line 540
+Declared at embed.fnc, line 5403; documented at pad.c, line 543
 
 =over 4
 
@@ -1719,7 +1920,7 @@ Update the pad compilation state variables on entry to a new block.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2652; documented at pad.c, line 1414
+Declared at embed.fnc, line 2759; documented at pad.c, line 1449
 
 =over 4
 
@@ -1743,7 +1944,7 @@ C<is_our> indicates that the name to check is an C<"our"> declaration.
 =back
 
 =for hackers
-Declared at embed.fnc, line 5227; documented at pad.c, line 857
+Declared at embed.fnc, line 5408; documented at pad.c, line 885
 
 =over 4
 
@@ -1780,7 +1981,7 @@ index into the parent pad.
 =back
 
 =for hackers
-Declared at embed.fnc, line 5230; documented at pad.c, line 1062
+Declared at embed.fnc, line 5411; documented at pad.c, line 1093
 
 =over 4
 
@@ -1803,7 +2004,7 @@ moved to a pre-existing CV struct.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2661; documented at pad.c, line 2350
+Declared at embed.fnc, line 2768; documented at pad.c, line 2408
 
 =over 4
 
@@ -1822,7 +2023,7 @@ Free the SV at offset po in the current pad.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2665; documented at pad.c, line 1762
+Declared at embed.fnc, line 2772; documented at pad.c, line 1807
 
 =over 4
 
@@ -1842,7 +2043,7 @@ lexicals in this scope and warn of any lexicals that never got introduced.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2666; documented at pad.c, line 1500
+Declared at embed.fnc, line 2773; documented at pad.c, line 1539
 
 =over 4
 
@@ -1863,7 +2064,7 @@ the new pad an C<@_> in slot zero.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2683; documented at pad.c, line 2422
+Declared at embed.fnc, line 2792; documented at pad.c, line 2481
 
 =over 4
 
@@ -1881,7 +2082,7 @@ Mark all the current temporaries for reuse
 =back
 
 =for hackers
-Declared at embed.fnc, line 5239; documented at pad.c, line 1608
+Declared at embed.fnc, line 5420; documented at pad.c, line 1651
 
 =over 4
 
@@ -1901,7 +2102,7 @@ Use the macro C<PAD_SETSV()> rather than calling this function directly.
 =back
 
 =for hackers
-Declared at embed.fnc, line 4198; documented at pad.c, line 1389
+Declared at embed.fnc, line 4341; documented at pad.c, line 1424
 
 =over 4
 
@@ -1921,7 +2122,7 @@ Use macro C<PAD_SV> instead of calling this function directly.
 =back
 
 =for hackers
-Declared at embed.fnc, line 4200; documented at pad.c, line 1366
+Declared at embed.fnc, line 4343; documented at pad.c, line 1399
 
 =over 4
 
@@ -1941,7 +2142,7 @@ new one.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2685; documented at pad.c, line 1556
+Declared at embed.fnc, line 2794; documented at pad.c, line 1597
 
 =over 4
 
@@ -1962,7 +2163,7 @@ Duplicates a pad.
 =back
 
 =for hackers
-Declared at embed.fnc, line 6613; documented at pad.c, line 2503
+Declared at embed.fnc, line 6805; documented at pad.c, line 2562
 
 =over 4
 
@@ -1983,7 +2184,7 @@ Duplicates a pad name.
 =back
 
 =for hackers
-Declared at embed.fnc, line 6615; documented at pad.c, line 2870
+Declared at embed.fnc, line 6807; documented at pad.c, line 2963
 
 =over 4
 
@@ -2004,7 +2205,7 @@ Duplicates a pad name list.
 =back
 
 =for hackers
-Declared at embed.fnc, line 6617; documented at pad.c, line 2736
+Declared at embed.fnc, line 6809; documented at pad.c, line 2797
 
 =over 4
 
@@ -2023,7 +2224,7 @@ Implements L<perlapi/C<PERL_SET_CONTEXT>>, which you should use instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3220; documented at util.c, line 3520
+Declared at embed.fnc, line 3329; documented at util.c, line 3680
 
 =over 4
 
@@ -2042,7 +2243,7 @@ Duplicate a stack info structure, returning a pointer to the cloned object.
 =back
 
 =for hackers
-Declared at embed.fnc, line 6634; documented at sv.c, line 15908
+Declared at embed.fnc, line 6826; documented at sv.c, line 16529
 
 =over 4
 
@@ -2063,7 +2264,7 @@ Duplicate the save stack, returning a pointer to the cloned object.
 =back
 
 =for hackers
-Declared at embed.fnc, line 6636; documented at sv.c, line 16005
+Declared at embed.fnc, line 6828; documented at sv.c, line 16626
 
 =head1 Errno
 
@@ -2085,7 +2286,7 @@ by C<RESTORE_ERRNO>.
 =back
 
 =for hackers
-Declared and documented at perl.h, line 1829
+Declared and documented at perl.h, line 2130
 
 =over 4
 
@@ -2104,7 +2305,7 @@ specific error number.
 =back
 
 =for hackers
-Declared and documented at perl.h, line 1824
+Declared and documented at perl.h, line 2125
 
 =over 4
 
@@ -2123,7 +2324,7 @@ was saved by C<dSAVE_ERRNO> or C<RESTORE_ERRNO>.
 =back
 
 =for hackers
-Declared and documented at perl.h, line 1841
+Declared and documented at perl.h, line 2142
 
 =over 4
 
@@ -2143,7 +2344,7 @@ C<dSAVEDERRNO> or C<dSAVE_ERRNO> in scope.
 =back
 
 =for hackers
-Declared and documented at perl.h, line 1835
+Declared and documented at perl.h, line 2136
 
 =over 4
 
@@ -2161,7 +2362,7 @@ Set C<errno>, and on VMS set C<vaxc$errno>.
 =back
 
 =for hackers
-Declared and documented at perl.h, line 1820
+Declared and documented at perl.h, line 2121
 
 =head1 Exception Handling (simple) Macros
 
@@ -2177,7 +2378,12 @@ There are currently no internal API items in Floating point
 
 =head1 General Configuration
 
-There are currently no internal API items in General Configuration
+This section contains configuration information not otherwise
+found in the more specialized sections of this document.  At the
+end is a list of C<#defines> whose name should be enough to tell
+you what they do, and a list of #defines which tell you if you
+need to C<#include> files to get the corresponding functionality.
+
 
 =head1 Global Variables
 
@@ -2242,7 +2448,7 @@ C<flags> should be set to AMG_unary for unary operations.
 =back
 
 =for hackers
-Declared at embed.fnc, line 821; documented at gv.c, line 3401
+Declared at embed.fnc, line 903; documented at gv.c, line 3433
 
 =over 4
 
@@ -2263,7 +2469,7 @@ Duplicate a typeglob, returning a pointer to the cloned object.
 =back
 
 =for hackers
-Declared at embed.fnc, line 6597; documented at sv.c, line 14886
+Declared at embed.fnc, line 6789; documented at sv.c, line 15469
 
 =over 4
 
@@ -2282,7 +2488,7 @@ Implements C<StashHANDLER>, which you should use instead
 =back
 
 =for hackers
-Declared at embed.fnc, line 1602; documented at gv.c, line 3292
+Declared at embed.fnc, line 1700; documented at gv.c, line 3320
 
 =over 4
 
@@ -2315,7 +2521,7 @@ reasons.
 =back
 
 =for hackers
-Declared at embed.fnc, line 4738; documented at gv.c, line 1674
+Declared at embed.fnc, line 4885; documented at gv.c, line 1689
 
 =over 4
 
@@ -2349,7 +2555,7 @@ more compactly represents the same thing.
 =back
 
 =for hackers
-Declared at embed.fnc, line 1640; documented at gv.c, line 4313
+Declared at embed.fnc, line 1738; documented at gv.c, line 4355
 
 =head1 Hook manipulation
 
@@ -2383,7 +2589,7 @@ Implements C<HvEITER> which you should use instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 1681; documented at hv.c, line 2552
+Declared at embed.fnc, line 1779; documented at hv.c, line 2608
 
 =over 4
 
@@ -2401,7 +2607,7 @@ Implements C<HvEITER_set> which you should use instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 1682; documented at hv.c, line 2613
+Declared at embed.fnc, line 1780; documented at hv.c, line 2672
 
 =over 4
 
@@ -2426,7 +2632,7 @@ table.
 =back
 
 =for hackers
-Declared at embed.fnc, line 1684; documented at hv.c, line 2757
+Declared at embed.fnc, line 1782; documented at hv.c, line 2821
 
 =over 4
 
@@ -2451,7 +2657,7 @@ This is called when a stash is deleted from the symbol table.
 =back
 
 =for hackers
-Declared at embed.fnc, line 1688; documented at hv.c, line 2820
+Declared at embed.fnc, line 1786; documented at hv.c, line 2884
 
 =over 4
 
@@ -2478,7 +2684,7 @@ hash.
 =back
 
 =for hackers
-Declared at embed.fnc, line 1706; documented at hv.c, line 2412
+Declared at embed.fnc, line 1804; documented at hv.c, line 2467
 
 =over 4
 
@@ -2496,7 +2702,7 @@ Implements C<HvPLACEHOLDERS_get>, which you should use instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 1731; documented at hv.c, line 3502
+Declared at embed.fnc, line 1829; documented at hv.c, line 3603
 
 =over 4
 
@@ -2514,7 +2720,7 @@ Implements C<HvPLACEHOLDERS_set>, which you should use instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 1735; documented at hv.c, line 3521
+Declared at embed.fnc, line 1833; documented at hv.c, line 3621
 
 =over 4
 
@@ -2532,7 +2738,7 @@ Implements C<HvRITER> which you should use instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 1742; documented at hv.c, line 2534
+Declared at embed.fnc, line 1840; documented at hv.c, line 2589
 
 =over 4
 
@@ -2550,7 +2756,7 @@ Implements C<HvRITER_set> which you should use instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 1743; documented at hv.c, line 2570
+Declared at embed.fnc, line 1841; documented at hv.c, line 2627
 
 =over 4
 
@@ -2574,7 +2780,7 @@ C<flags> is currently unused and must be zero.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2847; documented at hv.c, line 3586
+Declared at embed.fnc, line 2955; documented at hv.c, line 3686
 
 =over 4
 
@@ -2647,10 +2853,10 @@ extracted from that using L<perlapi/C<SvPV_const>>.
 =back
 
 =for hackers
-refcounted_he_fetch_pv declared at embed.fnc, line 2850; all in group documented at hv.c, line 3697
-refcounted_he_fetch_pvn declared at embed.fnc, line 2855
-refcounted_he_fetch_pvs declared at hv.c, line 3699
-refcounted_he_fetch_sv declared at embed.fnc, line 2861
+refcounted_he_fetch_pv declared at embed.fnc, line 2958; all in group documented at hv.c, line 3799
+refcounted_he_fetch_pvn declared at embed.fnc, line 2963
+refcounted_he_fetch_pvs declared at hv.c, line 3801
+refcounted_he_fetch_sv declared at embed.fnc, line 2969
 
 =over 4
 
@@ -2673,7 +2879,7 @@ no action occurs in this case.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2866; documented at hv.c, line 3959
+Declared at embed.fnc, line 2974; documented at hv.c, line 4063
 
 =over 4
 
@@ -2696,7 +2902,7 @@ to this function: no action occurs and a null pointer is returned.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2868; documented at hv.c, line 3996
+Declared at embed.fnc, line 2976; documented at hv.c, line 4100
 
 =over 4
 
@@ -2779,10 +2985,10 @@ C<refcounted_he>.
 =back
 
 =for hackers
-refcounted_he_new_pv declared at embed.fnc, line 2870; all in group documented at hv.c, line 3808
-refcounted_he_new_pvn declared at embed.fnc, line 2876
-refcounted_he_new_pvs declared at hv.c, line 3810
-refcounted_he_new_sv declared at embed.fnc, line 2883
+refcounted_he_new_pv declared at embed.fnc, line 2978; all in group documented at hv.c, line 3911
+refcounted_he_new_pvn declared at embed.fnc, line 2984
+refcounted_he_new_pvs declared at hv.c, line 3913
+refcounted_he_new_sv declared at embed.fnc, line 2991
 
 =over 4
 
@@ -2803,7 +3009,7 @@ C<len> and C<hash> must both be valid for C<str>.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3906; documented at hv.c, line 3242
+Declared at embed.fnc, line 4045; documented at hv.c, line 3306
 
 =head1 Input/Output
 
@@ -2826,7 +3032,7 @@ Duplicate a directory handle, returning a pointer to the cloned object.
 =back
 
 =for hackers
-Declared at embed.fnc, line 6592; documented at sv.c, line 14844
+Declared at embed.fnc, line 6784; documented at sv.c, line 15428
 
 =over 4
 
@@ -2847,7 +3053,7 @@ Duplicate a file handle, returning a pointer to the cloned object.
 =back
 
 =for hackers
-Declared at embed.fnc, line 6594; documented at sv.c, line 14809
+Declared at embed.fnc, line 6786; documented at sv.c, line 15392
 
 =over 4
 
@@ -2866,7 +3072,7 @@ Implements C<PERL_FLUSHALL_FOR_CHILD> on some platforms.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2268; documented at util.c, line 3632
+Declared at embed.fnc, line 2376; documented at util.c, line 3797
 
 =over 4
 
@@ -2884,7 +3090,7 @@ The C library C<L<mkostemp(3)>> if available, or a Perl implementation of it.
 =back
 
 =for hackers
-Declared at embed.fnc, line 4218; documented at util.c, line 5819
+Declared at embed.fnc, line 4371; documented at util.c, line 6013
 
 =over 4
 
@@ -2902,7 +3108,7 @@ The C library C<L<mkstemp(3)>> if available, or a Perl implementation of it.
 =back
 
 =for hackers
-Declared at embed.fnc, line 4222; documented at util.c, line 5837
+Declared at embed.fnc, line 4375; documented at util.c, line 6031
 
 =over 4
 
@@ -2924,7 +3130,7 @@ thread's copy.
 =back
 
 =for hackers
-Declared and documented at intrpvar.h, line 294
+Declared and documented at intrpvar.h, line 296
 
 =over 4
 
@@ -2946,7 +3152,7 @@ thread's copy.
 =back
 
 =for hackers
-Declared and documented at intrpvar.h, line 303
+Declared and documented at intrpvar.h, line 305
 
 =over 4
 
@@ -2968,7 +3174,7 @@ thread's copy.
 =back
 
 =for hackers
-Declared and documented at intrpvar.h, line 285
+Declared and documented at intrpvar.h, line 287
 
 =over 4
 
@@ -2993,7 +3199,7 @@ Moving it away shrinks F<pp_hot.c>; shrinking F<pp_hot.c> helps speed perl up.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3260; documented at doio.c, line 3390
+Declared at embed.fnc, line 3369; documented at doio.c, line 3427
 
 =over 4
 
@@ -3030,7 +3236,7 @@ Returns the absolute value of L<perlapi/C<IV_MIN>>, suitable for use in a UV
 =back
 
 =for hackers
-Declared and documented at handy.h, line 3217
+Declared and documented at handy.h, line 3402
 
 =over 4
 
@@ -3051,7 +3257,7 @@ undefined behavior when C<uv> is equal to C<L</ABS_IV_MIN>>.
 =back
 
 =for hackers
-Declared and documented at handy.h, line 3227
+Declared and documented at handy.h, line 3412
 
 =over 4
 
@@ -3070,7 +3276,7 @@ undefined behavior even if C<iv> is L<perlapi/C<IV_MIN>>.
 =back
 
 =for hackers
-Declared and documented at handy.h, line 3202
+Declared and documented at handy.h, line 3387
 
 =head1 I/O Formats
 
@@ -3113,7 +3319,7 @@ Note that C<NULL> is a valid C<proto> and will always return C<true>.
 =back
 
 =for hackers
-Declared at embed.fnc, line 4088; documented at toke.c, line 1783
+Declared at embed.fnc, line 4227; documented at toke.c, line 1810
 
 =head1 Locales
 
@@ -3139,6 +3345,31 @@ plus space for some flags and pointers.  For example, a tied variable has
 a MAGIC structure that contains a pointer to the object associated with the
 tie.
 
+=head2 Magic v2
+
+Magic v2 is currently considered B<experimental>.
+
+New in Perl version 5.45.4, the Magic system has been greatly extended by
+defining an entire new version. This "Magic v2" brings new data structures
+which define the sets of trigger functions and other metadata associated with
+that kind of magic, and new data structures, functions, and macros to use to
+attach them to SVs and manage those attachments.
+
+Whereas in the original (version 1) definition, user code was expected to
+directly access fields of the MAGIC structure attached to individual SVs, the
+data structure used by version 2 is considered opaque, and should only be
+manipulated via the various C<Mg...> named macros.
+
+The principal improvement is the addition of the C<struct MagicFunctions>
+structure to replace the previous C<struct MGVTBL>. It fills a similar role
+in that it provides pointers to various "trigger functions" (i.e. definitions
+of the new behaviour that the magic wishes to add), but also provides a number
+of metadata fields that were missing from the first version and couldn't
+easily be added. These metadata fields provide extra information about the
+overall kind of magic (as opposed to being about any particular SV
+attachment), as well as a version number to greatly simplify any future
+extensions of the structure to address any shortcomings from here onwards.
+
 
 =over 4
 
@@ -3158,7 +3389,7 @@ C<PL_compiling.cop_hints_hash>.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2015; documented at mg.c, line 3938
+Declared at embed.fnc, line 2113; documented at mg.c, line 4588
 
 =over 4
 
@@ -3177,7 +3408,7 @@ Triggered by clearing C<%^H>, resets C<PL_compiling.cop_hints_hash>.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2017; documented at mg.c, line 3966
+Declared at embed.fnc, line 2115; documented at mg.c, line 4616
 
 =over 4
 
@@ -3205,6 +3436,9 @@ Returns the SV (if any) returned by the method, or C<NULL> on failure.
 
 =over 3
 
+ SV *       magic_methcall(      SV *sv, const MAGIC *mg,
+                                 SV *meth, U32 flags, U32 argc,
+                                 ...)
  SV *  Perl_magic_methcall(pTHX_ SV *sv, const MAGIC *mg,
                                  SV *meth, U32 flags, U32 argc,
                                  ...)
@@ -3214,7 +3448,7 @@ Returns the SV (if any) returned by the method, or C<NULL> on failure.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2083; documented at mg.c, line 2091
+Declared at embed.fnc, line 2181; documented at mg.c, line 2724
 
 =over 4
 
@@ -3236,7 +3470,7 @@ reference.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2123; documented at mg.c, line 3905
+Declared at embed.fnc, line 2224; documented at mg.c, line 4555
 
 =over 4
 
@@ -3255,7 +3489,7 @@ Duplicate a chain of magic, returning a pointer to the cloned object.
 =back
 
 =for hackers
-Declared at embed.fnc, line 6604; documented at sv.c, line 14930
+Declared at embed.fnc, line 6796; documented at sv.c, line 15513
 
 =over 4
 
@@ -3281,7 +3515,7 @@ and that will handle the magic.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2196; documented at mg.c, line 464
+Declared at embed.fnc, line 2301; documented at mg.c, line 931
 
 =head1 Memory Management
 
@@ -3301,7 +3535,7 @@ Implements L<perlapi/C<Newxz>> which you should use instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 973; documented at malloc.c, line 2083
+Declared at embed.fnc, line 1057; documented at malloc.c, line 2089
 
 =over 4
 
@@ -3319,7 +3553,7 @@ Implements L<perlapi/C<Newx>> which you should use instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2166; documented at malloc.c, line 1215
+Declared at embed.fnc, line 2271; documented at malloc.c, line 1215
 
 =over 4
 
@@ -3337,7 +3571,7 @@ Implements L<perlapi/C<Safefree>> which you should use instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2175; documented at malloc.c, line 1788
+Declared at embed.fnc, line 2280; documented at malloc.c, line 1790
 
 =over 4
 
@@ -3355,7 +3589,7 @@ Implements L<perlapi/C<Renew>> which you should use instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2836; documented at malloc.c, line 1883
+Declared at embed.fnc, line 2944; documented at malloc.c, line 1887
 
 =head1 MRO
 
@@ -3390,7 +3624,7 @@ invalidated).
 =back
 
 =for hackers
-Declared at embed.fnc, line 5068; documented at mro_core.c, line 216
+Declared at embed.fnc, line 5240; documented at mro_core.c, line 220
 
 =over 4
 
@@ -3411,7 +3645,7 @@ by the C<setisa> magic, should not need to invoke directly.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2228; documented at mro_core.c, line 483
+Declared at embed.fnc, line 2336; documented at mro_core.c, line 489
 
 =over 4
 
@@ -3452,13 +3686,170 @@ simply returns.  This checked will be skipped if C<flags & 1>.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2235; documented at mro_core.c, line 734
+Declared at embed.fnc, line 2343; documented at mro_core.c, line 740
 
 =head1 Multicall Functions
 
 There are currently no internal API items in Multicall Functions
 
+=head1 Mutex locking macros
+
+Below is a list of libc functions for which Perl furnishes mutex
+locking/unlocking macros.  Functions on this list can be made
+thread-safe by wrapping their calls with these macros.  All these
+macros expand to no-ops unless threading is in effect.
+
+In some cases, the functions return pointers to static data that
+must be copied to a safe place before the unlock occurs.
+
+If a function is not on the list, it is because of one of several
+reasons:
+
+    1) We believe it is thread-safe
+    2) It cannot be made thread safe
+    3) It is used in conjunction with other functions which have
+       to be executed in one atomic unit, and that is beyond our
+       capabilities for automatically generating locks.
+    4) We don't know about it.
+
+See L<perlclib/Dealing with embedded perls and threads> for more
+details.  The macro definitions are based on man pages (especially
+Linux ones), and our experience.  We also know from experience
+that man pages can be wrong or incomplete, and the behavior of any
+given function may be platform dependent.  Patches to update our
+knowledge base in F<regen/lock_definitions.pl> are welcome.
+
+For a function 'foo', the locking/unlocking macros are named
+
+ PERL_FOO_LOCK
+ PERL_FOO_UNLOCK
+
+Note that just because a function is on the list below, doesn't
+mean it is a good idea for you to use it.  Some are obsolete; some
+are implemented on only one or a few platforms; some have better
+alternatives.  Before using a given lock, look it up in
+F<perl_lock_definitions.h> to see what notes and cautions are
+given for it.
+
+
 =head1 Numeric Functions
+
+=over 4
+
+=item C<grok_uint_by_base>
+X<grok_uint_by_base>
+
+Parses a string purportedly containing ASCII digit characters in the numeric
+base passed in as 'base', and translates it to a non-negative integer, if
+possible, which it returns.  The base is any of 2, 8, 10, or 16.  The string
+to be parsed starts at 'start' and has length *len_p bytes.  If *len_p is 0, 0
+is returned without complaint.
+
+It stops parsing when it reaches *len_p bytes, or at the first illegal
+character.  Legal characters include any digit in the given base and, if
+permitted by flags, underscores in restricted positions. It returns in
+*len_p the actual number of bytes parsed.  If it stopped parsing early,
+it raises a warning unless the caller has set the PERL_SCAN_SILENT_ILLDIGIT
+bit in *flags.  The flag is cleared if no illegal character is found,
+otherwise it will remain set on output.
+
+If the resultant integer won't fit in a UV, UV_MAX is returned, and *flags
+will contain the PERL_SCAN_NUMBER_OVERFLOWED bit. If 'approximation' is not
+NULL, an NV approximation to the full integer will be placed into
+*approximation.  And for bases 2, 8, 16, it raises a warning unless the
+caller has set the PERL_SCAN_SILENT_OVERFLOW bit in *flags.
+
+Note that *approximation is not changed unless overflow occurs.
+
+For non-base10 operations, by default, a warning is raised for numbers
+that don't overflow but exceed 32 bits in width.  This is suppressed if
+the caller has set the PERL_SCAN_SILENT_NON_PORTABLE bit in *flags.
+
+The function can silently accept (and otherwise ignore) underscores as well as
+digits if the caller has set the PERL_SCAN_ALLOW_UNDERSCORES bit in *flags.
+These are a single underscore between any two digits, and additionally an
+initial underscore.
+
+The function takes great care to make any overflowing approximation as
+accurate as possible given the platform's limitations.
+
+Attention has been paid to maximizing performance, but some compromises
+have been made because it is the unification of grok_bin, grok_oct,
+grok_hex and grok_decimal (if that existed).  The unification was done
+because over time, patches had been applied to one or another of the
+individual functions, causing them to drift apart.  Another solution
+would be to have a regen script that starts with a single template and
+customizes each one.  Here are the compromises that could matter.
+
+=over
+
+=item *
+
+Each digit calculation uses XDIGIT_VALUE(), which, to accomodate hex values,
+has extra bit operations not otherwise needed.  This macro replaces a
+subtraction with 2 shifts, 2 additions, and 3 masks
+
+=item *
+
+To accommodate base 10, each digit calculation uses an integer multiply and an
+addition instead of a bitwise shift and 'or'.
+
+=item *
+
+The main switch() statement could have more case statements for non-hex bases.
+
+=back
+
+There is a special mode that functions as an alternative to overflowing.  It
+is triggered by the caller setting PERL_SCAN_DISCARD_INSTEAD_OF_OVERFLOW into
+*flags.  Should overflow otherwise occur, subsequent digits are instead simply
+discarded, while rounding the result towards even.  *approximation is not
+changed if this flag is set.
+
+=over 3
+
+ UV       grok_uint_by_base(      const char * const start,
+                                  STRLEN *len_p, I32 *flags,
+                                  NV *approximation,
+                                  uint_fast8_t base,
+                                  const U32 lookup_bit,
+                                  uint_fast8_t offset)
+ UV  Perl_grok_uint_by_base(pTHX_ const char * const start,
+                                  STRLEN *len_p, I32 *flags,
+                                  NV *approximation,
+                                  uint_fast8_t base,
+                                  const U32 lookup_bit,
+                                  uint_fast8_t offset)
+
+=back
+
+=back
+
+=for hackers
+Declared at embed.fnc, line 1584; documented at numeric.c, line 327
+
+=over 4
+
+=item C<isEVEN>
+
+=item C<isODD>
+X<isEVEN>X<isODD>
+
+These return a boolean as to whether or not the integer value given by the
+argument is even or odd, respectively.
+
+=over 3
+
+ bool  isEVEN(UV a)
+ bool  isODD (UV a)
+
+=back
+
+=back
+
+=for hackers
+isEVEN declared at handy.h, line 357; all in group documented at handy.h, line 357
+isODD declared at handy.h, line 358
 
 =over 4
 
@@ -3483,7 +3874,15 @@ return true.
 =back
 
 =for hackers
-Declared at embed.fnc, line 1832; documented at numeric.c, line 1939
+Declared at embed.fnc, line 1930; documented at numeric.c, line 2089
+
+=over 4
+
+=item C<isODD*>
+
+Described under C<L</isEVEN>>
+
+=back
 
 =over 4
 
@@ -3793,6 +4192,7 @@ See the various _with_state siphash functions for a usage example.
 Declared and documented at perl_siphash.h, line 31
 
 =head1 Optrees
+X<OP_LVALUE_NO_CROAK>
 
 =over 4
 
@@ -3814,7 +4214,7 @@ Available since: v5.44
 =back
 
 =for hackers
-Declared at embed.fnc, line 2352; documented at op.c, line 4727
+Declared at embed.fnc, line 2460; documented at op.c, line 4888
 
 =over 4
 
@@ -3907,7 +4307,7 @@ ensure that it knows which of these situations applies.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2335; documented at op.c, line 11289
+Declared at embed.fnc, line 2443; documented at op.c, line 11749
 
 =over 4
 
@@ -3926,7 +4326,7 @@ Constructs, checks, and returns a format op.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2373; documented at op.c, line 12483
+Declared at embed.fnc, line 2481; documented at op.c, line 12952
 
 =over 4
 
@@ -3950,7 +4350,7 @@ Similar in action to L<perlintern/C<newATTRSUB_x>>.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2421; documented at op.c, line 10918
+Declared at embed.fnc, line 2529; documented at op.c, line 11378
 
 =over 4
 
@@ -4041,7 +4441,34 @@ ensure that it knows which of these situations applies.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2550; documented at op.c, line 12288
+Declared at embed.fnc, line 2658; documented at op.c, line 12756
+
+=over 4
+
+=item C<op_lvalue_flags>
+X<op_lvalue_flags>
+
+This is a non-API lower-level interface to L<perlapi/C<op_lvalue>>, whose
+flags param has these bits:
+
+=over
+
+=item OP_LVALUE_NO_CROAK
+
+return rather than croaking on error
+
+=back
+
+=over 3
+
+ OP *  Perl_op_lvalue_flags(pTHX_ OP *o, I32 type, U32 flags)
+
+=back
+
+=back
+
+=for hackers
+Declared at embed.fnc, line 2708; documented at op.c, line 3189
 
 =over 4
 
@@ -4060,7 +4487,7 @@ Implements the C<OP_REFCNT_LOCK> macro which you should use instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2610; documented at op.c, line 1518
+Declared at embed.fnc, line 2717; documented at op.c, line 1552
 
 =over 4
 
@@ -4079,7 +4506,7 @@ Implements the C<OP_REFCNT_UNLOCK> macro which you should use instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2611; documented at op.c, line 1534
+Declared at embed.fnc, line 2718; documented at op.c, line 1569
 
 =over 4
 
@@ -4100,7 +4527,7 @@ It combines former C<package> and C<package_version> into single call.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2624; documented at op.c, line 8322
+Declared at embed.fnc, line 2731; documented at op.c, line 8628
 
 =over 4
 
@@ -4123,7 +4550,7 @@ For now it's static, but it may be exposed to the API in the future.
 =back
 
 =for hackers
-Declared at embed.fnc, line 5248; documented at peep.c, line 1204
+Declared at embed.fnc, line 5429; documented at peep.c, line 1204
 
 =head1 Pack and Unpack
 
@@ -4147,7 +4574,7 @@ Save the current pad in the given context block structure.
 =back
 
 =for hackers
-Declared and documented at pad.h, line 444
+Declared and documented at pad.h, line 498
 
 =over 4
 
@@ -4166,7 +4593,7 @@ context block structure (can be used as an lvalue).
 =back
 
 =for hackers
-Declared and documented at pad.h, line 447
+Declared and documented at pad.h, line 501
 
 =over 4
 
@@ -4184,7 +4611,7 @@ Get the value from slot C<po> in the base (DEPTH=1) pad of a padlist
 =back
 
 =for hackers
-Declared and documented at pad.h, line 291
+Declared and documented at pad.h, line 303
 
 =over 4
 
@@ -4203,7 +4630,7 @@ Clone the state variables associated with running and compiling pads.
 =back
 
 =for hackers
-Declared and documented at pad.h, line 504
+Declared and documented at pad.h, line 558
 
 =over 4
 
@@ -4222,7 +4649,7 @@ at offset C<po>.  Assumes a valid slot entry.
 =back
 
 =for hackers
-Declared and documented at pad.h, line 459
+Declared and documented at pad.h, line 513
 
 =over 4
 
@@ -4241,7 +4668,7 @@ compiling pad (lvalue).
 =back
 
 =for hackers
-Declared and documented at pad.h, line 475
+Declared and documented at pad.h, line 529
 
 =over 4
 
@@ -4260,7 +4687,7 @@ ling pad (lvalue) to C<gen>.
 =back
 
 =for hackers
-Declared and documented at pad.h, line 479
+Declared and documented at pad.h, line 533
 
 =over 4
 
@@ -4279,7 +4706,7 @@ Assumes the slot entry is a valid C<our> lexical.
 =back
 
 =for hackers
-Declared and documented at pad.h, line 471
+Declared and documented at pad.h, line 525
 
 =over 4
 
@@ -4298,7 +4725,7 @@ at offset C<po>.  Assumes a valid slot entry.
 =back
 
 =for hackers
-Declared and documented at pad.h, line 463
+Declared and documented at pad.h, line 517
 
 =over 4
 
@@ -4317,7 +4744,7 @@ C<po>.  Must be a valid name.  Returns null if not typed.
 =back
 
 =for hackers
-Declared and documented at pad.h, line 467
+Declared and documented at pad.h, line 521
 
 =over 4
 
@@ -4335,7 +4762,7 @@ Restore the old pad saved into the local variable C<opad> by C<PAD_SAVE_LOCAL()>
 =back
 
 =for hackers
-Declared and documented at pad.h, line 313
+Declared and documented at pad.h, line 325
 
 =over 4
 
@@ -4354,7 +4781,7 @@ current pad equal to C<npad>
 =back
 
 =for hackers
-Declared and documented at pad.h, line 309
+Declared and documented at pad.h, line 321
 
 =over 4
 
@@ -4372,7 +4799,7 @@ Save the current pad then set it to null.
 =back
 
 =for hackers
-Declared and documented at pad.h, line 306
+Declared and documented at pad.h, line 318
 
 =over 4
 
@@ -4395,7 +4822,7 @@ long for some compilers, so it's best to replace it with
 =back
 
 =for hackers
-Declared and documented at pad.h, line 294
+Declared and documented at pad.h, line 306
 
 =over 4
 
@@ -4413,7 +4840,7 @@ like PAD_SET_CUR, but without the save
 =back
 
 =for hackers
-Declared and documented at pad.h, line 303
+Declared and documented at pad.h, line 315
 
 =over 4
 
@@ -4431,7 +4858,7 @@ Set the slot at offset C<po> in the current pad to C<sv>
 =back
 
 =for hackers
-Declared and documented at pad.h, line 279
+Declared and documented at pad.h, line 291
 
 =over 4
 
@@ -4449,7 +4876,7 @@ Get the value at offset C<po> in the current pad
 =back
 
 =for hackers
-Declared and documented at pad.h, line 282
+Declared and documented at pad.h, line 294
 
 =over 4
 
@@ -4470,7 +4897,7 @@ For internal use only.
 =back
 
 =for hackers
-Declared and documented at pad.h, line 285
+Declared and documented at pad.h, line 297
 
 =over 4
 
@@ -4489,7 +4916,7 @@ have additional information available via C<PadnameFIELDINFO>.
 =back
 
 =for hackers
-Declared and documented at pad.h, line 261
+Declared and documented at pad.h, line 273
 
 =over 4
 
@@ -4507,7 +4934,7 @@ Whether this is an "our" variable.
 =back
 
 =for hackers
-Declared and documented at pad.h, line 248
+Declared and documented at pad.h, line 260
 
 =over 4
 
@@ -4525,7 +4952,7 @@ Whether this is a "state" variable.
 =back
 
 =for hackers
-Declared and documented at pad.h, line 258
+Declared and documented at pad.h, line 270
 
 =over 4
 
@@ -4543,7 +4970,7 @@ The stash in which this "our" variable was declared.
 =back
 
 =for hackers
-Declared and documented at pad.h, line 251
+Declared and documented at pad.h, line 263
 
 =over 4
 
@@ -4562,7 +4989,7 @@ are often referred to as 'fake'.
 =back
 
 =for hackers
-Declared and documented at pad.h, line 254
+Declared and documented at pad.h, line 266
 
 =over 4
 
@@ -4581,7 +5008,7 @@ for C<my Foo $bar>.
 =back
 
 =for hackers
-Declared and documented at pad.h, line 265
+Declared and documented at pad.h, line 277
 
 =over 4
 
@@ -4600,7 +5027,7 @@ C<my>)
 =back
 
 =for hackers
-Declared and documented at pad.h, line 188
+Declared and documented at pad.h, line 195
 
 =over 4
 
@@ -4618,7 +5045,7 @@ save C<PL_comppad> and C<PL_curpad>
 =back
 
 =for hackers
-Declared and documented at pad.h, line 192
+Declared and documented at pad.h, line 199
 
 =over 4
 
@@ -4636,7 +5063,7 @@ Save a pad slot (used to restore after an iteration)
 =back
 
 =for hackers
-Declared and documented at pad.h, line 181
+Declared and documented at pad.h, line 188
 
 =head1 Password and Group access
 
@@ -4720,7 +5147,7 @@ mortal hash containing details of the error, as follows:
 =back
 
 =for hackers
-Declared at embed.fnc, line 2694; documented at toke.c, line 11009
+Declared at embed.fnc, line 2803; documented at toke.c, line 11127
 
 =head1 Stack Manipulation Macros
 
@@ -4728,6 +5155,9 @@ Declared at embed.fnc, line 2694; documented at toke.c, line 11009
 
 =item C<djSP>
 X<djSP>
+
+C<djSP> is provided for backwards compatibility with
+existing code, and should not be used for new code.
 
 Declare Just C<SP>.  This is actually identical to C<dSP>, and declares
 a local copy of perl's stack pointer, available via the C<SP> macro.
@@ -4755,7 +5185,7 @@ True if this op will be the return value of an lvalue subroutine
 =back
 
 =for hackers
-Declared and documented at pp.h, line 714
+Declared and documented at pp.h, line 715
 
 =over 4
 
@@ -4775,12 +5205,31 @@ function.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3094; documented at scope.c, line 1066
+Declared at embed.fnc, line 3202; documented at scope.c, line 1142
 
 =head1 String Handling
 
 See also C<L</Unicode Support>>.
 
+
+=over 4
+
+=item C<BmUSEFUL>
+X<BmUSEFUL>
+
+Used by regexec.c to help determine if using Boyers-Moore could speed up
+pattern matching of the string contained in C<sv>.
+
+=over 3
+
+ IV  BmUSEFUL(SV* sv)
+
+=back
+
+=back
+
+=for hackers
+Declared and documented at sv.h, line 1776
 
 =over 4
 
@@ -4824,7 +5273,7 @@ is not considered an error.
 =back
 
 =for hackers
-Declared at embed.fnc, line 1165; documented at util.c, line 590
+Declared at embed.fnc, line 1252; documented at util.c, line 598
 
 =over 4
 
@@ -4856,7 +5305,7 @@ In this case, the code should probably fail.
 =back
 
 =for hackers
-Declared at embed.fnc, line 6724; documented at util.c, line 5064
+Declared at embed.fnc, line 6916; documented at util.c, line 5252
 
 =over 4
 
@@ -4886,7 +5335,7 @@ See also L</quadmath_format_needed>.
 =back
 
 =for hackers
-Declared at embed.fnc, line 6726; documented at util.c, line 5026
+Declared at embed.fnc, line 6918; documented at util.c, line 5214
 
 =head1 SV Flags
 
@@ -4924,7 +5373,7 @@ These days using an inline function is generally preferred instead.
 =back
 
 =for hackers
-Declared and documented at intrpvar.h, line 232
+Declared and documented at intrpvar.h, line 234
 
 =over 4
 
@@ -4946,7 +5395,7 @@ and split it into a list of free SVs.
 =back
 
 =for hackers
-Declared at embed.fnc, line 6144; documented at sv.c, line 331
+Declared at embed.fnc, line 6336; documented at sv.c, line 333
 
 =over 4
 
@@ -4967,7 +5416,7 @@ SVs which are in complex self-referential hierarchies.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3339; documented at sv.c, line 582
+Declared at embed.fnc, line 3448; documented at sv.c, line 588
 
 =over 4
 
@@ -4986,7 +5435,7 @@ Attempt to destroy all objects not yet freed.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3341; documented at sv.c, line 534
+Declared at embed.fnc, line 3450; documented at sv.c, line 538
 
 =over 4
 
@@ -5006,7 +5455,7 @@ heads and bodies within the arenas must already have been freed.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3417; documented at sv.c, line 690
+Declared at embed.fnc, line 3526; documented at sv.c, line 702
 
 =over 4
 
@@ -5027,7 +5476,7 @@ Use the C<SvGROW> wrapper instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3423; documented at sv.c, line 1375
+Declared at embed.fnc, line 3532; documented at sv.c, line 1393
 
 =over 4
 
@@ -5049,7 +5498,7 @@ just assigns a char buffer and returns a pointer to it.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3425; documented at sv.c, line 1469
+Declared at embed.fnc, line 3534; documented at sv.c, line 1487
 
 =over 4
 
@@ -5069,7 +5518,7 @@ instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3476; documented at sv.c, line 7777
+Declared at embed.fnc, line 3613; documented at sv.c, line 8270
 
 =over 4
 
@@ -5122,7 +5571,7 @@ they are references so do_cmp() can be used safely.
 =back
 
 =for hackers
-Declared at embed.fnc, line 6151; documented at sv.c, line 8720
+Declared at embed.fnc, line 6343; documented at sv.c, line 9224
 
 =over 4
 
@@ -5141,7 +5590,7 @@ Use the C<SvPV_nolen> macro instead
 =back
 
 =for hackers
-Declared at embed.fnc, line 3540; documented at sv.h, line 2236
+Declared at embed.fnc, line 3677; documented at sv.h, line 2361
 
 =over 4
 
@@ -5160,7 +5609,7 @@ Use C<SvPVbyte_nolen> instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3543; documented at sv.h, line 2254
+Declared at embed.fnc, line 3680; documented at sv.h, line 2379
 
 =over 4
 
@@ -5182,7 +5631,7 @@ instead.  If the SV cannot be downgraded from UTF-8, this croaks.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3548; documented at sv.c, line 11278
+Declared at embed.fnc, line 3685; documented at sv.c, line 11821
 
 =over 4
 
@@ -5203,7 +5652,7 @@ can't cope with complex macro expressions.  Always use the macro instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3567; documented at sv.c, line 11209
+Declared at embed.fnc, line 3704; documented at sv.c, line 11752
 
 =over 4
 
@@ -5222,7 +5671,7 @@ Use the C<SvPVutf8_nolen> macro instead
 =back
 
 =for hackers
-Declared at embed.fnc, line 3576; documented at sv.h, line 2245
+Declared at embed.fnc, line 3713; documented at sv.h, line 2370
 
 =over 4
 
@@ -5244,7 +5693,7 @@ instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3581; documented at sv.c, line 11298
+Declared at embed.fnc, line 3718; documented at sv.c, line 11841
 
 =over 4
 
@@ -5263,7 +5712,7 @@ Test an SV for taintedness.  Use C<SvTAINTED> instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3727; documented at sv.c, line 11839
+Declared at embed.fnc, line 3864; documented at sv.c, line 12418
 
 =over 4
 
@@ -5284,7 +5733,7 @@ instead use an in-line version.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3729; documented at sv.c, line 11173
+Declared at embed.fnc, line 3866; documented at sv.c, line 11714
 
 =over 4
 
@@ -5303,7 +5752,7 @@ Untaint an SV.  Use C<SvTAINTED_off> instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3746; documented at sv.c, line 11818
+Declared at embed.fnc, line 3884; documented at sv.c, line 12398
 
 =over 4
 
@@ -5324,7 +5773,7 @@ It calls C<sv_2bool_flags> with the C<SV_GMAGIC> flag.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3295; documented at sv.c, line 3389
+Declared at embed.fnc, line 3404; documented at sv.c, line 3411
 
 =over 4
 
@@ -5345,7 +5794,7 @@ contain C<SV_GMAGIC>, then it does an C<mg_get()> first.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3296; documented at sv.c, line 3395
+Declared at embed.fnc, line 3405; documented at sv.c, line 3417
 
 =over 4
 
@@ -5388,8 +5837,8 @@ disabled in hints by C<no overloading;>.
 =back
 
 =for hackers
-sv_2num_flags declared at embed.fnc, line 3490; all in group documented at sv.c, line 2768
-sv_2num declared at embed.fnc, line 3479
+sv_2num_flags declared at embed.fnc, line 3627; all in group documented at sv.c, line 2789
+sv_2num declared at embed.fnc, line 3616
 
 =over 4
 
@@ -5409,7 +5858,7 @@ use the macro wrapper C<SvPV_nolen(sv)> instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3573; documented at sv.h, line 2295
+Declared at embed.fnc, line 3710; documented at sv.h, line 2420
 
 =over 4
 
@@ -5431,7 +5880,7 @@ Usually accessed via the C<SvPVbyte_nolen> macro.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3555; documented at sv.h, line 2306
+Declared at embed.fnc, line 3692; documented at sv.h, line 2431
 
 =over 4
 
@@ -5453,7 +5902,7 @@ Usually accessed via the C<SvPVutf8_nolen> macro.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3588; documented at sv.h, line 2319
+Declared at embed.fnc, line 3725; documented at sv.h, line 2444
 
 =over 4
 
@@ -5487,7 +5936,7 @@ C<sv_force_normal> does nothing.
 =back
 
 =for hackers
-Declared and documented at sv.h, line 1253
+Declared and documented at sv.h, line 1339
 
 =head1 Tainting
 
@@ -5508,7 +5957,7 @@ Taint an SV.  Use C<SvTAINTED_on> instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3726; documented at sv.h, line 1750
+Declared at embed.fnc, line 3863; documented at sv.h, line 1874
 
 =over 4
 
@@ -5528,7 +5977,7 @@ unspecified element is tainted.
 =back
 
 =for hackers
-Declared and documented at perl.h, line 962
+Declared and documented at perl.h, line 1222
 
 =over 4
 
@@ -5548,7 +5997,7 @@ things like C<$PATH>.
 =back
 
 =for hackers
-Declared and documented at perl.h, line 977
+Declared and documented at perl.h, line 1243
 
 =over 4
 
@@ -5567,7 +6016,7 @@ Implements the L</TAINT_ENV> macro, which you should generally use instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3834; documented at taint.c, line 91
+Declared at embed.fnc, line 3972; documented at taint.c, line 92
 
 =over 4
 
@@ -5585,7 +6034,7 @@ Returns a boolean as to whether some element is tainted or not.
 =back
 
 =for hackers
-Declared and documented at perl.h, line 994
+Declared and documented at perl.h, line 1260
 
 =over 4
 
@@ -5604,7 +6053,27 @@ tainted; otherwise do nothing.
 =back
 
 =for hackers
-Declared and documented at perl.h, line 972
+Declared and documented at perl.h, line 1232
+
+=over 4
+
+=item C<TAINT_IF_SV>
+X<TAINT_IF_SV>
+
+If C<sv> is not NULL and is tainted, call L</C<TAINT>> to indicate that
+something is tainted; otherwise do nothing.  As a macro, it may evaluate the
+C<sv> expression more than once.
+
+=over 3
+
+ void  TAINT_IF_SV(SV *sv)
+
+=back
+
+=back
+
+=for hackers
+Declared and documented at perl.h, line 1237
 
 =over 4
 
@@ -5622,7 +6091,7 @@ Remove any taintedness previously set by, I<e.g.>, C<TAINT>.
 =back
 
 =for hackers
-Declared and documented at perl.h, line 968
+Declared and documented at perl.h, line 1228
 
 =over 4
 
@@ -5642,7 +6111,7 @@ tainting violation.  If such violations are fatal, it croaks.
 =back
 
 =for hackers
-Declared and documented at perl.h, line 983
+Declared and documented at perl.h, line 1249
 
 =over 4
 
@@ -5663,7 +6132,7 @@ Implements the L</TAINT_PROPER> macro, which you should generally use instead.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3835; documented at taint.c, line 27
+Declared at embed.fnc, line 3973; documented at taint.c, line 27
 
 =over 4
 
@@ -5682,7 +6151,7 @@ If C<s> is false, L</C<TAINT_get>> returns false;
 =back
 
 =for hackers
-Declared and documented at perl.h, line 989
+Declared and documented at perl.h, line 1255
 
 =over 4
 
@@ -5701,7 +6170,7 @@ Returns true if they're just warnings
 =back
 
 =for hackers
-Declared and documented at perl.h, line 1006
+Declared and documented at perl.h, line 1272
 
 =over 4
 
@@ -5723,7 +6192,7 @@ violations are fatal.
 =back
 
 =for hackers
-Declared and documented at perl.h, line 1011
+Declared and documented at perl.h, line 1277
 
 =over 4
 
@@ -5741,7 +6210,7 @@ Returns a boolean as to whether taint checking is enabled or not.
 =back
 
 =for hackers
-Declared and documented at perl.h, line 998
+Declared and documented at perl.h, line 1264
 
 =over 4
 
@@ -5759,7 +6228,7 @@ Turn taint checking mode off/on
 =back
 
 =for hackers
-Declared and documented at perl.h, line 1002
+Declared and documented at perl.h, line 1268
 
 =head1 Time
 
@@ -5779,6 +6248,51 @@ and C<L</String Handling>>.
 Various functions outside this section also work specially with
 Unicode.  Search for the string "utf8" in this document.
 
+
+=over 4
+
+=item C<invlist_highest_range_start>
+X<invlist_highest_range_start>
+
+Returns the lowest code point of the highest range in the inversion list
+given by its parameter.
+
+This API has an ambiguity: it returns 0 either when the lowest such
+point is actually 0 or when the list is empty.  If this distinction matters to
+you, check for emptiness before calling this function.
+
+=over 3
+
+ UV  invlist_highest_range_start(SV * const invlist)
+
+=back
+
+=back
+
+=for hackers
+Declared at embed.fnc, line 5686; documented at invlist_inline.h, line 177
+
+=over 4
+
+=item C<invlist_lowest>
+X<invlist_lowest>
+
+Returns the lowest code point that matches an inversion list.
+
+This API has an ambiguity, as it returns 0 under either the lowest is actually
+0, or if the list is empty.  If this distinction matters to you, check for
+emptiness before calling this function
+
+=over 3
+
+ UV  invlist_lowest(SV * const invlist)
+
+=back
+
+=back
+
+=for hackers
+Declared at embed.fnc, line 5690; documented at invlist_inline.h, line 369
 
 =over 4
 
@@ -5808,7 +6322,7 @@ See also C<L<perlapi/is_utf8_invariant_string>>.
 =back
 
 =for hackers
-Declared at embed.fnc, line 4386; documented at inline.h, line 2168
+Declared at embed.fnc, line 4535; documented at inline.h, line 2251
 
 =over 4
 
@@ -5865,7 +6379,7 @@ it are from the Inherited or Common scripts.
 =back
 
 =for hackers
-Declared at embed.fnc, line 4383; documented at regexec.c, line 11716
+Declared at embed.fnc, line 4532; documented at regexec.c, line 11792
 
 =over 4
 
@@ -5880,7 +6394,7 @@ handling of.  It turns on ISPRINT and BACKSLASH as well.
 =back
 
 =for hackers
-Declared and documented at utf8.c, line 4772
+Declared and documented at utf8.c, line 4800
 
 =over 4
 
@@ -5919,7 +6433,7 @@ See L<perlapi/utf8n_to_uvchr> for details on when the REPLACEMENT CHARACTER is r
 =back
 
 =for hackers
-Declared at embed.fnc, line 4046; documented at mathoms.c, line 114
+Declared at embed.fnc, line 4185; documented at mathoms.c, line 118
 
 =over 4
 
@@ -5952,7 +6466,7 @@ convert to Unicode using L<perlapi/C<NATIVE_TO_UNI>>.
 =back
 
 =for hackers
-Declared at embed.fnc, line 3961; documented at mathoms.c, line 158
+Declared at embed.fnc, line 4100; documented at mathoms.c, line 161
 
 =over 4
 
@@ -5979,7 +6493,7 @@ For details, see the description for L<perlapi/uv_to_utf8_flags>.
 =back
 
 =for hackers
-Declared at embed.fnc, line 4066; documented at utf8.h, line 143
+Declared at embed.fnc, line 4205; documented at utf8.h, line 143
 
 =over 4
 
@@ -6014,8 +6528,8 @@ problematic C<_uvchr> forms.
 =back
 
 =for hackers
-valid_utf8_to_uv declared at embed.fnc, line 4102; all in group documented at inline.h, line 1331
-valid_utf8_to_uvchr declared at embed.fnc, line 4105
+valid_utf8_to_uv declared at embed.fnc, line 4241; all in group documented at inline.h, line 1403
+valid_utf8_to_uvchr declared at embed.fnc, line 4244
 
 =over 4
 
@@ -6052,7 +6566,7 @@ C<L<perlapi/is_utf8_invariant_string_loc>>,
 =back
 
 =for hackers
-Declared at embed.fnc, line 4394; documented at inline.h, line 2086
+Declared at embed.fnc, line 4543; documented at inline.h, line 2169
 
 =head1 Utility Functions
 
@@ -6075,7 +6589,7 @@ Implementing function on some systems for PerlProc_popen_list()
 =back
 
 =for hackers
-Declared at embed.fnc, line 2277; documented at util.c, line 2391
+Declared at embed.fnc, line 2385; documented at util.c, line 2523
 
 =over 4
 
@@ -6097,7 +6611,7 @@ enough functionality for the emulation.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2287; documented at util.c, line 4305
+Declared at embed.fnc, line 2395; documented at util.c, line 4473
 
 =head1 Versioning
 
@@ -6159,9 +6673,9 @@ In C<deprecate_fatal_in>, the message will be of the form:
 =back
 
 =for hackers
-deprecate declared at handy.h, line 3039; all in group documented at handy.h, line 3039
-deprecate_disappears_in declared at handy.h, line 3040
-deprecate_fatal_in declared at handy.h, line 3041
+deprecate declared at handy.h, line 3224; all in group documented at handy.h, line 3224
+deprecate_disappears_in declared at handy.h, line 3225
+deprecate_fatal_in declared at handy.h, line 3226
 
 =over 4
 
@@ -6198,7 +6712,7 @@ C<PL_comppad>/C<PL_curpad> points to the currently executing pad.
 =back
 
 =for hackers
-Declared at embed.fnc, line 6129; documented at sv.c, line 17626
+Declared at embed.fnc, line 6321; documented at sv.c, line 18282
 
 =over 4
 
@@ -6217,7 +6731,7 @@ Print appropriate "Use of uninitialized variable" warning.
 =back
 
 =for hackers
-Declared at embed.fnc, line 2984; documented at sv.c, line 18424
+Declared at embed.fnc, line 3092; documented at sv.c, line 19093
 
 =head1 XS
 
@@ -6254,7 +6768,7 @@ diagnosable than random crashes and mis-behaviour.
 =back
 
 =for hackers
-Declared at embed.fnc, line 834; documented at util.c, line 5629
+Declared at embed.fnc, line 916; documented at util.c, line 5823
 
 =over 4
 
@@ -6278,7 +6792,18 @@ off, by allocating or extending the interpreter's C<PL_my_cxt_list> array
 =back
 
 =for hackers
-Declared at embed.fnc, line 4325; documented at util.c, line 5330
+Declared at embed.fnc, line 4469; documented at util.c, line 5522
+
+=over 4
+
+=item C<my_cxt_t>
+
+Described in L<perlxs>.
+
+=back
+
+=for hackers
+Documented at dist/ExtUtils-ParseXS/lib/perlxs.pod, line 4824
 
 =head1 Undocumented elements
 
@@ -6300,13 +6825,14 @@ X<av_nonelem>X<av_reify>X<AvFILL_>X<bind_match>X<block_gimme>
 X<boot_core_builtin>X<boot_core_mro>X<boot_core_PerlIO>
 X<boot_core_UNIVERSAL>X<build_infix_plugin>X<byte_dump_string_>
 X<call_list>X<cando>X<capture_clear>X<cast_iv>X<cast_i32>X<cast_ulong>
-X<cast_uv>X<check_hash_fields_and_hekify>X<check_regnode_after>
-X<check_utf8_print>X<ck_anoncode>X<ck_backtick>X<ck_bitop>X<ck_classname>
-X<ck_cmp>X<ck_concat>X<ck_defined>X<ck_delete>X<ck_each>
-X<ck_entersub_args_core>X<ck_eof>X<ck_eval>X<ck_exec>X<ck_exists>
-X<ck_ftst>X<ck_fun>X<ck_glob>X<ck_grep>X<ck_helemexistsor>X<ck_index>
-X<ck_isa>X<ck_join>X<ck_length>X<ck_lfun>X<ck_listiob>X<ck_match>
-X<ck_method>X<ck_null>X<ck_open>X<ck_prototype>X<ck_readline>
+X<cast_uv>X<category_lock>X<category_unlock>
+X<check_hash_fields_and_hekify>X<check_regnode_after>X<check_utf8_print>
+X<ck_aassign>X<ck_anoncode>X<ck_anonhash>X<ck_backtick>X<ck_bitop>
+X<ck_caller>X<ck_classname>X<ck_cmp>X<ck_concat>X<ck_defined>X<ck_delete>
+X<ck_each>X<ck_entersub_args_core>X<ck_eof>X<ck_eval>X<ck_exec>
+X<ck_exists>X<ck_ftst>X<ck_fun>X<ck_glob>X<ck_grep>X<ck_helemexistsor>
+X<ck_index>X<ck_isa>X<ck_join>X<ck_length>X<ck_lfun>X<ck_listiob>
+X<ck_match>X<ck_method>X<ck_null>X<ck_open>X<ck_prototype>X<ck_readline>
 X<ck_refassign>X<ck_repeat>X<ck_require>X<ck_return>X<ck_rfun>
 X<ck_rvconst>X<ck_sassign>X<ck_scmp>X<ck_select>X<ck_shift>
 X<ck_smartmatch>X<ck_sort>X<ck_spair>X<ck_split>X<ck_stringify>X<ck_subr>
@@ -6314,30 +6840,29 @@ X<ck_substr>X<ck_svconst>X<ck_tell>X<ck_trunc>X<ck_trycatch>X<ckwarn>
 X<ckwarn_d>X<class_add_ADJUST>X<class_add_field>X<class_apply_attributes>
 X<class_apply_field_attributes>X<class_prepare_initfield_parse>
 X<class_prepare_method_parse>X<class_seal_stash>X<class_set_field_defop>
-X<class_setup_stash>X<class_wrap_method_body>X<clear_defarray>
-X<closest_cop>X<cmp_desc>X<cmp_locale_desc>X<cmpchain_extend>
-X<cmpchain_finish>X<cmpchain_start>X<cntrl_to_mnemonic>
-X<construct_ahocorasick_from_trie>X<cop_file_avn>X<coresub_op>
-X<croak_caller>X<croak_kw_unless_class>X<croak_memory_wrap>X<croak_no_mem>
-X<croak_no_mem_ext>X<croak_popstack>X<csighandler>X<csighandler1>
-X<csighandler3>X<current_re_engine>X<custom_op_get_field>X<cv_clone_into>
-X<cv_const_sv_or_av>X<cv_undef_flags>X<cvgv_from_hek>X<cvgv_set>
-X<cvstash_set>X<cx_dump>X<cx_dup>X<cxinc>X<deb_stack_all>X<debstackptrs>
-X<debug_hash_seed>X<debug_peep>X<debug_show_study_flags>X<debug_studydata>
-X<defelem_target>X<despatch_signals>X<die_unwind>X<do_aexec>X<do_aexec5>
-X<do_aspawn>X<do_eof>X<do_exec>X<do_exec3>X<do_gv_dump>X<do_gvgv_dump>
-X<do_hv_dump>X<do_ipcctl>X<do_ipcget>X<do_magic_dump>X<do_msgrcv>
-X<do_msgsnd>X<do_ncmp>X<do_op_dump>X<do_pmop_dump>X<do_print>
-X<do_readline>X<do_seek>X<do_semop>X<do_shmio>X<do_spawn>
-X<do_spawn_nowait>X<do_sv_dump>X<do_sysseek>X<do_tell>X<do_trans>
-X<do_uniprop_match>X<do_vecget>X<do_vecset>X<do_vop>X<does_utf8_overflow>
-X<dofile>X<doing_taint>X<doref>X<drand48_init_r>X<drand48_r>
-X<dtrace_probe_call>X<dtrace_probe_load>X<dtrace_probe_op>
+X<class_setup_stash>X<class_wrap_method_body>X<clear_defarray>X<cmp_desc>
+X<cmp_locale_desc>X<cmpchain_extend>X<cmpchain_finish>X<cmpchain_start>
+X<cntrl_to_mnemonic>X<construct_ahocorasick_from_trie>X<cop_file_avn>
+X<coresub_op>X<croak_caller>X<croak_kw_unless_class>X<croak_memory_wrap>
+X<croak_no_mem>X<croak_no_mem_ext>X<croak_popstack>X<csighandler>
+X<csighandler1>X<csighandler3>X<current_re_engine>X<custom_op_get_field>
+X<cv_clone_into>X<cv_const_sv_or_av>X<cv_undef_flags>X<cvgv_from_hek>
+X<cvgv_set>X<cvstash_set>X<cx_dump>X<cx_dup>X<cxinc>X<deb_stack_all>
+X<debstackptrs>X<debug_hash_seed>X<debug_peep>X<debug_show_study_flags>
+X<debug_studydata>X<defelem_target>X<despatch_signals>X<die_unwind>
+X<do_aexec>X<do_aexec5>X<do_aspawn>X<do_eof>X<do_exec>X<do_exec3>
+X<do_gv_dump>X<do_gvgv_dump>X<do_hv_dump>X<do_ipcctl>X<do_ipcget>
+X<do_magic_dump>X<do_msgrcv>X<do_msgsnd>X<do_ncmp>X<do_op_dump>
+X<do_pmop_dump>X<do_print>X<do_readline>X<do_seek>X<do_semop>X<do_shmio>
+X<do_spawn>X<do_spawn_nowait>X<do_sv_dump>X<do_sysseek>X<do_tell>
+X<do_trans>X<do_uniprop_match>X<do_vecget>X<do_vecset>X<do_vop>
+X<does_utf8_overflow>X<dofile>X<doing_taint>X<doref>X<drand48_init_r>
+X<drand48_r>X<dtrace_probe_call>X<dtrace_probe_load>X<dtrace_probe_op>
 X<dtrace_probe_phase>X<dump_all_perl>X<dump_indent>X<dump_packsubs_perl>
 X<dump_sub_perl>X<dump_sv_child>X<dump_vindent>X<dumpuntil>X<dup_warnings>
 X<find_first_differing_byte_pos>X<find_lexical_cv>X<find_runcv_where>
-X<find_script>X<finish_export_lexical>X<foldEQ_latin1>
-X<foldEQ_latin1_s2_folded>X<foldEQ_utf8_flags>X<force_locale_unlock>
+X<find_script>X<foldEQ_latin1>X<foldEQ_latin1_s2_folded>
+X<foldEQ_utf8_flags>X<force_locale_unlock>
 X<force_out_malformed_utf8_message_>X<form_alien_digit_msg>
 X<form_cp_too_large_msg>X<free_tied_hv_pool>X<free_tmps>
 X<get_and_check_backslash_N_name>X<get_ANYOFHbbm_contents>
@@ -6347,7 +6872,7 @@ X<get_invlist_iter_addr>X<get_invlist_offset_addr>
 X<get_invlist_previous_index_addr>X<get_mstats>X<get_prop_definition>
 X<get_prop_values>X<get_re_gclass_aux_data>X<get_regclass_aux_data>
 X<get_regex_charset_name>X<get_win32_message_utf8ness>X<getenv_len>
-X<gimme_V>X<gp_free>X<gp_ref>X<grok_bin_oct_hex>X<grok_bslash_c>
+X<gimme_V>X<gp_free>X<gp_ref>X<grok_bin_hex>X<grok_bslash_c>
 X<grok_bslash_o>X<grok_bslash_x>X<gv_check>X<gv_fetchmeth_internal>
 X<gv_override>X<gv_setref>X<gv_stashpvn_internal>X<he_dup>X<hek_dup>
 X<hfree_next_entry>X<hv_auxalloc>X<hv_common>X<hv_common_key_len>
@@ -6392,7 +6917,8 @@ X<magic_setvec>X<magic_sizepack>X<magic_wipepack>X<make_trie>
 X<malloc_good_size>X<malloced_size>X<markstack_grow>X<mbtowc_>
 X<mem_collxfrm_>X<mem_log_alloc>X<mem_log_del_sv>X<mem_log_free>
 X<mem_log_new_sv>X<mem_log_realloc>X<mg_find_mglob>X<mg_free_struct>
-X<mg_size>X<mode_from_discipline>X<more_bodies>X<more_sv>X<moreswitches>
+X<mg_propagate>X<mg_size>X<mg_unpropagate>X<mgv2_copy>
+X<mode_from_discipline>X<more_bodies>X<more_sv>X<moreswitches>
 X<mortal_getenv>X<mortalized_pv_copy>X<mro_get_private_data>
 X<mro_meta_dup>X<mro_meta_init>X<msbit_pos32>X<msbit_pos64>
 X<multiconcat_stringify>X<multideref_stringify>X<my_atof2>X<my_atof3>
@@ -6402,27 +6928,27 @@ X<my_strerror>X<my_unexec>X<new_invlist_>X<new_invlist_C_array_>
 X<new_stackinfo>X<new_stackinfo_flags>X<new_sv>X<newMETHOP_internal>
 X<newPROG>X<newSTUB>X<newSVavdefelem>X<newXS_deffile>X<nextargv>
 X<no_bareword_allowed>X<no_bareword_filehandle>X<noperl_die>
-X<notify_parser_that_encoding_changed>X<oopsAV>X<oopsHV>X<op_clear>
-X<op_integerize>X<op_lvalue_flags>X<op_prune_chain_head>X<op_relocate_sv>
-X<op_std_init>X<op_varname>X<opmethod_stash>X<opslab_force_free>
-X<opslab_free>X<opslab_free_nopad>X<opslab_slot_offset>
-X<output_non_portable>X<pad_add_weakref>X<padlist_store>X<padname_free>
-X<PadnameIN_SCOPE>X<padnamelist_free>X<parse_unicode_opts>X<parser_dup>
-X<parser_free>X<parser_free_nexttoke_ops>X<path_is_searchable>X<peep>
-X<perl_alloc_using>X<perl_clone_using>X<PerlEnv_putenv>
-X<PerlIO_context_layers>X<PerlIO_restore_errno>X<PerlIO_save_errno>
-X<PerlLIO_dup_cloexec>X<PerlLIO_dup2_cloexec>X<PerlLIO_open_cloexec>
-X<PerlLIO_open3_cloexec>X<PerlProc_pipe_cloexec>X<PerlSock_accept_cloexec>
+X<notify_parser_that_encoding_changed>X<oopsAV>X<oopsHV>X<op_integerize>
+X<op_prune_chain_head>X<op_relocate_sv>X<op_std_init>X<op_varname>
+X<opmethod_stash>X<opslab_force_free>X<opslab_free>X<opslab_free_nopad>
+X<opslab_slot_offset>X<output_non_portable>X<pad_add_weakref>
+X<padlist_store>X<padname_free>X<padname_upgrade_sv>X<PadnameIN_SCOPE>
+X<padnamelist_free>X<parse_unicode_opts>X<parser_dup>X<parser_free>
+X<parser_free_nexttoke_ops>X<path_is_searchable>X<peep>X<perl_alloc_using>
+X<perl_clone_using>X<PerlEnv_putenv>X<PerlIO_context_layers>
+X<PerlIO_restore_errno>X<PerlIO_save_errno>X<PerlLIO_dup_cloexec>
+X<PerlLIO_dup2_cloexec>X<PerlLIO_open_cloexec>X<PerlLIO_open3_cloexec>
+X<PerlProc_pipe_cloexec>X<PerlSock_accept_cloexec>
 X<PerlSock_socket_cloexec>X<PerlSock_socketpair_cloexec>
 X<perly_sighandler>X<pmruntime>X<POPMARK>
 X<populate_anyof_bitmap_from_invlist>X<populate_bitmap_from_invlist>
-X<populate_invlist_from_bitmap>X<populate_isa>X<pregfree>X<pregfree2>
-X<prepare_export_lexical>X<qerror>X<re_exec_indentf>X<re_indentf>
-X<re_intuit_start>X<re_intuit_string>X<re_op_compile>X<re_printf>X<ReANY>
-X<reentrant_free>X<reentrant_init>X<reentrant_retry>X<reentrant_size>
-X<ref>X<reg_add_data>X<reg_named_buff>X<reg_named_buff_all>
-X<reg_named_buff_exists>X<reg_named_buff_fetch>X<reg_named_buff_firstkey>
-X<reg_named_buff_iter>X<reg_named_buff_nextkey>X<reg_named_buff_scalar>
+X<populate_invlist_from_bitmap>X<populate_isa>X<posix_LC_foo>X<pregfree>
+X<pregfree2>X<re_exec_indentf>X<re_indentf>X<re_intuit_start>
+X<re_intuit_string>X<re_op_compile>X<re_printf>X<ReANY>X<reentrant_free>
+X<reentrant_init>X<reentrant_retry>X<reentrant_size>X<ref>X<reg_add_data>
+X<reg_named_buff>X<reg_named_buff_all>X<reg_named_buff_exists>
+X<reg_named_buff_fetch>X<reg_named_buff_firstkey>X<reg_named_buff_iter>
+X<reg_named_buff_nextkey>X<reg_named_buff_scalar>
 X<reg_numbered_buff_fetch>X<reg_numbered_buff_fetch_flags>
 X<reg_numbered_buff_length>X<reg_numbered_buff_store>X<reg_qr_package>
 X<reg_skipcomment>X<reg_temp_copy>X<regcurly>X<regdump>X<regdupe_internal>
@@ -6439,32 +6965,34 @@ X<scalarvoid>X<scan_commit>X<scan_num>X<seed>X<set_ANYOF_arg>
 X<set_caret_X>X<set_numeric_standard>X<set_numeric_underlying>
 X<set_padlist>X<setfd_cloexec>X<setfd_cloexec_for_nonsysfd>
 X<setfd_cloexec_or_inhexec_by_sysfdness>X<setfd_inhexec>
-X<setfd_inhexec_for_sysfd>X<setup_canned_invlist_>X<share_hek>
-X<should_warn_nl>X<should_we_output_Debug_r>X<sighandler>X<sighandler1>
-X<sighandler3>X<single_1bit_pos32>X<single_1bit_pos64>X<size_to_psize>
-X<Slab_Alloc>X<Slab_Free>X<Slab_to_ro>X<Slab_to_rw>X<softref2xv>
-X<sortsv_flags_impl>X<ssc_init>X<stack_grow>X<str_to_version>X<strxfrm>
-X<study_chunk>X<sub_crush_depth>X<subsignature_append_fence_op>
+X<setfd_inhexec_for_sysfd>X<setup_canned_invlist_>X<should_warn_nl>
+X<should_we_output_Debug_r>X<sighandler>X<sighandler1>X<sighandler3>
+X<single_1bit_pos32>X<single_1bit_pos64>X<size_to_psize>X<Slab_Alloc>
+X<Slab_Free>X<Slab_to_ro>X<Slab_to_rw>X<softref2xv>X<sortsv_flags_impl>
+X<ssc_init>X<stack_grow>X<str_to_version>X<strxfrm>X<study_chunk>
+X<sub_crush_depth>X<subsignature_append_fence_op>
 X<subsignature_append_named>X<subsignature_append_positional>
 X<subsignature_append_slurpy>X<subsignature_finish>X<subsignature_start>
 X<sv_add_backref>X<sv_buf_to_ro>X<sv_can_swipe_pv_buf>X<sv_del_backref>
-X<sv_i_ncmp>X<sv_i_ncmp_desc>X<sv_magicext_mglob>X<sv_mark_arenas>
-X<sv_ncmp>X<sv_ncmp_desc>X<sv_only_taint_gmagic>X<sv_or_pv_pos_u2b>
-X<sv_pvbyten_force_wrapper>X<sv_pvutf8n_force_wrapper>X<sv_resetpvn>
-X<sv_sethek>X<sv_sweep_arenas>X<sv_unglob>X<sv_2iv>X<sv_2uv>X<SvPV_helper>
+X<sv_has_valuemagic>X<sv_i_ncmp>X<sv_i_ncmp_desc>X<sv_magicext_mglob>
+X<sv_magicv2_attach>X<sv_mark_arenas>X<sv_ncmp>X<sv_ncmp_desc>
+X<sv_only_taint_gmagic>X<sv_or_pv_pos_u2b>X<sv_pvbyten_force_wrapper>
+X<sv_pvutf8n_force_wrapper>X<sv_reftype_id>X<sv_resetpvn>X<sv_sethek>
+X<sv_sweep_arenas>X<sv_unglob>X<sv_2iv>X<sv_2uv>X<SvPV_helper>
 X<SvTRUE_common>X<switch_locale_context>X<sys_init>X<sys_init3>
 X<sys_intern_clear>X<sys_intern_dup>X<sys_intern_init>X<sys_term>
 X<tied_method>X<tmps_grow_p>X<to_fold_latin1_>X<to_uni_fold>
 X<to_uni_fold_flags_>X<to_uni_lower>X<to_uni_title>X<to_uni_upper>
 X<to_upper_title_latin1_>X<to_utf8_fold_flags_>X<to_utf8_lower_flags_>
 X<to_utf8_title_flags_>X<to_utf8_upper_flags_>X<TOPMARK>
-X<translate_substr_offsets>X<try_amagic_bin>X<try_amagic_un>X<unlnk>
-X<unshare_hek>X<unwind_paren>X<utf8_to_bytes_>X<utf8_to_uv_msgs_helper_>
-X<utf16_to_utf8>X<utf16_to_utf8_base>X<utf16_to_utf8_reversed>X<utilize>
-X<uvoffuni_to_utf8_flags_msgs>X<variant_byte_number>X<varname>
-X<vivify_defelem>X<vivify_ref>X<wait4pid>X<warn_elem_scalar_context>
-X<warn_problematic_locale>X<was_lvalue_sub>X<watch>
-X<win32_croak_not_implemented>X<write_to_stderr>X<xs_boot_epilog>
+X<translate_substr_offsets>X<TRIE_JUMP_TYPE_MAX>X<try_amagic_bin>
+X<try_amagic_un>X<unlnk>X<unwind_paren>X<utf8_to_bytes_>
+X<utf8_to_uv_msgs_helper_>X<utf16_to_utf8>X<utf16_to_utf8_base>
+X<utf16_to_utf8_reversed>X<utilize>X<uvoffuni_to_utf8_flags_msgs>
+X<valuemagic_applyto>X<valuemagic_clear>X<valuemagic_from>
+X<variant_byte_number>X<varname>X<vivify_defelem>X<vivify_ref>X<wait4pid>
+X<warn_elem_scalar_context>X<warn_problematic_locale>X<was_lvalue_sub>
+X<watch>X<win32_croak_not_implemented>X<write_to_stderr>X<xs_boot_epilog>
 X<XS_builtin_indexed>X<xs_handshake>X<yyerror>X<yyerror_pv>X<yyerror_pvn>
 X<yylex>X<yyparse>X<yyquit>X<yyunlex>
 
@@ -6509,12 +7037,17 @@ X<yylex>X<yyparse>X<yyquit>X<yyunlex>
  cast_i32
  cast_ulong
  cast_uv
+ category_lock
+ category_unlock
  check_hash_fields_and_hekify
  check_regnode_after
  check_utf8_print
+ ck_aassign
  ck_anoncode
+ ck_anonhash
  ck_backtick
  ck_bitop
+ ck_caller
  ck_classname
  ck_cmp
  ck_concat
@@ -6577,7 +7110,6 @@ X<yylex>X<yyparse>X<yyquit>X<yyunlex>
  class_setup_stash
  class_wrap_method_body
  clear_defarray
- closest_cop
  cmp_desc
  cmp_locale_desc
  cmpchain_extend
@@ -6670,7 +7202,6 @@ X<yylex>X<yyparse>X<yyquit>X<yyunlex>
  find_lexical_cv
  find_runcv_where
  find_script
- finish_export_lexical
  foldEQ_latin1
  foldEQ_latin1_s2_folded
  foldEQ_utf8_flags
@@ -6702,7 +7233,7 @@ X<yylex>X<yyparse>X<yyquit>X<yyunlex>
  gimme_V
  gp_free
  gp_ref
- grok_bin_oct_hex
+ grok_bin_hex
  grok_bslash_c
  grok_bslash_o
  grok_bslash_x
@@ -6866,7 +7397,10 @@ X<yylex>X<yyparse>X<yyquit>X<yyunlex>
  mem_log_realloc
  mg_find_mglob
  mg_free_struct
+ mg_propagate
  mg_size
+ mg_unpropagate
+ mgv2_copy
  mode_from_discipline
  more_bodies
  more_sv
@@ -6910,9 +7444,7 @@ X<yylex>X<yyparse>X<yyquit>X<yyunlex>
  notify_parser_that_encoding_changed
  oopsAV
  oopsHV
- op_clear
  op_integerize
- op_lvalue_flags
  op_prune_chain_head
  op_relocate_sv
  op_std_init
@@ -6926,6 +7458,7 @@ X<yylex>X<yyparse>X<yyquit>X<yyunlex>
  pad_add_weakref
  padlist_store
  padname_free
+ padname_upgrade_sv
  PadnameIN_SCOPE
  padnamelist_free
  parse_unicode_opts
@@ -6955,10 +7488,9 @@ X<yylex>X<yyparse>X<yyquit>X<yyunlex>
  populate_bitmap_from_invlist
  populate_invlist_from_bitmap
  populate_isa
+ posix_LC_foo
  pregfree
  pregfree2
- prepare_export_lexical
- qerror
  re_exec_indentf
  re_indentf
  re_intuit_start
@@ -7046,7 +7578,6 @@ X<yylex>X<yyparse>X<yyquit>X<yyunlex>
  setfd_inhexec
  setfd_inhexec_for_sysfd
  setup_canned_invlist_
- share_hek
  should_warn_nl
  should_we_output_Debug_r
  sighandler
@@ -7077,9 +7608,11 @@ X<yylex>X<yyparse>X<yyquit>X<yyunlex>
  sv_buf_to_ro
  sv_can_swipe_pv_buf
  sv_del_backref
+ sv_has_valuemagic
  sv_i_ncmp
  sv_i_ncmp_desc
  sv_magicext_mglob
+ sv_magicv2_attach
  sv_mark_arenas
  sv_ncmp
  sv_ncmp_desc
@@ -7087,6 +7620,7 @@ X<yylex>X<yyparse>X<yyquit>X<yyunlex>
  sv_or_pv_pos_u2b
  sv_pvbyten_force_wrapper
  sv_pvutf8n_force_wrapper
+ sv_reftype_id
  sv_resetpvn
  sv_sethek
  sv_sweep_arenas
@@ -7117,10 +7651,10 @@ X<yylex>X<yyparse>X<yyquit>X<yyunlex>
  to_utf8_upper_flags_
  TOPMARK
  translate_substr_offsets
+ TRIE_JUMP_TYPE_MAX
  try_amagic_bin
  try_amagic_un
  unlnk
- unshare_hek
  unwind_paren
  utf8_to_bytes_
  utf8_to_uv_msgs_helper_
@@ -7129,6 +7663,9 @@ X<yylex>X<yyparse>X<yyquit>X<yyunlex>
  utf16_to_utf8_reversed
  utilize
  uvoffuni_to_utf8_flags_msgs
+ valuemagic_applyto
+ valuemagic_clear
+ valuemagic_from
  variant_byte_number
  varname
  vivify_defelem
@@ -7162,42 +7699,32 @@ X<cx_pushformat>X<cx_pushgiven>X<cx_pushloop_for>X<cx_pushloop_plain>
 X<cx_pushsub>X<cx_pushtry>X<cx_pushwhen>X<cx_topblock>X<delete_eval_scope>
 X<do_open_raw>X<do_open6>X<emulate_cop_io>X<expected_size>X<get_re_arg>
 X<get_vtbl>X<hv_backreferences_p>X<hv_kill_backrefs>
-X<invlist_highest_range_start>X<invlist_lowest>X<new_warnings_bitfield>
-X<newGP>X<op_refcnt_dec>X<op_refcnt_inc>X<op_unscope>X<pop_stackinfo>
-X<pp_wrap>X<push_stackinfo>X<rpp_free_2_>X<rpp_obliterate_stack_to>
-X<rpp_replace_2_1_COMMON>X<runops_wrap>X<scan_str>X<scan_word>
-X<skipspace_flags>X<sv_free2>X<sv_kill_backrefs>X<sv_setpv_freshbuf>
-X<sv_setsv_cow>X<switch_argstack>X<utf8_to_utf16_base>X<xs_wrap>
+X<new_warnings_bitfield>X<newGP>X<op_refcnt_dec>X<op_refcnt_inc>
+X<op_unscope>X<pop_stackinfo>X<pp_wrap>X<push_stackinfo>X<rpp_free_2_>
+X<rpp_obliterate_stack_to>X<rpp_replace_2_1_COMMON>X<runops_wrap>
+X<scan_str>X<scan_word>X<skipspace_flags>X<sv_free2>X<sv_kill_backrefs>
+X<sv_setpv_freshbuf>X<sv_setsv_cow>X<switch_argstack>X<utf8_to_utf16_base>
+X<xs_wrap>
 
- alloc_LOGOP            get_re_arg
- av_remove_offset       get_vtbl
- clear_defarray_simple  hv_backreferences_p
- create_eval_scope      hv_kill_backrefs
- cv_ckproto_len_flags   invlist_highest_range_start
- cx_popblock            invlist_lowest
- cx_popeval             new_warnings_bitfield
- cx_popformat           newGP
- cx_popgiven            op_refcnt_dec
- cx_poploop             op_refcnt_inc
- cx_popsub              op_unscope
- cx_popsub_args         pop_stackinfo
- cx_popsub_common       pp_wrap
- cx_popwhen             push_stackinfo
- cx_pushblock           rpp_free_2_
- cx_pusheval            rpp_obliterate_stack_to
- cx_pushformat          rpp_replace_2_1_COMMON
- cx_pushgiven           runops_wrap
- cx_pushloop_for        scan_str
- cx_pushloop_plain      scan_word
- cx_pushsub             skipspace_flags
- cx_pushtry             sv_free2
- cx_pushwhen            sv_kill_backrefs
- cx_topblock            sv_setpv_freshbuf
- delete_eval_scope      sv_setsv_cow
- do_open_raw            switch_argstack
- do_open6               utf8_to_utf16_base
- emulate_cop_io         xs_wrap
- expected_size          
+ alloc_LOGOP            cx_pushloop_plain      pop_stackinfo
+ av_remove_offset       cx_pushsub             pp_wrap
+ clear_defarray_simple  cx_pushtry             push_stackinfo
+ create_eval_scope      cx_pushwhen            rpp_free_2_
+ cv_ckproto_len_flags   cx_topblock            rpp_obliterate_stack_to
+ cx_popblock            delete_eval_scope      rpp_replace_2_1_COMMON
+ cx_popeval             do_open_raw            runops_wrap
+ cx_popformat           do_open6               scan_str
+ cx_popgiven            emulate_cop_io         scan_word
+ cx_poploop             expected_size          skipspace_flags
+ cx_popsub              get_re_arg             sv_free2
+ cx_popsub_args         get_vtbl               sv_kill_backrefs
+ cx_popsub_common       hv_backreferences_p    sv_setpv_freshbuf
+ cx_popwhen             hv_kill_backrefs       sv_setsv_cow
+ cx_pushblock           new_warnings_bitfield  switch_argstack
+ cx_pusheval            newGP                  utf8_to_utf16_base
+ cx_pushformat          op_refcnt_dec          xs_wrap
+ cx_pushgiven           op_refcnt_inc          
+ cx_pushloop_for        op_unscope             
 
 Finally are the deprecated undocumented elements.
 Do not use any for new code; remove all occurrences of all of these from

@@ -19,7 +19,7 @@ import java.util.Arrays;
 import java.util.Base64;
 
 public final class PerlUnicodeScalarNameData {
-    public static final String SOURCE_SHA256 = "33d5a4c7a3e006844be77faf10898f5211c1fd1711573249be3e1617cfdc3acd";
+    public static final String SOURCE_SHA256 = "1681a6c81b9e9aad9d568181741538f6cbca0333b0ec8cb1dabe02a535e4f616";
     public static final int ENTRY_COUNT = 35836;
     public static final int DUPLICATE_NAME_COUNT = 0;
 

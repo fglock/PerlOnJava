@@ -1357,10 +1357,23 @@ public class OperatorParser {
         // Skip whitespace, but not `#`
         parser.tokenIndex = startIndex;
         consume(parser);
+        boolean skippedWhitespace = false;
         while (parser.tokenIndex < parser.tokens.size()) {
             LexerToken token1 = parser.tokens.get(parser.tokenIndex);
             if (token1.type == WHITESPACE || token1.type == NEWLINE) {
                 parser.tokenIndex++;
+                skippedWhitespace = true;
+            } else if (skippedWhitespace && token1.type == OPERATOR && "#".equals(token1.text)) {
+                // Perl permits a comment between a quote-like operator and
+                // its delimiter.  The lexer intentionally keeps `#` as a
+                // token because it is also a valid delimiter (q#...#), so
+                // only treat it as a comment when whitespace preceded it.
+                parser.tokenIndex++;
+                while (parser.tokenIndex < parser.tokens.size()
+                        && parser.tokens.get(parser.tokenIndex).type != NEWLINE) {
+                    parser.tokenIndex++;
+                }
+                skippedWhitespace = true;
             } else {
                 break;
             }
@@ -1706,6 +1719,17 @@ public class OperatorParser {
     }
 
     static OperatorNode parseGoto(Parser parser, int currentIndex) {
+        // A bare v-number in goto position is a label name, not a v-string
+        // expression.  Perl accepts labels such as `v23:` and consequently
+        // `goto v23`; normal expression parsing would turn the latter into
+        // the control character represented by the v-string.
+        LexerToken next = peek(parser);
+        if (next.type == IDENTIFIER && next.text.matches("v\\d+")) {
+            TokenUtils.consume(parser);
+            List<Node> elements = new ArrayList<>();
+            elements.add(new StringNode(next.text, currentIndex));
+            return new OperatorNode("goto", new ListNode(elements, currentIndex), currentIndex);
+        }
         Node operand;
         // Handle 'goto' keyword - operand is optional (bare `goto` is a runtime error)
         operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);

@@ -236,13 +236,13 @@ public class IdentifierParser {
             }
         }
 
-        // A normal eval of a Unicode string has Unicode source semantics even
-        // when its enclosing scope did not enable `use utf8`.  Only evalbytes
-        // treats its input as byte source and therefore rejects non-ASCII
-        // characters in multi-character identifiers.
+        // Unicode eval source accepts Unicode identifier characters. Byte
+        // source, whether it comes from evalbytes or an ordinary eval of an
+        // un-upgraded scalar, retains Perl's byte-oriented identifier rules.
         boolean utf8Enabled = parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)
                 && !parser.ctx.compilerOptions.isEvalbytes;
-        if (parser.ctx.compilerOptions.isEvalbytes && token.type == LexerTokenType.IDENTIFIER) {
+        if ((parser.ctx.compilerOptions.isEvalbytes || parser.ctx.compilerOptions.isByteStringSource)
+                && token.type == LexerTokenType.IDENTIFIER) {
             // The Lexer may have greedily consumed non-ASCII identifier parts into a single IDENTIFIER token.
             // Under evalbytes, those are not allowed for length-2+ variables.
             String id = token.text;
@@ -250,8 +250,11 @@ public class IdentifierParser {
                 for (int i = 0; i < id.length(); ) {
                     int cp = id.codePointAt(i);
                     if (cp > 127) {
-                        String hex = "\\x{" + Integer.toHexString(cp) + "}";
-                        throw new PerlCompilerException("Unrecognized character " + hex + ";");
+                        String hex = parser.ctx.compilerOptions.isByteStringSource
+                                ? String.format("\\x%02X", cp)
+                                : "\\x{" + Integer.toHexString(cp) + "}";
+                        parser.throwCleanError("Unrecognized character " + hex
+                                + "; marked by <-- HERE after $x =<-- HERE near column 5");
                     }
                     i += Character.charCount(cp);
                 }

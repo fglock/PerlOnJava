@@ -1034,7 +1034,9 @@ public class BytecodeInterpreter {
 
                                 // Convert to scalar if needed
                                 RuntimeBase value = registers[srcReg];
-                                RuntimeScalar scalarValue = (value instanceof RuntimeScalar)
+                                RuntimeScalar scalarValue = value == null
+                                        ? RuntimeScalarCache.scalarUndef
+                                        : (value instanceof RuntimeScalar)
                                         ? (RuntimeScalar) value
                                         : value.scalar();
 
