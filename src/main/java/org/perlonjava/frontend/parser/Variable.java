@@ -1254,6 +1254,12 @@ public class Variable {
         }
 
         if (bracedVarName != null) {
+            // A simple braced numeric variable follows the same spelling
+            // rules as its unbraced counterpart.  This validation normally
+            // happens in parseVariable(), but ${00} takes this direct braced
+            // path and used to bypass it entirely.
+            IdentifierParser.validateIdentifier(parser, bracedVarName, savedIndex);
+
             // In a dereference such as `%{ $ {*$glob}{Keys} }`, the `$`
             // starts a nested scalar expression; it is not the name of a
             // global hash `%$`. Fall back to block parsing so the glob-slot

@@ -5,6 +5,7 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.perlmodule.Strict;
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.nio.charset.StandardCharsets;
@@ -609,6 +610,20 @@ public class ParsePrimary {
         int startLineNumber = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex - 1); // Save line number before peek() side effects
         parser.tokenIndex++;
         nextToken = peek(parser);
+
+        // Keep Perl's special diagnostic for the exact ambiguous `-C-` form.
+        // The ordinary unary-minus parser reports its missing operand before
+        // this method can recognize the completed file-test construct.
+        if (nextToken.text.equals("-")
+                && parser.tokenIndex + 1 < parser.tokens.size()
+                && parser.tokens.get(parser.tokenIndex + 1).type == LexerTokenType.EOF) {
+            WarnDie.warn(new RuntimeScalar("Warning: Use of \"" + operator
+                            + "-\" without parentheses is ambiguous"),
+                    new RuntimeScalar(parser.ctx.errorUtil.warningLocation(parser.tokenIndex)));
+            String errorMsg = "syntax error at " + parser.ctx.errorUtil.getFileName() + " line " + startLineNumber + ", at EOF\n" +
+                    "Execution of " + parser.ctx.errorUtil.getFileName() + " aborted due to compilation errors.\n";
+            throw new PerlParserException(errorMsg);
+        }
 
         if (nextToken.text.equals("=>")) {
             // autoquote ` -X => ... `

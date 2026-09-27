@@ -232,6 +232,13 @@ public class FileHandle {
 
                 if ("<<".equals(nextText)) {
                     // `<<` is an infix, but it is also a heredoc
+                } else if (("+".equals(nextText) || "-".equals(nextText))
+                        && parser.tokenIndex + 1 < parser.tokens.size()
+                        && parser.tokens.get(parser.tokenIndex + 1).text.equals("(")) {
+                    // `print $fh +(EXPR)` is the historical unbraced
+                    // filehandle form followed by a parenthesized unary
+                    // expression.  The parenthesis disambiguates it from
+                    // `print $fh + EXPR`, where $fh is an output value.
                 } else if (ParserTables.INFIX_OP.contains(nextText) || "{[".contains(nextText) || "->".equals(nextText)) {
                     // Examples that are NOT file handles:
                     // print $fh + 2;     # arithmetic
