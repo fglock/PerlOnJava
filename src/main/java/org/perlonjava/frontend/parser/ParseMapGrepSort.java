@@ -27,6 +27,32 @@ public class ParseMapGrepSort {
 
         LexerToken nextToken = peek(parser);
 
+        // Since Perl 5.36 a physically empty sort is a compile-time error.
+        // Do this before the normal block/list backtracking, which otherwise
+        // reports a generic syntax error after trying to parse EOF or a list
+        // terminator as a comparator.
+        if (nextToken.type == LexerTokenType.EOF || nextToken.text.equals(";")
+                || nextToken.text.equals("}") || nextToken.text.equals(")")) {
+            parser.throwError("Not enough arguments for sort");
+        }
+
+        // A scalar comparator is ambiguous with a one-item sort list.  It is
+        // a comparator only when another list term follows it.  Parse this
+        // form before the ordinary list branch: otherwise `$cmp qw(...)`
+        // becomes a one-item list and qw is later parsed as a bare sub call.
+        if (nextToken.text.equals("$")) {
+            int comparatorStart = parser.tokenIndex;
+            Node comparator = ParsePrimary.parsePrimary(parser);
+            LexerToken afterComparator = peek(parser);
+            if (startsSortListTerm(afterComparator)) {
+                ListNode comparatorOperands =
+                        ListParser.parseZeroOrMoreList(parser, 1, false, false, false, false);
+                comparatorOperands.handle = comparator;
+                return finishSort(parser, token, comparatorOperands);
+            }
+            parser.tokenIndex = comparatorStart;
+        }
+
         // Check for sort( SUBNAME LIST ) — peek inside parens for the SUBNAME pattern
         boolean hasSortParen = false;
         if (nextToken.text.equals("(")) {
@@ -64,6 +90,18 @@ public class ParseMapGrepSort {
             // Save position and try to determine which
             int identStart = parser.tokenIndex;
             String subName = IdentifierParser.parseSubroutineIdentifier(parser);
+
+            // CORE::reverse (and other known CORE operators) is a list
+            // expression, not a named sort comparator.  Unknown CORE names
+            // intentionally remain comparators so that sort can issue its
+            // specialised "Undefined sort subroutine" diagnostic.
+            if (subName.startsWith("CORE::")
+                    && ParserTables.CORE_PROTOTYPES.containsKey(subName.substring("CORE::".length()))) {
+                parser.tokenIndex = hasSortParen ? currentIndex : identStart;
+                operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseSort CORE operator: " + operand);
+                return finishSort(parser, token, operand);
+            }
             
             // Check if followed by -> (method call) - if so, backtrack and parse as list
             if (peek(parser).text.equals("->")) {
@@ -126,6 +164,10 @@ public class ParseMapGrepSort {
                 parser.parsingForLoopVariable = true;
                 Node var = ParsePrimary.parsePrimary(parser);
                 parser.parsingForLoopVariable = false;
+                // The comparator itself is parsed in the restricted context
+                // above, but its list must again recognise quote-like CORE
+                // operators.  Keeping the restriction here made
+                // `sort $cmp qw(...)` treat qw as an ordinary subroutine.
                 operand = ListParser.parseZeroOrMoreList(parser, 1, false, false, false, false);
                 operand.handle = var;
 
@@ -136,15 +178,14 @@ public class ParseMapGrepSort {
             }
         }
 
+        return finishSort(parser, token, operand);
+    }
+
+    private static BinaryOperatorNode finishSort(Parser parser, LexerToken token, ListNode operand) {
         // transform:   { 123 }
         // into:        sub { 123 }
         Node block = operand.handle;
         operand.handle = null;
-        if ((token.text.equals("all") || token.text.equals("any")) && block == null) {
-            // Unlike map and grep, the feature-gated all/any keywords do not
-            // accept a unary callback expression such as `any length, @list`.
-            parser.throwErrorAtToken(currentIndex - 2, "syntax error");
-        }
         if (block == null) {
             // create default block for `sort`: { $a cmp $b }
             // Use the current package's $a and $b variables
@@ -168,6 +209,15 @@ public class ParseMapGrepSort {
             block = subNode;
         }
         return new BinaryOperatorNode(token.text, block, operand, parser.tokenIndex);
+    }
+
+    private static boolean startsSortListTerm(LexerToken token) {
+        if (token.type == LexerTokenType.EOF || token.text.equals(",")
+                || token.text.equals(";") || token.text.equals(")")
+                || token.text.equals("}") || token.text.equals("->")) {
+            return false;
+        }
+        return !ParserTables.INFIX_OP.contains(token.text);
     }
 
     /**

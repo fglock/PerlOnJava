@@ -56,6 +56,27 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.runUnitcheckBlock
  * It provides functionality to compile, store, and execute Perl subroutines and eval strings.
  */
 public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
+    /** Nesting of comparator invocations currently owned by sort(). */
+    private static final ThreadLocal<Integer> sortComparatorDepth = ThreadLocal.withInitial(() -> 0);
+
+    public static void enterSortComparator() {
+        sortComparatorDepth.set(sortComparatorDepth.get() + 1);
+    }
+
+    public static void leaveSortComparator() {
+        int depth = sortComparatorDepth.get() - 1;
+        if (depth <= 0) sortComparatorDepth.remove();
+        else sortComparatorDepth.set(depth);
+    }
+
+    public static boolean isInSortComparator() {
+        return sortComparatorDepth.get() > 0;
+    }
+
+    public static boolean isCurrentSortComparatorBlock() {
+        RuntimeCode active = getActiveCodeAt(0);
+        return active != null && active.isSortComparator;
+    }
     private static final String INDIRECT_BLOCK_METHOD_PREFIX = "\uFDD0indirect-block:";
     private static final String FIRST_ARGUMENT_METHOD_PREFIX = "\uFDD1first-argument:";
 
@@ -7538,6 +7559,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (codeRef == null || codeRef.type != RuntimeScalarType.CODE
                 || !(codeRef.value instanceof RuntimeCode code)) {
             return codeRef != null ? codeRef.undefine() : new RuntimeScalar();
+        }
+        if (isActiveCode(code)) {
+            throw new PerlCompilerException("Can't undef active subroutine");
         }
         // Lexical constant subs retain their existing scalar-undef path: it
         // emits Perl's required "Constant subroutine ... undefined" warning.
