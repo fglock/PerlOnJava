@@ -17,6 +17,10 @@ priorities and future plans.
   scalar method-list expressions, comparator control flow, and temporary
   argument lifetimes on both execution backends.
 
+- Preserve shared-scalar identity after an ithread locks it through a lexical
+  reference, restoring recursive locks and condition operations on both
+  execution backends.
+
 - Restore BEGIN-captured container aliases, localized hash closure destruction,
   and lexical `no warnings 'signal'` handling on both execution backends.
 

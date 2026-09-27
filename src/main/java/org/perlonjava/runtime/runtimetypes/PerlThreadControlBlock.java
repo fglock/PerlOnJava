@@ -97,12 +97,14 @@ public final class PerlThreadControlBlock {
                             // scope, but the child has no enclosing invocation
                             // that can later retire them. Thread termination is
                             // their scope boundary in this runtime.
-                            // A shared scalar is the parent's canonical storage,
-                            // not a child-owned cloned pad. Releasing the child
-                            // closure must drop only its capture; marking that
-                            // canonical slot scope-exited lets child teardown
-                            // destroy/clear a value the parent still owns.
-                            if (!captured.threadShared) {
+                            // A shared scalar, including one reached through a
+                            // child-local reference wrapper, is the parent's
+                            // canonical storage. Releasing the child closure
+                            // must drop only its capture; marking that pad
+                            // scope-exited lets child teardown destroy or clear
+                            // a value the parent still owns.
+                            RuntimeBase capturedReferent = SharedPerlStorage.referent(captured);
+                            if (capturedReferent == null || !capturedReferent.threadShared) {
                                 captured.scopeExited = true;
                             }
                         }
