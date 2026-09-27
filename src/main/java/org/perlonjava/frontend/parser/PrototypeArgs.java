@@ -1411,6 +1411,13 @@ public class PrototypeArgs {
             return;
         }
 
+        if (refType == '%' && isKeyValueHashSlice(referenceArg)) {
+            String subName = parser.ctx.symbolTable.getCurrentSubroutine();
+            String subNamePart = (subName == null || subName.isEmpty()) ? "" : " to " + subName;
+            parser.throwError("Type of arg " + (args.elements.size() + 1) + subNamePart
+                    + " must be hash (not key/value hash slice)");
+        }
+
         Character actualSigil = sigilForBackslashPrototypeArg(referenceArg);
         if (actualSigil == null || actualSigil == refType) {
             return;
@@ -1426,6 +1433,13 @@ public class PrototypeArgs {
         String subNamePart = (subName == null || subName.isEmpty()) ? "" : " to " + subName;
         parser.throwError("Type of arg " + (args.elements.size() + 1) + subNamePart
                 + " must be " + expected + " (not " + describeBackslashPrototypeArg(referenceArg) + ")");
+    }
+
+    private static boolean isKeyValueHashSlice(Node node) {
+        return node instanceof BinaryOperatorNode access
+                && access.operator.equals("{")
+                && access.left instanceof OperatorNode sigil
+                && sigil.operator.equals("%");
     }
 
     private static Character sigilForBackslashPrototypeArg(Node node) {

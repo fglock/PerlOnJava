@@ -34,6 +34,10 @@ public class EmitOperatorLocal {
         }
 
         Node localOperand = node.operand;
+        if (isKeyValueHashSlice(localOperand)) {
+            throw new PerlCompilerException(node.tokenIndex,
+                    "Can't modify key/value hash slice in local", emitterVisitor.ctx.errorUtil);
+        }
         if (localOperand instanceof OperatorNode sigilNode
                 && (sigilNode.operator.equals("@") || sigilNode.operator.equals("%"))) {
             Node dereferenceOperand = sigilNode.operand;
@@ -354,6 +358,16 @@ public class EmitOperatorLocal {
                 "rejectLocalizeThroughReference",
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
                 false);
+    }
+
+    private static boolean isKeyValueHashSlice(Node node) {
+        if (node instanceof ListNode list && list.elements.size() == 1) {
+            return isKeyValueHashSlice(list.elements.getFirst());
+        }
+        return node instanceof BinaryOperatorNode access
+                && access.operator.equals("{")
+                && access.left instanceof OperatorNode sigil
+                && sigil.operator.equals("%");
     }
 
 }

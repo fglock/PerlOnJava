@@ -34,6 +34,12 @@ public class CompileBinaryOperator {
         // Track token index for error reporting
         bytecodeCompiler.currentTokenIndex = node.getIndex();
 
+        if (node.operator.equals("->") && node.left instanceof OperatorNode sigil
+                && sigil.operator.equals("%")) {
+            bytecodeCompiler.throwCompilerException("Can't use a hash as a reference");
+            return;
+        }
+
         // Perl evaluates chained comparisons left-to-right, evaluating each
         // operand once and stopping as soon as a comparison is false.  The JVM
         // backend has a dedicated emitter for this shape; keep the bytecode

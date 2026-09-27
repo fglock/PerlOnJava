@@ -196,6 +196,10 @@ public class CompileAssignment {
         // General fallback for any BinaryOperatorNode lvalue (matches JVM backend behavior)
         // Handles: local $hash{key} = v, local $array[i] = v, local $obj->method->{key} = v, etc.
         if (localOperand instanceof BinaryOperatorNode binOp) {
+            if (BytecodeCompiler.isKeyValueHashSlice(binOp)) {
+                bc.throwCompilerException("Can't modify key/value hash slice in local");
+                return true;
+            }
             // Localizing an array element replaces its slot. Saving the scalar
             // object in place is insufficient when the slot aliases a read-only
             // argument (for example local $_[3] where the caller passed '').
@@ -769,6 +773,13 @@ public class CompileAssignment {
         // Use LValueVisitor to properly determine context for all LHS patterns
         // including $array[index], $hash{key}, etc.
         int rhsContext = LValueVisitor.getContext(node);
+        if (isKeyValueHashSliceLvalueSub(node.left)) {
+            String assignmentKind = rhsContext == RuntimeContextType.SCALAR
+                    ? "scalar" : "list";
+            bytecodeCompiler.throwCompilerException(
+                    "Can't modify key/value hash slice in " + assignmentKind + " assignment");
+            return;
+        }
         if (rhsContext == RuntimeContextType.VOID) {
             // VOID means not a valid L-value, but we still compile it - default to LIST
             rhsContext = RuntimeContextType.LIST;
@@ -2112,6 +2123,12 @@ public class CompileAssignment {
                     int hashReg;
                     if (leftBin.left instanceof OperatorNode hashOp) {
 
+                        if (hashOp.operator.equals("%")) {
+                            bytecodeCompiler.throwCompilerException(
+                                    "Can't modify key/value hash slice in list assignment");
+                            return;
+                        }
+
                         // Check for hash slice assignment: @hash{keys} = values
                         if (hashOp.operator.equals("@")) {
                             if (hashOp.operand instanceof IdentifierNode idNode) {
@@ -2540,6 +2557,19 @@ public class CompileAssignment {
             } else {
                 bytecodeCompiler.throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
             }
+    }
+
+    private static boolean isKeyValueHashSliceLvalueSub(Node node) {
+        while (node instanceof ListNode list && list.elements.size() == 1) {
+            node = list.elements.getFirst();
+        }
+        if (!(node instanceof BinaryOperatorNode call) || !call.operator.equals("(")
+                || !(call.left instanceof OperatorNode codeOp) || !codeOp.operator.equals("&")) {
+            return false;
+        }
+        return codeOp.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef
+                && codeRef.value instanceof RuntimeCode code
+                && code.returnsKeyValueHashSlice;
     }
 
     static int resolveArrayForDollarHash(BytecodeCompiler bytecodeCompiler, OperatorNode dollarHashOp) {

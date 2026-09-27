@@ -2828,6 +2828,8 @@ public class BytecodeCompiler implements Visitor {
         // Key/value slice: %hash{keys} returns alternating key/value pairs.
         // Postfix ->%{...} is parsed into this form by the parser.
 
+        emitKeyValueHashSliceScalarWarning(node, leftOp);
+
         if (leftOp.operand instanceof IdentifierNode) {
             // Direct key/value slice: %hash{keys}
             String varName = ((IdentifierNode) leftOp.operand).name;
@@ -2864,11 +2866,6 @@ public class BytecodeCompiler implements Visitor {
 
         if (!(node.right instanceof HashLiteralNode keysNode)) {
             throwCompilerException("Key/value slice requires HashLiteralNode");
-            return;
-        }
-
-        if (keysNode.elements.isEmpty()) {
-            throwCompilerException("Key/value slice requires at least one key");
             return;
         }
 
@@ -2914,6 +2911,35 @@ public class BytecodeCompiler implements Visitor {
         } else {
             lastResultReg = rd;
         }
+    }
+
+    private void emitKeyValueHashSliceScalarWarning(BinaryOperatorNode node, OperatorNode leftOp) {
+        if (currentCallContext != RuntimeContextType.SCALAR
+                || !(leftOp.operand instanceof IdentifierNode identifier)) {
+            return;
+        }
+        String keys = "...";
+        if (node.right instanceof HashLiteralNode keyNode
+                && keyNode.elements.size() == 1
+                && keyNode.elements.getFirst() instanceof StringNode key) {
+            keys = "\"" + key.value + "\"";
+        }
+        String hashName = identifier.name;
+        int messageReg = allocateRegister();
+        emit(Opcodes.LOAD_STRING);
+        emitReg(messageReg);
+        emit(addToStringPool("%" + hashName + "{" + keys
+                + "} in scalar context better written as $" + hashName + "{" + keys + "}"));
+        int locationReg = allocateRegister();
+        emit(Opcodes.LOAD_STRING);
+        emitReg(locationReg);
+        String location = errorUtil != null
+                ? errorUtil.warningLocation(node.getIndex())
+                : " at " + sourceName + " line " + sourceLine;
+        emit(addToStringPool(location));
+        emitWithToken(Opcodes.WARN, node.getIndex());
+        emitReg(messageReg);
+        emitReg(locationReg);
     }
 
     /**
@@ -4651,6 +4677,11 @@ public class BytecodeCompiler implements Visitor {
                 return;
             }
 
+            if (isKeyValueHashSlice(node.operand)) {
+                throwCompilerException("Can't modify key/value hash slice in local");
+                return;
+            }
+
             emitLocalReferenceChecks(node.operand);
 
             // local $x - temporarily localize a global variable
@@ -5370,6 +5401,17 @@ public class BytecodeCompiler implements Visitor {
         }
         return outer.operand instanceof OperatorNode inner
                 && inner.operator.equals("$");
+    }
+
+    /** A %hash{...} key/value slice is a list value, never a localizable hash. */
+    static boolean isKeyValueHashSlice(Node node) {
+        if (node instanceof ListNode list && list.elements.size() == 1) {
+            return isKeyValueHashSlice(list.elements.getFirst());
+        }
+        return node instanceof BinaryOperatorNode access
+                && access.operator.equals("{")
+                && access.left instanceof OperatorNode sigil
+                && sigil.operator.equals("%");
     }
 
     private void emitLocalReferenceChecks(Node operand) {

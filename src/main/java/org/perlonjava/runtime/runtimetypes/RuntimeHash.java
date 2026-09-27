@@ -1277,6 +1277,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         }
 
         RuntimeList result = new RuntimeList();
+        result.keyValueHashSlice = true;
         List<RuntimeBase> outElements = result.elements;
         for (RuntimeScalar keyScalar : value) {
             outElements.add(keyScalar);                    // Add the key
