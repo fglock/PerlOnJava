@@ -28,6 +28,8 @@ public final class GlobalRuntimeState {
     private final Map<String, RuntimeScalar> temporaryScalarAliases = new HashMap<>();
     private final Map<String, Boolean> importedSubs = new HashMap<>();
     private final Map<String, Boolean> operatorOverrideGlobs = new HashMap<>();
+    /** Names promoted to full GVs by an explicit runtime typeglob assignment. */
+    private final Map<String, Boolean> explicitGlobAssignments = new HashMap<>();
     private final Map<String, RuntimeScalar> codeRefs = new HashMap<>();
     private final Map<String, RuntimeScalar> pseudoConstants = new HashMap<>();
     /** Compact values stored directly in a package stash before GV promotion. */
@@ -96,6 +98,10 @@ public final class GlobalRuntimeState {
 
     Map<String, Boolean> operatorOverrideGlobs() {
         return operatorOverrideGlobs;
+    }
+
+    Map<String, Boolean> explicitGlobAssignments() {
+        return explicitGlobAssignments;
     }
 
     Map<String, RuntimeScalar> pseudoConstants() {
@@ -263,6 +269,7 @@ public final class GlobalRuntimeState {
     void clearCodeValues() {
         importedSubs.clear();
         operatorOverrideGlobs.clear();
+        explicitGlobAssignments.clear();
         codeRefs.clear();
         pseudoConstants.clear();
         compactStashValues.clear();
@@ -333,6 +340,7 @@ public final class GlobalRuntimeState {
 
         target.importedSubs.putAll(importedSubs);
         target.operatorOverrideGlobs.putAll(operatorOverrideGlobs);
+        target.explicitGlobAssignments.putAll(explicitGlobAssignments);
         target.deletedCodeRefPins.addAll(deletedCodeRefPins);
         target.hiddenIoSlotsAfterStashDelete.addAll(hiddenIoSlotsAfterStashDelete);
         target.localizedCodeRefDepth.putAll(localizedCodeRefDepth);

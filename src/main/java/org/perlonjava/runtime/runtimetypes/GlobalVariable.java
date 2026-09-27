@@ -70,10 +70,22 @@ public class GlobalVariable {
     static final Map<String, Boolean> globalGlobs =
             new CurrentRuntimePlainMap<>(state -> state.operatorOverrideGlobs());
 
+    // Named declarations also set globalGlobs for parser-level CORE::GLOBAL
+    // override handling. Keep actual typeglob promotion separate so a named
+    // subroutine retains Perl's compact CODE stash representation.
+    static final Map<String, Boolean> explicitGlobAssignments =
+            new CurrentRuntimePlainMap<>(state -> state.explicitGlobAssignments());
+
     /** Record that a named typeglob exists, even if its runtime assignment is unreachable. */
     public static void markGlobAssigned(String globName) {
         if (globName != null && !globName.isEmpty()) {
             globalGlobs.put(globName, true);
+        }
+    }
+
+    static void markExplicitGlobAssignment(String globName) {
+        if (globName != null && !globName.isEmpty()) {
+            explicitGlobAssignments.put(globName, true);
         }
     }
 
@@ -665,6 +677,7 @@ public class GlobalVariable {
         globalFormatRefs.clear();
         globalState().clearIoAndFormatValues();
         globalGlobs.clear();
+        explicitGlobAssignments.clear();
         isSubs.clear();
         globalState().clearGlobAndStashValues();
         globalState().clearDeclarationsAndPackageServices();

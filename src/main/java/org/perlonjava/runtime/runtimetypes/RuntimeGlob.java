@@ -1230,6 +1230,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     private void markGlobAsAssigned() {
         GlobalVariable.markStashEntryVisible(globName);
         GlobalVariable.clearGlobalPseudoConstant(globName);
+        GlobalVariable.markExplicitGlobAssignment(globName);
         // Mark this name as having been assigned via glob syntax (e.g. *CORE::GLOBAL::do = ...)
         // This distinction is crucial because subroutines assigned via glob assignment
         // are eligible to override built-in operators, whereas those defined using
