@@ -409,7 +409,9 @@ public class IdentifierParser {
                 // RT #124216: an illegal interpolated variable character at
                 // end-of-file must use the enclosing quoted-string syntax
                 // diagnostic, not the internal ${...} marker.
-                if (cpL == 0x3030) {
+                if (cpL == 0x3030
+                        && parser.tokenIndex + 1 < parser.tokens.size()
+                        && parser.tokens.get(parser.tokenIndex + 1).type == LexerTokenType.EOF) {
                     throw new PerlParserException("syntax error at - line 1, near \"$" + id
                             + "\"\nExecution of - aborted due to compilation errors.");
                 }
@@ -445,7 +447,9 @@ public class IdentifierParser {
                     } else {
                         hex = "\\x{" + Integer.toHexString(cp) + "}";
                     }
-                    if (cpL == 0x3030) {
+                    if (cpL == 0x3030
+                            && parser.tokenIndex + 1 < parser.tokens.size()
+                            && parser.tokens.get(parser.tokenIndex + 1).type == LexerTokenType.EOF) {
                         throw new PerlParserException("syntax error at - line 1, near \"$" + id
                                 + "\"\nExecution of - aborted due to compilation errors.");
                     }

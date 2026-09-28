@@ -115,6 +115,11 @@ public class ParseInfix {
         // allowing statement recovery to reduce it to a generic syntax error.
         if (token.type == LexerTokenType.STRING && !token.text.isEmpty()) {
             int cp = token.text.codePointAt(0);
+            // A NUL embedded in a bareword is reported as a syntax error,
+            // including when it arrives after the left operand of require.
+            if (cp == 0) {
+                parser.throwCleanError("syntax error");
+            }
             OperatorNode namedVariable = typedFieldVariable(left);
             if (cp == 0x24E6 && namedVariable != null
                     && namedVariable.operand instanceof IdentifierNode identifier) {
