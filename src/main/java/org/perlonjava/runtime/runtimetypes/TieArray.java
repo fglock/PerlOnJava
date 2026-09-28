@@ -131,6 +131,7 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * Stores an element into a tied array (delegates to STORE).
      */
     public static RuntimeScalar tiedStore(RuntimeArray array, RuntimeScalar index, RuntimeScalar value) {
+        array.clearTiedLocalSizeOverride();
         return tieCall(array, "STORE", index, value).getFirst();
     }
 
@@ -145,7 +146,13 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * Sets the size of a tied array (delegates to STORESIZE).
      */
     public static RuntimeScalar tiedStoreSize(RuntimeArray array, RuntimeScalar size) {
+        array.clearTiedLocalSizeOverride();
         return tieCall(array, "STORESIZE", size).getFirst();
+    }
+
+    public static boolean tiedHasMethod(RuntimeArray array, String methodName) {
+        TieArray tieArray = (TieArray) array.elements;
+        return InheritanceResolver.findMethodInHierarchy(methodName, tieArray.getTiedPackage(), null, 0) != null;
     }
 
     /**
@@ -166,6 +173,7 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * Deletes an element from a tied array (delegates to DELETE).
      */
     public static RuntimeScalar tiedDelete(RuntimeArray array, RuntimeScalar index) {
+        array.clearTiedLocalSizeOverride();
         return tieCall(array, "DELETE", index).getFirst();
     }
 
