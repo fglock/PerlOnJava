@@ -1148,10 +1148,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         // Check if the element is null and return proxy if it is
         RuntimeScalar element = elements.get(index);
         if (element == null) {
-            // Keep a hole proxy in its physical slot.  A caller can retain this
-            // lvalue while unshift/splice moves the slot; a detached proxy that
-            // only remembers the old numeric index would subsequently write to
-            // the wrong element.
+            // Retain a physical proxy for a sparse slot so an alias obtained
+            // through a call argument follows that slot after structural
+            // changes.  Out-of-range reads remain detached proxies above.
             RuntimeArrayProxyEntry proxy = new RuntimeArrayProxyEntry(this, index, originalIndex);
             elements.set(index, proxy);
             return proxy;

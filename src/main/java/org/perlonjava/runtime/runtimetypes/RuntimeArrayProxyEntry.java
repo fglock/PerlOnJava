@@ -256,11 +256,14 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
             if (previousState == null && key >= previousSize) {
                 // Remove the localized hole itself while retaining values
                 // assigned to intervening indices during the scope.
-                if (key < parent.elements.size()) {
-                    parent.elements.set(key, null);
+                // Structural array operations can move the proxy, so remove
+                // its current physical slot rather than the original index.
+                int currentKey = currentKey();
+                if (currentKey >= 0 && currentKey < parent.elements.size()) {
+                    parent.elements.set(currentKey, null);
                 }
                 while (parent.elements.size() > previousSize
-                        && parent.elements.getLast() == null) {
+                        && isEmptyPlaceholder(parent.elements.getLast())) {
                     parent.elements.removeLast();
                 }
                 return;
@@ -272,5 +275,9 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
                 parent.elements.removeLast();
             }
         }
+    }
+
+    private static boolean isEmptyPlaceholder(RuntimeScalar value) {
+        return value == null || (value.type & RuntimeScalarType.UNDEF) != 0;
     }
 }
