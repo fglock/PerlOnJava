@@ -728,6 +728,17 @@ public class ModuleOperators {
         }
         parsedArgs.code = code;
 
+        // A runtime assignment to $^P takes effect before a later do FILE.
+        // Retain the file under the spelling supplied to do, which is also
+        // the key Perl exposes through @{"_<filename"}.  Waiting until the
+        // nested compilation has normalized its resolved path (for example
+        // "./comp/file" for a lookup through ".") loses that observable name.
+        int debugFlags = GlobalVariable.getGlobalVariable(
+                GlobalContext.encodeSpecialVar("P")).getInt();
+        if ((debugFlags & 0x02) != 0) {
+            RuntimeCode.storeProgramSourceLines(code, fileName, null);
+        }
+
         String requireDebugPre = System.getenv("JPERL_REQUIRE_DEBUG");
         if (requireDebugPre != null && !requireDebugPre.isEmpty()) {
             System.err.println((isRequire ? "require" : "do") + " loading " + fileName + " => " + parsedArgs.fileName);
