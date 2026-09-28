@@ -11,7 +11,7 @@ my $source = <<'PERL';
 use overload;
 BEGIN { overload::constant q => sub {} }
 q(1);
-qq(1);
+qq(1$_);
 PERL
 
 my $launcher = $^X eq 'jperl' ? './jperl' : $^X;

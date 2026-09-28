@@ -1361,6 +1361,11 @@ public class StringParser {
                             parser.ctx.symbolTable.isStrictOptionEnabled(org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8)
                                     || parser.ctx.compilerOptions.isUnicodeSource);
                 }
+                // Interpolation produces a compound node rather than a
+                // StringNode.  It still invokes the q handler for its
+                // compile-time diagnostic; unlike a literal node there is no
+                // precomputed replacement value to install here.
+                rejectUndefinedStringConstantHandler(parser, rawStr, operator);
                 return value;
             }
             case "qw":
