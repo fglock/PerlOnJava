@@ -90,7 +90,10 @@ public class PointerPackHandler implements PackFormatHandler {
                 String str = value.toString();
                 // Use hashCode as a unique identifier, but as a long for 64-bit pointer
                 ptr = Integer.toUnsignedLong(str.hashCode());
-                pointerMap().put((int) ptr, str);  // Still use int key for the map
+                // A Perl scalar's PV is NUL-terminated.  Pn copies n bytes
+                // from that address, so retain the terminator in our pointer
+                // simulation as observable memory beyond the logical string.
+                pointerMap().put((int) ptr, str + '\0');  // Still use int key for the map
             }
 
             // Write as 8 bytes (64-bit pointer) 

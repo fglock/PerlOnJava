@@ -410,15 +410,18 @@ public class BitwiseOperators {
     public static RuntimeScalar bitwiseAndDot(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
         String s1 = runtimeScalar.toString();
         String s2 = arg2.toString();
+        // Perl rejects a wide character anywhere in either operand, even
+        // beyond the shorter string's end (where & itself would truncate).
+        // Checking only the overlap incorrectly lets `"abc" & "abc\\x{100}"`
+        // succeed.
+        validateByteStringOperand(s1, "and", '&');
+        validateByteStringOperand(s2, "and", '&');
         int len = Math.min(s1.length(), s2.length());
         StringBuilder result = new StringBuilder(len);
 
         for (int i = 0; i < len; i++) {
             char c1 = s1.charAt(i);
             char c2 = s2.charAt(i);
-            if (c1 > 0xFF || c2 > 0xFF) {
-                throw new PerlCompilerException("Use of strings with code points over 0xFF as arguments to bitwise and (&) operator is not allowed");
-            }
             result.append((char) (c1 & c2));
         }
 
@@ -500,7 +503,7 @@ public class BitwiseOperators {
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
             if (c > 0xFF) {
-                throw new PerlCompilerException("Use of strings with code points over 0xFF as arguments to bitwise not (~) operator is not allowed");
+                throw new PerlCompilerException("Use of strings with code points over 0xFF as arguments to 1's complement (~) operator is not allowed");
             }
             result.append((char) ((~c) & 0xFF));
         }
@@ -517,6 +520,16 @@ public class BitwiseOperators {
             result.type = RuntimeScalarType.BYTE_STRING;
         }
         return result;
+    }
+
+    private static void validateByteStringOperand(String value, String operation, char symbol) {
+        for (int i = 0; i < value.length(); i++) {
+            if (value.charAt(i) > 0xFF) {
+                throw new PerlCompilerException(
+                        "Use of strings with code points over 0xFF as arguments to bitwise "
+                                + operation + " (" + symbol + ") operator is not allowed");
+            }
+        }
     }
 
     /**
