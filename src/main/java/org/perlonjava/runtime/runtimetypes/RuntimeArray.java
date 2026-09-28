@@ -1141,7 +1141,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             // Perl's aliased sparse-slot path retains the hole immediately
             // before the ordinary negative-index position (perl #118691).
             // This matters when the resulting lvalue is passed through @_.
-            if (index >= 0 && index < elements.size() && elements.get(index) == null) {
+            if (elements.size() > 1 && index > 0 && index < elements.size()
+                    && isEmptySlot(elements.get(index))) {
                 index--;
             }
         }
@@ -1176,7 +1177,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         int originalIndex = index;
         if (index < 0) {
             index = elements.size() + index;
-            if (index >= 0 && index < elements.size() && elements.get(index) == null) {
+            if (elements.size() > 1 && index > 0 && index < elements.size()
+                    && isEmptySlot(elements.get(index))) {
                 index--;
             }
         }
@@ -1254,7 +1256,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         int originalIndex = index;
         if (index < 0) {
             index = elements.size() + index; // Handle negative indices
-            if (index >= 0 && index < elements.size() && elements.get(index) == null) {
+            if (elements.size() > 1 && index > 0 && index < elements.size()
+                    && isEmptySlot(elements.get(index))) {
                 index--;
             }
         }
