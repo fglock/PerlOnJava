@@ -17,10 +17,10 @@ perl dev/tools/perl_test_runner.pl --jobs 10 --cpu-heavy-jobs 2 \
   --output /tmp/regex.json perl5_t/t/re
 ```
 
-Normal fixtures use `--jobs`. Memory-sensitive regex fixtures run in a serial
-lane, while `pat_psycho*` and `speed*` run afterward in a dedicated lane only
-when `--cpu-heavy-jobs` is supplied. Direct runner calls that omit it retain the
-weighted scheduler.
+Normal fixtures use `--jobs`. When `--cpu-heavy-jobs` is supplied,
+`pat_psycho*` and `speed*` use that concurrent resource cap while ordinary
+fixtures continue to run. It is not an exclusive or follow-on phase. Calls
+that omit it use the weighted scheduler.
 
 ### compare_test_results.pl
 **Purpose:** Compare test results between runs to identify regressions or improvements.

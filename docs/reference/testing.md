@@ -162,7 +162,9 @@ The runner is a semantic validator, not a performance benchmark harness.
 `--jobs` is a scheduling-unit budget shared by the whole run: ordinary files
 consume one unit, known CPU/memory-heavy semantic fixtures consume three, and
 any future test requiring demonstrated process isolation can run alone. No
-current test has an exclusive semantic profile. A heavy file's weight is
+current test has an exclusive semantic profile. When the compatibility
+`--cpu-heavy-jobs` option is supplied, its CPU-heavy cap runs concurrently with
+the ordinary cap rather than after it. A heavy file's weight is
 clamped to the caller's budget, so it still runs with `--jobs 1` or `--jobs 2`.
 The runner starts known long-running heavy files before ordinary files,
 preserving input order within each class. Starting the long work early avoids a

@@ -15,6 +15,7 @@ THREAD_TOOLING_TESTS := \
 	dev/tools/tests/perl_test_runner_japh_isolation.t \
 	dev/tools/tests/perl_test_runner_pat_capacity.t \
 	dev/tools/tests/perl_test_runner_resource_lanes.t \
+	dev/tools/tests/perl_test_runner_shared_resource_schedule.t \
 	dev/tools/tests/perl_test_runner_scheduler.t \
 	dev/tools/tests/gradle_niceness_contract.t \
 	dev/tools/tests/perl_test_runner_timeout_cleanup.t \
