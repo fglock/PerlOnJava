@@ -1617,6 +1617,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public boolean isTryExpressionWrapper = false;
     /** A :lvalue CV whose direct result is a %hash{...} key/value slice. */
     public boolean returnsKeyValueHashSlice = false;
+    /** A :lvalue CV whose direct result is a %array[...] index/value slice. */
+    public boolean returnsIndexValueArraySlice = false;
     // Method context information for next::method support
     public String packageName;
     public String subName;

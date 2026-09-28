@@ -472,7 +472,7 @@ public class EmitOperator {
     // Handle an operator that was parsed using a Perl prototype.
     static void handleOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         if ((node.operator.equals("keys") || node.operator.equals("values") || node.operator.equals("each"))
-                && isKeyValueHashSlice(node.operand)) {
+                && isKeyValueSlice(node.operand)) {
             throw new PerlCompilerException(node.tokenIndex,
                     "Experimental " + node.operator + " on scalar is now forbidden",
                     emitterVisitor.ctx.errorUtil);
@@ -534,12 +534,12 @@ public class EmitOperator {
         }
     }
 
-    private static boolean isKeyValueHashSlice(Node node) {
+    private static boolean isKeyValueSlice(Node node) {
         if (node instanceof ListNode list && list.elements.size() == 1) {
-            return isKeyValueHashSlice(list.elements.getFirst());
+            return isKeyValueSlice(list.elements.getFirst());
         }
         return node instanceof BinaryOperatorNode access
-                && access.operator.equals("{")
+                && (access.operator.equals("{") || access.operator.equals("["))
                 && access.left instanceof OperatorNode sigil
                 && sigil.operator.equals("%");
     }

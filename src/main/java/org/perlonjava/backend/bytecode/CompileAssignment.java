@@ -1531,7 +1531,7 @@ public class CompileAssignment {
         // Handles: local $hash{key} = v, local $array[i] = v, local $obj->method->{key} = v, etc.
         if (localOperand instanceof BinaryOperatorNode binOp) {
             if (BytecodeCompiler.isKeyValueHashSlice(binOp)) {
-                bc.throwCompilerException("Can't modify key/value hash slice in local");
+                bc.throwCompilerException("Can't modify " + BytecodeCompiler.keyValueSliceDescription(binOp) + " in local");
                 return true;
             }
             // Localizing an array element replaces its slot. Saving the scalar
@@ -2122,11 +2122,17 @@ public class CompileAssignment {
         // Use LValueVisitor to properly determine context for all LHS patterns
         // including $array[index], $hash{key}, etc.
         int rhsContext = LValueVisitor.getContext(node);
+        if (BytecodeCompiler.isKeyValueHashSlice(node.left)) {
+            bytecodeCompiler.throwCompilerException("Can't modify "
+                    + BytecodeCompiler.keyValueSliceDescription(node.left) + " in list assignment");
+            return;
+        }
         if (isKeyValueHashSliceLvalueSub(node.left)) {
-            String assignmentKind = rhsContext == RuntimeContextType.SCALAR
+            String assignmentKind = isIndexValueArraySliceLvalueSub(node.left) ? "list"
+                    : rhsContext == RuntimeContextType.SCALAR
                     ? "scalar" : "list";
             bytecodeCompiler.throwCompilerException(
-                    "Can't modify key/value hash slice in " + assignmentKind + " assignment");
+                    "Can't modify " + keyValueSliceLvalueSubDescription(node.left) + " in " + assignmentKind + " assignment");
             return;
         }
         if (node.left instanceof OperatorNode referenceOp
@@ -4000,7 +4006,7 @@ public class CompileAssignment {
 
                         if (hashOp.operator.equals("%")) {
                             bytecodeCompiler.throwCompilerException(
-                                    "Can't modify key/value hash slice in list assignment");
+                                    "Can't modify " + BytecodeCompiler.keyValueSliceDescription(leftBin) + " in list assignment");
                             return;
                         }
 
@@ -4472,7 +4478,22 @@ public class CompileAssignment {
         }
         return codeOp.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef
                 && codeRef.value instanceof RuntimeCode code
-                && code.returnsKeyValueHashSlice;
+                && (code.returnsKeyValueHashSlice || code.returnsIndexValueArraySlice);
+    }
+
+    private static String keyValueSliceLvalueSubDescription(Node node) {
+        while (node instanceof ListNode list && list.elements.size() == 1) node = list.elements.getFirst();
+        if (node instanceof BinaryOperatorNode call && call.left instanceof OperatorNode codeOp
+                && codeOp.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar ref
+                && ref.value instanceof RuntimeCode code && code.returnsIndexValueArraySlice) return "index/value array slice";
+        return "key/value hash slice";
+    }
+
+    private static boolean isIndexValueArraySliceLvalueSub(Node node) {
+        while (node instanceof ListNode list && list.elements.size() == 1) node = list.elements.getFirst();
+        return node instanceof BinaryOperatorNode call && call.left instanceof OperatorNode codeOp
+                && codeOp.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar ref
+                && ref.value instanceof RuntimeCode code && code.returnsIndexValueArraySlice;
     }
 
     /**

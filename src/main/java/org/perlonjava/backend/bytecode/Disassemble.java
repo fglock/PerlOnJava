@@ -358,6 +358,17 @@ public class Disassemble {
                                 .append(".getKeyValueSlice(r").append(kvRs2).append(")\n");
                         break;
                     }
+                    case Opcodes.MARK_KEYVALUE_SLICE:
+                        sb.append("MARK_KEYVALUE_SLICE r").append(interpretedCode.bytecode[pc++]).append("\n");
+                        break;
+                    case Opcodes.ARRAY_KEYVALUE_SLICE: {
+                        rd = interpretedCode.bytecode[pc++];
+                        int arrayReg = interpretedCode.bytecode[pc++];
+                        int indicesReg = interpretedCode.bytecode[pc++];
+                        sb.append("ARRAY_KEYVALUE_SLICE r").append(rd).append(" = r")
+                                .append(arrayReg).append(".getKeyValueSlice(r").append(indicesReg).append(")\n");
+                        break;
+                    }
                     case Opcodes.ADD_SCALAR:
                         rd = interpretedCode.bytecode[pc++];
                         int addRs1 = interpretedCode.bytecode[pc++];

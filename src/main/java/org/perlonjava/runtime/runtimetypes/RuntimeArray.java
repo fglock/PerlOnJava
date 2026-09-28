@@ -1758,6 +1758,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
 
         RuntimeList result = new RuntimeList();
+        // A :lvalue sub returning an index/value slice exposes only its
+        // writable values to foreach, never the index expressions.
+        result.keyValueHashSlice = true;
         List<RuntimeBase> outElements = result.elements;
         for (RuntimeScalar indexScalar : value) {
             outElements.add(indexScalar);                    // Add the index

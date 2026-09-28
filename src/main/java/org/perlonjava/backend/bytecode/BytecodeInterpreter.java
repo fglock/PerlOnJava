@@ -1719,6 +1719,13 @@ public class BytecodeInterpreter {
                             case Opcodes.ARRAY_GET_FOR_LOCAL -> {
                                 pc = InlineOpcodeHandler.executeArrayGetForLocal(bytecode, pc, registers);
                             }
+                            case Opcodes.ARRAY_KEYVALUE_SLICE -> {
+                                int rd = bytecode[pc++];
+                                RuntimeBase array = registers[bytecode[pc++]];
+                                RuntimeList indices = (RuntimeList) registers[bytecode[pc++]];
+                                if (array instanceof RuntimeScalar scalar) array = scalar.arrayDeref();
+                                registers[rd] = ((RuntimeArray) array).getKeyValueSlice(indices);
+                            }
 
                             case Opcodes.ARRAY_SET -> {
                                 pc = InlineOpcodeHandler.executeArraySet(bytecode, pc, registers);
@@ -2905,6 +2912,10 @@ public class BytecodeInterpreter {
 
                             case Opcodes.HASH_SET_FROM_LIST -> {
                                 pc = InlineOpcodeHandler.executeHashSetFromList(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.MARK_KEYVALUE_SLICE -> {
+                                ((RuntimeList) registers[bytecode[pc++]]).keyValueHashSlice = true;
                             }
 
                             // =================================================================

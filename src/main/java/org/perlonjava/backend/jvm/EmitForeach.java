@@ -13,6 +13,8 @@ import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 public class EmitForeach {
     // Feature flags for control flow implementation
@@ -61,12 +63,22 @@ public class EmitForeach {
                     && LValueVisitor.getContext(assignment.left) == RuntimeContextType.SCALAR) {
                 assignment.accept(emitterVisitor.with(RuntimeContextType.VOID));
                 assignment.left.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+            } else if (isIndexValueArraySliceLvalueSub(source)) {
+                source.accept(emitterVisitor.with(RuntimeContextType.LVALUE_LIST));
             } else {
                 source.accept(emitterVisitor.with(RuntimeContextType.LIST));
             }
         } finally {
             source.setAnnotation("foreachSource", false);
         }
+    }
+
+    private static boolean isIndexValueArraySliceLvalueSub(Node node) {
+        while (node instanceof ListNode list && list.elements.size() == 1) node = list.elements.getFirst();
+        return node instanceof BinaryOperatorNode call && call.left instanceof OperatorNode codeOp
+                && codeOp.operator.equals("&")
+                && codeOp.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar ref
+                && ref.value instanceof RuntimeCode code && code.returnsIndexValueArraySlice;
     }
 
     private static void pushGotoLabelsForBlock(EmitterVisitor emitterVisitor, BlockNode blockNode) {

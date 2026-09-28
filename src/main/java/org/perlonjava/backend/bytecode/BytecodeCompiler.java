@@ -2198,35 +2198,18 @@ public class BytecodeCompiler implements Visitor {
             throwCompilerException("Index/value slice requires ArrayLiteralNode");
             return;
         }
-        if (indicesNode.elements.isEmpty()) {
-            throwCompilerException("Index/value slice requires at least one index");
-            return;
-        }
+        emitKeyValueArraySliceScalarWarning(node, leftOp);
 
-        // Compile indices into a list
-        List<Integer> pairRegs = new ArrayList<>();
-        for (Node indexElement : indicesNode.elements) {
-            // Compile index in SCALAR context to ensure RuntimeScalar
-            compileNode(indexElement, -1, RuntimeContextType.SCALAR);
-            int indexReg = lastResultReg;
-
-            int valueReg = allocateRegister();
-            emit(Opcodes.ARRAY_GET);
-            emitReg(valueReg);
-            emitReg(arrayReg);
-            emitReg(indexReg);
-
-            pairRegs.add(indexReg);
-            pairRegs.add(valueReg);
-        }
-
+        // Evaluate the complete subscript expression in list context.  This
+        // preserves ranges, repeats, and flattened arrays (the earlier
+        // per-node scalar lowering turned 3..4 into an empty-string index).
+        compileNode(indicesNode.asListNode(), -1, RuntimeContextType.LIST);
+        int indicesReg = lastResultReg;
         int listReg = allocateRegister();
-        emit(Opcodes.CREATE_LIST);
+        emit(compilingForeachList ? Opcodes.ARRAY_SLICE : Opcodes.ARRAY_KEYVALUE_SLICE);
         emitReg(listReg);
-        emit(pairRegs.size());
-        for (int r : pairRegs) {
-            emitReg(r);
-        }
+        emitReg(arrayReg);
+        emitReg(indicesReg);
 
         if (currentCallContext == RuntimeContextType.SCALAR) {
             int rd = allocateOutputRegister();
@@ -2998,6 +2981,24 @@ public class BytecodeCompiler implements Visitor {
         emitWithToken(Opcodes.WARN, node.getIndex());
         emitReg(messageReg);
         emitReg(locationReg);
+    }
+
+    private void emitKeyValueArraySliceScalarWarning(BinaryOperatorNode node, OperatorNode leftOp) {
+        if (currentCallContext != RuntimeContextType.SCALAR
+                || !(leftOp.operand instanceof IdentifierNode identifier)) return;
+        String indices = "...";
+        if (node.right instanceof ArrayLiteralNode indexNode && indexNode.elements.size() == 1
+                && indexNode.elements.getFirst() instanceof NumberNode index) indices = index.value;
+        int messageReg = allocateRegister();
+        emit(Opcodes.LOAD_STRING); emitReg(messageReg);
+        emit(addToStringPool("%" + identifier.name + "[" + indices
+                + "] in scalar context better written as $" + identifier.name + "[" + indices + "]"));
+        int locationReg = allocateRegister();
+        emit(Opcodes.LOAD_STRING); emitReg(locationReg);
+        String location = errorUtil != null ? errorUtil.warningLocation(node.getIndex())
+                : " at " + sourceName + " line " + sourceLine;
+        emit(addToStringPool(location));
+        emitWithToken(Opcodes.WARN, node.getIndex()); emitReg(messageReg); emitReg(locationReg);
     }
 
     /**
@@ -4826,7 +4827,7 @@ public class BytecodeCompiler implements Visitor {
             }
 
             if (isKeyValueHashSlice(node.operand)) {
-                throwCompilerException("Can't modify key/value hash slice in local");
+                throwCompilerException("Can't modify " + keyValueSliceDescription(node.operand) + " in local");
                 return;
             }
 
@@ -5557,9 +5558,15 @@ public class BytecodeCompiler implements Visitor {
             return isKeyValueHashSlice(list.elements.getFirst());
         }
         return node instanceof BinaryOperatorNode access
-                && access.operator.equals("{")
+                && (access.operator.equals("{") || access.operator.equals("["))
                 && access.left instanceof OperatorNode sigil
                 && sigil.operator.equals("%");
+    }
+
+    static String keyValueSliceDescription(Node node) {
+        while (node instanceof ListNode list && list.elements.size() == 1) node = list.elements.getFirst();
+        return node instanceof BinaryOperatorNode access && access.operator.equals("[")
+                ? "index/value array slice" : "key/value hash slice";
     }
 
     private void emitLocalReferenceChecks(Node operand) {
