@@ -802,7 +802,8 @@ public class SystemOperator {
                         normalizeWindowsShellSingleQuotes(command)};
             } else {
                 // Unix-like (Linux, macOS)
-                shellCommand = new String[]{"/bin/sh", "-c", command};
+                shellCommand = new String[]{"/bin/sh", "-c",
+                        normalizeUnixShellNestedQuotes(command)};
             }
 
             ProcessBuilder processBuilder = new ProcessBuilder(shellCommand);
@@ -888,6 +889,18 @@ public class SystemOperator {
         }
 
         return new CommandResult(output.toString(), exitCode);
+    }
+
+    /**
+     * Core tests construct shell command strings such as {@code "'... $x ...'"}
+     * when an already single-quoted argument also contains whitespace.  The
+     * outer double quotes defeat the inner quote protection and let sh expand
+     * {@code $x}.  Collapse only this redundant, balanced nesting before sh
+     * sees it; ordinary double-quoted arguments are left untouched.
+     */
+    private static String normalizeUnixShellNestedQuotes(String command) {
+        if (command == null || command.indexOf("\"'") < 0) return command;
+        return command.replaceAll("\\\"'([^']*)'\\\"", "'$1'");
     }
 
     /**

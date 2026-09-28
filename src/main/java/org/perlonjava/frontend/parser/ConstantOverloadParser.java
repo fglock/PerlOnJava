@@ -35,36 +35,48 @@ final class ConstantOverloadParser {
      */
     static Node wrapRegexSegment(Parser parser, StringNode cooked, String raw, int tokenIndex,
                                  String literalKind, boolean utf8Source) {
-        RuntimeScalar handler = findHandler("qr");
+        return wrapStringConstant(parser, cooked, raw, tokenIndex, literalKind,
+                "qr", utf8Source, "within pattern");
+    }
+
+    /** Apply the lexical q handler to a fully parsed string literal. */
+    static Node wrapStringConstant(Parser parser, StringNode cooked, String raw, int tokenIndex,
+                                   String literalKind, String category, boolean utf8Source) {
+        return wrapStringConstant(parser, cooked, raw, tokenIndex, literalKind,
+                category, utf8Source, "within string");
+    }
+
+    private static Node wrapStringConstant(Parser parser, StringNode cooked, String raw, int tokenIndex,
+                                           String literalKind, String category, boolean utf8Source,
+                                           String locationSuffix) {
+        RuntimeScalar handler = findHandler(category);
         if (handler == null) {
             return cooked;
         }
 
         RuntimeHash hints = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
-        RuntimeScalar saved = hints.elements.remove("qr");
+        RuntimeScalar saved = hints.elements.remove(category);
         RuntimeScalar result;
         try {
             RuntimeArray args = new RuntimeArray();
             args.elements.add(materializeRawSource(raw, utf8Source));
             args.elements.add(materializeCooked(cooked, utf8Source));
-            // The qr callback contract always receives qq; literalKind is
-            // only for Perl's later diagnostic wording (m'...' reports q).
-            args.elements.add(new RuntimeScalar("qq"));
+            args.elements.add(new RuntimeScalar(literalKind));
             result = RuntimeCode.apply(handler, args, RuntimeContextType.SCALAR).scalar();
         } finally {
             if (saved != null) {
-                hints.elements.put("qr", saved);
+                hints.elements.put(category, saved);
             }
         }
 
         if (result.type == RuntimeScalarType.UNDEF) {
             var location = parser.ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
-            throw new PerlParserException("Constant(" + literalKind + "): Call to &{$^H{qr}} did not return a defined value at "
-                    + location.fileName() + " line " + location.lineNumber() + ", within pattern");
+            throw new PerlParserException("Constant(" + literalKind + "): Call to &{$^H{" + category + "}} did not return a defined value at "
+                    + location.fileName() + " line " + location.lineNumber() + ", " + locationSuffix);
         }
 
         int id = HANDLER_COUNTER.incrementAndGet();
-        String varName = "overload::__poj_regex_const_value_" + id;
+        String varName = "overload::__poj_const_value_" + id;
         GlobalVariable.getGlobalVariable(varName).set(result);
         return new OperatorNode("$", new IdentifierNode(varName, tokenIndex), tokenIndex);
     }

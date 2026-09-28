@@ -120,18 +120,23 @@ public class For3Node extends AbstractNode {
             }
             if (isMagicWhile(condition)) {
                 // need  `defined( $_ = ...)`
-                condition = new OperatorNode(
-                        "defined",
-                        new BinaryOperatorNode(
-                                "=",
-                                new OperatorNode(
-                                        "$",
-                                        new IdentifierNode("_", tokenIndex),
-                                        tokenIndex
-                                ),
-                                condition,
+                BinaryOperatorNode readlineAssignment = new BinaryOperatorNode(
+                        "=",
+                        new OperatorNode(
+                                "$",
+                                new IdentifierNode("_", tokenIndex),
                                 tokenIndex
                         ),
+                        condition,
+                        tokenIndex
+                );
+                // Assignment normally returns its lvalue. The implicit
+                // readline loop instead tests its returned line, even when
+                // $_ aliases a magical scalar such as $..
+                readlineAssignment.setAnnotation("magicReadlineAssignment", true);
+                condition = new OperatorNode(
+                        "defined",
+                        readlineAssignment,
                         tokenIndex
                 );
             }

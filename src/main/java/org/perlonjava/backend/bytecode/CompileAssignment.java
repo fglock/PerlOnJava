@@ -483,6 +483,27 @@ public class CompileAssignment {
         return bc.lastResultReg;
     }
 
+    /**
+     * A nested named typeglob assignment is the RHS glob for an outer
+     * typeglob assignment.  Its ordinary scalar result remains unchanged in
+     * every other context, preserving scalar/reference assignment semantics.
+     */
+    private static int nestedNamedTypeglobResult(BytecodeCompiler bc, Node rhs, int fallbackReg) {
+        if (!(rhs instanceof BinaryOperatorNode assignment)
+                || !assignment.operator.equals("=")
+                || !(assignment.left instanceof OperatorNode glob)
+                || !glob.operator.equals("*")
+                || !(glob.operand instanceof IdentifierNode identifier)) {
+            return fallbackReg;
+        }
+        String name = NameNormalizer.normalizeVariableName(identifier.name, bc.getCurrentPackage());
+        int globReg = bc.allocateRegister();
+        bc.emit(Opcodes.LOAD_GLOB);
+        bc.emitReg(globReg);
+        bc.emit(bc.addToStringPool(name));
+        return globReg;
+    }
+
     /** Compile whole-array refaliasing for {@code \state @array = ARRAYREF}. */
     private static boolean compileStateArrayReferenceAliasAssignment(
             BytecodeCompiler bc, BinaryOperatorNode node) {
@@ -2715,6 +2736,9 @@ public class CompileAssignment {
                 }
             }
             int valueReg = bytecodeCompiler.lastResultReg;
+            if (node.left instanceof OperatorNode globTarget && globTarget.operator.equals("*")) {
+                valueReg = nestedNamedTypeglobResult(bytecodeCompiler, node.right, valueReg);
+            }
 
             // Assign to LHS
             if (node.left instanceof OperatorNode leftOp) {
@@ -2738,7 +2762,9 @@ public class CompileAssignment {
                         bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_SCALAR);
                         bytecodeCompiler.emitReg(lvalReg);
                         bytecodeCompiler.emit(nameIdx);
-                        bytecodeCompiler.lastResultReg = lvalReg;
+                        bytecodeCompiler.lastResultReg = Boolean.TRUE.equals(
+                                node.getAnnotation("magicReadlineAssignment"))
+                                ? valueReg : lvalReg;
                     } else if (bytecodeCompiler.hasVariable(varName)) {
                         // Lexical variable - check if it's captured
                         int targetReg = bytecodeCompiler.getVariableRegister(varName);

@@ -1557,6 +1557,14 @@ public class OperatorParser {
                 ((OperatorNode) separator).operator = "quoteRegex";
             }
         }
+        // A fat comma is an ordinary list separator, including immediately
+        // after a quote-like split pattern: `split // => $text`.  The regex
+        // list parser deliberately leaves it as a terminator, so consume it
+        // here and parse the remaining argument explicitly.
+        if (TokenUtils.peek(parser).text.equals("=>")) {
+            TokenUtils.consume(parser);
+            operand.elements.add(parser.parseExpression(0));
+        }
         // If no string argument provided, default to $_
         // This is needed so both JVM and bytecode backends resolve $_ correctly
         // at runtime (the bytecode backend otherwise compiles the empty ListNode

@@ -472,6 +472,10 @@ public class ListParser {
                     // `print%;` it must start the print argument list, not
                     // be interpreted as a leading modulus operator.
                     || nextToken.text.equals(";")
+                    // `%%` is likewise a legal punctuation-named hash.  It
+                    // must begin a list expression rather than be read as a
+                    // modulus operator followed by a bare percent token.
+                    || nextToken.text.equals("%")
                     // %+ and %- are Perl's named-capture hash variables. They
                     // are tokenized as a '%' sigil followed by '+'/'-', so
                     // keep them as a variable instead of treating '%' as

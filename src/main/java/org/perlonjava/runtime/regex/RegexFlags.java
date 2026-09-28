@@ -102,8 +102,15 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
     }
 
     public static void validateModifiers(String modifiers) {
+        validateModifiers(modifiers, false);
+    }
+
+    /** /e and /r are valid only on substitutions, never on m// or qr//. */
+    public static void validateModifiers(String modifiers, boolean substitutionModifiers) {
         // Valid modifiers based on what's actually handled in fromModifiers
-        String validModifiers = "gcr?noimsxpadeulET\u0006"; // E/T and U+0006 are internal lexical flags
+        String validModifiers = substitutionModifiers
+                ? "gcr?noimsxpadeulET\u0006"
+                : "gc?noimsxpadulET\u0006"; // E/T and U+0006 are internal lexical flags
 
         for (int i = 0; i < modifiers.length(); i++) {
             char modifier = modifiers.charAt(i);

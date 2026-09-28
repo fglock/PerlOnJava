@@ -164,7 +164,11 @@ public class GlobalContext {
         GlobalVariable.globalVariables.put("main::(", new ScalarSpecialVariable(ScalarSpecialVariable.Id.REAL_GID));  // $( - real GID (lazy)
         GlobalVariable.globalVariables.put("main::)", new ScalarSpecialVariable(ScalarSpecialVariable.Id.EFFECTIVE_GID));  // $) - effective GID (lazy)
         // $^ is installed above as a per-filehandle current top-format variable.
-        GlobalVariable.getGlobalVariable("main:::");  // TODO
+        // $: (format lines per page) has Perl's historical default of
+        // space, newline, and hyphen. It is writable like an ordinary
+        // scalar, but the default is essential to code that uses it as an
+        // obfuscated substitution subject.
+        GlobalVariable.getGlobalVariable("main:::").set(" \n-");
 
         // Only set $/ if it hasn't been set yet - prevents overwriting during re-entrant calls
         if (!GlobalVariable.globalVariables.containsKey("main::/")) {

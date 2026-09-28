@@ -1445,7 +1445,41 @@ public class ArgumentParser {
 
             if (parsedArgs.processAndPrint) {
                 // Wrap the executable code in a loop that processes and prints each line
-                parsedArgs.code = "while (<>) { " + chompCode + autoSplit + executableCode + " } continue { print or die \"-p destination: $!\\n\"; }" + dataSection;
+                // A leading `}` and trailing `{` are the historical way for
+                // `-p` programs to splice their source around Perl's implicit
+                // loop.  Strip only those wrapper-boundary braces before
+                // emitting our explicit loop; the interior remains ordinary
+                // user code (and may itself be a block).
+                int firstCodeChar = 0;
+                while (firstCodeChar < executableCode.length()
+                        && Character.isWhitespace(executableCode.charAt(firstCodeChar))) {
+                    firstCodeChar++;
+                }
+                int lastCodeChar = executableCode.length() - 1;
+                while (lastCodeChar >= firstCodeChar
+                        && Character.isWhitespace(executableCode.charAt(lastCodeChar))) {
+                    lastCodeChar--;
+                }
+                boolean braceSplicesImplicitLoop = firstCodeChar < lastCodeChar
+                        && executableCode.charAt(firstCodeChar) == '}'
+                        && executableCode.charAt(lastCodeChar) == '{';
+                if (braceSplicesImplicitLoop) {
+                    executableCode = executableCode.substring(firstCodeChar + 1, lastCodeChar);
+                }
+                if (braceSplicesImplicitLoop) {
+                    // `-p -e '} CODE {'` closes Perl's implicit loop before
+                    // CODE and opens a replacement block for its continue
+                    // clause. Its print runs once after CODE, so express that
+                    // directly rather than relying on a bare block followed
+                    // by `continue`, which the frontend cannot represent.
+                    parsedArgs.code = "while (<>) { " + chompCode + autoSplit
+                            + " } " + executableCode
+                            + "; print or die \"-p destination: $!\\n\";"
+                            + dataSection;
+                } else {
+                    parsedArgs.code = "while (<>) { " + chompCode + autoSplit + executableCode
+                            + " } continue { print or die \"-p destination: $!\\n\"; }" + dataSection;
+                }
             } else if (parsedArgs.processOnly) {
                 // Wrap the executable code in a loop that processes each line without printing
                 parsedArgs.code = "while (<>) { " + chompCode + autoSplit + executableCode + " }" + dataSection;

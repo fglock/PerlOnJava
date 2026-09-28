@@ -424,6 +424,17 @@ public class Lexer {
                     }
                     break;
                 case '/':
+                    // In quote-like contexts `split//=>EXPR` uses an empty
+                    // pattern followed by Perl's fat-comma argument
+                    // separator. Leave the `=` for the next token so this
+                    // becomes `//`, `=>`, rather than `//=`, `>`.
+                    if (position + 4 <= input.length()
+                            && input.charAt(position + 1) == '/'
+                            && input.charAt(position + 2) == '='
+                            && input.charAt(position + 3) == '>') {
+                        position += 2;
+                        return new LexerToken(LexerTokenType.OPERATOR, "//");
+                    }
                     if (position + 3 <= input.length()
                             && input.charAt(position + 1) == '/'
                             && input.charAt(position + 2) == '=') {
