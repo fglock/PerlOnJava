@@ -3633,10 +3633,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         sourceArray.elements.clear();
         sourceArray.elements.add(RuntimeScalarCache.scalarUndef);
         for (String line : lines) {
-            sourceArray.elements.add(new RuntimeScalar(line + "\\n"));
+            sourceArray.elements.add(new RuntimeScalar(line + "\n"));
         }
-        sourceArray.elements.add(new RuntimeScalar("\\n"));
-        sourceArray.elements.add(new RuntimeScalar(";"));
         processLineDirectives(source, lines, tokens);
     }
 

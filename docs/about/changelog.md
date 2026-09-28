@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Retain source lines for `do FILE` under `$^P`, restoring `comp/line_debug.t`
+  compatibility on both execution backends.
+
 - Restore `op/kvhslice.t` compatibility for empty key/value slices, scalar
   warnings, invalid lvalue diagnostics, `foreach` aliases, and hash prototypes
   on both execution backends.
