@@ -686,20 +686,13 @@ public class OperatorParser {
                         || "(".equals(afterType.text);
                 if (followedBySigil) {
                     // Unambiguously a type annotation (followed by a variable sigil or paren list)
-                    // Perl validates a typed lexical while compiling the
-                    // declaration. Delaying this to an emitter leaves eval
-                    // STRING without the source diagnostic on one backend.
-                    if (!GlobalVariable.isPackageLoaded(packageName)
-                            && (packageName.contains("::")
-                            || packageName.codePoints().anyMatch(cp -> cp > 0x7F))) {
+                    if (parser.parsingForLoopVariable && !GlobalVariable.isPackageLoaded(packageName)) {
                         parser.throwCleanError("No such class " + packageName);
                     }
                     varType = packageName;
                 } else if ("=".equals(afterType.text)
                         && packageName.codePoints().anyMatch(cp -> cp > 0x7F)
                         && !GlobalVariable.isPackageLoaded(packageName)) {
-                    // A non-ASCII type-like token can be erased by declaration
-                    // parsing in eval STRING; preserve Perl's class diagnostic.
                     parser.throwCleanError("No such class " + packageName);
                 } else if (GlobalVariable.isPackageLoaded(packageName)) {
                     varType = packageName;
