@@ -312,6 +312,8 @@ public class ReferenceOperators {
                 if (runtimeScalar.value instanceof RuntimeScalar scalar) {
                     if (scalar instanceof RuntimeSubstrLvalue) {
                         ref = "LVALUE";
+                    } else if (scalar.isLvalueScalar()) {
+                        ref = "LVALUE";
                     } else if (scalar.firstClassRegexScalar) {
                         ref = "REGEXP";
                     } else {
@@ -353,7 +355,8 @@ public class ReferenceOperators {
                 } else if (runtimeScalar.value instanceof RuntimeIO) {
                     // IO slot access (*{$fh}{IO}) returns IO::Handle class in Perl 5
                     blessId = ((RuntimeBase) runtimeScalar.value).blessId;
-                    str = blessId == 0 ? "IO::Handle" : NameNormalizer.getBlessStr(blessId);
+                    str = blessId == 0 ? ((RuntimeIO) runtimeScalar.value).perlReferenceClassName()
+                            : NameNormalizer.getBlessStr(blessId);
                 } else {
                     blessId = ((RuntimeBase) runtimeScalar.value).blessId;
                     str = blessId == 0 ? "GLOB" : NameNormalizer.getBlessStr(blessId);

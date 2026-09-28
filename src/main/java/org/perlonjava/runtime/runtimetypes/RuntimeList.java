@@ -629,6 +629,20 @@ public class RuntimeList extends RuntimeBase {
                 return flattenElements();
             }
         }
+        // A range contributes its scalar values to the surrounding list even
+        // when other scalar elements are present: \(1..2, 3) is three scalar
+        // references, not a reference to the range plus a reference to 3.
+        if (elements.stream().anyMatch(element -> element instanceof PerlRange)) {
+            RuntimeList expanded = new RuntimeList();
+            for (RuntimeBase element : elements) {
+                if (element instanceof PerlRange range) {
+                    for (RuntimeScalar scalar : range) expanded.elements.add(scalar);
+                } else {
+                    expanded.elements.add(element);
+                }
+            }
+            return expanded;
+        }
         return this;
     }
 

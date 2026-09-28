@@ -1644,7 +1644,18 @@ public class RuntimeIO extends RuntimeScalar {
         //         ? ref
         //         : NameNormalizer.getBlessStr(blessId) + "=" + ref);
 
-        return "IO(0x" + this.hashCode() + ")";
+        String className = isStandardHandle() ? "IO::File=" : "";
+        return className + "IO(0x" + this.hashCode() + ")";
+    }
+
+    /** Perl's standard filehandles are IO::File objects; other handles are IO::Handle. */
+    public boolean isStandardHandle() {
+        return globName != null && (globName.equals("main::STDIN")
+                || globName.equals("main::STDOUT") || globName.equals("main::STDERR"));
+    }
+
+    public String perlReferenceClassName() {
+        return isStandardHandle() ? "IO::File" : "IO::Handle";
     }
 
     /**

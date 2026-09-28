@@ -248,9 +248,12 @@ public class Re extends PerlModuleBase {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for isRegexp() method");
         }
-        return new RuntimeList(
-                new RuntimeScalar(args.get(0).type == RuntimeScalarType.REGEX)
-        );
+        RuntimeScalar arg = args.get(0);
+        if (arg.type == RuntimeScalarType.REFERENCE && arg.value instanceof RuntimeScalar referent) {
+            arg = referent;
+        }
+        return new RuntimeList(new RuntimeScalar(
+                arg.type == RuntimeScalarType.REGEX || arg.firstClassRegexScalar));
     }
 
     /**

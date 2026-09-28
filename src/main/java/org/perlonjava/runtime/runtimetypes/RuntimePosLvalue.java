@@ -260,6 +260,10 @@ public class RuntimePosLvalue {
     }
 
     private static class PosLvalueScalar extends RuntimeScalar {
+        @Override
+        public boolean isLvalueScalar() {
+            return true;
+        }
         private final RuntimeScalar target;
         private boolean regexPublished;
 
@@ -328,6 +332,10 @@ public class RuntimePosLvalue {
     }
 
     private static final class BytePosLvalueScalar extends RuntimeScalar {
+        @Override
+        public boolean isLvalueScalar() {
+            return true;
+        }
         private final RuntimeScalar target;
         private final RuntimeScalar characterPosition;
 

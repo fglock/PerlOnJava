@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore `op/ref.t` compatibility for regexp, lvalue, blessed-reference,
+  standard-IO, and range refgen semantics on both execution backends.
+
 - Restore `op/kvhslice.t` compatibility for empty key/value slices, scalar
   warnings, invalid lvalue diagnostics, `foreach` aliases, and hash prototypes
   on both execution backends.
