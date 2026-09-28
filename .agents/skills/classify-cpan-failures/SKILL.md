@@ -144,6 +144,32 @@ Search for duplicate or related issues before proposing a new one, using the
 distribution/module name, stable failing test names, and the confirmed
 PerlOnJava cause. Record the search result in the classification notes. If a
 related issue exists, recommend a follow-up there rather than a duplicate.
+
+### GitHub access fallback
+
+Use the GitHub CLI for the duplicate search when it is connected. Check its
+state first:
+
+```bash
+gh auth status --hostname github.com
+```
+
+If it is not authenticated, connect interactively without exposing a token:
+
+```bash
+gh auth login --hostname github.com --web
+```
+
+If a previously authenticated CLI reports an API connectivity error, retry the
+read-only search once. Authentication does not repair a network, VPN, proxy,
+or GitHub outage. When the API remains unavailable, use an available
+read-only web search restricted to `github.com/<owner>/<repo>/issues` with the
+module name, stable failing test name, and confirmed cause. Do not treat an
+unavailable API or an incomplete web index as proof that no duplicate exists.
+Record the duplicate check as inconclusive, including the failed access method,
+and continue the classification; do not attempt an issue creation or comment
+until GitHub access is restored and the user explicitly authorizes that write.
+
 For a new issue, apply an existing appropriate label (normally `bug`, and any
 other already-existing project label that accurately describes the confirmed
 cause); never create a new label just for an isolated CPAN failure. Include
