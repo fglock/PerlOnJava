@@ -38,15 +38,23 @@ sub profile_for_test {
         };
     }
 
-    # Direct pat and anyof runs sustain enough allocation/GC pressure that at
-    # most two should share a ten-unit budget.
-    if ($normalized_file =~ m{
-          (?:^|/)(?:perl5_t/t/)?re/pat\.t$
-        | (?:^|/)(?:perl5_t/t/)?re/anyof(?:_thr)?\.t$
-    }x) {
+    # Direct pat runs sustain enough allocation/GC pressure that at most two
+    # should share a ten-unit budget.
+    if ($normalized_file =~ m{(?:^|/)(?:perl5_t/t/)?re/pat\.t$}) {
         return {
             class => 'heavy',
             weight => 5,
+        };
+    }
+
+    # anyof is the longest compatibility fixture, but weight it below the
+    # five-unit default budget so one ordinary test can overlap it. This keeps
+    # the slowest test off the tail of a UAT without creating an exclusive
+    # phase on the standard --jobs 5 invocation.
+    if ($normalized_file =~ m{(?:^|/)(?:perl5_t/t/)?re/anyof(?:_thr)?\.t$}) {
+        return {
+            class => 'heavy',
+            weight => 4,
         };
     }
 
