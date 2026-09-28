@@ -3075,7 +3075,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         yield scalar.toString();
                     }
                     if (scalar.isLvalueScalar()) {
-                        yield "LVALUE(0x" + ((RuntimeBase) value).referenceAddressHex() + ")";
+                        String lvalueRef = "LVALUE(0x" + ((RuntimeBase) value).referenceAddressHex() + ")";
+                        yield valueBlessId == 0
+                                ? lvalueRef
+                                : NameNormalizer.getBlessStr(valueBlessId) + "=" + lvalueRef;
                     }
                     typeName = switch (scalar.type) {
                         case VSTRING -> "VSTRING";

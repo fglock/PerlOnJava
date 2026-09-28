@@ -857,7 +857,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     // Perl arrays do not retain trailing nonexistent slots after
                     // deleting the last existing element. This matters for sparse
                     // arrays and for restoring a localized high tied index.
-                    while (!elements.isEmpty() && elements.getLast() == null) {
+                    while (!elements.isEmpty() && isEmptySlot(elements.getLast())) {
                         elements.removeLast();
                     }
                     yield previous;
@@ -1022,12 +1022,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     if (idx == self.elements.size() - 1) {
                         // Last element - actually remove it
                         self.elements.removeLast();
-                        while (!self.elements.isEmpty() && self.elements.getLast() == null) {
+                        while (!self.elements.isEmpty() && isEmptySlot(self.elements.getLast())) {
                             self.elements.removeLast();
                         }
                     } else {
                         self.elements.set(idx, null);
-                        while (!self.elements.isEmpty() && self.elements.getLast() == null) {
+                        while (!self.elements.isEmpty() && isEmptySlot(self.elements.getLast())) {
                             self.elements.removeLast();
                         }
                     }
@@ -1054,7 +1054,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                         self.elements.removeLast();
                     }
                     while (self.elements.size() > savedSize
-                            && self.elements.getLast() == null) {
+                            && isEmptySlot(self.elements.getLast())) {
                         self.elements.removeLast();
                     }
                 }
@@ -1080,6 +1080,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * lvalue. Unlike localizing the fetched scalar in place, this also works
      * when the old element aliases a read-only literal through {@code @_}.
      */
+    /** A sparse hole may be represented by an unvivified proxy after an lvalue read. */
+    static boolean isEmptySlot(RuntimeScalar value) {
+        return value == null || (value instanceof RuntimeArrayProxyEntry proxy && !proxy.hasLvalue());
+    }
+
     public RuntimeScalar localize(int index) {
         deleteLocal(index);
         return get(index);
