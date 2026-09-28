@@ -15,7 +15,8 @@ my $pat_thr = profile_for_test('perl5_t/t/re/pat_thr.t');
 my $anyof = profile_for_test('perl5_t/t/re/anyof.t');
 
 is($pat->{weight}, 5, 'direct pat consumes half of a ten-unit budget');
-is($anyof->{weight}, 5, 'direct anyof consumes half of a ten-unit budget');
+is($anyof->{weight}, 4,
+    'direct anyof leaves one unit for ordinary work in a ten-unit budget');
 is($pat_thr->{weight}, 10,
     'threaded pat consumes the complete ten-unit budget');
 
@@ -36,9 +37,10 @@ while (1) {
     push @started, $test->{profile}{weight};
 }
 
-is_deeply(\@started, [5, 5],
-    'direct pat and anyof share the initial budget');
-is($active_weight, 10, 'initial pat resource admission fills the budget');
+is_deeply(\@started, [5, 4],
+    'direct pat and anyof share the initial budget without filling it');
+is($active_weight, 9,
+    'initial pat and anyof admission leaves one ordinary-work unit');
 is(scalar(@queue), 1, 'threaded pat waits for the direct gates');
 is($queue[0]{profile}{weight}, 10,
     'threaded pat is the sole deferred resource gate');
