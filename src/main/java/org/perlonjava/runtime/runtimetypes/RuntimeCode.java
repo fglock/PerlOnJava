@@ -5387,6 +5387,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (DebugState.isDebugMode()) {
                         RuntimeArray frameArgs = DebugState.getArgsForFrame(frame);
                         if (frameArgs != null) {
+                            frameArgs.clearStaleLocalArrayAliases();
                             dbArgs.setFromListAliased(frameArgs.getList());
                         } else {
                             dbArgs.setFromListAliased(new RuntimeList());
@@ -5412,6 +5413,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             frameArgs = getOriginalArgsAt(trackedActiveCodeFrame);
                         }
                         if (frameArgs != null) {
+                            frameArgs.clearStaleLocalArrayAliases();
                             dbArgs.setFromListAliased(frameArgs.getList());
                         } else {
                             dbArgs.setFromListAliased(new RuntimeList());

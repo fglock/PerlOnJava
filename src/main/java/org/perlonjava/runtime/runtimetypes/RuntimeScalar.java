@@ -1610,9 +1610,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
         arr.elements.add(this);
         arr.elementsAliased = true;
-        if (localArrayOwner != null) {
-            localArrayOwner.markCallArgumentElement(this);
-        }
         return arr;
     }
 

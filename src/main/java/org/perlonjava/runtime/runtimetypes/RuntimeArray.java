@@ -85,7 +85,6 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     private boolean elementSlotsAliasedIntoCallFrame;
     // Individual array cells passed as scalar arguments also alias a callee's
     // @_ even though the complete array was not expanded at the call site.
-    private Set<RuntimeScalar> callFrameAliasedElements;
     private int activeScalarLocalElements;
     private boolean scalarLocalContainerCleared;
 
@@ -1293,7 +1292,6 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
         notePackageRootMutation();
         MortalList.deferDestroyForContainerClear(this.elements);
-        invalidateCallAliasedElementSlots();
         this.elements.clear();
         this.ownedAliasElements = null;
         this.elementsAliased = false;
@@ -1339,11 +1337,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                             listCopy.elements.add(elem);
                         }
                     }
-                invalidateCallAliasedElementSlots();
                 this.elements.clear();
                     listCopy.addToArray(this);
                 } else {
-                    invalidateCallAliasedElementSlots();
                     this.elements.clear();
                     list.addToArray(this);
                 }
@@ -1919,15 +1915,6 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         elementSlotsAliasedIntoCallFrame = true;
     }
 
-    /** Marks one existing source slot as aliased into an active call frame. */
-    void markCallArgumentElement(RuntimeScalar element) {
-        if (element == null || !elements.contains(element)) return;
-        if (callFrameAliasedElements == null) {
-            callFrameAliasedElements = Collections.newSetFromMap(new IdentityHashMap<>());
-        }
-        callFrameAliasedElements.add(element);
-    }
-
     @Override
     public RuntimeArray getTailCallArrayOfAlias() {
         RuntimeArray arr = getArrayOfAlias();
@@ -2054,24 +2041,30 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         notePackageRootMutation();
         markScalarLocalContainerCleared();
         MortalList.deferDestroyForContainerClear(this.elements);
-        invalidateCallAliasedElementSlots();
-        this.elements.clear();
-        MortalList.flush();
-        return this;
-    }
-
-    private void invalidateCallAliasedElementSlots() {
-        if (elementSlotsAliasedIntoCallFrame || callFrameAliasedElements != null) {
+        if (elementSlotsAliasedIntoCallFrame) {
             for (RuntimeScalar element : this.elements) {
                 if (element != null
-                        && (elementSlotsAliasedIntoCallFrame
-                                || callFrameAliasedElements.contains(element))
                         && (element.type & RuntimeScalarType.REFERENCE_BIT) == 0) {
                     element.clearForArraySlotRemoval();
                 }
             }
         }
-        callFrameAliasedElements = null;
+        this.elements.clear();
+        MortalList.flush();
+        return this;
+    }
+
+    /** Clears argument aliases whose source array slot was removed meanwhile. */
+    public void clearStaleLocalArrayAliases() {
+        for (RuntimeScalar element : elements) {
+            if (element == null || element.localArrayOwner == null) continue;
+            RuntimeArray owner = element.localArrayOwner;
+            int index = element.localArrayIndex;
+            if (index < 0 || index >= owner.elements.size()
+                    || owner.elements.get(index) != element) {
+                element.clearForArraySlotRemoval();
+            }
+        }
     }
 
     /**
