@@ -90,11 +90,16 @@ cleanup behavior.
 - [x] Remove obsolete exclusive lane (2026-09-25)
   - JAPH private-overlay tests now run under the shared weighted scheduler.
   - Removed exclusive profile/barrier handling and the serial test phase.
+- [x] Remove legacy CPU-heavy phase barrier (2026-09-28)
+  - `--cpu-heavy-jobs` now supplies a concurrent resource cap instead of
+    splitting ordinary and CPU-heavy fixtures into consecutive phases.
+  - Added regression coverage that proves ordinary and CPU-heavy fixtures
+    overlap when both caps have capacity.
 
 ### Next Steps
 
 1. Verify Linux and Windows CI semantic-result parity and cleanup behavior.
-2. Revisit weight three only if cross-platform memory or timeout evidence
+2. Revisit weight three and compatibility resource caps only if cross-platform memory or timeout evidence
    requires adjustment.
 
 ### Open Questions

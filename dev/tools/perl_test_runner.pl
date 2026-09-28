@@ -134,23 +134,19 @@ print "Running tests with $jperl_path (${jobs}-unit resource budget, "
     . "all tests share the scheduling budget)\n";
 print "-" x 60, "\n";
 
-# Use one scheduling budget for the complete corpus. Ordinary tests consume one
+# Use one scheduling plan for the complete corpus. Ordinary tests consume one
 # unit and heavy semantic fixtures consume more. Stable longest-first classes
-# start known slow work early, then
-# use the more uniform ordinary files to fill the remaining resource budget.
+# start known slow work early, then use the more uniform ordinary files to fill
+# the remaining resource budget.
 if (defined $cpu_heavy_jobs) {
-    my (@parallel_tests, @cpu_heavy_tests);
-    for my $test (@indexed_tests) {
-        if (requires_cpu_heavy_slot($test->{test_file})) {
-            push @cpu_heavy_tests, $test;
-        } else {
-            push @parallel_tests, $test;
-        }
-    }
-    print "Running tests with $jperl_path (${jobs} parallel jobs, ${timeout}s base timeout; "
-        . scalar(@cpu_heavy_tests) . " CPU-heavy tests use ${cpu_heavy_jobs} jobs)\n";
-    run_tests_parallel(\@parallel_tests, $test_dir, $jobs, $total_files);
-    run_tests_parallel(\@cpu_heavy_tests, $test_dir, $cpu_heavy_jobs, $total_files);
+    my $cpu_heavy_count = grep {
+        requires_cpu_heavy_slot($_->{test_file})
+    } @indexed_tests;
+    print "Running tests with $jperl_path (${jobs} ordinary jobs, ${timeout}s base timeout; "
+        . "$cpu_heavy_count CPU-heavy tests use ${cpu_heavy_jobs} jobs within the shared scheduler)\n";
+    run_tests_shared_resources(
+        \@indexed_tests, $test_dir, $jobs, $cpu_heavy_jobs, $total_files,
+    );
 } else {
     print "Running tests with $jperl_path (${jobs}-unit resource budget, "
         . "${timeout}s base timeout; $heavy_count weighted heavy, "
@@ -232,32 +228,58 @@ sub is_excluded_test_file {
     return 0;
 }
 
-sub run_tests_parallel {
-    my ($test_files, $test_dir, $max_jobs, $total_files) = @_;
+sub run_tests_shared_resources {
+    my ($test_files, $test_dir, $ordinary_jobs, $cpu_heavy_jobs, $total_files) = @_;
     my %children;
     my @test_queue = @$test_files;
-    my $completed = 0;
+    my ($active_ordinary, $active_cpu_heavy) = (0, 0);
     local $SIG{CHLD} = 'DEFAULT';
 
-    while (@test_queue && keys(%children) < $max_jobs) {
-        start_test_job(\@test_queue, \%children, $total_files, 0);
-    }
     while (%children || @test_queue) {
+        # The legacy CPU-heavy cap is a concurrent resource limit, never a
+        # phase barrier. Admit the long CPU-heavy work first, then immediately
+        # fill ordinary capacity so no fixture waits for an unrelated class to
+        # drain.
+        while ($active_cpu_heavy < $cpu_heavy_jobs) {
+            my $queue_index = next_resource_index(\@test_queue, 1);
+            last unless defined $queue_index;
+            $test_queue[$queue_index]{resource_class} = 'cpu-heavy';
+            start_test_job(\@test_queue, \%children, $total_files, $queue_index);
+            $active_cpu_heavy++;
+        }
+        while ($active_ordinary < $ordinary_jobs) {
+            my $queue_index = next_resource_index(\@test_queue, 0);
+            last unless defined $queue_index;
+            $test_queue[$queue_index]{resource_class} = 'ordinary';
+            start_test_job(\@test_queue, \%children, $total_files, $queue_index);
+            $active_ordinary++;
+        }
+
         for my $pid (keys %children) {
             my $res = waitpid($pid, WNOHANG);
             if ($res > 0) {
                 my $test_info = delete $children{$pid};
                 process_test_result($test_info, $test_dir);
-                $completed++;
-                start_test_job(\@test_queue, \%children, $total_files, 0)
-                    if @test_queue && keys(%children) < $max_jobs;
+                $active_cpu_heavy-- if $test_info->{resource_class} eq 'cpu-heavy';
+                $active_ordinary-- if $test_info->{resource_class} eq 'ordinary';
             } elsif ($res < 0) {
                 warn "Warning: Lost track of child $pid\n";
-                delete $children{$pid};
+                my $test_info = delete $children{$pid};
+                $active_cpu_heavy-- if $test_info->{resource_class} eq 'cpu-heavy';
+                $active_ordinary-- if $test_info->{resource_class} eq 'ordinary';
             }
         }
         select(undef, undef, undef, 0.05) if %children;
     }
+}
+
+sub next_resource_index {
+    my ($test_queue, $cpu_heavy) = @_;
+    for my $index (0 .. $#$test_queue) {
+        return $index if requires_cpu_heavy_slot($test_queue->[$index]{test_file})
+            == $cpu_heavy;
+    }
+    return;
 }
 
 sub run_tests_weighted {
@@ -752,6 +774,7 @@ sub start_test_job {
             start_time => time(),
             child_pid => $pid,
             scheduler_weight => $test->{scheduler_weight},
+            resource_class => $test->{resource_class},
         };
     }
 }
@@ -1165,7 +1188,8 @@ Options:
                    subprocess-heavy tests have a documented minimum)
   --jobs|-j NUM    Total scheduling-unit budget (default: 5)
   --cpu-heavy-jobs NUM
-                   Use the legacy dedicated CPU-heavy lane (optional)
+                   Limit CPU-heavy fixtures without creating an exclusive
+                   phase (optional, compatibility mode)
   --output FILE    Save detailed results to JSON file
   --strict-exit    Exit nonzero if any file fails, errors, times out, or is incomplete
   --help           Show this help message

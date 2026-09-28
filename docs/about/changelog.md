@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Run CPU-heavy and ordinary Perl test fixtures concurrently when using the
+  runner's compatibility resource caps, while admitting long-running work
+  first.
+
 - Restore `op/ref.t` compatibility for regexp, lvalue, blessed-reference,
   standard-IO, and range refgen semantics on both execution backends.
 
