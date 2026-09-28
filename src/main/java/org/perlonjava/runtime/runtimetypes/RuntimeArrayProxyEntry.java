@@ -23,6 +23,9 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
     private final RuntimeArray parent;
     // Index associated with this proxy in the parent array
     private final int key;
+    // Preserve the source subscript for diagnostics after negative-index
+    // normalization (for example, $a[-5] on a four-element array).
+    private final int diagnosticKey;
 
     /**
      * Constructs a RuntimeArrayProxyEntry for a given index in the specified parent array.
@@ -31,10 +34,25 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
      * @param key    the index in the array for which this proxy is created
      */
     public RuntimeArrayProxyEntry(RuntimeArray parent, int key) {
+        this(parent, key, key);
+    }
+
+    public RuntimeArrayProxyEntry(RuntimeArray parent, int key, int diagnosticKey) {
         super();
         this.parent = parent;
         this.key = key;
+        this.diagnosticKey = diagnosticKey;
         // Note: this.type is RuntimeScalarType.UNDEF
+    }
+
+    /**
+     * A sparse-slot proxy can itself occupy the array's hole.  Resolve its
+     * current physical position so structural mutations performed while an
+     * alias is live do not redirect a later write to the old numeric index.
+     */
+    private int currentKey() {
+        int moved = parent.elements.indexOf(this);
+        return moved >= 0 ? moved : key;
     }
 
     /** Parent aggregate, used for diagnostics that retain an element's identity. */
@@ -57,15 +75,16 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
     public RuntimeScalar aliasToReference(RuntimeScalar reference) {
         if (parent.threadShared) SharedPerlStorage.validateStoredValue(reference);
         RuntimeScalar referent = reference.refAliasScalarReference();
-        if (key < 0) {
+        int currentKey = currentKey();
+        if (currentKey < 0) {
             throw new PerlCompilerException(
-                    "Modification of non-creatable array value attempted, subscript " + key);
+                    "Modification of non-creatable array value attempted, subscript " + diagnosticKey);
         }
         parent.notePackageRootMutation();
-        while (key >= parent.elements.size()) {
+        while (currentKey >= parent.elements.size()) {
             parent.elements.add(null);
         }
-        parent.elements.set(key, referent);
+        parent.elements.set(currentKey, referent);
         parent.markPackageRootedValue(referent);
         this.lvalue = referent;
         this.type = referent.type;
@@ -95,8 +114,10 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
         if (lvalue == null) {
             // Check if the element already exists (e.g., a tied scalar)
             List<RuntimeScalar> elements = parent.elements;
-            if (key >= 0 && key < elements.size() && elements.get(key) != null) {
-                lvalue = elements.get(key);
+            int currentKey = currentKey();
+            if (currentKey >= 0 && currentKey < elements.size() && elements.get(currentKey) != null
+                    && elements.get(currentKey) != this) {
+                lvalue = elements.get(currentKey);
                 parent.markPackageRootedValue(lvalue);
             } else {
                 vivify();
@@ -115,9 +136,10 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
             if (parent.type == RuntimeArray.READONLY_ARRAY) {
                 throw new PerlCompilerException("Modification of a read-only value attempted");
             }
-            if (key < 0) {
+            int currentKey = currentKey();
+            if (currentKey < 0) {
                 throw new PerlCompilerException(
-                        "Modification of non-creatable array value attempted, subscript " + key);
+                        "Modification of non-creatable array value attempted, subscript " + diagnosticKey);
             }
             lvalue = new RuntimeScalar();
 
@@ -130,36 +152,42 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
 
             // Expand the array if needed
             parent.notePackageRootMutation();
-            while (key >= elements.size()) {
+            while (currentKey >= elements.size()) {
                 elements.add(null); // Add null placeholders
             }
 
             // Set the element at the index
-            elements.set(key, lvalue);
+            elements.set(currentKey, lvalue);
             parent.markPackageRootedValue(lvalue);
         }
     }
 
     @Override
     RuntimeScalar posStorage() {
-        if (lvalue == null && key >= 0 && key < parent.elements.size()) {
-            lvalue = parent.elements.get(key);
+        int currentKey = currentKey();
+        if (lvalue == null && currentKey >= 0 && currentKey < parent.elements.size()
+                && parent.elements.get(currentKey) != this) {
+            lvalue = parent.elements.get(currentKey);
         }
         return lvalue == null ? this : lvalue.posStorage();
     }
 
     @Override
     public RuntimeArray setArrayOfAlias(RuntimeArray array) {
-        if (lvalue == null && key >= 0 && key < parent.elements.size()) {
-            lvalue = parent.elements.get(key);
+        int currentKey = currentKey();
+        if (lvalue == null && currentKey >= 0 && currentKey < parent.elements.size()
+                && parent.elements.get(currentKey) != this) {
+            lvalue = parent.elements.get(currentKey);
         }
         return lvalue == null ? super.setArrayOfAlias(array) : lvalue.setArrayOfAlias(array);
     }
 
     @Override
     public String toString() {
-        if (lvalue == null && key >= 0 && key < parent.elements.size()) {
-            lvalue = parent.elements.get(key);
+        int currentKey = currentKey();
+        if (lvalue == null && currentKey >= 0 && currentKey < parent.elements.size()
+                && parent.elements.get(currentKey) != this) {
+            lvalue = parent.elements.get(currentKey);
         }
         return lvalue == null ? super.toString() : lvalue.toString();
     }
@@ -228,11 +256,14 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
             if (previousState == null && key >= previousSize) {
                 // Remove the localized hole itself while retaining values
                 // assigned to intervening indices during the scope.
-                if (key < parent.elements.size()) {
-                    parent.elements.set(key, null);
+                // Structural array operations can move the proxy, so remove
+                // its current physical slot rather than the original index.
+                int currentKey = currentKey();
+                if (currentKey >= 0 && currentKey < parent.elements.size()) {
+                    parent.elements.set(currentKey, null);
                 }
                 while (parent.elements.size() > previousSize
-                        && parent.elements.getLast() == null) {
+                        && isEmptyPlaceholder(parent.elements.getLast())) {
                     parent.elements.removeLast();
                 }
                 return;
@@ -244,5 +275,9 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
                 parent.elements.removeLast();
             }
         }
+    }
+
+    private static boolean isEmptyPlaceholder(RuntimeScalar value) {
+        return value == null || (value.type & RuntimeScalarType.UNDEF) != 0;
     }
 }

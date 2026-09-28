@@ -29,6 +29,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
     /** Outstanding {@code $#array} proxies; retained only for lexical teardown. */
     private List<RuntimeArraySizeLvalue> arraySizeLvalues;
+    /** Number of pre-existing $# proxies at each local-array entry. */
+    private final Stack<Integer> localArraySizeLvalueCounts = new Stack<>();
 
     void registerArraySizeLvalue(RuntimeArraySizeLvalue proxy) {
         if (arraySizeLvalues == null) arraySizeLvalues = new ArrayList<>();
@@ -42,6 +44,16 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             proxy.orphan();
         }
         arraySizeLvalues.clear();
+    }
+
+    private void orphanLocalArraySizeLvalues() {
+        int preservedCount = localArraySizeLvalueCounts.isEmpty() ? 0
+                : localArraySizeLvalueCounts.pop();
+        if (arraySizeLvalues == null) return;
+        for (int i = arraySizeLvalues.size() - 1; i >= preservedCount; i--) {
+            arraySizeLvalues.get(i).orphan();
+            arraySizeLvalues.remove(i);
+        }
     }
 
     public static final int PLAIN_ARRAY = 0;
@@ -792,7 +804,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 }
                 // Check if the element at index is null
                 RuntimeScalar element = elements.get(index);
-                yield (element == null) ? scalarFalse : scalarTrue;
+                yield (element == null || (element instanceof RuntimeArrayProxyEntry proxy
+                        && !proxy.hasLvalue())) ? scalarFalse : scalarTrue;
             }
             case AUTOVIVIFY_ARRAY -> scalarFalse;
             case TIED_ARRAY -> {
@@ -813,7 +826,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     yield scalarFalse;
                 }
                 RuntimeScalar element = elements.get(index);
-                yield (element == null) ? scalarFalse : scalarTrue;
+                yield (element == null || (element instanceof RuntimeArrayProxyEntry proxy
+                        && !proxy.hasLvalue())) ? scalarFalse : scalarTrue;
             }
             default -> throw new IllegalStateException("Unknown array type: " + type);
         };
@@ -1116,19 +1130,30 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             AutovivificationArray.vivify(this);
         }
 
+        int originalIndex = index;
         if (index < 0) {
             index = elements.size() + index; // Handle negative indices
+            // Perl's aliased sparse-slot path retains the hole immediately
+            // before the ordinary negative-index position (perl #118691).
+            // This matters when the resulting lvalue is passed through @_.
+            if (index >= 0 && index < elements.size() && elements.get(index) == null) {
+                index--;
+            }
         }
         if (index < 0 || index >= elements.size()) {
             // Lazy autovivification
-            return new RuntimeArrayProxyEntry(this, index);
+            return new RuntimeArrayProxyEntry(this, index, originalIndex);
         }
 
         // Check if the element is null and return proxy if it is
         RuntimeScalar element = elements.get(index);
         if (element == null) {
-            // Lazy autovivification for null elements
-            return new RuntimeArrayProxyEntry(RuntimeArray.this, index);
+            // Retain a physical proxy for a sparse slot so an alias obtained
+            // through a call argument follows that slot after structural
+            // changes.  Out-of-range reads remain detached proxies above.
+            RuntimeArrayProxyEntry proxy = new RuntimeArrayProxyEntry(this, index, originalIndex);
+            elements.set(index, proxy);
+            return proxy;
         }
 
         element.recordLocalArrayOwner(this, index);
@@ -1143,10 +1168,25 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         if (this.type == AUTOVIVIFY_ARRAY) {
             AutovivificationArray.vivify(this);
         }
+        int originalIndex = index;
         if (index < 0) {
             index = elements.size() + index;
+            if (index >= 0 && index < elements.size() && elements.get(index) == null) {
+                index--;
+            }
         }
-        return new RuntimeArrayProxyEntry(this, index);
+        if (index < 0 || index >= elements.size()) {
+            return new RuntimeArrayProxyEntry(this, index, originalIndex);
+        }
+        RuntimeScalar element = elements.get(index);
+        if (element == null) {
+            RuntimeArrayProxyEntry proxy = new RuntimeArrayProxyEntry(this, index, originalIndex);
+            elements.set(index, proxy);
+            return proxy;
+        }
+        // Keep an lvalue proxy even for an existing slot: refaliasing may
+        // replace a read-only element with a new referent.
+        return new RuntimeArrayProxyEntry(this, index, originalIndex);
     }
 
     /** Scalar-index variant of {@link #getLvalue(int)}. */
@@ -1206,19 +1246,24 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
 
         int index = value.getInt();
+        int originalIndex = index;
         if (index < 0) {
             index = elements.size() + index; // Handle negative indices
+            if (index >= 0 && index < elements.size() && elements.get(index) == null) {
+                index--;
+            }
         }
         if (index < 0 || index >= elements.size()) {
             // Lazy autovivification
-            return new RuntimeArrayProxyEntry(this, index);
+            return new RuntimeArrayProxyEntry(this, index, originalIndex);
         }
 
         // Check if the element is null and return proxy if it is
         RuntimeScalar element = elements.get(index);
         if (element == null) {
-            // Lazy autovivification for null elements
-            return new RuntimeArrayProxyEntry(RuntimeArray.this, index);
+            RuntimeArrayProxyEntry proxy = new RuntimeArrayProxyEntry(this, index, originalIndex);
+            elements.set(index, proxy);
+            return proxy;
         }
 
         element.recordLocalArrayOwner(this, index);
@@ -1582,7 +1627,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     /** Returns the array's actual element cells for a list-lvalue consumer. */
     public RuntimeList getLvalueList() {
         RuntimeList result = new RuntimeList();
-        result.elements.addAll(this.elements);
+        // Preserve sparse slots as physical proxy entries.  List-lvalue
+        // consumers such as map alias each member and may structurally mutate
+        // the source array before writing through that alias.
+        for (int i = 0; i < elements.size(); i++) {
+            result.elements.add(get(i));
+        }
         return result;
     }
 
@@ -2054,6 +2104,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      */
     @Override
     public void dynamicSaveState() {
+        localArraySizeLvalueCounts.push(arraySizeLvalues == null ? 0 : arraySizeLvalues.size());
         // Create a new RuntimeArray to save the current state
         RuntimeArray currentState = new RuntimeArray();
         // Copy the current elements to the new state
@@ -2091,6 +2142,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         if (!dynamicStateStack.isEmpty()) {
             // Pop the most recent saved state from the stack
             RuntimeArray previousState = dynamicStateStack.pop();
+            // $# proxies made while a local array state was active refer to
+            // that temporary AV and become orphaned at restoration.  Keep
+            // proxies that predate the local scope attached to the restored
+            // outer array.
+            orphanLocalArraySizeLvalues();
             // Before discarding the current (local scope's) elements, defer
             // refCount decrements for any tracked blessed references they own.
             // Without this, `local @_ = ($obj)` where $obj is tracked would
@@ -2180,9 +2236,14 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             RuntimeScalar element = elements.get(currentIndex);
             currentIndex++;
 
-            // Return a proxy entry if the element is null
+            // Keep a sparse-slot proxy in the parent array so an lvalue alias
+            // obtained by map/foreach follows this physical slot if the array
+            // is structurally modified before the alias is assigned.
             if (element == null) {
-                return new RuntimeArrayProxyEntry(RuntimeArray.this, currentIndex - 1);
+                RuntimeArrayProxyEntry proxy = new RuntimeArrayProxyEntry(
+                        RuntimeArray.this, currentIndex - 1);
+                elements.set(currentIndex - 1, proxy);
+                return proxy;
             }
 
             return element;

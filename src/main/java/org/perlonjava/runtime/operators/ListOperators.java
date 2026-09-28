@@ -81,6 +81,13 @@ public class ListOperators {
                         && cfList.getControlFlowType() == ControlFlowType.RETURN) {
                     throw new PerlNonLocalReturnException(cfList.getReturnValue());
                 }
+                // A goto leaving a map block must leave the map itself.  Do
+                // not continue iterating a snapshot after the target scope
+                // has changed; in particular that would run additional
+                // sparse-slot aliases after a structural array mutation.
+                if (result instanceof RuntimeControlFlowList cfList) {
+                    return cfList;
+                }
 
                 // `result` list contains aliases to the original array;
                 // We need to make copies of the result elements

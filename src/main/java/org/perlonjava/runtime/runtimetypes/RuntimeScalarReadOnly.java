@@ -302,7 +302,9 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
     public RuntimeArray arrayDerefNonStrict(String packageName) {
         // Don't call vivify() for read-only scalars
         // For symbolic references, look up the global variable
-        if (this.type == RuntimeScalarType.STRING || this.type == RuntimeScalarType.BYTE_STRING) {
+        if (this.type == RuntimeScalarType.STRING || this.type == RuntimeScalarType.BYTE_STRING
+                || this.type == RuntimeScalarType.INTEGER || this.type == RuntimeScalarType.DOUBLE
+                || this.type == RuntimeScalarType.BOOLEAN || this.type == RuntimeScalarType.DUALVAR) {
             String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
             return GlobalVariable.getGlobalArray(varName);
         }
