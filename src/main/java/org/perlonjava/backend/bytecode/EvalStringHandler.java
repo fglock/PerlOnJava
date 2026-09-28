@@ -644,12 +644,14 @@ public class EvalStringHandler {
                     : new RuntimeArray();
             RuntimeList result;
             RuntimeCode.incrementEvalDepth();
+            RuntimeCode.pushActiveEvalSource(evalFileName, perlCode);
             try {
                 result = RuntimeCode.resolveTailCalls(evalCode.apply(args, callContext), callContext);
                 // A successful eval STRING clears a prior nested-eval error,
                 // including when its final statement is an explicit return.
                 GlobalVariable.setGlobalVariable("main::@", "");
             } finally {
+                RuntimeCode.popActiveEvalSource();
                 RuntimeCode.decrementEvalDepth();
                 DynamicVariableManager.popToLocalLevel(pkgLevel);
             }

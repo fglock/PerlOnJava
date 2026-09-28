@@ -4,6 +4,7 @@ import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.backend.jvm.ByteCodeSourceMapper;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
+import org.perlonjava.runtime.runtimetypes.ErrorMessageUtil;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -542,6 +543,17 @@ public class CompileBinaryOperator {
             }
 
             int savedCallerLineOverride = bytecodeCompiler.callerLineTokenOverride;
+            if (node.right instanceof ListNode outerArgs && outerArgs.elements.size() >= 2
+                    && unwrapScalarAnonymousInvocation(outerArgs.elements.get(0)) instanceof BinaryOperatorNode invocation
+                    && "->".equals(invocation.operator)
+                    && invocation.left instanceof SubroutineNode
+                    && outerArgs.elements.get(1) instanceof AbstractNode lineNode
+                    && lineNode.getBooleanAnnotation("sourcePseudoLine")) {
+                Node followingArgument = outerArgs.elements.size() > 2
+                        ? outerArgs.elements.get(2) : null;
+                invocation.setAnnotation("callerLineTokenOverride",
+                        pseudoLineCallSiteToken(bytecodeCompiler.errorUtil, lineNode, followingArgument));
+            }
             if (savedCallerLineOverride <= 0 && node.left != null && node.left.getIndex() > 0) {
                 bytecodeCompiler.callerLineTokenOverride = node.left.getIndex();
             }
@@ -1138,6 +1150,39 @@ public class CompileBinaryOperator {
         }
 
         return list.elements.get(0) instanceof SubroutineNode;
+    }
+
+    /**
+     * Prototype processing wraps a scalar argument in {@code scalar}.  Preserve
+     * caller's COP for an immediately invoked anonymous sub inside that wrapper.
+     */
+    private static Node unwrapScalarAnonymousInvocation(Node node) {
+        if (node instanceof OperatorNode operator && "scalar".equals(operator.operator)) {
+            return operator.operand;
+        }
+        return node;
+    }
+
+    private static int pseudoLineCallSiteToken(ErrorMessageUtil errorUtil, AbstractNode lineNode,
+                                                Node followingArgument) {
+        if (lineNode instanceof NumberNode number && errorUtil != null && followingArgument != null) {
+            try {
+                int pseudoLine = Integer.parseInt(number.value);
+                int followingToken = followingArgument.getIndex();
+                if (followingToken > 0
+                        && errorUtil.getSourceLocationAccurate(followingToken).lineNumber() == pseudoLine) {
+                    return followingToken;
+                }
+            } catch (NumberFormatException ignored) {
+                // The parser only tags integer __LINE__ values, but retain a safe fallback.
+            }
+        }
+        return sourceArgumentStart(lineNode);
+    }
+
+    private static int sourceArgumentStart(AbstractNode node) {
+        Object annotated = node.getAnnotation("argumentStartIndex");
+        return annotated instanceof Integer token && token > 0 ? token : node.getIndex();
     }
 
     private static String directCallPrototype(BinaryOperatorNode node) {

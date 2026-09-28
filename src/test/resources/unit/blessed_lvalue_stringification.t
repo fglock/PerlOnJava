@@ -8,7 +8,10 @@ my $reference = bless \substr($value, 1, 1), 'BlessedLvalueStringification';
 
 is(ref($reference), 'BlessedLvalueStringification', 'blessed lvalue reference retains its class');
 is(reftype($reference), 'LVALUE', 'blessed lvalue reference retains its underlying type');
-like("$reference", qr/^BlessedLvalueStringification=LVALUE\(0x[0-9a-f]+\)$/, 
+like("$reference", qr/^BlessedLvalueStringification=LVALUE\(0x[0-9a-f]+\)$/,
     'blessed lvalue reference stringification includes class and LVALUE type');
+my ($address) = "$reference" =~ /0x([0-9a-f]+)/;
+cmp_ok(hex($address), '==', $reference,
+    'blessed lvalue stringification preserves the reference address');
 
 done_testing;

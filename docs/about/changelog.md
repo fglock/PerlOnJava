@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore `op/caller.t` compatibility for eval source text, tied and freed
+  `@DB::args`, anonymous stashes, hint hashes, nested `use` frames, and
+  caller source-line tracking on both execution backends.
+
 - Run CPU-heavy and ordinary Perl test fixtures concurrently when using the
   runner's compatibility resource caps, while admitting long-running work
   first.

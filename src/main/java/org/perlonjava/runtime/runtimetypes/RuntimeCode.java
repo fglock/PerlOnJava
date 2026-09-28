@@ -307,6 +307,34 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static ArrayDeque<ArrayList<String>> syntheticCallerFrames() {
         return PerlRuntime.current().executionState().syntheticCallerFrames;
     }
+    private static Deque<EvalSourceFrame> activeEvalSources() {
+        return PerlRuntime.current().executionState().activeEvalSources;
+    }
+
+    /** Source identity retained for caller(EXPR)'s eval-text element. */
+    public record EvalSourceFrame(String filename, String text) {}
+
+    public static void pushActiveEvalSource(String filename, String text) {
+        activeEvalSources().push(new EvalSourceFrame(filename, text));
+    }
+
+    public static void popActiveEvalSource() {
+        Deque<EvalSourceFrame> sources = activeEvalSources();
+        if (!sources.isEmpty()) sources.pop();
+    }
+
+    private static String activeEvalText(String filename) {
+        if (filename == null) return null;
+        for (EvalSourceFrame source : activeEvalSources()) {
+            if (filename.equals(source.filename())) return source.text();
+        }
+        return null;
+    }
+
+    private static String currentActiveEvalText() {
+        EvalSourceFrame source = activeEvalSources().peek();
+        return source == null ? null : source.text();
+    }
     private static Map<String, Class<?>> evalCache() {
         return PerlRuntime.current().runtimeCodeState().evalCache;
     }
@@ -4155,6 +4183,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Execute the interpreted code
             // Track eval depth for $^S support
             incrementEvalDepth();
+            pushActiveEvalSource(evalCompilerOptions.fileName, evalString);
             try {
                 // Eval STRING is an execution boundary: resolve a goto &sub
                 // marker here so its eval-string restriction is caught and
@@ -4214,6 +4243,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     return new RuntimeList(new RuntimeScalar());
                 }
             } finally {
+                popActiveEvalSource();
                 decrementEvalDepth();
             }
 
@@ -5131,7 +5161,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeCode code = (RuntimeCode) currentSub.value;
             calledFromDB = "DB".equals(code.packageName);
         }
-        if (!calledFromDB) {
+        if (!stackTrace.isEmpty()) {
+            // The innermost source location records the lexical package of
+            // this caller operator. The interpreter package variable can
+            // still describe an outer frame while JVM code is executing.
+            calledFromDB = "DB".equals(stackTrace.get(0).get(0));
+        } else if (!calledFromDB) {
             calledFromDB = "DB".equals(InterpreterState.currentPackage.get().toString());
         }
 
@@ -5324,6 +5359,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // *__ANON__ glob currently has a name override active, swap
                 // it in. See dev/modules/anon_sub_naming.md.
                 subName = applyAnonNameOverride(subName);
+                subName = normalizeCallerSubName(subName);
 
                 if (subName != null && !subName.isEmpty()) {
                     res.add(new RuntimeScalar(subName));  // subroutine
@@ -5344,9 +5380,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // test 18).
                 if (calledFromDB) {
                     RuntimeArray dbArgs = GlobalVariable.getGlobalArray("DB::args");
+                    // Debugger arguments are borrowed slots, not an ordinary
+                    // array assignment. Perl rejects a tie rather than calling
+                    // its CLEAR/STORE methods while inspecting the stack.
+                    if (dbArgs.type == RuntimeArray.TIED_ARRAY) {
+                        throw new PerlCompilerException("Cannot set tied @DB::args");
+                    }
                     if (DebugState.isDebugMode()) {
                         RuntimeArray frameArgs = DebugState.getArgsForFrame(frame);
                         if (frameArgs != null) {
+                            frameArgs.clearStaleLocalArrayAliases();
                             dbArgs.setFromListAliased(frameArgs.getList());
                         } else {
                             dbArgs.setFromListAliased(new RuntimeList());
@@ -5372,6 +5415,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             frameArgs = getOriginalArgsAt(trackedActiveCodeFrame);
                         }
                         if (frameArgs != null) {
+                            frameArgs.clearStaleLocalArrayAliases();
                             dbArgs.setFromListAliased(frameArgs.getList());
                         } else {
                             dbArgs.setFromListAliased(new RuntimeList());
@@ -5417,17 +5461,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 res.add(callerWantarrayScalar(frameCallContext));
 
-                // Add evaltext (element 6): The eval text if inside eval STRING
-                // For eval {...}, this is undef; for eval "...", this is the string
-                // Check if filename looks like an eval (e.g., "(eval 123)")
                 String filename = frameInfo.get(1);
-                if (filename != null && filename.startsWith("(eval ") && filename.endsWith(")")) {
-                    // This is an eval frame - we don't have the actual text, return empty string
-                    // Perl uses "" for eval {} and actual text for eval "..."
-                    res.add(RuntimeScalarCache.scalarUndef);
-                } else {
-                    res.add(RuntimeScalarCache.scalarUndef);
-                }
+                // The eval frame reports its call site's file/line, while
+                // element 6 belongs to the currently executing eval source.
+                // Therefore `(eval)` is the authoritative marker here rather
+                // than the reported filename (which can be the outer script).
+                String evalText = subName != null && subName.startsWith("(eval")
+                        ? currentActiveEvalText() : activeEvalText(filename);
+                res.add(evalText != null ? new RuntimeScalar(evalText)
+                        : RuntimeScalarCache.scalarUndef);
 
                 // Add is_require (element 7): 1 if inside require/use, undef otherwise
                 // We don't currently distinguish require from regular code
@@ -5466,10 +5508,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Use the per-call-site hint hash registry to get the %^H snapshot
                 // that was active when the calling code was compiled.
                 // Falls back to the global %^H for compile-time calls (BEGIN blocks).
-                java.util.Map<String, String> callerHintHash = HintHashRegistry.getCallerHintHashAtFrame(frame - 1);
+                java.util.Map<String, RuntimeScalar> callerHintHash = HintHashRegistry.getCallerScalarHintHashAtFrame(frame - 1);
                 if (callerHintHash != null) {
                     RuntimeHash snapshot = new RuntimeHash();
-                    for (java.util.Map.Entry<String, String> entry : callerHintHash.entrySet()) {
+                    for (java.util.Map.Entry<String, RuntimeScalar> entry : callerHintHash.entrySet()) {
                         snapshot.elements.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
                     }
                     res.add(snapshot.createReference());
@@ -5519,10 +5561,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     res.add(warningBits != null
                             ? new RuntimeScalar(warningBits)
                             : RuntimeScalarCache.scalarUndef);
-                    java.util.Map<String, String> callerHintHash = HintHashRegistry.getCallerHintHashAtFrame(frame - 1);
+                    java.util.Map<String, RuntimeScalar> callerHintHash = HintHashRegistry.getCallerScalarHintHashAtFrame(frame - 1);
                     if (callerHintHash != null) {
                         RuntimeHash snapshot = new RuntimeHash();
-                        for (java.util.Map.Entry<String, String> entry : callerHintHash.entrySet()) {
+                        for (java.util.Map.Entry<String, RuntimeScalar> entry : callerHintHash.entrySet()) {
                             snapshot.elements.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
                         }
                         res.add(snapshot.createReference());
@@ -5563,11 +5605,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         res.add(warningBits != null
                                 ? new RuntimeScalar(warningBits)
                                 : RuntimeScalarCache.scalarUndef);
-                        java.util.Map<String, String> callerHintHash =
-                                HintHashRegistry.getCallerHintHashAtFrame(frame - 1);
+                        java.util.Map<String, RuntimeScalar> callerHintHash =
+                                HintHashRegistry.getCallerScalarHintHashAtFrame(frame - 1);
                         if (callerHintHash != null) {
                             RuntimeHash snapshot = new RuntimeHash();
-                            for (java.util.Map.Entry<String, String> entry : callerHintHash.entrySet()) {
+                            for (java.util.Map.Entry<String, RuntimeScalar> entry : callerHintHash.entrySet()) {
                                 snapshot.elements.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
                             }
                             res.add(snapshot.createReference());
@@ -5902,7 +5944,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private static String normalizeCallerPackage(String packageName) {
-        return packageName == null || packageName.isEmpty() ? "main" : packageName;
+        if (packageName == null || packageName.isEmpty()) return "main";
+        return NameNormalizer.isAnonymizedPackage(packageName)
+                || GlobalVariable.isAnonymousStashPackage(packageName) ? "__ANON__" : packageName;
+    }
+
+    private static String normalizeCallerSubName(String subName) {
+        if (subName == null) return null;
+        int separator = subName.lastIndexOf("::");
+        if (separator <= 0) return subName;
+        String packageName = subName.substring(0, separator);
+        return NameNormalizer.isAnonymizedPackage(packageName)
+                || GlobalVariable.isAnonymousStashPackage(packageName)
+                ? "__ANON__" + subName.substring(separator) : subName;
     }
 
     /**

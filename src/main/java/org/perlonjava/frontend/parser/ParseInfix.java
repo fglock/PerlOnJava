@@ -536,7 +536,21 @@ public class ParseInfix {
                 }
             case "(":
                 // Handle function calls
-                right = new ListNode(ListParser.parseList(parser, ")", 0), parser.tokenIndex);
+                ListNode callArguments = new ListNode(
+                        ListParser.parseList(parser, ")", 0), parser.tokenIndex);
+                right = callArguments;
+                // After a brace-terminated statement, Perl's COP can be
+                // re-armed by a following __LINE__ argument.  Preserve that
+                // source location for an immediately-invoked anonymous sub
+                // nested as the call's first argument (perl #115768).
+                if (callArguments.elements.size() >= 2
+                        && callArguments.elements.get(0) instanceof BinaryOperatorNode invocation
+                        && "->".equals(invocation.operator)
+                        && invocation.left instanceof SubroutineNode
+                        && callArguments.elements.get(1) instanceof AbstractNode lineNode
+                        && lineNode.getBooleanAnnotation("sourcePseudoLine")) {
+                    invocation.setAnnotation("callerLineTokenOverride", lineNode.getIndex());
+                }
                 return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
             case "{":
                 // Handle hash subscripts

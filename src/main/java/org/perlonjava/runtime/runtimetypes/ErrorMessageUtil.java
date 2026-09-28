@@ -649,9 +649,27 @@ public class ErrorMessageUtil {
         if (directive < 0) {
             return new SourceLocation(originalFileName, physicalLine);
         }
-        int logicalLine = directives.logicalLines[directive]
+        long logicalLine = directives.logicalLines[directive]
                 + physicalLine - directives.physicalLines[directive];
-        return new SourceLocation(directives.fileNames[directive], logicalLine);
+        // JVM line tables use ints, but caller() must retain Perl's full
+        // #line coordinate. Consumers which require an int retain the
+        // historical bounded representation; caller() uses the text helper.
+        int boundedLine = logicalLine > Integer.MAX_VALUE ? Integer.MAX_VALUE
+                : (int) logicalLine;
+        return new SourceLocation(directives.fileNames[directive], boundedLine);
+    }
+
+    /** Full logical source-line text, including #line values above Integer.MAX_VALUE. */
+    public String getSourceLocationLineTextAccurate(int index) {
+        if (index < 0 || tokens == null || tokens.isEmpty()) return "1";
+        int boundedIndex = Math.min(index, tokens.size() - 1);
+        int physicalLine = getLineNumberAccurate(boundedIndex);
+        SourceDirectiveIndex directives = sourceDirectiveIndex();
+        int directive = directives.floor(boundedIndex);
+        if (directive < 0) return Integer.toString(physicalLine);
+        long logicalLine = directives.logicalLines[directive]
+                + physicalLine - directives.physicalLines[directive];
+        return Long.toString(logicalLine);
     }
 
     private SourceDirectiveIndex sourceDirectiveIndex() {
@@ -671,7 +689,7 @@ public class ErrorMessageUtil {
     private SourceDirectiveIndex buildSourceDirectiveIndex() {
         ArrayList<Integer> tokenIndexes = new ArrayList<>();
         ArrayList<Integer> physicalLines = new ArrayList<>();
-        ArrayList<Integer> logicalLines = new ArrayList<>();
+        ArrayList<Long> logicalLines = new ArrayList<>();
         ArrayList<String> fileNames = new ArrayList<>();
         String currentFileName = originalFileName;
         int physicalLine = 1;
@@ -719,7 +737,7 @@ public class ErrorMessageUtil {
         return new SourceDirectiveIndex(
                 tokenIndexes.stream().mapToInt(Integer::intValue).toArray(),
                 physicalLines.stream().mapToInt(Integer::intValue).toArray(),
-                logicalLines.stream().mapToInt(Integer::intValue).toArray(),
+                logicalLines.stream().mapToLong(Long::longValue).toArray(),
                 fileNames.toArray(String[]::new));
     }
 
@@ -743,9 +761,9 @@ public class ErrorMessageUtil {
                 || tokens.get(index).type != LexerTokenType.NUMBER) {
             return null;
         }
-        final int lineNumber;
+        final long lineNumber;
         try {
-            lineNumber = Integer.parseInt(tokens.get(index).text);
+            lineNumber = Long.parseLong(tokens.get(index).text);
         } catch (NumberFormatException invalidLine) {
             return null;
         }
@@ -810,13 +828,13 @@ public class ErrorMessageUtil {
         return new ParsedLineDirective(lineNumber, directiveFile);
     }
 
-    private record ParsedLineDirective(int lineNumber, String fileName) {
+    private record ParsedLineDirective(long lineNumber, String fileName) {
     }
 
     private record SourceDirectiveIndex(
             int[] tokenIndexes,
             int[] physicalLines,
-            int[] logicalLines,
+            long[] logicalLines,
             String[] fileNames) {
         private int floor(int tokenIndex) {
             int low = 0;

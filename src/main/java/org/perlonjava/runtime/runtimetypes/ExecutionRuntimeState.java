@@ -56,6 +56,8 @@ public final class ExecutionRuntimeState {
     public final ArrayList<int[]> interpreterPcs = new ArrayList<>();
 
     public final ArrayDeque<RuntimeCode.EvalRuntimeContext> evalRuntimeContexts = new ArrayDeque<>();
+    /** Source strings of eval STRING invocations currently executing on this runtime. */
+    public final Deque<RuntimeCode.EvalSourceFrame> activeEvalSources = new ArrayDeque<>();
     public final ArrayDeque<ArrayList<String>> syntheticCallerFrames = new ArrayDeque<>();
     public final Deque<RuntimeArray> argsStack = new ArrayDeque<>();
     public final Deque<RuntimeCode> activeCodeStack = new ArrayDeque<>();

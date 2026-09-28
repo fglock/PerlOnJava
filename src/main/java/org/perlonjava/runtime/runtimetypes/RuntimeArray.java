@@ -29,12 +29,17 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
     /** Outstanding {@code $#array} proxies; retained only for lexical teardown. */
     private List<RuntimeArraySizeLvalue> arraySizeLvalues;
+    private Integer tiedLocalSizeOverride;
     /** Number of pre-existing $# proxies at each local-array entry. */
     private final Stack<Integer> localArraySizeLvalueCounts = new Stack<>();
 
     void registerArraySizeLvalue(RuntimeArraySizeLvalue proxy) {
         if (arraySizeLvalues == null) arraySizeLvalues = new ArrayList<>();
         arraySizeLvalues.add(proxy);
+    }
+
+    void clearTiedLocalSizeOverride() {
+        tiedLocalSizeOverride = null;
     }
 
     void orphanArraySizeLvalues() {
@@ -83,6 +88,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     // True only for a syntactic @array expansion at a subroutine call site.
     // `undef @array` must invalidate those cells as well as removing slots.
     private boolean elementSlotsAliasedIntoCallFrame;
+    // Individual array cells passed as scalar arguments also alias a callee's
+    // @_ even though the complete array was not expanded at the call site.
     private int activeScalarLocalElements;
     private boolean scalarLocalContainerCleared;
 
@@ -971,6 +978,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 index = TieArray.tiedFetchSize(this).getInt() + index;
             }
             final RuntimeScalar tiedIndex = new RuntimeScalar(index);
+            final boolean tiedHasStoreSize = TieArray.tiedHasMethod(this, "STORESIZE");
             final boolean tiedExisted = TieArray.tiedExists(this, tiedIndex).getBoolean();
             final RuntimeScalar tiedSavedValue = tiedExisted
                     ? new RuntimeScalar(TieArray.tiedFetch(this, tiedIndex)) : null;
@@ -996,6 +1004,15 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                         // spurious DELETE for an untouched missing slot.
                         TieArray.tiedDelete(self, tiedIndex);
                     }
+                    if (!tiedHasStoreSize) {
+                        int currentSize = TieArray.tiedFetchSize(self).getInt();
+                        int targetSize = currentSize;
+                        while (targetSize > 0
+                                && !TieArray.tiedExists(self, new RuntimeScalar(targetSize - 1)).getBoolean()) {
+                            targetSize--;
+                        }
+                        self.tiedLocalSizeOverride = targetSize;
+                    }
                 }
             });
             return tiedReturnValue;
@@ -1003,12 +1020,15 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         if (index < 0) {
             index = elements.size() + index;
         }
-        boolean existed = index >= 0 && index < elements.size() && elements.get(index) != null;
+        RuntimeScalar existingElement = index >= 0 && index < elements.size()
+                ? elements.get(index) : null;
+        boolean existed = existingElement != null
+                && !(existingElement instanceof RuntimeArrayProxyEntry proxy && !proxy.hasLvalue());
         // local must restore the original slot, not a scalar copy of it.  An
         // array entry can be ref-aliased (for example, `$a[0]` aliased to
         // `$_`), and copying the wrapper here loses that alias identity when
         // the dynamic scope exits.
-        RuntimeScalar savedValue = existed ? elements.get(index) : null;
+        RuntimeScalar savedValue = existed ? existingElement : null;
         RuntimeScalar returnValue = existed ? new RuntimeScalar(elements.get(index)) : new RuntimeScalar();
         int savedSize = elements.size();
         RuntimeArray self = this;
@@ -1054,7 +1074,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                         self.elements.removeLast();
                     }
                     while (self.elements.size() > savedSize
-                            && isEmptySlot(self.elements.getLast())) {
+                            && isEmptyLocalPlaceholder(self.elements.getLast())) {
                         self.elements.removeLast();
                     }
                 }
@@ -1073,6 +1093,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         });
 
         return returnValue;
+    }
+
+    /** A read of a sparse hole leaves an unbound proxy that is still empty. */
+    private static boolean isEmptyLocalPlaceholder(RuntimeScalar value) {
+        return value == null
+                || (value instanceof RuntimeArrayProxyEntry proxy && !proxy.hasLvalue())
+                || (value.type & RuntimeScalarType.UNDEF) != 0;
     }
 
     /**
@@ -1335,7 +1362,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                             listCopy.elements.add(elem);
                         }
                     }
-                    this.elements.clear();
+                this.elements.clear();
                     listCopy.addToArray(this);
                 } else {
                     this.elements.clear();
@@ -1664,7 +1691,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 }
                 yield new RuntimeScalarTemporary(0);
             }
-            case TIED_ARRAY -> TieArray.tiedFetchSize(this);
+            case TIED_ARRAY -> tiedLocalSizeOverride != null
+                    ? new RuntimeScalarTemporary(tiedLocalSizeOverride)
+                    : TieArray.tiedFetchSize(this);
             case READONLY_ARRAY -> {
                 if (scalarContextSize != null) {
                     yield new RuntimeScalarTemporary(scalarContextSize);
@@ -1685,7 +1714,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 }
                 yield -1;
             }
-            case TIED_ARRAY -> TieArray.tiedFetchSize(this).getInt() - 1;
+            case TIED_ARRAY -> (tiedLocalSizeOverride != null
+                    ? tiedLocalSizeOverride : TieArray.tiedFetchSize(this).getInt()) - 1;
             case READONLY_ARRAY -> elements.size() - 1;
             default -> throw new IllegalStateException("Unknown array type: " + type);
         };
@@ -2053,6 +2083,19 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         this.elements.clear();
         MortalList.flush();
         return this;
+    }
+
+    /** Clears argument aliases whose source array slot was removed meanwhile. */
+    public void clearStaleLocalArrayAliases() {
+        for (RuntimeScalar element : elements) {
+            if (element == null || element.localArrayOwner == null) continue;
+            RuntimeArray owner = element.localArrayOwner;
+            int index = element.localArrayIndex;
+            if (index < 0 || index >= owner.elements.size()
+                    || owner.elements.get(index) != element) {
+                element.clearForArraySlotRemoval();
+            }
+        }
     }
 
     /**

@@ -271,6 +271,24 @@ public class HintHashRegistry {
         return null;
     }
 
+    /** Typed caller hint snapshot; preserves undef and reference-valued entries. */
+    public static Map<String, RuntimeScalar> getCallerScalarHintHashAtFrame(int frame) {
+        CompilationRuntimeState state = state();
+        int index = 0;
+        for (int id : state.callerHintHashIdStack) {
+            if (index++ != frame) continue;
+            if (id == 0) return Collections.emptyMap();
+            Map<String, RuntimeScalar> snapshot = state.hintScalarSnapshots.get(id);
+            if (snapshot == null) return null;
+            Map<String, RuntimeScalar> copy = new HashMap<>();
+            for (Map.Entry<String, RuntimeScalar> entry : snapshot.entrySet()) {
+                copy.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+            }
+            return copy;
+        }
+        return null;
+    }
+
     /**
      * Gets the hint hash map for the current call site's snapshot ID.
      * Used by eval STRING to restore %^H before compilation.

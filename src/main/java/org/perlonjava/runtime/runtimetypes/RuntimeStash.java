@@ -496,6 +496,7 @@ public class RuntimeStash extends RuntimeHash {
         // anonymous (__ANON__). namespace is stored with trailing "::".
         String className = prefix.endsWith("::") ? prefix.substring(0, prefix.length() - 2) : prefix;
         NameNormalizer.anonymizeBlessId(className);
+        GlobalVariable.markAnonymousStashPackage(className);
 
         GlobalVariable.clearPackageCache();
         return this;

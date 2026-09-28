@@ -43,6 +43,8 @@ public final class GlobalRuntimeState {
     private final Map<String, RuntimeGlob> ioSlots = new HashMap<>();
     private final Map<String, RuntimeFormat> formatSlots = new HashMap<>();
     private final Set<String> hiddenIoSlotsAfterStashDelete = new HashSet<>();
+    /** Packages whose current stashes were made anonymous by undef %Pkg::. */
+    private final Set<String> anonymousStashPackages = new HashSet<>();
     private final Map<String, String> stashAliases = new HashMap<>();
     private final Map<String, String> resolvedStashAliases = new HashMap<>();
     private final Map<String, String> globAliases = new HashMap<>();
@@ -142,6 +144,10 @@ public final class GlobalRuntimeState {
 
     Set<String> hiddenIoSlotsAfterStashDelete() {
         return hiddenIoSlotsAfterStashDelete;
+    }
+
+    Set<String> anonymousStashPackages() {
+        return anonymousStashPackages;
     }
 
     Map<String, String> stashAliases() {
@@ -286,6 +292,7 @@ public final class GlobalRuntimeState {
         ioSlots.clear();
         formatSlots.clear();
         hiddenIoSlotsAfterStashDelete.clear();
+        anonymousStashPackages.clear();
         invalidateStashEnumeration();
     }
 
@@ -343,6 +350,7 @@ public final class GlobalRuntimeState {
         target.explicitGlobAssignments.putAll(explicitGlobAssignments);
         target.deletedCodeRefPins.addAll(deletedCodeRefPins);
         target.hiddenIoSlotsAfterStashDelete.addAll(hiddenIoSlotsAfterStashDelete);
+        target.anonymousStashPackages.addAll(anonymousStashPackages);
         target.localizedCodeRefDepth.putAll(localizedCodeRefDepth);
         target.stashAliases.putAll(stashAliases);
         target.resolvedStashAliases.putAll(resolvedStashAliases);
