@@ -30,6 +30,8 @@ profile_is('src/test/resources/unit/array.t', 'normal', 1,
     'ordinary semantic test consumes one unit');
 profile_is('perl5_t/t/re/pat_psycho.t', 'heavy', 3,
     'regex stress test consumes three units');
+profile_is('perl5_t/t/re/anyof.t', 'heavy', 4,
+    'anyof leaves one unit available in the standard five-unit UAT budget');
 profile_is('perl5_t/t/re/pat_psycho_thr.t', 'heavy', 3,
     'threaded regex stress wrapper consumes three units');
 profile_is('/checkout/perl5_t/t/op/gv.t', 'heavy', 3,
@@ -76,6 +78,10 @@ my @weighted_queue = map { +{ profile => $_ } }
     ($heavy, $heavy, $normal);
 is(next_runnable_index(\@weighted_queue, 10, 9, 3, 0), 2,
     'light work may bypass a heavy test that does not fit remaining capacity');
+
+my $anyof = profile_for_test('perl5_t/t/re/anyof.t');
+ok(test_can_start($normal, 5, effective_weight($anyof, 5), 1, 0),
+    'an ordinary test can overlap anyof in the standard five-unit UAT budget');
 
 my @initial_queue = map { +{ profile => $_ } }
     ($heavy, $heavy, $heavy, $heavy, $normal, $normal);

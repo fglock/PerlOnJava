@@ -1453,6 +1453,7 @@ public class MortalList {
         LifecycleRuntimeState state = state();
         if (!state.mortalActive) return;
         if (state.flushing) return;
+        boolean topLevel = state.marks.isEmpty();
         if (state.pending.isEmpty() && state.pendingTiedReleases.isEmpty()
                 && state.pendingIoReleases.isEmpty()) {
             processReadyDeferredCaptures(state);
@@ -1462,6 +1463,7 @@ public class MortalList {
         }
         invalidateDrainReachabilityCaches();
         state.flushing = true;
+        if (topLevel) state.topLevelFlushDepth++;
         try {
             processDeferredEntriesFrom(0, 0, 0);
             state.pending.clear();
@@ -1474,6 +1476,7 @@ public class MortalList {
             state.tiedReleaseMarks.clear();
             state.ioReleaseMarks.clear();
         } finally {
+            if (topLevel) state.topLevelFlushDepth--;
             state.flushing = false;
             invalidateDrainReachabilityCaches();
         }
@@ -1731,6 +1734,7 @@ public class MortalList {
         }
         invalidateDrainReachabilityCaches();
         state.flushing = true;
+        if (topLevel) state.topLevelFlushDepth++;
         try {
             processDeferredEntriesFrom(mark, tiedMark, ioMark);
             // Remove only entries above the mark
@@ -1747,12 +1751,23 @@ public class MortalList {
                 state.pendingIoReleases.removeLast();
             }
         } finally {
+            if (topLevel) state.topLevelFlushDepth--;
             state.flushing = false;
             invalidateDrainReachabilityCaches();
         }
         processReadyDeferredCaptures(state);
         maybeAutoSweepAtStatementBoundary(state, topLevel);
         refreshBoundaryWork(state);
+    }
+
+    /**
+     * Whether cleanup is currently running at a top-level Perl statement
+     * boundary.  A top-level temporary can be finalized immediately before
+     * {@code ${^GLOBAL_PHASE}} changes to {@code DESTRUCT}; Perl still treats
+     * a destructor resurrection there as global-destruction resurrection.
+     */
+    public static boolean isDrainingTopLevelTemporary() {
+        return state().topLevelFlushDepth > 0;
     }
 
     /**

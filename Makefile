@@ -12,6 +12,7 @@ THREAD_TOOLING_TESTS := \
 	dev/tools/tests/ci_workflow_contract.t \
 	dev/regex/tools/tests/collect_direct_thread.t \
 	dev/tools/tests/perl_test_runner_ansi_tap.t \
+	dev/tools/tests/perl_test_runner_anyof_parallel_schedule.t \
 	dev/tools/tests/perl_test_runner_japh_isolation.t \
 	dev/tools/tests/perl_test_runner_pat_capacity.t \
 	dev/tools/tests/perl_test_runner_resource_lanes.t \

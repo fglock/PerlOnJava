@@ -278,6 +278,6 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
     }
 
     private static boolean isEmptyPlaceholder(RuntimeScalar value) {
-        return value == null || (value.type & RuntimeScalarType.UNDEF) != 0;
+        return RuntimeArray.isEmptySlot(value) || (value.type & RuntimeScalarType.UNDEF) != 0;
     }
 }

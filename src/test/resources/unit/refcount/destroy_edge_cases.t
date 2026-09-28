@@ -73,6 +73,27 @@ END_CHILD
         'global destruction warns when DESTROY revives its object');
 }
 
+# --- Ordinary resurrection does not produce a global-destruction warning ---
+{
+    my @warnings;
+    local $SIG{__WARN__} = sub { push @warnings, $_[0] };
+    {
+        package DE_RunPhaseRescue;
+        our $save = 1;
+        our @saved;
+        sub DESTROY { push @saved, $_[0] if $save }
+    }
+    {
+        my $obj = bless {}, 'DE_RunPhaseRescue';
+    }
+    is(scalar @DE_RunPhaseRescue::saved, 1,
+        'ordinary DESTROY resurrection retains the object');
+    is_deeply(\@warnings, [],
+        'ordinary DESTROY resurrection does not warn about global destruction');
+    $DE_RunPhaseRescue::save = 0;
+    @DE_RunPhaseRescue::saved = ();
+}
+
 # --- Exception in DESTROY becomes a warning ---
 {
     my @warnings;
@@ -223,6 +244,23 @@ END_CHILD
     }
     is_deeply(\@log, ["B", "A"],
         "re-blessing during DESTROY invokes the new class's DESTROY");
+}
+
+# --- Re-bless into the same class while DESTROY is running ---
+{
+    my @log;
+    {
+        package DE_ReblessSameDuringDestroy;
+        sub DESTROY {
+            push @log, "same";
+            bless $_[0], 'DE_ReblessSameDuringDestroy';
+        }
+    }
+    {
+        my $obj = bless {}, 'DE_ReblessSameDuringDestroy';
+    }
+    is_deeply(\@log, ["same"],
+        "re-blessing into the same class does not invoke DESTROY twice");
 }
 
 # --- Nested DESTROY: DESTROY that triggers another DESTROY ---

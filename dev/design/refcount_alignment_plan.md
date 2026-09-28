@@ -431,6 +431,38 @@ At that point PerlOnJava is a credible target for running the long tail of
 CPAN modules that depend on deterministic destruction and accurate
 reference counting — which is most of them.
 
+## Progress Tracking
+
+### Current Status: targeted DESTROY lifecycle compatibility work continues
+
+### Completed Phases
+
+- [x] Issue #1515 false-resurrection diagnostics (2026-09-28)
+  - `DestroyDispatch` reports the global-destruction resurrection warning
+    during `DESTRUCT` and for top-level temporary cleanup immediately before
+    the phase change, while keeping ordinary lexical resurrection silent.
+  - Same-class reblessing during `DESTROY` compares Perl class names rather
+    than runtime-local blessing IDs, preserving cache resurrection without a
+    second destructor call.
+  - Added standard-Perl-validated regression coverage in
+    `src/test/resources/unit/refcount/destroy_edge_cases.t` for ordinary
+    resurrection, genuine global-destruction resurrection, and same-class
+    reblessing. The focused JVM and interpreter gate passes.
+
+### Next Steps
+
+1. Continue the planned ownership-source audit for remaining destructor timing
+   gaps, including Class::Std::Fast inherited cleanup callbacks.
+2. Keep command-output ambiguity warnings and unrelated CPAN test failures
+   separately classified from DESTROY resurrection diagnostics.
+
+### Open Questions
+
+- Class::Std::Fast `runtime.t` still misses three inherited `DEMOLISH`
+  callbacks at shutdown. Its direct JVM/interpreter reproduction no longer
+  emits the #1515 diagnostics, but its cleanup-count gap needs an independent
+  ownership-timing investigation.
+
 ## 12. References
 
 - `dev/architecture/weaken-destroy.md` — current refCount state machine
