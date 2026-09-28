@@ -245,6 +245,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /** True for the non-reference scalar produced by dereferencing a qr// value. */
     public boolean firstClassRegexScalar;
 
+    /** True for scalar proxies whose reference is exposed as Perl's LVALUE type. */
+    public boolean isLvalueScalar() {
+        return false;
+    }
+
     /** Internal provenance used by formline for a picture built with a tainted repeat count. */
     public boolean formatPictureTainted;
 
@@ -3066,6 +3071,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 int valueBlessId = 0;
                 if (value instanceof RuntimeScalar scalar) {
                     valueBlessId = ((RuntimeBase) value).blessId;
+                    if (scalar.firstClassRegexScalar) {
+                        yield scalar.toString();
+                    }
+                    if (scalar.isLvalueScalar()) {
+                        yield "LVALUE(0x" + ((RuntimeBase) value).referenceAddressHex() + ")";
+                    }
                     typeName = switch (scalar.type) {
                         case VSTRING -> "VSTRING";
                         case REGEX, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE, REFERENCE -> "REF";

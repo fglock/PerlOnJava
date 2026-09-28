@@ -91,7 +91,7 @@ public class ScalarUtil extends PerlModuleBase {
             // RuntimeIO-backed GLOBREFERENCE values, but Perl treats them as
             // blessed IO objects.
             if (scalar.type == RuntimeScalarType.GLOBREFERENCE && scalar.value instanceof RuntimeIO) {
-                return blessedResult("IO::Handle").getList();
+                return blessedResult(((RuntimeIO) scalar.value).perlReferenceClassName()).getList();
             }
             return new RuntimeScalar().getList();  // undef
         }
@@ -163,7 +163,7 @@ public class ScalarUtil extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for reftype() method");
         }
         RuntimeScalar scalar = magicallyDeref(args.get(0));
-        if (scalar instanceof RuntimeSubstrLvalue) {
+        if (scalar.isLvalueScalar()) {
             return new RuntimeScalar("LVALUE").getList();
         }
         String type = switch (scalar.type) {
@@ -172,6 +172,7 @@ public class ScalarUtil extends PerlModuleBase {
                 if (scalar.value instanceof RuntimeScalar inner) {
                     if (inner.type == READONLY_SCALAR) inner = (RuntimeScalar) inner.value;
                     if (inner instanceof RuntimeSubstrLvalue) yield "LVALUE";
+                    if (inner.isLvalueScalar()) yield "LVALUE";
                     if (inner.firstClassRegexScalar) yield "REGEXP";
                     yield switch (inner.type) {
                         case VSTRING -> "VSTRING";

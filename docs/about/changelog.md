@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore `op/ref.t` compatibility for regexp, lvalue, blessed-reference,
+  standard-IO, and range refgen semantics on both execution backends.
+
 - Retain source lines for `do FILE` under `$^P`, restoring `comp/line_debug.t`
   compatibility on both execution backends.
 

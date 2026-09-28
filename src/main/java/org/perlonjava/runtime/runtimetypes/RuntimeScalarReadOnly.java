@@ -14,6 +14,13 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.UNDEF;
  */
 public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
 
+    // Cached literals are proxy-backed only to enforce immutability; Perl still
+    // exposes a reference to them as an ordinary SCALAR, not an LVALUE.
+    @Override
+    public boolean isLvalueScalar() {
+        return false;
+    }
+
     private String foreachRestoreKey;
     private RuntimeScalar foreachRestoreValue;
 

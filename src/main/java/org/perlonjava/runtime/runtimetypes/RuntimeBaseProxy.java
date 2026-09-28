@@ -12,6 +12,11 @@ import org.perlonjava.runtime.operators.ReferenceOperators;
  */
 public abstract class RuntimeBaseProxy extends RuntimeScalar {
 
+    @Override
+    public boolean isLvalueScalar() {
+        return true;
+    }
+
     // The underlying scalar value that this proxy represents.
     RuntimeScalar lvalue;
 

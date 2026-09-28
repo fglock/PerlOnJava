@@ -14,6 +14,8 @@ import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.WeakRefRegistry;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
+import org.perlonjava.runtime.runtimetypes.ClassRegistry;
+import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 
 import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
@@ -151,38 +153,14 @@ public class Builtin extends PerlModuleBase {
     public static RuntimeList reftype(RuntimeArray args, int ctx) {
         RuntimeScalar ref = args.get(0);
         if (ref.type == READONLY_SCALAR) ref = (RuntimeScalar) ref.value;
-
-        // Check if this is a blessed object (class instance)
-        // For Perl 5.38+ class syntax, blessed objects should return "OBJECT"
         int blessId = RuntimeScalarType.blessedId(ref);
-        if (blessId != 0) {
-            // This is a blessed object - return "OBJECT" for class instances
-            // This is specifically for the new class syntax
+        if (blessId != 0 && ClassRegistry.isClass(NameNormalizer.getBlessStr(blessId))) {
             return new RuntimeList(new RuntimeScalar("OBJECT"));
         }
-
-        // Return reference type in capitals
-        String type = switch (ref.type) {
-            case REFERENCE -> {
-                if (ref.value instanceof RuntimeScalar scalar) {
-                    if (scalar.type == READONLY_SCALAR) scalar = (RuntimeScalar) scalar.value;
-                    yield switch (scalar.type) {
-                        case REFERENCE, ARRAYREFERENCE, HASHREFERENCE, CODE, REGEX -> "REF";
-                        case GLOB, GLOBREFERENCE -> "GLOB";
-                        default -> "SCALAR";
-                    };
-                }
-                yield "REF";
-            }
-            case ARRAYREFERENCE -> "ARRAY";
-            case HASHREFERENCE -> "HASH";
-            case CODE -> "CODE";
-            case GLOB, GLOBREFERENCE -> "GLOB";
-            case REGEX -> "REGEXP";
-            default -> null;
-        };
-
-        return new RuntimeList(type != null ? new RuntimeScalar(type) : scalarUndef);
+        // builtin::reftype and Scalar::Util::reftype have the same underlying
+        // reference semantics; only Perl class instances use the builtin-only
+        // OBJECT result above.
+        return ScalarUtil.reftype(args, ctx);
     }
 
     public static RuntimeList ceil(RuntimeArray args, int ctx) {
