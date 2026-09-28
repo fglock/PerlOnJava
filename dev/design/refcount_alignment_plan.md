@@ -438,8 +438,9 @@ reference counting — which is most of them.
 ### Completed Phases
 
 - [x] Issue #1515 false-resurrection diagnostics (2026-09-28)
-  - `DestroyDispatch` now reports the global-destruction resurrection warning
-    only during `${^GLOBAL_PHASE} eq 'DESTRUCT'`.
+  - `DestroyDispatch` reports the global-destruction resurrection warning
+    during `DESTRUCT` and for top-level temporary cleanup immediately before
+    the phase change, while keeping ordinary lexical resurrection silent.
   - Same-class reblessing during `DESTROY` compares Perl class names rather
     than runtime-local blessing IDs, preserving cache resurrection without a
     second destructor call.

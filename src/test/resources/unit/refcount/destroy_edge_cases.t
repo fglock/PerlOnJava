@@ -51,7 +51,7 @@ SKIP: {
     my ($child_fh, $child_name) = tempfile(SUFFIX => '.pl');
     print {$child_fh} <<'END_CHILD';
 sub DE_GlobalResurrection::DESTROY { $main::de_global_resurrection = $_[0] }
-$main::de_global_resurrection_source = bless [], 'DE_GlobalResurrection';
+bless [], 'DE_GlobalResurrection';
 END_CHILD
     close($child_fh) or die "close child script: $!";
 

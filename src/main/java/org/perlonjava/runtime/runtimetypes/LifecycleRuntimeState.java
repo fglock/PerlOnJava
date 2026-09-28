@@ -37,6 +37,7 @@ final class LifecycleRuntimeState {
     final ArrayList<Integer> tiedReleaseMarks = new ArrayList<>();
     final ArrayList<Integer> ioReleaseMarks = new ArrayList<>();
     boolean flushing;
+    int topLevelFlushDepth;
     long lastAutoSweepNanos;
     boolean inAutoSweep;
     boolean immediateWeakSweepRequested;
@@ -98,6 +99,7 @@ final class LifecycleRuntimeState {
         tiedReleaseMarks.clear();
         ioReleaseMarks.clear();
         flushing = false;
+        topLevelFlushDepth = 0;
         lastAutoSweepNanos = 0;
         inAutoSweep = false;
         immediateWeakSweepRequested = false;

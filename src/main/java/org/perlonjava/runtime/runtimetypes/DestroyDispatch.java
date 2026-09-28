@@ -611,10 +611,17 @@ public class DestroyDispatch {
         }
     }
 
-    /** Warn only for an object revived during Perl's global destruction phase. */
+    /**
+     * Warn when a destructor revives an object during global teardown.
+     *
+     * Perl drains top-level temporaries immediately before changing
+     * {@code ${^GLOBAL_PHASE}} to {@code DESTRUCT}.  Those objects survive
+     * into teardown just like objects destroyed after the phase change, while
+     * an ordinary nested lexical resurrection must remain silent.
+     */
     private static void warnIfResurrectedDuringGlobalDestruction(RuntimeBase referent, String className) {
         String phase = GlobalVariable.getGlobalVariable(GlobalContext.GLOBAL_PHASE).toString();
-        if (!"DESTRUCT".equals(phase)) return;
+        if (!"DESTRUCT".equals(phase) && !MortalList.isDrainingTopLevelTemporary()) return;
         String name = className == null || className.isEmpty()
                 ? NameNormalizer.getBlessStr(referent.blessId) : className;
         WarnDie.warn(new RuntimeScalar(
