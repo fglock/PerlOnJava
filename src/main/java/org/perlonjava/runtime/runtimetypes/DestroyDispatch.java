@@ -483,9 +483,15 @@ public class DestroyDispatch {
             // current DESTROY frame; going through callDestroy() here would
             // be treated as re-entrance and discarded.
             if (referent.blessId != destroyBlessId) {
-                referent.destroyFired = false;
                 String reblessedClassName = NameNormalizer.getBlessStr(referent.blessId);
-                if (reblessedClassName != null && !reblessedClassName.isEmpty()) {
+                // A same-class bless may receive a fresh runtime-local ID after
+                // method-cache invalidation.  It does not start a new Perl
+                // destruction lifecycle: cache implementations such as
+                // Class::Std::Fast use it while retaining the object.  Compare
+                // the Perl class names rather than their ephemeral IDs.
+                if (reblessedClassName != null && !reblessedClassName.isEmpty()
+                        && !reblessedClassName.equals(className)) {
+                    referent.destroyFired = false;
                     doCallDestroy(referent, reblessedClassName);
                     return;
                 }
@@ -605,15 +611,10 @@ public class DestroyDispatch {
         }
     }
 
-    /**
-     * Perl warns when a destructor revives the object currently being finalized.
-     *
-     * Top-level temporaries may be finalized while the main scope is draining,
-     * immediately before GlobalDestruction switches ${^GLOBAL_PHASE} to DESTRUCT.
-     * The escaped reference nevertheless survives into global teardown, so the
-     * warning belongs at the resurrection point rather than behind a phase test.
-     */
+    /** Warn only for an object revived during Perl's global destruction phase. */
     private static void warnIfResurrectedDuringGlobalDestruction(RuntimeBase referent, String className) {
+        String phase = GlobalVariable.getGlobalVariable(GlobalContext.GLOBAL_PHASE).toString();
+        if (!"DESTRUCT".equals(phase)) return;
         String name = className == null || className.isEmpty()
                 ? NameNormalizer.getBlessStr(referent.blessId) : className;
         WarnDie.warn(new RuntimeScalar(

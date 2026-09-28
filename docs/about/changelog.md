@@ -133,6 +133,9 @@ priorities and future plans.
 - Restore the global-destruction warning when a `DESTROY` method revives its
   object.
 
+- Avoid spurious global-destruction resurrection diagnostics from ordinary
+  `DESTROY` resurrection and same-class reblessing during destruction.
+
 - Restore `Hash::Util::FieldHash` `:all` imports and scalar `id` semantics,
   unblocking Cache::Ref's LRU implementation.
 
