@@ -74,7 +74,8 @@ public class StatementResolver {
             "skip", "warning_like", "warning_is", "warnings_like");
 
     private static final Set<String> CORE_QUALIFIED_CONTROL_STATEMENTS = Set.of(
-            "if", "unless", "for", "foreach", "while", "until", "given");
+            "if", "unless", "for", "foreach", "while", "until", "given",
+            "when", "default");
 
     /**
      * Parses a single statement from the parser's token stream.
@@ -155,11 +156,13 @@ public class StatementResolver {
                         ? StatementParser.parseGivenStatement(parser)
                         : null;
 
-                case "when" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("switch")
+                case "when" -> (coreQualifiedControl
+                        || parser.ctx.symbolTable.isFeatureCategoryEnabled("switch"))
                         ? StatementParser.parseWhenStatement(parser)
                         : null;
 
-                case "default" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("switch")
+                case "default" -> (coreQualifiedControl
+                        || parser.ctx.symbolTable.isFeatureCategoryEnabled("switch"))
                         ? StatementParser.parseDefaultStatement(parser)
                         : null;
 
@@ -748,8 +751,14 @@ public class StatementResolver {
                                     // sub is part of that closure's pad.  Its later
                                     // ordinary `sub name { ... }` definition must fill
                                     // this runtime cell, not a compiler-global one.
-                                    boolean runtimeLexicalSub = parser.ctx.symbolTable.isInSubroutineBody()
-                                            && parser.ctx.symbolTable.getCurrentSubroutine().isEmpty();
+                                    boolean runtimeLexicalSub = (parser.ctx.symbolTable.isInSubroutineBody()
+                                            && parser.ctx.symbolTable.getCurrentSubroutine().isEmpty())
+                                            // A state lexical forward declaration which shadows an
+                                            // existing package CV must keep its cell in the runtime
+                                            // lexical pad. Installing its eventual definition through
+                                            // a synthetic BEGIN instead captures the declaration in
+                                            // that BEGIN frame, leaving the real state cell undefined.
+                                            || (declaration.equals("state") && packageSubAlreadyDefined);
                                     if (runtimeLexicalSub) {
                                         varDecl.setAnnotation("runtimeLexicalSub", true);
                                         varDecl.setAnnotation("lexicalSubScopeIndex",
@@ -1194,6 +1203,8 @@ public class StatementResolver {
                     }
                     yield result;
                 }
+
+                case "when" -> StatementParser.parseWhenModifier(parser, expression);
 
                 default -> {
                     parser.throwError("Not implemented: " + token);

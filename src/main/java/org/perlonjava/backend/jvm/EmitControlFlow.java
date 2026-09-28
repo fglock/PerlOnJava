@@ -155,7 +155,17 @@ public class EmitControlFlow {
 
         // Find loop labels by name.
         LoopLabels loopLabels;
-        if (labelStr == null) {
+        boolean implicitGivenLast = node.getBooleanAnnotation("implicitGivenLast");
+        boolean switchBreak = node.getBooleanAnnotation("switchBreak");
+        Object switchControlOperator = node.getAnnotation("switchControlOperator");
+        if (switchControlOperator instanceof String && ctx.javaClassInfo.isInEvalBlock) {
+            // Eval's synthetic bare block must not consume a switch-only
+            // marker. The generated eval method catches it and sets $@.
+            loopLabels = null;
+        } else if (implicitGivenLast || switchBreak
+                || (switchControlOperator instanceof String && !ctx.javaClassInfo.isInEvalBlock)) {
+            loopLabels = ctx.javaClassInfo.findInnermostImplicitWhenTarget();
+        } else if (labelStr == null) {
             // Unlabeled next/last/redo target the nearest enclosing true loop.
             // This avoids mis-targeting bare/labeled blocks like SKIP: { ... }.
             loopLabels = ctx.javaClassInfo.findInnermostTrueLoopLabels();
@@ -165,7 +175,8 @@ public class EmitControlFlow {
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(next) operator: " + operator + " label: " + labelStr + " labels: " + loopLabels);
 
         // Check if we're trying to use next/last/redo in a pseudo-loop (do-while/bare block)
-        if (loopLabels != null && !loopLabels.isTrueLoop) {
+        if (loopLabels != null && !loopLabels.isTrueLoop && !implicitGivenLast && !switchBreak
+                && !(switchControlOperator instanceof String)) {
             throw new PerlCompilerException(node.tokenIndex,
                     "Can't \"" + operator + "\" outside a loop block",
                     ctx.errorUtil);
@@ -205,11 +216,21 @@ public class EmitControlFlow {
             // Push lineNumber (from errorUtil if available)
             int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(node.tokenIndex) : 0;
             ctx.mv.visitLdcInsn(lineNumber);
+            if (switchControlOperator instanceof String spelling) {
+                ctx.mv.visitInsn(Opcodes.ACONST_NULL); // eval scope
+                ctx.mv.visitLdcInsn(spelling);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
+                        "<init>",
+                        "(Lorg/perlonjava/runtime/runtimetypes/ControlFlowType;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;)V",
+                        false);
+            } else {
             ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
                     "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
                     "<init>",
                     "(Lorg/perlonjava/runtime/runtimetypes/ControlFlowType;Ljava/lang/String;Ljava/lang/String;I)V",
                     false);
+            }
 
             // Return the tagged list via returnLabel so that local variable teardown
             // (popToLocalLevel) runs before the method exits. A direct ARETURN would
@@ -226,15 +247,15 @@ public class EmitControlFlow {
         }
 
         // A when-clause's implicit last carries the clause's final value out
-        // of the synthetic given loop. Evaluate it explicitly in scalar
-        // context and leave it on the operand stack for the given block's
-        // result. Ordinary last remains valueless and follows the path below.
-        boolean implicitGivenLast = node.getBooleanAnnotation("implicitGivenLast");
+        // of the synthetic given loop. Evaluate it in the enclosing given
+        // expression's context: `given` is an expression, so a list-valued
+        // when/default must remain a list when its caller expects one.
+        // Ordinary last remains valueless and follows the path below.
         if (implicitGivenLast) {
             Object resultAnnotation = node.getAnnotation("implicitGivenResult");
             Node result = resultAnnotation instanceof Node ? (Node) resultAnnotation : null;
             if (result != null) {
-                result.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                result.accept(emitterVisitor.with(loopLabels.context));
             } else {
                 EmitOperator.emitUndef(ctx.mv);
             }
@@ -243,8 +264,20 @@ public class EmitControlFlow {
         // Handle return values based on context
         if (loopLabels.context != RuntimeContextType.VOID) {
             if ((operator.equals("next") || operator.equals("last")) && !implicitGivenLast) {
-                // For non-void contexts, ensure an 'undef' value is pushed to maintain stack consistency
-                EmitOperator.emitUndef(ctx.mv);
+                // A control transfer has no scalar value, but in list context
+                // it contributes an empty list.  Supplying scalar undef here
+                // corrupts a surrounding list expression after `break` from
+                // a given/when block.
+                if (loopLabels.context == RuntimeContextType.LIST) {
+                    ctx.mv.visitTypeInsn(Opcodes.NEW,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeList");
+                    ctx.mv.visitInsn(Opcodes.DUP);
+                    ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                            "<init>", "()V", false);
+                } else {
+                    EmitOperator.emitUndef(ctx.mv);
+                }
             }
         }
 
@@ -512,12 +545,12 @@ public class EmitControlFlow {
      * Creates a TAILCALL marker with the coderef and arguments.
      *
      * @param emitterVisitor The visitor handling the bytecode emission
-     * @param subNode        The operator node for the subroutine reference (&NAME)
+     * @param subNode        The expression producing the target code reference
      * @param argsNode       The node representing the arguments
      * @param tokenIndex     The token index for error reporting
      * @param evalScope      The eval scope type ("eval-block", "eval-string", or null)
      */
-    static void handleGotoSubroutine(EmitterVisitor emitterVisitor, OperatorNode subNode, Node argsNode, int tokenIndex, String evalScope) {
+    static void handleGotoSubroutine(EmitterVisitor emitterVisitor, Node subNode, Node argsNode, int tokenIndex, String evalScope) {
         EmitterContext ctx = emitterVisitor.ctx;
 
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(goto &sub): Emitting TAILCALL marker");
@@ -559,7 +592,8 @@ public class EmitControlFlow {
         } else {
             ctx.mv.visitInsn(Opcodes.ACONST_NULL);
         }
-        String namedTarget = subNode.operand instanceof IdentifierNode id
+        String namedTarget = subNode instanceof OperatorNode opNode
+                && opNode.operand instanceof IdentifierNode id
                 ? org.perlonjava.runtime.runtimetypes.NameNormalizer.normalizeVariableName(
                         id.name, ctx.symbolTable.getCurrentPackage()) : null;
         if (namedTarget != null) ctx.mv.visitLdcInsn(namedTarget); else ctx.mv.visitInsn(Opcodes.ACONST_NULL);
@@ -568,6 +602,18 @@ public class EmitControlFlow {
                 "<init>",
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;)V",
                 false);
+
+        // An eval BLOCK is an execution boundary. Resolve here while its
+        // catch handler is active; returning the marker directly would let it
+        // escape past the eval and report an internal tail-call error.
+        if (evalScope != null) {
+            emitterVisitor.pushCallContext();
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "resolveTailCalls",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    false);
+        }
 
         if (pooledArgs) {
             ctx.javaClassInfo.releaseSpillSlot();
@@ -690,6 +736,13 @@ public class EmitControlFlow {
         if (node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
             Node arg = labelNode.elements.getFirst();
 
+            // In statement position the parser represents bare __SUB__ as an
+            // identifier. Normalize it to the operator form consumed by the
+            // tail-call path below instead of treating it as a goto label.
+            if (arg instanceof IdentifierNode identifier && identifier.name.equals("__SUB__")) {
+                arg = new OperatorNode("__SUB__", null, identifier.tokenIndex);
+            }
+
             // Check if it's a static label (IdentifierNode)
             if (arg instanceof IdentifierNode) {
                 labelName = ((IdentifierNode) arg).name;
@@ -765,6 +818,34 @@ public class EmitControlFlow {
                             new IdentifierNode("_", opNode.tokenIndex), opNode.tokenIndex);
                     argsNode.elements.add(atUnderscore);
                     handleGotoSubroutine(emitterVisitor, opNode, argsNode, node.tokenIndex, evalScope3);
+                    return;
+                }
+
+                // `goto sub { ... }` tail-calls the anonymous coderef with
+                // the current argument array.  It is distinct from a dynamic
+                // label expression even though both begin with a non-label
+                // AST node.
+                if (arg instanceof SubroutineNode subroutineNode) {
+                    if (ctx.javaClassInfo.isSortComparator) {
+                        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                                "sortTailCallOutsideError",
+                                "()Lorg/perlonjava/runtime/runtimetypes/PerlCompilerException;",
+                                false);
+                        ctx.mv.visitInsn(Opcodes.ATHROW);
+                        return;
+                    }
+                    ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                            "checkSortTailCall", "()V", false);
+                    String evalScope3 = null;
+                    if (ctx.javaClassInfo.isInEvalBlock) evalScope3 = "eval-block";
+                    else if (ctx.javaClassInfo.isInEvalString) evalScope3 = "eval-string";
+                    ListNode argsNode = new ListNode(subroutineNode.tokenIndex);
+                    argsNode.elements.add(new OperatorNode("@",
+                            new IdentifierNode("_", subroutineNode.tokenIndex), subroutineNode.tokenIndex));
+                    handleGotoSubroutine(emitterVisitor, subroutineNode, argsNode,
+                            node.tokenIndex, evalScope3);
                     return;
                 }
 

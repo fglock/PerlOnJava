@@ -640,6 +640,9 @@ public class Opcodes {
      */
     public static final short ARRAY_SET_FROM_LIST = 95;
 
+    /** Replace array slots with the referents in a ref-alias RHS list. */
+    public static final short ARRAY_SET_FROM_REFERENCE_LIST = 583;
+
     /**
      * Set hash from list: hash_reg = RuntimeHash.createHash(list_reg) then copy elements
      */
@@ -1020,7 +1023,7 @@ public class Opcodes {
     /**
      * Flip-flop operator: rd = ScalarFlipFlopOperator.evaluate(flipFlopId, rs1, rs2)
      * flipFlopId is a unique per-call-site int constant.
-     * Format: FLIP_FLOP rd flipFlopId rs1 rs2 isExclusive
+     * Format: FLIP_FLOP rd flipFlopId rs1 rs2 leftIsLineNumber rightIsLineNumber
      */
     public static final short FLIP_FLOP = 341;
 
@@ -2093,10 +2096,35 @@ public class Opcodes {
     /** Mark a persistent state scalar initialized. Format: name_idx persist_id. */
     public static final short STATE_MARK_INITIALIZED = 574;
 
+    /** Retrieve a persistent state array without initializing it. Format: rd name_idx persist_id. */
+    public static final short STATE_RETRIEVE_ARRAY = 579;
+
+    /** Replace a persistent state-array binding for whole-array refaliasing.
+     * Format: rd source_array_reg name_idx persist_id. */
+    public static final short STATE_ALIAS_ARRAY = 580;
+
+    /** Replace a persistent state-hash binding for whole-hash refaliasing.
+     * Format: rd source_hash_reg name_idx persist_id. */
+    public static final short STATE_ALIAS_HASH = 607;
+
+    /** Retrieve a persistent state hash without initializing it. Format: rd name_idx persist_id. */
+    public static final short STATE_RETRIEVE_HASH = 608;
+
     // Smartmatch operator (~~)
     // Format: SMARTMATCH rd rs1 rs2
     // Effect: rd = CompareOperators.smartmatch(rs1, rs2)
     public static final short SMARTMATCH = 400;
+
+    // Format: INTEGER_SMARTMATCH rd rs1 rs2
+    // Effect: rd = CompareOperators.smartmatchInteger(rs1, rs2)
+    public static final short INTEGER_SMARTMATCH = 613;
+
+    /**
+     * Select a list range or scalar flip-flop using the active subroutine call
+     * context. Format: RUNTIME_RANGE_OR_FLIP_FLOP rd flip_flop_id rs1 rs2
+     * leftIsLineNumber rightIsLineNumber.
+     */
+    public static final short RUNTIME_RANGE_OR_FLIP_FLOP = 614;
 
     /**
      * Call subroutine sharing caller's @_: rd = RuntimeCode.apply(coderef_reg, args_reg, context)
@@ -2678,7 +2706,32 @@ public class Opcodes {
     public static final short DEFINED_SCALAR_DEREF = 578;
 
     /** Convert an array result to a list of its writable element cells. */
-    public static final short ARRAY_LVALUE_LIST = 579;
+    public static final short ARRAY_LVALUE_LIST = 615;
+    /** Validate a CODE reference for ref-alias assignment. Format: rd valueReg. */
+    public static final short REFALIAS_CODE_REFERENCE = 616;
+    /** Validate and unwrap a scalar reference used by ref aliasing. */
+    public static final short REFALIAS_SCALAR_REFERENCE = 617;
+
+    /** Create a NEXT marker retaining source spelling {@code continue}. Format: rd labelIdx. */
+    public static final short CREATE_SWITCH_CONTINUE = 618;
+
+    /** Create a LAST marker retaining source spelling {@code break}. Format: rd labelIdx. */
+    public static final short CREATE_SWITCH_BREAK = 619;
+
+    /** Create a LAST marker retaining loop-topicalizer break diagnostics. Format: rd labelIdx. */
+    public static final short CREATE_SWITCH_BREAK_LOOP_TOPICALIZER = 620;
+
+    /** Load a named typeglob without making the detached IO-preserving copy. */
+    public static final short LOAD_GLOB_CANONICAL = 609;
+
+    /** Materialize an unread lexical scalar as Perl undef. Format: register. */
+    public static final short MATERIALIZE_LEXICAL_SCALAR = 610;
+
+    /** Initialize a scalar declaration, retaining an already ref-aliased cell. Format: register. */
+    public static final short INITIALIZE_LEXICAL_SCALAR = 611;
+
+    /** Remove an active lexical binding when its declaring scope exits. Format: register nameStringIdx. */
+    public static final short UNBIND_ACTIVE_LEXICAL = 612;
 
     private Opcodes() {
     } // Utility class - no instantiation

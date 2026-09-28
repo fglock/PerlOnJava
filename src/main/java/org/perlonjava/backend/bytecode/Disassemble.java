@@ -42,6 +42,12 @@ public class Disassemble {
                         int secReg = interpretedCode.bytecode[pc++];
                         sb.append("SCOPE_EXIT_CLEANUP r").append(secReg).append("\n");
                         break;
+                    case Opcodes.UNBIND_ACTIVE_LEXICAL:
+                        int ualReg = interpretedCode.bytecode[pc++];
+                        int ualName = interpretedCode.bytecode[pc++];
+                        sb.append("UNBIND_ACTIVE_LEXICAL r").append(ualReg)
+                                .append(" ").append(interpretedCode.stringPool[ualName]).append("\n");
+                        break;
                     case Opcodes.RETURN_SCOPE_CLEANUP:
                         int rscReg = interpretedCode.bytecode[pc++];
                         int rscReturnReg = interpretedCode.bytecode[pc++];
@@ -196,6 +202,14 @@ public class Disassemble {
                     case Opcodes.LOAD_UNDEF_READONLY:
                         rd = interpretedCode.bytecode[pc++];
                         sb.append("LOAD_UNDEF_READONLY r").append(rd).append("\n");
+                        break;
+                    case Opcodes.MATERIALIZE_LEXICAL_SCALAR:
+                        rd = interpretedCode.bytecode[pc++];
+                        sb.append("MATERIALIZE_LEXICAL_SCALAR r").append(rd).append("\\n");
+                        break;
+                    case Opcodes.INITIALIZE_LEXICAL_SCALAR:
+                        rd = interpretedCode.bytecode[pc++];
+                        sb.append("INITIALIZE_LEXICAL_SCALAR r").append(rd).append("\\n");
                         break;
                     case Opcodes.MY_SCALAR:
                         rd = interpretedCode.bytecode[pc++];
@@ -1313,6 +1327,12 @@ public class Disassemble {
                         rs2 = interpretedCode.bytecode[pc++];  // list register
                         sb.append("ARRAY_SET_FROM_LIST r").append(rs1).append(".setFromList(r").append(rs2).append(")\n");
                         break;
+                    case Opcodes.ARRAY_SET_FROM_REFERENCE_LIST:
+                        rs1 = interpretedCode.bytecode[pc++];  // array register
+                        rs2 = interpretedCode.bytecode[pc++];  // reference list register
+                        sb.append("ARRAY_SET_FROM_REFERENCE_LIST r").append(rs1)
+                                .append(".setFromReferenceList(r").append(rs2).append(")\n");
+                        break;
                     case Opcodes.SET_FROM_LIST:
                         rd = interpretedCode.bytecode[pc++];
                         rs1 = interpretedCode.bytecode[pc++];  // lhs list
@@ -1648,9 +1668,11 @@ public class Disassemble {
                         sb.append("SELECT_OP r").append(rd).append(" = select(r").append(rs).append(")\n");
                         break;
                     case Opcodes.LOAD_GLOB:
+                    case Opcodes.LOAD_GLOB_CANONICAL:
                         rd = interpretedCode.bytecode[pc++];
                         nameIdx = interpretedCode.bytecode[pc++];
-                        sb.append("LOAD_GLOB r").append(rd).append(" = *").append(interpretedCode.stringPool[nameIdx]).append("\n");
+                        sb.append(opcode == Opcodes.LOAD_GLOB ? "LOAD_GLOB r" : "LOAD_GLOB_CANONICAL r")
+                                .append(rd).append(" = *").append(interpretedCode.stringPool[nameIdx]).append("\n");
                         break;
                     case Opcodes.TIME_OP:
                         rd = interpretedCode.bytecode[pc++];
@@ -1686,6 +1708,12 @@ public class Disassemble {
                         rd = interpretedCode.bytecode[pc++];
                         rs = interpretedCode.bytecode[pc++];
                         sb.append("DEREF_ARRAY r").append(rd).append(" = @{r").append(rs).append("}\n");
+                        break;
+                    case Opcodes.REFALIAS_SCALAR_REFERENCE:
+                        rd = interpretedCode.bytecode[pc++];
+                        rs = interpretedCode.bytecode[pc++];
+                        sb.append("REFALIAS_SCALAR_REFERENCE r").append(rd)
+                                .append(" = refalias_scalar(r").append(rs).append(")\n");
                         break;
                     case Opcodes.DEREF_HASH:
                         rd = interpretedCode.bytecode[pc++];
@@ -1935,7 +1963,21 @@ public class Disassemble {
                         int ffId = interpretedCode.bytecode[pc++];
                         int ffRs1 = interpretedCode.bytecode[pc++];
                         int ffRs2 = interpretedCode.bytecode[pc++];
+                        boolean ffLeftLine = interpretedCode.bytecode[pc++] != 0;
+                        boolean ffRightLine = interpretedCode.bytecode[pc++] != 0;
                         sb.append("FLIP_FLOP r").append(ffRd).append(" = flipFlop(").append(ffId).append(", r").append(ffRs1).append(", r").append(ffRs2).append(")\n");
+                        break;
+                    }
+                    case Opcodes.RUNTIME_RANGE_OR_FLIP_FLOP: {
+                        int ffRd = interpretedCode.bytecode[pc++];
+                        int ffId = interpretedCode.bytecode[pc++];
+                        int ffRs1 = interpretedCode.bytecode[pc++];
+                        int ffRs2 = interpretedCode.bytecode[pc++];
+                        boolean ffLeftLine = interpretedCode.bytecode[pc++] != 0;
+                        boolean ffRightLine = interpretedCode.bytecode[pc++] != 0;
+                        sb.append("RUNTIME_RANGE_OR_FLIP_FLOP r").append(ffRd)
+                                .append(" = rangeOrFlipFlop(").append(ffId).append(", r")
+                                .append(ffRs1).append(", r").append(ffRs2).append(")\n");
                         break;
                     }
                     case Opcodes.LOCAL_GLOB:
@@ -2177,6 +2219,26 @@ public class Disassemble {
                         rd = interpretedCode.bytecode[pc++];
                         int cfLabelIdx = interpretedCode.bytecode[pc++];
                         sb.append("CREATE_REDO r").append(rd).append(" label=");
+                        if (cfLabelIdx == 255) {
+                            sb.append("<none>");
+                        } else if (interpretedCode.stringPool != null && cfLabelIdx < interpretedCode.stringPool.length) {
+                            sb.append("\"").append(interpretedCode.stringPool[cfLabelIdx]).append("\"");
+                        } else {
+                            sb.append(cfLabelIdx);
+                        }
+                        sb.append("\n");
+                        break;
+                    }
+                    case Opcodes.CREATE_SWITCH_CONTINUE:
+                    case Opcodes.CREATE_SWITCH_BREAK:
+                    case Opcodes.CREATE_SWITCH_BREAK_LOOP_TOPICALIZER: {
+                        rd = interpretedCode.bytecode[pc++];
+                        int cfLabelIdx = interpretedCode.bytecode[pc++];
+                        sb.append(opcode == Opcodes.CREATE_SWITCH_CONTINUE
+                                ? "CREATE_SWITCH_CONTINUE r"
+                                : opcode == Opcodes.CREATE_SWITCH_BREAK_LOOP_TOPICALIZER
+                                ? "CREATE_SWITCH_BREAK_LOOP_TOPICALIZER r" : "CREATE_SWITCH_BREAK r").append(rd)
+                                .append(" label=");
                         if (cfLabelIdx == 255) {
                             sb.append("<none>");
                         } else if (interpretedCode.stringPool != null && cfLabelIdx < interpretedCode.stringPool.length) {
@@ -2935,6 +2997,31 @@ public class Disassemble {
                                 .append(", persist=").append(statePersist).append("\n");
                         break;
                     }
+                    case Opcodes.STATE_RETRIEVE_ARRAY:
+                    case Opcodes.STATE_RETRIEVE_HASH: {
+                        String name = opcode == Opcodes.STATE_RETRIEVE_ARRAY
+                                ? "STATE_RETRIEVE_ARRAY" : "STATE_RETRIEVE_HASH";
+                        int stateRd = interpretedCode.bytecode[pc++];
+                        int stateName = interpretedCode.bytecode[pc++];
+                        int statePersist = interpretedCode.bytecode[pc++];
+                        sb.append(name).append(" r").append(stateRd)
+                                .append(", name=").append(stateName)
+                                .append(", persist=").append(statePersist).append("\\n");
+                        break;
+                    }
+                    case Opcodes.STATE_ALIAS_ARRAY:
+                    case Opcodes.STATE_ALIAS_HASH: {
+                        String name = opcode == Opcodes.STATE_ALIAS_ARRAY
+                                ? "STATE_ALIAS_ARRAY" : "STATE_ALIAS_HASH";
+                        int stateRd = interpretedCode.bytecode[pc++];
+                        int sourceReg = interpretedCode.bytecode[pc++];
+                        int stateName = interpretedCode.bytecode[pc++];
+                        int statePersist = interpretedCode.bytecode[pc++];
+                        sb.append(name).append(" r").append(stateRd).append(" = r")
+                                .append(sourceReg).append(", name=").append(stateName)
+                                .append(", persist=").append(statePersist).append("\\n");
+                        break;
+                    }
                     case Opcodes.STATE_IS_INITIALIZED: {
                         int stateRd = interpretedCode.bytecode[pc++];
                         int stateName = interpretedCode.bytecode[pc++];
@@ -2956,6 +3043,13 @@ public class Disassemble {
                         int smRs1 = interpretedCode.bytecode[pc++];
                         int smRs2 = interpretedCode.bytecode[pc++];
                         sb.append("SMARTMATCH r").append(smRd).append(", r").append(smRs1).append(", r").append(smRs2).append("\n");
+                        break;
+                    }
+                    case Opcodes.INTEGER_SMARTMATCH: {
+                        int smRd = interpretedCode.bytecode[pc++];
+                        int smRs1 = interpretedCode.bytecode[pc++];
+                        int smRs2 = interpretedCode.bytecode[pc++];
+                        sb.append("INTEGER_SMARTMATCH r").append(smRd).append(", r").append(smRs1).append(", r").append(smRs2).append("\n");
                         break;
                     }
                     case Opcodes.AWAIT: {

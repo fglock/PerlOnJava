@@ -130,6 +130,41 @@ public class CoreOperatorResolver {
             case "last", "next", "redo" -> OperatorParser.parseLast(parser, token, currentIndex);
             case "goto" -> OperatorParser.parseGoto(parser, currentIndex);
             case "return" -> OperatorParser.parseReturn(parser, currentIndex);
+            case "continue" -> {
+                OperatorNode continueNode = new OperatorNode(
+                        "next",
+                        new ListNode(currentIndex), currentIndex);
+                // `continue` in a when block is switch fall-through, whereas
+                // an explicit `next` remains ordinary loop control. Preserve
+                // the source spelling so parseWhenStatement can distinguish
+                // the two after this normalization.
+                continueNode.setAnnotation("whenContinue", true);
+                boolean evalOutsideGiven = !parser.evalGivenDepthBaselines.isEmpty()
+                        && parser.parsingGivenDepth <= parser.evalGivenDepthBaselines.peek();
+                if (parser.parsingGivenDepth == 0 || evalOutsideGiven) {
+                    continueNode.setAnnotation("switchControlOperator", "continue");
+                }
+                yield continueNode;
+            }
+            case "break" -> {
+                OperatorNode breakNode = new OperatorNode(
+                        "last",
+                        new ListNode(currentIndex), currentIndex);
+                // `break` exits a synthetic given boundary. Outside a given it
+                // follows the existing ordinary-last path, which lets eval
+                // report its normal runtime diagnostic.
+                boolean evalOutsideGiven = !parser.evalGivenDepthBaselines.isEmpty()
+                        && parser.parsingGivenDepth <= parser.evalGivenDepthBaselines.peek();
+                if (parser.parsingGivenDepth > 0 && !evalOutsideGiven) {
+                    breakNode.setAnnotation("switchBreak", true);
+                }
+                if (parser.parsingGivenDepth == 0 || evalOutsideGiven) {
+                    breakNode.setAnnotation("switchControlOperator",
+                            evalOutsideGiven && parser.parsingLoopTopicalizerDepth > 0
+                                    ? "break-loop-topicalizer" : "break");
+                }
+                yield breakNode;
+            }
             case "eval", "evalbytes" -> OperatorParser.parseEval(parser, token.text);
             case "do" -> OperatorParser.parseDoOperator(parser);
             case "require" -> OperatorParser.parseRequire(parser);

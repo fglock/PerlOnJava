@@ -2067,6 +2067,13 @@ public class CompileOperator {
         String labelStr = null;
         if (node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
             Node arg = labelNode.elements.getFirst();
+
+            // In statement position the parser represents bare __SUB__ as an
+            // identifier. Normalize it to the operator form consumed by the
+            // tail-call path below instead of treating it as a goto label.
+            if (arg instanceof IdentifierNode identifier && identifier.name.equals("__SUB__")) {
+                arg = new OperatorNode("__SUB__", null, identifier.tokenIndex);
+            }
             
             // Check if this is goto &NAME or goto &{expr} - a subroutine call form
             // The parser produces: BinaryOperatorNode "(" with left=OperatorNode "&" (for &NAME)
@@ -2168,6 +2175,31 @@ public class CompileOperator {
                     bc.lastResultReg = -1;
                     return;
                 }
+            }
+
+            // `goto sub { ... }` tail-calls an anonymous coderef with the
+            // current argument array.  Do not route it through GOTO_DYNAMIC:
+            // a coderef is a tail-call target here, not a computed label.
+            if (arg instanceof SubroutineNode) {
+                int outerContext = bc.currentCallContext;
+                bc.compileNode(arg, -1, RuntimeContextType.SCALAR);
+                int codeRefReg = bc.lastResultReg;
+                String evalScope = bc.getEvalScopeType();
+                int evalScopeIdx = evalScope == null ? -1 : bc.addToStringPool(evalScope);
+                int rd = bc.allocateOutputRegister();
+                bc.emit(Opcodes.GOTO_TAILCALL);
+                bc.emitReg(rd);
+                bc.emitReg(codeRefReg);
+                // A negative argument register preserves the current @_ array.
+                bc.emitReg(-1);
+                bc.emit(outerContext);
+                bc.emit(evalScopeIdx);
+                bc.emit(-1);
+                emitSubroutineExitCleanup(bc, rd);
+                bc.emitWithToken(Opcodes.RETURN, node.getIndex());
+                bc.emitReg(rd);
+                bc.lastResultReg = -1;
+                return;
             }
             
             if (arg instanceof IdentifierNode) labelStr = ((IdentifierNode) arg).name;

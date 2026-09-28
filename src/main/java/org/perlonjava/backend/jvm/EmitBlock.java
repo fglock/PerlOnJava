@@ -440,16 +440,24 @@ public class EmitBlock {
             // However, a *bare* block with loop control (e.g. `{ ...; redo }` or
             // `{ ... } continue { ... }`) is itself a valid target for *unlabeled*
             // last/next/redo, matching Perl semantics.
-            boolean isBareBlock = node.labelName == null;
+            boolean topicalizerLoopBody = node.getBooleanAnnotation("topicalizerLoopBody");
+            boolean isBareBlock = node.labelName == null
+                    && !node.getBooleanAnnotation("givenBlock");
             emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
                     node.labelName,
                     nextLabel,
                     redoLabel,
                     nextLabel,
                     emitterVisitor.ctx.contextType,
-                    isBareBlock,
-                    isBareBlock);
+                    topicalizerLoopBody ? false : isBareBlock,
+                    topicalizerLoopBody ? false : isBareBlock);
             LoopLabels loopLabels = emitterVisitor.ctx.javaClassInfo.getInnermostLoopLabels();
+            loopLabels.implicitWhenTarget = node.getBooleanAnnotation("givenBlock") || topicalizerLoopBody;
+            // An implicit `last` from a when, or an explicit `break`, jumps
+            // past this synthetic given block.  Record its lexical boundary
+            // so loop control tears down variables declared by nested when
+            // bodies before reaching that jump target.
+            loopLabels.cleanupScopeIndex = scopeIndex;
             if (localRecord.needsCleanup()) {
                 loopLabels.dynamicLocalLevelSlot = localRecord.dynamicIndex();
             }
@@ -468,12 +476,7 @@ public class EmitBlock {
             // actual array live; foreachAliasIterator snapshots other list
             // expressions when the loop is emitted.
             int tempArrayIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-            forNode.list.setAnnotation("foreachSource", true);
-            try {
-                forNode.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
-            } finally {
-                forNode.list.setAnnotation("foreachSource", false);
-            }
+            EmitForeach.emitForeachSource(emitterVisitor, forNode.list);
             mv.visitVarInsn(Opcodes.ASTORE, tempArrayIndex);
 
             // Mark the For1Node to use the pre-evaluated array

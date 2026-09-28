@@ -5,7 +5,9 @@ import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.core.Configuration;
 import org.perlonjava.frontend.analysis.ExtractValueVisitor;
+import org.perlonjava.frontend.analysis.LValueVisitor;
 import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
@@ -22,7 +24,9 @@ import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Stack;
 
 import static org.perlonjava.frontend.parser.NumberParser.parseNumber;
@@ -46,6 +50,114 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  * use declarations, and package declarations.
  */
 public class StatementParser {
+    /**
+     * Postfix modifiers are parsed after their statement, but their lowering
+     * evaluates the modifier condition first.  A lexical introduced by that
+     * condition is visible to following source, not to references which were
+     * already parsed in the preceding statement.  Preserve that source-order
+     * binding on scalar references so both backends can use the original pad
+     * slot when emitting the reordered AST.
+     */
+    private static void bindPostfixStatementLexicals(Node node,
+                                                      Map<String, SymbolTable.SymbolEntry> bindings) {
+        if (node == null || bindings.isEmpty()) return;
+        if (node instanceof OperatorNode op) {
+            if (op.operator.equals("$") && op.operand instanceof IdentifierNode identifier) {
+                SymbolTable.SymbolEntry entry = bindings.get("$" + identifier.name);
+                if (entry != null) op.setAnnotation("sourceOrderLexicalBinding", entry);
+            }
+            bindPostfixStatementLexicals(op.operand, bindings);
+            return;
+        }
+        if (node instanceof BinaryOperatorNode binary) {
+            bindPostfixStatementLexicals(binary.left, bindings);
+            bindPostfixStatementLexicals(binary.right, bindings);
+            return;
+        }
+        if (node instanceof TernaryOperatorNode ternary) {
+            bindPostfixStatementLexicals(ternary.condition, bindings);
+            bindPostfixStatementLexicals(ternary.trueExpr, bindings);
+            bindPostfixStatementLexicals(ternary.falseExpr, bindings);
+            return;
+        }
+        if (node instanceof IfNode conditional) {
+            bindPostfixStatementLexicals(conditional.condition, bindings);
+            bindPostfixStatementLexicals(conditional.thenBranch, bindings);
+            bindPostfixStatementLexicals(conditional.elseBranch, bindings);
+            return;
+        }
+        if (node instanceof BlockNode block) {
+            for (Node element : block.elements) bindPostfixStatementLexicals(element, bindings);
+            return;
+        }
+        if (node instanceof ListNode list) {
+            for (Node element : list.elements) bindPostfixStatementLexicals(element, bindings);
+            return;
+        }
+        if (node instanceof ArrayLiteralNode array) {
+            for (Node element : array.elements) bindPostfixStatementLexicals(element, bindings);
+            return;
+        }
+        if (node instanceof HashLiteralNode hash) {
+            for (Node element : hash.elements) bindPostfixStatementLexicals(element, bindings);
+        }
+    }
+
+    private static Map<String, SymbolTable.SymbolEntry> visibleLexicals(Parser parser) {
+        Map<String, SymbolTable.SymbolEntry> visible = new HashMap<>();
+        for (SymbolTable.SymbolEntry entry : parser.ctx.symbolTable.getAllVisibleVariables().values()) {
+            if ("my".equals(entry.decl()) || "state".equals(entry.decl())) {
+                visible.put(entry.name(), entry);
+            }
+        }
+        return visible;
+    }
+
+    /** Hoist declarations in a postfix-when condition without moving their initializer. */
+    private static Node hoistPostfixWhenConditionDeclarations(Node node, List<Node> declarations) {
+        if (node instanceof BinaryOperatorNode binary) {
+            if (binary.operator.equals("=") && binary.left instanceof OperatorNode declaration
+                    && declaration.operator.equals("my")) {
+                declarations.add(declaration);
+                binary.left = declaration.operand;
+            } else {
+                binary.left = hoistPostfixWhenConditionDeclarations(binary.left, declarations);
+            }
+            binary.right = hoistPostfixWhenConditionDeclarations(binary.right, declarations);
+            return binary;
+        }
+        if (node instanceof OperatorNode operator) {
+            operator.operand = hoistPostfixWhenConditionDeclarations(operator.operand, declarations);
+            return operator;
+        }
+        if (node instanceof ListNode list) {
+            for (int i = 0; i < list.elements.size(); i++) {
+                list.elements.set(i, hoistPostfixWhenConditionDeclarations(list.elements.get(i), declarations));
+            }
+            return list;
+        }
+        if (node instanceof BlockNode block) {
+            for (int i = 0; i < block.elements.size(); i++) {
+                block.elements.set(i, hoistPostfixWhenConditionDeclarations(block.elements.get(i), declarations));
+            }
+        }
+        return node;
+    }
+
+    /** A declaration before switch continue establishes scope but its initializer is skipped. */
+    private static void hoistPostfixWhenContinueDeclarations(Node node, List<Node> declarations) {
+        if (node instanceof ListNode list) {
+            for (int i = 0; i < list.elements.size(); i++) {
+                Node element = list.elements.get(i);
+                if (element instanceof BinaryOperatorNode assignment && assignment.operator.equals("=")
+                        && assignment.left instanceof OperatorNode declaration && declaration.operator.equals("my")) {
+                    declarations.add(declaration);
+                    list.elements.remove(i--);
+                }
+            }
+        }
+    }
+
     /** Mark the source-side subtree synthesized into a given block.  Backends
      * need this provenance to distinguish a legal internal goto from a jump
      * which enters the block and skips topicalizer setup. */
@@ -184,9 +296,16 @@ public class StatementParser {
             // We need to parse the reference manually to avoid parsePrimary trying to parse
             // the following (...) as a function call or hash subscript.
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "\\");
+            boolean previousParsingTakeReference = parser.parsingTakeReference;
+            parser.parsingTakeReference = true;
             parser.parsingForLoopVariable = true;
-            Node operand = ParsePrimary.parsePrimary(parser);
-            parser.parsingForLoopVariable = false;
+            Node operand;
+            try {
+                operand = ParsePrimary.parsePrimary(parser);
+            } finally {
+                parser.parsingForLoopVariable = false;
+                parser.parsingTakeReference = previousParsingTakeReference;
+            }
             varNode = new OperatorNode("\\", operand, parser.tokenIndex);
         }
 
@@ -292,12 +411,30 @@ public class StatementParser {
                     "foreach on non-lexical iterator variable";
         }
         Node body;
+        boolean loopTopicalizer = isTopicalizerLoopVariable(varNode)
+                && parser.ctx.symbolTable.isFeatureCategoryEnabled("switch");
+        if (loopTopicalizer) {
+            parser.parsingGivenDepth++;
+            parser.parsingLoopTopicalizerDepth++;
+        }
         try {
             parser.parsingRuntimeLoopBodyDepth++;
             body = ParseBlock.parseBlock(parser);
         } finally {
             parser.parsingRuntimeLoopBodyDepth--;
+            if (loopTopicalizer) {
+                parser.parsingGivenDepth--;
+                parser.parsingLoopTopicalizerDepth--;
+            }
             parser.futureAsyncAwaitForbiddenContext = previousForbiddenContext;
+        }
+        // A foreach whose iterator topicalizes $_ accepts when/default just
+        // like given.  Its implicit when exit ends the switch dispatch for
+        // this iteration, not the enclosing foreach loop.  Keep that target
+        // explicit so backends can distinguish it from source `last`/`next`.
+        if (loopTopicalizer && body instanceof BlockNode block) {
+            block.isLoop = true;
+            block.setAnnotation("topicalizerLoopBody", true);
         }
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
@@ -348,6 +485,14 @@ public class StatementParser {
     private static boolean isLexicalForeachVariable(Node varNode) {
         return varNode instanceof OperatorNode operator
                 && (operator.operator.equals("my") || operator.operator.equals("state"));
+    }
+
+    private static boolean isTopicalizerLoopVariable(Node varNode) {
+        if (varNode == null) return true;
+        return varNode instanceof OperatorNode variable
+                && variable.operator.equals("$")
+                && variable.operand instanceof IdentifierNode identifier
+                && identifier.name.equals("_");
     }
 
     /**
@@ -658,13 +803,47 @@ public class StatementParser {
         // that value across the control-flow jump instead of compiling it in
         // void context and replacing it with undef.
         Node whenResult = null;
-        for (int i = whenBlock.elements.size() - 1; i >= 0; i--) {
+        boolean explicitLoopControl = false;
+        boolean continueWhen = false;
+        // `continue` transfers immediately to the next when/default clause;
+        // any following source statements are unreachable. Detect it before
+        // choosing a final expression, since code such as `continue; 456`
+        // must not turn 456 into the implicit given result.
+        for (int i = 0; i < whenBlock.elements.size(); i++) {
+            Node element = whenBlock.elements.get(i);
+            if (element instanceof AbstractNode annotated
+                    && annotated.getBooleanAnnotation("whenContinue")) {
+                whenBlock.elements.subList(i, whenBlock.elements.size()).clear();
+                continueWhen = true;
+                break;
+            }
+        }
+        for (int i = whenBlock.elements.size() - 1; !continueWhen && i >= 0; i--) {
             Node element = whenBlock.elements.get(i);
             if (element != null) {
                 whenResult = element;
-                whenBlock.elements.remove(i);
+                // `continue` is normalized to `next` by CoreOperatorResolver,
+                // but in a when clause it means switch fall-through rather
+                // than loop control.  Drop it so the following when/default
+                // clause remains reachable. Other loop controls must stay in
+                // the body rather than becoming an implicit result.
+                continueWhen = element instanceof AbstractNode annotated
+                        && annotated.getBooleanAnnotation("whenContinue");
+                explicitLoopControl = element instanceof OperatorNode control
+                        && (control.operator.equals("last")
+                        || control.operator.equals("next")
+                        || control.operator.equals("redo"));
+                if (continueWhen || !explicitLoopControl) {
+                    whenBlock.elements.remove(i);
+                }
                 break;
             }
+        }
+        if (continueWhen || explicitLoopControl) {
+            return new IfNode("if", whenIsBoolean(whenCondition) ? whenCondition
+                    : new BinaryOperatorNode("~~",
+                    new OperatorNode("$", new IdentifierNode("_", index), index),
+                    whenCondition, index), whenBlock, null, index);
         }
         if (whenResult == null) {
             whenResult = new OperatorNode("undef", new ListNode(index), index);
@@ -703,8 +882,11 @@ public class StatementParser {
                     index);
         }
 
-        // Return as an if statement
-        return new IfNode("if", ifCondition, whenBlock, null, index);
+        // A false when contributes an empty list, unlike a plain if without
+        // an else (which returns its false condition).  This distinction is
+        // observable when the given block is embedded in a list; scalar
+        // context naturally turns the empty list into undef.
+        return new IfNode("if", ifCondition, whenBlock, new ListNode(index), index);
     }
 
     /**
@@ -713,22 +895,76 @@ public class StatementParser {
      */
     private static boolean whenIsBoolean(Node node) {
         if (node instanceof BinaryOperatorNode b) {
+            if (b.operator.equals("eof")) {
+                return true;
+            }
+            if (b.operator.equals("->")) {
+                // Method calls in when() are predicates; their return values
+                // are not smartmatch RHS operands.
+                return true;
+            }
+            if (b.operator.equals("(") && b.left instanceof OperatorNode call
+                    && call.operator.equals("&")
+                    && call.getBooleanAnnotation("directNamedCall")) {
+                // A direct subroutine call is evaluated for truth, unlike a
+                // coderef (\&sub), which intentionally remains a smartmatch
+                // predicate and receives the topicalized value as its arg.
+                return true;
+            }
             return switch (b.operator) {
                 case "==", "!=", "<", ">", "<=", ">=", "<=>",
                      "eq", "ne", "equ", "neu", "lt", "gt", "le", "ge", "cmp",
-                     "&&", "||", "//", "and", "or", "xor",
+                     "..", "...",
                      "=~", "!~" -> true;
+                case "&&", "||", "//", "and", "or", "xor" ->
+                        logicalWhenIsBoolean(b);
                 default -> false;
             };
         }
         if (node instanceof OperatorNode o) {
             return switch (o.operator) {
-                case "!", "not", "defined", "exists" -> true;
+                // A bare m// in when is evaluated against the localized $_.
+                // Wrapping its boolean result in $_ ~~ ... would compare the
+                // topic to 0/1 instead of performing the regex predicate.
+                case "!", "not", "defined", "exists", "matchRegex",
+                     "-b", "-c", "-d", "-e", "-f", "-g", "-k", "-l",
+                     "-o", "-p", "-r", "-s", "-S", "-t", "-u", "-w",
+                     "-x", "-z", "-M", "-A", "-C" -> true;
                 default -> false;
             };
         }
         return false;
     }
+
+    /**
+     * Perl does not make a logical expression a {@code when} predicate merely
+     * because it contains a boolean operator.  For example,
+     * {@code when((1 == 1) && "bar")} remains a smartmatch against "bar".
+     * A logical expression is a predicate when it depends on the topic or on
+     * a capture produced from the topic.
+     */
+    private static boolean logicalWhenIsBoolean(BinaryOperatorNode node) {
+        return containsTopicOrCapture(node);
+    }
+
+    private static boolean containsTopicOrCapture(Node node) {
+        if (node == null) return false;
+        if (node instanceof OperatorNode operator) {
+            if (operator.operator.equals("$") && operator.operand instanceof IdentifierNode identifier) {
+                String name = identifier.name;
+                if (name.equals("_") || name.matches("[0-9]+")) return true;
+            }
+            return containsTopicOrCapture(operator.operand);
+        }
+        if (node instanceof BinaryOperatorNode binary) {
+            return containsTopicOrCapture(binary.left) || containsTopicOrCapture(binary.right);
+        }
+        if (node instanceof ListNode list) {
+            for (Node element : list.elements) if (containsTopicOrCapture(element)) return true;
+        }
+        return false;
+    }
+
 
     /**
      * Parses a default statement (part of given/when feature from Perl 5.10).
@@ -750,7 +986,139 @@ public class StatementParser {
         BlockNode defaultBlock = ParseBlock.parseBlock(parser);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
+        // Like a matching when clause, default supplies the given expression's
+        // value and terminates the switch. Without this synthetic last a
+        // following statement in the given block overwrites default's result.
+        Node defaultResult = null;
+        for (int i = defaultBlock.elements.size() - 1; i >= 0; i--) {
+            Node element = defaultBlock.elements.get(i);
+            if (element != null) {
+                defaultResult = element;
+                defaultBlock.elements.remove(i);
+                break;
+            }
+        }
+        if (defaultResult == null) {
+            defaultResult = new OperatorNode("undef", new ListNode(index), index);
+        }
+        defaultResult.setAnnotation("insideGivenBlock", true);
+        OperatorNode implicitLast = new OperatorNode("last", new ListNode(index), index);
+        implicitLast.setAnnotation("implicitGivenLast", true);
+        implicitLast.setAnnotation("implicitGivenResult", defaultResult);
+        defaultBlock.elements.add(implicitLast);
+
         return defaultBlock;
+    }
+
+    /** Parse an expression followed by Perl's postfix {@code when} modifier. */
+    public static Node parseWhenModifier(Parser parser, Node expression) {
+        int index = parser.tokenIndex;
+        if (parser.parsingGivenDepth == 0) {
+            parser.throwCleanError(index, "Can't \"when\" outside a topicalizer");
+        }
+        TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // when
+        Map<String, SymbolTable.SymbolEntry> lexicalsBeforeCondition = visibleLexicals(parser);
+        Node condition;
+        if (TokenUtils.peek(parser).text.equals("(")) {
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
+            condition = parser.parseExpression(0);
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+        } else {
+            condition = parser.parseExpression(0);
+        }
+        List<Node> hoistedDeclarations = new ArrayList<>();
+        condition = hoistPostfixWhenConditionDeclarations(condition, hoistedDeclarations);
+        Map<String, SymbolTable.SymbolEntry> sourceOrderBindings = new HashMap<>();
+        for (Map.Entry<String, SymbolTable.SymbolEntry> entry : lexicalsBeforeCondition.entrySet()) {
+            SymbolTable.SymbolEntry after = parser.ctx.symbolTable.getSymbolEntry(entry.getKey());
+            if (after != null && after.index() != entry.getValue().index()) {
+                sourceOrderBindings.put(entry.getKey(), entry.getValue());
+                // Backends revisit the completed symbol table while emitting,
+                // so retain the earlier declaration's parser-assigned pad slot
+                // as well as its references.  The later condition declaration
+                // will then allocate its own slot when it is emitted.
+                if (entry.getValue().ast() != null) {
+                    entry.getValue().ast().setAnnotation("sourceOrderLexicalSlot", entry.getValue().index());
+                }
+            }
+        }
+        bindPostfixStatementLexicals(expression, sourceOrderBindings);
+        // Postfix when has the same implicit given exit as a braced when.
+        // A source `continue` is the exception: it falls through to the next
+        // switch clause, so remove it (and unreachable trailing expressions)
+        // rather than compiling it as an ordinary loop `next`.
+        boolean continueWhen = removeWhenContinue(expression);
+        boolean directContinue = expression instanceof AbstractNode annotated
+                && annotated.getBooleanAnnotation("whenContinue");
+        if (continueWhen) {
+            hoistPostfixWhenContinueDeclarations(expression, hoistedDeclarations);
+        }
+        List<Node> bodyElements = new ArrayList<>();
+        if (continueWhen) {
+            // A bare `continue when CONDITION` is itself the marker.  There
+            // is no containing statement-order node from which
+            // removeWhenContinue() can remove it, so retaining it would emit
+            // an ordinary `next` and incorrectly advance an enclosing loop.
+            // Nested expressions retain their prefix side effects.
+            if (!directContinue) {
+                bodyElements.add(expression);
+            }
+        } else {
+            // The synthetic last evaluates its annotation; retaining the
+            // expression in the body would run side effects twice.
+            expression.setAnnotation("insideGivenBlock", true);
+            OperatorNode implicitLast = new OperatorNode("last", new ListNode(index), index);
+            implicitLast.setAnnotation("implicitGivenLast", true);
+            implicitLast.setAnnotation("implicitGivenResult", expression);
+            bodyElements.add(implicitLast);
+        }
+        BlockNode body = new BlockNode(bodyElements, index, parser);
+        Node ifCondition = whenIsBoolean(condition) ? condition
+                : new BinaryOperatorNode("~~",
+                        new OperatorNode("$", new IdentifierNode("_", index), index),
+                        condition, index);
+        Node result = new IfNode("if", ifCondition, body, new ListNode(index), index);
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, ";");
+        if (hoistedDeclarations.isEmpty()) return result;
+        hoistedDeclarations.add(result);
+        return new ListNode(hoistedDeclarations, index);
+    }
+
+    /**
+     * Removes a switch {@code continue} and source statements after it from a
+     * postfix-when expression.  The parser represents comma-separated source
+     * expressions as ListNodes and {@code do { ... }} with nested blocks, so
+     * walk statement-order containers and truncate at the first marker.
+     */
+    private static boolean removeWhenContinue(Node node) {
+        if (node == null) return false;
+        if (node instanceof AbstractNode annotated
+                && annotated.getBooleanAnnotation("whenContinue")) {
+            return true;
+        }
+        if (node instanceof BlockNode block) {
+            return removeWhenContinueFromElements(block.elements);
+        }
+        if (node instanceof ListNode list) {
+            return removeWhenContinueFromElements(list.elements);
+        }
+        if (node instanceof OperatorNode operator) {
+            return removeWhenContinue(operator.operand);
+        }
+        if (node instanceof BinaryOperatorNode binary) {
+            return removeWhenContinue(binary.left) || removeWhenContinue(binary.right);
+        }
+        return false;
+    }
+
+    private static boolean removeWhenContinueFromElements(List<Node> elements) {
+        for (int i = 0; i < elements.size(); i++) {
+            if (removeWhenContinue(elements.get(i))) {
+                elements.subList(i, elements.size()).clear();
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -759,11 +1127,12 @@ public class StatementParser {
      * Transforms:
      * given(EXPR) { when(COND1) { BLOCK1 } when(COND2) { BLOCK2 } default { BLOCK3 } }
      * <p>
-     * Into AST equivalent of:
-     * do { $_ = EXPR; when/default statements }
+     * Into AST equivalent of {@code local $_ = EXPR} followed by the
+     * when/default statements.  A scalar assignment whose left hand side is
+     * an assignable cell uses the existing one-pass topicalizing foreach
+     * lowering instead, preserving Perl's alias semantics for tied scalars.
      * <p>
      * Where when/default are parsed as regular statements that check $_.
-     * This is a pure AST transformation - no special emitter code needed.
      *
      * @param parser The Parser instance
      * @return A Node representing the given-when statement as transformed AST
@@ -797,19 +1166,13 @@ public class StatementParser {
         HintHashRegistry.exitScope(); // Restore compile-time %^H
         int postBlockHintHashId = HintHashRegistry.snapshotCurrentHintHash();
 
-        // Create the complete block: { $_ = EXPR; blockContent }
+        // Create the given body first.  It remains an implicit-when target so
+        // `last` inserted by a matching when leaves this body rather than an
+        // enclosing source loop.
         List<Node> statements = new ArrayList<>();
-
-        // local $_ = condition  (given dynamically localizes the topic)
         Node dollarUnderscore = new OperatorNode("$",
                 new IdentifierNode("_", index),
                 index);
-        Node localTopic = new OperatorNode("local", dollarUnderscore, index);
-        statements.add(new BinaryOperatorNode("=",
-                localTopic,
-                condition,
-                index));
-
         // Add all the statements from the block
         markInsideGiven(blockContent);
         statements.addAll(blockContent.elements);
@@ -821,7 +1184,38 @@ public class StatementParser {
         // to an outer loop or the program top level.
         givenBlock.isLoop = true;
         givenBlock.setAnnotation("postBlockHintHashId", postBlockHintHashId);
+
+        if (usesAssignableGivenTopic(condition)) {
+            // For1Node emits its BlockNode body inline.  Reuse the explicit
+            // topicalizer marker so both backends install the switch dispatch
+            // boundary around that inlined body.
+            givenBlock.setAnnotation("topicalizerLoopBody", true);
+            For1Node topicalizer = new For1Node(null, false, dollarUnderscore,
+                    condition, givenBlock, null, index);
+            topicalizer.needsArrayOfAlias = true;
+            return new BlockNode(List.of(
+                    new OperatorNode("local", dollarUnderscore, index),
+                    topicalizer), index, parser);
+        }
+
+        // Preserve the ordinary given lowering for rvalues, declarations,
+        // list expressions, and their expression-result/scoping semantics.
+        Node localTopic = new OperatorNode("local", dollarUnderscore, index);
+        statements.addFirst(new BinaryOperatorNode("=", localTopic, condition, index));
         return givenBlock;
+    }
+
+    /** A non-declaration scalar assignment is a Perl topicalizer lvalue. */
+    private static boolean usesAssignableGivenTopic(Node condition) {
+        if (!(condition instanceof BinaryOperatorNode assignment) || !assignment.operator.equals("=")) {
+            return false;
+        }
+        if (assignment.left instanceof OperatorNode declaration
+                && (declaration.operator.equals("my") || declaration.operator.equals("our")
+                || declaration.operator.equals("state"))) {
+            return false;
+        }
+        return LValueVisitor.getContext(assignment.left) == RuntimeContextType.SCALAR;
     }
 
     /**

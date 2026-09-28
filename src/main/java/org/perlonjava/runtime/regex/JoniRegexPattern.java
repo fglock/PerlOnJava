@@ -705,12 +705,17 @@ final class JoniRegexPattern {
     }
 
     void materializeDefinedDeferredProperties() {
+        materializeDefinedDeferredProperties(false);
+    }
+
+    void materializeDefinedDeferredProperties(boolean qualifyBareDiagnosticName) {
         if (!regex.hasDeferredCharacterProperties()) return;
         UnicodeResolver.withUserPropertyPackage(userPropertyPackage, () -> {
             for (DeferredPropertyFact property : deferredCharacterProperties()) {
                 boolean materialized = UnicodeResolver.tryMaterializeDeferredJoniProperty(
                         property.name().trim(),
-                        Option.isIgnoreCase(property.option()));
+                        Option.isIgnoreCase(property.option()),
+                        qualifyBareDiagnosticName);
                 if (!materialized && property.context()
                         == CharacterPropertyResolver.Context
                                 .PERL_EXTENDED_CHARACTER_CLASS) {

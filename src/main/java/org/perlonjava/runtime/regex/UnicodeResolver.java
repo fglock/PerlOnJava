@@ -820,7 +820,8 @@ public class UnicodeResolver {
      */
     private static String tryUserDefinedProperty(
             String property, Set<String> recursionSet, boolean caseInsensitive) {
-        return tryUserDefinedProperty(property, recursionSet, caseInsensitive, false);
+        return tryUserDefinedProperty(property, recursionSet, caseInsensitive,
+                isUserPropertyMaterializationDeferred());
     }
 
     private static String tryUserDefinedProperty(
@@ -963,6 +964,10 @@ public class UnicodeResolver {
     private static IllegalArgumentException propertyDefinitionDie(
             PerlDieException failure, String propertyName) {
         String message = failure.getMessage();
+        if (message != null && message.startsWith("Died at ")) {
+            return new IllegalArgumentException(
+                    "Died: " + message + " in expansion of " + propertyName);
+        }
         return new IllegalArgumentException(
                 "Error \"" + (message == null ? "" : message)
                         + "\" in expansion of " + propertyName);
@@ -1372,11 +1377,11 @@ public class UnicodeResolver {
      * Undefined forward declarations remain matcher-lazy.
      */
     static boolean tryMaterializeDeferredJoniProperty(
-            String property, boolean caseInsensitive) {
+            String property, boolean caseInsensitive, boolean qualifyBareDiagnosticName) {
         if (PerlRuntime.currentOrNull() == null) return false;
         String encoded = tryUserDefinedProperty(
                 property, new LinkedHashSet<>(), caseInsensitive,
-                false, true);
+                qualifyBareDiagnosticName, true);
         return encoded != null;
     }
 

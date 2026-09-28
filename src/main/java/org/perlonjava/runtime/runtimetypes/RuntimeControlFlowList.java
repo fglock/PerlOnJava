@@ -46,8 +46,14 @@ public class RuntimeControlFlowList extends RuntimeList {
     /** Constructor for label control flow which carries its eval origin. */
     public RuntimeControlFlowList(ControlFlowType type, String label, String fileName, int lineNumber,
                                   String evalScope) {
+        this(type, label, fileName, lineNumber, evalScope, null);
+    }
+
+    /** Constructor retaining a switch-only source spelling after NEXT/LAST normalization. */
+    public RuntimeControlFlowList(ControlFlowType type, String label, String fileName, int lineNumber,
+                                  String evalScope, String switchControlOperator) {
         super();
-        this.marker = new ControlFlowMarker(type, label, fileName, lineNumber, evalScope);
+        this.marker = new ControlFlowMarker(type, label, fileName, lineNumber, evalScope, switchControlOperator);
         this.returnValue = null;
         this.suppressEscapingLoopControlWarning = Warnings.isWarnFlagLocalized()
                 && !Warnings.isWarnFlagSet();
@@ -143,6 +149,11 @@ public class RuntimeControlFlowList extends RuntimeList {
 
     public boolean suppressEscapingLoopControlWarning() {
         return suppressEscapingLoopControlWarning;
+    }
+
+    /** Switch controls cannot escape an eval or subroutine as ordinary loop controls can. */
+    public boolean isSwitchControl() {
+        return marker.switchControlOperator != null;
     }
 
     /**

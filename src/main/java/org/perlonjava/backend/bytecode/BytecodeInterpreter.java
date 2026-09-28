@@ -505,6 +505,12 @@ public class BytecodeInterpreter {
                                 }
                             }
 
+                            case Opcodes.UNBIND_ACTIVE_LEXICAL -> {
+                                int reg = bytecode[pc++];
+                                int nameIdx = bytecode[pc++];
+                                code.unbindActiveLexical(code.stringPool[nameIdx], registers[reg]);
+                            }
+
                             case Opcodes.RETURN_SCOPE_CLEANUP -> {
                                 int reg = bytecode[pc++];
                                 int returnReg = bytecode[pc++];
@@ -659,6 +665,29 @@ public class BytecodeInterpreter {
 
                                 if (retVal == null) {
                                     retVal = new RuntimeList();
+                                }
+                                // A switch-only control is normalized to a
+                                // NEXT/LAST marker.  It must fail at the eval
+                                // boundary rather than return from the whole
+                                // interpreter frame and bypass EVAL_CATCH.
+                                if (retVal instanceof RuntimeControlFlowList flow
+                                        && flow.isSwitchControl() && !evalCatchStack.isEmpty()) {
+                                    GlobalVariable.setGlobalVariable(
+                                            "main::@", flow.marker.buildErrorMessage() + ".\n");
+                                    if (!evalLocalLevelStack.isEmpty()) {
+                                        int relativeLevel = evalLocalLevelStack.pop();
+                                        DynamicVariableManager.popToLocalLevel(
+                                                savedLocalLevel + relativeLevel);
+                                    }
+                                    unwindEvalMethodInvocantHolds(
+                                            evalMethodInvocantHoldDepthStack, methodInvocantHolds);
+                                    pc = evalCatchStack.pop();
+                                    RuntimeCode.decrementEvalDepth();
+                                    if (frame.virtualEvalFrameDepth > 0) {
+                                        InterpreterState.pop();
+                                        frame.virtualEvalFrameDepth--;
+                                    }
+                                    break;
                                 }
                                 RuntimeCode.requireInterpreterLvalueReturn(code, retVal, callContext);
                                 RuntimeList retList = RuntimeCode.returnList(
@@ -964,6 +993,27 @@ public class BytecodeInterpreter {
                                 registers[rd] = RuntimeScalarCache.scalarUndef;
                             }
 
+                            case Opcodes.MATERIALIZE_LEXICAL_SCALAR -> {
+                                int register = bytecode[pc++];
+                                // This is lexical storage, not an expression
+                                // result.  Centralize the writable-cell test:
+                                // a skipped declaration may inherit a pooled
+                                // read-only literal through register reuse.
+                                registers[register] = RuntimeScalar.materializeLexicalCell(
+                                        (RuntimeScalar) registers[register]);
+                            }
+
+                            case Opcodes.INITIALIZE_LEXICAL_SCALAR -> {
+                                int register = bytecode[pc++];
+                                // A temporary list register can be recycled for this
+                                // declaration. Only an existing scalar cell can carry a
+                                // forward refalias binding; any other value is replaced by
+                                // a fresh lexical scalar.
+                                registers[register] = registers[register] instanceof RuntimeScalar scalar
+                                        ? RuntimeScalar.initializeLexicalCell(scalar)
+                                        : new RuntimeScalar();
+                            }
+
                             case Opcodes.UNDEFINE_SCALAR -> {
                                 pc = InlineOpcodeHandler.executeUndefineScalar(bytecode, pc, registers);
                             }
@@ -1118,7 +1168,7 @@ public class BytecodeInterpreter {
 
                                 if (iterator.hasNext()) {
                                     // See FOREACH_NEXT_OR_EXIT above for the rationale.
-                                    RuntimeScalar element = iterator.next();
+                                    RuntimeScalar element = ReadOnlyAlias.forForeach(iterator.next());
                                     registers[rd] = element;
                                     GlobalVariable.aliasForeachGlobalVariable(name, element);
                                     pc = bodyTarget;  // ABSOLUTE jump back to body start
@@ -1479,7 +1529,7 @@ public class BytecodeInterpreter {
                             // TYPE AND REFERENCE OPERATORS (opcodes 102-105) - Delegated
                             // =================================================================
 
-                            case Opcodes.DEFINED, Opcodes.DEFINED_CODE, Opcodes.DEFINED_CODE_DYNAMIC, Opcodes.DEFINED_GLOB, Opcodes.DEFINED_SCALAR_DEREF, Opcodes.REF, Opcodes.BLESS, Opcodes.BLESS_CLASS_INSTANCE, Opcodes.ISA, Opcodes.SMARTMATCH, Opcodes.PROTOTYPE,
+                            case Opcodes.DEFINED, Opcodes.DEFINED_CODE, Opcodes.DEFINED_CODE_DYNAMIC, Opcodes.DEFINED_GLOB, Opcodes.DEFINED_SCALAR_DEREF, Opcodes.REF, Opcodes.BLESS, Opcodes.BLESS_CLASS_INSTANCE, Opcodes.ISA, Opcodes.SMARTMATCH, Opcodes.INTEGER_SMARTMATCH, Opcodes.PROTOTYPE,
                                  Opcodes.QUOTE_REGEX, Opcodes.QUOTE_REGEX_O -> {
                                 pc = executeTypeOps(opcode, bytecode, pc, registers, code);
                             }
@@ -1538,10 +1588,7 @@ public class BytecodeInterpreter {
                                     // Keep ScalarSpecialVariable cells live.  Foreach aliases
                                     // to match variables such as $' must observe later matches,
                                     // just like the JVM backend and Perl do.
-                                    RuntimeScalar elem = iterator.next();
-                                    if (elem instanceof RuntimeScalarReadOnly) {
-                                        elem = new ReadOnlyAlias(elem);
-                                    }
+                                    RuntimeScalar elem = ReadOnlyAlias.forForeach(iterator.next());
                                     registers[rd] = elem;
                                     pc = bodyTarget;  // ABSOLUTE jump back to body start
                                 } else {
@@ -1983,7 +2030,8 @@ public class BytecodeInterpreter {
                                     }
                                     if (!handled) {
                                         ControlFlowType cfType = flow.getControlFlowType();
-                                        if ((cfType == ControlFlowType.GOTO || cfType == ControlFlowType.TAILCALL)
+                                        if ((cfType == ControlFlowType.GOTO || cfType == ControlFlowType.TAILCALL
+                                                || flow.isSwitchControl())
                                                 && !evalCatchStack.isEmpty()) {
                                             // Set $@ to the error message
                                             String errorMsg = flow.marker.buildErrorMessage();
@@ -2157,7 +2205,8 @@ public class BytecodeInterpreter {
                                     }
                                     if (!handled) {
                                         ControlFlowType cfType = flow.getControlFlowType();
-                                        if ((cfType == ControlFlowType.GOTO || cfType == ControlFlowType.TAILCALL)
+                                        if ((cfType == ControlFlowType.GOTO || cfType == ControlFlowType.TAILCALL
+                                                || flow.isSwitchControl())
                                                 && !evalCatchStack.isEmpty()) {
                                             String errorMsg = flow.marker.buildErrorMessage();
                                             GlobalVariable.setGlobalVariable("main::@", errorMsg);
@@ -2204,6 +2253,21 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeCreateNext(bytecode, pc, registers, code);
                             }
 
+                            case Opcodes.CREATE_SWITCH_CONTINUE, Opcodes.CREATE_SWITCH_BREAK,
+                                    Opcodes.CREATE_SWITCH_BREAK_LOOP_TOPICALIZER -> {
+                                int rd = bytecode[pc++];
+                                int labelIdx = bytecode[pc++];
+                                String label = labelIdx == 255 ? null : code.stringPool[labelIdx];
+                                boolean isContinue = opcode == Opcodes.CREATE_SWITCH_CONTINUE;
+                                String switchControl = isContinue ? "continue"
+                                        : opcode == Opcodes.CREATE_SWITCH_BREAK_LOOP_TOPICALIZER
+                                        ? "break-loop-topicalizer" : "break";
+                                registers[rd] = new RuntimeControlFlowList(
+                                        isContinue ? ControlFlowType.NEXT : ControlFlowType.LAST,
+                                        label, code.sourceName, code.sourceLine, null,
+                                        switchControl);
+                            }
+
                             case Opcodes.CREATE_REDO -> {
                                 pc = InlineOpcodeHandler.executeCreateRedo(bytecode, pc, registers, code);
                             }
@@ -2231,6 +2295,12 @@ public class BytecodeInterpreter {
                                 int context = bytecode[pc++];  // unused in marker, but consumed
                                 int evalScopeIdx = bytecode[pc++]; // -1 = not in eval
                                 int namedTargetIdx = bytecode[pc++]; // -1 = dynamic target
+
+                                // A tail call may not escape sort's pseudo
+                                // block. Do this at marker creation because
+                                // direct interpreter call paths can resolve a
+                                // marker before the caller sees it.
+                                RuntimeCode.checkSortTailCall();
 
                                 // Get coderef
                                 RuntimeBase codeRefBase = registers[coderefReg];
@@ -2825,6 +2895,10 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeArraySetFromList(bytecode, pc, registers);
                             }
 
+                            case Opcodes.ARRAY_SET_FROM_REFERENCE_LIST -> {
+                                pc = InlineOpcodeHandler.executeArraySetFromReferenceList(bytecode, pc, registers);
+                            }
+
                             case Opcodes.SET_FROM_LIST -> {
                                 pc = InlineOpcodeHandler.executeSetFromList(bytecode, pc, registers);
                             }
@@ -2859,7 +2933,9 @@ public class BytecodeInterpreter {
                                  Opcodes.RETRIEVE_BEGIN_HASH, Opcodes.LOCAL_SCALAR, Opcodes.LOCAL_ARRAY,
                                  Opcodes.LOCAL_HASH, Opcodes.STATE_INIT_SCALAR, Opcodes.STATE_INIT_ARRAY,
                                  Opcodes.STATE_INIT_HASH, Opcodes.STATE_RETRIEVE_SCALAR,
-                                 Opcodes.STATE_IS_INITIALIZED, Opcodes.STATE_MARK_INITIALIZED -> {
+                                 Opcodes.STATE_RETRIEVE_ARRAY, Opcodes.STATE_IS_INITIALIZED,
+                                 Opcodes.STATE_MARK_INITIALIZED, Opcodes.STATE_ALIAS_ARRAY,
+                                 Opcodes.STATE_ALIAS_HASH, Opcodes.STATE_RETRIEVE_HASH -> {
                                 pc = executeScopeOps(opcode, bytecode, pc, registers, code);
                             }
 
@@ -2898,11 +2974,12 @@ public class BytecodeInterpreter {
                                 int rd = bytecode[pc++];
                                 registers[rd] = org.perlonjava.runtime.operators.WaitpidOperator.waitForChild();
                             }
-                            case Opcodes.EVAL_STRING, Opcodes.SELECT_OP, Opcodes.LOAD_GLOB, Opcodes.SLEEP_OP,
+                            case Opcodes.EVAL_STRING, Opcodes.SELECT_OP, Opcodes.LOAD_GLOB, Opcodes.LOAD_GLOB_CANONICAL, Opcodes.SLEEP_OP,
                                  Opcodes.ALARM_OP, Opcodes.DEREF_GLOB, Opcodes.DEREF_GLOB_NONSTRICT,
                                  Opcodes.LOAD_GLOB_DYNAMIC, Opcodes.DEREF_SCALAR_STRICT,
                                  Opcodes.DEREF_SCALAR_NONSTRICT, Opcodes.CODE_DEREF_NONSTRICT,
-                                 Opcodes.CODE_DEREF_STRICT,
+                                 Opcodes.CODE_DEREF_STRICT, Opcodes.REFALIAS_CODE_REFERENCE,
+                                 Opcodes.REFALIAS_SCALAR_REFERENCE,
                                  Opcodes.NAMED_CODE_REFERENCE, Opcodes.DIRECT_NAMED_CODE_CALL,
                                  Opcodes.FOREACH_DEREF_SCALAR, Opcodes.FOREACH_DEREF_ARRAY,
                                  Opcodes.FOREACH_DEREF_HASH -> {
@@ -3106,6 +3183,10 @@ public class BytecodeInterpreter {
 
                             case Opcodes.FLIP_FLOP -> {
                                 pc = InlineOpcodeHandler.executeFlipFlop(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.RUNTIME_RANGE_OR_FLIP_FLOP -> {
+                                pc = InlineOpcodeHandler.executeRuntimeRangeOrFlipFlop(bytecode, pc, registers);
                             }
 
                             case Opcodes.LOCAL_GLOB -> {
@@ -3999,6 +4080,13 @@ public class BytecodeInterpreter {
                 registers[rd] = CompareOperators.smartmatch(registers[rs1], registers[rs2]);
                 return pc;
             }
+            case Opcodes.INTEGER_SMARTMATCH -> {
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                registers[rd] = CompareOperators.smartmatchInteger(registers[rs1], registers[rs2]);
+                return pc;
+            }
             case Opcodes.PROTOTYPE -> {
                 int rd = bytecode[pc++];
                 int rs = bytecode[pc++];
@@ -4229,6 +4317,52 @@ public class BytecodeInterpreter {
                     stateArr.setFromList(((RuntimeBase) registers[valueReg]).getList());
                     StateVariable.markInitializedStateVariable(codeRef, varName, persistId);
                 }
+                return pc;
+            }
+            case Opcodes.STATE_RETRIEVE_ARRAY -> {
+                int rd = bytecode[pc++];
+                int nameIdx = bytecode[pc++];
+                int persistId = bytecode[pc++];
+                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
+                registers[rd] = StateVariable.retrieveStateArray(codeRef, code.stringPool[nameIdx], persistId);
+                return pc;
+            }
+            case Opcodes.STATE_RETRIEVE_HASH -> {
+                int rd = bytecode[pc++];
+                int nameIdx = bytecode[pc++];
+                int persistId = bytecode[pc++];
+                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
+                registers[rd] = StateVariable.retrieveStateHash(codeRef, code.stringPool[nameIdx], persistId);
+                return pc;
+            }
+            case Opcodes.STATE_ALIAS_ARRAY -> {
+                int rd = bytecode[pc++];
+                int sourceReg = bytecode[pc++];
+                int nameIdx = bytecode[pc++];
+                int persistId = bytecode[pc++];
+                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
+                RuntimeBase source = registers[sourceReg];
+                // Whole-array refaliasing may provide the aggregate directly
+                // (for an array literal) or as the scalar array reference
+                // produced by a refalias expression.  Both denote the same
+                // installable state-array binding.
+                RuntimeArray array = source instanceof RuntimeArray direct
+                        ? direct : source.scalar().arrayDeref();
+                StateVariable.aliasStateArray(codeRef, code.stringPool[nameIdx], persistId, array);
+                registers[rd] = array;
+                return pc;
+            }
+            case Opcodes.STATE_ALIAS_HASH -> {
+                int rd = bytecode[pc++];
+                int sourceReg = bytecode[pc++];
+                int nameIdx = bytecode[pc++];
+                int persistId = bytecode[pc++];
+                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
+                RuntimeBase source = registers[sourceReg];
+                RuntimeHash hash = source instanceof RuntimeHash direct
+                        ? direct : source.scalar().hashDeref();
+                StateVariable.aliasStateHash(codeRef, code.stringPool[nameIdx], persistId, hash);
+                registers[rd] = hash;
                 return pc;
             }
             case Opcodes.STATE_INIT_HASH -> {
@@ -4483,6 +4617,9 @@ public class BytecodeInterpreter {
             case Opcodes.LOAD_GLOB -> {
                 return SlowOpcodeHandler.executeLoadGlob(bytecode, pc, registers, code);
             }
+            case Opcodes.LOAD_GLOB_CANONICAL -> {
+                return SlowOpcodeHandler.executeLoadGlobCanonical(bytecode, pc, registers, code);
+            }
             case Opcodes.SLEEP_OP -> {
                 return SlowOpcodeHandler.executeSleep(bytecode, pc, registers);
             }
@@ -4512,6 +4649,12 @@ public class BytecodeInterpreter {
             }
             case Opcodes.FOREACH_DEREF_HASH -> {
                 return SlowOpcodeHandler.executeForeachDerefHash(bytecode, pc, registers);
+            }
+            case Opcodes.REFALIAS_CODE_REFERENCE -> {
+                return SlowOpcodeHandler.executeRefAliasCodeReference(bytecode, pc, registers);
+            }
+            case Opcodes.REFALIAS_SCALAR_REFERENCE -> {
+                return SlowOpcodeHandler.executeRefAliasScalarReference(bytecode, pc, registers);
             }
             case Opcodes.DEREF_SCALAR_NONSTRICT -> {
                 return SlowOpcodeHandler.executeDerefScalarNonStrict(bytecode, pc, registers, code);

@@ -6,6 +6,7 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.analysis.LValueVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.SymbolTable;
@@ -41,6 +42,32 @@ public class EmitForeach {
 
     // Set to true to enable debug output for loop control flow
     private static final boolean DEBUG_LOOP_CONTROL_FLOW = false;
+
+    /**
+     * Emits a foreach source before the loop localizes its topic.
+     *
+     * <p>A scalar assignment is an assignable foreach source in Perl.  Its
+     * ordinary expression result is the value returned by STORE, which is a
+     * copy for tied scalars; the iterator instead needs the left-hand cell so
+     * its topic remains tied.  Evaluate that assignment exactly once, then
+     * emit the scalar lvalue as the singleton source.  Other sources retain
+     * the normal list behaviour and slice handling.</p>
+     */
+    public static void emitForeachSource(EmitterVisitor emitterVisitor, Node source) {
+        source.setAnnotation("foreachSource", true);
+        try {
+            if (source instanceof BinaryOperatorNode assignment
+                    && assignment.operator.equals("=")
+                    && LValueVisitor.getContext(assignment.left) == RuntimeContextType.SCALAR) {
+                assignment.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                assignment.left.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+            } else {
+                source.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            }
+        } finally {
+            source.setAnnotation("foreachSource", false);
+        }
+    }
 
     private static void pushGotoLabelsForBlock(EmitterVisitor emitterVisitor, BlockNode blockNode) {
         // Pre-register labels for forward/backward goto inside this block.
@@ -122,12 +149,7 @@ public class EmitForeach {
             // A key/value hash slice used as a foreach source supplies its
             // values only.  Keep this marker narrowly scoped to emission so
             // ordinary %hash{...} expressions still return key/value pairs.
-            node.list.setAnnotation("foreachSource", true);
-            try {
-                node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
-            } finally {
-                node.list.setAnnotation("foreachSource", false);
-            }
+            emitForeachSource(emitterVisitor, node.list);
             preEvalListLocal = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
             mv.visitVarInsn(Opcodes.ASTORE, preEvalListLocal);
         }
@@ -264,6 +286,13 @@ public class EmitForeach {
                     && (declaration.operator.equals("my") || declaration.operator.equals("our")
                     || declaration.operator.equals("state"))
                     && declaration.operand instanceof OperatorNode sigil) {
+                // The leading reference keeps the declaration nested instead
+                // of visiting it through the normal `for my ...` path above.
+                // Materialize that lexical slot before compiling the body so
+                // `for \\my @x` shadows an earlier package @x rather than
+                // continuing to resolve @x through the outer symbol table.
+                declaration.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                isDeclaredInFor = true;
                 actualVariable = sigil;
             }
 
@@ -549,8 +578,14 @@ public class EmitForeach {
                 mv.visitVarInsn(Opcodes.ALOAD, iteratorIndex);
                 mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true);
                 mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
-
                 mv.visitLabel(endValueLabel);
+                // Padding is the same read-only undef rvalue as an explicit
+                // undef in the source list, not a writable loop temporary.
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/ReadOnlyAlias",
+                        "forForeach",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
 
                 // Assign to variable
                 Node varNode = varList.elements.get(i);
@@ -569,6 +604,11 @@ public class EmitForeach {
             mv.visitVarInsn(Opcodes.ALOAD, iteratorIndex);
             mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true);
             mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/ReadOnlyAlias",
+                    "forForeach",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
 
             // Reference-alias loop variables bind to the referenced cell, not
             // to the RuntimeScalar that holds the reference.
@@ -686,6 +726,22 @@ public class EmitForeach {
 
             pushGotoLabelsForBlock(emitterVisitor, blockNode);
 
+            // emitFor1 expands a BlockNode inline instead of delegating to
+            // EmitBlock.  Preserve the synthetic switch boundary that an
+            // implicit-$_ foreach needs for `when`: its synthesized `last`
+            // finishes this iteration's dispatch, while source loop control
+            // continues to select currentLoopLabels.
+            Label topicalizerEnd = null;
+            boolean topicalizerLoopBody = blockNode.getBooleanAnnotation("topicalizerLoopBody");
+            if (topicalizerLoopBody) {
+                topicalizerEnd = new Label();
+                LoopLabels topicalizerLabels = new LoopLabels(
+                        null, topicalizerEnd, topicalizerEnd, topicalizerEnd,
+                        RuntimeContextType.VOID, false, false);
+                topicalizerLabels.implicitWhenTarget = true;
+                emitterVisitor.ctx.javaClassInfo.pushLoopLabels(topicalizerLabels);
+            }
+
             java.util.List<Node> list = blockNode.elements;
             int lastNonNullIndex = -1;
             for (int i = list.size() - 1; i >= 0; i--) {
@@ -721,6 +777,11 @@ public class EmitForeach {
                 emitRegistryCheck(mv, currentLoopLabels, redoLabel, continueLabel, loopEnd);
             }
             emitterVisitor.ctx.javaClassInfo.statementTokenIndex = savedStatementTokenIndex;
+
+            if (topicalizerLoopBody) {
+                mv.visitLabel(topicalizerEnd);
+                emitterVisitor.ctx.javaClassInfo.popLoopLabels();
+            }
 
             popGotoLabelsForBlock(emitterVisitor, blockNode);
 

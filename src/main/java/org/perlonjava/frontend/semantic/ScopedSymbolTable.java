@@ -389,6 +389,19 @@ public class ScopedSymbolTable {
         return indices;
     }
 
+    /** Scalar lexical pad names and registers that leave a scope together. */
+    public java.util.Map<Integer, String> getMyScalarNamesInScope(int scopeIndex) {
+        java.util.Map<Integer, String> names = new java.util.LinkedHashMap<>();
+        for (int i = symbolTableStack.size() - 1; i >= scopeIndex; i--) {
+            for (SymbolTable.SymbolEntry entry : symbolTableStack.get(i).variableIndex.values()) {
+                if ("my".equals(entry.decl()) && entry.name() != null && entry.name().startsWith("$")) {
+                    names.putIfAbsent(entry.index(), entry.name());
+                }
+            }
+        }
+        return names;
+    }
+
     /**
      * Returns true if we are currently parsing inside a subroutine body (named or anonymous).
      */

@@ -849,6 +849,13 @@ public class StringParser {
                     namedCharacterExpansions);
         }
         node.setAnnotation("syntacticQuoteRegex", isQuoteRegex);
+        // Runtime wrappers for source regexes are created only when their CV
+        // executes.  Preserve whether this syntax was parsed before RUN so
+        // deferred user-property diagnostics retain Perl's compile-time name
+        // qualification rather than inferring it from that later execution.
+        node.setAnnotation("regexSourceCompiledBeforeRun",
+                parser.isTopLevelScript && !parser.parsingEvalString
+                        && hasForwardUserPropertyDefinition(parser, rawStr.index));
         node.setAnnotation("literalSyntaxValidated", literalSyntaxValidated);
         node.setAnnotation("regexWarningsEnabled",
                 ctx.symbolTable != null && ctx.symbolTable.isWarningCategoryEnabled("regexp"));
@@ -859,6 +866,31 @@ public class StringParser {
         node.setAnnotation("regexWarningBits",
                 ctx.symbolTable == null ? null : ctx.symbolTable.getWarningBitsString());
         return node;
+    }
+
+    /**
+     * A property name interpolated into a source regex cannot be resolved while
+     * parsing. Retain whether the source unit introduces a later Is or In
+     * definition: Perl reports that forward definition with its package name,
+     * while a property already defined before the regex remains bare.
+     */
+    private static boolean hasForwardUserPropertyDefinition(Parser parser, int regexIndex) {
+        for (int i = Math.max(0, regexIndex); i + 1 < parser.tokens.size(); i++) {
+            if (!"sub".equals(parser.tokens.get(i).text)) continue;
+            int nameIndex = i + 1;
+            while (nameIndex < parser.tokens.size()
+                    && (parser.tokens.get(nameIndex).type == LexerTokenType.WHITESPACE
+                    || parser.tokens.get(nameIndex).type == LexerTokenType.NEWLINE)) {
+                nameIndex++;
+            }
+            if (nameIndex >= parser.tokens.size()) continue;
+            String name = parser.tokens.get(nameIndex).text;
+            if ((name.startsWith("Is") || name.startsWith("In"))
+                    && name.length() > 2) {
+                return true;
+            }
+        }
+        return false;
     }
 
     static void captureLexicalNamedCharacterTranslator(

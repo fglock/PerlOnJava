@@ -303,6 +303,7 @@ public class ClassTransformer {
         ListNode myClassDecl = new ListNode(0);
         OperatorNode myClass = new OperatorNode("my",
                 new OperatorNode("$", new IdentifierNode("class", 0), 0), 0);
+        ((OperatorNode) myClass.operand).setAnnotation("reuseBytecodeLexicalRegister", Boolean.TRUE);
         myClassDecl.elements.add(myClass);
         OperatorNode shiftOp = new OperatorNode("shift",
                 new OperatorNode("@", new IdentifierNode("_", 0), 0), 0);
@@ -313,6 +314,7 @@ public class ClassTransformer {
         ListNode myArgsDecl = new ListNode(0);
         OperatorNode myArgs = new OperatorNode("my",
                 new OperatorNode("%", new IdentifierNode("args", 0), 0), 0);
+        ((OperatorNode) myArgs.operand).setAnnotation("reuseBytecodeLexicalRegister", Boolean.TRUE);
         myArgsDecl.elements.add(myArgs);
         BinaryOperatorNode argsAssign = new BinaryOperatorNode("=", myArgsDecl,
                 new OperatorNode("@", new IdentifierNode("_", 0), 0), 0);
@@ -343,6 +345,7 @@ public class ClassTransformer {
         ListNode mySelfDecl = new ListNode(0);
         OperatorNode mySelf = new OperatorNode("my",
                 new OperatorNode("$", new IdentifierNode("self", 0), 0), 0);
+        ((OperatorNode) mySelf.operand).setAnnotation("reuseBytecodeLexicalRegister", Boolean.TRUE);
         mySelfDecl.elements.add(mySelf);
 
         // Check if this class has a parent (from :isa attribute)

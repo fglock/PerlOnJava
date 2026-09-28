@@ -693,7 +693,11 @@ public class InlineOpcodeHandler {
         int rd = bytecode[pc++];
         int operandReg = bytecode[pc++];
         RuntimeBase operand = registers[operandReg];
-        registers[rd] = operand.scalar();
+        // A lexical array declared by a refalias expression can have its
+        // scope-cleanup slot cleared before a later loop iteration observes
+        // it. Perl observes that slot as an empty array, whose scalar value
+        // is zero; never dereference the cleared register as Java null.
+        registers[rd] = operand == null ? new RuntimeScalar(0) : operand.scalar();
         return pc;
     }
 
@@ -1283,6 +1287,14 @@ public class InlineOpcodeHandler {
         return pc;
     }
 
+    /** Format: ARRAY_SET_FROM_REFERENCE_LIST arrayReg listReg. */
+    public static int executeArraySetFromReferenceList(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int arrayReg = bytecode[pc++];
+        int listReg = bytecode[pc++];
+        ((RuntimeArray) registers[arrayReg]).setFromReferenceList(registers[listReg].getList());
+        return pc;
+    }
+
     /**
      * List assignment: rd = lhsList.setFromList(rhsList)
      * Format: SET_FROM_LIST rd lhsReg rhsReg
@@ -1586,10 +1598,27 @@ public class InlineOpcodeHandler {
         int flipFlopId = bytecode[pc++];
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
+        boolean leftIsLineNumberEndpoint = bytecode[pc++] != 0;
+        boolean rightIsLineNumberEndpoint = bytecode[pc++] != 0;
         registers[rd] = ScalarFlipFlopOperator.evaluate(
                 flipFlopId,
                 registers[rs1].scalar(),
-                registers[rs2].scalar());
+                registers[rs2].scalar(),
+                leftIsLineNumberEndpoint, rightIsLineNumberEndpoint);
+        return pc;
+    }
+
+    public static int executeRuntimeRangeOrFlipFlop(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int flipFlopId = bytecode[pc++];
+        int rs1 = bytecode[pc++];
+        int rs2 = bytecode[pc++];
+        boolean leftIsLineNumberEndpoint = bytecode[pc++] != 0;
+        boolean rightIsLineNumberEndpoint = bytecode[pc++] != 0;
+        int context = registers[2].scalar().getInt();
+        registers[rd] = ScalarFlipFlopOperator.evaluateInContext(
+                flipFlopId, registers[rs1].scalar(), registers[rs2].scalar(), context,
+                leftIsLineNumberEndpoint, rightIsLineNumberEndpoint);
         return pc;
     }
 

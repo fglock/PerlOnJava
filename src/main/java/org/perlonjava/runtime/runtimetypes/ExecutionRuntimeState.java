@@ -59,6 +59,12 @@ public final class ExecutionRuntimeState {
     public final ArrayDeque<ArrayList<String>> syntheticCallerFrames = new ArrayDeque<>();
     public final Deque<RuntimeArray> argsStack = new ArrayDeque<>();
     public final Deque<RuntimeCode> activeCodeStack = new ArrayDeque<>();
+    /** Self references of active JVM-generated Perl methods. */
+    public final Deque<RuntimeScalar> activeJvmSelfReferences = new ArrayDeque<>();
+    /** Sort pseudo-block state for active JVM-generated Perl methods. */
+    public final Deque<Boolean> activeJvmSortComparators = new ArrayDeque<>();
+    /** Dynamic extent of a sort comparator invocation, including called subs. */
+    public int activeSortComparatorInvocations;
     final Deque<RuntimeCode.JvmClosureFrame> jvmClosureFrames = new ArrayDeque<>();
     /** Match-time callback locations, preserved through builtin wrapper frames. */
     public final Deque<String> activeRegexCallbackLocations = new ArrayDeque<>();

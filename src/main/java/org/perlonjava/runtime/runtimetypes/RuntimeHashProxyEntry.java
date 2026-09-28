@@ -148,7 +148,7 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
     /** Replace this hash slot with the scalar referenced by a refaliasing RHS. */
     public RuntimeScalar aliasToReference(RuntimeScalar reference) {
         if (parent.threadShared) SharedPerlStorage.validateStoredValue(reference);
-        RuntimeScalar referent = reference.scalarDeref();
+        RuntimeScalar referent = reference.refAliasScalarReference();
         parent.notePackageRootMutation();
         parent.elements.put(key, referent);
         parent.markKeyByte(key, byteKey);
@@ -167,27 +167,27 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
      */
     @Override
     public void dynamicSaveState() {
-        // Create a new RuntimeScalar to save the current state
         if (this.lvalue == null) {
             dynamicStateStack().push(null);
             vivify();
         } else {
-            RuntimeScalar currentState = new RuntimeScalar();
-            // Copy the current type and value to the new state
-            currentState.type = this.lvalue.type;
-            currentState.value = this.lvalue.value;
-            currentState.blessId = this.lvalue.blessId;
-            dynamicStateStack().push(currentState);
-            // A localized hash slot is an ordinary scalar localization, not
-            // `undef &name`: it must become an actual undef value even when
-            // its previous value was CODE.  RuntimeScalar.undefine() retains
-            // a declared CODE identity for named subroutine slots, which
-            // would leave `local $SIG{__DIE__}` callable in the inner scope.
-            this.lvalue.type = RuntimeScalarType.UNDEF;
-            this.lvalue.value = null;
-            this.lvalue.globalCodeRefFqn = null;
+            // Preserve the actual hash slot, not merely its value. Refaliasing
+            // can make the slot's scalar identity observable after local() unwinds.
+            dynamicStateStack().push(this.lvalue);
+            // The localized value needs a distinct mutable slot. Clearing the
+            // saved slot would also clear the object that must be reinstalled
+            // at scope exit, losing ordinary `local $hash{key}` values.
+            RuntimeScalar localized = new RuntimeScalar();
+            parent.notePackageRootMutation();
+            parent.elements.put(key, localized);
+            // %ENV wraps slots on insertion.  Re-fetch the installed element
+            // so subsequent assignment updates that wrapper rather than the
+            // detached temporary scalar passed to put().
+            this.lvalue = parent.elements.get(key);
+            parent.markPackageRootedValue(this.lvalue);
             this.type = RuntimeScalarType.UNDEF;
             this.value = null;
+            this.blessId = 0;
         }
     }
 
@@ -219,26 +219,31 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
                 this.type = RuntimeScalarType.UNDEF;
                 this.value = null;
             } else {
-                // Re-fetch or create the entry in the parent hash by key.
-                // This handles the case where %hash was reassigned between save and restore
-                // (setFromList does elements.clear() which orphans the old lvalue).
-                RuntimeScalar target = parent.elements.get(key);
-                if (target == null) {
-                    parent.put(key, new RuntimeScalar());
-                    // Environment hashes wrap values on insertion; restore
-                    // the scalar that is actually held by the map.
-                    target = parent.elements.get(key);
-                }
-                parent.markPackageRootedValue(target);
-                this.lvalue = target;
-                // Restore the saved value into the current hash entry
-                // lvalue.set() goes through setLarge() which handles refCount
-                this.lvalue.set(previousState);
-                this.lvalue.blessId = previousState.blessId;
-                // Sync proxy state
+                // A temporary local alias may have replaced the map entry.
+                // Reinstall the saved slot so its original scalar identity
+                // remains observable after the dynamic scope unwinds.
+                parent.notePackageRootMutation();
+                RuntimeScalar displaced = parent.elements.put(key, previousState);
+                parent.markPackageRootedValue(previousState);
+                this.lvalue = previousState;
                 this.type = this.lvalue.type;
                 this.value = this.lvalue.value;
-                this.blessId = previousState.blessId;
+                this.blessId = this.lvalue.blessId;
+
+                // The localized slot can hold a closure that is no longer
+                // reachable after the saved hash entry is restored. Release
+                // it only after restoration, so a DESTROY method observes the
+                // restored dynamic value (notably a restored %SIG handler).
+                if (displaced != null && displaced != previousState) {
+                    // Replacing a localized element has the same ownership
+                    // effect as deleting a hash element.  In particular, a
+                    // CODE slot can be the last counted owner of a closure;
+                    // deferDecrementIfTracked then releases its captures when
+                    // the closure's reference count reaches zero.
+                    MortalList.deferDecrementIfTracked(displaced);
+                    MortalList.deferIoOwnerRelease(displaced);
+                    MortalList.flush();
+                }
             }
         }
     }

@@ -221,6 +221,14 @@ sub is_excluded_test_file {
     # so retain its source for reference but exclude it from UAT, even by name.
     return 1 if $path =~ m{(?:^|/)perl5_t/t/benchmark/gh7094-speed-up-keys-on-empty-hash\.t$};
 
+    # These imported performance tests inspect Perl 5's native optree through
+    # B::walkoptree and B's compile-time opcode flag constants. PerlOnJava's
+    # B module is intentionally a runtime metadata shim, not a native optree
+    # implementation, so these tests do not measure a supported surface.
+    # Keep the upstream sources available for reference, but exclude them from
+    # the compatibility corpus even when named directly.
+    return 1 if $path =~ m{(?:^|/)perl5_t/t/perf/(?:opcount|optree)\.t$};
+
     return 0;
 }
 

@@ -237,6 +237,15 @@ public class EmitBinaryOperator {
         }
         // stack: [left, right]
         ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, node.left.getIndex());
+        if (node.operator.equals("~~") && isIntegerEnabled(emitterVisitor, node)) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/operators/CompareOperators",
+                    "smartmatchInteger",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            EmitOperator.handleVoidContext(emitterVisitor);
+            return;
+        }
         emitOperator(node, emitterVisitor);
     }
 
@@ -257,8 +266,16 @@ public class EmitBinaryOperator {
         if (node instanceof OperatorNode operator) {
             return operator.operator.equals("@") || operator.operator.equals("%");
         }
-        return node instanceof BinaryOperatorNode binary
-                && (binary.operator.equals("(") || binary.operator.equals("()"));
+        if (node instanceof BinaryOperatorNode binary) {
+            if (binary.operator.equals("(") || binary.operator.equals("()")) return true;
+            // @hash{keys} and @array[indices] are aggregate values for
+            // smartmatch dispatch; evaluating them in scalar context loses
+            // every value except the final slice member.
+            return (binary.operator.equals("{") || binary.operator.equals("["))
+                    && binary.left instanceof OperatorNode sigil
+                    && sigil.operator.equals("@");
+        }
+        return false;
     }
 
     private static void emitIntegerBinaryOperator(EmitterVisitor emitterVisitor,
@@ -501,6 +518,8 @@ public class EmitBinaryOperator {
     static void handleRangeOrFlipFlop(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             EmitLogicalOperator.emitFlipFlopOperator(emitterVisitor, node);
+        } else if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME) {
+            EmitLogicalOperator.emitRuntimeRangeOrFlipFlop(emitterVisitor, node);
         } else {
             EmitOperator.handleRangeOperator(emitterVisitor, node);
         }

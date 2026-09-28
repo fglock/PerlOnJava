@@ -291,6 +291,16 @@ PerlOnJava does **not** implement the following Perl features:
 
 ### Testing
 
+Run repository `make` targets with maximum niceness so builds and test gates
+yield CPU to other work on the shared host:
+
+```bash
+nice -n 19 make
+```
+
+Preserve the `nice -n 19` wrapper when adding a timeout or redirecting build
+output.
+
 **Documentation-only exception:** Changes limited to documentation, generated
 CPAN report data, and non-executable agent skill instructions do not require
 `make` or runtime tests. When any Markdown file changes, run `make check-links`.

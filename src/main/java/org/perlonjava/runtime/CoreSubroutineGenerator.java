@@ -100,11 +100,69 @@ public class CoreSubroutineGenerator {
      */
     private static boolean installWrapper(String fullName, String operatorName,
                                           String prototype, PerlSubroutine sub) {
-        RuntimeCode code = new RuntimeCode(sub, prototype);
+        PerlSubroutine checkedSub = (args, ctx) -> {
+            // Bareword-only CORE entries such as chomp and chop have no
+            // prototype. Their generated stub owns the direct-call error.
+            if (prototype != null) {
+                validatePrototypeArity(operatorName, prototype, args.size());
+            }
+            return sub.apply(args, ctx);
+        };
+        RuntimeCode code = new RuntimeCode(checkedSub, prototype);
         code.packageName = "CORE";
         code.subName = operatorName;
         GlobalVariable.getGlobalCodeRef(fullName).set(new RuntimeScalar(code));
         return true;
+    }
+
+    /**
+     * CORE wrappers are reached through symbolic code references, after the
+     * parser has already lost the call site's prototype information.  Preserve
+     * Perl's arity diagnostics before dispatching to their Java implementation.
+     */
+    private static void validatePrototypeArity(String name, String prototype, int actual) {
+        int minimum = 0;
+        int maximum = 0;
+        boolean optional = false;
+        boolean unlimited = false;
+
+        for (int i = 0; i < prototype.length(); i++) {
+            char token = prototype.charAt(i);
+            if (token == ';') {
+                optional = true;
+                continue;
+            }
+            if (token == '@' || token == '%') {
+                unlimited = true;
+                continue;
+            }
+            if (token == '\\') {
+                if (++i < prototype.length() && prototype.charAt(i) == '[') {
+                    while (i < prototype.length() && prototype.charAt(i) != ']') {
+                        i++;
+                    }
+                }
+                maximum++;
+                if (!optional) minimum++;
+                continue;
+            }
+            if (token == '_') {
+                // '_' supplies $_ when omitted, but accepts one explicit arg.
+                maximum++;
+                continue;
+            }
+            if (token == '$' || token == '*' || token == '&' || token == '+') {
+                maximum++;
+                if (!optional) minimum++;
+            }
+        }
+
+        if (actual < minimum) {
+            throw new PerlCompilerException("Not enough arguments for " + name);
+        }
+        if (!unlimited && actual > maximum) {
+            throw new PerlCompilerException("Too many arguments for " + name);
+        }
     }
 
     /**
@@ -211,6 +269,22 @@ public class CoreSubroutineGenerator {
                     WaitpidOperator.waitForChild().getList();
             case "wantarray" -> (args, ctx) ->
                     Operator.wantarray(ctx).getList();
+            case "__SUB__" -> (args, ctx) -> {
+                // A CORE::__SUB__ wrapper is itself a RuntimeCode frame, so
+                // the Perl subroutine whose identity is requested is its
+                // caller, not the wrapper's own CV. JVM-generated wrappers
+                // are invoked without an extra active-code frame, so their
+                // caller is already at depth zero.
+                RuntimeCode caller = RuntimeCode.getActiveCodeAt(1);
+                if (caller == null || caller.__SUB__ == null) {
+                    caller = RuntimeCode.getActiveCodeAt(0);
+                }
+                RuntimeScalar self = caller == null ? null : caller.__SUB__;
+                if (self == null) {
+                    self = RuntimeCode.getJvmSelfReference();
+                }
+                return RuntimeCode.selfReferenceMaybeNull(self).getList();
+            };
             case "fork" -> (args, ctx) ->
                     SystemOperator.fork(ctx).getList();
             default -> (args, ctx) ->
@@ -427,6 +501,7 @@ public class CoreSubroutineGenerator {
         return switch (name) {
             // I/O operators
             case "open" -> IOOperator.open(ctx, args).getList();
+            case "binmode" -> IOOperator.binmode(ctx, args).getList();
             case "close" -> IOOperator.close(ctx, args).getList();
             case "fileno" -> IOOperator.fileno(ctx, args).getList();
             case "flock" -> IOOperator.flock(ctx, args).getList();

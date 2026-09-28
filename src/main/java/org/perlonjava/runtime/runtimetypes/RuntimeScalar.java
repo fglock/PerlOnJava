@@ -588,6 +588,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public boolean referencedByScalarReference;
 
     /**
+     * A reference was made after control flow materialized this lexical slot
+     * before its declaration ran. The next declaration must retain that pad
+     * cell so the forward reference remains an alias; ordinary escaped
+     * {@code \$lexical} references must not set this marker.
+     */
+    private boolean retainMaterializedForwardReference;
+
+    /** True only while this scalar represents a lexical slot skipped by control flow. */
+    private boolean materializedBeforeLexicalDeclaration;
+
+    /**
      * True when {@link #createReference()} promoted an otherwise-unbound
      * scalar temporary into selective reference counting. Such a referent has
      * no hidden lexical, closure, global, or aggregate owner, so weakening its
@@ -598,6 +609,86 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Constructors
     public RuntimeScalar() {
         this.type = UNDEF;
+    }
+
+    /**
+     * Return a writable lexical storage cell, creating Perl undef storage for
+     * a declaration whose initializer was skipped by control flow.
+     *
+     * <p>The JVM backend keeps lexical variables in local slots. A forward
+     * jump can reach refgen before the declaration initialized that slot, but
+     * refgen must still bind to a distinct mutable cell.</p>
+     */
+    public static RuntimeScalar materializeLexicalCell(RuntimeScalar scalar) {
+        // A foreach literal alias deliberately occupies a lexical slot.  It
+        // is not an uninitialized declaration placeholder: retain its guard
+        // so a mutation reports Perl's read-only-value error.
+        if (scalar instanceof ReadOnlyAlias) {
+            return scalar;
+        }
+        // Register recycling can leave the shared read-only undef placeholder
+        // in a declaration skipped by control flow. It is not lexical storage
+        // and must never become the target of a later refalias or assignment.
+        // A skipped declaration can also inherit a pooled literal from a
+        // recycled register.  Like scalarUndef, that literal is a read-only
+        // expression result rather than lexical storage.  Refgen must never
+        // expose it as a pad cell: later refaliasing would try to mutate the
+        // literal and fail with "Modification of a read-only value attempted".
+        if (scalar == null || scalar == RuntimeScalarCache.scalarUndef) {
+            RuntimeScalar materialized = new RuntimeScalar();
+            materialized.materializedBeforeLexicalDeclaration = true;
+            return materialized;
+        }
+        if (scalar.refCount == Integer.MIN_VALUE) {
+            // JVM local-slot reuse can assign a new declaration's initializer
+            // into a destroyed prior cell before refgen materializes it. Keep
+            // that new payload, but give the declaration a fresh scalar
+            // identity rather than exposing the destroyed referent.
+            return new RuntimeScalar(scalar);
+        }
+        if (scalar instanceof RuntimeScalarReadOnly) {
+            // Loop iterators and constants may occupy a lexical register.
+            // They need a new writable cell, but must retain their current
+            // value rather than being mistaken for a skipped declaration.
+            // A RuntimeScalar merely marked READONLY_SCALAR is different: it
+            // is a real lexical that Internals::SvREADONLY froze at runtime.
+            // Replacing it here would make a later reference escape a clone,
+            // allowing the next block invocation to mutate the prior cell.
+            RuntimeScalar writable = new RuntimeScalar();
+            writable.set(scalar);
+            return writable;
+        }
+        return scalar;
+    }
+
+    /**
+     * Initialize a scalar declaration without replacing a cell retained by
+     * a reference made after control flow skipped that declaration.
+     */
+    public static RuntimeScalar initializeLexicalCell(RuntimeScalar scalar) {
+        // Interpreter register arrays are reused between calls.  Preserve the
+        // writable cell installed by a forward refalias, but never retain a
+        // destroyed or read-only scalar left in the same register by an
+        // earlier frame (notably a literal signature argument).
+        boolean retainForwardReference = scalar != null
+                && scalar.retainMaterializedForwardReference
+                && scalar.refCount != Integer.MIN_VALUE
+                && !(scalar instanceof RuntimeScalarReadOnly)
+                && scalar.type != RuntimeScalarType.READONLY_SCALAR;
+        if (retainForwardReference) {
+            scalar.retainMaterializedForwardReference = false;
+            scalar.materializedBeforeLexicalDeclaration = false;
+            return scalar;
+        }
+        return new RuntimeScalar();
+    }
+
+    /** Consume the one declaration-retention permit created by forward refgen. */
+    public boolean consumeMaterializedForwardReference() {
+        if (!retainMaterializedForwardReference) return false;
+        retainMaterializedForwardReference = false;
+        materializedBeforeLexicalDeclaration = false;
+        return true;
     }
 
     public RuntimeScalar(long value) {
@@ -3368,8 +3459,37 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * ordinary dereference operators' autovivification semantics.
      */
     public RuntimeScalar foreachScalarReference() {
+        return refAliasScalarReference();
+    }
+
+    /**
+     * Validate and unwrap a scalar reference used as a ref-aliasing target.
+     * Unlike an ordinary scalar dereference, this neither autovivifies an
+     * undef value nor turns a glob reference into a glob value: ref aliasing
+     * installs the glob's scalar slot.
+     */
+    public RuntimeScalar refAliasScalarReference() {
+        // Ref-aliasing accepts a glob reference for a scalar target. The
+        // target becomes a scalar holding that glob (\$x = \*glob), rather
+        // than an alias of the glob's existing SCALAR slot.
+        if (type == GLOBREFERENCE && value instanceof RuntimeGlob glob) {
+            // LOAD_GLOB deliberately returns a detached copy for local
+            // filehandle lifetimes. A named typeglob alias, however, must
+            // retain the canonical stash identity observed by *name{GLOB}.
+            return glob.globName == null ? glob : GlobalVariable.getGlobalIO(glob.globName);
+        }
+        if (type == GLOB) {
+            return scalarDeref();
+        }
         requireForeachReference(REFERENCE, "SCALAR");
-        return (RuntimeScalar) value;
+        RuntimeScalar referent = (RuntimeScalar) value;
+        // Refaliasing, rather than reference creation, is what gives a
+        // forward lexical cell its declaration identity.  Preserve one
+        // declaration initialization for this referent.  An ordinary escaped
+        // reference never reaches this path, so it cannot leak into a later
+        // shadowing lexical.
+        referent.retainMaterializedForwardReference = true;
+        return referent;
     }
 
     public RuntimeArray foreachArrayReference() {
@@ -3380,6 +3500,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeHash foreachHashReference() {
         requireForeachReference(HASHREFERENCE, "HASH");
         return (RuntimeHash) value;
+    }
+
+    /** Validate a CODE reference before installing it through ref aliasing. */
+    public RuntimeScalar refAliasCodeReference() {
+        requireForeachReference(CODE, "CODE");
+        return this;
     }
 
     private void requireForeachReference(int expectedType, String expectedName) {
@@ -3909,6 +4035,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // store the RuntimeGlob directly, losing the reference to this container.
     // Internals::SvREADONLY needs the container to set/get readonly status.
     public RuntimeScalar createReference() {
+        if (materializedBeforeLexicalDeclaration) {
+            retainMaterializedForwardReference = true;
+        }
         referencedByScalarReference = true;
         boolean isRegisteredLexical =
                 this.refCount == -1 && MyVarCleanupStack.isRegistered(this);

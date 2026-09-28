@@ -553,6 +553,22 @@ public class EmitterMethodCreator implements Opcodes {
             // Generate the subroutine block
             mv.visitCode();
 
+            // Direct JVM-to-JVM calls bypass RuntimeCode.apply(), so retain
+            // the generated method's self reference for dynamic wrappers
+            // such as &{"CORE::__SUB__"}.
+            mv.visitVarInsn(Opcodes.ALOAD, 0);
+            mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassInfo.javaClassName,
+                    "__SUB__", "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "pushJvmSelfReference",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V", false);
+            mv.visitInsn(ctx.javaClassInfo.isSortComparator ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "pushJvmSortComparator",
+                    "(Z)V", false);
+
             // Initialize local variables with closure values from instance fields
             // Skip some indices because they are reserved for special arguments (this, "@_" and call
             // context)
@@ -661,6 +677,13 @@ public class EmitterMethodCreator implements Opcodes {
 
             // Create a label for the return point
             ctx.javaClassInfo.returnLabel = new Label();
+
+            // The control-flow emitter must not resolve a switch-only
+            // continue/break in eval BLOCK code against a topicalizer from
+            // its caller.  useTryCatch is precisely the eval-BLOCK method
+            // boundary; retain that fact in the class metadata while emitting
+            // its AST so the marker reaches the eval catcher.
+            ctx.javaClassInfo.isInEvalBlock = useTryCatch;
 
             // Prepare to visit the AST to generate bytecode
             EmitterVisitor visitor = new EmitterVisitor(ctx);
@@ -846,12 +869,27 @@ public class EmitterMethodCreator implements Opcodes {
                             false);
                     int evalControlFlowTypeSlot = ctx.symbolTable.allocateLocalVariable();
                     mv.visitVarInsn(Opcodes.ISTORE, evalControlFlowTypeSlot);
+                    // `continue` and `break` are switch-only controls. Their
+                    // normalized NEXT/LAST markers must be caught by eval even
+                    // though ordinary next/last may target an enclosing loop.
+                    Label ordinaryLoopControl = new Label();
+                    mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);
+                    mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
+                            "isSwitchControl", "()Z", false);
+                    mv.visitJumpInsn(Opcodes.IFEQ, ordinaryLoopControl);
+                    Label evalBoundaryError = new Label();
+                    mv.visitJumpInsn(Opcodes.GOTO, evalBoundaryError);
+                    mv.visitLabel(ordinaryLoopControl);
                     mv.visitVarInsn(Opcodes.ILOAD, evalControlFlowTypeSlot);
                     mv.visitInsn(Opcodes.ICONST_2); // LAST/NEXT/REDO propagate
                     mv.visitJumpInsn(Opcodes.IF_ICMPLE, normalReturn);
                     mv.visitVarInsn(Opcodes.ILOAD, evalControlFlowTypeSlot);
                     mv.visitLdcInsn(5);  // RETURN.ordinal() = 5
                     mv.visitJumpInsn(Opcodes.IF_ICMPEQ, normalReturn);  // RETURN → propagate
+
+                    mv.visitLabel(evalBoundaryError);
 
                     // GOTO and TAILCALL cannot cross an eval-block boundary.
                     mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);
@@ -1194,6 +1232,17 @@ public class EmitterMethodCreator implements Opcodes {
                 Local.localTeardown(dynamicIndex, mv);
             }
 
+            mv.visitVarInsn(Opcodes.ALOAD, 0);
+            mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassInfo.javaClassName,
+                    "__SUB__", "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "popJvmSelfReference",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V", false);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "popJvmSortComparator",
+                    "()V", false);
             mv.visitInsn(Opcodes.ARETURN); // Returns an Object
             mv.visitMaxs(0, 0); // Automatically computed
             mv.visitEnd();

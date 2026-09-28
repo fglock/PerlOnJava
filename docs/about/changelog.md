@@ -17,6 +17,13 @@ priorities and future plans.
   scalar method-list expressions, comparator control flow, and temporary
   argument lifetimes on both execution backends.
 
+- Preserve shared-scalar identity after an ithread locks it through a lexical
+  reference, restoring recursive locks and condition operations on both
+  execution backends.
+
+- Restore BEGIN-captured container aliases, localized hash closure destruction,
+  and lexical `no warnings 'signal'` handling on both execution backends.
+
 - Restore `lex.t` compatibility for quote-like `#line` mapping, byte-source
   eval diagnostics, evalled substitutions, constant stash entries, and both
   execution backends.
@@ -26,6 +33,24 @@ priorities and future plans.
 
 - Implement Unix `socketpair` through real POSIX descriptors, preserving
   bidirectional I/O, socket options, shutdown, and scope-exit EOF semantics.
+
+- Restore lexical lvalue alias isolation, `${^LAST_FH}` lexical filehandle
+  identity, and user-defined Unicode property diagnostics on both backends.
+
+- Preserve lexical-sub storage and CODE aliases across interpreter fallback,
+  and reject writes to padded multi-variable foreach iterators on both backends.
+
+- Restore scalar flip-flop semantics for `..`/`...` in `when` predicates and
+  subroutines whose caller context is determined at runtime.
+
+- Restore logical `when` predicate selection, preserving smartmatch semantics
+  for non-topical logical expressions and boolean context for topic/captures.
+
+- Preserve `DATA` handle semantics for commented marker text and empty
+  top-level data sections, restoring `eof(DATA)` behavior in `given`/`when`.
+
+- Restore `use integer` smartmatch semantics in `given`/`when`, including
+  numeric scalar, array, and regex dispatch on both execution backends.
 
 - Preserve Perl-compatible `EISDIR` readline behavior for filehandles opened
   on directories on Windows, and ensure `Config` does not advertise unsupported

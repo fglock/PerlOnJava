@@ -559,6 +559,93 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return null;
     }
 
+    /** True when the current Perl call chain is executing a sort BLOCK comparator. */
+    public static boolean hasActiveSortComparator() {
+        for (RuntimeCode active : activeCodeStack()) {
+            if (active.isSortComparator) return true;
+        }
+        for (boolean active : PerlRuntime.current().executionState().activeJvmSortComparators) {
+            if (active) return true;
+        }
+        return PerlRuntime.current().executionState().activeSortComparatorInvocations > 0;
+    }
+
+    /**
+     * Perl distinguishes a tail call written directly in a sort BLOCK from a
+     * tail call made by a named subroutine invoked by that comparator.
+     */
+    public static PerlCompilerException sortTailCallError() {
+        RuntimeCode source = getActiveCodeAt(0);
+        boolean sourceIsSortComparator = source != null
+                ? source.isSortComparator
+                : Boolean.TRUE.equals(
+                        PerlRuntime.current().executionState().activeJvmSortComparators.peek());
+        String message = sourceIsSortComparator
+                ? "Can't goto subroutine outside a subroutine"
+                : "Can't goto subroutine from a sort sub";
+        return new PerlCompilerException(message);
+    }
+
+    /** Diagnostic for a tail call written directly in a sort BLOCK. */
+    public static PerlCompilerException sortTailCallOutsideError() {
+        return new PerlCompilerException("Can't goto subroutine outside a subroutine");
+    }
+
+    /** Reject a tail call that would cross an active sort pseudo-block. */
+    public static void checkSortTailCall() {
+        if (hasActiveSortComparator()) {
+            throw sortTailCallError();
+        }
+    }
+
+    /** Enter/leave the dynamic extent in which sort invokes its comparator. */
+    public static void enterSortComparatorInvocation() {
+        PerlRuntime.current().executionState().activeSortComparatorInvocations++;
+    }
+
+    public static void exitSortComparatorInvocation() {
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        if (state.activeSortComparatorInvocations > 0) state.activeSortComparatorInvocations--;
+    }
+
+    /**
+     * Track a JVM-generated method's Perl-visible self reference. Generated
+     * methods call each other directly and therefore do not enter the
+     * interpreter's {@link #activeCodeStack()}.
+     */
+    public static void pushJvmSelfReference(RuntimeScalar selfReference) {
+        if (selfReference != null) {
+            PerlRuntime.current().executionState().activeJvmSelfReferences.push(selfReference);
+        }
+    }
+
+    /** Remove the matching JVM-generated method self reference on return. */
+    public static void popJvmSelfReference(RuntimeScalar selfReference) {
+        if (selfReference == null) return;
+        Deque<RuntimeScalar> stack = PerlRuntime.current().executionState().activeJvmSelfReferences;
+        if (!stack.isEmpty() && stack.peek() == selfReference) {
+            stack.pop();
+        } else {
+            stack.removeFirstOccurrence(selfReference);
+        }
+    }
+
+    /** Track whether a JVM-generated frame is a sort BLOCK pseudo-block. */
+    public static void pushJvmSortComparator(boolean comparator) {
+        PerlRuntime.current().executionState().activeJvmSortComparators.push(comparator);
+    }
+
+    /** Pop the JVM sort pseudo-block state paired with method entry. */
+    public static void popJvmSortComparator() {
+        Deque<Boolean> stack = PerlRuntime.current().executionState().activeJvmSortComparators;
+        if (!stack.isEmpty()) stack.pop();
+    }
+
+    /** The innermost JVM-generated Perl subroutine, if any. */
+    public static RuntimeScalar getJvmSelfReference() {
+        return PerlRuntime.current().executionState().activeJvmSelfReferences.peek();
+    }
+
     /** True when an interpreter-owned Future::AsyncAwait frame is active. */
     public static boolean hasActiveFutureAsyncAwaitSub() {
         for (RuntimeCode active : activeCodeStack()) {
@@ -1865,6 +1952,26 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public RuntimeBase resolveLexicalAlias(String variableName, RuntimeBase defaultValue) {
         RuntimeBase cell = defaultValue;
+        // A forward goto can reach reference generation before this lexical's
+        // declaration has initialized its register. The refgen path binds the
+        // materialized pad cell in the active frame; retain it only when a
+        // scalar reference has actually exposed that cell. Ordinary loop or
+        // repeated declaration execution still receives a fresh lexical.
+        RuntimeBase activeCell = findBoundActiveLexical(this, variableName);
+        if (activeCell instanceof RuntimeScalar scalar
+                // A tied lexical's storage is declaration-local. Reusing it
+                // for a later shadowing declaration leaks the old tie into
+                // the new lexical cell.
+                && scalar.type != RuntimeScalarType.TIED_SCALAR
+                // A prior block invocation can have exposed its lexical to
+                // Internals::SvREADONLY.  That cell is no longer valid
+                // writable storage for the next invocation: retain the new
+                // declaration cell instead of resurrecting the readonly one.
+                && !(scalar instanceof RuntimeScalarReadOnly)
+                && scalar.type != RuntimeScalarType.READONLY_SCALAR
+                && scalar.consumeMaterializedForwardReference()) {
+            cell = scalar;
+        }
         if (lexicalAliases != null) {
             RuntimeBase replacement = lexicalAliases.get(variableName);
             if (replacement != null) cell = replacement;
@@ -1874,10 +1981,33 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return cell;
     }
 
+    private static RuntimeBase findBoundActiveLexical(RuntimeCode code, String variableName) {
+        PerlRuntime runtime = PerlRuntime.current();
+        for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
+            if (sameLogicalCode(frame.code(), code)) {
+                RuntimeBase cell = frame.cells().get(variableName);
+                if (cell != null) return cell;
+            }
+        }
+        return null;
+    }
+
     /** Refresh a live lexical binding after foreach replaces its alias cell. */
     public void bindActiveLexical(String variableName, RuntimeBase cell) {
         tagGeneratedLexicalSubCell(variableName, cell);
         registerActiveLexical(this, variableName, cell);
+    }
+
+    /** Drop a binding only when the departing scope still owns that exact cell. */
+    public void unbindActiveLexical(String variableName, RuntimeBase cell) {
+        PerlRuntime runtime = PerlRuntime.current();
+        for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
+            if (sameLogicalCode(frame.code(), this)
+                    && frame.cells().get(variableName) == cell) {
+                frame.cells().remove(variableName);
+                return;
+            }
+        }
     }
 
     /**
@@ -6099,6 +6229,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Cast the value to RuntimeCode and call apply()
                 RuntimeList result = code.apply(argsForCall, callContext);
                 if (code.isSortComparator && result instanceof RuntimeControlFlowList flow) {
+                    if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
+                        throw sortTailCallError();
+                    }
                     throw new PerlCompilerException("Can't \"goto\" out of a pseudo block at "
                             + flow.marker.fileName + " line " + flow.marker.lineNumber + ".\n");
                 }
@@ -6867,6 +7000,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             }
             try {
+                if (hasActiveSortComparator()) {
+                    throw sortTailCallError();
+                }
                 if (cfList.marker.evalScope != null) {
                     throw new PerlCompilerException("Can't goto subroutine from an " + cfList.marker.evalScope);
                 }

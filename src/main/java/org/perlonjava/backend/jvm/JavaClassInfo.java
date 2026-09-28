@@ -109,6 +109,8 @@ public class JavaClassInfo {
      * so the return value propagates to the enclosing subroutine.
      */
     public boolean isMapGrepBlock;
+    /** True when this generated method implements a sort BLOCK pseudo-block. */
+    public boolean isSortComparator;
 
     /**
      * True when this generated method belongs to a subroutine with the
@@ -369,6 +371,16 @@ public class JavaClassInfo {
     public LoopLabels findInnermostTrueLoopLabels() {
         for (LoopLabels loopLabels : loopLabelStack) {
             if (loopLabels != null && loopLabels.isTrueLoop && loopLabels.isUnlabeledControlFlowTarget) {
+                return loopLabels;
+            }
+        }
+        return null;
+    }
+
+    /** Find the synthetic switch boundary used by a when clause. */
+    public LoopLabels findInnermostImplicitWhenTarget() {
+        for (LoopLabels loopLabels : loopLabelStack) {
+            if (loopLabels != null && loopLabels.implicitWhenTarget) {
                 return loopLabels;
             }
         }

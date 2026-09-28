@@ -13,6 +13,7 @@ import org.perlonjava.frontend.astnode.BinaryOperatorNode;
 import org.perlonjava.frontend.astnode.HashLiteralNode;
 import org.perlonjava.frontend.astnode.ListNode;
 import org.perlonjava.frontend.astnode.Node;
+import org.perlonjava.frontend.astnode.NumberNode;
 import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.astnode.TernaryOperatorNode;
 import org.perlonjava.runtime.operators.ScalarFlipFlopOperator;
@@ -68,9 +69,32 @@ public class EmitLogicalOperator {
         mv.visitVarInsn(Opcodes.ILOAD, flipFlopIdSlot);
         mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
         mv.visitVarInsn(Opcodes.ALOAD, rightSlot);
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/operators/ScalarFlipFlopOperator", "evaluate", "(ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        mv.visitInsn(node.left instanceof NumberNode ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        mv.visitInsn(node.right instanceof NumberNode ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/operators/ScalarFlipFlopOperator", "evaluate", "(ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;ZZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
 
         // If the context is VOID, pop the result from the stack
+        EmitOperator.handleVoidContext(emitterVisitor);
+    }
+
+    static void emitRuntimeRangeOrFlipFlop(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
+        EmitterContext ctx = emitterVisitor.ctx;
+        MethodVisitor mv = ctx.mv;
+        int flipFlopId = ScalarFlipFlopOperator.allocateId();
+        ScalarFlipFlopOperator.flipFlops().putIfAbsent(flipFlopId,
+                new ScalarFlipFlopOperator(node.operator.equals("...")));
+
+        mv.visitLdcInsn(flipFlopId);
+        emitFlipFlopOperand(emitterVisitor, node.left);
+        emitFlipFlopOperand(emitterVisitor, node.right);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                "currentRawCallContext", "()I", false);
+        mv.visitInsn(node.left instanceof NumberNode ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        mv.visitInsn(node.right instanceof NumberNode ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/operators/ScalarFlipFlopOperator", "evaluateInContext",
+                "(ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;IZZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                false);
         EmitOperator.handleVoidContext(emitterVisitor);
     }
 

@@ -126,9 +126,11 @@ public class OperatorParser {
             // This ensures source locations are saved with the correct context
             String previousSubroutine = parser.ctx.symbolTable.getCurrentSubroutine();
             parser.ctx.symbolTable.setCurrentSubroutine("(eval)");
+            parser.evalGivenDepthBaselines.push(parser.parsingGivenDepth);
             try {
                 block = ParseBlock.parseBlock(parser);
             } finally {
+                parser.evalGivenDepthBaselines.pop();
                 parser.ctx.symbolTable.setCurrentSubroutine(previousSubroutine);
             }
             TokenUtils.consume(parser, OPERATOR, "}");
@@ -1732,7 +1734,39 @@ public class OperatorParser {
         }
         Node operand;
         // Handle 'goto' keyword - operand is optional (bare `goto` is a runtime error)
-        operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
+        // A bareword after goto is always a label, even if a subroutine with
+        // the same name is already visible.  Letting the general list parser
+        // resolve it as a call changes `goto skip` into `skip()` when test
+        // helpers (or user code) provide that subroutine.
+        LexerToken target = peek(parser);
+        // `goto sub { ... }` tail-calls an anonymous coderef.  `sub` is
+        // normally dispatched by CoreOperatorResolver, but goto owns its
+        // operand parsing so the general list parser never gets that chance.
+        // Parse the anonymous sub here instead of mistaking the keyword for a
+        // static label and leaving its block behind as a syntax error.
+        if (target.text.equals("sub")) {
+            consume(parser);
+            operand = new ListNode(List.of(
+                    SubroutineParser.parseSubroutineDefinition(parser, false, null)), currentIndex);
+        } else if (target.type == IDENTIFIER) {
+            // A bareword is a static label only when it is the complete goto
+            // operand.  Keywords can begin computed expressions: in
+            // `goto state $label = ...`, treating `state` as a label leaves
+            // the declaration behind and produces a syntax error.  This is
+            // the same complete-operand distinction used by last/next/redo.
+            int labelIndex = parser.tokenIndex;
+            consume(parser);
+            LexerToken afterLabel = peek(parser);
+            parser.tokenIndex = labelIndex;
+            if (afterLabel.type == EOF || ListParser.isListTerminator(parser, afterLabel)) {
+                consume(parser);
+                operand = new ListNode(List.of(new IdentifierNode(target.text, labelIndex)), currentIndex);
+            } else {
+                operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
+            }
+        } else {
+            operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
+        }
         // Always return a goto operator - the emitter handles &sub vs LABEL distinction
         return new OperatorNode("goto", operand, currentIndex);
     }
