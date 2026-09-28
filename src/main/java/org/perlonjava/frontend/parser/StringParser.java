@@ -1254,6 +1254,10 @@ public class StringParser {
         // not an array access after a complete regex.  Perl owns the error at
         // the complete quote-like construct, including that final bracket.
         if (operator.equals("m") && rawStr.startDelim == '['
+                // A modifier makes the regex boundary unambiguous: in
+                // `@[... m[..]g ]`, the following bracket belongs to the
+                // enclosing array expression, not to the quote-like token.
+                && rawStr.buffers.get(1).isEmpty()
                 && parser.tokenIndex < parser.tokens.size()
                 && parser.tokens.get(parser.tokenIndex).text.equals("]")) {
             var location = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);

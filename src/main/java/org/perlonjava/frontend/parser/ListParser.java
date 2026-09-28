@@ -468,6 +468,10 @@ public class ListParser {
                 // Looks like a subroutine call, not an infix `&`
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like subroutine call");
             } else if (token.text.equals("%") && (nextToken.text.equals("$") || nextToken.text.equals("{")
+                    // `%;` is the legal punctuation-named hash.  In
+                    // `print%;` it must start the print argument list, not
+                    // be interpreted as a leading modulus operator.
+                    || nextToken.text.equals(";")
                     // %+ and %- are Perl's named-capture hash variables. They
                     // are tokenized as a '%' sigil followed by '+'/'-', so
                     // keep them as a variable instead of treating '%' as

@@ -116,6 +116,7 @@ public class OperatorParser {
         Node block;
         Node operand;
         LexerToken token;
+        boolean usesDefaultTopic = false;
         // Handle 'eval' keyword which can be followed by a block or an expression
         token = TokenUtils.peek(parser);
         var index = parser.tokenIndex;
@@ -151,13 +152,21 @@ public class OperatorParser {
             if (((ListNode) operand).elements.isEmpty()) {
                 // create `$_` variable
                 operand = ParserNodeUtils.scalarUnderscore(parser);
+                usesDefaultTopic = true;
             }
         }
-        return new EvalOperatorNode(
+        EvalOperatorNode evalNode = new EvalOperatorNode(
                 operator,
                 operand,
                 parser.ctx.symbolTable.snapShot(), // Freeze the scoped symbol table for the eval context
                 index);
+        // `eval` without an operand can carry non-local control flow from the
+        // runtime contents of $_.  Preserve the distinction from an explicit
+        // `eval $_`, whose caller has deliberately supplied the operand.
+        if (usesDefaultTopic) {
+            evalNode.setAnnotation("evalUsesDefaultTopic", true);
+        }
+        return evalNode;
     }
 
     /**

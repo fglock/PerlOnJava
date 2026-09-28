@@ -161,8 +161,7 @@ public class IdentifierParser {
     private static boolean isSpecialVariable(String name) {
         // Special variables that can't be package-qualified
         // These are single-character special variables in Perl
-        return name.equals("_") ||   // default variable
-               name.equals("/") ||   // input record separator
+        return name.equals("/") ||   // input record separator
                name.equals("\\") ||  // output record separator
                name.equals("|") ||   // output field separator
                name.equals(",") ||   // output field separator
