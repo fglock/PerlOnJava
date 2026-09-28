@@ -2989,8 +2989,13 @@ public class SubroutineParser {
             return false;
         }
         int underscore = prototype.indexOf('_');
-        return underscore >= 0 && underscore + 1 < prototype.length()
-                && prototype.charAt(underscore + 1) != ';';
+        if (underscore < 0 || underscore + 1 == prototype.length()) {
+            return false;
+        }
+        // `_@` and `_%` are valid list prototypes.  An underscore may also
+        // be followed by `;`; every other continuation is malformed.
+        char following = prototype.charAt(underscore + 1);
+        return following != ';' && following != '@' && following != '%';
     }
 
     /**

@@ -98,6 +98,12 @@ public class ParsePrimary {
                 // quoted literals: the lexer uses this category for a code
                 // point which cannot participate in an identifier or an
                 // operator.  Preserve Perl's Unicode-aware diagnostic.
+                // A NUL embedded in a bareword is a syntax error rather than
+                // an identifier-character diagnostic (for example, `require
+                // strict\\0::invalid`).
+                if (!token.text.isEmpty() && token.text.codePointAt(0) == 0) {
+                    parser.throwCleanError("syntax error");
+                }
                 parser.throwUnrecognizedCharacter(startIndex, token.text);
                 return null; // unreachable
             case OPERATOR:
