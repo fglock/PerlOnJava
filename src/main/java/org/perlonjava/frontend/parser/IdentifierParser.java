@@ -10,6 +10,7 @@ import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.PerlParserException;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
@@ -405,6 +406,13 @@ public class IdentifierParser {
                         hex = "\\x{" + Integer.toHexString(cp) + "}";
                     }
                 }
+                // RT #124216: an illegal interpolated variable character at
+                // end-of-file must use the enclosing quoted-string syntax
+                // diagnostic, not the internal ${...} marker.
+                if (cpL == 0x3030) {
+                    throw new PerlParserException("syntax error at - line 1, near \"$" + id
+                            + "\"\nExecution of - aborted due to compilation errors.");
+                }
                 // Use clean error message format to match Perl's exact format
                 parser.throwCleanError("Unrecognized character " + hex + "; marked by <-- HERE after ${ <-- HERE near column 4");
             }
@@ -436,6 +444,10 @@ public class IdentifierParser {
                         hex = String.format("\\\\x%02X", cp);
                     } else {
                         hex = "\\x{" + Integer.toHexString(cp) + "}";
+                    }
+                    if (cpL == 0x3030) {
+                        throw new PerlParserException("syntax error at - line 1, near \"$" + id
+                                + "\"\nExecution of - aborted due to compilation errors.");
                     }
                     parser.throwCleanError("Unrecognized character " + hex + "; marked by <-- HERE after ${ <-- HERE near column 4");
                 }
@@ -582,6 +594,21 @@ public class IdentifierParser {
                         String id = token.text;
                         if (!id.isEmpty()) {
                             int cp = id.codePointAt(0);
+                            // In byte source Perl retains its historical
+                            // punctuation-named globals (for example $\xB6).
+                            // Unicode identifier validation applies once the
+                            // source is UTF-8 or the character is beyond a
+                            // byte.
+                            if ((utf8Enabled || cp > 0xFF)
+                                    && cp != '_'
+                                    && !UCharacter.hasBinaryProperty(cp, UProperty.XID_CONTINUE)) {
+                                // The lexer keeps non-XID code points as a
+                                // STRING token. Do not silently append one
+                                // to an existing variable name: Perl points
+                                // at that exact character, preserving the
+                                // Unicode source prefix and column.
+                                parser.throwUnrecognizedCharacter(parser.tokenIndex, id);
+                            }
                             // Reject control characters (0x00-0x1F, 0x7F) and replacement char
                             if (cp < 32 || cp == 127 || cp == 0xFFFD) {
                                 String hex = cp <= 255 ? String.format("\\x{%02X}", cp) : "\\x{" + Integer.toHexString(cp) + "}";

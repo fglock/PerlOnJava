@@ -420,6 +420,9 @@ public class OperatorParser {
             parser.parsingForLoopVariable = true;
             Node var = ParsePrimary.parsePrimary(parser);
             parser.parsingForLoopVariable = false;
+            if (peek(parser).text.equals(",")) {
+                parser.throwCleanError("No comma allowed after filehandle");
+            }
             operand = ListParser.parseZeroOrMoreList(parser, 1, false, false, false, false);
             operand.handle = var;
 
@@ -646,6 +649,19 @@ public class OperatorParser {
             int declarationSourceIndex) {
 
         String varType = null;
+        // Fullwidth and other compatibility letters are not XID_START, so
+        // the lexer deliberately exposes them as STRING tokens.  In a typed
+        // declaration they are nevertheless the class-name candidate and
+        // Perl diagnoses a missing class before considering the target.
+        if (peek(parser).type == STRING) {
+            String packageName = peek(parser).text;
+            int afterType = Whitespace.skipWhitespace(parser, parser.tokenIndex + 1, parser.tokens);
+            String following = parser.tokens.get(afterType).text;
+            if ("$".equals(following) || "@".equals(following) || "%".equals(following)
+                    || "\\".equals(following) || "(".equals(following) || "=".equals(following)) {
+                parser.throwCleanError("No such class " + packageName);
+            }
+        }
         if (peek(parser).type == IDENTIFIER) {
             String tokenText = peek(parser).text;
 
@@ -670,10 +686,18 @@ public class OperatorParser {
                         || "(".equals(afterType.text);
                 if (followedBySigil) {
                     // Unambiguously a type annotation (followed by a variable sigil or paren list)
-                    if (parser.parsingForLoopVariable && !GlobalVariable.isPackageLoaded(packageName)) {
+                    // Perl validates a typed lexical while compiling the
+                    // declaration. Delaying this to an emitter leaves eval
+                    // STRING without the source diagnostic on one backend.
+                    if (!GlobalVariable.isPackageLoaded(packageName)) {
                         parser.throwCleanError("No such class " + packageName);
                     }
                     varType = packageName;
+                } else if ("=".equals(afterType.text) && !GlobalVariable.isPackageLoaded(packageName)) {
+                    // Interpolation can erase the declaration target in an
+                    // eval STRING (`my TYPE $undef = ...`). Perl still sees
+                    // TYPE in declaration position and reports it first.
+                    parser.throwCleanError("No such class " + packageName);
                 } else if (GlobalVariable.isPackageLoaded(packageName)) {
                     varType = packageName;
                 } else {
@@ -721,6 +745,8 @@ public class OperatorParser {
         Node operand = ParsePrimary.parsePrimary(parser);
         parser.parsingDeclaration = savedParsingDeclaration;
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseVariableDeclaration " + operator + ": " + operand + " (ref=" + isDeclaredReference + ")");
+
+        validateQualifiedDeclarationTarget(parser, operator, operand);
 
         // A declaration list may only contain declaration targets.  Keep the
         // two special forms Perl diagnoses explicitly from falling through to
@@ -927,6 +953,26 @@ public class OperatorParser {
         }
 
         return decl;
+    }
+
+    /** Lexicals cannot declare a package-qualified variable target. */
+    private static void validateQualifiedDeclarationTarget(Parser parser, String declaration, Node operand) {
+        if (!(operand instanceof OperatorNode variable)
+                || !(variable.operand instanceof IdentifierNode identifier)) {
+            return;
+        }
+        String name = identifier.name;
+        if (!name.contains("::")) {
+            return;
+        }
+        String rendered = variable.operator + name;
+        if ("our".equals(declaration)) {
+            parser.throwCleanError("No package name allowed for variable " + rendered + " in \"our\"");
+        }
+        if ("my".equals(declaration) || "state".equals(declaration)) {
+            parser.throwCleanError("\"" + declaration + "\" variable " + rendered
+                    + " can't be in a package");
+        }
     }
 
     /** A declaration list cannot contain another my/our/state declaration. */

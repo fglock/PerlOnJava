@@ -94,8 +94,12 @@ public class ParsePrimary {
                 // Handle numeric literals (integers, floats, hex, octal, binary)
                 return NumberParser.parseNumber(parser, token);
             case STRING:
-                // Handle string literals (already parsed by lexer)
-                return new StringNode(token.text, parser.tokenIndex);
+                // STRING tokens reaching primary-expression parsing are not
+                // quoted literals: the lexer uses this category for a code
+                // point which cannot participate in an identifier or an
+                // operator.  Preserve Perl's Unicode-aware diagnostic.
+                parser.throwUnrecognizedCharacter(startIndex, token.text);
+                return null; // unreachable
             case OPERATOR:
                 // Handle operators and special constructs
                 return parseOperator(parser, token, operator);
