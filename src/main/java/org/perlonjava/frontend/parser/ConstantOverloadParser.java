@@ -71,6 +71,22 @@ final class ConstantOverloadParser {
 
         if (result.type == RuntimeScalarType.UNDEF) {
             var location = parser.ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
+            // A q handler may reject several quote-like constants in one
+            // compilation unit.  Perl collects those diagnostics and reports
+            // each form (q, qq, tr, s), rather than aborting at the first q
+            // literal.  Leave q/qq parsing viable after recording its error;
+            // StringParser's existing paths will add the later forms.
+            if ("q".equals(category)) {
+                String suffix = "q".equals(literalKind)
+                        ? ", near \"'" + raw + "'\"\n"
+                        : ", within string\n";
+                parser.deferDiagnostic("Constant(" + literalKind
+                        + "): Call to &{$^H{" + category
+                        + "}} did not return a defined value at "
+                        + location.fileName() + " line "
+                        + location.lineNumber() + suffix);
+                return cooked;
+            }
             throw new PerlParserException("Constant(" + literalKind + "): Call to &{$^H{" + category + "}} did not return a defined value at "
                     + location.fileName() + " line " + location.lineNumber() + ", " + locationSuffix);
         }
