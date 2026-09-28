@@ -1859,13 +1859,12 @@ public class CompileOperator {
         int arrayReg = -1;
         if (node.operand instanceof OperatorNode operandOp) {
             if (operandOp.operator.equals("@") && operandOp.operand instanceof IdentifierNode) {
-                String varName = "@" + ((IdentifierNode) operandOp.operand).name;
-                if (bc.hasVariable(varName)) arrayReg = bc.getVariableRegister(varName);
-                else {
-                    arrayReg = bc.allocateRegister();
-                    int nameIdx = bc.addToStringPool(NameNormalizer.normalizeVariableName(((IdentifierNode) operandOp.operand).name, bc.getCurrentPackage()));
-                    bc.emit(Opcodes.LOAD_GLOBAL_ARRAY); bc.emitReg(arrayReg); bc.emit(nameIdx);
-                }
+                // $#{@array} uses scalar(@array) as a symbolic reference.
+                bc.compileNode(operandOp, -1, RuntimeContextType.SCALAR);
+                int refReg = bc.lastResultReg;
+                arrayReg = bc.allocateRegister();
+                if (bc.isStrictRefsEnabled()) { bc.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex()); bc.emitReg(arrayReg); bc.emitReg(refReg); }
+                else { int pkgIdx = bc.addToStringPool(bc.getCurrentPackage()); bc.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex()); bc.emitReg(arrayReg); bc.emitReg(refReg); bc.emit(pkgIdx); }
             } else if (operandOp.operator.equals("$")) {
                 operandOp.accept(bc); int refReg = bc.lastResultReg;
                 arrayReg = bc.allocateRegister();

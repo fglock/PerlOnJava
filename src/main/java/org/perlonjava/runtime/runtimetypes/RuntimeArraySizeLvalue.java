@@ -39,7 +39,12 @@ public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
      * @param parent The parent RuntimeArray.
      */
     public RuntimeArraySizeLvalue(RuntimeArray parent) {
-        this.lvalue = parent.createReference();
+        // $#array is an lvalue proxy, not an escaped \@array reference.
+        // Keeping a tracked reference here would prevent lexical cleanup from
+        // orphaning the proxy after `local @array` unwinds.
+        this.lvalue = new RuntimeScalar();
+        this.lvalue.type = RuntimeScalarType.ARRAYREFERENCE;
+        this.lvalue.value = parent;
         this.type = RuntimeScalarType.INTEGER;
         this.value = parent.lastElementIndex();
         parent.registerArraySizeLvalue(this);

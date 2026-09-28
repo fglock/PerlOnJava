@@ -4493,16 +4493,24 @@ public class CompileAssignment {
     static int resolveArrayForDollarHash(BytecodeCompiler bytecodeCompiler, OperatorNode dollarHashOp) {
         if (dollarHashOp.operand instanceof OperatorNode operandOp
                 && operandOp.operator.equals("@") && operandOp.operand instanceof IdentifierNode idNode) {
-            String varName = "@" + idNode.name;
-            if (bytecodeCompiler.hasVariable(varName)) {
-                return bytecodeCompiler.getVariableRegister(varName);
-            }
+            // In $#{@array}, the braced expression is evaluated in scalar
+            // context and then used as a symbolic array reference.  With
+            // @array = (1..4), this therefore addresses @4, rather than
+            // changing @array's own last index.
+            bytecodeCompiler.compileNode(operandOp, -1, RuntimeContextType.SCALAR);
+            int refReg = bytecodeCompiler.lastResultReg;
             int arrayReg = bytecodeCompiler.allocateRegister();
-            String globalName = NameNormalizer.normalizeVariableName(idNode.name, bytecodeCompiler.getCurrentPackage());
-            int nameIdx = bytecodeCompiler.addToStringPool(globalName);
-            bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_ARRAY);
-            bytecodeCompiler.emitReg(arrayReg);
-            bytecodeCompiler.emit(nameIdx);
+            if (bytecodeCompiler.isStrictRefsEnabled()) {
+                bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, dollarHashOp.getIndex());
+                bytecodeCompiler.emitReg(arrayReg);
+                bytecodeCompiler.emitReg(refReg);
+            } else {
+                int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, dollarHashOp.getIndex());
+                bytecodeCompiler.emitReg(arrayReg);
+                bytecodeCompiler.emitReg(refReg);
+                bytecodeCompiler.emit(pkgIdx);
+            }
             return arrayReg;
         } else if (dollarHashOp.operand instanceof IdentifierNode idNode) {
             String varName = "@" + idNode.name;

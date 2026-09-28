@@ -92,6 +92,9 @@ public class GlobalRuntimeArray implements DynamicState {
                 // before discarding it, matching RuntimeArray's local-scope
                 // restoration path.
                 if (localArray != null && localArray != saved.originalArray) {
+                    // A $# proxy made inside local @array belongs to the
+                    // discarded temporary AV, not the restored package array.
+                    localArray.orphanArraySizeLvalues();
                     MortalList.deferDestroyForContainerClear(localArray.elements);
                 }
                 GlobalVariable.globalArrays.put(saved.fullName, saved.originalArray);
