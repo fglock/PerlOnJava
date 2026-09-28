@@ -99,6 +99,16 @@ public class GlobalVariable {
         globalState().invalidateStashEnumeration();
     }
 
+    static void markAnonymousStashPackage(String packageName) {
+        if (packageName != null && !packageName.isEmpty()) {
+            globalState().anonymousStashPackages().add(packageName);
+        }
+    }
+
+    static boolean isAnonymousStashPackage(String packageName) {
+        return packageName != null && globalState().anonymousStashPackages().contains(packageName);
+    }
+
     static long codeRefVersion() {
         return globalState().codeRefVersion();
     }

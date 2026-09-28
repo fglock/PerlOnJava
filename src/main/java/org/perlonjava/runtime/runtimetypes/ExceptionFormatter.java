@@ -148,13 +148,20 @@ public class ExceptionFormatter {
                 int effectiveIndex = callerStackIndex + lazyToSkip;
                 var callerInfo = CallerStack.peek(effectiveIndex);
                 if (callerInfo != null) {
-                    var entry = new ArrayList<String>();
-                    String ciPkg = callerInfo.packageName();
-                    entry.add(ciPkg != null ? ciPkg : "main");
-                    entry.add(callerInfo.filename());
-                    entry.add(String.valueOf(callerInfo.line()));
-                    entry.add(null);  // No subroutine name available for use statements
-                    stackTrace.add(entry);
+                    // A compile-time `use` expands to require, the use wrapper, and
+                    // import.  Perl exposes all three as caller frames, each at the
+                    // source location of the use statement.  The Java parser has one
+                    // parseUseDeclaration frame for that boundary, so materialize the
+                    // three Perl-level frames here rather than collapsing the stack.
+                    for (int useFrame = 0; useFrame < 3; useFrame++) {
+                        var entry = new ArrayList<String>();
+                        String ciPkg = callerInfo.packageName();
+                        entry.add(ciPkg != null ? ciPkg : "main");
+                        entry.add(callerInfo.filename());
+                        entry.add(String.valueOf(callerInfo.line()));
+                        entry.add(null);  // No subroutine name available for use statements
+                        stackTrace.add(entry);
+                    }
                     lastFileName = callerInfo.filename() != null ? callerInfo.filename() : "";
                     callerStackIndex = effectiveIndex + 1;
                 }
@@ -252,7 +259,7 @@ public class ExceptionFormatter {
                             if (tokenIndex != null && frame.code().errorUtil != null) {
                                 ErrorMessageUtil.SourceLocation loc = frame.code().errorUtil.getSourceLocationAccurate(tokenIndex);
                                 filename = loc.fileName();
-                                line = String.valueOf(loc.lineNumber());
+                                line = frame.code().errorUtil.getSourceLocationLineTextAccurate(tokenIndex);
                             }
 
                             String subName = frame.subroutineName();

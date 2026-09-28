@@ -870,6 +870,10 @@ public class Dereference {
         if (node.right instanceof ListNode) { // ->()
 
             BinaryOperatorNode applyNode = new BinaryOperatorNode("(", node.left, node.right, node.tokenIndex);
+            Object callerLineOverride = node.getAnnotation("callerLineTokenOverride");
+            if (callerLineOverride instanceof Integer token && token > 0) {
+                applyNode.setAnnotation("callerLineTokenOverride", token);
+            }
             applyNode.accept(emitterVisitor);
 
         } else if (node.right instanceof ArrayLiteralNode) { // ->[0]

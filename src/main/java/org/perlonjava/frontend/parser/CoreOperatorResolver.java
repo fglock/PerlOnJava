@@ -56,6 +56,11 @@ public class CoreOperatorResolver {
         return switch (operatorName) {
             case "__LINE__" -> {
                 handleEmptyParentheses(parser);
+                // ParsePrimary enters this resolver after consuming the
+                // pseudo-function.  The parser cursor may already have
+                // advanced across a continuation token, so anchor the source
+                // lookup at the consumed token rather than that cursor.
+                int lineSourceIndex = Math.max(0, currentIndex - 1);
                 int lineNumber;
                 if (parser.baseLineNumber > 0) {
                     // Inside string interpolation sub-parser: count newlines in inner tokens
@@ -69,9 +74,11 @@ public class CoreOperatorResolver {
                     lineNumber = parser.baseLineNumber + newlineCount;
                 } else {
                     lineNumber = parser.ctx.errorUtil
-                            .getSourceLocationAccurate(sourceIndex).lineNumber();
+                            .getSourceLocationAccurate(lineSourceIndex).lineNumber();
                 }
-                yield new NumberNode(Integer.toString(lineNumber), parser.tokenIndex);
+                NumberNode lineNode = new NumberNode(Integer.toString(lineNumber), parser.tokenIndex);
+                lineNode.setAnnotation("sourcePseudoLine", true);
+                yield lineNode;
             }
             case "__FILE__" -> {
                 handleEmptyParentheses(parser);

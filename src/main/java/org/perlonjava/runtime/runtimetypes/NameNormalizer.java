@@ -185,6 +185,14 @@ public class NameNormalizer {
         // anonymous (matches Perl semantics for `undef %Pkg::`).
     }
 
+    /** True when {@code undef %Pkg::} detached this package's current stash. */
+    public static boolean isAnonymizedPackage(String className) {
+        if (className == null || className.isEmpty()) return false;
+        State state = state();
+        Integer id = state.blessIdCache.get(className);
+        return id != null && "__ANON__".equals(state.blessStrCache.get(id));
+    }
+
     public static String getBlessStrForClassName(String className) {
         Integer id = state().blessIdCache.get(className);
         if (id == null) {
