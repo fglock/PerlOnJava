@@ -116,6 +116,7 @@ public class OperatorParser {
         Node block;
         Node operand;
         LexerToken token;
+        boolean usesDefaultTopic = false;
         // Handle 'eval' keyword which can be followed by a block or an expression
         token = TokenUtils.peek(parser);
         var index = parser.tokenIndex;
@@ -151,13 +152,21 @@ public class OperatorParser {
             if (((ListNode) operand).elements.isEmpty()) {
                 // create `$_` variable
                 operand = ParserNodeUtils.scalarUnderscore(parser);
+                usesDefaultTopic = true;
             }
         }
-        return new EvalOperatorNode(
+        EvalOperatorNode evalNode = new EvalOperatorNode(
                 operator,
                 operand,
                 parser.ctx.symbolTable.snapShot(), // Freeze the scoped symbol table for the eval context
                 index);
+        // `eval` without an operand can carry non-local control flow from the
+        // runtime contents of $_.  Preserve the distinction from an explicit
+        // `eval $_`, whose caller has deliberately supplied the operand.
+        if (usesDefaultTopic) {
+            evalNode.setAnnotation("evalUsesDefaultTopic", true);
+        }
+        return evalNode;
     }
 
     /**
@@ -1547,6 +1556,14 @@ public class OperatorParser {
             if (((OperatorNode) separator).operator.equals("matchRegex")) {
                 ((OperatorNode) separator).operator = "quoteRegex";
             }
+        }
+        // A fat comma is an ordinary list separator, including immediately
+        // after a quote-like split pattern: `split // => $text`.  The regex
+        // list parser deliberately leaves it as a terminator, so consume it
+        // here and parse the remaining argument explicitly.
+        if (TokenUtils.peek(parser).text.equals("=>")) {
+            TokenUtils.consume(parser);
+            operand.elements.add(parser.parseExpression(0));
         }
         // If no string argument provided, default to $_
         // This is needed so both JVM and bytecode backends resolve $_ correctly

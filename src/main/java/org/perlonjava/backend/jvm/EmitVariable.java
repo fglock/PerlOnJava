@@ -948,6 +948,20 @@ public class EmitVariable {
                         && arrayRhs.operator.equals("@");
                 node.right.accept(emitterVisitor.with(directArrayToGlob
                         ? RuntimeContextType.LIST : RuntimeContextType.SCALAR));
+                if (node.left instanceof OperatorNode outerGlob
+                        && outerGlob.operator.equals("*")
+                        && node.right instanceof BinaryOperatorNode nestedAssignment
+                        && nestedAssignment.operator.equals("=")
+                        && nestedAssignment.left instanceof OperatorNode nestedGlob
+                        && nestedGlob.operator.equals("*")
+                        && nestedGlob.operand instanceof IdentifierNode) {
+                    // In `*outer = *inner = value`, the inner assignment's
+                    // scalar result is not the value to install: Perl aliases
+                    // the complete *inner glob into *outer.  Re-load this
+                    // named glob without re-evaluating a dynamic lvalue.
+                    mv.visitInsn(Opcodes.POP);
+                    nestedGlob.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                }
                 if (directArrayToGlob) {
                     mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                             "org/perlonjava/runtime/runtimetypes/RuntimeGlob",
@@ -1288,6 +1302,13 @@ public class EmitVariable {
                     mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                             "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "assignTo",
                             "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                }
+
+                if (Boolean.TRUE.equals(node.getAnnotation("magicReadlineAssignment"))) {
+                    // `while (<>)` tests readline's result, not the assigned
+                    // lvalue, which can be magical after `*_=*.`.
+                    mv.visitInsn(Opcodes.POP);
+                    mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
                 }
 
                 if (pooledRhs) {

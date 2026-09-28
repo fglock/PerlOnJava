@@ -87,6 +87,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static final boolean DEBUG_REGEX = System.getenv("DEBUG_REGEX") != null;
     private static final ThreadLocal<Integer> DEFER_FAILED_COMPILE_DEBUG_FREE =
             ThreadLocal.withInitial(() -> 0);
+    /** Validation context for the initial regex compilation performed by s///. */
+    private static final ThreadLocal<Integer> SUBSTITUTION_VALIDATION_DEPTH =
+            ThreadLocal.withInitial(() -> 0);
     private static final ThreadLocal<Integer> ACTIVE_DEBUG_MODE =
             ThreadLocal.withInitial(() -> 0);
 
@@ -1313,7 +1316,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static void validateModifiersWithPendingDiagnostics(
             String modifiers, RuntimeRegex regex) {
         try {
-            validateModifiers(modifiers);
+            validateModifiers(modifiers, SUBSTITUTION_VALIDATION_DEPTH.get() > 0);
             return;
         } catch (PerlCompilerException primary) {
             String location = WarnDie.getPerlLocationFromStack();
@@ -1335,6 +1338,23 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
 
             String compilationUnit = compilationUnitFromLocation(location);
+            // A file being compiled can repair itself from a BEGIN-installed
+            // __WARN__ handler and exec before this failure is raised.  eval
+            // STRING instead carries the modifier error in $@; dispatching it
+            // there would incorrectly add a second warning.
+            if (compilationUnit != null && WarnDie.hasCustomWarningHandler()) {
+                // The warning hook receives the complete suffix, as Perl's
+                // historical parser did.  Self-correcting programs use that
+                // spelling to print the final modifier while removing it and
+                // re-execing.  Keep `diagnostics` based on the primary error
+                // below so an ordinary, returning handler retains the modern
+                // one-character fatal diagnostic.
+                // Keep the final quote as the last non-newline character.
+                // WarnDie appends a derived location to messages without a
+                // newline, which would break Perl's quote-anchored handler.
+                String warningDiagnostic = "Unknown regexp modifier \"/" + modifiers + "\"\n";
+                WarnDie.warn(new RuntimeScalar(warningDiagnostic), new RuntimeScalar(""));
+            }
             if (compilationUnit != null) {
                 diagnostics.append("Execution of ").append(compilationUnit)
                         .append(" aborted due to compilation errors.\n");
@@ -3043,6 +3063,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * @return A RuntimeScalar representing the compiled regex with replacement.
      */
     public static RuntimeScalar getReplacementRegex(RuntimeScalar patternString, RuntimeScalar replacement, RuntimeScalar modifiers) {
+        int previousSubstitutionDepth = SUBSTITUTION_VALIDATION_DEPTH.get();
+        SUBSTITUTION_VALIDATION_DEPTH.set(previousSubstitutionDepth + 1);
+        try {
         // Use resolveRegex to properly handle qr objects and qr overloading
         // Resolve a string substitution pattern with its lexical modifiers on
         // the first compilation. In particular, the internal E flag from
@@ -3148,6 +3171,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         regex.replacement = replacement;
         return new RuntimeScalar(regex).propagateTaint(patternString);
+        } finally {
+            SUBSTITUTION_VALIDATION_DEPTH.set(previousSubstitutionDepth);
+        }
     }
 
     /**
@@ -3345,9 +3371,19 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             int debugMode = lexicalDebugMode != 0
                     ? lexicalDebugMode
                     : (previous == null ? 0 : previous.lexicalDebugMode);
-            reused = compile(source, modifiers, debugMode, 0,
-                    previous != null && previous.patternByteBacked,
-                    lexicalReStrict || (previous != null && previous.lexicalReStrict));
+            int previousSubstitutionDepth = SUBSTITUTION_VALIDATION_DEPTH.get();
+            if (replacement != null) {
+                SUBSTITUTION_VALIDATION_DEPTH.set(previousSubstitutionDepth + 1);
+            }
+            try {
+                reused = compile(source, modifiers, debugMode, 0,
+                        previous != null && previous.patternByteBacked,
+                        lexicalReStrict || (previous != null && previous.lexicalReStrict));
+            } finally {
+                if (replacement != null) {
+                    SUBSTITUTION_VALIDATION_DEPTH.set(previousSubstitutionDepth);
+                }
+            }
         }
         reused.regexFlags = flags == null ? reused.regexFlags : flags;
         reused.hasPreservesMatch = reused.hasPreservesMatch

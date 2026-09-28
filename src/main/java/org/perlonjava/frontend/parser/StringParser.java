@@ -1254,6 +1254,10 @@ public class StringParser {
         // not an array access after a complete regex.  Perl owns the error at
         // the complete quote-like construct, including that final bracket.
         if (operator.equals("m") && rawStr.startDelim == '['
+                // A modifier makes the regex boundary unambiguous: in
+                // `@[... m[..]g ]`, the following bracket belongs to the
+                // enclosing array expression, not to the quote-like token.
+                && rawStr.buffers.get(1).isEmpty()
                 && parser.tokenIndex < parser.tokens.size()
                 && parser.tokens.get(parser.tokenIndex).text.equals("]")) {
             var location = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
@@ -1277,7 +1281,13 @@ public class StringParser {
             throw malformedAttributeQuote;
         }
         rejectClearedConstantHandler(parser, rawStr, operator);
-        rejectUndefinedStringConstantHandler(parser, rawStr, operator);
+        // q/qq constants are transformed below into their handler result.
+        // The other quote-like forms retain their existing undefined-result
+        // diagnostic path.
+        if (!(operator.equals("q") || operator.equals("'")
+                || operator.equals("qq") || operator.equals("\""))) {
+            rejectUndefinedStringConstantHandler(parser, rawStr, operator);
+        }
 
         switch (operator) {
             case "`":
@@ -1308,8 +1318,16 @@ public class StringParser {
                 return new BinaryOperatorNode("(", codeRef, arguments, rawStr.index);
             }
             case "'":
-            case "q":
-                return StringSingleQuoted.parseSingleQuotedString(rawStr);
+            case "q": {
+                Node value = StringSingleQuoted.parseSingleQuotedString(rawStr);
+                if (value instanceof StringNode stringNode) {
+                    return ConstantOverloadParser.wrapStringConstant(parser, stringNode,
+                            rawStr.buffers.getFirst(), rawStr.index, "q", "q",
+                            parser.ctx.symbolTable.isStrictOptionEnabled(org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8)
+                                    || parser.ctx.compilerOptions.isUnicodeSource);
+                }
+                return value;
+            }
             case "m":
             case "qr":
             case "/":
@@ -1334,8 +1352,22 @@ public class StringParser {
             case "s":
                 return parseRegexReplace(parser.ctx, rawStr, parser);
             case "\"":
-            case "qq":
-                return StringDoubleQuoted.parseDoubleQuotedString(parser.ctx, rawStr, true, true, false, parser.getHeredocNodes(), parser);
+            case "qq": {
+                Node value = StringDoubleQuoted.parseDoubleQuotedString(parser.ctx, rawStr,
+                        true, true, false, parser.getHeredocNodes(), parser);
+                if (value instanceof StringNode stringNode) {
+                    return ConstantOverloadParser.wrapStringConstant(parser, stringNode,
+                            rawStr.buffers.getFirst(), rawStr.index, "qq", "q",
+                            parser.ctx.symbolTable.isStrictOptionEnabled(org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8)
+                                    || parser.ctx.compilerOptions.isUnicodeSource);
+                }
+                // Interpolation produces a compound node rather than a
+                // StringNode.  It still invokes the q handler for its
+                // compile-time diagnostic; unlike a literal node there is no
+                // precomputed replacement value to install here.
+                rejectUndefinedStringConstantHandler(parser, rawStr, operator);
+                return value;
+            }
             case "qw":
                 return parseWordsString(rawStr);
             case "tr":

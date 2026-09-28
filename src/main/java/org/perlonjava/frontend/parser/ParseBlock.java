@@ -126,6 +126,15 @@ public class ParseBlock {
         while (token.type != LexerTokenType.EOF
                 && !(token.type == LexerTokenType.OPERATOR && token.text.equals("}"))) {
 
+            // Perl's parser accepts runs of the same sigil as decorations
+            // when they occupy a complete statement line.  They carry no
+            // runtime effect, but legacy JAPH programs use `* * *`, `/ / /`,
+            // and `% % %` as visual separators before a real statement.
+            if (consumeDecorationLine(parser)) {
+                token = peek(parser);
+                continue;
+            }
+
             // Label parsing logic
             String label = null;
             if (token.type == LexerTokenType.IDENTIFIER) {
@@ -144,6 +153,16 @@ public class ParseBlock {
                 if (label != null && token.type == LexerTokenType.OPERATOR && token.text.equals("}")) {
                     continue;
                 }
+            }
+
+            // Perl accepts an empty label (`:`) as a statement separator.
+            // Obfuscated programs use it to make `:` delimiters and the $:
+            // special variable visually overlap, e.g. `:;$:=~s:...:`.
+            if (token.text.equals(":")) {
+                TokenUtils.consume(parser);
+                swallowedLookahead = false;
+                token = peek(parser);
+                continue;
             }
 
             // Handle empty statements (lone semicolons). Perl parses these as
@@ -253,6 +272,50 @@ public class ParseBlock {
         }
         parser.tokenIndex = currentIndexLabel;
         return null;
+    }
+
+    private static boolean consumeDecorationLine(Parser parser) {
+        int index = parser.tokenIndex;
+        while (index < parser.tokens.size()
+                && parser.tokens.get(index).type == LexerTokenType.WHITESPACE) {
+            index++;
+        }
+        if (index >= parser.tokens.size()) return false;
+        LexerToken first = parser.tokens.get(index);
+        if (!(first.text.equals("*") || first.text.equals("/") || first.text.equals("%"))) {
+            return false;
+        }
+        String decoration = first.text;
+        int count = 0;
+        boolean terminated = false;
+        while (index < parser.tokens.size()) {
+            LexerToken token = parser.tokens.get(index);
+            if (token.type == LexerTokenType.WHITESPACE) {
+                if (token.text.contains("\n")) {
+                    terminated = true;
+                    index++;
+                    break;
+                }
+                index++;
+                continue;
+            }
+            if (token.type == LexerTokenType.NEWLINE) {
+                terminated = true;
+                index++;
+                break;
+            }
+            if (token.text.equals(";") && count >= 3) {
+                terminated = true;
+                index++;
+                break;
+            }
+            if (!token.text.equals(decoration)) return false;
+            count++;
+            index++;
+        }
+        if (!terminated || count < 3) return false;
+        parser.tokenIndex = index;
+        return true;
     }
 
     /**

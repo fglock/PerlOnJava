@@ -81,11 +81,12 @@ public class IdentifierParser {
                 parser.throwError("syntax error");
             }
 
-            // Perl does not allow whitespace to turn into a punctuation special variable.
-            // For example "$\t = 4" must be a syntax error, not "$= 4".
+            // Perl does not allow most punctuation names after whitespace.
+            // `%%` is the exception: `% %` is a hash named `%`.
+            // For example "$\t = 4" must remain a syntax error, not "$= 4".
             if (tokenAfter.type == LexerTokenType.OPERATOR
                     && tokenAfter.text.length() == 1
-                    && "!|/*+-<>&~.=%'?()".indexOf(tokenAfter.text.charAt(0)) >= 0) {
+                    && "!|/*+-<>&~.='?()".indexOf(tokenAfter.text.charAt(0)) >= 0) {
                 parser.throwError("syntax error");
             }
         }
@@ -161,12 +162,12 @@ public class IdentifierParser {
     private static boolean isSpecialVariable(String name) {
         // Special variables that can't be package-qualified
         // These are single-character special variables in Perl
-        return name.equals("_") ||   // default variable
-               name.equals("/") ||   // input record separator
+        return name.equals("/") ||   // input record separator
                name.equals("\\") ||  // output record separator
                name.equals("|") ||   // output field separator
                name.equals(",") ||   // output field separator
                name.equals(";") ||   // statement terminator
+               name.equals(":") ||   // format lines per page
                name.equals("'") ||   // last pattern match result
                name.equals("`") ||   // last read line
                name.equals("!") ||   // errno
@@ -267,7 +268,12 @@ public class IdentifierParser {
             // Signal "missing variable name" to the caller by returning the empty string.
             if (token.type != LexerTokenType.IDENTIFIER
                     && token.type != LexerTokenType.NUMBER
-                    && token.type != LexerTokenType.STRING) {
+                    && token.type != LexerTokenType.STRING
+                    // Whitespace also separates a sigil from a
+                    // punctuation-named variable: `% %` is `%%`, just as
+                    // `$ ;` is `$;`.  Keep it eligible for the ordinary
+                    // punctuation-variable handling below.
+                    && !token.text.equals("%")) {
                 return "";
             }
         }
@@ -451,6 +457,16 @@ public class IdentifierParser {
                     String prefix = variableName.toString();
                     if (prefix.equals("")) {
                         // `$;` is a valid name
+                        variableName.append(token.text);
+                        parser.tokenIndex++;
+                        return variableName.toString();
+                    }
+                    return prefix;
+                }
+                if (token.text.equals(":")) {
+                    String prefix = variableName.toString();
+                    if (prefix.isEmpty()) {
+                        // `$:` is the format-lines-per-page special scalar.
                         variableName.append(token.text);
                         parser.tokenIndex++;
                         return variableName.toString();

@@ -11,6 +11,7 @@ import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 /**
@@ -112,6 +113,14 @@ public class EmitEval {
      * @param node           The OperatorNode representing the eval operation (contains the eval string expression)
      */
     static void handleEvalOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
+        if (node.getBooleanAnnotation("evalUsesDefaultTopic")) {
+            // Runtime $_ may hold `goto LABEL`.  eval STRING executes through
+            // the interpreter and correctly returns that marker, but generated
+            // JVM code cannot resume at an outer Perl label.  Fall back before
+            // emitting the surrounding unit so its label-to-PC dispatcher owns
+            // both sides of the non-local jump.
+            throw new PerlCompilerException("implicit-topic eval requires interpreter fallback");
+        }
         EmitterContext ctx = emitterVisitor.ctx;
         MethodVisitor mv = ctx.mv;
 

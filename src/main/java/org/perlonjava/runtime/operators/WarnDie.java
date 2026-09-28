@@ -63,6 +63,12 @@ public class WarnDie {
                 || code.defined();
     }
 
+    /** True only when __WARN__ is an active, non-reserved Perl signal handler. */
+    public static boolean hasCustomWarningHandler() {
+        RuntimeScalar sig = getGlobalHash("main::SIG").get("__WARN__");
+        return hasUsableSigHandler(sig) && !isReservedSigString(sig);
+    }
+
     private static Throwable unwrapException(Throwable throwable) {
         Throwable current = throwable;
 
