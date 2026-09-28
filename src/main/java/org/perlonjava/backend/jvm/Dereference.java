@@ -232,6 +232,8 @@ public class Dereference {
                  */
                 if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) %array[] ");
 
+                emitKeyValueArraySliceScalarWarning(emitterVisitor, node, sigilNode);
+
                 // Rewrite variable from % to @ to get the array
                 OperatorNode varNode = new OperatorNode("@", sigilNode.operand, sigilNode.tokenIndex);
                 varNode.accept(emitterVisitor.with(RuntimeContextType.LIST)); // target - left parameter
@@ -251,7 +253,9 @@ public class Dereference {
                 emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
 
                 // Call the appropriate method based on operation
-                String methodName = arrayOperation.equals("delete") ? "deleteKeyValueSlice" : "getKeyValueSlice";
+                String methodName = arrayOperation.equals("delete") ? "deleteKeyValueSlice"
+                        : Boolean.TRUE.equals(node.getAnnotation("foreachSource"))
+                                ? "getSlice" : "getKeyValueSlice";
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeArray",
                         methodName, "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;", false);
 
@@ -1484,6 +1488,40 @@ public class Dereference {
         String hashName = identifier.name;
         String message = "%" + hashName + "{" + keys
                 + "} in scalar context better written as $" + hashName + "{" + keys + "}";
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(message);
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "<init>",
+                "(Ljava/lang/String;)V", false);
+        mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(emitterVisitor.ctx.errorUtil.warningLocation(node.tokenIndex));
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "<init>",
+                "(Ljava/lang/String;)V", false);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/operators/WarnDie", "warn",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                false);
+        mv.visitInsn(Opcodes.POP);
+    }
+
+    private static void emitKeyValueArraySliceScalarWarning(
+            EmitterVisitor emitterVisitor, BinaryOperatorNode node, OperatorNode sigilNode) {
+        if (emitterVisitor.ctx.contextType != RuntimeContextType.SCALAR
+                || !(sigilNode.operand instanceof IdentifierNode identifier)) {
+            return;
+        }
+        String indices = "...";
+        if (node.right instanceof ArrayLiteralNode indexNode
+                && indexNode.elements.size() == 1 && indexNode.elements.getFirst() instanceof NumberNode index) {
+            indices = index.value;
+        }
+        String arrayName = identifier.name;
+        String message = "%" + arrayName + "[" + indices
+                + "] in scalar context better written as $" + arrayName + "[" + indices + "]";
         MethodVisitor mv = emitterVisitor.ctx.mv;
         mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
         mv.visitInsn(Opcodes.DUP);

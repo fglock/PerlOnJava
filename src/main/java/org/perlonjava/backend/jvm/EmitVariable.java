@@ -852,9 +852,9 @@ public class EmitVariable {
                     "Can't modify substr in scalar assignment", ctx.errorUtil);
         }
 
-        if (isKeyValueHashSlice(node.left)) {
+        if (isKeyValueSlice(node.left)) {
             throw new PerlCompilerException(node.tokenIndex,
-                    "Can't modify key/value hash slice in list assignment", ctx.errorUtil);
+                    "Can't modify " + keyValueSliceDescription(node.left) + " in list assignment", ctx.errorUtil);
         }
 
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("SET " + node);
@@ -863,10 +863,11 @@ public class EmitVariable {
         // Inspect the AST and get the L-value context: SCALAR or LIST
         int lvalueContext = LValueVisitor.getContext(node);
         if (isKeyValueHashSliceLvalueSub(node.left)) {
-            String assignmentKind = lvalueContext == RuntimeContextType.SCALAR
+            String assignmentKind = isIndexValueArraySliceLvalueSub(node.left) ? "list"
+                    : lvalueContext == RuntimeContextType.SCALAR
                     ? "scalar" : "list";
             throw new PerlCompilerException(node.tokenIndex,
-                    "Can't modify key/value hash slice in " + assignmentKind + " assignment",
+                    "Can't modify " + keyValueSliceDescription(node.left) + " in " + assignmentKind + " assignment",
                     ctx.errorUtil);
         }
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("SET Lvalue context: " + lvalueContext);
@@ -1405,14 +1406,28 @@ public class EmitVariable {
      * LIST assignments in scalar context return a cached read-only element count, which cannot
      * be used as an lvalue target. Scalar assignments return the variable itself (writable).
      */
-    private static boolean isKeyValueHashSlice(Node node) {
+    private static boolean isKeyValueSlice(Node node) {
         if (node instanceof ListNode list && list.elements.size() == 1) {
-            return isKeyValueHashSlice(list.elements.getFirst());
+            return isKeyValueSlice(list.elements.getFirst());
         }
         return node instanceof BinaryOperatorNode access
-                && access.operator.equals("{")
+                && (access.operator.equals("{") || access.operator.equals("["))
                 && access.left instanceof OperatorNode sigil
                 && sigil.operator.equals("%");
+    }
+
+    private static String keyValueSliceDescription(Node node) {
+        while (node instanceof ListNode list && list.elements.size() == 1) node = list.elements.getFirst();
+        if (node instanceof BinaryOperatorNode call && call.operator.equals("(")
+                && call.left instanceof OperatorNode codeOp && codeOp.operator.equals("&")
+                && codeOp.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef
+                && codeRef.value instanceof RuntimeCode code && code.returnsIndexValueArraySlice) {
+            // The flag does not distinguish array and hash slices; Perl's
+            // observable error remains list-assignment for either lvalue sub.
+            return "index/value array slice";
+        }
+        return node instanceof BinaryOperatorNode access && access.operator.equals("[")
+                ? "index/value array slice" : "key/value hash slice";
     }
 
     private static boolean isKeyValueHashSliceLvalueSub(Node node) {
@@ -1425,7 +1440,14 @@ public class EmitVariable {
         }
         return codeOp.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef
                 && codeRef.value instanceof RuntimeCode code
-                && code.returnsKeyValueHashSlice;
+                && (code.returnsKeyValueHashSlice || code.returnsIndexValueArraySlice);
+    }
+
+    private static boolean isIndexValueArraySliceLvalueSub(Node node) {
+        while (node instanceof ListNode list && list.elements.size() == 1) node = list.elements.getFirst();
+        return node instanceof BinaryOperatorNode call && call.left instanceof OperatorNode codeOp
+                && codeOp.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar ref
+                && ref.value instanceof RuntimeCode code && code.returnsIndexValueArraySlice;
     }
 
     private static boolean isListAssignBranch(Node expr) {

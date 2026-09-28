@@ -1786,6 +1786,9 @@ public class Opcodes {
      */
     public static final short LSTAT_LASTHANDLE = 349;
 
+    /** Mark a RuntimeList as an index/key-value slice for lvalue foreach. */
+    public static final short MARK_KEYVALUE_SLICE = 621;
+
     /**
      * Mutable scalar assignment: rd = new RuntimeScalar(); rd.set(rs)
      * Superinstruction combining LOAD_UNDEF + SET_SCALAR for lexical scalar assignment.
@@ -2729,6 +2732,9 @@ public class Opcodes {
 
     /** Initialize a scalar declaration, retaining an already ref-aliased cell. Format: register. */
     public static final short INITIALIZE_LEXICAL_SCALAR = 611;
+
+    /** Index/value array slice: rd = array.getKeyValueSlice(indices). */
+    public static final short ARRAY_KEYVALUE_SLICE = 622;
 
     /** Remove an active lexical binding when its declaring scope exits. Format: register nameStringIdx. */
     public static final short UNBIND_ACTIVE_LEXICAL = 612;
