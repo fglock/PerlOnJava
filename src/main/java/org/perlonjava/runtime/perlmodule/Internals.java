@@ -76,6 +76,7 @@ public class Internals extends PerlModuleBase {
             internals.registerMethod("jperl_cv_start_location", "jperlCvStartLocation", "$");
             internals.registerMethod("jperl_cv_deparse_info", "jperlCvDeparseInfo", "$");
             internals.registerMethod("jperl_cv_is_constant", "jperlCvIsConstant", "$");
+            internals.registerMethod("jperl_is_anonymous_stash", "jperlIsAnonymousStash", "$");
             internals.registerMethod("jperl_mark_pseudo_constant", "jperlMarkPseudoConstant", "$$");
             internals.registerMethod("jperl_end_av_ref", "jperlEndAvRef", "");
             internals.registerMethod("jperl_b_object_2svref", "jperlBObject2svref", "$");
@@ -1184,6 +1185,13 @@ public class Internals extends PerlModuleBase {
         }
         boolean isConst = code.constantValue != null || code.isConstantCv;
         return new RuntimeScalar(isConst ? 1 : 0).getList();
+    }
+
+    /** Report whether `undef %Package::` detached the package's old stash. */
+    public static RuntimeList jperlIsAnonymousStash(RuntimeArray args, int ctx) {
+        if (args.size() != 1) return new RuntimeScalar(0).getList();
+        return new RuntimeScalar(GlobalVariable.isAnonymousStashPackage(args.get(0).toString()) ? 1 : 0)
+                .getList();
     }
 
     /** Preserve constant.pm's scalar-reference proxy in the stash hash view. */

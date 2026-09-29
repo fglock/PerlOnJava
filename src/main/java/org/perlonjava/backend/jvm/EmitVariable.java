@@ -214,7 +214,13 @@ public class EmitVariable {
      */
     private static void fetchGlobalVariable(EmitterContext ctx, boolean createIfNotExists, String sigil, String varName, int tokenIndex) {
 
-        String var = NameNormalizer.normalizeVariableName(varName, ctx.symbolTable.getCurrentPackage());
+        // `%::` is the main stash.  Keep this parser-level spelling distinct
+        // from other symbolic names normalised by NameNormalizer (notably the
+        // real global hash `%:`).
+        String var = sigil.equals("%") && varName.equals("::")
+                ? "main::"
+                : NameNormalizer.normalizeVariableName(varName, ctx.symbolTable.getCurrentPackage());
+        boolean isStash = sigil.equals("%") && varName.endsWith("::");
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("GETVAR lookup global " + sigil + varName + " normalized to " + var + " createIfNotExists:" + createIfNotExists);
 
         // Perl creates package symbols at compile time when they are referenced.
@@ -225,7 +231,7 @@ public class EmitVariable {
                 GlobalVariable.getGlobalVariable(var);
             } else if (sigil.equals("@")) {
                 GlobalVariable.getGlobalArray(var);
-            } else if (sigil.equals("%") && !var.endsWith("::")) {
+            } else if (sigil.equals("%") && !isStash) {
                 GlobalVariable.getGlobalHash(var);
             }
         }
@@ -254,7 +260,7 @@ public class EmitVariable {
             return;
         }
 
-        if (sigil.equals("%") && var.endsWith("::")) {
+        if (sigil.equals("%") && isStash) {
             // A stash
             // Stash is the hash that represents a package's symbol table,
             // containing all the typeglobs for that package.

@@ -27,6 +27,11 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
  * the existence of these global entities, initializing them as necessary.
  */
 public class GlobalVariable {
+    private static boolean isStashHashKey(String key) {
+        // `main:::` is the storage name of `%:`; it is a plain hash. `main::`
+        // remains the main symbol table used by `%::`.
+        return key != null && key.endsWith("::") && !key.equals("main:::");
+    }
     // Global variables and subroutines
     public static final Map<String, RuntimeScalar> globalVariables =
             new CurrentRuntimeMap<>(state -> state.scalarValues());
@@ -105,7 +110,7 @@ public class GlobalVariable {
         }
     }
 
-    static boolean isAnonymousStashPackage(String packageName) {
+    public static boolean isAnonymousStashPackage(String packageName) {
         return packageName != null && globalState().anonymousStashPackages().contains(packageName);
     }
 
@@ -1778,13 +1783,13 @@ public class GlobalVariable {
         // Normalize stash lookups: in Perl, all packages are children of main::,
         // so %{main::F::} and %F:: refer to the same stash.
         // Strip a leading "main::" from stash keys (but keep "main::" itself).
-        if (key.length() > 6 && key.endsWith("::") && key.startsWith("main::")) {
+        if (key.length() > 6 && isStashHashKey(key) && key.startsWith("main::")) {
             key = key.substring(6);
         }
         // Stash alias resolution with fallback for non-stash-view hashes
         // (e.g. %Pkg::h). Stash-view keys (ending in "::") are already
         // unified at assignment time in RuntimeGlob.set(RuntimeGlob).
-        if (!stashAliases.isEmpty() && !key.endsWith("::")) {
+        if (!stashAliases.isEmpty() && !isStashHashKey(key)) {
             String resolvedKey = resolveAliasedFqn(key);
             if (resolvedKey != key) {
                 RuntimeHash resolved = globalHashes.get(resolvedKey);
@@ -1808,7 +1813,7 @@ public class GlobalVariable {
         }
         RuntimeHash var = globalHashes.get(key);
         if (var == null) {
-            boolean isStash = key.endsWith("::");
+            boolean isStash = isStashHashKey(key);
             // Glob-aliased names (`*A = *B`) need to share the same RuntimeHash
             // so that auto-vivification under one name shows up under the other.
             // Stash-view hashes are excluded — they have their own unification
@@ -1840,7 +1845,10 @@ public class GlobalVariable {
                 if (isStash) {
                     var = new RuntimeStash(key);
                 } else {
-                    var = createNamedGlobalHash(java.util.List.of(key));
+                var = createNamedGlobalHash(java.util.List.of(key));
+                if (key.equals("main:::")) {
+                    var.suppressOddAssignmentWarning = true;
+                }
                 }
                 // D-W6.18: mark as package-global so values stored here
                 // get the storedInPackageGlobal flag (replaces class-name
@@ -2185,6 +2193,18 @@ public class GlobalVariable {
         RuntimeCode runtimeCode = (RuntimeCode) codeRef.value;
         if (!runtimeCode.defined()) {
             runtimeCode.isDeclared = true;
+            // A forward CV's CvSTASH and source COP belong to the source that
+            // took its reference, rather than the package named by that ref.
+            CallerStack.CallerInfo caller = CallerStack.peek(0);
+            if (caller != null) {
+                if (caller.packageName() != null && !caller.packageName().isEmpty()) {
+                    runtimeCode.packageName = caller.packageName();
+                }
+                if (caller.filename() != null && !caller.filename().isEmpty()) {
+                    runtimeCode.cvStartFile = caller.filename();
+                    runtimeCode.cvStartLine = caller.line();
+                }
+            }
         }
         return codeRef;
     }

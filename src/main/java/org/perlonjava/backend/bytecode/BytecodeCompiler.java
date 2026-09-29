@@ -5947,14 +5947,18 @@ public class BytecodeCompiler implements Visitor {
                 } else if (hasVariable(varName) && isDynamicOurVariable(varName)) {
                     // 'our' hash - must load from global table to see local() changes
                     hashReg = allocateRegister();
-                    String globalHashName = NameNormalizer.normalizeVariableName(((IdentifierNode) node.operand).name, getCurrentPackage());
+                    String rawHashName = ((IdentifierNode) node.operand).name;
+                    String globalHashName = rawHashName.equals("::") ? "main::"
+                            : NameNormalizer.normalizeVariableName(rawHashName, getCurrentPackage());
                     int nameIdx = addToStringPool(globalHashName);
                     emit(Opcodes.LOAD_GLOBAL_HASH);
                     emitReg(hashReg);
                     emit(nameIdx);
                 } else {
                     hashReg = allocateRegister();
-                    String globalHashName = NameNormalizer.normalizeVariableName(((IdentifierNode) node.operand).name, getCurrentPackage());
+                    String rawHashName = ((IdentifierNode) node.operand).name;
+                    String globalHashName = rawHashName.equals("::") ? "main::"
+                            : NameNormalizer.normalizeVariableName(rawHashName, getCurrentPackage());
                     int nameIdx = addToStringPool(globalHashName);
 
                     emit(Opcodes.LOAD_GLOBAL_HASH);

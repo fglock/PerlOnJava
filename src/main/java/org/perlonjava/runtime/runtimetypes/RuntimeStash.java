@@ -311,6 +311,10 @@ public class RuntimeStash extends RuntimeHash {
 
         // Method resolution and package existence caches are now stale
         InheritanceResolver.invalidateCache();
+        String className = childPrefix.endsWith("::")
+                ? childPrefix.substring(0, childPrefix.length() - 2) : childPrefix;
+        NameNormalizer.anonymizeBlessId(className);
+        GlobalVariable.markAnonymousStashPackage(className);
         GlobalVariable.clearPackageCache();
         GlobalVariable.markStashPackageFreed(childPrefix);
 
@@ -481,6 +485,16 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.globalArrays.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.globalHashes.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.globalCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
+        // References to a glob survive `undef %Pkg::`, but the GV has lost
+        // its package identity.  Retain the leaf name for diagnostics and
+        // stringification while making that detached GV anonymous.
+        for (Map.Entry<String, RuntimeGlob> entry : GlobalVariable.globalIORefs.entrySet()) {
+            String key = entry.getKey();
+            RuntimeGlob glob = entry.getValue();
+            if (key.startsWith(prefix) && glob != null) {
+                glob.globName = "__ANON__::" + key.substring(prefix.length());
+            }
+        }
         GlobalVariable.removeGlobalIORefsForNamespace(prefix);
         GlobalVariable.globalFormatRefs.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.invalidateStashEnumerationCache();
@@ -501,6 +515,42 @@ public class RuntimeStash extends RuntimeHash {
 
         GlobalVariable.clearPackageCache();
         return this;
+    }
+
+    /**
+     * Assignment to a stash hash clears its visible symbols, but unlike
+     * {@link #undefine()} it does not detach the stash or anonymize existing
+     * package identity.  Stash values are typeglobs, so a dangling final
+     * value is ignored rather than producing the ordinary hash-assignment
+     * warning used by plain hashes.
+     */
+    @Override
+    public RuntimeArray setFromList(RuntimeList value) {
+        RuntimeArray materialized = new RuntimeArray();
+        for (RuntimeScalar element : value) {
+            materialized.elements.add(new RuntimeScalar(element));
+        }
+
+        String prefix = namespace;
+        GlobalVariable.clearStashAlias(prefix);
+        GlobalVariable.clearGlobalPseudoConstantsForNamespace(prefix);
+        GlobalVariable.globalVariables.keySet().removeIf(k -> k.startsWith(prefix));
+        GlobalVariable.globalArrays.keySet().removeIf(k -> k.startsWith(prefix));
+        GlobalVariable.globalHashes.keySet().removeIf(k -> k.startsWith(prefix));
+        GlobalVariable.globalCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
+        GlobalVariable.removeGlobalIORefsForNamespace(prefix);
+        GlobalVariable.globalFormatRefs.keySet().removeIf(k -> k.startsWith(prefix));
+        GlobalVariable.invalidateStashEnumerationCache();
+        GlobalVariable.clearHiddenIORefsForNamespace(prefix);
+        GlobalVariable.invalidatePackageRootSnapshot();
+        elements.clear();
+        InheritanceResolver.invalidateCache();
+        GlobalVariable.clearPackageCache();
+
+        for (int i = 0; i + 1 < materialized.elements.size(); i += 2) {
+            put(materialized.elements.get(i).toString(), materialized.elements.get(i + 1));
+        }
+        return materialized;
     }
 
     /**

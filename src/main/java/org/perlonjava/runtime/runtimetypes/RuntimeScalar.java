@@ -3867,7 +3867,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 yield (RuntimeGlob) value;
             }
             default -> {
-                String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
+                String symbolName = this.toString();
+                // `%::` names the main stash, but a symbolic glob lookup of
+                // the string "::" is relative to the current package.  Keep
+                // these two spellings distinct: after `%:: = ()`, `*{"::"}`
+                // is `*main::main::`, not the main stash glob itself.
+                String varName = symbolName.equals("::")
+                        ? packageName + "::main::"
+                        : NameNormalizer.normalizeVariableName(symbolName, packageName);
                 // Use the canonical glob object for this symbol name.
                 // This ensures the IO slot is shared/visible across operations like:
                 //   *{"\3"} = *DATA; readline v3

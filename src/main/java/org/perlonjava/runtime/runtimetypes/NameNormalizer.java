@@ -210,6 +210,12 @@ public class NameNormalizer {
      */
     public static String normalizeVariableName(String variable, String defaultPackage) {
 
+        // A single quote is Perl's legacy package separator.  Normalize it
+        // before caching so symbolic references use the parsed spelling too.
+        if (variable.indexOf('\'') >= 0) {
+            variable = variable.replace("'", "::");
+        }
+
         if (variable.isEmpty()) {
             // Fast path for empty variable - don't cache, just concatenate
             return defaultPackage + "::" + variable;
@@ -248,7 +254,6 @@ public class NameNormalizer {
             normalized.append(variable);
         } else {
             // Prepend default package
-            // Check if defaultPackage already ends with :: to avoid Math::BigInt::::((
             if (defaultPackage.endsWith("::")) {
                 normalized.append(defaultPackage).append(variable);
             } else {

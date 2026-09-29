@@ -1820,7 +1820,12 @@ public class SubroutineParser {
         }
 
         // - register the subroutine in the namespace
-        String fullName = NameNormalizer.normalizeVariableName(subName, packageToUse);
+        // A package name may itself end with `::` (for example `package
+        // Bear::`). Its members are then spelled `Bear::::member`: do not let
+        // the ordinary package-prefix convention collapse that separator.
+        String fullName = packageToUse.endsWith("::")
+                ? packageToUse + "::" + subName
+                : NameNormalizer.normalizeVariableName(subName, packageToUse);
         // Apply stash-alias resolution so `*Dst:: = *Src::; sub Dst::foo {}`
         // installs in Src::foo and reports "Src::foo" from caller(). The
         // resolution happens here (not in NameNormalizer) to avoid rewriting

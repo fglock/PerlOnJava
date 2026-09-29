@@ -167,6 +167,7 @@ package B::CV {
         $self->{_sub_name} = '__ANON__';
         $self->{_pkg_name} = 'main';
         $self->{_is_anon}  = 1;
+        $self->{_pkg_anonymous} = 0;
         if ($self->{ref} && ref($self->{ref}) eq 'CODE') {
             eval { require Sub::Util };
             return if $@;  # Sub::Util not available, use defaults
@@ -222,6 +223,10 @@ package B::CV {
                     $self->{_is_anon}  = 0;
                 }
             }
+            if (eval { require Internals; Internals::jperl_is_anonymous_stash($self->{_pkg_name}) }) {
+                $self->{_pkg_name} = '__ANON__';
+                $self->{_pkg_anonymous} = 1;
+            }
         }
     }
 
@@ -234,11 +239,17 @@ package B::CV {
     sub STASH {
         my $self = shift;
         $self->_introspect;
+        return B::SPECIAL->new(0) if $self->{_pkg_anonymous};
         return B::STASH->new($self->{_pkg_name});
     }
     
     sub FILE {
-        return "-e";
+        my $self = shift;
+        return "-e" unless $self->{ref} && ref($self->{ref}) eq 'CODE';
+        local $@;
+        return "-e" unless eval { require Internals; 1 };
+        my ($file) = Internals::jperl_cv_start_location($self->{ref});
+        return defined($file) && length($file) ? $file : "-e";
     }
     
     sub START {
