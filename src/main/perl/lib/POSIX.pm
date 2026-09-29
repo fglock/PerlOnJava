@@ -29,7 +29,7 @@ use constant O_EXCL     => 0200;    # 128
 use constant O_NOCTTY   => 0400;    # 256
 use constant O_TRUNC    => 01000;   # 512
 use constant O_APPEND   => 02000;   # 1024
-use constant O_NONBLOCK => 04000;   # 2048
+use constant O_NONBLOCK => $^O eq 'darwin' ? 4 : 04000;
 
 # Wait constants
 use constant WNOHANG    => 1;

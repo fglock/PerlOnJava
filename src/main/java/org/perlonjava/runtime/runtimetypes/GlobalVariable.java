@@ -1061,12 +1061,32 @@ public class GlobalVariable {
         }
     }
 
-    static boolean isIORefHiddenAfterStashDelete(String key) {
+    public static boolean isIORefHiddenAfterStashDelete(String key) {
         PerlRuntime runtime = PerlRuntime.currentOrNull();
         if (runtime != null && runtime.standardIOGlob(key) != null) {
             return !runtime.isStandardIOGlobVisible(key);
         }
         return key != null && hiddenIORefsAfterStashDelete().contains(key);
+    }
+
+    /**
+     * Detach a glob reference retained across a stash delete before it receives
+     * a new anonymous IO slot.  Symbol::gensym creates exactly this shape:
+     * it obtains a named glob reference and then deletes the stash entry.
+     * Reusing that hidden map entry would let RuntimeGlob.setIO() re-expose it
+     * and give the lexical socket a permanent phantom owner.
+     */
+    public static void detachHiddenIORef(RuntimeGlob glob) {
+        if (glob == null || glob.globName == null
+                || !isIORefHiddenAfterStashDelete(glob.globName)) {
+            return;
+        }
+        String key = glob.globName;
+        if (globalIORefs.get(key) == glob) {
+            globalIORefs.remove(key);
+        }
+        hiddenIORefsAfterStashDelete().remove(key);
+        invalidateStashEnumerationCache();
     }
 
     static boolean isVisibleGlobalIORef(String key) {

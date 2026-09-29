@@ -38,6 +38,8 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariab
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 
 public class IOOperator {
+    private static final int O_NONBLOCK = NativeUtils.IS_MAC ? 4 : 04000;
+
     // File descriptor to RuntimeIO mapping for duplication support
     private static Map<Integer, RuntimeIO> fileDescriptorMap() {
         return PerlRuntime.current().ioRegistryState.operatorFileDescriptors;
@@ -2989,10 +2991,10 @@ public class IOOperator {
             IOHandle managedHandle = selectableHandle(fh.ioHandle);
             if (managedHandle instanceof SocketIO socketIO) {
                 if (function == 3) { // F_GETFL
-                    return new RuntimeScalar(socketIO.isBlocking() ? 0 : 2048);
+                    return new RuntimeScalar(socketIO.isBlocking() ? 0 : O_NONBLOCK);
                 }
                 if (function == 4) { // F_SETFL
-                    socketIO.setBlocking((arg & 2048) == 0);
+                    socketIO.setBlocking((arg & O_NONBLOCK) == 0);
                     return scalarTrue;
                 }
             }
@@ -3950,6 +3952,14 @@ public class IOOperator {
             targetGlob = glob;
         }
         if (targetGlob != null) {
+            // Symbol::gensym creates a named glob reference and immediately
+            // removes its stash entry.  Do not let setIO() revive that hidden
+            // name: the retained reference is now an anonymous lexical owner.
+            if (targetGlob.globName != null
+                    && GlobalVariable.isIORefHiddenAfterStashDelete(targetGlob.globName)) {
+                GlobalVariable.detachHiddenIORef(targetGlob);
+                targetGlob.globName = null;
+            }
             targetGlob.setIO(io);
             MyVarCleanupStack.retainLiveIoGlobOwners(targetGlob);
             RuntimeScalar.retainUnstashedIoForDurableSlot(handle);
