@@ -632,7 +632,9 @@ public class WarnDie {
         if (!objectMessage) {
             // Error message
             String out = message.toString();
-            if (!out.endsWith("\n")) {
+            // A regex passed to die stringifies as its pattern, but Perl does
+            // not append a source location to that special scalar value.
+            if (!out.endsWith("\n") && first.type != RuntimeScalarType.REGEX) {
                 // Add " at FILE line N" location
                 String location = signatureMismatchLocation(out, where);
                 if (location.isEmpty() && fileName != null && lineNumber > 0) {
@@ -649,7 +651,14 @@ public class WarnDie {
                     out += ".\n";
                 }
             }
-            errVariable.set(out);
+            // Retain a regex payload in $@.  It stringifies to the same
+            // pattern for eval callers, while preserving the special die
+            // formatting rule for an unhandled exception.
+            if (first.type == RuntimeScalarType.REGEX) {
+                errVariable.set(first);
+            } else {
+                errVariable.set(out);
+            }
         } else {
             // Error object
             errVariable.set(first);

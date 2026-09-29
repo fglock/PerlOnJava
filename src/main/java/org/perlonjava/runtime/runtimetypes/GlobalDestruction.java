@@ -56,8 +56,15 @@ public class GlobalDestruction {
             if (arr == null) continue;  // defensive: rare null entries seen during END
             // Skip tied arrays — iterating them calls FETCHSIZE/FETCH on the
             // tie object, which may already be destroyed or invalid at global
-            // destruction time (e.g., broken ties from eval+last).
-            if (arr.type == RuntimeArray.TIED_ARRAY) continue;
+            // destruction time (e.g., broken ties from eval+last).  The tie
+            // wrapper itself remains the array's owner of the handler, so
+            // release it just as we do for tied hashes below.
+            if (arr.type == RuntimeArray.TIED_ARRAY) {
+                if (arr.elements instanceof TieArray tieArray) {
+                    tieArray.releaseTiedObject();
+                }
+                continue;
+            }
             for (RuntimeScalar elem : new ArrayList<>(arr.elements)) {
                 destroyIfTracked(elem, visited);
             }

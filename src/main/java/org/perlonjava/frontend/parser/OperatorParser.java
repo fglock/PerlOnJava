@@ -1870,6 +1870,28 @@ public class OperatorParser {
             operand = parser.parseExpression(parser.getPrecedence("++"));
         }
 
+        // `local` only accepts package variables.  Named subroutines are
+        // compiled lazily by the JVM backend, but Perl reports this error
+        // while compiling the enclosing program even when the sub is never
+        // called.  Validate direct lexical scalars here, while their scope is
+        // still represented by the parser's symbol table.
+        Node localTarget = operand;
+        if (operand instanceof BinaryOperatorNode assignment
+                && assignment.operator.equals("=")) {
+            localTarget = assignment.left;
+        }
+        if (localTarget instanceof OperatorNode scalar
+                && scalar.operator.equals("$")
+                && scalar.operand instanceof IdentifierNode identifier) {
+            String variableName = "$" + identifier.name;
+            var entry = parser.ctx.symbolTable.getSymbolEntry(variableName);
+            if (entry != null && !"our".equals(entry.decl())) {
+                var location = parser.ctx.errorUtil.getSourceLocationAccurate(currentIndex);
+                throw new PerlCompilerException("Can't localize lexical variable " + variableName
+                        + " at " + location.fileName() + " line " + location.lineNumber() + ".");
+            }
+        }
+
         // Check for declared references inside parentheses: local(\$x)
         if (operand instanceof ListNode listNode) {
             for (Node element : listNode.elements) {

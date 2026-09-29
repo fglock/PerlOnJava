@@ -541,8 +541,40 @@ public class SpecialBlockParser {
             if (!message.endsWith("\n")) {
                 message += "\n";
             }
-            message += blockPhase + " failed--compilation aborted";
-            throw new PerlCompilerException(parser.tokenIndex, message, parser.ctx.errorUtil);
+            // The phaser failed while executing the block introduced at
+            // tokenIndex.  Reporting the parser's current token points at
+            // the following statement (and adds an irrelevant `near` clause)
+            // rather than the BEGIN declaration itself.
+            int failureTokenIndex = block.getIndex();
+            // A BEGIN that installed a __WARN__ handler is reported at the
+            // closing brace when that handler (or a subsequent die) aborts
+            // compilation.  Ordinary BEGIN failures point at the declaration.
+            RuntimeScalar warningHandler = GlobalVariable.getGlobalHash("main::SIG").get("__WARN__");
+            if (blockPhase.equals("BEGIN") && warningHandler != null
+                    && warningHandler.getDefinedBoolean()) {
+                for (int i = Math.min(tokenIndex - 1, parser.tokens.size() - 1);
+                        i >= block.getIndex(); i--) {
+                    if ("}".equals(parser.tokens.get(i).text)) {
+                        failureTokenIndex = i;
+                        break;
+                    }
+                }
+            }
+            ErrorMessageUtil.SourceLocation loc =
+                    parser.ctx.errorUtil.getSourceLocationAccurate(failureTokenIndex);
+            String failureFileName = callerLocation != null ? callerLocation.fileName() : loc.fileName();
+            int failureLineNumber = callerLocation != null ? callerLocation.lineNumber() : loc.lineNumber();
+            // A malformed assignment is a parser/compiler error that Perl
+            // labels "BEGIN not safe after errors". Runtime failures that
+            // happen while compiling a constant expression (for example
+            // division by zero) still use the ordinary BEGIN-failed wording.
+            boolean compileErrorInPhaser = message.startsWith("Can't modify ");
+            String abortPrefix = blockPhase.equals("BEGIN") && compileErrorInPhaser
+                    ? "BEGIN not safe after errors--compilation aborted at "
+                    : blockPhase + " failed--compilation aborted at ";
+            message += abortPrefix
+                    + failureFileName + " line " + failureLineNumber + ".";
+            throw new PerlCompilerException(message);
         } finally {
             if (preserveCallerPragmas) {
                 restoreStack(parser.ctx.symbolTable.warningFlagsStack, savedWarningFlagsStack);

@@ -16,6 +16,7 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.blessedId;
  * It includes both numeric and string comparison methods.
  */
 public class CompareOperators {
+    private static final ThreadLocal<RuntimeScalar> comparisonWarningLocation = new ThreadLocal<>();
     /**
      * Array-reference smartmatch is structural and can encounter cyclic Perl
      * arrays.  Keep the pairs currently being compared (not a global memo):
@@ -110,6 +111,36 @@ public class CompareOperators {
         if (!arg2.getDefinedBoolean()) {
             WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in numeric " + op),
                     callerWhere(), "uninitialized");
+        }
+    }
+
+    /** Numeric coercion for comparisons with a Perl-source caller location. */
+    private static RuntimeScalar comparisonNumber(RuntimeScalar arg, String operation) {
+        RuntimeScalar warningLocation = comparisonWarningLocation.get();
+        if (warningLocation == null) {
+            return arg.getNumberWarn(operation);
+        }
+        if (!arg.getDefinedBoolean()) {
+            String lexicalName = RuntimeCode.findActiveLexicalName(arg);
+            if (lexicalName == null) {
+                lexicalName = GlobalVariable.findGlobalScalarName(arg);
+            }
+            WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value"
+                    + (lexicalName == null ? "" : " " + lexicalName)
+                    + " in " + operation), warningLocation, "uninitialized");
+            return scalarZero;
+        }
+        return arg.getNumberWarn(operation);
+    }
+
+    /** JVM call-site variant used when a comparison must retain its exact source location. */
+    public static RuntimeScalar equalToWarnAt(RuntimeScalar arg1, RuntimeScalar arg2,
+                                               String fileName, int lineNumber) {
+        comparisonWarningLocation.set(new RuntimeScalar(" at " + fileName + " line " + lineNumber));
+        try {
+            return equalTo(arg1, arg2);
+        } finally {
+            comparisonWarningLocation.remove();
         }
     }
 
@@ -334,7 +365,7 @@ public class CompareOperators {
         }
 
         // Convert strings to numbers if necessary
-        arg1 = arg1.getNumber("numeric eq (==)");
+        arg1 = comparisonNumber(arg1, "numeric eq (==)");
         // Perform comparison based on type
         if (arg1.type == RuntimeScalarType.DOUBLE) {
             return getScalarBoolean(arg1.getDouble() == (double) arg2);
@@ -386,8 +417,8 @@ public class CompareOperators {
         }
 
         // Convert strings to numbers if necessary
-        arg1 = arg1.getNumber("numeric eq (==)");
-        arg2 = arg2.getNumber("numeric eq (==)");
+        arg1 = comparisonNumber(arg1, "numeric eq (==)");
+        arg2 = comparisonNumber(arg2, "numeric eq (==)");
         // Perform comparison based on type
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return getScalarBoolean(arg1.getDouble() == arg2.getDouble());

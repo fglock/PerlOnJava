@@ -215,10 +215,13 @@ public class ErrorMessageUtil {
         StringBuilder sb = new StringBuilder();
 
         String perlDiePayloadMessage = null;
+        boolean regexDiePayload = false;
         if (innermostCause instanceof PerlDieException pde && pde.getPayload() != null) {
             RuntimeScalar first = pde.getPayload().getFirst();
-            if (first != null && RuntimeScalarType.isReference(first)) {
+            if (first != null && (RuntimeScalarType.isReference(first)
+                    || first.type == RuntimeScalarType.REGEX)) {
                 perlDiePayloadMessage = first.toString();
+                regexDiePayload = first.type == RuntimeScalarType.REGEX;
             }
         }
 
@@ -232,7 +235,10 @@ public class ErrorMessageUtil {
         String message1 = perlDiePayloadMessage != null ? message : t.getMessage();
         // Check if the original message ends with \n - Perl skips stack trace in that case
         boolean suppressStackTrace = (message != null && message.endsWith("\n"))
-                || (message1 != null && message1.endsWith("\n"));
+                || (message1 != null && message1.endsWith("\n"))
+                // Perl prints a regex die payload verbatim, without either
+                // an automatic source suffix or a stack trace.
+                || regexDiePayload;
 
         // Avoid printing the outer message when it is just a re-wrapping of the
         // innermost cause. This commonly happens when the wrapping exception's
