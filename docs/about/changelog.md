@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Fix `bless` of references returned by tied hash elements.
+
 - Restore `comp/retainedlines.t` debugger eval-source retention, `#line`
   mappings, and UNITCHECK diagnostics on both execution backends.
 
