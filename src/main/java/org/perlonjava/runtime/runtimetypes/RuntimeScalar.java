@@ -261,6 +261,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public boolean numericContextSeen;
 
+    /**
+     * True when a bare typeglob was stored as a scalar value.  Such a value
+     * retains its glob slots for filehandle operations, but numifies through
+     * its string form.  A directly used typeglob has this false and is not a
+     * numeric scalar.
+     */
+    private boolean scalarStoredGlob;
+
     /** True on the scalar slot that owns a newly created anonymous IO glob. */
     public boolean ioOwner;
 
@@ -853,6 +861,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
         this.value = value;
+        this.scalarStoredGlob = value != null;
     }
 
     public RuntimeScalar(byte[] bytes) {
@@ -890,6 +899,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.tainted = scalar.tainted;
                 this.numericLiteralText = scalar.numericLiteralText;
                 this.numericContextSeen = scalar.numericContextSeen;
+                this.scalarStoredGlob = scalar.scalarStoredGlob;
                 this.firstClassRegexScalar = scalar.firstClassRegexScalar;
                 this.formatPictureTainted = scalar.formatPictureTainted;
                 this.lexicalSubName = scalar.lexicalSubName;
@@ -1136,7 +1146,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return NumberParser.parseNumber(this, operation);
         }
         if (type == GLOB) {
-            return NumberParser.parseNumber(new RuntimeScalar(toString()), operation);
+            return NumberParser.parseNumber(this, operation);
         }
         return getNumberLarge();
     }
@@ -1156,10 +1166,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 yield NumberParser.parseNumber(this);
             }
             case BOOLEAN -> (boolean) value ? scalarOne : scalarZero;
-            // A typeglob numifies through its string form.  Like Perl, this
-            // yields zero (and may emit an "isn't numeric" warning) rather
-            // than treating the glob's truth value as a numeric one.
-            case GLOB -> NumberParser.parseNumber(new RuntimeScalar(toString()));
+            case GLOB -> {
+                if (!scalarStoredGlob) {
+                    throw new PerlCompilerException("Can't coerce GLOB to number in numeric context");
+                }
+                yield NumberParser.parseNumber(this);
+            }
             case JAVAOBJECT -> value != null ? scalarOne : scalarZero;
             case TIED_SCALAR -> this.tiedFetch().getNumber();
             case READONLY_SCALAR -> ((RuntimeScalar) this.value).getNumber();
@@ -1192,7 +1204,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 yield NumberParser.parseNumber(this);
             }
             case BOOLEAN -> (boolean) value ? scalarOne : scalarZero;
-            case GLOB -> NumberParser.parseNumber(new RuntimeScalar(toString()));
+            case GLOB -> {
+                if (!scalarStoredGlob) {
+                    throw new PerlCompilerException("Can't coerce GLOB to number in numeric context");
+                }
+                yield NumberParser.parseNumber(this);
+            }
             case JAVAOBJECT -> value != null ? scalarOne : scalarZero;
             case TIED_SCALAR -> this.tiedFetch().getNumberNoOverload();
             case READONLY_SCALAR -> ((RuntimeScalar) this.value).getNumberNoOverload();
@@ -1241,8 +1258,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             markNumericContextSeen();
             return NumberParser.parseNumber(this, operation);
         }
+        // Perl permits a bare glob in warning-enabled arithmetic (with the
+        // usual numeric warning).  The non-warning path remains stricter for
+        // a direct glob used as a compound-assignment lvalue.
         if (type == GLOB) {
-            return NumberParser.parseNumber(new RuntimeScalar(toString()), operation);
+            return NumberParser.parseNumber(this, operation);
         }
         // All other types are defined, just convert to number
         return getNumberLarge();
@@ -2078,6 +2098,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.tainted = value.tainted;
                 this.numericLiteralText = value.numericLiteralText;
                 this.numericContextSeen = value.numericContextSeen;
+                this.scalarStoredGlob = value.scalarStoredGlob
+                        || (value.type == GLOB && value.value instanceof RuntimeGlob);
                 this.firstClassRegexScalar = value.firstClassRegexScalar;
                 this.formatPictureTainted = value.formatPictureTainted;
                 this.globalCodeRefFqn = value.globalCodeRefFqn;
@@ -2089,6 +2111,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.tainted = value.tainted;
                 this.numericLiteralText = value.numericLiteralText;
                 this.numericContextSeen = value.numericContextSeen;
+                this.scalarStoredGlob = value.scalarStoredGlob
+                        || (value.type == GLOB && value.value instanceof RuntimeGlob);
                 this.firstClassRegexScalar = value.firstClassRegexScalar;
                 this.formatPictureTainted = value.formatPictureTainted;
                 this.globalCodeRefFqn = value.globalCodeRefFqn;
@@ -2225,6 +2249,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.tainted = value.tainted;
         this.numericLiteralText = value.numericLiteralText;
         this.numericContextSeen = value.numericContextSeen;
+        this.scalarStoredGlob = value.scalarStoredGlob
+                || (value.type == GLOB && value.value instanceof RuntimeGlob);
         this.firstClassRegexScalar = value.firstClassRegexScalar;
         this.formatPictureTainted = value.formatPictureTainted;
         return this;

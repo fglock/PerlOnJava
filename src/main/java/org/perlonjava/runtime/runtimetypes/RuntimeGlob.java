@@ -879,6 +879,14 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case BOOLEAN:
             case VSTRING:
             case DUALVAR:
+                // A bare typeglob passed directly through @_ remains a glob
+                // lvalue.  Perl permits it to participate in arithmetic, but
+                // rejects replacing that argument with a numeric scalar (for
+                // example, `$_[0] += 0`).  Ordinary `*name = 1` assignment
+                // continues to replace the glob's scalar slot.
+                if (RuntimeCode.isCurrentArgumentAlias(this)) {
+                    throw new PerlCompilerException("Can't coerce GLOB to number in numeric context");
+                }
                 RuntimeIO lastReadline = RuntimeIO.getLastAccessedHandle();
                 if (lastReadline != null && this.globName != null
                         && (this.globName.equals(lastReadline.globName)
