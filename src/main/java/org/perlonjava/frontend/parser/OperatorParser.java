@@ -7,6 +7,7 @@ import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.perlmodule.Universal;
@@ -1307,13 +1308,13 @@ public class OperatorParser {
                     name = name.substring(0, name.length() - 2);
                 }
                 className = new StringNode(name, currentIndex);
-            } else if (className instanceof StringNode stringNode && stringNode.value.isEmpty()) {
-                // default to main package if empty class name is provided
-                className = new StringNode("main", currentIndex);
             }
         } else {
-            // No class name provided - default to current package
-            className = new StringNode(parser.ctx.symbolTable.getCurrentPackage(), currentIndex);
+            // Preserve that the package came from one-argument bless: after a
+            // package stash is deleted, Perl rejects the implicit form while
+            // allowing an explicit package name to recreate the stash.
+            className = new StringNode(ReferenceOperators.IMPLICIT_PACKAGE_PREFIX
+                    + parser.ctx.symbolTable.getCurrentPackage(), currentIndex);
         }
 
         return new BinaryOperatorNode("bless", ref, className, currentIndex);

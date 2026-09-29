@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore `op/bless.t` compatibility for empty-package warnings, deleted
+  package stashes, and readonly scalar references on both execution backends.
+
 - Fix `bless` of references returned by tied hash elements.
 
 - Restore command-line Unicode and Perl shebang switch compatibility, including
