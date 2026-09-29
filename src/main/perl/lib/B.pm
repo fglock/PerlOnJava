@@ -227,6 +227,10 @@ package B::CV {
                 $self->{_pkg_name} = '__ANON__';
                 $self->{_pkg_anonymous} = 1;
             }
+            my $forward_pkg = eval { Internals::jperl_cv_forward_reference_package($self->{ref}) };
+            if (defined $forward_pkg && length $forward_pkg) {
+                $self->{_pkg_name} = $forward_pkg;
+            }
         }
     }
 

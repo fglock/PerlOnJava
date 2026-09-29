@@ -591,6 +591,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         copy.attributes = this.attributes;
         copy.subName = this.subName;
         copy.packageName = this.packageName;
+        copy.forwardReferencePackageName = this.forwardReferencePackageName;
         copy.lexicalSubDisplayName = this.lexicalSubDisplayName;
         copy.deferredClosureWarning = this.deferredClosureWarning;
         copy.deferredClosureWarningLocation = this.deferredClosureWarningLocation;

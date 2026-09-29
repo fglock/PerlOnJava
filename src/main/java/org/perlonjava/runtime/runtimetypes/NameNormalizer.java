@@ -212,7 +212,10 @@ public class NameNormalizer {
 
         // A single quote is Perl's legacy package separator.  Normalize it
         // before caching so symbolic references use the parsed spelling too.
-        if (variable.indexOf('\'') >= 0) {
+        // `$'` is the one-character post-match special variable, not a
+        // legacy-qualified symbol name.  Longer spellings such as Foo'bar
+        // still use the quote as a package separator.
+        if (variable.length() > 1 && variable.indexOf('\'') >= 0) {
             variable = variable.replace("'", "::");
         }
 

@@ -74,6 +74,7 @@ public class Internals extends PerlModuleBase {
             // such as Pod::Coverage can skip imported helpers.
             internals.registerMethod("jperl_is_imported_sub", "jperl_is_imported_sub", "$");
             internals.registerMethod("jperl_cv_start_location", "jperlCvStartLocation", "$");
+            internals.registerMethod("jperl_cv_forward_reference_package", "jperlCvForwardReferencePackage", "$");
             internals.registerMethod("jperl_cv_deparse_info", "jperlCvDeparseInfo", "$");
             internals.registerMethod("jperl_cv_is_constant", "jperlCvIsConstant", "$");
             internals.registerMethod("jperl_is_anonymous_stash", "jperlIsAnonymousStash", "$");
@@ -1150,6 +1151,18 @@ public class Internals extends PerlModuleBase {
             file = defFile;
         }
         return new RuntimeList(new RuntimeScalar(file), new RuntimeScalar(line));
+    }
+
+    /** Return the source package retained by an undefined named coderef. */
+    public static RuntimeList jperlCvForwardReferencePackage(RuntimeArray args, int ctx) {
+        if (args.size() == 0) return new RuntimeScalar().getList();
+        RuntimeScalar scalar = args.get(0);
+        if (scalar == null) return new RuntimeScalar().getList();
+        scalar = scalar.scalar();
+        if (scalar.type != RuntimeScalarType.CODE || !(scalar.value instanceof RuntimeCode code)) {
+            return new RuntimeScalar().getList();
+        }
+        return new RuntimeScalar(code.forwardReferencePackageName).getList();
     }
 
     public static RuntimeList jperlCvDeparseInfo(RuntimeArray args, int ctx) {

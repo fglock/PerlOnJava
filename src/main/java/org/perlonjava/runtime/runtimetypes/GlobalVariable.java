@@ -2193,18 +2193,6 @@ public class GlobalVariable {
         RuntimeCode runtimeCode = (RuntimeCode) codeRef.value;
         if (!runtimeCode.defined()) {
             runtimeCode.isDeclared = true;
-            // A forward CV's CvSTASH and source COP belong to the source that
-            // took its reference, rather than the package named by that ref.
-            CallerStack.CallerInfo caller = CallerStack.peek(0);
-            if (caller != null) {
-                if (caller.packageName() != null && !caller.packageName().isEmpty()) {
-                    runtimeCode.packageName = caller.packageName();
-                }
-                if (caller.filename() != null && !caller.filename().isEmpty()) {
-                    runtimeCode.cvStartFile = caller.filename();
-                    runtimeCode.cvStartLine = caller.line();
-                }
-            }
         }
         return codeRef;
     }

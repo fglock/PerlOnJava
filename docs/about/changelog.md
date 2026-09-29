@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore `op/stash.t` namespace spellings, stash clearing, and forward-CV
+  provenance on both execution backends.
+
 - Restore `op/bless.t` compatibility for empty-package warnings, deleted
   package stashes, and readonly scalar references on both execution backends.
 
