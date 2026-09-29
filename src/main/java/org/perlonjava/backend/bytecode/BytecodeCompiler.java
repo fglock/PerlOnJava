@@ -7257,6 +7257,7 @@ public class BytecodeCompiler implements Visitor {
         int codeReg = allocateRegister();
 
         if (closureVarIndices.isEmpty() && !subCode.inheritsSelfReference
+                && (node.attributes == null || !node.attributes.contains("const"))
                 && !subCompiler.hasStateVariableDeclarations) {
             // No closures - just wrap the InterpretedCode
             RuntimeScalar codeScalar = new RuntimeScalar(subCode);

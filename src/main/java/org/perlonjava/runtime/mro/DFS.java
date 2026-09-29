@@ -97,9 +97,15 @@ public class DFS {
         RuntimeArray isaArray = InheritanceResolver.getIsaArrayForClass(className);
         List<String> parents = new ArrayList<>();
         for (RuntimeBase entity : InheritanceResolver.visibleArrayElements(isaArray)) {
-            String parentName = entity.toString();
-            // FIXED: Skip empty or null parent names
-            if (parentName != null && !parentName.isEmpty()) {
+            String parentName = entity == null ? null : entity.toString();
+            if (entity == null || !entity.getDefinedBoolean()) {
+                // Perl keeps the historical behavior of treating undef in
+                // @ISA as the package main.
+                parentName = "main";
+            } else if (parentName == null || parentName.isEmpty()) {
+                continue;
+            }
+            if (!parentName.isEmpty()) {
                 // Normalize old-style ' separator to :: (e.g., Foo'Bar -> Foo::Bar)
                 parentName = NameNormalizer.normalizePackageName(parentName);
                 // `*Clone:: = *Outer::` aliases the entire subtree, not

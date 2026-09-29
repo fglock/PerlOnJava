@@ -23,6 +23,15 @@ public class MathOperators {
         return new RuntimeScalar(result.doubleValue());
     }
 
+    private static RuntimeScalar exactIntegerQuotient(RuntimeScalar dividend, RuntimeScalar divisor) {
+        if (dividend.type != INTEGER || divisor.type != INTEGER || divisor.getBigint().signum() == 0
+                || !hasWideInteger(dividend, divisor)) {
+            return null;
+        }
+        BigInteger[] quotientAndRemainder = dividend.getBigint().divideAndRemainder(divisor.getBigint());
+        return quotientAndRemainder[1].signum() == 0 ? integerResult(quotientAndRemainder[0]) : null;
+    }
+
     /**
      * Keep the string channel of a scalar which entered arithmetic as a
      * string. Perl's numeric operators add an IV/NV value to the existing PV
@@ -783,6 +792,8 @@ public class MathOperators {
         // Convert string type to number if necessary
         arg1 = arg1.getNumber("division (/)");
         arg2 = arg2.getNumber("division (/)");
+        RuntimeScalar exactQuotient = exactIntegerQuotient(arg1, arg2);
+        if (exactQuotient != null) return exactQuotient;
         double divisor = arg2.getDouble();
         // Check for division by zero
         if (divisor == 0.0) {
@@ -826,6 +837,8 @@ public class MathOperators {
         // Convert to number with warning for uninitialized values
         arg1 = arg1.getNumberWarn("division (/)");
         arg2 = arg2.getNumberWarn("division (/)");
+        RuntimeScalar exactQuotient = exactIntegerQuotient(arg1, arg2);
+        if (exactQuotient != null) return exactQuotient;
         double divisor = arg2.getDouble();
         // Check for division by zero
         if (divisor == 0.0) {
@@ -870,6 +883,10 @@ public class MathOperators {
                 || Double.isInfinite(arg1.getDouble()) || Double.isNaN(arg1.getDouble())
                 || Double.isInfinite(arg2.getDouble()) || Double.isNaN(arg2.getDouble())) {
             return modulusFromDoubles(arg1.getDouble(), arg2.getDouble());
+        }
+
+        if (hasWideInteger(arg1, arg2)) {
+            return modulusFromBigIntegers(arg1.getBigint(), arg2.getBigint());
         }
 
         // Use long arithmetic to handle large integers (beyond int range)
@@ -919,6 +936,10 @@ public class MathOperators {
 
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
             return modulusFromDoubles(arg1.getDouble(), arg2.getDouble());
+        }
+
+        if (hasWideInteger(arg1, arg2)) {
+            return modulusFromBigIntegers(arg1.getBigint(), arg2.getBigint());
         }
 
         // Use long arithmetic to handle large integers (beyond int range)
@@ -1269,15 +1290,22 @@ public class MathOperators {
             }
         }
 
-        long dividend = arg1.getLong();
-        long divisor = arg2.getLong();
+        BigInteger dividend = arg1.getBigint();
+        BigInteger divisor = arg2.getBigint();
 
-        if (divisor == 0) {
+        if (divisor.signum() == 0) {
             throw new PerlCompilerException("Illegal modulus zero");
         }
 
-        long result = dividend % divisor;
-        return new RuntimeScalar(result);
+        return modulusFromBigIntegers(dividend, divisor);
+    }
+
+    private static RuntimeScalar modulusFromBigIntegers(BigInteger dividend, BigInteger divisor) {
+        BigInteger result = dividend.remainder(divisor);
+        if (result.signum() != 0 && result.signum() != divisor.signum()) {
+            result = result.add(divisor);
+        }
+        return integerResult(result);
     }
 
     /** Integer modulus with Perl's divisor-sign result rule. */

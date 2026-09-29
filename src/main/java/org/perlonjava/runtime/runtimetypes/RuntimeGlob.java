@@ -666,7 +666,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                         && !isNativeModuleMethod(oldCode)
                         && !isCompiledDeclarationInstall(oldCode, newCode)
                         && !isSameCachedConstant(oldCode, newCode)) {
-                    String warningPrefix = oldCode.isConstantCv
+                    String warningPrefix = (oldCode.isConstantCv
+                            || oldCode.attributes != null && oldCode.attributes.contains("const"))
                             ? "Constant subroutine " : "Subroutine ";
                     org.perlonjava.runtime.operators.WarnDie.warnWithCategory(
                             new RuntimeScalar(warningPrefix + this.globName + " redefined"),
@@ -830,7 +831,18 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     // enough: descendants such as Clone::Inner must also be
                     // resolved through Outer:: for @ISA and method lookup.
                     if (isStashGlobName(this.globName) && hash instanceof RuntimeStash sourceStash) {
-                        GlobalVariable.setStashAlias(this.globName, sourceStash.namespace);
+                        if (sourceStash.savedNamespaceMove != null) {
+                            GlobalVariable.installNamespaceMove(sourceStash.savedNamespaceMove, this.globName);
+                        } else if (GlobalVariable.globalHashes.get(sourceStash.namespace) != sourceStash) {
+                            // A saved \%Pkg:: can outlive a rebind of *Pkg::.
+                            // Move its old descendants under the new name
+                            // instead of resolving through Pkg's replacement.
+                            RuntimeGlob.NamespaceMove move =
+                                    GlobalVariable.detachNamespaceForStaleStash(sourceStash.namespace);
+                            GlobalVariable.installNamespaceMove(move, this.globName);
+                        } else {
+                            GlobalVariable.setStashAlias(this.globName, sourceStash.namespace);
+                        }
                         InheritanceResolver.invalidateCache();
                         GlobalVariable.clearPackageCache();
                     }
@@ -930,6 +942,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // `local *data = "$mod\::DATA"`.
                 String aliasName = NameNormalizer.normalizeVariableName(
                         value.toString(), RuntimeCode.getCurrentPackage());
+                if (isStashGlobName(this.globName)) {
+                    RuntimeHash oldStash = GlobalVariable.globalHashes.get(this.globName);
+                    if (oldStash instanceof RuntimeStash oldRuntimeStash) {
+                        oldRuntimeStash.savedNamespaceMove =
+                                GlobalVariable.detachNamespaceForStaleStash(this.globName);
+                    }
+                }
                 this.set(GlobalVariable.getGlobalIO(aliasName));
 
                 // Perl also uses `local *PKG::__ANON__ = 'name'` to provide a

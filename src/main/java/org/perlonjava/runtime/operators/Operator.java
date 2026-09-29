@@ -947,8 +947,22 @@ public class Operator {
             String expr = args.getFirst().toString();
             Set<Character> resetChars = parseResetExpression(expr);
 
-            // Get current package from caller information
-            String currentPackage = RuntimeCode.getCurrentPackage();
+            // caller() has no Perl frame at file scope and falls back to main.
+            // The runtime package tracker follows package statements in both
+            // file scope and subroutines, which is the scope reset operates on.
+            String currentPackage =
+                    org.perlonjava.backend.bytecode.InterpreterState.currentPackage.get().toString();
+            if (currentPackage == null || currentPackage.isEmpty()) {
+                currentPackage = RuntimeCode.getCurrentPackage();
+            }
+            if (currentPackage != null && currentPackage.length() > 6
+                    && currentPackage.startsWith("main::")) {
+                currentPackage = currentPackage.substring(6);
+            }
+            if (currentPackage != null && !currentPackage.isEmpty()
+                    && !currentPackage.endsWith("::")) {
+                currentPackage += "::";
+            }
 
             // Reset global variables that start with matching characters
             GlobalVariable.resetGlobalVariables(resetChars, currentPackage);

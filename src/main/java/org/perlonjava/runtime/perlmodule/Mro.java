@@ -262,9 +262,14 @@ public class Mro extends PerlModuleBase {
     private static void buildIsaRevForClass(String className, Map<String, Set<String>> isaRevCache) {
         if (GlobalVariable.existsGlobalArray(className + "::ISA")) {
             RuntimeArray isaArray = GlobalVariable.getGlobalArray(className + "::ISA");
-            for (RuntimeBase parent : isaArray.elements) {
-                String parentName = parent.toString();
+            for (RuntimeBase parent : InheritanceResolver.visibleArrayElements(isaArray)) {
+                String parentName = parent == null ? null : parent.toString();
+                if (parent == null || !parent.getDefinedBoolean()) {
+                    parentName = "main";
+                }
                 if (parentName != null && !parentName.isEmpty()) {
+                    parentName = NameNormalizer.normalizePackageName(parentName);
+                    parentName = GlobalVariable.resolveStashAlias(parentName);
                     isaRevCache.computeIfAbsent(parentName, k -> new HashSet<>()).add(className);
                 }
             }

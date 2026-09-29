@@ -201,7 +201,7 @@ public class Attributes extends PerlModuleBase {
                             return ATTR_WARN;
                         }
                         // const: invoke and store result if callable, else warn "useless"
-                        if ("const".equals(attrName) && !hadAttr) {
+                        if ("const".equals(attrName) && (!hadAttr || code.constantValue == null)) {
                             if (code.definitionPending) {
                                 // Perl lets an attribute handler apply :const
                                 // to an anonymous closure prototype before its
@@ -342,6 +342,15 @@ public class Attributes extends PerlModuleBase {
         if (codeRef.type != CODE) return;
         RuntimeCode code = (RuntimeCode) codeRef.value;
         if (code.attributes == null || code.attributes.isEmpty()) return;
+
+        // Apply built-in attributes after anonymous closure cells have been
+        // attached, so :const snapshots the values visible at creation time.
+        for (String attr : new ArrayList<>(code.attributes)) {
+            String name = attr.startsWith("-") ? attr.substring(1) : attr;
+            if (Set.of("lvalue", "method", "const").contains(name)) {
+                applyBuiltinAttribute(codeRef, "CODE", attr);
+            }
+        }
 
         // Filter non-builtin attributes
         Set<String> builtinAttrs = Set.of("lvalue", "method", "const");

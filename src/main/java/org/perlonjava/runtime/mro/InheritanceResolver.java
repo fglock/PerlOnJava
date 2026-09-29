@@ -158,8 +158,10 @@ public class InheritanceResolver {
         // Build current ISA list
         List<String> currentIsa = new ArrayList<>();
         for (RuntimeBase entity : visibleArrayElements(isaArray)) {
-            String parentName = entity.toString();
-            if (parentName != null && !parentName.isEmpty()) {
+            String parentName = entity == null ? null : entity.toString();
+            if (entity == null || !entity.getDefinedBoolean()) {
+                currentIsa.add("main");
+            } else if (parentName != null && !parentName.isEmpty()) {
                 currentIsa.add(parentName);
             }
         }
@@ -227,6 +229,13 @@ public class InheritanceResolver {
 
     public static long getIsaGeneration() {
         return currentState().isaGeneration();
+    }
+
+    /** Reject a newly-mutated @ISA immediately when it introduces a cycle. */
+    public static void validateIsaArrays(Collection<String> classNames) {
+        for (String className : classNames) {
+            linearizeHierarchy(className);
+        }
     }
 
     /**
@@ -355,10 +364,10 @@ public class InheritanceResolver {
         RuntimeArray isaArray = getIsaArrayForClass(className);
         List<String> parents = new ArrayList<>();
         for (RuntimeBase entity : visibleArrayElements(isaArray)) {
-            String parentName = entity.toString();
+            String parentName = entity == null ? null : entity.toString();
             // Handle undef elements as "main" for Perl compatibility
-            if (parentName == null || parentName.equals("")) {
-                if (!entity.getDefinedBoolean()) {
+            if (entity == null || parentName == null || parentName.equals("")) {
+                if (entity == null || !entity.getDefinedBoolean()) {
                     parentName = "main";
                 } else {
                     continue; // Skip empty but defined strings
@@ -394,7 +403,7 @@ public class InheritanceResolver {
      * {@code FETCH} methods; reading {@link RuntimeArray#elements} directly sees
      * only the empty backing list used by a tied array.</p>
      */
-    static List<RuntimeScalar> visibleArrayElements(RuntimeArray array) {
+    public static List<RuntimeScalar> visibleArrayElements(RuntimeArray array) {
         if (array.type != RuntimeArray.TIED_ARRAY) {
             return array.elements;
         }

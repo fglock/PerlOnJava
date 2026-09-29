@@ -759,6 +759,7 @@ public class GlobalVariable {
         stashAliases.put(dst, src);
         resolvedStashAliasCache.clear();
         invalidatePackageRootSnapshot();
+        InheritanceResolver.noteIsaMutation();
     }
 
     /**
@@ -835,6 +836,25 @@ public class GlobalVariable {
         return snapshot;
     }
 
+    static RuntimeGlob.NamespaceMove detachNamespaceForStaleStash(String namespace) {
+        String prefix = normalizeStashNamespace(namespace);
+        Map<String, RuntimeScalar> scalars = snapshotNamespace(globalVariables, prefix);
+        Map<String, RuntimeArray> arrays = snapshotNamespace(globalArrays, prefix);
+        Map<String, RuntimeHash> hashes = snapshotNamespace(globalHashes, prefix);
+        hashes.remove(prefix);
+        Map<String, RuntimeScalar> codes = snapshotNamespace(globalCodeRefs, prefix);
+        globalVariables.keySet().removeIf(key -> key.startsWith(prefix));
+        globalArrays.keySet().removeIf(key -> key.startsWith(prefix));
+        globalHashes.keySet().removeIf(key -> key.startsWith(prefix) && !key.equals(prefix));
+        globalCodeRefs.keySet().removeIf(key -> key.startsWith(prefix));
+        removeGlobalIORefsForNamespace(prefix);
+        globalFormatRefs.keySet().removeIf(key -> key.startsWith(prefix));
+        clearHiddenIORefsForNamespace(prefix);
+        clearPinnedCodeRefsForNamespace(prefix);
+        invalidateStashEnumerationCache();
+        return new RuntimeGlob.NamespaceMove(prefix, scalars, arrays, hashes, codes);
+    }
+
     static void installNamespaceMove(RuntimeGlob.NamespaceMove move, String destinationPrefix) {
         for (Map.Entry<String, RuntimeScalar> entry : move.scalars.entrySet()) {
             globalVariables.put(destinationPrefix + entry.getKey().substring(move.sourcePrefix.length()), entry.getValue());
@@ -882,6 +902,7 @@ public class GlobalVariable {
         String key = namespace.endsWith("::") ? namespace : namespace + "::";
         if (stashAliases.remove(key) != null) {
             invalidatePackageRootSnapshot();
+            InheritanceResolver.noteIsaMutation();
         }
         resolvedStashAliasCache.clear();
     }
@@ -1337,6 +1358,9 @@ public class GlobalVariable {
     }
 
     public static void aliasGlobalArray(String key, RuntimeArray array) {
+        if (key.endsWith("::ISA")) {
+            array.markIsaArray(key);
+        }
         markPackageGlobalRoot(array);
         globalArrays.put(key, array);
         invalidatePackageRootSnapshot();
@@ -1692,7 +1716,8 @@ public class GlobalVariable {
                     invalidatePackageRootSnapshot();
                 }
                 if (isaArray || resolvedKey.endsWith("::ISA")) {
-                    resolved.markIsaArray();
+                    resolved.markIsaArray(key);
+                    resolved.markIsaArray(resolvedKey);
                 }
                 return resolved;
             }
@@ -1735,7 +1760,7 @@ public class GlobalVariable {
             markPackageGlobalRoot(var);
         }
         if (isaArray) {
-            var.markIsaArray();
+            var.markIsaArray(key);
         }
         return var;
     }

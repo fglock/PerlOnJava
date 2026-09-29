@@ -1027,6 +1027,9 @@ public class SubroutineParser {
         if (!attributes.isEmpty()) {
             org.perlonjava.runtime.operators.ModuleOperators.require(new RuntimeScalar("attributes.pm"));
         }
+        if (subName != null && attributes.contains("const")) {
+            parser.throwError(":const is not permitted on named subroutines");
+        }
         if (futureAsyncAwaitSub && attributes.contains("lvalue")) {
             String location = parser.ctx.errorUtil == null
                     ? ""
