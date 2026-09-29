@@ -1470,7 +1470,7 @@ public class GlobalVariable {
         return null;
     }
 
-    private static void retainForeachAlias(RuntimeScalar scalar) {
+    public static void retainForeachAlias(RuntimeScalar scalar) {
         if (scalar != null
                 && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && scalar.value instanceof RuntimeBase base) {
@@ -1478,7 +1478,7 @@ public class GlobalVariable {
         }
     }
 
-    private static void releaseForeachAlias(RuntimeScalar scalar) {
+    public static void releaseForeachAlias(RuntimeScalar scalar) {
         if (scalar != null
                 && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && scalar.value instanceof RuntimeBase base
@@ -2601,7 +2601,7 @@ public class GlobalVariable {
     public static boolean isPackageLoaded(String className) {
         // Check cache first
         Boolean cached = packageExistsCache.get(className);
-        if (cached != null) {
+        if (Boolean.TRUE.equals(cached)) {
             return cached;
         }
 
@@ -2613,6 +2613,12 @@ public class GlobalVariable {
         // After stripping the prefix, the remaining part must NOT contain "::"
         // to be a direct member of this package.
         boolean exists = globalCodeRefs.keySet().stream()
+                .anyMatch(key -> key.startsWith(prefix) && !key.substring(prefix.length()).contains("::"))
+                || globalVariables.keySet().stream()
+                .anyMatch(key -> key.startsWith(prefix) && !key.substring(prefix.length()).contains("::"))
+                || globalArrays.keySet().stream()
+                .anyMatch(key -> key.startsWith(prefix) && !key.substring(prefix.length()).contains("::"))
+                || globalHashes.keySet().stream()
                 .anyMatch(key -> key.startsWith(prefix) && !key.substring(prefix.length()).contains("::"));
 
         // Cache the result

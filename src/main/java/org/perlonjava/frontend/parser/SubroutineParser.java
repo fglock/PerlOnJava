@@ -3016,6 +3016,9 @@ public class SubroutineParser {
      */
     static void emitIllegalProtoWarning(Parser parser, String proto, String subDisplayName) {
         if (proto == null || proto.isEmpty()) return;
+        boolean warningsEnabled = parser.ctx.symbolTable.isWarningCategoryEnabled("illegalproto");
+        boolean warnFlag = parser.ctx.compilerOptions != null && parser.ctx.compilerOptions.warnFlag;
+        if (!warningsEnabled && !warnFlag) return;
         String name = subDisplayName != null ? subDisplayName : "?";
         String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
         // Check if any character is illegal
@@ -3029,26 +3032,39 @@ public class SubroutineParser {
         }
         if (hasIllegal) {
             String msg = "Illegal character in prototype for " + name + " : " + proto;
-            Warnings.warnWithCategory("illegalproto", msg, loc);
+            emitPrototypeWarning(parser, msg, loc, warningsEnabled);
         }
 
         // Perl emits diagnostics in addition to the general illegal-character
         // warning for the malformed prototype shapes below.
-        if (proto.indexOf('@') >= 0 && proto.matches(".*@\\s+.*")) {
-            Warnings.warnWithCategory("illegalproto",
-                    "Prototype after '@' for " + name + " : " + proto, loc);
+        int at = proto.indexOf('@');
+        if (at >= 0 && at + 1 < proto.length()) {
+            emitPrototypeWarning(parser,
+                    "Prototype after '@' for " + name + " : " + proto, loc, warningsEnabled);
         }
         for (int i = 0; i < proto.length(); i++) {
             if (proto.charAt(i) == '_' && i + 1 < proto.length()
                     && proto.charAt(i + 1) != ';') {
-                Warnings.warnWithCategory("illegalproto",
-                        "Illegal character after '_' in prototype for " + name + " : " + proto, loc);
+                emitPrototypeWarning(parser,
+                        "Illegal character after '_' in prototype for " + name + " : " + proto, loc,
+                        warningsEnabled);
                 break;
             }
         }
         if (proto.indexOf('[') >= 0 && proto.indexOf(']', proto.indexOf('[') + 1) < 0) {
-            Warnings.warnWithCategory("illegalproto",
-                    "Missing ']' in prototype for " + name + " : " + proto, loc);
+            emitPrototypeWarning(parser,
+                    "Missing ']' in prototype for " + name + " : " + proto, loc, warningsEnabled);
+        }
+    }
+
+    private static void emitPrototypeWarning(Parser parser, String message, String location,
+            boolean warningsEnabled) {
+        RuntimeScalar warning = new RuntimeScalar(message);
+        RuntimeScalar where = new RuntimeScalar(location);
+        if (warningsEnabled && parser.ctx.symbolTable.isFatalWarningCategory("illegalproto")) {
+            org.perlonjava.runtime.operators.WarnDie.die(warning, where);
+        } else {
+            org.perlonjava.runtime.operators.WarnDie.warn(warning, where);
         }
     }
 

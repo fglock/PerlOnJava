@@ -265,6 +265,9 @@ public class StatementParser {
             int declIndex = parser.tokenIndex;
             parser.parsingForLoopVariable = true;
             TokenUtils.consume(parser, LexerTokenType.IDENTIFIER);
+            if (token.text.equals("state") && TokenUtils.peek(parser).type == LexerTokenType.IDENTIFIER) {
+                parser.throwCleanError("Missing $ on loop variable");
+            }
             varNode = OperatorParser.parseVariableDeclaration(parser, token.text, declIndex, declIndex);
             parser.parsingForLoopVariable = false;
         } else if (token.type == LexerTokenType.IDENTIFIER && token.text.equals("CORE")
@@ -280,6 +283,9 @@ public class StatementParser {
                 int declIndex = parser.tokenIndex;
                 parser.parsingForLoopVariable = true;
                 TokenUtils.consume(parser, LexerTokenType.IDENTIFIER);
+                if (TokenUtils.peek(parser).type == LexerTokenType.IDENTIFIER) {
+                    parser.throwCleanError("Missing $ on loop variable");
+                }
                 varNode = OperatorParser.parseVariableDeclaration(parser, coreOp.text, declIndex, declIndex);
                 parser.parsingForLoopVariable = false;
             } else {
@@ -307,6 +313,11 @@ public class StatementParser {
                 parser.parsingTakeReference = previousParsingTakeReference;
             }
             varNode = new OperatorNode("\\", operand, parser.tokenIndex);
+        }
+
+        if (varNode instanceof OperatorNode declaration && declaration.operator.equals("our")
+                && declaration.operand instanceof ListNode) {
+            parser.throwCleanError("Missing $ on loop variable");
         }
 
         validateDeclaredReferenceForeachVariables(parser, varNode);

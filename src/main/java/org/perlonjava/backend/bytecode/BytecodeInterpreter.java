@@ -1014,6 +1014,16 @@ public class BytecodeInterpreter {
                                         : new RuntimeScalar();
                             }
 
+                            case Opcodes.FOREACH_ALIAS_RETAIN -> {
+                                int register = bytecode[pc++];
+                                GlobalVariable.retainForeachAlias((RuntimeScalar) registers[register]);
+                            }
+
+                            case Opcodes.FOREACH_ALIAS_RELEASE -> {
+                                int register = bytecode[pc++];
+                                GlobalVariable.releaseForeachAlias((RuntimeScalar) registers[register]);
+                            }
+
                             case Opcodes.UNDEFINE_SCALAR -> {
                                 pc = InlineOpcodeHandler.executeUndefineScalar(bytecode, pc, registers);
                             }

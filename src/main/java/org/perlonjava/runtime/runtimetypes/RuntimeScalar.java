@@ -2223,7 +2223,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (value.type == GLOB && value.value instanceof RuntimeIO) {
                     value.getNumber();
                 }
-                return this.tiedStore(value);
+                this.tiedStore(value);
+                // The value of an assignment to a tied scalar is its value
+                // after STORE has run.  FETCH is observable Perl magic and
+                // must run even when the caller immediately consumes the
+                // assignment expression (for example, `$out = $tied = $rhs`).
+                return this.tiedFetch();
             }
             case READONLY_SCALAR -> {
                 if (this instanceof RuntimeScalarReadOnly readOnly) {
