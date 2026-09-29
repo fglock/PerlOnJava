@@ -3866,6 +3866,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 }
                 yield (RuntimeGlob) value;
             }
+            // `no strict 'refs'` permits symbolic names, not references of
+            // the wrong kind.  In particular, an earlier array/hash
+            // autovivification must not be stringified as a glob name.
+            case REGEX, CODE, ARRAYREFERENCE, HASHREFERENCE ->
+                    throw new PerlCompilerException("Not a GLOB reference");
             default -> {
                 String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
                 // Use the canonical glob object for this symbol name.
