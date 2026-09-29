@@ -11,6 +11,8 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  * and performing inheritance checks.
  */
 public class ReferenceOperators {
+    /** Parser-only scalar prefix that identifies a one-argument bless. */
+    public static final String IMPLICIT_PACKAGE_PREFIX = "\u0000implicit-bless-package:";
     /**
      * "Blesses" a Perl reference into an object by associating it with a class name.
      * This method is used to convert a Perl reference into an object of a specified class.
@@ -49,6 +51,9 @@ public class ReferenceOperators {
             runtimeScalar.type = RuntimeScalarType.GLOBREFERENCE;
         }
         if (RuntimeScalarType.isReference(runtimeScalar)) {
+            if (runtimeScalar.value instanceof RuntimeScalarReadOnly) {
+                throw new PerlCompilerException("Modification of a read-only value attempted");
+            }
             // The class-name operand is an ordinary scalar read, so tied
             // scalar magic must run before deciding whether it is a reference.
             className = RuntimeScalar.fetchTiedOnce(className);
@@ -80,6 +85,15 @@ public class ReferenceOperators {
             // refs, but callers like IO::Handle already handle this via
             // ref($class) || $class in Perl code.
             String str = className.toString();
+            boolean implicitPackage = str.startsWith(IMPLICIT_PACKAGE_PREFIX);
+            if (implicitPackage) {
+                str = str.substring(IMPLICIT_PACKAGE_PREFIX.length());
+                if (GlobalVariable.isStashPackageFreed(str)) {
+                    throw new PerlCompilerException("Attempt to bless into a freed package");
+                }
+            } else {
+                GlobalVariable.reviveStashPackage(str);
+            }
             // Default to "main" if className is empty
             if (str.isEmpty()) {
                 WarnDie.warnWithCategory(
@@ -104,7 +118,6 @@ public class ReferenceOperators {
             // is no longer affected — the underlying lifetime issues
             // that caused the detached-source errors are resolved.
             str = GlobalVariable.resolveStashAlias(str);
-
             RuntimeBase referent = (RuntimeBase) runtimeScalar.value;
             if (!classConstruction && ClassRegistry.isClass(str)) {
                 throw new PerlCompilerException("Attempt to bless into a class");

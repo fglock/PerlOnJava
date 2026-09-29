@@ -312,6 +312,7 @@ public class RuntimeStash extends RuntimeHash {
         // Method resolution and package existence caches are now stale
         InheritanceResolver.invalidateCache();
         GlobalVariable.clearPackageCache();
+        GlobalVariable.markStashPackageFreed(childPrefix);
 
         return RuntimeGlob.createDetachedNamespaceMove(movedNamespace);
     }

@@ -109,6 +109,30 @@ public class GlobalVariable {
         return packageName != null && globalState().anonymousStashPackages().contains(packageName);
     }
 
+    /** Mark a package whose stash was removed by a whole-namespace delete. */
+    public static void markStashPackageFreed(String packageName) {
+        String normalized = normalizePackageName(packageName);
+        if (!normalized.isEmpty()) globalState().freedStashPackages().add(normalized);
+    }
+
+    /** Whether an implicit bless targets a package whose stash was deleted. */
+    public static boolean isStashPackageFreed(String packageName) {
+        return globalState().freedStashPackages().contains(normalizePackageName(packageName));
+    }
+
+    /** Recreate a package explicitly after its stash was deleted. */
+    public static void reviveStashPackage(String packageName) {
+        globalState().freedStashPackages().remove(normalizePackageName(packageName));
+    }
+
+    private static String normalizePackageName(String packageName) {
+        if (packageName == null || packageName.isEmpty()) return "";
+        String normalized = packageName.endsWith("::")
+                ? packageName.substring(0, packageName.length() - 2) : packageName;
+        return normalized.length() > 6 && normalized.startsWith("main::")
+                ? normalized.substring(6) : normalized;
+    }
+
     static long codeRefVersion() {
         return globalState().codeRefVersion();
     }
