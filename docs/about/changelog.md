@@ -8,6 +8,9 @@ priorities and future plans.
 
 - Fix `bless` of references returned by tied hash elements.
 
+- Restore command-line Unicode and Perl shebang switch compatibility, including
+  scoped `-Ci`/`-Co` open layers and `Module::Pluggable::Fast` loading.
+
 - Restore `comp/retainedlines.t` debugger eval-source retention, `#line`
   mappings, and UNITCHECK diagnostics on both execution backends.
 

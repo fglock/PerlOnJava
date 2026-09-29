@@ -153,6 +153,7 @@ public class PerlLanguageProvider {
         ScopedSymbolTable savedCurrentScope = null;
         RuntimeCode.EvalRuntimeContext savedEvalRuntimeContext = null;
         boolean evalRuntimeContextSaved = false;
+        RuntimeIO.CommandLineUnicodeState savedCommandLineUnicode = RuntimeIO.commandLineUnicodeState();
         try {
 
         // The compiler options are also the source of truth for nested loads.
@@ -168,11 +169,29 @@ public class PerlLanguageProvider {
         if (isTopLevelScript) {
             ArgumentParser.applyPerlShebangSwitches(compilerOptions.code, compilerOptions);
             GlobalContext.setThreadTaintMode(compilerOptions.taintMode);
-        } else if (compilerOptions.taintMode) {
+            RuntimeIO.configureCommandLineUnicode(
+                    compilerOptions.unicodeInput || compilerOptions.unicodeStdin,
+                    compilerOptions.unicodeOutput || compilerOptions.unicodeStdout,
+                    compilerOptions.unicodeStderr);
+            if (compilerOptions.unicodeInput || compilerOptions.unicodeStdin) {
+                RuntimeIO.getStdin().binmode(":utf8");
+            }
+            if (compilerOptions.unicodeOutput || compilerOptions.unicodeStdout) {
+                RuntimeIO.getStdout().binmode(":utf8");
+            }
+            if (compilerOptions.unicodeStderr) {
+                RuntimeIO.getStderr().binmode(":utf8");
+            }
+        } else {
+            // -Ci/-Co are scoped to the current file. A require/do compilation
+            // must not inherit the top-level command-line open defaults.
+            RuntimeIO.configureCommandLineUnicode(false, false, false);
+            if (compilerOptions.taintMode) {
             // A nested require/do inherits its caller's runtime taint mode.
             // It may enable taint explicitly, but default nested options must
             // not disable a top-level -T program.
             GlobalContext.setThreadTaintMode(true);
+            }
         }
 
         // Save the current scope so we can restore it after execution.
@@ -413,6 +432,7 @@ public class PerlLanguageProvider {
             if (evalRuntimeContextSaved) {
                 RuntimeCode.restoreEvalRuntimeContext(savedEvalRuntimeContext);
             }
+            RuntimeIO.restoreCommandLineUnicode(savedCommandLineUnicode);
             } finally {
                 COMPILE_LOCK.unlock();
                 compilationLock.close();

@@ -99,6 +99,12 @@ public class CompilerOptions implements Cloneable {
     public boolean unicodeOutput = false; // -CO (same as stdout)
     public boolean unicodeArgs = false; // -CA
     public boolean unicodeLocale = false; // -CL
+    /** True while parsing switches extracted from the program shebang. */
+    public boolean processingPerlShebang = false;
+    /** Whether a command-line -C switch was seen before the shebang. */
+    public boolean commandLineUnicodeSwitchSeen = false;
+    /** Numeric mask of the command-line -C switch, for shebang conflict checks. */
+    public int commandLineUnicodeMask = 0;
     public boolean warnFlag = false; // For -w (sets $^W = 1)
     public int warningOverride = 0; // For -W/-X: 1 forces warnings on, -1 forces warnings off
     public RuntimeScalar incHook = null; // For storing @INC hook reference

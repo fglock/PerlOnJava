@@ -138,6 +138,9 @@ public class SystemOperator {
         checkTaintEnvironment();
 
         String cmd = command.toString();
+        if (command.type == RuntimeScalarType.BYTE_STRING) {
+            cmd = encodeByteStringForShell(cmd);
+        }
         CommandResult result;
 
         List<String> directCommand = splitDirectCommandWords(cmd);
@@ -160,6 +163,30 @@ public class SystemOperator {
         }
 
         return processOutput(result.output, ctx);
+    }
+
+    /**
+     * Preserve octets embedded in a Perl byte-string command when the command
+     * is passed through a UTF-8 Java ProcessBuilder argument. Core tests build
+     * shell commands from utf8::encoded strings; octal escapes survive the
+     * shell's single-quoted command text and are decoded by the child Perl.
+     */
+    private static String encodeByteStringForShell(String command) {
+        StringBuilder encoded = new StringBuilder(command.length());
+        for (int i = 0; i < command.length(); i++) {
+            char ch = command.charAt(i);
+            if (ch >= 0x80 && ch <= 0xff) {
+                encoded.append('\\');
+                String octal = Integer.toOctalString(ch);
+                for (int pad = octal.length(); pad < 3; pad++) {
+                    encoded.append('0');
+                }
+                encoded.append(octal);
+            } else {
+                encoded.append(ch);
+            }
+        }
+        return encoded.toString();
     }
 
     /**
