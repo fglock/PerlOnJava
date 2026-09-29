@@ -9,6 +9,9 @@ priorities and future plans.
 - Restore `comp/retainedlines.t` debugger eval-source retention, `#line`
   mappings, and UNITCHECK diagnostics on both execution backends.
 
+- Restore CGI::Simple multipart request parsing and `CORE::GLOBAL::time`
+  overrides on both execution backends.
+
 - Restore `op/caller.t` compatibility for eval source text, tied and freed
   `@DB::args`, anonymous stashes, hint hashes, nested `use` frames, and
   caller source-line tracking on both execution backends.

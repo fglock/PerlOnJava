@@ -206,9 +206,12 @@ subtest 'gethostbyname operator override' => sub {
 };
 
 subtest 'time family CORE::GLOBAL overrides' => sub {
-    plan tests => 8;
+    plan tests => 10;
 
     BEGIN {
+        *CORE::GLOBAL::time = sub {
+            return 123456789;
+        };
         *CORE::GLOBAL::localtime = sub (;$) {
             return wantarray ? ('local-list', $_[0] // 'undef') : 'local-scalar:' . ($_[0] // 'undef');
         };
@@ -216,6 +219,9 @@ subtest 'time family CORE::GLOBAL overrides' => sub {
             return wantarray ? ('gm-list', $_[0] // 'undef') : 'gm-scalar:' . ($_[0] // 'undef');
         };
     }
+
+    is(time, 123456789, 'time override works without parentheses');
+    is(time(), 123456789, 'time override works with parentheses');
 
     is(scalar(localtime), 'local-scalar:undef', 'localtime override works without args');
     is(scalar(localtime 123), 'local-scalar:123', 'localtime override works with an arg');

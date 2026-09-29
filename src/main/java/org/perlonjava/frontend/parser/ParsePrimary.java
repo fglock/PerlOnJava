@@ -298,7 +298,7 @@ public class ParsePrimary {
                     // to reparse.  Rewriting its token stream loses the call and
                     // leaves the core time operator in the AST, so construct the
                     // pinned direct-CV call explicitly.
-                    if (operator.equals("time")) {
+                    if (operator.equals("time") && !nextTokenText.equals("(")) {
                         OperatorNode codeRef = new OperatorNode("&",
                                 new IdentifierNode(coreGlobalName, startIndex), startIndex);
                         codeRef.setAnnotation("directNamedCall", true);

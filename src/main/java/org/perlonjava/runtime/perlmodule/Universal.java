@@ -342,9 +342,21 @@ public class Universal extends PerlModuleBase {
             case CODE:
                 int blessId = ((RuntimeBase) object.value).blessId;
                 if (blessId == 0) {
-                    // An IO slot may arrive as a reference to its containing
-                    // glob.  The value itself is still Perl's implicit
-                    // IO::Handle object.
+                    // A reference to a glob remains a GLOB for UNIVERSAL::isa,
+                    // even when that glob has an open IO slot.  The IO slot is
+                    // available for method dispatch, but it must not change the
+                    // reference-type predicate used by modules such as
+                    // CGI::Simple to recognize a supplied filehandle.
+                    boolean globReference = (type == GLOBREFERENCE
+                            && !(object.value instanceof RuntimeIO))
+                            || (type == REFERENCE
+                                    && object.value instanceof RuntimeScalar rs
+                                    && rs.type == RuntimeScalarType.GLOB);
+                    if (globReference) {
+                        return getScalarBoolean(argString.equals("GLOB")).getList();
+                    }
+                    // An IO slot itself is an IO::Handle.  Keep this separate
+                    // from a reference to the glob that owns the slot.
                     if (RuntimeIO.getRuntimeIO(object) != null) {
                         return getScalarBoolean(argString.equals("IO::Handle")).getList();
                     }
