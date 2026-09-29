@@ -281,6 +281,12 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                 || scalarSlot instanceof RuntimeScalarReadOnly) {
             return;
         }
+        // %+ and %- are internal capture hashes.  Their runtime-only
+        // read-only slots must not create ordinary writable-looking globs in
+        // %:: (the same visibility rule as the special scalar cells above).
+        if ("main::+".equals(key) || "main::-".equals(key)) {
+            return;
+        }
         boolean isMainStash = "main::".equals(namespace);
         String entryKey = stashEntryKeyFromGlobalKey(namespace, key, isMainStash);
         if (entryKey == null || entryKey.isEmpty()) {
