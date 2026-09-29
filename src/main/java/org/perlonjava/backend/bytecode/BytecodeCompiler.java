@@ -7682,6 +7682,17 @@ public class BytecodeCompiler implements Visitor {
         }
         if (!multiVarRegs.isEmpty()) {
             varReg = multiVarRegs.get(0);
+            // These holds must survive every statement in the loop body. The
+            // body compiler recycles temporary registers at scope boundaries,
+            // so allocating the holds at the iterator check (after compiling
+            // the body) can reuse a body temporary that overwrites the hold
+            // before it is released. Reserve them before entering the loop
+            // scope so its temporary-register floor is above these registers.
+            for (int i = 0; i < multiVarRegs.size(); i++) {
+                if (multiVarReferenceSigils.get(i) == null) {
+                    multiVarAliasHeldRegs.set(i, allocateRegister());
+                }
+            }
         }
         if (varReg == -1) {
             varReg = allocateRegister();
@@ -7899,11 +7910,6 @@ public class BytecodeCompiler implements Visitor {
         int explicitLoopExitPatch = -1;
         if (!multiVarRegs.isEmpty()) {
             int hasNextReg = allocateRegister();
-            for (int i = 0; i < multiVarRegs.size(); i++) {
-                if (multiVarReferenceSigils.get(i) == null) {
-                    multiVarAliasHeldRegs.set(i, allocateRegister());
-                }
-            }
             for (int heldReg : multiVarAliasHeldRegs) {
                 if (heldReg >= 0) {
                     emit(Opcodes.FOREACH_ALIAS_RELEASE);
