@@ -482,6 +482,9 @@ public class ListParser {
                     // modulus at the start of a return/list expression.
                     || nextToken.text.equals("+") || nextToken.text.equals("-")
                     || nextToken.type == LexerTokenType.IDENTIFIER
+                    // Hash names may be numeric, as in %0.  At the start of
+                    // a list this is a hash variable, not a modulus operator.
+                    || nextToken.type == LexerTokenType.NUMBER
                     // Perl ignores an embedded NUL between a sigil and an
                     // identifier.  Treat this as a hash variable here so it
                     // is not mistaken for a leading modulus operator.
