@@ -3408,6 +3408,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             List<LexerToken> tokens = lexer.tokenize(); // Tokenize the Perl code
             Node ast = null;
             Class<?> generatedClass;
+            boolean compiledSuccessfully = false;
             try {
                 // Create the AST
                 // Create an instance of ErrorMessageUtil with the file name and token list
@@ -3453,6 +3454,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         generatedClass.getName().replace('.', '/'),
                         evalCtx.symbolTable.getDisabledWarningCategories());
                 runUnitcheckBlocks(evalCtx.unitcheckBlocks);
+                compiledSuccessfully = true;
             } catch (Throwable e) {
                 // Compilation error in eval-string
 
@@ -3475,9 +3477,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     current = next;
                 }
                 if (die != null && die.getPayload() != null) {
-                    err.set(die.getPayload().getFirst());
+                    RuntimeScalar payload = die.getPayload().getFirst();
+                    if (evalString != null && evalString.matches("(?s).*\\bUNITCHECK\\b.*")) {
+                        err.set(payload + "\nUNITCHECK failed--call queue aborted.\n");
+                    } else {
+                        err.set(payload);
+                    }
                 } else {
-                    err.set(e.getMessage());
+                    err.set(withDeferredEvalPhaseDiagnostic(e, e.getMessage()));
                 }
 
                 // If EVAL_VERBOSE is set, print the error to stderr for debugging
@@ -3553,7 +3560,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Store source lines in symbol table if $^P flags are set
                 // Do this on both success and failure paths when flags require retention
                 // Use the original evalString and actualFileName; AST may be null on failure
-                storeSourceLines(evalString, actualFileName, ast, tokens);
+                storeSourceLines(evalString, actualFileName, ast, tokens, compiledSuccessfully);
             }
 
             // Cache the result (unless debugging is enabled)
@@ -3596,26 +3603,65 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @param tokens     Lexer tokens for #line directive processing
      */
     public static void storeSourceLines(String evalString, String filename, Node ast, List<LexerToken> tokens) {
-        // Check $^P for debugger flags
-        int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
+        storeSourceLines(evalString, filename, ast, tokens, true);
+    }
+
+    private static String withDeferredEvalPhaseDiagnostic(Throwable failure, String message) {
+        Throwable current = failure;
+        while (current != null) {
+            if (current instanceof SpecialBlock.DeferredPhaseException deferred
+                    && "UNITCHECK".equals(deferred.phase())) {
+                String suffix = "UNITCHECK failed--call queue aborted.\n";
+                String result = message == null ? "" : message;
+                if (!result.endsWith("\n")) result += "\n";
+                return result.contains(suffix) ? result : result + suffix;
+            }
+            Throwable next = current.getCause();
+            if (next == current) break;
+            current = next;
+        }
+        return message;
+    }
+
+    /**
+     * Store eval source using the debugger's separate retention policies for
+     * successful and failed compilations.
+     */
+    public static void storeSourceLines(String evalString, String filename, Node ast,
+                                        List<LexerToken> tokens, boolean compiledSuccessfully) {
+        storeSourceLines(evalString, filename, ast, tokens, compiledSuccessfully,
+                GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt());
+    }
+
+    /** Store eval source using the $^P value present when its compilation began. */
+    public static void storeSourceLines(String evalString, String filename, Node ast,
+                                        List<LexerToken> tokens, boolean compiledSuccessfully,
+                                        int debugFlags) {
         // 0x02 (2): Line-by-line debugging (also saves source like 0x400)
         // 0x400 (1024): Save source code lines
         // 0x800 (2048): Include evals that generate no subroutines
         // 0x1000 (4096): Include source that did not compile
         boolean shouldSaveSource = (debugFlags & 0x02) != 0 || (debugFlags & 0x400) != 0;
         boolean saveWithoutSubs = (debugFlags & 0x800) != 0;
+        boolean saveFailedSource = (debugFlags & 0x1000) != 0;
 
         if (shouldSaveSource) {
             // Note: We can't reliably detect subroutine definitions from the AST because
             // subroutines are processed at parse-time and removed from the AST.
             // Use a simple heuristic: check if the eval string contains "sub " followed by
             // an identifier or block.
-            boolean definesSubs = evalString.matches("(?s).*\\bsub\\s+(?:\\w+|\\{).*");
+            boolean definesSubs = evalString.matches("(?s).*\\b(?:sub|BEGIN|UNITCHECK)\\s*(?:\\w+|\\{).*");
 
-            // Only save if either:
-            // - The eval defines subroutines, OR
-            // - The 0x800 flag is set (save evals without subs)
-            if (!definesSubs && !saveWithoutSubs) {
+            // #line directives populate their named debugger arrays even if
+            // this eval itself is not retained as an (eval N) entry.
+            if (compiledSuccessfully) {
+                processLineDirectives(evalString, evalString.split("\\n"), tokens);
+            }
+
+            // 0x800 keeps successful evals without subroutines. Failed evals
+            // require 0x1000, independently of 0x800.
+            if ((!compiledSuccessfully && !definesSubs && !saveFailedSource)
+                    || (compiledSuccessfully && !definesSubs && !saveWithoutSubs)) {
                 return;  // Skip this eval
             }
             // Store in the symbol table as @{"_<(eval N)"}
@@ -3644,8 +3690,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Index n+2: ";"
             sourceArray.elements.add(new RuntimeScalar(";"));
 
-            // Process #line directives to populate @{"_<filename"} arrays
-            processLineDirectives(evalString, lines, tokens);
         }
     }
 
@@ -3682,6 +3726,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static void processLineDirectives(String evalString, String[] lines, List<LexerToken> tokens) {
         String currentFilename = null;
         int currentLineOffset = 0; // 0-based index into lines array
+        int currentTargetLine = 0;
 
         for (int i = 0; i < lines.length; i++) {
             String line = lines[i];
@@ -3692,6 +3737,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 int targetLine = Integer.parseInt(m.group(1)); // 1-based line number in target file
                 currentFilename = m.group(2);
                 currentLineOffset = i + 1; // Next line in eval corresponds to targetLine
+                currentTargetLine = targetLine;
                 // Ensure the target array exists and is properly sized
                 String targetKey = "main::_<" + currentFilename;
                 RuntimeArray targetArray = GlobalVariable.getGlobalArray(targetKey);
@@ -3705,7 +3751,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             } else if (currentFilename != null && i >= currentLineOffset) {
                 // Continue populating the current filename array
-                int targetLine = (i - currentLineOffset) + 1; // Convert to 1-based
+                int targetLine = currentTargetLine + (i - currentLineOffset);
                 String targetKey = "main::_<" + currentFilename;
                 RuntimeArray targetArray = GlobalVariable.getGlobalArray(targetKey);
                 // Ensure array is large enough (sparse behavior)
@@ -3799,6 +3845,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Declare these outside try block so they're accessible in finally block for debugger support
         Node ast = null;
         List<LexerToken> tokens = null;
+        String evalFilename = null;
+        boolean compiledSuccessfully = false;
+        boolean sourceLinesStored = false;
+        int debuggerFlagsAtEntry = GlobalVariable
+                .getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
 
         // Save dynamic variable level to restore after eval.
         // IMPORTANT: Scope InterpreterState.currentPackage around eval execution.
@@ -3859,8 +3910,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 evalCompilerOptions.isUnicodeSource = false;
                 evalCompilerOptions.isByteStringSource = true;
             }
-            // Always generate a unique filename for each eval to prevent source location collisions
-            evalCompilerOptions.fileName = getNextEvalFilename(ctx.compilerOptions.fileName);
+            // EmitEval gives each call site a synthetic compilerOptions name,
+            // but retains the enclosing source in errorUtil. Allocate within
+            // that enclosing source so distinct sites share its `(eval N)`
+            // sequence without perturbing unrelated source files.
+            evalCompilerOptions.fileName = getNextEvalFilename(ctx.errorUtil.getFileName());
+            evalFilename = evalCompilerOptions.fileName;
             warnSignatureArgsInEval(evalString, evalCompilerOptions.fileName);
 
             // Setup for BEGIN block support - create aliases for captured variables.
@@ -4045,6 +4100,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         adjustedOurPackages);
                 compiler.setCompilePackage(capturedSymbolTable.getCurrentPackage());
                 interpretedCode = compiler.compile(ast, evalCtx);
+                compiledSuccessfully = true;
                 evalTrace("evalStringWithInterpreter compiled tag=" + evalTag +
                         " bytecodeLen=" + (interpretedCode != null ? interpretedCode.bytecode.length : -1) +
                         " src=" + (interpretedCode != null ? interpretedCode.sourceName : "null"));
@@ -4060,6 +4116,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     interpretedCode = interpretedCode.withCapturedVars(capturedVars2);
                 }
+
+                // Retention is decided at eval compilation time.  In
+                // particular, a later cleanup of a localized $^P must not
+                // turn an 0x800-only failed eval into a retained source.
+                storeSourceLines(evalString, evalFilename, ast, tokens, true, debuggerFlagsAtEntry);
+                sourceLinesStored = true;
 
             } catch (Throwable e) {
                 // Compilation error in eval-string
@@ -4080,7 +4142,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     current = next;
                 }
                 if (die != null && die.getPayload() != null) {
-                    err.set(die.getPayload().getFirst());
+                    RuntimeScalar payload = die.getPayload().getFirst();
+                    if (evalString != null && evalString.matches("(?s).*\\bUNITCHECK\\b.*")) {
+                        err.set(payload + "\nUNITCHECK failed--call queue aborted.\n");
+                    } else {
+                        err.set(payload);
+                    }
                 } else {
                     String evalError = e.getMessage();
                     if (evalError != null
@@ -4102,7 +4169,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                     syntax.group(1) + (line - 1) + syntax.group(3)));
                         }
                     }
-                    err.set(evalError);
+                    // A UNITCHECK queue failure reaches this eval boundary as
+                    // its inner die payload, so retain Perl's queue-abort
+                    // diagnostic even after that wrapper has been unwrapped.
+                    if (evalString != null && evalString.matches("(?s).*\\bUNITCHECK\\b.*")) {
+                        String suffix = "UNITCHECK failed--call queue aborted.\n";
+                        if (!evalError.endsWith("\n")) evalError += "\n";
+                        if (!evalError.contains(suffix)) evalError += suffix;
+                    }
+                    err.set(withDeferredEvalPhaseDiagnostic(e, evalError));
                 }
 
                 // If EVAL_VERBOSE is set, print the error to stderr for debugging
@@ -4174,8 +4249,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
                 // Return undef/empty list to signal compilation failure
                 if (RuntimeContextType.isListLike(callContext)) {
+                    storeSourceLines(evalString, evalFilename, ast, tokens, false, debuggerFlagsAtEntry);
+                    sourceLinesStored = true;
                     return new RuntimeList();
                 } else {
+                    storeSourceLines(evalString, evalFilename, ast, tokens, false, debuggerFlagsAtEntry);
+                    sourceLinesStored = true;
                     return new RuntimeList(new RuntimeScalar());
                 }
             }
@@ -4275,9 +4354,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Do this on both success and failure paths when flags require retention
             // ast and tokens may be null if parsing failed early, but storeSourceLines handles that
             int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
-            if (debugFlags != 0 && tokens != null) {
-                String evalFilename = getNextEvalFilename();
-                storeSourceLines(code.toString(), evalFilename, ast, tokens);
+            if (!sourceLinesStored && debugFlags != 0 && tokens != null && evalFilename != null) {
+                storeSourceLines(code.toString(), evalFilename, ast, tokens, compiledSuccessfully,
+                        debuggerFlagsAtEntry);
             }
 
             // Clean up this eval's ThreadLocal stack entry.

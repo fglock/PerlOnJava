@@ -307,6 +307,10 @@ public class EvalStringHandler {
             activeHintHash.clearForHintHashContextTransfer();
             activeHintHash.elements.putAll(lexicalHintHash);
         }
+        List<LexerToken> evalTokens = null;
+        String evalFileName = null;
+        Node evalAst = null;
+        boolean compiledSuccessfully = false;
         try {
             evalTrace("EvalStringHandler enter ctx=" + callContext + " srcName=" + sourceName +
                     " srcLine=" + sourceLine + " codeLen=" + (perlCode != null ? perlCode.length() : -1) +
@@ -333,6 +337,7 @@ public class EvalStringHandler {
             // Step 2: Parse the string to AST
             Lexer lexer = new Lexer(perlCode);
             List<LexerToken> tokens = lexer.tokenize();
+            evalTokens = tokens;
 
             // Create minimal EmitterContext for parsing
             // IMPORTANT: Inherit strict/feature/warning flags from parent scope
@@ -340,7 +345,7 @@ public class EvalStringHandler {
             // Generate a unique eval filename so ByteCodeSourceMapper entries from
             // different evals don't collide (each eval's token indices start from 0,
             // so sharing a single filename would mix package-at-location data).
-            String evalFileName = RuntimeCode.getNextEvalFilename(sourceName);
+            evalFileName = RuntimeCode.getNextEvalFilename(sourceName);
 
             CompilerOptions opts = new CompilerOptions();
             opts.fileName = evalFileName;
@@ -556,6 +561,7 @@ public class EvalStringHandler {
             try {
                 RuntimeCode.enterEvalBeginCompilation();
                 ast = parser.parse();
+                evalAst = ast;
             } finally {
                 RuntimeCode.exitEvalBeginCompilation();
                 RegexQuoteMeta.setParserWarningBits(savedRegexWarningBits);
@@ -584,6 +590,7 @@ public class EvalStringHandler {
                     adjustedRegistry  // Pass adjusted registry for variable capture
             );
             InterpretedCode evalCode = compiler.compile(ast, ctx);  // Pass ctx for context propagation
+            compiledSuccessfully = true;
             // Keep the package resolved while parsing this particular eval on its
             // frame.  Eval filenames are only `(eval N)` and are reused by other
             // source files, so the global source mapper cannot identify this eval
@@ -599,7 +606,7 @@ public class EvalStringHandler {
             // Step 4.5: Store source lines in debugger symbol table if $^P flags are set
             int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
             if (debugFlags != 0) {
-                RuntimeCode.storeSourceLines(perlCode, evalFileName, ast, tokens);
+                RuntimeCode.storeSourceLines(perlCode, evalFileName, ast, tokens, true);
             }
 
             // Step 5: Attach captured variables to eval'd code
@@ -661,8 +668,18 @@ public class EvalStringHandler {
                     " $@=" + GlobalVariable.getGlobalVariable("main::@"));
             return result;
         } catch (Exception e) {
+            if (evalTokens != null && evalFileName != null) {
+                RuntimeCode.storeSourceLines(perlCode, evalFileName, evalAst, evalTokens, false);
+            }
             evalTrace("EvalStringHandler exec exception ctx=" + callContext + " ex=" + e.getClass().getSimpleName() + " msg=" + e.getMessage());
             WarnDie.catchEval(e);
+            if (perlCode != null && perlCode.matches("(?s).*\\bUNITCHECK\\b.*")) {
+                RuntimeScalar error = GlobalVariable.getGlobalVariable("main::@");
+                String suffix = "UNITCHECK failed--call queue aborted.\n";
+                String message = error.toString();
+                if (!message.endsWith("\n")) message += "\n";
+                if (!message.contains(suffix)) error.set(message + suffix);
+            }
             // An eval STRING error returns undef in scalar context and an
             // empty list in list context.  Returning a list containing undef
             // makes `@result = eval 'die'` have one element, and breaks the
