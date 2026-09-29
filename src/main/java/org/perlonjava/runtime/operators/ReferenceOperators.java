@@ -35,6 +35,11 @@ public class ReferenceOperators {
 
     private static RuntimeScalar bless(RuntimeScalar runtimeScalar, RuntimeScalar className,
                                        boolean classConstruction) {
+        // A tied hash/array element is represented as a tied scalar proxy. Perl
+        // blesses the reference returned by FETCH, so resolve tied magic before
+        // validating the operand type. Keep this explicit and one-shot: FETCH
+        // must run once for this operand evaluation, not once per check below.
+        runtimeScalar = RuntimeScalar.fetchTiedOnce(runtimeScalar);
         if (RuntimeScalarType.isReference(runtimeScalar)) {
             // The class-name operand is an ordinary scalar read, so tied
             // scalar magic must run before deciding whether it is a reference.
