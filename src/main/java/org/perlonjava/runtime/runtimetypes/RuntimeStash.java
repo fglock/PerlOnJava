@@ -485,16 +485,6 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.globalArrays.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.globalHashes.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.globalCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
-        // References to a glob survive `undef %Pkg::`, but the GV has lost
-        // its package identity.  Retain the leaf name for diagnostics and
-        // stringification while making that detached GV anonymous.
-        for (Map.Entry<String, RuntimeGlob> entry : GlobalVariable.globalIORefs.entrySet()) {
-            String key = entry.getKey();
-            RuntimeGlob glob = entry.getValue();
-            if (key.startsWith(prefix) && glob != null) {
-                glob.globName = "__ANON__::" + key.substring(prefix.length());
-            }
-        }
         GlobalVariable.removeGlobalIORefsForNamespace(prefix);
         GlobalVariable.globalFormatRefs.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.invalidateStashEnumerationCache();
