@@ -567,7 +567,7 @@ File::Flock	PERL_FAIL			6/8 test programs failed; 0/0 subtests failed	2026-09-14
 File::Locate	PERL_FAIL	2	1	1/2 subtests failed; 5/6 test programs failed	2026-09-23	Perl failed	
 File::Slurp	PERL_FAIL			Unknown test outcome	2026-09-19	Perl failed	
 File::Slurper::Temp	PERL_FAIL	4	3	1/4 subtests failed; 1/5 test programs failed	2026-09-10	Perl failed	
-File::SmartNL	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-26	Perl failed	
+File::SmartNL	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-29	Perl failed	
 File::Stat::Moose	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-27	Perl failed	
 Filter::PerlTags::Extra	PERL_FAIL	1		1 subtests failed in test files	2026-09-20	Perl failed	
 Finance::Bank::Postbank_de	PERL_FAIL	216		9/15 test programs failed; 0/216 subtests failed	2026-09-23	Perl failed	
@@ -637,7 +637,7 @@ Games::Tournament::Swiss	PERL_FAIL	1191	1189	2/1191 subtests failed; 2/33 test p
 Games::Traveller::Animals	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-12	Perl failed	
 Gapp	PERL_FAIL	13	8	5/13 subtests failed; 49/51 test programs failed	2026-09-19	Perl failed	
 GappX::FileTree	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-19	Perl failed	
-GappX::NoticeBox	PERL_FAIL			2/2 test programs failed; 0/0 subtests failed	2026-09-23	Perl failed	
+GappX::NoticeBox	PERL_FAIL			2/2 test programs failed; 0/0 subtests failed	2026-09-29	Perl failed	
 Gearman::Client::Async	PERL_FAIL	8		11/12 test programs failed; 0/8 subtests failed	2026-09-27	Perl failed	
 Geo::Coder::Googlev3	PERL_FAIL	69	42	27/69 subtests failed; 1/1 test programs failed	2026-09-10	Perl failed	
 Geo::Coordinates::Converter::LV03	PERL_FAIL			Make failed	2026-09-17	Perl failed	
@@ -920,7 +920,6 @@ Math::LongDouble	PERL_FAIL	2		23/25 test programs failed; 0/2 subtests failed	20
 Math::PRSG	PERL_FAIL				2026-09-28	Perl failed	
 Math::Random::Brownian	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-13	Perl failed	
 Maypole	PERL_FAIL	162	148	14/162 subtests failed; 5/12 test programs failed	2026-09-14	Perl failed	
-Maypole::Plugin::Authorization	PERL_FAIL	17	16	1/17 subtests failed; 1/2 test programs failed	2026-09-26	Perl failed	
 McBain::WithGearmanXS	PERL_FAIL	1		1 subtests failed in test files	2026-09-11	Perl failed	
 Medusa::XS	PERL_FAIL	1		1 subtests failed in test files	2026-09-18	Perl failed	
 Meschach	PERL_FAIL			Configure failed	2026-09-27	Perl failed	
@@ -1156,6 +1155,7 @@ POE::Component::Daemon	PERL_FAIL	5	2	3/5 subtests failed; 5/5 test programs fail
 POE::Component::Daemon::Win32	PERL_FAIL				2026-09-20	Perl failed	
 POE::Component::IRC::Object	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-12	Perl failed	
 POE::Component::IRC::Plugin::ImageMirror	PERL_FAIL	1	0	1/1 subtests failed; 2/2 test programs failed	2026-09-14	Perl failed	
+POE::Component::IRC::Plugin::MegaHAL	PERL_FAIL	2	1	1/2 subtests failed; 2/2 test programs failed	2026-09-29	Perl failed	
 POE::Component::IRC::Plugin::POE::Knee	PERL_FAIL	4	2	2/4 subtests failed; 2/4 test programs failed	2026-09-17	Perl failed	
 POE::Component::IRC::Plugin::QueryDNSBL	PERL_FAIL	7	6	1/7 subtests failed; 1/4 test programs failed	2026-09-23	Perl failed	
 POE::Component::MetaCPAN::Recent	PERL_FAIL	4	3	1/4 subtests failed; 1/4 test programs failed	2026-09-20	Perl failed	

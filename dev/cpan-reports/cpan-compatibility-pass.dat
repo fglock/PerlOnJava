@@ -232,7 +232,7 @@ AnyEvent::HTTP::LWP::UserAgent	PASS	2	2		2026-09-12		141cdae65
 AnyEvent::HTTPBenchmark	PASS	5	5		2026-09-21		c147446f2
 AnyEvent::Handle::Writer	PASS	2	2		2026-09-03		26d89b590
 AnyEvent::I3	PASS	12	12		2026-09-20		c147446f2
-AnyEvent::IRC	PASS	41	41		2026-09-27		a5d9552df
+AnyEvent::IRC	PASS	41	41		2026-09-29		bce2f0c75
 AnyEvent::IRC::Client	PASS	41	41		2026-08-26		fc1332935
 AnyEvent::ITM	PASS	25	25		2026-09-07		e35e5f15d
 AnyEvent::Ident	PASS	89	89		2026-09-03		d8e4fd417
@@ -1407,7 +1407,7 @@ Catalyst::Plugin::Pluggable	PASS	13	13		2026-09-23		62fb9a0ee
 Catalyst::Plugin::Profile::DBI::Log	PASS	1	1		2026-09-12		141cdae65
 Catalyst::Plugin::RedirectAndDetach	PASS	1	1		2026-09-02		948364c75
 Catalyst::Plugin::ServeFile	PASS	26	26		2026-09-15		d90fa37f9
-Catalyst::Plugin::Session	PASS	21	21		2026-08-26		344a3971c
+Catalyst::Plugin::Session	PASS	21	21		2026-09-29		bce2f0c75
 Catalyst::Plugin::Session::DynamicExpiry	PASS	1	1		2026-09-06		2ed88dcdd
 Catalyst::Plugin::Session::PSGI	PASS	3	3		2026-09-19		c147446f2
 Catalyst::Plugin::Session::State::Header	PASS	10	10		2026-09-15		d90fa37f9
@@ -2834,7 +2834,7 @@ ELab::Client	PASS	2	2		2026-09-19		c147446f2
 ENV::Util	PASS	6	6		2026-09-26		d5170d2d0
 EPFL::Net::SSLTest	PASS	4	4		2026-09-20		c147446f2
 EPS	PASS				2026-08-20		1af78283f
-EPublisher::Source::Plugin::PerltutsCom	PASS	19	19		2026-08-28		19c285d26
+EPublisher::Source::Plugin::PerltutsCom	PASS	19	19		2026-09-29		bce2f0c75
 EPublisher::Target::Plugin::EPub	PASS	10	10		2026-09-05		2ed88dcdd
 ESPPlus::Storage	PASS	45	45		2026-08-26		344a3971c
 ETL::Pequel3::PlaceHolder	PASS	1	1		2026-09-05		2ed88dcdd
@@ -3827,7 +3827,7 @@ HealthCheck::Diagnostic::DBHCheck	PASS	27	27		2026-09-27		d5170d2d0
 HealthCheck::Diagnostic::DBHCheck::v1.0.1	PASS	27	27		2026-09-17		4abf1838f
 HealthCheck::Diagnostic::RabbitMQ	PASS	43	43		2026-09-28		a5d9552df
 HealthCheck::Diagnostic::RabbitMQ::v1.3.1	PASS	43	43		2026-09-14		d90fa37f9
-HealthCheck::Diagnostic::RemoteHealth	PASS	8	8		2026-08-26		fc1332935
+HealthCheck::Diagnostic::RemoteHealth	PASS	8	8		2026-09-29		bce2f0c75
 HealthCheck::Diagnostic::RemoteHealth::v0.1.2	PASS	8	8		2026-09-20		c147446f2
 HealthCheck::Diagnostic::SMTP	PASS	7	7		2026-09-01		0f5febaa8
 Heap	PASS	2473	2473		2026-09-20		c147446f2
@@ -5762,7 +5762,7 @@ Object::eBay::v0.5.1	PASS	68	68		2026-09-15		d90fa37f9
 Object::groups	PASS	345	345		2026-08-23		2b2257e94
 Ogg::Vorbis::Header::PurePerl	PASS	20	20		2026-09-08		5ccb82ec1
 OmniDisco::Prometheus	PASS	33	33		2026-09-18		4abf1838f
-Onyphe	PASS	35	35		2026-09-28		a5d9552df
+Onyphe	PASS	35	35		2026-09-29		bce2f0c75
 Onyphe::v4.19.0	PASS	35	35		2026-09-19		c147446f2
 OpenAI::API	PASS	8	8		2026-09-24		a15bf3334
 OpenAPI	PASS				2026-09-27		a5d9552df
@@ -9121,7 +9121,7 @@ immutable	PASS	41	41		2026-09-06		2ed88dcdd
 kif	PASS	1	1		2026-09-15		d90fa37f9
 lib::projectroot	PASS	22	22		2026-09-26		d5170d2d0
 log	PASS				2026-09-28		a5d9552df
-marc::mir::template	PASS	3	3		2026-09-20		c147446f2
+marc::mir::template	PASS	3	3		2026-09-29		bce2f0c75
 marc::moose	PASS	74	74		2026-09-20		c147446f2
 match::simple	PASS	396	396		2026-09-26		d5170d2d0
 match::smart	PASS	396	396		2026-09-09		492a3166a
