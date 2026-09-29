@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore `comp/retainedlines.t` debugger eval-source retention, `#line`
+  mappings, and UNITCHECK diagnostics on both execution backends.
+
 - Restore `op/caller.t` compatibility for eval source text, tied and freed
   `@DB::args`, anonymous stashes, hint hashes, nested `use` frames, and
   caller source-line tracking on both execution backends.
