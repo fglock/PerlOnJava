@@ -121,7 +121,7 @@ public class UnpackState {
         // If we have Unicode characters beyond Latin-1, use extended UTF-8 (Perl semantics).
         this.isUTF8Flagged = utf8Flagged || hasHighUnicode || hasSurrogates || hasBeyondUnicode;
         this.isUTF8Data = hasHighUnicode || hasSurrogates || hasBeyondUnicode;
-        if (isUTF8Data) {
+        if (isUTF8Flagged) {
             this.originalBytes = encodeUtf8Extended(this.codePoints);
         } else {
             // For strings that only contain characters 0-255, preserve as ISO-8859-1

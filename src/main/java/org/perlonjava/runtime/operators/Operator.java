@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.operators;
 
+import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.regex.RegexMatcher;
@@ -940,29 +941,33 @@ public class Operator {
     }
 
     public static RuntimeList reset(RuntimeList args, int ctx) {
+        String activePackage = RuntimeCode.getActivePackageName();
+        if (activePackage == null || activePackage.isEmpty()) {
+            activePackage = InterpreterState.currentPackage.get().toString();
+        }
+        return resetInPackage(args, ctx, activePackage);
+    }
+
+    /** Execute {@code reset} using the package that owns its compiled call site. */
+    public static RuntimeList resetInPackage(RuntimeList args, int ctx, String packageName) {
+        String currentPackage = packageName;
+        if (currentPackage == null || currentPackage.isEmpty()) {
+            currentPackage = "main";
+        }
+        while (currentPackage.endsWith("::")) {
+            currentPackage = currentPackage.substring(0, currentPackage.length() - 2);
+        }
+        if (currentPackage.length() > 6 && currentPackage.startsWith("main::")) {
+            currentPackage = currentPackage.substring(6);
+        }
         if (args.isEmpty()) {
-            RuntimeRegex.reset();
+            RuntimeRegex.reset(currentPackage);
         } else {
             // Parse the character range expression
             String expr = args.getFirst().toString();
             Set<Character> resetChars = parseResetExpression(expr);
 
-            // caller() has no Perl frame at file scope and falls back to main.
-            // The runtime package tracker follows package statements in both
-            // file scope and subroutines, which is the scope reset operates on.
-            String currentPackage =
-                    org.perlonjava.backend.bytecode.InterpreterState.currentPackage.get().toString();
-            if (currentPackage == null || currentPackage.isEmpty()) {
-                currentPackage = RuntimeCode.getCurrentPackage();
-            }
-            if (currentPackage != null && currentPackage.length() > 6
-                    && currentPackage.startsWith("main::")) {
-                currentPackage = currentPackage.substring(6);
-            }
-            if (currentPackage != null && !currentPackage.isEmpty()
-                    && !currentPackage.endsWith("::")) {
-                currentPackage += "::";
-            }
+            if (!currentPackage.endsWith("::")) currentPackage += "::";
 
             // Reset global variables that start with matching characters
             GlobalVariable.resetGlobalVariables(resetChars, currentPackage);

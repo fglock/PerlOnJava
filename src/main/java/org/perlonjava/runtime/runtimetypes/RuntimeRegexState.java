@@ -62,6 +62,10 @@ public final class RuntimeRegexState {
 
     /** Per-runtime callsite state for static matches, {@code /o}, and {@code m?PAT?}. */
     public final Map<Integer, RuntimeScalar> optimizedRegexCache = new LinkedHashMap<>();
+    /** Package and stable numeric key for each compiled static-regex call site. */
+    public final Map<String, Integer> optimizedRegexCallsiteIds = new LinkedHashMap<>();
+    public final Map<Integer, String> optimizedRegexCallsitePackages = new LinkedHashMap<>();
+    public int nextOptimizedRegexCallsiteId = 1;
     /** Stable scalar identities for literal regex targets, keyed by compiled call site. */
     public final Map<Integer, RuntimeScalar> literalRegexTargets = new LinkedHashMap<>();
     public final Map<String, String> userUnicodePropertyCache = new LinkedHashMap<>();
@@ -143,6 +147,9 @@ public final class RuntimeRegexState {
     public void resetForTopLevel() {
         compiledRegexCache.clear();
         optimizedRegexCache.clear();
+        optimizedRegexCallsiteIds.clear();
+        optimizedRegexCallsitePackages.clear();
+        nextOptimizedRegexCallsiteId = 1;
         literalRegexTargets.clear();
         positionCache.clear();
         activeDebugRegexes.clear();

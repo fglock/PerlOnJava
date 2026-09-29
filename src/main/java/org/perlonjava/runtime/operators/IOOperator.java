@@ -683,6 +683,14 @@ public class IOOperator {
             return TieHandle.tiedFileno(tieHandle);
         }
 
+        if (fh != null && fh.directoryIO != null) {
+            // Java directory streams do not expose a native descriptor. Perl
+            // reports this as an undefined fileno and sets EBADF.
+            FFMPosix.get().setErrno(9);
+            GlobalVariable.getGlobalVariable("main::!").set(9);
+            return RuntimeScalarCache.scalarUndef;
+        }
+
         if (fh == null || fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) {
             return RuntimeScalarCache.scalarUndef;
         }
@@ -956,6 +964,18 @@ public class IOOperator {
                             throw new PerlCompilerException("Bad filehandle: " + extractFilehandleName(argStr));
                         }
                     }
+                }
+            } else if (secondArg.type == RuntimeScalarType.UNDEF && mode.equals("+<")) {
+                // open($fh, "+<", undef) asks PerlIO for an anonymous,
+                // seekable temporary file. Keep the file alive for the
+                // process; its path is intentionally not exposed to Perl.
+                try {
+                    Path temporaryFile = Files.createTempFile("PerlIO_", "");
+                    temporaryFile.toFile().deleteOnExit();
+                    fh = RuntimeIO.open(temporaryFile.toString(), mode);
+                } catch (IOException e) {
+                    RuntimeIO.handleIOException(e, "open failed");
+                    fh = null;
                 }
             } else if (secondArg.type == RuntimeScalarType.REFERENCE && !secondArg.isBlessed()) {
                 // Only an unblessed scalar reference selects an in-memory

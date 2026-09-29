@@ -557,7 +557,7 @@ public class ParsePrimary {
                 }
                 operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
                 OperatorNode bitwiseNot = new OperatorNode(operator, operand, parser.tokenIndex);
-                if (operator.equals("~")) {
+                if (operator.equals("~") || operator.equals("binary~")) {
                     bitwiseNot.setAnnotation("useInteger",
                             parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER));
                 }

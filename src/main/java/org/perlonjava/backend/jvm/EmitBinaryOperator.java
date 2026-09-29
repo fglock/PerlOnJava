@@ -49,7 +49,7 @@ public class EmitBinaryOperator {
 
         if (isIntegerEnabled(emitterVisitor, node)
                 && switch (node.operator) {
-                    case "+", "-", "*", "&", "|", "^" -> true;
+                    case "+", "-", "*", "&", "|", "^", "binary&", "binary|", "binary^" -> true;
                     default -> false;
                 }) {
             emitIntegerBinaryOperator(emitterVisitor, scalarVisitor, node, operatorHandler);
@@ -324,15 +324,15 @@ public class EmitBinaryOperator {
                     default -> "integerMultiply";
                 };
             }
-            case "&" -> {
+            case "&", "binary&" -> {
                 className = "org/perlonjava/runtime/operators/BitwiseOperators";
                 methodName = "integerBitwiseAnd";
             }
-            case "|" -> {
+            case "|", "binary|" -> {
                 className = "org/perlonjava/runtime/operators/BitwiseOperators";
                 methodName = "integerBitwiseOr";
             }
-            case "^" -> {
+            case "^", "binary^" -> {
                 className = "org/perlonjava/runtime/operators/BitwiseOperators";
                 methodName = "integerBitwiseXor";
             }
@@ -472,6 +472,20 @@ public class EmitBinaryOperator {
                             Opcodes.INVOKESTATIC,
                             "org/perlonjava/runtime/operators/StringOperators",
                             "stringConcatAssign",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                            false);
+                } else if (node.operator.equals("|=")) {
+                    mv.visitMethodInsn(
+                            Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/operators/BitwiseOperators",
+                            "bitwiseOrAssign",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                            false);
+                } else if (node.operator.equals("^=")) {
+                    mv.visitMethodInsn(
+                            Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/operators/BitwiseOperators",
+                            "bitwiseXorAssign",
                             "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                             false);
                 } else {

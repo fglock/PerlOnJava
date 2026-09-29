@@ -3032,8 +3032,17 @@ public class GlobalVariable {
             String key = entry.getKey();
 
             if (key.startsWith(currentPackage) && shouldResetVariable(key, currentPackage, resetChars)) {
-                // Reset to undef instead of removing to maintain reference integrity
-                entry.getValue().set(RuntimeScalar.undef());
+                if (entry.getValue().type == RuntimeScalarType.READONLY_SCALAR) {
+                    continue;
+                }
+                // $^W is a numeric global warning switch; Perl resets it to
+                // zero, while ordinary package scalars become undef.
+                if (key.substring(currentPackage.length()).equals("^W")) {
+                    entry.getValue().set(0);
+                } else {
+                    // Reset to undef instead of removing to maintain reference integrity
+                    entry.getValue().set(RuntimeScalar.undef());
+                }
             }
         }
 

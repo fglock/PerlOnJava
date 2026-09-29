@@ -3044,12 +3044,24 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // or m?PAT?.  Reusing its private wrapper is safe: unlike qr//, it
         // cannot escape into Perl code, and /g progress remains on the target
         // scalar rather than the regex wrapper.
-        RuntimeScalar cached = state().optimizedRegexCache.get(callsiteId);
+        String packageName = InterpreterState.currentPackage.get().toString();
+        String callsiteKey = packageName + '\0' + callsiteId;
+        RuntimeRegexState runtimeState = state();
+        Integer cacheKey = runtimeState.optimizedRegexCallsiteIds.get(callsiteKey);
+        if (cacheKey == null) {
+            cacheKey = runtimeState.nextOptimizedRegexCallsiteId++;
+            while (runtimeState.optimizedRegexCache.containsKey(cacheKey)) {
+                cacheKey = runtimeState.nextOptimizedRegexCallsiteId++;
+            }
+            runtimeState.optimizedRegexCallsiteIds.put(callsiteKey, cacheKey);
+            runtimeState.optimizedRegexCallsitePackages.put(cacheKey, packageName);
+        }
+        RuntimeScalar cached = runtimeState.optimizedRegexCache.get(cacheKey);
         if (cached != null) return cached;
 
         RuntimeScalar result = getQuotedRegex(
                 patternString, modifiers, preResolvedNamedCharacters);
-        state().optimizedRegexCache.put(callsiteId, result);
+        runtimeState.optimizedRegexCache.put(cacheKey, result);
         return result;
     }
 
@@ -4233,6 +4245,22 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
         // Also reset m?PAT? patterns cached per-callsite in state().optimizedRegexCache
         for (Map.Entry<Integer, RuntimeScalar> entry : state().optimizedRegexCache.entrySet()) {
+            RuntimeScalar scalar = entry.getValue();
+            if (scalar.value instanceof RuntimeRegex regex) {
+                regex.matched = false;
+            }
+        }
+    }
+
+    /** Reset match-once state for static regex callsites in one package. */
+    public static void reset(String packageName) {
+        String normalizedPackage = packageName == null ? "main" : packageName;
+        while (normalizedPackage.endsWith("::")) {
+            normalizedPackage = normalizedPackage.substring(0, normalizedPackage.length() - 2);
+        }
+        RuntimeRegexState runtimeState = state();
+        for (Map.Entry<Integer, RuntimeScalar> entry : runtimeState.optimizedRegexCache.entrySet()) {
+            if (!normalizedPackage.equals(runtimeState.optimizedRegexCallsitePackages.get(entry.getKey()))) continue;
             RuntimeScalar scalar = entry.getValue();
             if (scalar.value instanceof RuntimeRegex regex) {
                 regex.matched = false;

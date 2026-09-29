@@ -500,7 +500,7 @@ public class CompileBinaryOperatorHelper {
             }
             case "binary&" -> {
                 // Numeric bitwise AND (use feature "bitwise"): always numeric
-                bytecodeCompiler.emit(Opcodes.BINARY_AND);
+                bytecodeCompiler.emit(useInteger ? Opcodes.INTEGER_BITWISE_AND : Opcodes.BINARY_AND);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
@@ -514,7 +514,7 @@ public class CompileBinaryOperatorHelper {
             }
             case "binary|" -> {
                 // Numeric bitwise OR (use feature "bitwise"): always numeric
-                bytecodeCompiler.emit(Opcodes.BINARY_OR);
+                bytecodeCompiler.emit(useInteger ? Opcodes.INTEGER_BITWISE_OR : Opcodes.BINARY_OR);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
@@ -528,7 +528,7 @@ public class CompileBinaryOperatorHelper {
             }
             case "binary^" -> {
                 // Numeric bitwise XOR (use feature "bitwise"): always numeric
-                bytecodeCompiler.emit(Opcodes.BINARY_XOR);
+                bytecodeCompiler.emit(useInteger ? Opcodes.INTEGER_BITWISE_XOR : Opcodes.BINARY_XOR);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);

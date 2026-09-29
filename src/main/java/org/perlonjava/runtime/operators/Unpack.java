@@ -3,6 +3,8 @@ package org.perlonjava.runtime.operators;
 import org.perlonjava.runtime.operators.pack.PackHelper;
 import org.perlonjava.runtime.operators.unpack.*;
 import org.perlonjava.runtime.runtimetypes.*;
+import org.perlonjava.runtime.perlmodule.Strict;
+import org.perlonjava.runtime.WarningBitsRegistry;
 
 import java.math.BigInteger;
 import java.util.*;
@@ -84,7 +86,8 @@ public class Unpack {
         // Check if template starts with U0 to switch to byte mode.
         // (See inline `case 'C'/'U' 0` handler below for the historical
         // naming quirk.)
-        if (template.startsWith("U0")) {
+        boolean bytesPragma = (WarningBitsRegistry.getCallSiteHints() & Strict.HINT_BYTES) != 0;
+        if (template.startsWith("U0") || bytesPragma) {
             state.switchToByteMode();
         }
 
