@@ -68,6 +68,22 @@ public class ArgumentParserTest {
     }
 
     @Test
+    void malformedPerlShebangDoesNotConsumeAttachedSwitches() {
+        CompilerOptions options = new CompilerOptions();
+
+        assertTrue(ArgumentParser.applyPerlShebangSwitches(
+                "#!perl-wT\nprint qq(ok\\n);\n", options));
+        assertTrue(options.perlShebangProcessed);
+        assertTrue(!options.taintMode);
+
+        options = new CompilerOptions();
+        assertTrue(ArgumentParser.applyPerlShebangSwitches(
+                "#!perl -wT\nprint qq(ok\\n);\n", options));
+        assertTrue(options.perlShebangProcessed);
+        assertTrue(options.taintMode);
+    }
+
+    @Test
     void inlinePerlShebangAffectsTheImplicitLoop() {
         CompilerOptions options = ArgumentParser.parseArguments(new String[] {
                 "-e", "#!perl -sn\nprint $x"
@@ -76,6 +92,20 @@ public class ArgumentParserTest {
         assertTrue(options.rudimentarySwitchParsing);
         assertTrue(options.processOnly);
         assertTrue(options.code.startsWith("while (<>) {"));
+    }
+
+    @Test
+    void numericUnicodeSwitchesUsePerlBitAssignments() {
+        CompilerOptions options = ArgumentParser.parseArguments(new String[] {"-C2", "-e", "1"});
+
+        assertTrue(!options.unicodeInput);
+        assertTrue(options.unicodeOutput);
+        assertTrue(!options.unicodeStderr);
+
+        options = ArgumentParser.parseArguments(new String[] {"-C7", "-e", "1"});
+        assertTrue(options.unicodeInput);
+        assertTrue(options.unicodeOutput);
+        assertTrue(options.unicodeStderr);
     }
 
     @Test

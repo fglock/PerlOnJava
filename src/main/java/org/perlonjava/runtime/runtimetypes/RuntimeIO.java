@@ -102,6 +102,42 @@ public class RuntimeIO extends RuntimeScalar {
 
     private static IORuntimeRegistryState registry() { return PerlRuntime.current().ioRegistryState; }
 
+    private static final ThreadLocal<CommandLineUnicode> commandLineUnicode =
+            ThreadLocal.withInitial(CommandLineUnicode::new);
+
+    private static final class CommandLineUnicode {
+        boolean input;
+        boolean output;
+        boolean stderr;
+    }
+
+    /** Snapshot of the command-line Unicode defaults for nested file loads. */
+    public record CommandLineUnicodeState(boolean input, boolean output, boolean stderr) {}
+
+    /** Apply the command-line -C defaults for this top-level Perl execution. */
+    public static void configureCommandLineUnicode(boolean input, boolean output, boolean stderr) {
+        CommandLineUnicode settings = commandLineUnicode.get();
+        settings.input = input;
+        settings.output = output;
+        settings.stderr = stderr;
+    }
+
+    public static CommandLineUnicodeState commandLineUnicodeState() {
+        CommandLineUnicode settings = commandLineUnicode.get();
+        return new CommandLineUnicodeState(settings.input, settings.output, settings.stderr);
+    }
+
+    public static void restoreCommandLineUnicode(CommandLineUnicodeState state) {
+        configureCommandLineUnicode(state.input(), state.output(), state.stderr());
+    }
+
+    private static String commandLineDefaultLayer(String mode) {
+        CommandLineUnicode settings = commandLineUnicode.get();
+        boolean outputMode = mode != null && mode.contains(">");
+        boolean enabled = outputMode ? settings.output : settings.input;
+        return enabled ? ":utf8" : ":";
+    }
+
     public static RuntimeIO getStdout() { return PerlRuntime.current().ioStdout; }
     public static void setStdout(RuntimeIO io) { PerlRuntime.current().replaceStandardHandle("main::STDOUT", io); }
     public static RuntimeIO getStderr() { return PerlRuntime.current().ioStderr; }
@@ -939,7 +975,8 @@ public class RuntimeIO extends RuntimeScalar {
             // ":" asks binmode() for the platform default (:crlf on Windows,
             // :raw elsewhere) without consulting the legacy process-global
             // ${^OPEN} value.
-            ioLayers = lexicalLayer == null || lexicalLayer.isEmpty() ? ":" : lexicalLayer;
+            ioLayers = lexicalLayer == null || lexicalLayer.isEmpty()
+                    ? commandLineDefaultLayer(mode) : lexicalLayer;
         }
         RuntimeScalar status = binmode(ioLayers);
         if (status.getBoolean()) {

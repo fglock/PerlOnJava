@@ -379,7 +379,7 @@ public class ArgumentParser {
         // perlrun: parsing of #! switches starts at a *word* "perl" or "indir".
         // Substrings like "jperl" must NOT match (matches stock perl behavior).
         Matcher perlWord = Pattern.compile(
-                "\\b(?:perl(?:\\d+(?:\\.\\d+)*)?|indir)\\b",
+                "\\b(?:perl(?:\\d+(?:\\.\\d+)*)?|indir)(?=\\s|$)",
                 Pattern.CASE_INSENSITIVE).matcher(shebangLine);
         if (perlWord.find()) {
             String relevantPart = shebangLine.substring(perlWord.end()).trim();
@@ -400,7 +400,22 @@ public class ArgumentParser {
                     .filter(arg -> !arg.isEmpty())
                     .toArray(String[]::new);
             validateShebangSwitches(nonEmptyArgs);
-            processArgs(nonEmptyArgs, parsedArgs);
+            parsedArgs.processingPerlShebang = true;
+            try {
+                processArgs(nonEmptyArgs, parsedArgs);
+            } finally {
+                parsedArgs.processingPerlShebang = false;
+            }
+            return true;
+        }
+
+        // A malformed line such as "#!perl-wT" is still intended to name Perl,
+        // but the attached text is not a valid shebang switch list.  Recognize
+        // it so the caller does not try to execute "perl-wT" as another program.
+        Matcher malformedPerlWord = Pattern.compile(
+                "\\b(?:perl(?:\\d+(?:\\.\\d+)*)?|indir)-",
+                Pattern.CASE_INSENSITIVE).matcher(shebangLine);
+        if (malformedPerlWord.find()) {
             return true;
         }
 
@@ -785,6 +800,20 @@ public class ArgumentParser {
             unicodeFlags = "D";
         }
 
+        if (parsedArgs.processingPerlShebang) {
+            int shebangMask = unicodeMask(unicodeFlags);
+            if (!parsedArgs.commandLineUnicodeSwitchSeen) {
+                shebangError("Too late for \"-C" + unicodeFlags + "\" option");
+            }
+            if ((parsedArgs.commandLineUnicodeMask & shebangMask)
+                    != parsedArgs.commandLineUnicodeMask) {
+                shebangError("Too late for \"-C" + unicodeFlags + "\" option");
+            }
+        } else {
+            parsedArgs.commandLineUnicodeSwitchSeen = true;
+            parsedArgs.commandLineUnicodeMask = unicodeMask(unicodeFlags);
+        }
+
         // Parse the Unicode flags
         parseUnicodeFlags(unicodeFlags, parsedArgs);
 
@@ -801,6 +830,10 @@ public class ArgumentParser {
         // Handle numeric flags (like -C0)
         if (flags.matches("\\d+")) {
             int numericFlag = Integer.parseInt(flags);
+            if (flags.length() > 1 && flags.charAt(0) == '0') {
+                System.err.println("Invalid number '" + flags + "' for -C option.");
+                System.exit(25);
+            }
             if (numericFlag == 0) {
                 // -C0: Disable all Unicode I/O features
                 parsedArgs.unicodeStdin = false;
@@ -811,15 +844,16 @@ public class ArgumentParser {
                 parsedArgs.unicodeArgs = false;
                 parsedArgs.unicodeLocale = false;
             } else {
-                // Other numeric values can be implemented as needed
-                // For now, treat them as enabling all Unicode features
-                parsedArgs.unicodeStdin = true;
-                parsedArgs.unicodeStdout = true;
-                parsedArgs.unicodeStderr = true;
-                parsedArgs.unicodeInput = true;
-                parsedArgs.unicodeOutput = true;
-                parsedArgs.unicodeArgs = true;
-                parsedArgs.unicodeLocale = true;
+                // Numeric -C values are a bit mask: 1=S, 2=O, 4=E,
+                // 8=A and 16=L.  Higher bits are accepted by Perl as
+                // reserved extensions and do not affect these streams.
+                parsedArgs.unicodeStdin = (numericFlag & 1) != 0;
+                parsedArgs.unicodeInput = parsedArgs.unicodeStdin;
+                parsedArgs.unicodeStdout = (numericFlag & 2) != 0;
+                parsedArgs.unicodeOutput = parsedArgs.unicodeStdout;
+                parsedArgs.unicodeStderr = (numericFlag & 4) != 0;
+                parsedArgs.unicodeArgs = (numericFlag & 8) != 0;
+                parsedArgs.unicodeLocale = (numericFlag & 16) != 0;
             }
             return;
         }
@@ -828,8 +862,9 @@ public class ArgumentParser {
         for (char flag : flags.toCharArray()) {
             switch (flag) {
                 case 'S':
-                    // STDIN
+                    // Standard input and output
                     parsedArgs.unicodeStdin = true;
+                    parsedArgs.unicodeStdout = true;
                     break;
                 case 'O':
                     // STDOUT
@@ -843,6 +878,12 @@ public class ArgumentParser {
                     // Input (same as S)
                     parsedArgs.unicodeInput = true;
                     parsedArgs.unicodeStdin = true;
+                    break;
+                case 'o':
+                    parsedArgs.unicodeOutput = true;
+                    break;
+                case 'i':
+                    parsedArgs.unicodeInput = true;
                     break;
                 case 'A':
                     // All (STDIN, STDOUT, STDERR)
@@ -872,6 +913,27 @@ public class ArgumentParser {
                     break;
             }
         }
+    }
+
+    private static int unicodeMask(String flags) {
+        if (flags.matches("\\d+")) {
+            if (flags.length() > 1 && flags.charAt(0) == '0') {
+                return 0;
+            }
+            return Integer.parseInt(flags);
+        }
+        int mask = 0;
+        for (char flag : flags.toCharArray()) {
+            switch (flag) {
+                case 'S' -> mask |= 1;
+                case 'O' -> mask |= 2;
+                case 'E' -> mask |= 4;
+                case 'A' -> mask |= 8;
+                case 'L' -> mask |= 16;
+                default -> { }
+            }
+        }
+        return mask;
     }
 
     private static void printVersionInfo() {
