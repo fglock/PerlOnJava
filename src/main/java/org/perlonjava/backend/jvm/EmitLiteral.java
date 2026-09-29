@@ -533,8 +533,7 @@ public class EmitLiteral {
             // result only; doing so for every LVALUE_LIST member would flatten
             // an empty array target in `my ($head, @tail) = @_` before
             // RuntimeList.setFromList() can assign its remaining arguments.
-            boolean snapshotListAssignmentResult = contextType == RuntimeContextType.LVALUE_LIST
-                    && element instanceof BinaryOperatorNode assignment
+            boolean snapshotListAssignmentResult = element instanceof BinaryOperatorNode assignment
                     && assignment.operator.equals("=")
                     && LValueVisitor.getContext(assignment.left) == RuntimeContextType.LIST;
             // Foreach aliases its source cells, including holes.  Its source
@@ -543,7 +542,8 @@ public class EmitLiteral {
             if (forceListSnapshot || snapshotListAssignmentResult || snapshotForeachSource) {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeDescriptorConstants.LIST_CLASS,
                         snapshotForeachSource ? "addSnapshotWithArrayHoles"
-                                : snapshotListAssignmentResult ? "addLvalueSnapshot" : "addSnapshot",
+                                : snapshotListAssignmentResult && contextType == RuntimeContextType.LVALUE_LIST
+                                ? "addLvalueSnapshot" : "addSnapshot",
                         "(" + RuntimeDescriptorConstants.BASE_TYPE + ")V", false);
             } else if (contextType == RuntimeContextType.RUNTIME) {
                 // A dynamic-context aggregate is scalarized by its emitter for

@@ -5,6 +5,7 @@ import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.analysis.DoBlockResultAnalysis;
 import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
+import org.perlonjava.frontend.analysis.LValueVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.analysis.Visitor;
 import org.perlonjava.frontend.astnode.*;
@@ -8947,12 +8948,22 @@ public class BytecodeCompiler implements Visitor {
         emitReg(listReg);
         boolean forceListSnapshot = Boolean.TRUE.equals(node.getAnnotation("forceListSnapshot"))
                 || Boolean.TRUE.equals(node.getAnnotation("foreachSource"));
+        // A nested list assignment returns the aggregate containing its
+        // assigned values.  The surrounding list must materialize that result
+        // before a later expression can mutate the same aggregate; otherwise
+        // `(@a, (@a = ...))` observes @a only after the inner assignment.
+        // This mirrors the JVM emitter's addLvalueSnapshot path.  CREATE_LIST
+        // snapshots every member as one operation, which is also the normal
+        // rvalue-list expansion rule for any neighbouring aggregates.
+        boolean snapshotListAssignmentResult = node.elements.stream().anyMatch(element -> element instanceof BinaryOperatorNode assignment
+                && assignment.operator.equals("=")
+                && LValueVisitor.getContext(assignment.left) == RuntimeContextType.LIST);
         // Aggregate assignment results are converted to their writable cells
         // by the assignment lowering itself.  Flattening every list compiled
         // in LVALUE_LIST context also changes ordinary argument lists, such
         // as `my ($class, @args) = @_` inside a module import method.
         boolean flattenRuntimeAggregate = currentCallContext == RuntimeContextType.RUNTIME;
-        emit((forceListSnapshot || flattenRuntimeAggregate)
+        emit((forceListSnapshot || snapshotListAssignmentResult || flattenRuntimeAggregate)
                 ? -node.elements.size() - 1 : node.elements.size());
 
         // Emit register numbers for each element
