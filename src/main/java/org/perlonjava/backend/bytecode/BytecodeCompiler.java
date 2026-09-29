@@ -8936,10 +8936,26 @@ public class BytecodeCompiler implements Visitor {
 
         // General case: multiple elements in LIST context
         // Evaluate each element into a register
+        boolean containsListAssignmentResult = node.elements.stream().anyMatch(element ->
+                element instanceof BinaryOperatorNode assignment
+                        && assignment.operator.equals("=")
+                        && LValueVisitor.getContext(assignment.left) == RuntimeContextType.LIST);
         int[] elementRegs = new int[node.elements.size()];
         for (int i = 0; i < node.elements.size(); i++) {
             compileNode(node.elements.get(i), -1, elementContext);
             elementRegs[i] = lastResultReg;
+            // CREATE_LIST normally runs only after every operand has been
+            // evaluated.  That is too late for `(@a, (@a = ...))`: the
+            // second operand has already mutated @a.  Snapshot each member
+            // immediately, then combine those stable one-member lists.
+            if (containsListAssignmentResult) {
+                int snapshotReg = allocateRegister();
+                emit(Opcodes.CREATE_LIST);
+                emitReg(snapshotReg);
+                emit(-2); // one member, flattened now
+                emitReg(elementRegs[i]);
+                elementRegs[i] = snapshotReg;
+            }
         }
 
         // Create RuntimeList with all elements
@@ -8955,15 +8971,12 @@ public class BytecodeCompiler implements Visitor {
         // This mirrors the JVM emitter's addLvalueSnapshot path.  CREATE_LIST
         // snapshots every member as one operation, which is also the normal
         // rvalue-list expansion rule for any neighbouring aggregates.
-        boolean snapshotListAssignmentResult = node.elements.stream().anyMatch(element -> element instanceof BinaryOperatorNode assignment
-                && assignment.operator.equals("=")
-                && LValueVisitor.getContext(assignment.left) == RuntimeContextType.LIST);
         // Aggregate assignment results are converted to their writable cells
         // by the assignment lowering itself.  Flattening every list compiled
         // in LVALUE_LIST context also changes ordinary argument lists, such
         // as `my ($class, @args) = @_` inside a module import method.
         boolean flattenRuntimeAggregate = currentCallContext == RuntimeContextType.RUNTIME;
-        emit((forceListSnapshot || snapshotListAssignmentResult || flattenRuntimeAggregate)
+        emit((forceListSnapshot || flattenRuntimeAggregate)
                 ? -node.elements.size() - 1 : node.elements.size());
 
         // Emit register numbers for each element
