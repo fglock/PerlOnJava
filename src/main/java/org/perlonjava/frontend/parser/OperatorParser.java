@@ -1408,8 +1408,10 @@ public class OperatorParser {
         // Handle special-quoted domain-specific arguments
         String operator = token.text;
         // Skip whitespace, but not `#`
-        parser.tokenIndex = startIndex;
-        consume(parser);
+        // ParsePrimary has already consumed the quote-like operator.  Do not
+        // rewind to startIndex here: that index can refer to leading
+        // whitespace, which would incorrectly become the delimiter in
+        // forms such as `m 0 0`.
         boolean skippedWhitespace = false;
         while (parser.tokenIndex < parser.tokens.size()) {
             LexerToken token1 = parser.tokens.get(parser.tokenIndex);
