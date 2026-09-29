@@ -875,6 +875,12 @@ public class RuntimeIO extends RuntimeScalar {
                 }
             }
 
+            // Perl resolves encoding layers (including their Encode.pm
+            // dependency and any recursive @INC hooks) before opening the
+            // underlying path. Keep that ordering even when the path does not
+            // exist; otherwise an open failure can hide PerlIO recursion.
+            LayeredIOHandle.prepareOpenLayers(ioLayers);
+
             // Handle filehandle duplication modes
             if (mode.equals("<&") || mode.equals(">&") || mode.equals("+<&") ||
                     mode.equals("<&=") || mode.equals(">&=") || mode.equals("+<&=")) {

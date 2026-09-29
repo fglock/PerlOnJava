@@ -3032,12 +3032,15 @@ public class GlobalVariable {
             String key = entry.getKey();
 
             if (key.startsWith(currentPackage) && shouldResetVariable(key, currentPackage, resetChars)) {
-                if (entry.getValue().type == RuntimeScalarType.READONLY_SCALAR) {
+                if (entry.getValue() instanceof RuntimeScalarReadOnly
+                        || entry.getValue().type == RuntimeScalarType.READONLY_SCALAR) {
                     continue;
                 }
-                // $^W is a numeric global warning switch; Perl resets it to
+                // $^W is stored under its control-character name (\cW), not
+                // the printable caret spelling. Perl resets it to numeric
                 // zero, while ordinary package scalars become undef.
-                if (key.substring(currentPackage.length()).equals("^W")) {
+                if (key.substring(currentPackage.length())
+                        .equals(Character.toString('W' - 'A' + 1))) {
                     entry.getValue().set(0);
                 } else {
                     // Reset to undef instead of removing to maintain reference integrity

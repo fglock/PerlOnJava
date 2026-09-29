@@ -941,9 +941,14 @@ public class Operator {
     }
 
     public static RuntimeList reset(RuntimeList args, int ctx) {
-        String activePackage = RuntimeCode.getActivePackageName();
+        // The interpreter tracks package-block scope dynamically.  The active
+        // RuntimeCode package is only the enclosing CV's package, which can be
+        // stale for a top-level `package Foo { reset ... }` block in code that
+        // fell back to the interpreter.  JVM-emitted reset sites pass their
+        // lexical package directly through resetInPackage().
+        String activePackage = InterpreterState.currentPackage.get().toString();
         if (activePackage == null || activePackage.isEmpty()) {
-            activePackage = InterpreterState.currentPackage.get().toString();
+            activePackage = RuntimeCode.getActivePackageName();
         }
         return resetInPackage(args, ctx, activePackage);
     }

@@ -10,7 +10,8 @@ my $recursive_load_error;
     delete $INC{'Encode.pm'};
     my $hook = sub {
         return undef unless caller eq 'main';
-        open my $fh, '<:encoding(utf-8)', __FILE__ or die "open failed: $!";
+        open my $fh, '<:encoding(utf-8)', __FILE__ . '.missing'
+            or die "open failed: $!";
         return $fh;
     };
     unshift @INC, $hook;
@@ -80,6 +81,11 @@ sub reset_alpha { reset 'a' }
 sub match_once { 'needle' =~ m?needle? }
 sub reset_match_once { reset }
 
+package RequestedResetBlock;
+our @beta_array = (1 .. 3);
+our %beta_array = (one => 1, two => 2);
+sub match_once { 'block-needle' =~ m?block-needle? }
+
 package main;
 ok(RequestedResetRegression::match_once(), 'match-once callsite matches initially');
 ok(!RequestedResetRegression::match_once(), 'match-once callsite is consumed');
@@ -87,6 +93,34 @@ RequestedResetRegression::reset_match_once();
 ok(RequestedResetRegression::match_once(), 'reset re-enables the caller package match-once callsite');
 RequestedResetRegression::reset_alpha();
 ok(!defined($RequestedResetRegression::alpha), 'reset uses the caller package for named globals');
+
+{
+    no strict 'refs';
+    no warnings 'once';
+    *RequestedResetBlock::beta_array = \1;
+}
+package RequestedResetBlock { reset 'b' }
+is(scalar @RequestedResetBlock::beta_array, 0,
+    'reset in a package block clears that package array in the interpreter');
+is(scalar keys %RequestedResetBlock::beta_array, 0,
+    'reset in a package block clears that package hash in the interpreter');
+is($RequestedResetBlock::beta_array, 1,
+    'reset preserves a readonly scalar sharing the reset array/hash glob');
+
+ok(RequestedResetBlock::match_once(), 'package-block match-once callsite matches initially');
+ok(!RequestedResetBlock::match_once(), 'package-block match-once callsite is consumed');
+package RequestedResetBlock { reset }
+ok(RequestedResetBlock::match_once(),
+    'reset in a package block re-enables that package regex callsite');
+
+my $reset_warning_switch;
+{
+    local $SIG{__WARN__} = sub {};
+    local $^W = 1;
+    reset "\cW";
+    $reset_warning_switch = $^W;
+}
+is($reset_warning_switch, 0, 'reset of \cW leaves the numeric warning switch at zero');
 
 my @warnings;
 {

@@ -5,6 +5,7 @@ import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.core.Configuration;
 import org.perlonjava.runtime.HintHashRegistry;
+import org.perlonjava.runtime.io.LayeredIOHandle;
 import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
 import org.perlonjava.runtime.perlmodule.Feature;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -19,8 +20,11 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
 import static org.perlonjava.runtime.runtimetypes.ExceptionFormatter.findInnermostCause;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalHash;
@@ -64,6 +68,8 @@ public class ModuleOperators {
     /** Entries actually consulted by the current require search, in order. */
     private static final ThreadLocal<List<String>> INC_ENTRIES_CHECKED =
             ThreadLocal.withInitial(ArrayList::new);
+    private static final ThreadLocal<Set<Object>> ACTIVE_INC_HOOKS =
+            ThreadLocal.withInitial(() -> Collections.newSetFromMap(new IdentityHashMap<>()));
 
     /**
      * Public entry point for `do` operator.
@@ -595,12 +601,17 @@ public class ModuleOperators {
 
                     // Check if this @INC entry is a CODE reference, ARRAY reference, or blessed object
                     if (isHook) {
+                        if (LayeredIOHandle.isLoadingEncodingModule()
+                                && ACTIVE_INC_HOOKS.get().contains(incHookIdentity(dirScalar))) {
+                            throw new PerlCompilerException(
+                                    "Recursive call to Perl_load_module in PerlIO_find_layer at :encoding layer");
+                        }
                         // Perl exposes the current @INC slot through $INC
                         // while a hook runs. Clearing it asks require to
                         // restart from slot zero after replacing @INC.
                         RuntimeScalar incCursor = getGlobalVariable("main::INC");
                         incCursor.set(i);
-                        RuntimeList hookResult = tryIncHook(dirScalar, fileName);
+                        RuntimeList hookResult = invokeIncHook(dirScalar, fileName);
                         if (!incCursor.getDefinedBoolean()) {
                             i = -1;
                             continue;
@@ -1336,6 +1347,22 @@ public class ModuleOperators {
         }
 
         return result;
+    }
+
+    private static RuntimeList invokeIncHook(RuntimeScalar hook, String fileName) {
+        Set<Object> activeHooks = ACTIVE_INC_HOOKS.get();
+        Object hookIdentity = incHookIdentity(hook);
+        boolean newlyActive = activeHooks.add(hookIdentity);
+        try {
+            return tryIncHook(hook, fileName);
+        } finally {
+            if (newlyActive) activeHooks.remove(hookIdentity);
+            if (activeHooks.isEmpty()) ACTIVE_INC_HOOKS.remove();
+        }
+    }
+
+    private static Object incHookIdentity(RuntimeScalar hook) {
+        return hook.value != null ? hook.value : hook;
     }
 
     private static class IncHookSource {

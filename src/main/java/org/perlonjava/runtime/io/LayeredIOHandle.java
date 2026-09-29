@@ -47,6 +47,39 @@ import java.util.function.Function;
 public class LayeredIOHandle implements IOHandle {
     private static final ThreadLocal<Boolean> LOADING_ENCODING_MODULE =
             ThreadLocal.withInitial(() -> false);
+
+    /** Whether this thread is inside the module load initiated by :encoding. */
+    public static boolean isLoadingEncodingModule() {
+        return LOADING_ENCODING_MODULE.get();
+    }
+
+    /**
+     * Load modules needed by open-time layers before attempting the underlying
+     * filesystem open. Perl resolves :encoding(...) layers before opening the
+     * path, so even a missing path can trigger PerlIO/@INC recursion.
+     */
+    public static void prepareOpenLayers(String layerSpec) {
+        if (layerSpec == null || layerSpec.isEmpty()) return;
+        for (String rawLayer : splitLayers(layerSpec)) {
+            String layer = normalizeLayerSpec(rawLayer);
+            if (!layer.startsWith("encoding(") || !layer.endsWith(")")) continue;
+            ensureEncodingModuleLoaded();
+            resolveEncodingCharset(layer.substring(9, layer.length() - 1));
+        }
+    }
+
+    private static void ensureEncodingModuleLoaded() {
+        if (LOADING_ENCODING_MODULE.get()) {
+            throw new PerlCompilerException(
+                    "Recursive call to Perl_load_module in PerlIO_find_layer at :encoding layer");
+        }
+        LOADING_ENCODING_MODULE.set(true);
+        try {
+            ModuleOperators.require(new RuntimeScalar("Encode.pm"));
+        } finally {
+            LOADING_ENCODING_MODULE.set(false);
+        }
+    }
     /**
      * List of currently active layers.
      * Maintained for proper cleanup and reset operations.
@@ -388,7 +421,7 @@ public class LayeredIOHandle implements IOHandle {
         }
     }
 
-    private String normalizeLayerSpec(String layerSpec) {
+    private static String normalizeLayerSpec(String layerSpec) {
         layerSpec = layerSpec.trim();
         while (!layerSpec.isEmpty() && layerSpec.charAt(layerSpec.length() - 1) == '\0') {
             layerSpec = layerSpec.substring(0, layerSpec.length() - 1).trim();
@@ -410,7 +443,7 @@ public class LayeredIOHandle implements IOHandle {
      * @param modeStr the layer specification string to split
      * @return array of individual layer specifications
      */
-    private String[] splitLayers(String modeStr) {
+    private static String[] splitLayers(String modeStr) {
         List<String> result = new ArrayList<>();
         int start = 0;
         int i = 0;
@@ -518,16 +551,7 @@ public class LayeredIOHandle implements IOHandle {
                         // and loads Encode as a visible side effect. Some CPAN modules
                         // (including Pod::Spell) rely on Encode::* being available
                         // after an encoded handle has been opened.
-                        if (LOADING_ENCODING_MODULE.get()) {
-                            throw new PerlCompilerException(
-                                    "Recursive call to Perl_load_module in PerlIO_find_layer at :encoding layer");
-                        }
-                        LOADING_ENCODING_MODULE.set(true);
-                        try {
-                            ModuleOperators.require(new RuntimeScalar("Encode.pm"));
-                        } finally {
-                            LOADING_ENCODING_MODULE.set(false);
-                        }
+                        ensureEncodingModuleLoaded();
                         EncodingLayer layer = new EncodingLayer(charset, layerSpec);
                         activeLayers.add(layer);
                         Function<String, String> inputTransform = s -> layer.processInput(s);
