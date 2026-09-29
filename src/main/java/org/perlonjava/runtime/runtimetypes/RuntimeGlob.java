@@ -2083,6 +2083,16 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // Put this (old) glob back in globalIORefs, replacing the local scope's glob.
         // Any references captured during the local scope still point to the local glob,
         // which is now an independent orphaned glob (matching Perl 5 GV behavior).
+        RuntimeGlob localizedGlob = GlobalVariable.getExistingGlobalIO(snap.globName);
+        if (localizedGlob != null && localizedGlob != this
+                && localizedGlob.IO != null
+                && localizedGlob.IO.type == TIED_SCALAR
+                && localizedGlob.IO.value instanceof TieHandle tieHandle) {
+            // The localized glob is being removed from the active stash.  Its
+            // tied IO wrapper owns the handler reference and must release it
+            // at scope exit, just as a tied scalar/array/hash does.
+            tieHandle.releaseTiedObject();
+        }
         GlobalVariable.replaceGlobalIO(snap.globName, this);
 
         // Restore saved objects directly - they were never mutated, so no

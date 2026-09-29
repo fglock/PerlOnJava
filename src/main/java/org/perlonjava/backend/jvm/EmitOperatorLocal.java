@@ -84,6 +84,14 @@ public class EmitOperatorLocal {
                     var symbolEntry = emitterVisitor.ctx.symbolTable.getSymbolEntry(varName);
                     isOurVariable = symbolEntry != null && "our".equals(symbolEntry.decl());
                 }
+                // A symbol-table entry for a non-our scalar is a lexical.
+                // It must be rejected here, before the generic lvalue path,
+                // rather than localized as its runtime scalar object.
+                if (varIndex != -1 && !isOurVariable) {
+                    throw new PerlCompilerException(node.tokenIndex,
+                            "Can't localize lexical variable " + varName,
+                            emitterVisitor.ctx.errorUtil);
+                }
                 if (varIndex == -1 || isOurVariable) {
                     // Variable is global or 'our' - use makeLocal
                     String fullName = NameNormalizer.normalizeVariableName(idNode.name, emitterVisitor.ctx.symbolTable.getCurrentPackage());

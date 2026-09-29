@@ -529,8 +529,8 @@ sub run_single_test {
         $local_test_dir = $1;
     }
 
-    # abigail.t writes progtmp* programs containing literal #!./perl. Run it in
-    # a private overlay so concurrent runner processes cannot share either the
+    # These tests execute programs through literal ./perl paths. Run them in a
+    # private overlay so concurrent runner processes cannot share either the
     # launcher or generated programs. All authoritative test-tree entries
     # remain read-only links; only perl and progtmp* live in the private cwd.
     my $private_test_root;
@@ -538,7 +538,7 @@ sub run_single_test {
     my $test_name;
     my $test_launcher = $abs_jperl;
     if ($^O ne 'MSWin32' && $^O ne 'cygwin' && $^O ne 'msys'
-            && $test_file =~ m{(?:^|/)perl5_t/t/(?:japh/abigail|op/magic)\.t$}) {
+            && $test_file =~ m{(?:^|/)perl5_t/t/(?:japh/abigail|op/magic|run/fresh_perl)\.t$}) {
         my $source_test_dir = File::Spec->rel2abs('perl5_t/t', $old_dir);
         my $source_lib_dir = File::Spec->rel2abs('perl5_t/lib', $old_dir);
         $private_test_root = tempdir('perlonjava-core-XXXXXX', TMPDIR => 1, CLEANUP => 1);
@@ -596,7 +596,9 @@ NATIVE_LAUNCHER
             $ENV{PERLONJAVA_SHEBANG_TARGET} = $abs_jperl;
         }
         $local_test_dir = $private_test_dir;
-        $test_name = $test_file =~ m{/op/magic\.t$} ? 'op/magic.t' : 'japh/abigail.t';
+        $test_name = $test_file =~ m{/op/magic\.t$} ? 'op/magic.t'
+                   : $test_file =~ m{/run/fresh_perl\.t$} ? 'run/fresh_perl.t'
+                   : 'japh/abigail.t';
         # Run through the private ./perl name so Perl's $^X matches the
         # interpreter path expected by shebang-sensitive core tests.
         $test_launcher = './perl';

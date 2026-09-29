@@ -5,6 +5,7 @@ import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.ErrorMessageUtil;
 
 import java.util.List;
 
@@ -153,6 +154,26 @@ public class TokenUtils {
     public static void consume(Parser parser, LexerTokenType type, String text) {
         LexerToken token = consume(parser);
         if (token.type != type || !token.text.equals(text)) {
+            // In `$hash{key}{size}; used => $hash{key}(used}`, the second
+            // hash subscript reaches `;` while still seeking its right curly.
+            // Perl anchors the resulting syntax diagnostic on the next hash
+            // key (`used`), not the semicolon, and reports terminal compile
+            // failure. Keep this recovery limited to that delimiter mismatch.
+            if (type == LexerTokenType.OPERATOR && "}".equals(text)
+                    && token.type == LexerTokenType.OPERATOR && ";".equals(token.text)) {
+                for (int i = parser.tokenIndex; i < parser.tokens.size(); i++) {
+                    LexerToken next = parser.tokens.get(i);
+                    if (next.type == LexerTokenType.IDENTIFIER) {
+                        ErrorMessageUtil.SourceLocation location =
+                                parser.ctx.errorUtil.getSourceLocationAccurate(i);
+                        String diagnostic = "syntax error at " + location.fileName()
+                                + " line " + location.lineNumber() + ", near \"" + next.text + "\"\n"
+                                + "Execution of " + location.fileName()
+                                + " aborted due to compilation errors.\n";
+                        throw new PerlCompilerException(diagnostic);
+                    }
+                }
+            }
             throw new PerlCompilerException(
                     parser.tokenIndex,
                     "syntax error",

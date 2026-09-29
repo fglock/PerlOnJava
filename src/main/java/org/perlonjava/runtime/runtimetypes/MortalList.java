@@ -700,6 +700,7 @@ public class MortalList {
         if (args == null || !isActive()) return;
         for (RuntimeScalar scalar : args.elements) {
             if (scalar == null
+                    || !args.ownsElement(scalar)
                     || !scalar.refCountOwned
                     || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
                     || !(scalar.value instanceof RuntimeBase base)

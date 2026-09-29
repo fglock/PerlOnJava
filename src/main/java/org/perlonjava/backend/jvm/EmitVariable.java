@@ -1377,6 +1377,15 @@ public class EmitVariable {
                     if (op.equals("chop") || op.equals("chomp") || op.equals("substr")) {
                         throw new PerlCompilerException(node.tokenIndex, "Can't modify " + op + " in scalar assignment", ctx.errorUtil);
                     }
+                    if (op.equals("undef")) {
+                        var location = ctx.errorUtil.getSourceLocationAccurate(right.getIndex());
+                        String rhsExcerpt = right instanceof NumberNode number
+                                ? number.value : right.toString();
+                        String message = "Can't modify undef operator in scalar assignment at "
+                                + location.fileName() + " line " + location.lineNumber()
+                                + ", near \"" + rhsExcerpt + " }\"\n";
+                        throw new PerlCompilerException(message);
+                    }
                 }
                 throw new PerlCompilerException(node.tokenIndex, "Unsupported assignment context: " + lvalueContext, ctx.errorUtil);
         }

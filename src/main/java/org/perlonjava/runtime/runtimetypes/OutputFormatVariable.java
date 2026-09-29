@@ -65,6 +65,10 @@ public final class OutputFormatVariable extends RuntimeScalar {
     // numeric expressions such as `$% == 1` in TOP formats.
     @Override public RuntimeScalar getNumber() { return new RuntimeScalar(getInt()); }
     @Override public RuntimeScalar getNumber(String operation) { return getNumber(); }
+    // Numeric comparisons use getNumberWarn() when warnings are enabled.  The
+    // base implementation sees this magic scalar's UNDEF storage slot rather
+    // than its selected-handle value, making `$% == 1` incorrectly false.
+    @Override public RuntimeScalar getNumberWarn(String operation) { return getNumber(); }
     @Override public RuntimeScalar getNumberNoOverload() { return getNumber(); }
 
     @Override

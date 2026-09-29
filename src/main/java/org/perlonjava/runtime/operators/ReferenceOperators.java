@@ -40,6 +40,14 @@ public class ReferenceOperators {
         // validating the operand type. Keep this explicit and one-shot: FETCH
         // must run once for this operand evaluation, not once per check below.
         runtimeScalar = RuntimeScalar.fetchTiedOnce(runtimeScalar);
+        // *FH{IO} may pass through scalar assignment as a GLOB-typed
+        // RuntimeIO rather than the GLOBREFERENCE wrapper returned directly
+        // by the glob-slot accessor.  Perl treats that PVIO as a blessable
+        // reference, so normalize only this representation before checking.
+        if (runtimeScalar.type == RuntimeScalarType.GLOB
+                && runtimeScalar.value instanceof RuntimeIO) {
+            runtimeScalar.type = RuntimeScalarType.GLOBREFERENCE;
+        }
         if (RuntimeScalarType.isReference(runtimeScalar)) {
             // The class-name operand is an ordinary scalar read, so tied
             // scalar magic must run before deciding whether it is a reference.

@@ -44,6 +44,15 @@ public class IOOperator {
     }
 
     public static RuntimeScalar select(RuntimeList runtimeList, int ctx) {
+        return selectInPackage(runtimeList, ctx, "main");
+    }
+
+    /**
+     * Select a filehandle using the package at the Perl call site to resolve a
+     * symbolic handle.  JVM-compiled subroutines do not update the dynamic
+     * current-package state, so callers supply their lexical package here.
+     */
+    public static RuntimeScalar selectInPackage(RuntimeList runtimeList, int ctx, String packageName) {
         if (runtimeList.isEmpty()) {
             // select() with no args returns the currently selected filehandle.
             // In Perl 5 this returns a string name like "main::STDOUT".
@@ -97,6 +106,36 @@ public class IOOperator {
         RuntimeScalar fileHandleArg = new RuntimeScalar(
                 RuntimeScalar.dereferenceAndFetchOnce(runtimeList.getFirst()));
         RuntimeIO newIO = fileHandleArg.getRuntimeIO();
+        // Selecting a named but unopened typeglob materializes its IO slot.
+        // Perl relies on this for `select select ++$name`, after which
+        // *{$name}{IO} is a blessable IO reference rather than undef.
+        if (newIO == null && fileHandleArg.value instanceof RuntimeGlob glob
+                && glob.globName != null) {
+            RuntimeGlob canonical = GlobalVariable.getGlobalIO(glob.globName);
+            RuntimeScalar ioSlot = canonical.getIO();
+            if (ioSlot == null || !(ioSlot.value instanceof RuntimeIO)) {
+                newIO = new RuntimeIO();
+                canonical.setIO(newIO);
+            } else {
+                newIO = (RuntimeIO) ioSlot.value;
+            }
+        }
+        if (newIO == null && fileHandleArg.getDefinedBoolean()) {
+            String name = fileHandleArg.toString();
+            if (!name.isEmpty()) {
+                String effectivePackage = packageName == null || packageName.isEmpty()
+                        ? "main" : packageName;
+                String fullName = name.contains("::") ? name : effectivePackage + "::" + name;
+                RuntimeGlob canonical = GlobalVariable.getGlobalIO(fullName);
+                RuntimeScalar ioSlot = canonical.getIO();
+                if (ioSlot == null || !(ioSlot.value instanceof RuntimeIO)) {
+                    newIO = new RuntimeIO();
+                    canonical.setIO(newIO);
+                } else {
+                    newIO = (RuntimeIO) ioSlot.value;
+                }
+            }
+        }
         // Auto-vivify: when called with an undefined scalar, Perl creates a new anonymous
         // GLOB reference and stores it back in the variable (like `open my $fh, ...` does).
         // This enables the idiom:  select select my $fh_null;  tie *$fh_null, 'SomeClass';

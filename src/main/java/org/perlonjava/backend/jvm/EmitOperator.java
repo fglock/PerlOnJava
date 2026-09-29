@@ -49,10 +49,11 @@ public class EmitOperator {
         boolean noOverloading = symbolTable != null &&
                 symbolTable.isStrictOptionEnabled(Strict.HINT_NO_AMAGIC);
         OperatorHandler operatorHandler = noOverloading ? OperatorHandler.getNoOverload(operator) : null;
+        boolean warnUninit = emitterVisitor.ctx.symbolTable.isWarningCategoryEnabled("uninitialized")
+                || emitterVisitor.ctx.compilerOptions.warnFlag;
         // Check if uninitialized warnings are enabled at compile time
         // Use warn variant for zero-overhead when warnings disabled
         if (operatorHandler == null) {
-            boolean warnUninit = emitterVisitor.ctx.symbolTable.isWarningCategoryEnabled("uninitialized");
             operatorHandler = warnUninit
                     ? OperatorHandler.getWarn(operator)
                     : OperatorHandler.get(operator);
@@ -66,13 +67,25 @@ public class EmitOperator {
                 operatorHandler.methodName() + " " +
                 operatorHandler.descriptor()
         );
-        emitterVisitor.ctx.mv.visitMethodInsn(
+        if (operator.equals("==") && warnUninit && node instanceof BinaryOperatorNode binary) {
+            var location = emitterVisitor.ctx.errorUtil.getSourceLocationAccurate(binary.getIndex());
+            emitterVisitor.ctx.mv.visitLdcInsn(location.fileName());
+            emitterVisitor.ctx.mv.visitLdcInsn(location.lineNumber());
+            emitterVisitor.ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/operators/CompareOperators",
+                    "equalToWarnAt",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        } else {
+            emitterVisitor.ctx.mv.visitMethodInsn(
                 operatorHandler.methodType(),
                 operatorHandler.className(),
                 operatorHandler.methodName(),
                 operatorHandler.descriptor(),
                 false
-        );
+            );
+        }
 
         // Handle context
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
@@ -1464,6 +1477,24 @@ public class EmitOperator {
             node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
         }
         emitterVisitor.pushCallContext();
+        if (node.operator.equals("select")) {
+            // A symbolic filehandle is resolved in the lexical package of the
+            // call site.  Compiled subs do not otherwise update the dynamic
+            // current-package state used by the generic runtime helper.
+            emitterVisitor.pushCurrentPackage();
+            emitterVisitor.ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/operators/IOOperator",
+                    "selectInPackage",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;ILjava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                handleVoidContext(emitterVisitor);
+            } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                handleScalarContext(emitterVisitor, node);
+            }
+            return;
+        }
         emitOperator(node, emitterVisitor);
     }
 
