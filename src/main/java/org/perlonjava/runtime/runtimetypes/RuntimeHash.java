@@ -41,6 +41,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public Map<String, RuntimeScalar> elements;
     /** True only for Perl's compile-time %^H hash. */
     public boolean isHintHash;
+    /** True for Perl's runtime %{^HOOK} hash. */
+    public boolean isRequireHookHash;
     private boolean suppressHintHashLifecycleCleanup;
     // Set when this hash is installed as %ENV through a typeglob alias.
     // Perl rejects process execution before inspecting PATH in that case.
@@ -470,6 +472,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     materializedList.elements.add(new RuntimeScalar(iterator.next()));
                 }
 
+                validateRequireHookAssignments(materializedList);
+
                 // Store the original list size for scalar context
                 int originalSize = materializedList.elements.size();
 
@@ -577,6 +581,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @param value The value for the hash entry.
      */
     public void put(String key, RuntimeScalar value) {
+        validateRequireHookAssignment(key, value);
         switch (type) {
             case PLAIN_HASH -> {
                 // Each hash key owns an independent scalar slot. The referent
@@ -619,6 +624,30 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             case READONLY_HASH -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + type);
+        }
+    }
+
+    /**
+     * Perl reserves the two require hook slots for callbacks.  Validate at
+     * assignment time so invalid values fail where Perl reports them, rather
+     * than being silently ignored when a later require happens.
+     */
+    void validateRequireHookAssignment(String key, RuntimeScalar value) {
+        if (!isRequireHookHash
+                || !("require__before".equals(key) || "require__after".equals(key))
+                || value == null || !value.defined().getBoolean()
+                || value.type == RuntimeScalarType.CODE) {
+            return;
+        }
+        throw new PerlCompilerException("${^HOOK}{" + key
+                + "} may only be a CODE reference or undef");
+    }
+
+    private void validateRequireHookAssignments(RuntimeArray values) {
+        if (!isRequireHookHash) return;
+        for (int index = 0; index + 1 < values.elements.size(); index += 2) {
+            validateRequireHookAssignment(values.elements.get(index).toString(),
+                    values.elements.get(index + 1));
         }
     }
 
@@ -1728,6 +1757,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         // Create a new RuntimeHash to save the current state
         RuntimeHash currentState = new RuntimeHash();
         currentState.isHintHash = this.isHintHash;
+        currentState.isRequireHookHash = this.isRequireHookHash;
         currentState.elements = currentState.newElementMap(this.elements);
         currentState.blessId = this.blessId;
         currentState.byteKeys = this.byteKeys != null ? new HashSet<>(this.byteKeys) : null;
@@ -1783,6 +1813,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             this.byteKeys = previousState.byteKeys;
             this.type = previousState.type;
             this.isHintHash = previousState.isHintHash;
+            this.isRequireHookHash = previousState.isRequireHookHash;
         }
     }
 

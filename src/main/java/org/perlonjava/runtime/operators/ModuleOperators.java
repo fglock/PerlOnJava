@@ -673,7 +673,7 @@ public class ModuleOperators {
                                 // Preserve the @INC entry's relativity for display/error messages
                                 // (Perl 5 uses "lib/Foo.pm" not "/abs/path/lib/Foo.pm")
                                 // Strip trailing slash from dirName to avoid double slashes
-                                String cleanDir = dirName.endsWith("/") ? dirName.substring(0, dirName.length() - 1) : dirName;
+                                String cleanDir = displayIncDirectory(dirName);
                                 actualFileName = cleanDir + "/" + fileName + "c";
                                 break;
                             }
@@ -690,7 +690,7 @@ public class ModuleOperators {
                             fullName = fullPath;
                             // Preserve the @INC entry's relativity for display/error messages
                             // Strip trailing slash from dirName to avoid double slashes
-                            String cleanDir = dirName.endsWith("/") ? dirName.substring(0, dirName.length() - 1) : dirName;
+                            String cleanDir = displayIncDirectory(dirName);
                             actualFileName = cleanDir + "/" + fileName;
                             break;
                         }
@@ -962,6 +962,17 @@ public class ModuleOperators {
             return getScalarInt(1);
         }
 
+        // %{^HOOK} is a runtime hook, distinct from the compile-time %^H
+        // hints hash.  Its before callback receives an alias to require's
+        // filename, and may therefore rewrite the name that gets searched.
+        // A CODE value it returns is retained as this invocation's post action.
+        // A bareword module name is represented by a read-only literal scalar.
+        // The hook contract nevertheless makes $_[0] writable, so use a
+        // mutable request-local cell for both the callback and the load.
+        RuntimeScalar hookFileName = new RuntimeScalar(runtimeScalar);
+        RuntimeScalar postAction = runRequireBeforeHook(hookFileName);
+        runtimeScalar = hookFileName;
+
         // Look up the file name in %INC
         String fileName = runtimeScalar.toString();
         RuntimeHash incHash = getGlobalHash("main::INC");
@@ -977,7 +988,9 @@ public class ModuleOperators {
                                 + "Compilation failed in require");
             }
             // module was already loaded successfully - always return exactly 1
-            return getScalarInt(1);
+            RuntimeScalar loaded = getScalarInt(1);
+            runRequireAfterHooks(postAction, fileName);
+            return loaded;
         }
 
         // Call doFile with require-specific behavior - set %INC optimistically
@@ -1048,8 +1061,45 @@ public class ModuleOperators {
         // Return the actual result - doFile already applied module_true logic if needed
         // If module_true was enabled, result will be 1
         // If module_true was disabled, result will be the module's actual return value
+        runRequireAfterHooks(postAction, fileName);
         return result;
         }
+    }
+
+    private static RuntimeScalar runRequireBeforeHook(RuntimeScalar fileName) {
+        RuntimeScalar before = getGlobalHash(GlobalContext.encodeSpecialVar("HOOK"))
+                .elements.get("require__before");
+        if (before == null || before.type != RuntimeScalarType.CODE
+                || !(before.value instanceof RuntimeCode callback)) {
+            return null;
+        }
+        RuntimeArray args = new RuntimeArray();
+        // @_ aliases arguments.  RuntimeArray.push() intentionally copies a
+        // scalar into an independent list slot, which would prevent the hook
+        // from rewriting require's filename through $_[0].
+        args.elements.add(fileName);
+        RuntimeScalar postAction = callback.apply(args, RuntimeContextType.SCALAR).scalar();
+        return postAction.type == RuntimeScalarType.CODE ? postAction : null;
+    }
+
+    private static void runRequireAfterHooks(RuntimeScalar postAction, String fileName) {
+        RuntimeArray args = new RuntimeArray();
+        args.push(new RuntimeScalar(fileName));
+        if (postAction != null && postAction.value instanceof RuntimeCode callback) {
+            callback.apply(args, RuntimeContextType.VOID);
+        }
+        RuntimeScalar after = getGlobalHash(GlobalContext.encodeSpecialVar("HOOK"))
+                .elements.get("require__after");
+        if (after != null && after.type == RuntimeScalarType.CODE
+                && after.value instanceof RuntimeCode callback) {
+            callback.apply(args, RuntimeContextType.VOID);
+        }
+    }
+
+    /** Perl displays an @INC entry beginning with ./ without that redundant prefix. */
+    private static String displayIncDirectory(String directory) {
+        String clean = directory.endsWith("/") ? directory.substring(0, directory.length() - 1) : directory;
+        return clean.startsWith("./") ? clean.substring(2) : clean;
     }
 
     /** Format Perl's missing-require diagnostic without suggesting invalid module names. */
