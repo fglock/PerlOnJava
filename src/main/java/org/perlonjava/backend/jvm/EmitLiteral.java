@@ -516,6 +516,13 @@ public class EmitLiteral {
 
         // Populate the list with elements
         boolean forceListSnapshot = Boolean.TRUE.equals(node.getAnnotation("forceListSnapshot"));
+        // A list containing a nested list assignment must materialize all of
+        // its members before evaluating that assignment.  In particular,
+        // `(@a, (@a = ...))` must retain @a's pre-assignment membership.
+        boolean containsListAssignmentResult = node.elements.stream().anyMatch(element ->
+                element instanceof BinaryOperatorNode assignment
+                        && assignment.operator.equals("=")
+                        && LValueVisitor.getContext(assignment.left) == RuntimeContextType.LIST);
         for (Node element : node.elements) {
             // Generate code for the element with an empty operand stack so non-local control flow
             // cannot leak extra operands.
@@ -533,17 +540,18 @@ public class EmitLiteral {
             // result only; doing so for every LVALUE_LIST member would flatten
             // an empty array target in `my ($head, @tail) = @_` before
             // RuntimeList.setFromList() can assign its remaining arguments.
-            boolean snapshotListAssignmentResult = contextType == RuntimeContextType.LVALUE_LIST
-                    && element instanceof BinaryOperatorNode assignment
+            boolean snapshotListAssignmentResult = element instanceof BinaryOperatorNode assignment
                     && assignment.operator.equals("=")
                     && LValueVisitor.getContext(assignment.left) == RuntimeContextType.LIST;
             // Foreach aliases its source cells, including holes.  Its source
             // is emitted in ordinary LIST context, so mark it explicitly.
             boolean snapshotForeachSource = Boolean.TRUE.equals(node.getAnnotation("foreachSource"));
-            if (forceListSnapshot || snapshotListAssignmentResult || snapshotForeachSource) {
+            if (forceListSnapshot || containsListAssignmentResult
+                    || snapshotListAssignmentResult || snapshotForeachSource) {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeDescriptorConstants.LIST_CLASS,
                         snapshotForeachSource ? "addSnapshotWithArrayHoles"
-                                : snapshotListAssignmentResult ? "addLvalueSnapshot" : "addSnapshot",
+                                : snapshotListAssignmentResult && contextType == RuntimeContextType.LVALUE_LIST
+                                ? "addLvalueSnapshot" : "addSnapshot",
                         "(" + RuntimeDescriptorConstants.BASE_TYPE + ")V", false);
             } else if (contextType == RuntimeContextType.RUNTIME) {
                 // A dynamic-context aggregate is scalarized by its emitter for

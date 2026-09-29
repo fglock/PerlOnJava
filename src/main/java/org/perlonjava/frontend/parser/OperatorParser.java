@@ -1408,7 +1408,9 @@ public class OperatorParser {
     static Node parseSpecialQuoted(Parser parser, LexerToken token, int startIndex) {
         // Handle special-quoted domain-specific arguments
         String operator = token.text;
-        // Skip whitespace, but not `#`
+        // Rewind to the operator and consume it.  Unlike ordinary operators,
+        // quote-like syntax permits whitespace to be its delimiter: `m 0 0`
+        // matches a single space.  Do not skip that whitespace here.
         parser.tokenIndex = startIndex;
         consume(parser);
         boolean skippedWhitespace = false;

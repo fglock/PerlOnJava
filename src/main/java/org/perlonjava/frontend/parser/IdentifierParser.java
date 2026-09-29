@@ -489,6 +489,14 @@ public class IdentifierParser {
                     }
                     return prefix;
                 }
+                if (isTypeglob && token.text.equals("^") && nextToken.text.equals("=")) {
+                    // `*^=` is a typeglob named `^` followed by `=`.  The
+                    // caller split the lexer-produced ^= token so retain the
+                    // punctuation name and leave assignment for infix parsing.
+                    variableName.append(token.text);
+                    parser.tokenIndex++;
+                    return variableName.toString();
+                }
                 if (isFirstToken && token.type == LexerTokenType.NUMBER) {
                     // Numeric variables like $0, $1, and @0 are never package-qualified.
                     // In strings, "$0::Foo" is $0 followed by literal "::Foo".

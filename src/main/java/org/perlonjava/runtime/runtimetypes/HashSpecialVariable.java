@@ -226,7 +226,16 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     private static List<StashEntryName> computeStashEntries(String namespace) {
         Set<String> uniqueKeys = new HashSet<>();
         List<StashEntryName> entries = new ArrayList<>();
-        addCachedStashEntriesFromGlobalKeys(namespace, GlobalVariable.globalVariables.keySet(), uniqueKeys, entries);
+        // Runtime-only magic cells such as $&, $`, and $' share the global
+        // scalar registry, but a fresh Perl process does not expose them as
+        // ordinary entries in %::.  Enumerating them produces writable-looking
+        // typeglobs whose scalar slots are deliberately read-only.
+        for (Map.Entry<String, RuntimeScalar> scalarEntry : GlobalVariable.globalVariables.entrySet()) {
+            if (!(scalarEntry.getValue() instanceof ScalarSpecialVariable)) {
+                addCachedStashEntryFromGlobalKey(
+                        namespace, scalarEntry.getKey(), uniqueKeys, entries);
+            }
+        }
         addCachedStashEntriesFromGlobalKeys(namespace, GlobalVariable.globalArrays.keySet(), uniqueKeys, entries);
         addCachedStashEntriesFromGlobalKeys(namespace, GlobalVariable.globalHashes.keySet(), uniqueKeys, entries);
         // getGlobalCodeRef() pins undefined lookup placeholders so compiled call
@@ -263,6 +272,21 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                                                          String key,
                                                          Set<String> uniqueKeys,
                                                          List<StashEntryName> entries) {
+        // The same magic glob may also have an internally-created array or
+        // hash slot (for example @' alongside the read-only $').  Apply the
+        // visibility rule to the glob as a whole, not only while walking the
+        // scalar map.
+        RuntimeScalar scalarSlot = GlobalVariable.globalVariables.get(key);
+        if (scalarSlot instanceof ScalarSpecialVariable
+                || scalarSlot instanceof RuntimeScalarReadOnly) {
+            return;
+        }
+        // %+ and %- are internal capture hashes.  Their runtime-only
+        // read-only slots must not create ordinary writable-looking globs in
+        // %:: (the same visibility rule as the special scalar cells above).
+        if ("main::+".equals(key) || "main::-".equals(key)) {
+            return;
+        }
         boolean isMainStash = "main::".equals(namespace);
         String entryKey = stashEntryKeyFromGlobalKey(namespace, key, isMainStash);
         if (entryKey == null || entryKey.isEmpty()) {

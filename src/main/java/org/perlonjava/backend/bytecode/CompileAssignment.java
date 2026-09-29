@@ -2158,6 +2158,25 @@ public class CompileAssignment {
             rhsContext = RuntimeContextType.LIST;
         }
 
+        // Prefix ! is parsed as a scalar-looking assignment target in this
+        // compatibility corner. Perl evaluates its RHS before the target's
+        // immutable temporary is rejected.
+        if (node.left instanceof OperatorNode leftOp && leftOp.operator.equals("!")) {
+            bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.SCALAR);
+            int messageReg = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emit(Opcodes.LOAD_STRING);
+            bytecodeCompiler.emitReg(messageReg);
+            bytecodeCompiler.emit(bytecodeCompiler.addToStringPool("Modification of a read-only value attempted"));
+            int whereReg = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emit(Opcodes.LOAD_STRING);
+            bytecodeCompiler.emitReg(whereReg);
+            bytecodeCompiler.emit(bytecodeCompiler.addToStringPool(""));
+            bytecodeCompiler.emitWithToken(Opcodes.DIE, node.getIndex());
+            bytecodeCompiler.emitReg(messageReg);
+            bytecodeCompiler.emitReg(whereReg);
+            return;
+        }
+
         // Set the context for subroutine calls in RHS
         int outerContext = bytecodeCompiler.currentCallContext;
 
@@ -3764,6 +3783,9 @@ public class CompileAssignment {
                     if (leftOp.operator.equals("chop") || leftOp.operator.equals("chomp")
                             || leftOp.operator.equals("substr")) {
                         bytecodeCompiler.throwCompilerException("Can't modify " + leftOp.operator + " in scalar assignment");
+                    }
+                    if (leftOp.operator.equals("!")) {
+                        bytecodeCompiler.throwCompilerException("Can't modify not in scalar assignment");
                     }
                     bytecodeCompiler.throwCompilerException("Assignment to unsupported operator: " + leftOp.operator);
                 }

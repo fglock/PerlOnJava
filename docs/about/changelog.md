@@ -14,6 +14,10 @@ priorities and future plans.
 - Restore command-line Unicode and Perl shebang switch compatibility, including
   scoped `-Ci`/`-Co` open layers and `Module::Pluggable::Fast` loading.
 
+- Restore `op/refstack.t` compatibility for prefix `!~` assignment parsing,
+  special typeglob spellings, and typeglob numeric coercion on both execution
+  backends.
+
 - Restore `comp/retainedlines.t` debugger eval-source retention, `#line`
   mappings, and UNITCHECK diagnostics on both execution backends.
 

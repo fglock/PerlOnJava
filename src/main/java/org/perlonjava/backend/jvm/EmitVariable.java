@@ -949,6 +949,12 @@ public class EmitVariable {
                         && arrayRhs.operator.equals("@");
                 node.right.accept(emitterVisitor.with(directArrayToGlob
                         ? RuntimeContextType.LIST : RuntimeContextType.SCALAR));
+                if (node.left instanceof OperatorNode target
+                        && target.operator.equals("!")) {
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/GlobalRuntimeScalar",
+                            "rejectReadonlyNotAssignment", "()V", false);
+                }
                 if (node.left instanceof OperatorNode outerGlob
                         && outerGlob.operator.equals("*")
                         && node.right instanceof BinaryOperatorNode nestedAssignment
@@ -1385,6 +1391,9 @@ public class EmitVariable {
                                 + location.fileName() + " line " + location.lineNumber()
                                 + ", near \"" + rhsExcerpt + " }\"\n";
                         throw new PerlCompilerException(message);
+                    }
+                    if (op.equals("!")) {
+                        throw new PerlCompilerException(node.tokenIndex, "Can't modify not in scalar assignment", ctx.errorUtil);
                     }
                 }
                 throw new PerlCompilerException(node.tokenIndex, "Unsupported assignment context: " + lvalueContext, ctx.errorUtil);

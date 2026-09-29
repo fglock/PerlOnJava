@@ -5,6 +5,7 @@ import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.analysis.DoBlockResultAnalysis;
 import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
+import org.perlonjava.frontend.analysis.LValueVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.analysis.Visitor;
 import org.perlonjava.frontend.astnode.*;
@@ -8935,10 +8936,26 @@ public class BytecodeCompiler implements Visitor {
 
         // General case: multiple elements in LIST context
         // Evaluate each element into a register
+        boolean containsListAssignmentResult = node.elements.stream().anyMatch(element ->
+                element instanceof BinaryOperatorNode assignment
+                        && assignment.operator.equals("=")
+                        && LValueVisitor.getContext(assignment.left) == RuntimeContextType.LIST);
         int[] elementRegs = new int[node.elements.size()];
         for (int i = 0; i < node.elements.size(); i++) {
             compileNode(node.elements.get(i), -1, elementContext);
             elementRegs[i] = lastResultReg;
+            // CREATE_LIST normally runs only after every operand has been
+            // evaluated.  That is too late for `(@a, (@a = ...))`: the
+            // second operand has already mutated @a.  Snapshot each member
+            // immediately, then combine those stable one-member lists.
+            if (containsListAssignmentResult) {
+                int snapshotReg = allocateRegister();
+                emit(Opcodes.CREATE_LIST);
+                emitReg(snapshotReg);
+                emit(-2); // one member, flattened now
+                emitReg(elementRegs[i]);
+                elementRegs[i] = snapshotReg;
+            }
         }
 
         // Create RuntimeList with all elements
@@ -8947,6 +8964,13 @@ public class BytecodeCompiler implements Visitor {
         emitReg(listReg);
         boolean forceListSnapshot = Boolean.TRUE.equals(node.getAnnotation("forceListSnapshot"))
                 || Boolean.TRUE.equals(node.getAnnotation("foreachSource"));
+        // A nested list assignment returns the aggregate containing its
+        // assigned values.  The surrounding list must materialize that result
+        // before a later expression can mutate the same aggregate; otherwise
+        // `(@a, (@a = ...))` observes @a only after the inner assignment.
+        // This mirrors the JVM emitter's addLvalueSnapshot path.  CREATE_LIST
+        // snapshots every member as one operation, which is also the normal
+        // rvalue-list expansion rule for any neighbouring aggregates.
         // Aggregate assignment results are converted to their writable cells
         // by the assignment lowering itself.  Flattening every list compiled
         // in LVALUE_LIST context also changes ordinary argument lists, such

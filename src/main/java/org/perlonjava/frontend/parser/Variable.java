@@ -104,6 +104,15 @@ public class Variable {
                 ? parser.tokens.get(nextTokIdx)
                 : new LexerToken(LexerTokenType.EOF, "");
 
+        // In a typeglob position, `*^=` is the special glob `*^` followed
+        // by assignment.  The lexer quite reasonably maximizes the latter
+        // two characters as the ^= operator, so recover the contextual
+        // split before identifier parsing consumes the special variable.
+        if (sigil.equals("*") && nextToken.text.equals("^=")) {
+            nextToken.text = "^";
+            parser.tokens.add(nextTokIdx + 1, new LexerToken(LexerTokenType.OPERATOR, "="));
+        }
+
         // Special case 1: $${...} - nested scalar dereference
         // Example: $${ref} means dereference $ref to get a scalar reference, then dereference that
         int nextNonWsIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
