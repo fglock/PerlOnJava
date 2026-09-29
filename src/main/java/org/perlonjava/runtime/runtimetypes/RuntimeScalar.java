@@ -1135,6 +1135,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             markNumericContextSeen();
             return NumberParser.parseNumber(this, operation);
         }
+        if (type == GLOB) {
+            return NumberParser.parseNumber(new RuntimeScalar(toString()), operation);
+        }
         return getNumberLarge();
     }
 
@@ -1153,10 +1156,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 yield NumberParser.parseNumber(this);
             }
             case BOOLEAN -> (boolean) value ? scalarOne : scalarZero;
-            // A typeglob is truthy, but it is not a number.  In particular,
-            // compound numeric assignment must not silently replace a glob's
-            // value with 1 (Perl reports a coercion error instead).
-            case GLOB -> throw new PerlCompilerException("Can't coerce GLOB to number in numeric context");
+            // A typeglob numifies through its string form.  Like Perl, this
+            // yields zero (and may emit an "isn't numeric" warning) rather
+            // than treating the glob's truth value as a numeric one.
+            case GLOB -> NumberParser.parseNumber(new RuntimeScalar(toString()));
             case JAVAOBJECT -> value != null ? scalarOne : scalarZero;
             case TIED_SCALAR -> this.tiedFetch().getNumber();
             case READONLY_SCALAR -> ((RuntimeScalar) this.value).getNumber();
@@ -1189,7 +1192,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 yield NumberParser.parseNumber(this);
             }
             case BOOLEAN -> (boolean) value ? scalarOne : scalarZero;
-            case GLOB -> throw new PerlCompilerException("Can't coerce GLOB to number in numeric context");
+            case GLOB -> NumberParser.parseNumber(new RuntimeScalar(toString()));
             case JAVAOBJECT -> value != null ? scalarOne : scalarZero;
             case TIED_SCALAR -> this.tiedFetch().getNumberNoOverload();
             case READONLY_SCALAR -> ((RuntimeScalar) this.value).getNumberNoOverload();
@@ -1237,6 +1240,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (type == STRING || type == BYTE_STRING || type == VSTRING) {
             markNumericContextSeen();
             return NumberParser.parseNumber(this, operation);
+        }
+        if (type == GLOB) {
+            return NumberParser.parseNumber(new RuntimeScalar(toString()), operation);
         }
         // All other types are defined, just convert to number
         return getNumberLarge();

@@ -161,6 +161,11 @@ public class LValueVisitor implements Visitor {
                 context = node.operand instanceof ListNode list && list.elements.size() > 3
                         ? RuntimeContextType.VOID : RuntimeContextType.SCALAR;
                 break;
+            case "!":
+                // Perl evaluates an assignment RHS before rejecting this
+                // syntactically scalar-looking, but non-writable, result.
+                context = RuntimeContextType.SCALAR;
+                break;
             default:
                 context = RuntimeContextType.VOID;  // Not an L-value
         }

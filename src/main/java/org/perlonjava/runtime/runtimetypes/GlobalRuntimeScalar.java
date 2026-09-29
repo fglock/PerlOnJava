@@ -9,6 +9,13 @@ import org.perlonjava.runtime.WarningBitsRegistry;
  * global symbol table and restoring it when the context exits.
  */
 public class GlobalRuntimeScalar extends RuntimeScalar {
+
+    /** Reject an assignment to the immutable result of prefix {@code !} after its RHS ran. */
+    public static void rejectReadonlyNotAssignment() {
+        org.perlonjava.runtime.operators.WarnDie.die(
+                new RuntimeScalar("Modification of a read-only value attempted"),
+                new RuntimeScalar(""));
+    }
     // Stack to store the previous values when localized
     @SuppressWarnings("unchecked")
     private static Stack<SavedGlobalState> localizedStack() {

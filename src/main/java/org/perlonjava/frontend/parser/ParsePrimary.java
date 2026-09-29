@@ -526,6 +526,21 @@ public class ParsePrimary {
                 }
                 return new OperatorNode(token.text, operand, parser.tokenIndex);
 
+            case "!~":
+                // The lexer normally combines !~ for the infix regex-binding
+                // operator.  At the start of an expression Perl instead
+                // reads it as the adjacent prefix operators ! and ~, as in
+                // `pack "x", !~"" = ""`.  Preserve that contextual parse
+                // without weakening ordinary infix !~ handling.
+                operand = parser.parseExpression(parser.getPrecedence("~") + 1);
+                if (operand == null) {
+                    parser.throwError("syntax error");
+                }
+                OperatorNode prefixTilde = new OperatorNode("~", operand, parser.tokenIndex);
+                prefixTilde.setAnnotation("useInteger",
+                        parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER));
+                return new OperatorNode("!", prefixTilde, parser.tokenIndex);
+
             case "~", "~.":
                 // Bitwise complement operators
                 // ~ is string bitwise complement by default, binary~ with 'use feature "bitwise"'
@@ -636,6 +651,20 @@ public class ParsePrimary {
             case "*=":
                 // Special variable glob "="
                 return new OperatorNode("*", new IdentifierNode("=", parser.tokenIndex), parser.tokenIndex);
+
+            case "**":
+                // At the start of an expression, `**` is the typeglob named
+                // `*`, not exponentiation. This appears in historical
+                // typeglob assignment chains such as `*: = ** = *^= ...`.
+                return new OperatorNode("*", new IdentifierNode("*", parser.tokenIndex), parser.tokenIndex);
+
+            case "^=":
+                // In the malformed-but-supported typeglob chain `*^=`, an
+                // earlier `*` may already have been reduced as infix
+                // multiplication. Recover the remaining token as the `*^`
+                // special glob followed by its assignment operator.
+                parser.tokens.add(parser.tokenIndex, new LexerToken(LexerTokenType.OPERATOR, "="));
+                return new OperatorNode("*", new IdentifierNode("^", parser.tokenIndex), parser.tokenIndex);
 
             default:
                 // Unknown operator
