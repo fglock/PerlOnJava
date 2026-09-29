@@ -136,6 +136,7 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
 
     @Override
     public RuntimeScalar set(RuntimeScalar value) {
+        parent.validateRequireHookAssignment(key, value);
         if (parent.threadShared) {
             SharedPerlStorage.validateStoredValue(value);
             SharedPerlStorage.publishBlessing(value);

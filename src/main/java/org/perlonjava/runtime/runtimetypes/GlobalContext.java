@@ -249,6 +249,7 @@ public class GlobalContext {
         // %SIG uses a special hash that auto-qualifies handler names for known signals
         GlobalVariable.globalHashes.put("main::SIG", new RuntimeSigHash());
         GlobalVariable.getGlobalHash(encodeSpecialVar("H")).isHintHash = true;
+        GlobalVariable.getGlobalHash(encodeSpecialVar("HOOK")).isRequireHookHash = true;
         // These magic hashes are valid under strict vars but their stash slots
         // are created lazily on first access.
         GlobalVariable.declareGlobalHash("main::!");
