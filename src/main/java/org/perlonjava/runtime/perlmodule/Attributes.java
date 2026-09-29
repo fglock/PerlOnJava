@@ -203,9 +203,11 @@ public class Attributes extends PerlModuleBase {
                         // const: invoke and store result if callable, else warn "useless"
                         // A const attribute on a stub is initially useless, but
                         // Perl reports that warning only for the first attempt.
-                        // Reapplying it must remain silent even though no
-                        // constant value was cached for the stub.
-                        if ("const".equals(attrName) && !hadAttr) {
+                        // Reapplying it is silent unless a deferred or callable
+                        // closure now needs its constant value materialized.
+                        if ("const".equals(attrName) && (!hadAttr
+                                || (code.constantValue == null
+                                && (code.definitionPending || hasCallableBody)))) {
                             if (code.definitionPending) {
                                 // Perl lets an attribute handler apply :const
                                 // to an anonymous closure prototype before its
