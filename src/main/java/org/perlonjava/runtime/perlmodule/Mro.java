@@ -20,7 +20,10 @@ public class Mro extends PerlModuleBase {
      * Initializes the module with the name "mro".
      */
     public Mro() {
-        super("mro");
+        // MRO primitives are available at startup, but that must not mark
+        // mro.pm as loaded: its XSLoader bootstrap still needs to run on
+        // `require mro`, including its native-CV replacement semantics.
+        super("mro", false);
     }
 
     /**
@@ -32,6 +35,13 @@ public class Mro extends PerlModuleBase {
             // Register mro methods
             mro.registerMethod("get_linear_isa", "$;$");
             mro.registerMethod("set_mro", "$$");
+            RuntimeScalar previousGetMro = GlobalVariable.globalCodeRefs.get("mro::get_mro");
+            if (previousGetMro != null && previousGetMro.value instanceof RuntimeCode oldCode
+                    && oldCode.defined()) {
+                org.perlonjava.runtime.operators.WarnDie.warnWithCategory(
+                        new RuntimeScalar("Subroutine mro::get_mro redefined at "),
+                        new RuntimeScalar(), "redefine");
+            }
             mro.registerMethod("get_mro", "$");
             mro.registerMethod("get_isarev", "$");
             mro.registerMethod("is_universal", "$");

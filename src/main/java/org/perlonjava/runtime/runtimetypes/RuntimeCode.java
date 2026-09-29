@@ -1652,6 +1652,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public String subName;
     // Source package for imported forward declarations (used for AUTOLOAD resolution)
     public String sourcePackage = null;
+    /** Package at which an undefined named coderef was created, for B::CV provenance. */
+    public String forwardReferencePackageName;
     // Historical marker for symbolic references created by \&{string}. A CODE
     // scalar is defined as a scalar value even when its underlying subroutine is
     // only declared; RuntimeCode.defined() still reports whether the subroutine
@@ -2279,6 +2281,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         clone.attributes = this.attributes != null ? new java.util.ArrayList<>(this.attributes) : null;
         clone.packageName = this.packageName;
+        clone.forwardReferencePackageName = this.forwardReferencePackageName;
         clone.subName = this.subName;
         clone.stashInstallPackage = this.stashInstallPackage;
         clone.stashInstallSub = this.stashInstallSub;
@@ -7641,6 +7644,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof RuntimeCode runtimeCode
                 && !runtimeCode.defined()) {
             runtimeCode.isDeclared = true;
+            // A named coderef creates a forward CV whose CvSTASH and source
+            // COP belong to the reference site, rather than the package in
+            // the referenced name.  Keep this here instead of the generic
+            // global-CV lookup path: Exporter performs ordinary lookups while
+            // installing imported symbols and must not retag those slots.
+            if (packageName != null && !packageName.isEmpty()) {
+                runtimeCode.forwardReferencePackageName = packageName;
+            }
+            CallerStack.CallerInfo caller = CallerStack.peek(0);
+            if (caller != null && caller.filename() != null && !caller.filename().isEmpty()) {
+                runtimeCode.cvStartFile = caller.filename();
+                runtimeCode.cvStartLine = caller.line();
+            }
         }
 
         // Note: We used to return a reference to the constant value here, but that

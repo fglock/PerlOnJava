@@ -16,6 +16,8 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  * any type of Perl scalar value.
  */
 public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, DynamicState, Iterable<RuntimeScalar> {
+    /** Compatibility exception for the special global hash `%:`. */
+    public boolean suppressOddAssignmentWarning;
     /** Return an empty lexical cell when control flow skipped its declaration. */
     public static RuntimeHash materializeLexicalCell(RuntimeHash hash) {
         return hash != null ? hash : new RuntimeHash();
@@ -478,7 +480,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 int originalSize = materializedList.elements.size();
 
                 // Warn about odd elements
-                if (originalSize % 2 != 0) {
+                if (originalSize % 2 != 0 && !suppressOddAssignmentWarning) {
                     // Single hash/array reference: "Reference found where even-sized list expected"
                     // Other odd cases: "Odd number of elements in hash assignment"
                     String warning;

@@ -1580,6 +1580,13 @@ public class SlowOpcodeHandler {
                 && codeRef.value instanceof RuntimeCode referencedCode) {
             if (!referencedCode.defined()) {
                 referencedCode.isDeclared = true;
+                // Match RuntimeCode.createCodeReference(): an undefined
+                // named coderef retains the package and source location of
+                // the reference site for B::CV introspection.  Keep this as
+                // metadata rather than changing the callable CV identity.
+                referencedCode.forwardReferencePackageName = code.compilePackage;
+                referencedCode.cvStartFile = code.sourceName;
+                referencedCode.cvStartLine = code.sourceLine;
             }
             referencedCode.referenceOriginFqn = name;
         }
