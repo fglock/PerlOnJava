@@ -347,11 +347,18 @@ public class Universal extends PerlModuleBase {
                     // available for method dispatch, but it must not change the
                     // reference-type predicate used by modules such as
                     // CGI::Simple to recognize a supplied filehandle.
-                    if ((type == REFERENCE && argString.equals("GLOB")
-                            && object.value instanceof RuntimeScalar rs
-                            && rs.type == RuntimeScalarType.GLOB)
-                            || (type == GLOBREFERENCE && argString.equals("GLOB"))) {
-                        return getScalarBoolean(true).getList();
+                    boolean globReference = (type == GLOBREFERENCE
+                            && !(object.value instanceof RuntimeIO))
+                            || (type == REFERENCE
+                                    && object.value instanceof RuntimeScalar rs
+                                    && rs.type == RuntimeScalarType.GLOB);
+                    if (globReference) {
+                        return getScalarBoolean(argString.equals("GLOB")).getList();
+                    }
+                    // An IO slot itself is an IO::Handle.  Keep this separate
+                    // from a reference to the glob that owns the slot.
+                    if (RuntimeIO.getRuntimeIO(object) != null) {
+                        return getScalarBoolean(argString.equals("IO::Handle")).getList();
                     }
                     // Perl 5 recognises both "Regexp" (ref() spelling) and "REGEXP"
                     // (internal SV type name) for isa() checks on unblessed regexes.
