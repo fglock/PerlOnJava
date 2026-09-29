@@ -843,6 +843,39 @@ public class Parser {
         throw new PerlParserException(cleanMessage);
     }
 
+    /** Report a non-identifier Unicode code point with Perl's source marker. */
+    public void throwUnrecognizedCharacter(int index, String text) {
+        int lineStart = index;
+        while (lineStart > 0 && tokens.get(lineStart - 1).type != LexerTokenType.NEWLINE) {
+            lineStart--;
+        }
+        StringBuilder preceding = new StringBuilder();
+        for (int i = lineStart; i < index; i++) {
+            preceding.append(tokens.get(i).text);
+        }
+        // A regex code assertion is compiled from a larger synthetic source
+        // (for example ^a(?{ ... })). Perl marks only the assertion body.
+        int assertionStart = preceding.lastIndexOf("(?{");
+        int omittedAssertionPrefix = 0;
+        if (assertionStart >= 0) {
+            preceding.delete(0, assertionStart);
+            omittedAssertionPrefix = assertionStart;
+            // A quote-like expression inside a code assertion is reported
+            // from its quote body, while an ordinary assertion retains `(?{`.
+            if (preceding.length() > 3 && preceding.charAt(3) == 'q') {
+                preceding.delete(0, 3);
+                omittedAssertionPrefix += 3;
+            }
+        }
+        int codePoint = text.codePointAt(0);
+        int column = preceding.codePointCount(0, preceding.length()) + 1 + omittedAssertionPrefix;
+        ErrorMessageUtil.SourceLocation loc = this.ctx.errorUtil.getSourceLocationAccurate(index);
+        String message = "Unrecognized character \\x{" + Integer.toHexString(codePoint)
+                + "}; marked by <-- HERE after " + preceding + "<-- HERE near column " + column
+                + " at " + loc.fileName() + " line " + loc.lineNumber() + ".\n";
+        throw new PerlParserException(message);
+    }
+
     public void throwMissingRightCurlyOrSquareBracketError() {
         int locationIndex = this.tokenIndex;
         // A file ending in a newline has no additional source line after that

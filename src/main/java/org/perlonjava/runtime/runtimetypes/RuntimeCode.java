@@ -3106,7 +3106,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     .decode(java.nio.ByteBuffer.wrap(bytes))
                     .toString());
         } catch (java.nio.charset.CharacterCodingException e) {
-            throw new IllegalArgumentException("Malformed UTF-8 character (fatal)", e);
+            // Keep the fatal marker location-shaped even when decoding fails
+            // before the parser has constructed its normal source map.
+            throw new IllegalArgumentException("Malformed UTF-8 character (fatal) at ", e);
         }
     }
 
@@ -4081,6 +4083,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     err.set(die.getPayload().getFirst());
                 } else {
                     String evalError = e.getMessage();
+                    if (evalError != null
+                            && evalError.matches("(?s)^syntax error at \\(eval \\d+\\) line \\d+, at EOF\\n?$")
+                            && !evalError.contains("aborted due to compilation errors")) {
+                        String fileName = evalCompilerOptions.fileName;
+                        evalError = evalError.replaceFirst("\\n?$", "")
+                                + "\nExecution of " + fileName
+                                + " aborted due to compilation errors.\n";
+                    }
                     if (evalError != null && evalString != null
                             && evalString.matches("(?s).*\\n\\s*[^\\n;]+\\s*(?:<|>|\\+|-|\\*|/|%)\\s*;.*")) {
                         java.util.regex.Matcher syntax = java.util.regex.Pattern

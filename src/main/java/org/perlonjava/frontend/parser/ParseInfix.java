@@ -110,6 +110,29 @@ public class ParseInfix {
 
         Node right;
 
+        // A STRING token in infix position is the lexer's representation of
+        // a non-operator Unicode character.  Report it directly instead of
+        // allowing statement recovery to reduce it to a generic syntax error.
+        if (token.type == LexerTokenType.STRING && !token.text.isEmpty()) {
+            int cp = token.text.codePointAt(0);
+            // A NUL embedded in a bareword is reported as a syntax error,
+            // including when it arrives after the left operand of require.
+            if (cp == 0) {
+                parser.throwCleanError("syntax error");
+            }
+            OperatorNode namedVariable = typedFieldVariable(left);
+            if (cp == 0x24E6 && namedVariable != null
+                    && namedVariable.operand instanceof IdentifierNode identifier) {
+                String following = TokenUtils.peek(parser).text;
+                var loc = parser.ctx.errorUtil.getSourceLocationAccurate(operatorIndex);
+                throw new PerlParserException("\\x{24E6} is a \\w char that isn't valid in a name;"
+                        + " marked by <-- HERE after " + identifier.name + token.text
+                        + "<-- HERE " + following + " at " + loc.fileName()
+                        + " line " + loc.lineNumber() + ".");
+            }
+            parser.throwUnrecognizedCharacter(operatorIndex, token.text);
+        }
+
         if (ParserTables.INFIX_OP.contains(token.text)) {
             String operator = token.text;
 

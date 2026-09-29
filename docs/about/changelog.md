@@ -10,6 +10,9 @@ priorities and future plans.
   `@DB::args`, anonymous stashes, hint hashes, nested `use` frames, and
   caller source-line tracking on both execution backends.
 
+- Restore `uni/parser.t` Unicode parser diagnostics, typed declaration errors,
+  and eval compilation messages on both execution backends.
+
 - Run CPU-heavy and ordinary Perl test fixtures concurrently when using the
   runner's compatibility resource caps, while admitting long-running work
   first.

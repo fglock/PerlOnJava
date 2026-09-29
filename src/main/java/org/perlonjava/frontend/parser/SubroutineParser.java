@@ -755,6 +755,13 @@ public class SubroutineParser {
                 }
             } else {
                 // Direct subroutine calls DO check prototypes
+                // A malformed underscore placement is permitted at declaration
+                // time so `warnings 'illegalproto'` can report it, but Perl
+                // rejects an actual call through that prototype.
+                if (hasMalformedUnderscorePrototype(prototype)) {
+                    parser.throwCleanError("Malformed prototype for " + prototypeErrorName
+                            + ": " + prototype);
+                }
                 arguments = consumeArgsWithPrototype(parser, prototype);
             }
 
@@ -2975,6 +2982,20 @@ public class SubroutineParser {
         }
         return oldPrototype.replaceAll("\\s+", "")
                 .equals(newPrototype.replaceAll("\\s+", ""));
+    }
+
+    private static boolean hasMalformedUnderscorePrototype(String prototype) {
+        if (prototype == null) {
+            return false;
+        }
+        int underscore = prototype.indexOf('_');
+        if (underscore < 0 || underscore + 1 == prototype.length()) {
+            return false;
+        }
+        // `_@` and `_%` are valid list prototypes.  An underscore may also
+        // be followed by `;`; every other continuation is malformed.
+        char following = prototype.charAt(underscore + 1);
+        return following != ';' && following != '@' && following != '%';
     }
 
     /**

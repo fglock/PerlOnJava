@@ -94,8 +94,18 @@ public class ParsePrimary {
                 // Handle numeric literals (integers, floats, hex, octal, binary)
                 return NumberParser.parseNumber(parser, token);
             case STRING:
-                // Handle string literals (already parsed by lexer)
-                return new StringNode(token.text, parser.tokenIndex);
+                // STRING tokens reaching primary-expression parsing are not
+                // quoted literals: the lexer uses this category for a code
+                // point which cannot participate in an identifier or an
+                // operator.  Preserve Perl's Unicode-aware diagnostic.
+                // A NUL embedded in a bareword is a syntax error rather than
+                // an identifier-character diagnostic (for example, `require
+                // strict\\0::invalid`).
+                if (!token.text.isEmpty() && token.text.codePointAt(0) == 0) {
+                    parser.throwCleanError("syntax error");
+                }
+                parser.throwUnrecognizedCharacter(startIndex, token.text);
+                return null; // unreachable
             case OPERATOR:
                 // Handle operators and special constructs
                 return parseOperator(parser, token, operator);
