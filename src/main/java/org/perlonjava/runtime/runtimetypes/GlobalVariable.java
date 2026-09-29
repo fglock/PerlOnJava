@@ -1487,6 +1487,24 @@ public class GlobalVariable {
         }
     }
 
+    /** Retain a foreach reference and return a stable hold for its referent. */
+    public static RuntimeBase retainForeachAliasHold(RuntimeScalar scalar) {
+        if (scalar != null
+                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && scalar.value instanceof RuntimeBase base) {
+            base.foreachAliasCount++;
+            return base;
+        }
+        return null;
+    }
+
+    /** Release a hold returned by {@link #retainForeachAliasHold(RuntimeScalar)}. */
+    public static void releaseForeachAliasHold(RuntimeBase base) {
+        if (base != null && base.foreachAliasCount > 0) {
+            base.foreachAliasCount--;
+        }
+    }
+
     /**
      * Sets the value of a global variable.
      *

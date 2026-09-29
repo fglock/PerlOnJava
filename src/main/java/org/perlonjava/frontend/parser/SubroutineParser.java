@@ -3016,11 +3016,7 @@ public class SubroutineParser {
      */
     static void emitIllegalProtoWarning(Parser parser, String proto, String subDisplayName) {
         if (proto == null || proto.isEmpty()) return;
-        boolean warningsEnabled = parser.ctx.symbolTable.isWarningCategoryEnabled("illegalproto");
-        boolean warnFlag = parser.ctx.compilerOptions != null && parser.ctx.compilerOptions.warnFlag;
-        if (!warningsEnabled && !warnFlag) return;
         String name = subDisplayName != null ? subDisplayName : "?";
-        String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
         // Check if any character is illegal
         boolean hasIllegal = false;
         for (int i = 0; i < proto.length(); i++) {
@@ -3032,39 +3028,27 @@ public class SubroutineParser {
         }
         if (hasIllegal) {
             String msg = "Illegal character in prototype for " + name + " : " + proto;
-            emitPrototypeWarning(parser, msg, loc, warningsEnabled);
+            Warnings.emitCategoryWarning("illegalproto", msg);
         }
 
         // Perl emits diagnostics in addition to the general illegal-character
         // warning for the malformed prototype shapes below.
         int at = proto.indexOf('@');
         if (at >= 0 && at + 1 < proto.length()) {
-            emitPrototypeWarning(parser,
-                    "Prototype after '@' for " + name + " : " + proto, loc, warningsEnabled);
+            Warnings.emitCategoryWarning("illegalproto",
+                    "Prototype after '@' for " + name + " : " + proto);
         }
         for (int i = 0; i < proto.length(); i++) {
             if (proto.charAt(i) == '_' && i + 1 < proto.length()
                     && proto.charAt(i + 1) != ';') {
-                emitPrototypeWarning(parser,
-                        "Illegal character after '_' in prototype for " + name + " : " + proto, loc,
-                        warningsEnabled);
+                Warnings.emitCategoryWarning("illegalproto",
+                        "Illegal character after '_' in prototype for " + name + " : " + proto);
                 break;
             }
         }
         if (proto.indexOf('[') >= 0 && proto.indexOf(']', proto.indexOf('[') + 1) < 0) {
-            emitPrototypeWarning(parser,
-                    "Missing ']' in prototype for " + name + " : " + proto, loc, warningsEnabled);
-        }
-    }
-
-    private static void emitPrototypeWarning(Parser parser, String message, String location,
-            boolean warningsEnabled) {
-        RuntimeScalar warning = new RuntimeScalar(message);
-        RuntimeScalar where = new RuntimeScalar(location);
-        if (warningsEnabled && parser.ctx.symbolTable.isFatalWarningCategory("illegalproto")) {
-            org.perlonjava.runtime.operators.WarnDie.die(warning, where);
-        } else {
-            org.perlonjava.runtime.operators.WarnDie.warn(warning, where);
+            Warnings.emitCategoryWarning("illegalproto",
+                    "Missing ']' in prototype for " + name + " : " + proto);
         }
     }
 

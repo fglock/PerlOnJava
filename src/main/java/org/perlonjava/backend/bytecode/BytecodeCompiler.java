@@ -7573,6 +7573,7 @@ public class BytecodeCompiler implements Visitor {
         List<Integer> multiVarRegs = new ArrayList<>();
         List<String> lexicalLoopVarNames = new ArrayList<>();
         List<String> multiVarReferenceSigils = new ArrayList<>();
+        List<Integer> multiVarAliasHeldRegs = new ArrayList<>();
         OperatorNode referenceAliasedVariable = null;
         if (node.variable instanceof OperatorNode referenceOp
                 && referenceOp.operator.equals("\\")
@@ -7644,6 +7645,7 @@ public class BytecodeCompiler implements Visitor {
                         lexicalLoopVarNames.add((referenceSigil == null ? "$" : referenceSigil)
                                 + identifier.name);
                         multiVarReferenceSigils.add(referenceSigil);
+                        multiVarAliasHeldRegs.add(-1);
                     }
                 }
             }
@@ -7897,6 +7899,17 @@ public class BytecodeCompiler implements Visitor {
         int explicitLoopExitPatch = -1;
         if (!multiVarRegs.isEmpty()) {
             int hasNextReg = allocateRegister();
+            for (int i = 0; i < multiVarRegs.size(); i++) {
+                if (multiVarReferenceSigils.get(i) == null) {
+                    multiVarAliasHeldRegs.set(i, allocateRegister());
+                }
+            }
+            for (int heldReg : multiVarAliasHeldRegs) {
+                if (heldReg >= 0) {
+                    emit(Opcodes.FOREACH_ALIAS_RELEASE);
+                    emitReg(heldReg);
+                }
+            }
             emit(Opcodes.ITERATOR_HAS_NEXT);
             emitReg(hasNextReg);
             emitReg(iterReg);
@@ -7907,18 +7920,8 @@ public class BytecodeCompiler implements Visitor {
 
             for (int i = 0; i < multiVarRegs.size(); i++) {
                 int targetReg = multiVarRegs.get(i);
-                int valueReg = targetReg;
-                if (multiVarReferenceSigils.get(i) != null) {
-                    valueReg = allocateRegister();
-                }
-                // The loop variable aliases each input scalar. Retain a
-                // reference-valued element while that alias is active, then
-                // release it before replacing the slot and when leaving the
-                // loop (including `last`).
-                if (multiVarReferenceSigils.get(i) == null) {
-                    emit(Opcodes.FOREACH_ALIAS_RELEASE);
-                    emitReg(targetReg);
-                }
+                String referenceSigil = multiVarReferenceSigils.get(i);
+                int valueReg = referenceSigil == null ? targetReg : allocateRegister();
                 if (i == 0) {
                     emit(Opcodes.ITERATOR_NEXT);
                     emitReg(valueReg);
@@ -7947,13 +7950,12 @@ public class BytecodeCompiler implements Visitor {
                     emit(addToConstantPool(ReadOnlyAlias.forForeach(RuntimeScalarCache.scalarUndef)));
                     patchJump(assignedPatch, bytecode.size());
                 }
-                String referenceSigil = multiVarReferenceSigils.get(i);
                 if (referenceSigil == null) {
                     emit(Opcodes.ALIAS);
+                    emitReg(multiVarAliasHeldRegs.get(i));
                     emitReg(targetReg);
-                    emitReg(valueReg);
                     emit(Opcodes.FOREACH_ALIAS_RETAIN);
-                    emitReg(targetReg);
+                    emitReg(multiVarAliasHeldRegs.get(i));
                 } else if (referenceSigil.equals("$")) {
                     emitWithToken(Opcodes.FOREACH_DEREF_SCALAR,
                             node.variable.getIndex());
@@ -8054,10 +8056,11 @@ public class BytecodeCompiler implements Visitor {
         }
 
         if (!multiVarRegs.isEmpty()) {
-            for (int i = 0; i < multiVarRegs.size(); i++) {
-                if (multiVarReferenceSigils.get(i) != null) continue;
+            for (int heldReg : multiVarAliasHeldRegs) {
+                if (heldReg >= 0) {
                 emit(Opcodes.FOREACH_ALIAS_RELEASE);
-                emitReg(multiVarRegs.get(i));
+                    emitReg(heldReg);
+                }
             }
         }
 

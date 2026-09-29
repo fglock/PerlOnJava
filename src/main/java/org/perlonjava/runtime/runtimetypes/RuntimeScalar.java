@@ -1864,6 +1864,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     /**
+     * Store a value and produce the scalar value of an assignment expression.
+     * A tied scalar's STORE return value is ignored by Perl assignment; the
+     * expression observes the tied variable after STORE, which dispatches
+     * FETCH. Keep this separate from {@link #assignTo(RuntimeBase, RuntimeScalar)}
+     * because the latter is also used by interpreter opcodes in void contexts.
+     */
+    public static RuntimeScalar assignToExpression(RuntimeBase value, RuntimeScalar target) {
+        RuntimeScalar assigned = assignTo(value, target);
+        return target.type == RuntimeScalarType.TIED_SCALAR ? target.tiedFetch() : assigned;
+    }
+
+    /**
      * Vivifies this scalar as an lvalue. For plain scalars this is a no-op.
      * For hash/array element proxies (RuntimeBaseProxy subclasses), this creates
      * the actual entry in the parent container, matching Perl 5's behavior where
@@ -2223,12 +2235,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (value.type == GLOB && value.value instanceof RuntimeIO) {
                     value.getNumber();
                 }
-                this.tiedStore(value);
-                // The value of an assignment to a tied scalar is its value
-                // after STORE has run.  FETCH is observable Perl magic and
-                // must run even when the caller immediately consumes the
-                // assignment expression (for example, `$out = $tied = $rhs`).
-                return this.tiedFetch();
+                return this.tiedStore(value);
             }
             case READONLY_SCALAR -> {
                 if (this instanceof RuntimeScalarReadOnly readOnly) {

@@ -1157,8 +1157,7 @@ public class OpcodeHandlerExtended {
         java.util.Iterator<RuntimeScalar> iterator =
                 (java.util.Iterator<RuntimeScalar>) iterScalar.value;
 
-        RuntimeScalar next = iterator.next();
-        registers[rd] = BytecodeInterpreter.isImmutableProxy(next) ? BytecodeInterpreter.ensureMutableScalar(next) : next;
+        registers[rd] = ReadOnlyAlias.forForeach(iterator.next());
         return pc;
     }
 

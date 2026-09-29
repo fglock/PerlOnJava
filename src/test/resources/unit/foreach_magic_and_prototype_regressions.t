@@ -31,6 +31,30 @@ use Test::More;
 }
 
 {
+    eval {
+        for my ($left, $right) (1, undef) {
+            $right = lc($right // '');
+        }
+    };
+    like($@, qr/^Modification of a read-only value attempted/,
+        'an explicit undef in multivariable foreach stays readonly');
+}
+
+{
+    my @values = qw(ROBOR aeartep CERRIS);
+    eval {
+        for my ($left, $right) (@values) {
+            $left = lc $left;
+            $right = reverse($right // '');
+        }
+    };
+    like($@, qr/^Modification of a read-only value attempted/,
+        'a padded multivariable foreach slot stays readonly');
+    is(join(' ', @values), 'robor petraea cerris',
+        'padded readonly slot preserves Perl foreach element aliasing');
+}
+
+{
     our @foreach_results;
     my $supports_declared_ref_iterator = eval q{
         use feature qw(declared_refs refaliasing);
@@ -73,7 +97,7 @@ use Test::More;
         is($foreach_results[2], 'one=<1>,two=<2 2>,three=<3 3 3>',
             'multivariable foreach aliases declared array references');
         is($foreach_results[3], 3, 'reference-valued loop variable retains its foreach alias');
-        is($foreach_results[5], 2, 'reference-valued foreach alias is released after the loop');
+        is($foreach_results[4], 2, 'reference-valued foreach alias is released after the loop');
     }
 }
 
