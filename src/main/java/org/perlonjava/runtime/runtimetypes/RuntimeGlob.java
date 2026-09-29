@@ -1535,7 +1535,23 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     public RuntimeGlob setIO(RuntimeIO io) {
-        GlobalVariable.markStashEntryVisible(this.globName);
+        return setIO(io, true);
+    }
+
+    /**
+     * Install an IO slot without restoring a glob that Symbol::gensym removed
+     * from its stash.  The retained glob must keep its identity: tied handles
+     * and other users of the reference still observe that same glob, while the
+     * deleted stash entry must not become a permanent owner of its IO.
+     */
+    public RuntimeGlob setIOKeepingStashHidden(RuntimeIO io) {
+        return setIO(io, false);
+    }
+
+    private RuntimeGlob setIO(RuntimeIO io, boolean makeStashEntryVisible) {
+        if (makeStashEntryVisible) {
+            GlobalVariable.markStashEntryVisible(this.globName);
+        }
         acceptedSocket = false;
         // Set the glob name in the RuntimeIO for proper stringification
         io.globName = this.globName;

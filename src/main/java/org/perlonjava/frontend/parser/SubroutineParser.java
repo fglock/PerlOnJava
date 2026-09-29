@@ -3034,7 +3034,8 @@ public class SubroutineParser {
         // Perl emits diagnostics in addition to the general illegal-character
         // warning for the malformed prototype shapes below.
         int at = proto.indexOf('@');
-        if (at >= 0 && at + 1 < proto.length()) {
+        if (at >= 0 && at + 1 < proto.length() && proto.charAt(at + 1) != '%'
+                && proto.charAt(at + 1) != ']') {
             Warnings.emitCategoryWarning("illegalproto",
                     "Prototype after '@' for " + name + " : " + proto);
         }

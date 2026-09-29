@@ -3953,14 +3953,15 @@ public class IOOperator {
         }
         if (targetGlob != null) {
             // Symbol::gensym creates a named glob reference and immediately
-            // removes its stash entry.  Do not let setIO() revive that hidden
-            // name: the retained reference is now an anonymous lexical owner.
+            // removes its stash entry.  Keep that glob identity (ties can use
+            // it), but do not let installing the socket restore the hidden
+            // stash entry as a permanent IO owner.
             if (targetGlob.globName != null
                     && GlobalVariable.isIORefHiddenAfterStashDelete(targetGlob.globName)) {
-                GlobalVariable.detachHiddenIORef(targetGlob);
-                targetGlob.globName = null;
+                targetGlob.setIOKeepingStashHidden(io);
+            } else {
+                targetGlob.setIO(io);
             }
-            targetGlob.setIO(io);
             MyVarCleanupStack.retainLiveIoGlobOwners(targetGlob);
             RuntimeScalar.retainUnstashedIoForDurableSlot(handle);
         } else {

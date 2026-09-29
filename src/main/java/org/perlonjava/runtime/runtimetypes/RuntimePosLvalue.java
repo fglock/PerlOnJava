@@ -44,7 +44,9 @@ public class RuntimePosLvalue {
             throw new PerlCompilerException("perlVariable cannot be null");
         }
 
-        perlVariable = perlVariable.posStorage();
+        // pos() evaluates a tied scalar once before obtaining its lvalue
+        // storage, matching ordinary scalar operators' FETCH semantics.
+        perlVariable = RuntimeScalar.fetchTiedOnce(perlVariable).posStorage();
 
         RuntimeScalar position;
 

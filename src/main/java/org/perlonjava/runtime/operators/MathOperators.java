@@ -1280,6 +1280,11 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the integer modulus.
      */
     public static RuntimeScalar integerModulus(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Resolve each tied operand once before inspecting its blessing and
+        // numifying it.  getBigint() otherwise fetches again through
+        // stringification, so `$tied % $tied` observes four FETCH calls.
+        arg1 = RuntimeScalar.fetchTiedOnce(arg1);
+        arg2 = RuntimeScalar.fetchTiedOnce(arg2);
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
