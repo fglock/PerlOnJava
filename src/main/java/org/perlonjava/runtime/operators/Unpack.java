@@ -3,6 +3,8 @@ package org.perlonjava.runtime.operators;
 import org.perlonjava.runtime.operators.pack.PackHelper;
 import org.perlonjava.runtime.operators.unpack.*;
 import org.perlonjava.runtime.runtimetypes.*;
+import org.perlonjava.runtime.perlmodule.Strict;
+import org.perlonjava.runtime.WarningBitsRegistry;
 
 import java.math.BigInteger;
 import java.util.*;
@@ -78,13 +80,15 @@ public class Unpack {
         // Default mode is always C0 (character mode)
         boolean startsWithU = template.startsWith("U") && !template.startsWith("U0");
 
-        // Create state object - always starts in character mode
-        UnpackState state = new UnpackState(dataString, false, utf8Flagged);
-
         // Check if template starts with U0 to switch to byte mode.
         // (See inline `case 'C'/'U' 0` handler below for the historical
         // naming quirk.)
-        if (template.startsWith("U0")) {
+        boolean bytesPragma = (WarningBitsRegistry.getCallSiteHints() & Strict.HINT_BYTES) != 0;
+        // Create state object - always starts in character mode. `use bytes`
+        // determines whether an upgraded Latin-1 scalar exposes UTF-8 storage
+        // bytes to byte-oriented templates.
+        UnpackState state = new UnpackState(dataString, false, utf8Flagged, bytesPragma);
+        if (template.startsWith("U0") || bytesPragma) {
             state.switchToByteMode();
         }
 

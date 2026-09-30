@@ -2,6 +2,7 @@ package org.perlonjava.runtime.io;
 
 import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.runtimetypes.PerlJavaUnimplementedException;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.nio.charset.Charset;
@@ -44,6 +45,41 @@ import java.util.function.Function;
  * @see IOLayer
  */
 public class LayeredIOHandle implements IOHandle {
+    private static final ThreadLocal<Boolean> LOADING_ENCODING_MODULE =
+            ThreadLocal.withInitial(() -> false);
+
+    /** Whether this thread is inside the module load initiated by :encoding. */
+    public static boolean isLoadingEncodingModule() {
+        return LOADING_ENCODING_MODULE.get();
+    }
+
+    /**
+     * Load modules needed by open-time layers before attempting the underlying
+     * filesystem open. Perl resolves :encoding(...) layers before opening the
+     * path, so even a missing path can trigger PerlIO/@INC recursion.
+     */
+    public static void prepareOpenLayers(String layerSpec) {
+        if (layerSpec == null || layerSpec.isEmpty()) return;
+        for (String rawLayer : splitLayers(layerSpec)) {
+            String layer = normalizeLayerSpec(rawLayer);
+            if (!layer.startsWith("encoding(") || !layer.endsWith(")")) continue;
+            ensureEncodingModuleLoaded();
+            resolveEncodingCharset(layer.substring(9, layer.length() - 1));
+        }
+    }
+
+    private static void ensureEncodingModuleLoaded() {
+        if (LOADING_ENCODING_MODULE.get()) {
+            throw new PerlCompilerException(
+                    "Recursive call to Perl_load_module in PerlIO_find_layer at :encoding layer");
+        }
+        LOADING_ENCODING_MODULE.set(true);
+        try {
+            ModuleOperators.require(new RuntimeScalar("Encode.pm"));
+        } finally {
+            LOADING_ENCODING_MODULE.set(false);
+        }
+    }
     /**
      * List of currently active layers.
      * Maintained for proper cleanup and reset operations.
@@ -235,6 +271,15 @@ public class LayeredIOHandle implements IOHandle {
             String chunkStr = chunk.toString();
 
             if (chunkStr.isEmpty()) {
+                String pendingInput = flushPendingInput();
+                if (!pendingInput.isEmpty()) {
+                    int charsToTake = Math.min(pendingInput.length(), charactersNeeded);
+                    result.append(pendingInput, 0, charsToTake);
+                    charactersNeeded -= charsToTake;
+                    if (pendingInput.length() > charsToTake) {
+                        decodedCharBuffer.append(pendingInput, charsToTake, pendingInput.length());
+                    }
+                }
                 break; // EOF reached
             }
 
@@ -258,6 +303,20 @@ public class LayeredIOHandle implements IOHandle {
         }
 
         return new RuntimeScalar(result.toString());
+    }
+
+    /** Flush stateful input layers when the underlying stream reaches EOF. */
+    private String flushPendingInput() {
+        for (int i = 0; i < activeLayers.size(); i++) {
+            if (activeLayers.get(i) instanceof CrlfLayer crlfLayer) {
+                String pending = crlfLayer.flushInput();
+                for (int j = i + 1; j < activeLayers.size() && !pending.isEmpty(); j++) {
+                    pending = activeLayers.get(j).processInput(pending);
+                }
+                return pending;
+            }
+        }
+        return "";
     }
 
     /**
@@ -301,6 +360,8 @@ public class LayeredIOHandle implements IOHandle {
                     new RuntimeScalar(e.getMessage() + "\n"),
                     new RuntimeScalar(""));
             return new RuntimeScalar(0);
+        } catch (PerlCompilerException e) {
+            throw e;
         } catch (Exception e) {
             if (e.getMessage() != null && !e.getMessage().isEmpty()) {
                 org.perlonjava.runtime.operators.WarnDie.warn(
@@ -360,7 +421,7 @@ public class LayeredIOHandle implements IOHandle {
         }
     }
 
-    private String normalizeLayerSpec(String layerSpec) {
+    private static String normalizeLayerSpec(String layerSpec) {
         layerSpec = layerSpec.trim();
         while (!layerSpec.isEmpty() && layerSpec.charAt(layerSpec.length() - 1) == '\0') {
             layerSpec = layerSpec.substring(0, layerSpec.length() - 1).trim();
@@ -382,7 +443,7 @@ public class LayeredIOHandle implements IOHandle {
      * @param modeStr the layer specification string to split
      * @return array of individual layer specifications
      */
-    private String[] splitLayers(String modeStr) {
+    private static String[] splitLayers(String modeStr) {
         List<String> result = new ArrayList<>();
         int start = 0;
         int i = 0;
@@ -490,13 +551,15 @@ public class LayeredIOHandle implements IOHandle {
                         // and loads Encode as a visible side effect. Some CPAN modules
                         // (including Pod::Spell) rely on Encode::* being available
                         // after an encoded handle has been opened.
-                        ModuleOperators.require(new RuntimeScalar("Encode.pm"));
+                        ensureEncodingModuleLoaded();
                         EncodingLayer layer = new EncodingLayer(charset, layerSpec);
                         activeLayers.add(layer);
                         Function<String, String> inputTransform = s -> layer.processInput(s);
                         Function<String, String> outputTransform = s -> layer.processOutput(s);
                         inputPipeline = inputPipeline.andThen(inputTransform);
                         outputPipeline = outputPipeline.andThen(outputTransform);
+                    } catch (PerlCompilerException e) {
+                        throw e;
                     } catch (Exception e) {
                         throw new IllegalArgumentException("Unknown encoding: " + charsetName);
                     }

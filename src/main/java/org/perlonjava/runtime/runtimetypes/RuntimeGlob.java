@@ -666,7 +666,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                         && !isNativeModuleMethod(oldCode)
                         && !isCompiledDeclarationInstall(oldCode, newCode)
                         && !isSameCachedConstant(oldCode, newCode)) {
-                    String warningPrefix = oldCode.isConstantCv
+                    String warningPrefix = (oldCode.isConstantCv
+                            || oldCode.attributes != null && oldCode.attributes.contains("const"))
                             ? "Constant subroutine " : "Subroutine ";
                     org.perlonjava.runtime.operators.WarnDie.warnWithCategory(
                             new RuntimeScalar(warningPrefix + this.globName + " redefined"),
@@ -830,7 +831,18 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     // enough: descendants such as Clone::Inner must also be
                     // resolved through Outer:: for @ISA and method lookup.
                     if (isStashGlobName(this.globName) && hash instanceof RuntimeStash sourceStash) {
-                        GlobalVariable.setStashAlias(this.globName, sourceStash.namespace);
+                        if (sourceStash.savedNamespaceMove != null) {
+                            GlobalVariable.installNamespaceMove(sourceStash.savedNamespaceMove, this.globName);
+                        } else if (GlobalVariable.globalHashes.get(sourceStash.namespace) != sourceStash) {
+                            // A saved \%Pkg:: can outlive a rebind of *Pkg::.
+                            // Move its old descendants under the new name
+                            // instead of resolving through Pkg's replacement.
+                            RuntimeGlob.NamespaceMove move =
+                                    GlobalVariable.detachNamespaceForStaleStash(sourceStash.namespace);
+                            GlobalVariable.installNamespaceMove(move, this.globName);
+                        } else {
+                            GlobalVariable.setStashAlias(this.globName, sourceStash.namespace);
+                        }
                         InheritanceResolver.invalidateCache();
                         GlobalVariable.clearPackageCache();
                     }
@@ -930,6 +942,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // `local *data = "$mod\::DATA"`.
                 String aliasName = NameNormalizer.normalizeVariableName(
                         value.toString(), RuntimeCode.getCurrentPackage());
+                if (isStashGlobName(this.globName)) {
+                    RuntimeHash oldStash = GlobalVariable.globalHashes.get(this.globName);
+                    if (oldStash instanceof RuntimeStash oldRuntimeStash) {
+                        oldRuntimeStash.savedNamespaceMove =
+                                GlobalVariable.detachNamespaceForStaleStash(this.globName);
+                    }
+                }
                 this.set(GlobalVariable.getGlobalIO(aliasName));
 
                 // Perl also uses `local *PKG::__ANON__ = 'name'` to provide a
@@ -1310,11 +1329,20 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // RuntimeIO on the canonical glob in globalIORefs, so consult
                 // that as a fallback when the local IO slot is empty.
                 RuntimeScalar effectiveIO = this.IO;
+                RuntimeGlob ioOwner = this;
                 if ((effectiveIO == null || effectiveIO.value == null) && this.globName != null) {
                     RuntimeGlob canonical = GlobalVariable.peekGlobalIO(this.globName);
                     if (canonical != null && canonical != this && canonical.IO != null) {
                         effectiveIO = canonical.IO;
+                        ioOwner = canonical;
                     }
+                }
+                // Only detached glob wrappers need to remember the canonical
+                // owner.  A direct *STDOUT{IO}, for example, must still
+                // dereference to Perl's anonymous PVIO glob.
+                if (ioOwner != this && effectiveIO != null
+                        && effectiveIO.value instanceof RuntimeIO runtimeIO) {
+                    runtimeIO.setOwnerGlob(ioOwner);
                 }
                 if (effectiveIO != null && effectiveIO.type == RuntimeScalarType.GLOB
                         && effectiveIO.value instanceof RuntimeIO) {
@@ -1516,7 +1544,23 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     public RuntimeGlob setIO(RuntimeIO io) {
-        GlobalVariable.markStashEntryVisible(this.globName);
+        return setIO(io, true);
+    }
+
+    /**
+     * Install an IO slot without restoring a glob that Symbol::gensym removed
+     * from its stash.  The retained glob must keep its identity: tied handles
+     * and other users of the reference still observe that same glob, while the
+     * deleted stash entry must not become a permanent owner of its IO.
+     */
+    public RuntimeGlob setIOKeepingStashHidden(RuntimeIO io) {
+        return setIO(io, false);
+    }
+
+    private RuntimeGlob setIO(RuntimeIO io, boolean makeStashEntryVisible) {
+        if (makeStashEntryVisible) {
+            GlobalVariable.markStashEntryVisible(this.globName);
+        }
         acceptedSocket = false;
         // Set the glob name in the RuntimeIO for proper stringification
         io.globName = this.globName;

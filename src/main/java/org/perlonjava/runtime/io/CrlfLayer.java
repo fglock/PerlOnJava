@@ -70,13 +70,24 @@ public class CrlfLayer implements IOLayer {
             char c = input.charAt(i);
 
             if (lastWasCR && c == '\n') {
-                // This LF is part of a CRLF sequence
-                // Skip it since we already converted the CR to LF
-                lastWasCR = false;
-            } else if (c == '\r') {
-                // Convert CR to LF
-                // This handles both lone CR and the CR in CRLF
+                // Emit the normalized newline only after consuming the whole
+                // CRLF pair. In particular, readline must not stop between
+                // the CR and its still-unread LF at the end of a file.
                 result.append('\n');
+                lastWasCR = false;
+            } else if (lastWasCR) {
+                // The previous CR was a lone CR. Emit its newline, then
+                // process this character normally.
+                result.append('\n');
+                lastWasCR = false;
+                if (c == '\r') {
+                    lastWasCR = true;
+                } else {
+                    result.append(c);
+                }
+            } else if (c == '\r') {
+                // Hold the CR until the next byte determines whether it is
+                // part of CRLF or a lone CR.
                 lastWasCR = true;
             } else {
                 // Regular character - pass through unchanged
@@ -86,6 +97,13 @@ public class CrlfLayer implements IOLayer {
         }
 
         return result.toString();
+    }
+
+    /** Flush a trailing lone CR after the underlying stream reaches EOF. */
+    public String flushInput() {
+        if (!lastWasCR) return "";
+        lastWasCR = false;
+        return "\n";
     }
 
     /**

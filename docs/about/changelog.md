@@ -9,6 +9,10 @@ priorities and future plans.
 - Restore `op/stash.t` namespace spellings, stash clearing, and forward-CV
   provenance on both execution backends.
 
+- Restore `op/reset.t`, `io/perlio.t`, `uni/lex_utf8.t`, and `op/bop.t`
+  compatibility for scoped reset, PerlIO encoding recursion, byte unpacking,
+  and integer-mode bitwise behavior on both execution backends.
+
 - Restore `op/bless.t` compatibility for empty-package warnings, deleted
   package stashes, and readonly scalar references on both execution backends.
 

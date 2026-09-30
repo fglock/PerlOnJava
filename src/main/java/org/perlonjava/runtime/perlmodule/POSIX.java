@@ -1393,7 +1393,9 @@ public class POSIX extends PerlModuleBase {
     public static RuntimeList const_F_SETFL(RuntimeArray a, int c) { return new RuntimeScalar(4).getList(); }
     public static RuntimeList const_FD_CLOEXEC(RuntimeArray a, int c) { return new RuntimeScalar(1).getList(); }
     public static RuntimeList const_O_NONBLOCK(RuntimeArray a, int c) {
-        return new RuntimeScalar(IS_WINDOWS ? 0 : 2048).getList(); // 04000 on Unix
+        // Managed Windows sockets use the portable 04000 marker; Darwin
+        // native descriptors use the platform's real value (4).
+        return new RuntimeScalar(IS_MAC ? 4 : 04000).getList();
     }
 
     // POSIX wait status macros

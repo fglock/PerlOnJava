@@ -15,6 +15,7 @@ public class RuntimeStash extends RuntimeHash {
     // Map to store the elements of the hash
     public Map<String, RuntimeScalar> elements;
     public String namespace;
+    RuntimeGlob.NamespaceMove savedNamespaceMove;
     // Iterator for traversing the hash elements
     Iterator<RuntimeScalar> hashIterator;
 

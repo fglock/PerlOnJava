@@ -765,7 +765,8 @@ public class EmitSubroutine {
                     break;
                 }
             }
-            if (hasNonBuiltin) {
+            boolean hasConstAttribute = node.attributes.contains("const");
+            if (hasNonBuiltin || hasConstAttribute) {
                 // Determine if this sub is a closure (captures outer lexical variables).
                 // Closures get closure prototype semantics: MODIFY_CODE_ATTRIBUTES receives
                 // the prototype (non-callable), and the expression result is a callable clone.

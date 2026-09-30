@@ -81,6 +81,11 @@ public class UnpackState {
     }
 
     public UnpackState(String dataString, boolean startsWithU, boolean utf8Flagged) {
+        this(dataString, startsWithU, utf8Flagged, false);
+    }
+
+    public UnpackState(String dataString, boolean startsWithU, boolean utf8Flagged,
+                       boolean bytesPragma) {
         this.dataString = dataString;
         this.characterMode = !startsWithU;
 
@@ -121,7 +126,11 @@ public class UnpackState {
         // If we have Unicode characters beyond Latin-1, use extended UTF-8 (Perl semantics).
         this.isUTF8Flagged = utf8Flagged || hasHighUnicode || hasSurrogates || hasBeyondUnicode;
         this.isUTF8Data = hasHighUnicode || hasSurrogates || hasBeyondUnicode;
-        if (isUTF8Data) {
+        // The UTF-8 flag can be set on binary data without changing its
+        // underlying octets (for example a Storable hook payload).  `use
+        // bytes`, however, exposes the UTF-8 storage bytes of an upgraded
+        // Latin-1 scalar.  Characters outside Latin-1 always use UTF-8.
+        if (isUTF8Data || (bytesPragma && isUTF8Flagged)) {
             this.originalBytes = encodeUtf8Extended(this.codePoints);
         } else {
             // For strings that only contain characters 0-255, preserve as ISO-8859-1

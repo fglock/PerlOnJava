@@ -116,6 +116,11 @@ public class EmitForeach {
         // - my $x / state $x / our $x / local $x
         // - my \$x (declared_refs)
         if (node instanceof OperatorNode opNode) {
+            if (opNode.getBooleanAnnotation("isDeclaredReference")
+                    && opNode.getAnnotation("declaredReferenceOriginalSigil") instanceof String sigil
+                    && opNode.operand instanceof IdentifierNode idNode) {
+                return sigil + idNode.name;
+            }
             String op = opNode.operator;
             if ("my".equals(op) || "state".equals(op) || "our".equals(op) || "local".equals(op)) {
                 return extractSimpleVariableName(opNode.operand);
@@ -551,6 +556,7 @@ public class EmitForeach {
         }
 
         int loopVarIndex = -1;
+        java.util.List<Integer> multiVarAliasHeldIndices = new java.util.ArrayList<>();
 
         int foreachRegexStateLocal = -1;
         if (node.body instanceof BlockNode bodyBlock && RegexUsageDetector.containsRegexOperation(bodyBlock)) {
@@ -560,6 +566,21 @@ public class EmitForeach {
             mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
                     "org/perlonjava/runtime/runtimetypes/RegexState", "<init>", "()V", false);
             mv.visitVarInsn(Opcodes.ASTORE, foreachRegexStateLocal);
+        }
+
+        if (variableNode instanceof ListNode varList) {
+            for (Node varNode : varList.elements) {
+                boolean declaredReference = varNode instanceof OperatorNode op
+                        && op.getBooleanAnnotation("isDeclaredReference");
+                if (declaredReference) {
+                    multiVarAliasHeldIndices.add(-1);
+                } else {
+                    int heldIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                    multiVarAliasHeldIndices.add(heldIndex);
+                    mv.visitInsn(Opcodes.ACONST_NULL);
+                    mv.visitVarInsn(Opcodes.ASTORE, heldIndex);
+                }
+            }
         }
 
         mv.visitLabel(loopStart);
@@ -575,6 +596,23 @@ public class EmitForeach {
         // Handle multiple variables case
         if (variableNode instanceof ListNode varList) {
             for (int i = 0; i < varList.elements.size(); i++) {
+                Node varNode = varList.elements.get(i);
+                String varName = varNode instanceof OperatorNode op ? extractSimpleVariableName(op) : null;
+                int varIndex = varName == null ? -1
+                        : emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
+                boolean declaredReference = varNode instanceof OperatorNode op
+                        && op.getBooleanAnnotation("isDeclaredReference");
+                int heldIndex = multiVarAliasHeldIndices.get(i);
+                if (heldIndex >= 0) {
+                    mv.visitVarInsn(Opcodes.ALOAD, heldIndex);
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                            "releaseForeachAliasHold",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
+                            false);
+                    mv.visitInsn(Opcodes.ACONST_NULL);
+                    mv.visitVarInsn(Opcodes.ASTORE, heldIndex);
+                }
                 Label hasValueLabel = new Label();
                 Label endValueLabel = new Label();
                 mv.visitVarInsn(Opcodes.ALOAD, iteratorIndex);
@@ -600,15 +638,44 @@ public class EmitForeach {
                         false);
 
                 // Assign to variable
-                Node varNode = varList.elements.get(i);
                 if (varNode instanceof OperatorNode operatorNode) {
-                    String varName = extractSimpleVariableName(operatorNode);
                     if (varName == null) {
                         continue;
                     }
-                    int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
                     if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("FOR1 multi var name:" + varName + " index:" + varIndex);
+                    if (declaredReference
+                            && operatorNode.getAnnotation("declaredReferenceOriginalSigil") instanceof String sigil) {
+                        String method = switch (sigil) {
+                            case "$" -> "foreachScalarReference";
+                            case "@" -> "foreachArrayReference";
+                            case "%" -> "foreachHashReference";
+                            default -> null;
+                        };
+                        if (method != null) {
+                            String descriptor = switch (sigil) {
+                                case "@" -> "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;";
+                                case "%" -> "()Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;";
+                                default -> "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;";
+                            };
+                            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar", method,
+                                    descriptor, false);
+                        }
+                    }
+                    if (heldIndex >= 0) {
+                        mv.visitInsn(Opcodes.DUP);
+                        mv.visitVarInsn(Opcodes.ASTORE, heldIndex);
+                    }
                     mv.visitVarInsn(Opcodes.ASTORE, varIndex);
+                    if (heldIndex >= 0) {
+                        mv.visitVarInsn(Opcodes.ALOAD, heldIndex);
+                        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                                "retainForeachAliasHold",
+                                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                                false);
+                        mv.visitVarInsn(Opcodes.ASTORE, heldIndex);
+                    }
                 }
             }
         } else {
@@ -824,6 +891,18 @@ public class EmitForeach {
         LoopLabels poppedLabels = emitterVisitor.ctx.javaClassInfo.popLoopLabels();
 
         mv.visitLabel(loopEnd);
+
+        for (int index : multiVarAliasHeldIndices) {
+            if (index < 0) continue;
+            mv.visitVarInsn(Opcodes.ALOAD, index);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                    "releaseForeachAliasHold",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
+                    false);
+            mv.visitInsn(Opcodes.ACONST_NULL);
+            mv.visitVarInsn(Opcodes.ASTORE, index);
+        }
 
         if (foreachRegexStateLocal >= 0) {
             mv.visitVarInsn(Opcodes.ALOAD, foreachRegexStateLocal);

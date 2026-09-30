@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.operators;
 
+import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.regex.RegexMatcher;
@@ -940,15 +941,38 @@ public class Operator {
     }
 
     public static RuntimeList reset(RuntimeList args, int ctx) {
+        // The interpreter tracks package-block scope dynamically.  The active
+        // RuntimeCode package is only the enclosing CV's package, which can be
+        // stale for a top-level `package Foo { reset ... }` block in code that
+        // fell back to the interpreter.  JVM-emitted reset sites pass their
+        // lexical package directly through resetInPackage().
+        String activePackage = InterpreterState.currentPackage.get().toString();
+        if (activePackage == null || activePackage.isEmpty()) {
+            activePackage = RuntimeCode.getActivePackageName();
+        }
+        return resetInPackage(args, ctx, activePackage);
+    }
+
+    /** Execute {@code reset} using the package that owns its compiled call site. */
+    public static RuntimeList resetInPackage(RuntimeList args, int ctx, String packageName) {
+        String currentPackage = packageName;
+        if (currentPackage == null || currentPackage.isEmpty()) {
+            currentPackage = "main";
+        }
+        while (currentPackage.endsWith("::")) {
+            currentPackage = currentPackage.substring(0, currentPackage.length() - 2);
+        }
+        if (currentPackage.length() > 6 && currentPackage.startsWith("main::")) {
+            currentPackage = currentPackage.substring(6);
+        }
         if (args.isEmpty()) {
-            RuntimeRegex.reset();
+            RuntimeRegex.reset(currentPackage);
         } else {
             // Parse the character range expression
             String expr = args.getFirst().toString();
             Set<Character> resetChars = parseResetExpression(expr);
 
-            // Get current package from caller information
-            String currentPackage = RuntimeCode.getCurrentPackage();
+            if (!currentPackage.endsWith("::")) currentPackage += "::";
 
             // Reset global variables that start with matching characters
             GlobalVariable.resetGlobalVariables(resetChars, currentPackage);

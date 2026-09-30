@@ -419,7 +419,7 @@ public class OpcodeHandlerExtended {
         RuntimeScalar leftValue = specialTarget == null
                 ? (RuntimeScalar) registers[rd]
                 : specialTarget.getValueAsScalar();
-        RuntimeScalar result = BitwiseOperators.bitwiseOr(
+        RuntimeScalar result = BitwiseOperators.bitwiseOrAssign(
                 leftValue,
                 (RuntimeScalar) registers[rs]
         );
@@ -442,8 +442,8 @@ public class OpcodeHandlerExtended {
         if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
-        RuntimeScalar result = BitwiseOperators.bitwiseXor(
-                (RuntimeScalar) registers[rd],
+        RuntimeScalar result = BitwiseOperators.bitwiseXorAssign(
+            (RuntimeScalar) registers[rd],
                 (RuntimeScalar) registers[rs]
         );
         ((RuntimeScalar) registers[rd]).set(result);
@@ -1157,8 +1157,7 @@ public class OpcodeHandlerExtended {
         java.util.Iterator<RuntimeScalar> iterator =
                 (java.util.Iterator<RuntimeScalar>) iterScalar.value;
 
-        RuntimeScalar next = iterator.next();
-        registers[rd] = BytecodeInterpreter.isImmutableProxy(next) ? BytecodeInterpreter.ensureMutableScalar(next) : next;
+        registers[rd] = ReadOnlyAlias.forForeach(iterator.next());
         return pc;
     }
 

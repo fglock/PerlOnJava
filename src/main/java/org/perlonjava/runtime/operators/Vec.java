@@ -29,13 +29,19 @@ public class Vec {
         BigInteger offset = ((RuntimeScalar) args.elements.get(1)).getSignedBigint();
         int bits = ((RuntimeScalar) args.elements.get(2)).getInt();
 
+        // A tied scalar is one Perl operand evaluation, even though vec needs
+        // to inspect both its definedness and string value. Keep the original
+        // lvalue for a possible vec assignment, but use a single FETCH result
+        // for all reads in this call.
+        RuntimeScalar source = RuntimeScalar.fetchTiedOnce(strScalar);
+
         // Check if the scalar is undefined - vec should not autovivify on read
-        if (!strScalar.getDefinedBoolean()) {
+        if (!source.getDefinedBoolean()) {
             // Return 0 for undefined values without autovivifying
             return vecLvalue(strScalar, offset, bits, new RuntimeScalar(0));
         }
 
-        String str = strScalar.toString();
+        String str = source.toString();
 
         byte[] data = new byte[str.length()];
         for (int i = 0; i < str.length(); i++) {
@@ -115,7 +121,8 @@ public class Vec {
      * @throws PerlCompilerException if the string contains invalid characters or if the bit size is out of range.
      */
     public static RuntimeScalar set(RuntimeList args, RuntimeScalar value) throws PerlCompilerException {
-        String str = args.elements.get(0).toString();
+        RuntimeScalar parent = (RuntimeScalar) args.elements.get(0);
+        String str = RuntimeScalar.fetchTiedOnce(parent).toString();
         BigInteger offset = ((RuntimeScalar) args.elements.get(1)).getSignedBigint();
         int bits = ((RuntimeScalar) args.elements.get(2)).getInt();
 

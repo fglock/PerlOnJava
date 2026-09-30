@@ -551,6 +551,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 new ActiveLexicalFrame(code, new HashMap<>()));
     }
 
+    /** Current compiled subroutine package for builtins that need call-site scope. */
+    public static String getActivePackageName() {
+        RuntimeCode active = activeCodeStack().peek();
+        return active == null ? null : active.packageName;
+    }
+
     public static void popActiveCode(RuntimeCode code) {
         PerlRuntime runtime = PerlRuntime.current();
         ExecutionRuntimeState executionState = runtime.executionState();

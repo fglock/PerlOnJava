@@ -1313,7 +1313,9 @@ public class EmitVariable {
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, leftDescriptor, "set", rightDescriptor, false);
                 } else {
                     mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                            "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "assignTo",
+                            "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                            ctx.contextType == RuntimeContextType.VOID
+                                    ? "assignTo" : "assignToExpression",
                             "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                 }
 

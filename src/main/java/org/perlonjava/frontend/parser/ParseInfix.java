@@ -322,8 +322,8 @@ public class ParseInfix {
             // state. Lazy sub compilation and interpreter fallback may emit code long
             // after the parser's lexical hint stack has moved on.
             switch (operator) {
-                case "+", "-", "*", "/", "%", "&", "|", "^", "<<", ">>",
-                     "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=" ->
+                case "+", "-", "*", "/", "%", "&", "|", "^", "binary&", "binary|", "binary^", "<<", ">>",
+                     "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "binary&=", "binary|=", "binary^=", "<<=", ">>=" ->
                         node.setAnnotation("useInteger",
                                 parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER));
                 default -> {

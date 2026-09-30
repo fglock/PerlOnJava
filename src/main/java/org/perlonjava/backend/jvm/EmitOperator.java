@@ -1495,6 +1495,21 @@ public class EmitOperator {
             }
             return;
         }
+        if (node.operator.equals("reset")) {
+            emitterVisitor.pushCurrentPackage();
+            emitterVisitor.ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/operators/Operator",
+                    "resetInPackage",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;ILjava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    false);
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                handleVoidContext(emitterVisitor);
+            } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                handleScalarContext(emitterVisitor, node);
+            }
+            return;
+        }
         emitOperator(node, emitterVisitor);
     }
 

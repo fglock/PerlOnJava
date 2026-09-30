@@ -14,7 +14,10 @@ public class Symbol extends PerlModuleBase {
      * Initializes the module with the name "Symbol".
      */
     public Symbol() {
-        super("Symbol");
+        // Register the built-in methods without claiming that Perl's Symbol.pm
+        // has already been required.  require must still honor @INC hooks and
+        // execute the bundled module source when requested.
+        super("Symbol", false);
     }
 
     /**

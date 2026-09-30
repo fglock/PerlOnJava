@@ -15,6 +15,22 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.blessedId;
  */
 public class BitwiseOperators {
     private static final BigInteger UV_MASK = BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE);
+    private static final ThreadLocal<Boolean> COMPOUND_BITWISE_ASSIGNMENT =
+            ThreadLocal.withInitial(() -> false);
+
+    private static void warnUninitializedBitwiseOperands(
+            RuntimeScalar left, RuntimeScalar right, String operation, char symbol) {
+        if (!COMPOUND_BITWISE_ASSIGNMENT.get() && !left.getDefinedBoolean()) {
+            WarnDie.warnWithCategory(new RuntimeScalar(
+                            "Use of uninitialized value in bitwise " + operation + " (" + symbol + ")"),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
+        }
+        if (!right.getDefinedBoolean()) {
+            WarnDie.warnWithCategory(new RuntimeScalar(
+                            "Use of uninitialized value in bitwise " + operation + " (" + symbol + ")"),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
+        }
+    }
 
     private static BigInteger unsignedValue(RuntimeScalar scalar) {
         return scalar.getBigint().and(UV_MASK);
@@ -181,6 +197,8 @@ public class BitwiseOperators {
                 t2 == RuntimeScalarType.TIED_SCALAR ? arg2.tiedFetch() :
                         t2 == RuntimeScalarType.READONLY_SCALAR ? (RuntimeScalar) arg2.value : arg2;
 
+        warnUninitializedBitwiseOperands(val1, val2, "or", '|');
+
         // In Perl, bitwise ops dispatch based on internal type flags (SvNIOKp):
         // - If either operand has a numeric type (IOK/NOK), use numeric bitwise
         // - If both are non-numeric (strings from pack/vec, etc.), use string bitwise
@@ -206,6 +224,18 @@ public class BitwiseOperators {
         }
         return unsignedResult(unsignedValue(runtimeScalar).or(unsignedValue(arg2)))
                 .propagateTaint(runtimeScalar, arg2);
+    }
+
+    /** Compound {@code |=} warns for an undefined right operand, but not an
+     * undefined left operand. */
+    public static RuntimeScalar bitwiseOrAssign(RuntimeScalar left, RuntimeScalar right) {
+        boolean previous = COMPOUND_BITWISE_ASSIGNMENT.get();
+        COMPOUND_BITWISE_ASSIGNMENT.set(true);
+        try {
+            return bitwiseOr(left, right);
+        } finally {
+            COMPOUND_BITWISE_ASSIGNMENT.set(previous);
+        }
     }
 
     /**
@@ -249,6 +279,8 @@ public class BitwiseOperators {
                 t2 == RuntimeScalarType.TIED_SCALAR ? arg2.tiedFetch() :
                         t2 == RuntimeScalarType.READONLY_SCALAR ? (RuntimeScalar) arg2.value : arg2;
 
+        warnUninitializedBitwiseOperands(val1, val2, "xor", '^');
+
         // In Perl, bitwise ops dispatch based on internal type flags (SvNIOKp):
         // - If either operand has a numeric type (IOK/NOK), use numeric bitwise
         // - If both are non-numeric (strings from pack/vec, etc.), use string bitwise
@@ -280,6 +312,18 @@ public class BitwiseOperators {
         }
         return unsignedResult(unsignedValue(runtimeScalar).xor(unsignedValue(arg2)))
                 .propagateTaint(runtimeScalar, arg2);
+    }
+
+    /** Compound {@code ^=} warns for an undefined right operand, but not an
+     * undefined left operand. */
+    public static RuntimeScalar bitwiseXorAssign(RuntimeScalar left, RuntimeScalar right) {
+        boolean previous = COMPOUND_BITWISE_ASSIGNMENT.get();
+        COMPOUND_BITWISE_ASSIGNMENT.set(true);
+        try {
+            return bitwiseXor(left, right);
+        } finally {
+            COMPOUND_BITWISE_ASSIGNMENT.set(previous);
+        }
     }
 
     /** Numeric bitwise operations under {@code use integer}: return a signed IV. */

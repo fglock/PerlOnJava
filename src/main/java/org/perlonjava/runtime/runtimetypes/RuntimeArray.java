@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.Stack;
@@ -92,6 +93,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     // @_ even though the complete array was not expanded at the call site.
     private int activeScalarLocalElements;
     private boolean scalarLocalContainerCleared;
+    private final Set<String> isaArrayNames = new LinkedHashSet<>();
 
     void beginScalarLocalElement() { activeScalarLocalElements++; }
     void markScalarLocalContainerCleared() {
@@ -218,7 +220,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             owner.notePackageRootMutation(null, value);
             if (value != null) value.markContainerOwner(owner);
             owner.markPackageRootedValue(value);
-            return super.add(value);
+            boolean changed = super.add(value);
+            owner.validateIsaMutation();
+            return changed;
         }
 
         @Override
@@ -232,6 +236,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             if (element != null) element.markContainerOwner(owner);
             owner.markPackageRootedValue(element);
             super.add(index, element);
+            owner.validateIsaMutation();
         }
 
         @Override
@@ -243,7 +248,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     if (value != null) value.markContainerOwner(owner);
                     owner.markPackageRootedValue(value);
                 }
-                return super.addAll(c);
+                boolean changed = super.addAll(c);
+                if (changed) owner.validateIsaMutation();
+                return changed;
             }
             boolean changed = false;
             for (RuntimeScalar value : new ArrayList<>(c)) {
@@ -262,7 +269,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     if (value != null) value.markContainerOwner(owner);
                     owner.markPackageRootedValue(value);
                 }
-                return super.addAll(index, c);
+                boolean changed = super.addAll(index, c);
+                if (changed) owner.validateIsaMutation();
+                return changed;
             }
             int insertionIndex = index;
             boolean changed = false;
@@ -284,7 +293,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             owner.notePackageRootMutation(previous, element);
             if (element != null) element.markContainerOwner(owner);
             owner.markPackageRootedValue(element);
-            return super.set(index, element);
+            RuntimeScalar result = super.set(index, element);
+            owner.validateIsaMutation();
+            return result;
         }
 
         @Override
@@ -292,6 +303,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             RuntimeScalar previous = super.remove(index);
             owner.noteIsaMutation();
             owner.notePackageRootMutation(previous, null);
+            owner.validateIsaMutation();
             return previous;
         }
 
@@ -301,6 +313,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             if (removed && o instanceof RuntimeScalar scalar) {
                 owner.noteIsaMutation();
                 owner.notePackageRootMutation(scalar, null);
+                owner.validateIsaMutation();
             }
             return removed;
         }
@@ -312,6 +325,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 owner.notePackageRootClear(this);
             }
             super.clear();
+            owner.validateIsaMutation();
         }
     }
 
@@ -319,9 +333,22 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         isaArray = true;
     }
 
+    public void markIsaArray(String arrayName) {
+        isaArray = true;
+        if (arrayName != null && arrayName.endsWith("::ISA")) {
+            isaArrayNames.add(arrayName.substring(0, arrayName.length() - 5));
+        }
+    }
+
     private void noteIsaMutation() {
         if (isaArray) {
             InheritanceResolver.noteIsaMutation();
+        }
+    }
+
+    private void validateIsaMutation() {
+        if (isaArray && !isaArrayNames.isEmpty()) {
+            InheritanceResolver.validateIsaArrays(isaArrayNames);
         }
     }
 

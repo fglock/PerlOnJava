@@ -127,7 +127,14 @@ public class EmitOperatorNode {
                     EmitOperator.handleUnaryDefaultCase(node, "~", emitterVisitor);
                 }
             }
-            case "binary~" -> EmitOperator.handleUnaryDefaultCase(node, "binary~", emitterVisitor);
+            case "binary~" -> {
+                Object integerAnnotation = node.getAnnotation("useInteger");
+                boolean useInteger = integerAnnotation instanceof Boolean value
+                        ? value
+                        : emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER);
+                EmitOperator.handleUnaryDefaultCase(node,
+                        useInteger ? "integerBitwiseNot" : "binary~", emitterVisitor);
+            }
             case "~." -> EmitOperator.handleUnaryDefaultCase(node, "~.", emitterVisitor);
             case "!", "not" -> EmitOperator.handleLogicalNot(node, emitterVisitor);
             case "int" -> EmitOperator.handleUnaryDefaultCase(node, "int", emitterVisitor);

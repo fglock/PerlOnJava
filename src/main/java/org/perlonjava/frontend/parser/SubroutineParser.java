@@ -1027,6 +1027,9 @@ public class SubroutineParser {
         if (!attributes.isEmpty()) {
             org.perlonjava.runtime.operators.ModuleOperators.require(new RuntimeScalar("attributes.pm"));
         }
+        if (subName != null && attributes.contains("const")) {
+            parser.throwError(":const is not permitted on named subroutines");
+        }
         if (futureAsyncAwaitSub && attributes.contains("lvalue")) {
             String location = parser.ctx.errorUtil == null
                     ? ""
@@ -3014,7 +3017,6 @@ public class SubroutineParser {
     static void emitIllegalProtoWarning(Parser parser, String proto, String subDisplayName) {
         if (proto == null || proto.isEmpty()) return;
         String name = subDisplayName != null ? subDisplayName : "?";
-        String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
         // Check if any character is illegal
         boolean hasIllegal = false;
         for (int i = 0; i < proto.length(); i++) {
@@ -3026,26 +3028,28 @@ public class SubroutineParser {
         }
         if (hasIllegal) {
             String msg = "Illegal character in prototype for " + name + " : " + proto;
-            Warnings.warnWithCategory("illegalproto", msg, loc);
+            Warnings.emitCategoryWarning("illegalproto", msg);
         }
 
         // Perl emits diagnostics in addition to the general illegal-character
         // warning for the malformed prototype shapes below.
-        if (proto.indexOf('@') >= 0 && proto.matches(".*@\\s+.*")) {
-            Warnings.warnWithCategory("illegalproto",
-                    "Prototype after '@' for " + name + " : " + proto, loc);
+        int at = proto.indexOf('@');
+        if (at >= 0 && at + 1 < proto.length() && proto.charAt(at + 1) != '%'
+                && proto.charAt(at + 1) != ']') {
+            Warnings.emitCategoryWarning("illegalproto",
+                    "Prototype after '@' for " + name + " : " + proto);
         }
         for (int i = 0; i < proto.length(); i++) {
             if (proto.charAt(i) == '_' && i + 1 < proto.length()
                     && proto.charAt(i + 1) != ';') {
-                Warnings.warnWithCategory("illegalproto",
-                        "Illegal character after '_' in prototype for " + name + " : " + proto, loc);
+                Warnings.emitCategoryWarning("illegalproto",
+                        "Illegal character after '_' in prototype for " + name + " : " + proto);
                 break;
             }
         }
         if (proto.indexOf('[') >= 0 && proto.indexOf(']', proto.indexOf('[') + 1) < 0) {
-            Warnings.warnWithCategory("illegalproto",
-                    "Missing ']' in prototype for " + name + " : " + proto, loc);
+            Warnings.emitCategoryWarning("illegalproto",
+                    "Missing ']' in prototype for " + name + " : " + proto);
         }
     }
 

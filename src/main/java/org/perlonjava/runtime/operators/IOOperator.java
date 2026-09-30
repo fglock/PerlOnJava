@@ -38,6 +38,8 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariab
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 
 public class IOOperator {
+    private static final int O_NONBLOCK = NativeUtils.IS_MAC ? 4 : 04000;
+
     // File descriptor to RuntimeIO mapping for duplication support
     private static Map<Integer, RuntimeIO> fileDescriptorMap() {
         return PerlRuntime.current().ioRegistryState.operatorFileDescriptors;
@@ -683,6 +685,14 @@ public class IOOperator {
             return TieHandle.tiedFileno(tieHandle);
         }
 
+        if (fh != null && fh.directoryIO != null) {
+            // Java directory streams do not expose a native descriptor. Perl
+            // reports this as an undefined fileno and sets EBADF.
+            FFMPosix.get().setErrno(9);
+            GlobalVariable.getGlobalVariable("main::!").set(9);
+            return RuntimeScalarCache.scalarUndef;
+        }
+
         if (fh == null || fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) {
             return RuntimeScalarCache.scalarUndef;
         }
@@ -956,6 +966,18 @@ public class IOOperator {
                             throw new PerlCompilerException("Bad filehandle: " + extractFilehandleName(argStr));
                         }
                     }
+                }
+            } else if (secondArg.type == RuntimeScalarType.UNDEF && mode.equals("+<")) {
+                // open($fh, "+<", undef) asks PerlIO for an anonymous,
+                // seekable temporary file. Keep the file alive for the
+                // process; its path is intentionally not exposed to Perl.
+                try {
+                    Path temporaryFile = Files.createTempFile("PerlIO_", "");
+                    temporaryFile.toFile().deleteOnExit();
+                    fh = RuntimeIO.open(temporaryFile.toString(), mode);
+                } catch (IOException e) {
+                    RuntimeIO.handleIOException(e, "open failed");
+                    fh = null;
                 }
             } else if (secondArg.type == RuntimeScalarType.REFERENCE && !secondArg.isBlessed()) {
                 // Only an unblessed scalar reference selects an in-memory
@@ -2969,10 +2991,10 @@ public class IOOperator {
             IOHandle managedHandle = selectableHandle(fh.ioHandle);
             if (managedHandle instanceof SocketIO socketIO) {
                 if (function == 3) { // F_GETFL
-                    return new RuntimeScalar(socketIO.isBlocking() ? 0 : 2048);
+                    return new RuntimeScalar(socketIO.isBlocking() ? 0 : O_NONBLOCK);
                 }
                 if (function == 4) { // F_SETFL
-                    socketIO.setBlocking((arg & 2048) == 0);
+                    socketIO.setBlocking((arg & O_NONBLOCK) == 0);
                     return scalarTrue;
                 }
             }
@@ -3930,7 +3952,16 @@ public class IOOperator {
             targetGlob = glob;
         }
         if (targetGlob != null) {
-            targetGlob.setIO(io);
+            // Symbol::gensym creates a named glob reference and immediately
+            // removes its stash entry.  Keep that glob identity (ties can use
+            // it), but do not let installing the socket restore the hidden
+            // stash entry as a permanent IO owner.
+            if (targetGlob.globName != null
+                    && GlobalVariable.isIORefHiddenAfterStashDelete(targetGlob.globName)) {
+                targetGlob.setIOKeepingStashHidden(io);
+            } else {
+                targetGlob.setIO(io);
+            }
             MyVarCleanupStack.retainLiveIoGlobOwners(targetGlob);
             RuntimeScalar.retainUnstashedIoForDurableSlot(handle);
         } else {

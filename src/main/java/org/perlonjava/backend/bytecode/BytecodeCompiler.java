@@ -7257,6 +7257,7 @@ public class BytecodeCompiler implements Visitor {
         int codeReg = allocateRegister();
 
         if (closureVarIndices.isEmpty() && !subCode.inheritsSelfReference
+                && (node.attributes == null || !node.attributes.contains("const"))
                 && !subCompiler.hasStateVariableDeclarations) {
             // No closures - just wrap the InterpretedCode
             RuntimeScalar codeScalar = new RuntimeScalar(subCode);
@@ -7571,6 +7572,8 @@ public class BytecodeCompiler implements Visitor {
         int varReg = -1;
         List<Integer> multiVarRegs = new ArrayList<>();
         List<String> lexicalLoopVarNames = new ArrayList<>();
+        List<String> multiVarReferenceSigils = new ArrayList<>();
+        List<Integer> multiVarAliasHeldRegs = new ArrayList<>();
         OperatorNode referenceAliasedVariable = null;
         if (node.variable instanceof OperatorNode referenceOp
                 && referenceOp.operator.equals("\\")
@@ -7630,10 +7633,20 @@ public class BytecodeCompiler implements Visitor {
                 && declaration.operand instanceof ListNode variables) {
             for (Node variable : variables.elements) {
                 if (variable instanceof OperatorNode sigil
-                        && sigil.operator.equals("$")
                         && sigil.operand instanceof IdentifierNode identifier) {
-                    multiVarRegs.add(allocateRegister());
-                    lexicalLoopVarNames.add("$" + identifier.name);
+                    boolean declaredReference = sigil.getBooleanAnnotation("isDeclaredReference");
+                    String referenceSigil = declaredReference
+                            && sigil.getAnnotation("declaredReferenceOriginalSigil") instanceof String original
+                            ? original : null;
+                    if (sigil.operator.equals("$") && (referenceSigil == null
+                            || referenceSigil.equals("$") || referenceSigil.equals("@")
+                            || referenceSigil.equals("%"))) {
+                        multiVarRegs.add(allocateRegister());
+                        lexicalLoopVarNames.add((referenceSigil == null ? "$" : referenceSigil)
+                                + identifier.name);
+                        multiVarReferenceSigils.add(referenceSigil);
+                        multiVarAliasHeldRegs.add(-1);
+                    }
                 }
             }
         }
@@ -7669,6 +7682,17 @@ public class BytecodeCompiler implements Visitor {
         }
         if (!multiVarRegs.isEmpty()) {
             varReg = multiVarRegs.get(0);
+            // These holds must survive every statement in the loop body. The
+            // body compiler recycles temporary registers at scope boundaries,
+            // so allocating the holds at the iterator check (after compiling
+            // the body) can reuse a body temporary that overwrites the hold
+            // before it is released. Reserve them before entering the loop
+            // scope so its temporary-register floor is above these registers.
+            for (int i = 0; i < multiVarRegs.size(); i++) {
+                if (multiVarReferenceSigils.get(i) == null) {
+                    multiVarAliasHeldRegs.set(i, allocateRegister());
+                }
+            }
         }
         if (varReg == -1) {
             varReg = allocateRegister();
@@ -7886,6 +7910,12 @@ public class BytecodeCompiler implements Visitor {
         int explicitLoopExitPatch = -1;
         if (!multiVarRegs.isEmpty()) {
             int hasNextReg = allocateRegister();
+            for (int heldReg : multiVarAliasHeldRegs) {
+                if (heldReg >= 0) {
+                    emit(Opcodes.FOREACH_ALIAS_RELEASE);
+                    emitReg(heldReg);
+                }
+            }
             emit(Opcodes.ITERATOR_HAS_NEXT);
             emitReg(hasNextReg);
             emitReg(iterReg);
@@ -7896,35 +7926,58 @@ public class BytecodeCompiler implements Visitor {
 
             for (int i = 0; i < multiVarRegs.size(); i++) {
                 int targetReg = multiVarRegs.get(i);
+                String referenceSigil = multiVarReferenceSigils.get(i);
+                int valueReg = referenceSigil == null ? targetReg : allocateRegister();
                 if (i == 0) {
                     emit(Opcodes.ITERATOR_NEXT);
-                    emitReg(targetReg);
+                    emitReg(valueReg);
                     emitReg(iterReg);
-                    continue;
+                } else {
+                    emit(Opcodes.ITERATOR_HAS_NEXT);
+                    emitReg(hasNextReg);
+                    emitReg(iterReg);
+                    emit(Opcodes.GOTO_IF_FALSE);
+                    emitReg(hasNextReg);
+                    int undefPatch = bytecode.size();
+                    emitInt(0);
+
+                    emit(Opcodes.ITERATOR_NEXT);
+                    emitReg(valueReg);
+                    emitReg(iterReg);
+                    emit(Opcodes.GOTO);
+                    int assignedPatch = bytecode.size();
+                    emitInt(0);
+
+                    patchJump(undefPatch, bytecode.size());
+                    // Preserve the read-only alias just as ITERATOR_NEXT
+                    // does for an explicit undef element.
+                    emit(Opcodes.LOAD_CONST);
+                    emitReg(valueReg);
+                    emit(addToConstantPool(ReadOnlyAlias.forForeach(RuntimeScalarCache.scalarUndef)));
+                    patchJump(assignedPatch, bytecode.size());
                 }
-
-                emit(Opcodes.ITERATOR_HAS_NEXT);
-                emitReg(hasNextReg);
-                emitReg(iterReg);
-                emit(Opcodes.GOTO_IF_FALSE);
-                emitReg(hasNextReg);
-                int undefPatch = bytecode.size();
-                emitInt(0);
-
-                emit(Opcodes.ITERATOR_NEXT);
-                emitReg(targetReg);
-                emitReg(iterReg);
-                emit(Opcodes.GOTO);
-                int assignedPatch = bytecode.size();
-                emitInt(0);
-
-                patchJump(undefPatch, bytecode.size());
-                // Preserve the read-only alias just as ITERATOR_NEXT does
-                // for an explicit undef element.
-                emit(Opcodes.LOAD_CONST);
-                emitReg(targetReg);
-                emit(addToConstantPool(ReadOnlyAlias.forForeach(RuntimeScalarCache.scalarUndef)));
-                patchJump(assignedPatch, bytecode.size());
+                if (referenceSigil == null) {
+                    emit(Opcodes.ALIAS);
+                    emitReg(multiVarAliasHeldRegs.get(i));
+                    emitReg(targetReg);
+                    emit(Opcodes.FOREACH_ALIAS_RETAIN);
+                    emitReg(multiVarAliasHeldRegs.get(i));
+                } else if (referenceSigil.equals("$")) {
+                    emitWithToken(Opcodes.FOREACH_DEREF_SCALAR,
+                            node.variable.getIndex());
+                    emitReg(targetReg);
+                    emitReg(valueReg);
+                } else if (referenceSigil.equals("@")) {
+                    emitWithToken(Opcodes.FOREACH_DEREF_ARRAY,
+                            node.variable.getIndex());
+                    emitReg(targetReg);
+                    emitReg(valueReg);
+                } else {
+                    emitWithToken(Opcodes.FOREACH_DEREF_HASH,
+                            node.variable.getIndex());
+                    emitReg(targetReg);
+                    emitReg(valueReg);
+                }
             }
             emit(Opcodes.GOTO);
             emitInt(bodyStartPc);
@@ -8006,6 +8059,15 @@ public class BytecodeCompiler implements Visitor {
         patchJump(controlRedoPatch, bodyStartPc);
         if (explicitLoopExitPatch >= 0) {
             patchJump(explicitLoopExitPatch, loopEndPc);
+        }
+
+        if (!multiVarRegs.isEmpty()) {
+            for (int heldReg : multiVarAliasHeldRegs) {
+                if (heldReg >= 0) {
+                emit(Opcodes.FOREACH_ALIAS_RELEASE);
+                    emitReg(heldReg);
+                }
+            }
         }
 
         // Step 11b: Restore global loop variable after loop exits.

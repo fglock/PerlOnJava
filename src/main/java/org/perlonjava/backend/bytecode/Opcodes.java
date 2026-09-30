@@ -2739,6 +2739,11 @@ public class Opcodes {
     /** Remove an active lexical binding when its declaring scope exits. Format: register nameStringIdx. */
     public static final short UNBIND_ACTIVE_LEXICAL = 612;
 
+    /** Keep a reference-valued lexical foreach item alive while its slot aliases it. */
+    public static final short FOREACH_ALIAS_RETAIN = 623;
+    /** Release the active lexical foreach alias before replacing its slot or leaving the loop. */
+    public static final short FOREACH_ALIAS_RELEASE = 624;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

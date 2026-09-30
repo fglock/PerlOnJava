@@ -988,7 +988,13 @@ public class CompileOperator {
                 emitSimpleUnaryScalar(bytecodeCompiler, node,
                         useInteger ? Opcodes.INTEGER_BITWISE_NOT : Opcodes.BITWISE_NOT);
             }
-            case "binary~" -> emitSimpleUnaryScalar(bytecodeCompiler, node, Opcodes.BITWISE_NOT_BINARY);
+            case "binary~" -> {
+                Object integerAnnotation = node.getAnnotation("useInteger");
+                boolean useInteger = integerAnnotation instanceof Boolean value
+                        ? value : bytecodeCompiler.isIntegerEnabled();
+                emitSimpleUnaryScalar(bytecodeCompiler, node,
+                        useInteger ? Opcodes.INTEGER_BITWISE_NOT : Opcodes.BITWISE_NOT_BINARY);
+            }
             case "~." -> emitSimpleUnaryScalar(bytecodeCompiler, node, Opcodes.BITWISE_NOT_STRING);
             case "defined" -> visitDefined(bytecodeCompiler, node);
             case "lock" -> {

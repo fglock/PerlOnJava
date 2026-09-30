@@ -44,7 +44,14 @@ public class RuntimePosLvalue {
             throw new PerlCompilerException("perlVariable cannot be null");
         }
 
-        perlVariable = perlVariable.posStorage();
+        // pos() evaluates a tied scalar once before obtaining its lvalue
+        // storage, matching ordinary scalar operators' FETCH semantics.
+        perlVariable = RuntimeScalar.fetchTiedOnce(perlVariable).posStorage();
+        return posResolvedStorage(perlVariable, byteView);
+    }
+
+    /** Look up pos state for storage that has already had tied magic resolved. */
+    private static RuntimeScalar posResolvedStorage(RuntimeScalar perlVariable, boolean byteView) {
 
         RuntimeScalar position;
 
@@ -116,19 +123,25 @@ public class RuntimePosLvalue {
 
     /** Publish a position produced by the regex engine rather than Perl lvalue assignment. */
     public static void publishMatchPosition(RuntimeScalar perlVariable, RuntimeScalar position) {
-        RuntimeScalar stored = pos(perlVariable);
+        // pos() resolves a tied value before selecting its cache key.  Keep
+        // that same canonical storage here: looking up the original tied
+        // wrapper after pos() has populated the fetched scalar's entry loses
+        // the entry and crashes destructive s///e substitutions.
+        RuntimeScalar storage = perlVariable.posStorage();
+        RuntimeScalar stored = posResolvedStorage(storage, false);
         ((PosLvalueScalar) stored).setFromMatcher(position);
-        CacheEntry entry = positionCache().get(perlVariable.posStorage());
-        entry.matcherBytePosition = perlVariable.type == RuntimeScalarType.BYTE_STRING
+        CacheEntry entry = positionCache().get(storage);
+        entry.matcherBytePosition = storage.type == RuntimeScalarType.BYTE_STRING
                 && position.getDefinedBoolean() ? position.getInt() : null;
     }
 
     /** Publish an integer position produced by the regex engine. */
     public static void publishMatchPosition(RuntimeScalar perlVariable, int position) {
-        RuntimeScalar stored = pos(perlVariable);
+        RuntimeScalar storage = perlVariable.posStorage();
+        RuntimeScalar stored = posResolvedStorage(storage, false);
         ((PosLvalueScalar) stored).setFromMatcher(position);
-        CacheEntry entry = positionCache().get(perlVariable.posStorage());
-        entry.matcherBytePosition = perlVariable.type == RuntimeScalarType.BYTE_STRING
+        CacheEntry entry = positionCache().get(storage);
+        entry.matcherBytePosition = storage.type == RuntimeScalarType.BYTE_STRING
                 ? position : null;
     }
 

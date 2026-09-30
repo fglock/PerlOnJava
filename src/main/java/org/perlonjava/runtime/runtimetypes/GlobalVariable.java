@@ -759,6 +759,7 @@ public class GlobalVariable {
         stashAliases.put(dst, src);
         resolvedStashAliasCache.clear();
         invalidatePackageRootSnapshot();
+        InheritanceResolver.noteIsaMutation();
     }
 
     /**
@@ -835,6 +836,25 @@ public class GlobalVariable {
         return snapshot;
     }
 
+    static RuntimeGlob.NamespaceMove detachNamespaceForStaleStash(String namespace) {
+        String prefix = normalizeStashNamespace(namespace);
+        Map<String, RuntimeScalar> scalars = snapshotNamespace(globalVariables, prefix);
+        Map<String, RuntimeArray> arrays = snapshotNamespace(globalArrays, prefix);
+        Map<String, RuntimeHash> hashes = snapshotNamespace(globalHashes, prefix);
+        hashes.remove(prefix);
+        Map<String, RuntimeScalar> codes = snapshotNamespace(globalCodeRefs, prefix);
+        globalVariables.keySet().removeIf(key -> key.startsWith(prefix));
+        globalArrays.keySet().removeIf(key -> key.startsWith(prefix));
+        globalHashes.keySet().removeIf(key -> key.startsWith(prefix) && !key.equals(prefix));
+        globalCodeRefs.keySet().removeIf(key -> key.startsWith(prefix));
+        removeGlobalIORefsForNamespace(prefix);
+        globalFormatRefs.keySet().removeIf(key -> key.startsWith(prefix));
+        clearHiddenIORefsForNamespace(prefix);
+        clearPinnedCodeRefsForNamespace(prefix);
+        invalidateStashEnumerationCache();
+        return new RuntimeGlob.NamespaceMove(prefix, scalars, arrays, hashes, codes);
+    }
+
     static void installNamespaceMove(RuntimeGlob.NamespaceMove move, String destinationPrefix) {
         for (Map.Entry<String, RuntimeScalar> entry : move.scalars.entrySet()) {
             globalVariables.put(destinationPrefix + entry.getKey().substring(move.sourcePrefix.length()), entry.getValue());
@@ -882,6 +902,7 @@ public class GlobalVariable {
         String key = namespace.endsWith("::") ? namespace : namespace + "::";
         if (stashAliases.remove(key) != null) {
             invalidatePackageRootSnapshot();
+            InheritanceResolver.noteIsaMutation();
         }
         resolvedStashAliasCache.clear();
     }
@@ -1040,7 +1061,7 @@ public class GlobalVariable {
         }
     }
 
-    static boolean isIORefHiddenAfterStashDelete(String key) {
+    public static boolean isIORefHiddenAfterStashDelete(String key) {
         PerlRuntime runtime = PerlRuntime.currentOrNull();
         if (runtime != null && runtime.standardIOGlob(key) != null) {
             return !runtime.isStandardIOGlobVisible(key);
@@ -1337,6 +1358,9 @@ public class GlobalVariable {
     }
 
     public static void aliasGlobalArray(String key, RuntimeArray array) {
+        if (key.endsWith("::ISA")) {
+            array.markIsaArray(key);
+        }
         markPackageGlobalRoot(array);
         globalArrays.put(key, array);
         invalidatePackageRootSnapshot();
@@ -1446,7 +1470,7 @@ public class GlobalVariable {
         return null;
     }
 
-    private static void retainForeachAlias(RuntimeScalar scalar) {
+    public static void retainForeachAlias(RuntimeScalar scalar) {
         if (scalar != null
                 && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && scalar.value instanceof RuntimeBase base) {
@@ -1454,11 +1478,29 @@ public class GlobalVariable {
         }
     }
 
-    private static void releaseForeachAlias(RuntimeScalar scalar) {
+    public static void releaseForeachAlias(RuntimeScalar scalar) {
         if (scalar != null
                 && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && scalar.value instanceof RuntimeBase base
                 && base.foreachAliasCount > 0) {
+            base.foreachAliasCount--;
+        }
+    }
+
+    /** Retain a foreach reference and return a stable hold for its referent. */
+    public static RuntimeBase retainForeachAliasHold(RuntimeScalar scalar) {
+        if (scalar != null
+                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && scalar.value instanceof RuntimeBase base) {
+            base.foreachAliasCount++;
+            return base;
+        }
+        return null;
+    }
+
+    /** Release a hold returned by {@link #retainForeachAliasHold(RuntimeScalar)}. */
+    public static void releaseForeachAliasHold(RuntimeBase base) {
+        if (base != null && base.foreachAliasCount > 0) {
             base.foreachAliasCount--;
         }
     }
@@ -1692,7 +1734,8 @@ public class GlobalVariable {
                     invalidatePackageRootSnapshot();
                 }
                 if (isaArray || resolvedKey.endsWith("::ISA")) {
-                    resolved.markIsaArray();
+                    resolved.markIsaArray(key);
+                    resolved.markIsaArray(resolvedKey);
                 }
                 return resolved;
             }
@@ -1735,7 +1778,7 @@ public class GlobalVariable {
             markPackageGlobalRoot(var);
         }
         if (isaArray) {
-            var.markIsaArray();
+            var.markIsaArray(key);
         }
         return var;
     }
@@ -2576,7 +2619,7 @@ public class GlobalVariable {
     public static boolean isPackageLoaded(String className) {
         // Check cache first
         Boolean cached = packageExistsCache.get(className);
-        if (cached != null) {
+        if (Boolean.TRUE.equals(cached)) {
             return cached;
         }
 
@@ -2588,6 +2631,12 @@ public class GlobalVariable {
         // After stripping the prefix, the remaining part must NOT contain "::"
         // to be a direct member of this package.
         boolean exists = globalCodeRefs.keySet().stream()
+                .anyMatch(key -> key.startsWith(prefix) && !key.substring(prefix.length()).contains("::"))
+                || globalVariables.keySet().stream()
+                .anyMatch(key -> key.startsWith(prefix) && !key.substring(prefix.length()).contains("::"))
+                || globalArrays.keySet().stream()
+                .anyMatch(key -> key.startsWith(prefix) && !key.substring(prefix.length()).contains("::"))
+                || globalHashes.keySet().stream()
                 .anyMatch(key -> key.startsWith(prefix) && !key.substring(prefix.length()).contains("::"));
 
         // Cache the result
@@ -3007,8 +3056,20 @@ public class GlobalVariable {
             String key = entry.getKey();
 
             if (key.startsWith(currentPackage) && shouldResetVariable(key, currentPackage, resetChars)) {
-                // Reset to undef instead of removing to maintain reference integrity
-                entry.getValue().set(RuntimeScalar.undef());
+                if (entry.getValue() instanceof RuntimeScalarReadOnly
+                        || entry.getValue().type == RuntimeScalarType.READONLY_SCALAR) {
+                    continue;
+                }
+                // $^W is stored under its control-character name (\cW), not
+                // the printable caret spelling. Perl resets it to numeric
+                // zero, while ordinary package scalars become undef.
+                if (key.substring(currentPackage.length())
+                        .equals(Character.toString('W' - 'A' + 1))) {
+                    entry.getValue().set(0);
+                } else {
+                    // Reset to undef instead of removing to maintain reference integrity
+                    entry.getValue().set(RuntimeScalar.undef());
+                }
             }
         }
 
