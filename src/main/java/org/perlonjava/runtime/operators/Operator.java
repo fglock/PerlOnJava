@@ -8,6 +8,7 @@ import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.frontend.parser.SpecialBlockParser;
 import org.perlonjava.runtime.runtimetypes.*;
+import org.perlonjava.runtime.io.ClosedIOHandle;
 
 import java.math.BigInteger;
 
@@ -60,6 +61,16 @@ public class Operator {
         for (RuntimeScalar fileScalar : fileList) {
             fileScalar = RuntimeScalar.dereferenceAndFetchOnce(fileScalar);
             RuntimeScalar.checkTaint(fileScalar, "chmod");
+            RuntimeIO fileHandle = fileScalar.type == RuntimeScalarType.GLOB
+                    || fileScalar.type == RuntimeScalarType.GLOBREFERENCE
+                    ? RuntimeIO.getRuntimeIO(fileScalar) : null;
+            if (fileHandle != null && fileHandle.ioHandle instanceof ClosedIOHandle) {
+                GlobalVariable.getGlobalVariable("main::!").set("Bad file descriptor");
+                continue;
+            }
+            if (fileHandle != null) {
+                throw new PerlCompilerException("The fchmod function is unimplemented");
+            }
             String fileName = fileScalar.toString();
             Path resolved = RuntimeIO.resolvePath(fileName, "chmod");
             if (resolved == null) {

@@ -1194,7 +1194,25 @@ public class OperatorParser {
             }
             operand = ensureOneOperand(parser, token, operand);
         }
+        if (operator.equals("scalar")) {
+            // Retain scalar's context through prototype-driven call argument
+            // compilation, where the bytecode backend otherwise sees only
+            // the enclosing list context.
+            markScalarRanges(operand);
+        }
         return new OperatorNode(operator, operand, currentIndex);
+    }
+
+    private static void markScalarRanges(Node node) {
+        if (node instanceof BinaryOperatorNode range
+                && (range.operator.equals("..") || range.operator.equals("..."))) {
+            range.setAnnotation("forceScalarRange", true);
+            return;
+        }
+        if (node instanceof ListNode list && !list.elements.isEmpty()) {
+            // scalar LIST returns its final expression.
+            markScalarRanges(list.elements.getLast());
+        }
     }
 
     public static Node ensureOneOperand(Parser parser, LexerToken token, Node operand) {

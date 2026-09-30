@@ -96,7 +96,7 @@ public class CoreOperatorResolver {
                             "Cannot use __CLASS__ outside of a method or field initializer expression",
                             parser.ctx.errorUtil);
                 }
-                yield new StringNode(parser.ctx.symbolTable.getCurrentPackage(), parser.tokenIndex);
+                yield new OperatorNode("__CLASS__", null, parser.tokenIndex);
             }
             case "__SUB__", "time", "times", "wait", "wantarray" -> {
                 handleEmptyParentheses(parser);

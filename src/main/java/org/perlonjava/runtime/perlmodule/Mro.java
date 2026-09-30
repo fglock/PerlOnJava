@@ -429,6 +429,17 @@ public class Mro extends PerlModuleBase {
         var state = PerlRuntime.current().mroState();
         InheritanceResolver.getIsaGeneration();
 
+        if (!GlobalVariable.existsGlobalHash(className + "::")) {
+            // An explicit generation can outlive a stash temporarily (for
+            // example, while a stash is being cleared). A package which has
+            // never had a generation entry still reports zero when absent.
+            Integer generation = state.packageGenerations().get(className);
+            if (generation == null) {
+                return new RuntimeScalar(state.knownPackageMroQueries().contains(className) ? 1 : 0).getList();
+            }
+            return new RuntimeScalar(generation).getList();
+        }
+
         // Lazily detect @ISA changes and auto-increment pkg_gen
         if (GlobalVariable.existsGlobalArray(className + "::ISA")) {
             RuntimeArray isaArray = GlobalVariable.getGlobalArray(className + "::ISA");
@@ -462,6 +473,23 @@ public class Mro extends PerlModuleBase {
         Map<String, Integer> packageGenerations = state.packageGenerations();
         Integer current = packageGenerations.getOrDefault(packageName, 1);
         packageGenerations.put(packageName, current + 1);
+        state.incrementSubGeneration();
+    }
+
+    /** Reset the generation when a package stash is cleared but remains present. */
+    public static void resetPackageGeneration(String packageName) {
+        var state = PerlRuntime.current().mroState();
+        state.packageGenerations().put(packageName, 1);
+        state.packageGenerationIsaState().remove(packageName);
+        state.incrementSubGeneration();
+    }
+
+    /** Forget generation data when the package stash itself is removed. */
+    public static void removePackageGeneration(String packageName) {
+        var state = PerlRuntime.current().mroState();
+        state.packageGenerations().remove(packageName);
+        state.packageGenerationIsaState().remove(packageName);
+        state.knownPackageMroQueries().remove(packageName);
         state.incrementSubGeneration();
     }
 }

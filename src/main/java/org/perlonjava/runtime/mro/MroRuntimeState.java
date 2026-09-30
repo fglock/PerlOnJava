@@ -25,6 +25,7 @@ public final class MroRuntimeState {
     private final Map<String, List<String>> isaStateCache = new HashMap<>();
 
     private final Map<String, Integer> packageGenerations = new HashMap<>();
+    private final Set<String> knownPackageMroQueries = new HashSet<>();
     private final Map<String, Set<String>> isaRevCache = new HashMap<>();
     private final Map<String, List<String>> packageGenerationIsaState = new HashMap<>();
 
@@ -58,6 +59,10 @@ public final class MroRuntimeState {
 
     public Map<String, Integer> packageGenerations() {
         return packageGenerations;
+    }
+
+    public Set<String> knownPackageMroQueries() {
+        return knownPackageMroQueries;
     }
 
     public Map<String, Set<String>> isaRevCache() {

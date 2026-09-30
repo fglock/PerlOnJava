@@ -572,16 +572,24 @@ public class DestroyDispatch {
         } catch (Exception e) {
             String msg = e.getMessage();
             if (msg == null) msg = e.getClass().getName();
-            // Use WarnDie.warn() (not Warnings.warn()) so the warning routes
-            // through $SIG{__WARN__}, matching Perl 5 semantics.
+            // Use the misc warning category while retaining WarnDie's normal
+            // $SIG{__WARN__} delivery. In Perl, cleanup exceptions are
+            // suppressible with `no warnings 'misc'`.
             // Perl 5 prefixes DESTROY warnings with \t. Do NOT add \n — let
             // WarnDie.warn() handle the " at file line N\n" suffix naturally.
             // If msg already ends with \n (e.g., die "msg\n"), warn suppresses
             // the suffix. If msg doesn't (e.g., die $ref), warn appends it.
             String warning = "\t(in cleanup) " + msg;
-            WarnDie.warn(
-                    new RuntimeScalar(warning),
-                    new RuntimeScalar(""));
+            String warningBits = e instanceof PerlDieException dieException
+                    && dieException.getWarningBits() != null
+                    ? dieException.getWarningBits()
+                    : RuntimeCode.getWarningBitsForCode(code);
+            if (!(e instanceof PerlDieException dieException
+                    && dieException.isMiscWarningSuppressed())) {
+                WarnDie.warnWithCategoryFromCode(
+                        new RuntimeScalar(warning),
+                        new RuntimeScalar(""), "misc", warningBits);
+            }
         } finally {
             // Restore the DESTROY target and rescue flag for nested DESTROY calls
             state.currentDestroyTarget = savedTarget;

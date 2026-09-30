@@ -44,7 +44,7 @@ All 14 standard Scalar::Util EXPORT_OK functions are declared and registered.
 | `openhandle` | Full | Checks GLOB/GLOBREFERENCE; verifies IO handle not closed; handles `*{}` overload |
 | `readonly` | **Partial** | Only detects compile-time constants (`RuntimeScalarReadOnly`). Does NOT detect runtime `Internals::SvREADONLY`. |
 | `set_prototype` | Full | Sets/clears prototype on CODE refs |
-| `tainted` | **Stub** | Always returns false. Taint mode is not implemented in PerlOnJava. |
+| `tainted` | Full | Reports taint propagated by `-T` or `-t` input handling. |
 
 ## Test Results by File
 
@@ -89,7 +89,7 @@ All 14 standard Scalar::Util EXPORT_OK functions are declared and registered.
 | t/shuffle.t | 7 | 1 | `shuffle` edge case |
 | t/subname.t | 21 | 7 | `set_subname`/`subname` not fully implemented |
 | t/sum.t | 18 | 3 | `sum` numeric edge cases |
-| t/tainted.t | 5 | 3 | Taint mode not implemented |
+| t/tainted.t | 5 | 3 | Historical result; taint support has since been implemented |
 | t/undefined-block.t | 18 | 18 | Undefined code block handling |
 | t/uniq.t | 31 | 6 | `uniq`/`uniqstr` edge cases |
 | t/uniqnum.t | 23 | 2 | `uniqnum` numeric edge cases |
@@ -107,7 +107,7 @@ Sub renaming with exotic characters (control chars, UTF-8) does not work.
 
 ### 3. Stubs returning incorrect values
 - `isvstring`: always returns false (trivial fix available)
-- `tainted`: always returns false (systemic: no taint mode)
+- `tainted`: now reports scalar taint state; see the taint support notes below.
 
 ### 4. Magic/tie get-magic (getmagic-once.t)
 All 6 tests fail -- get-magic is not invoked the correct number of times.

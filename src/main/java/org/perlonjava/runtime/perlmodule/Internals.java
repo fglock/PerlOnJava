@@ -480,7 +480,14 @@ public class Internals extends PerlModuleBase {
             // one of the owners and gets discounted). For named lexicals,
             // no adjustment — the temp `\@a` from the arg doesn't add an
             // extra owner in real Perl.
-            int adjust = base.localBindingExists ? 0 : -1;
+            // A value returned from a hash slot has a durable aggregate owner,
+            // but its method-result temporary is not represented as a
+            // selective refCount owner. Do not discount that real owner.
+            boolean fieldOwnedMethodResult = rc == 1
+                    && !base.localBindingExists
+                    && base.hashSlotOwnerCount > 0
+                    && !ReachabilityWalker.hasLiveStrongScalarReferentOtherThan(base, arg);
+            int adjust = base.localBindingExists || fieldOwnedMethodResult ? 0 : -1;
             return new RuntimeScalar(rc + extra + adjust).getList();
         }
         return new RuntimeScalar(1).getList();

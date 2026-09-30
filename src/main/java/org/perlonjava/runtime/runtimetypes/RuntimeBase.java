@@ -166,6 +166,14 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public boolean storedInPackageGlobal = false;
 
     /**
+     * Number of live hash-element slots that directly own this referent.
+     * This is separate from selective refCount because a returned method
+     * value can be detached from its slot while the hash remains an owner.
+     */
+    public int hashSlotOwnerCount = 0;
+
+
+    /**
      * Marks a scalar/container whose contents are reachable from package
      * globals. Mutating such an object can change cached root-reachability
      * answers, so mutation paths invalidate MortalList's external-root

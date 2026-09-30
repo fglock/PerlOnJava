@@ -1098,7 +1098,8 @@ public class EmitOperator {
             int leftCtx;
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
                 leftCtx = RuntimeContextType.SCALAR;
-            } else if (node.left instanceof ListNode) {
+            } else if (node.left instanceof ListNode
+                    && emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
                 leftCtx = RuntimeContextType.LIST;
             } else {
                 leftCtx = RuntimeContextType.SCALAR;
@@ -1123,7 +1124,8 @@ public class EmitOperator {
         } else {
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
                 node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-            } else if (node.left instanceof ListNode) {
+            } else if (node.left instanceof ListNode
+                    && emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
                 node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));
             } else {
                 node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));

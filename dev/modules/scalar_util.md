@@ -63,7 +63,7 @@ sub-modules as thin Perl wrappers backed by Java classes:
 | t/subname.t | FAIL | 7/21 | set_subname not fully effective |
 | t/sum.t | FAIL | 3/18 | Numeric edge cases |
 | t/sum0.t | PASS | ok | |
-| t/tainted.t | FAIL | 3/5 | No taint mode |
+| t/tainted.t | Historical | 3/5 | Recorded before taint support was implemented |
 | t/undefined-block.t | FAIL | 18/18 | Undefined code block handling |
 | t/uniq.t | FAIL | 6/31 | uniq/uniqstr edge cases |
 | t/uniqnum.t | FAIL | 2/23 | uniqnum edge cases |
@@ -120,14 +120,10 @@ Per Perl 5 docs:
 
 **Files:** `src/main/java/org/perlonjava/runtime/perlmodule/ListUtil.java`
 
-### Bug 3: `tainted()` Always Returns False (Systemic)
+### Historical note: `tainted()` support
 
-**Impact:** t/tainted.t (3 failures)
-
-**Root cause:** Taint mode is not implemented in PerlOnJava. `RuntimeScalar.isTainted()`
-always returns `false`. This is a systemic limitation, not fixable in Scalar::Util alone.
-
-**Status:** Won't fix (requires taint mode implementation)
+The recorded `t/tainted.t` failures predate PerlOnJava's taint tracking. The
+`tainted()` function now reports taint state propagated by `-T` and `-t`.
 
 ### Bug 4: `isvstring` Returns False -- Resolved by Bug 1 Fix
 

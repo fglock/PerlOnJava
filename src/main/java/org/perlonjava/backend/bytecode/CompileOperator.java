@@ -1744,6 +1744,14 @@ public class CompileOperator {
                 bytecodeCompiler.emit(nameIdx);
                 bytecodeCompiler.lastResultReg = rd;
             }
+            case "__CLASS__" -> {
+                int rd = bytecodeCompiler.allocateOutputRegister();
+                int nameIdx = bytecodeCompiler.addToStringPool("__CLASS__");
+                bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_CODE);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emit(nameIdx);
+                bytecodeCompiler.lastResultReg = rd;
+            }
             default -> bytecodeCompiler.throwCompilerException("Unsupported operator: " + op);
         }
     }

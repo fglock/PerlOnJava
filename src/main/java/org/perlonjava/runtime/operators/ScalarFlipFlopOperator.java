@@ -63,9 +63,16 @@ public class ScalarFlipFlopOperator {
      */
     public static RuntimeScalar evaluate(int id, RuntimeScalar left, RuntimeScalar right,
             boolean leftIsLineNumberEndpoint, boolean rightIsLineNumberEndpoint) {
+        return evaluate(id, left, right, leftIsLineNumberEndpoint, rightIsLineNumberEndpoint, true);
+    }
+
+    /** Evaluate with the lexical uninitialized-warning decision made at the call site. */
+    public static RuntimeScalar evaluate(int id, RuntimeScalar left, RuntimeScalar right,
+            boolean leftIsLineNumberEndpoint, boolean rightIsLineNumberEndpoint,
+            boolean warnUninitialized) {
         ScalarFlipFlopOperator ff = flipFlops().get(id);
-        boolean leftOperand = endpointMatches(left, leftIsLineNumberEndpoint);
-        boolean rightOperand = endpointMatches(right, rightIsLineNumberEndpoint);
+        boolean leftOperand = endpointMatches(left, leftIsLineNumberEndpoint, "flip", warnUninitialized);
+        boolean rightOperand = endpointMatches(right, rightIsLineNumberEndpoint, "flop", warnUninitialized);
         if (!ff.currentState) {
             // If current state is false, evaluate the left operand
             if (leftOperand) {
@@ -97,15 +104,75 @@ public class ScalarFlipFlopOperator {
 
     public static RuntimeBase evaluateInContext(int id, RuntimeScalar left, RuntimeScalar right,
             int context, boolean leftIsLineNumberEndpoint, boolean rightIsLineNumberEndpoint) {
-        if (RuntimeContextType.isListLike(context)) {
-            return PerlRange.createRange(left, right);
-        }
-        return evaluate(id, left, right, leftIsLineNumberEndpoint, rightIsLineNumberEndpoint);
+        return evaluateInContext(id, left, right, context, leftIsLineNumberEndpoint,
+                rightIsLineNumberEndpoint, true);
     }
 
-    private static boolean endpointMatches(RuntimeScalar operand, boolean isLineNumberEndpoint) {
-        if (!isLineNumberEndpoint) return operand.getBoolean();
+    public static RuntimeBase evaluateInContext(int id, RuntimeScalar left, RuntimeScalar right,
+            int context, boolean leftIsLineNumberEndpoint, boolean rightIsLineNumberEndpoint,
+            boolean warnUninitialized) {
+        if (RuntimeContextType.isListLike(context)) {
+            // A scalar wrapper nested in a prototype-driven call can arrive
+            // here with its final context selected only at runtime. Numeric
+            // endpoints still consult $. before that selection, just as the
+            // scalar flip-flop path does.
+            if (warnUninitialized && leftIsLineNumberEndpoint && rightIsLineNumberEndpoint) {
+                warnUndefinedInputLine("flip");
+            }
+            return PerlRange.createRange(left, right);
+        }
+        return evaluate(id, left, right, leftIsLineNumberEndpoint, rightIsLineNumberEndpoint,
+                warnUninitialized);
+    }
+
+    private static boolean endpointMatches(RuntimeScalar operand, boolean isLineNumberEndpoint,
+            String endpointName, boolean warnUninitialized) {
+        boolean stringEndpoint = operand.isString();
+        if (!isLineNumberEndpoint && !stringEndpoint) return operand.getBoolean();
+        if (stringEndpoint && !org.perlonjava.runtime.runtimetypes.ScalarUtils
+                .looksLikeNumber(operand)) {
+            // Both endpoints are evaluated for a scalar flip-flop.  Route the
+            // diagnostic directly through warn so a local __WARN__ handler
+            // cannot replace the runtime warning context after the first
+            // endpoint and suppress the second diagnostic.
+            org.perlonjava.runtime.operators.WarnDie.warn(
+                    new RuntimeScalar("Argument \"" + operand + "\" isn't numeric in range (or "
+                            + endpointName + ")"),
+                    org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarEmptyString);
+        }
         RuntimeScalar inputLine = GlobalVariable.getGlobalVariable("main::.");
-        return inputLine.getInt() == operand.getInt();
+        if (warnUninitialized) {
+            warnUndefinedInputLine(endpointName);
+        }
+        return inputLine.getInt() == numericEndpointValue(operand, stringEndpoint);
+    }
+
+    /**
+     * The range operator owns the numeric diagnostic for non-numeric string
+     * endpoints.  Do not numify through RuntimeScalar#getInt() afterwards:
+     * that path issues a second, context-free warning and can bypass a local
+     * __WARN__ handler while it is dynamically protected.
+     */
+    private static int numericEndpointValue(RuntimeScalar operand, boolean stringEndpoint) {
+        if (!stringEndpoint) return operand.getInt();
+        String text = operand.toString().trim();
+        try {
+            return (int) Double.parseDouble(text);
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
+    }
+
+    private static void warnUndefinedInputLine(String endpointName) {
+        RuntimeScalar inputLine = GlobalVariable.getGlobalVariable("main::.");
+        if (!inputLine.getDefinedBoolean()) {
+            // Numeric endpoints consult $. even when this expression is being
+            // evaluated as an argument to a testing helper. Its helper frame
+            // must not suppress the diagnostic from the original range.
+            org.perlonjava.runtime.operators.WarnDie.warn(
+                    new RuntimeScalar("Use of uninitialized value $. in range (or "
+                            + endpointName + ")"),
+                    org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarEmptyString);
+        }
     }
 }

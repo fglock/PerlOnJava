@@ -320,27 +320,6 @@ public class ClassTransformer {
                 new OperatorNode("@", new IdentifierNode("_", 0), 0), 0);
         body.elements.add(argsAssign);
 
-        // Required :param fields must be present in the argument hash. An
-        // explicitly supplied undef is valid, so defined-or is not suitable:
-        // only the hash entry's existence determines whether it is missing.
-        for (OperatorNode field : fields) {
-            if (!isRequiredParameterField(field)) {
-                continue;
-            }
-            String paramName = parameterName(field);
-
-            OperatorNode argsVar = new OperatorNode("$", new IdentifierNode("args", 0), 0);
-            HashLiteralNode parameterKey = new HashLiteralNode(List.of(new StringNode(paramName, 0)), 0);
-            BinaryOperatorNode parameterAccess = new BinaryOperatorNode("{", argsVar, parameterKey, 0);
-            OperatorNode exists = new OperatorNode("exists", new ListNode(List.of(parameterAccess), 0), 0);
-            OperatorNode missing = new OperatorNode("!", exists, 0);
-            String message = "Required parameter '" + paramName + "' is missing for \""
-                    + className + "\" constructor";
-            OperatorNode die = new OperatorNode("die", new ListNode(List.of(new StringNode(message, 0)), 0), 0);
-            body.elements.add(new IfNode("if", missing,
-                    new BlockNode(new ArrayList<>(List.of(die)), 0), null, 0));
-        }
-
         // Step 3: Create $self - either by calling SUPER::new or blessing empty hash
         ListNode mySelfDecl = new ListNode(0);
         OperatorNode mySelf = new OperatorNode("my",
@@ -387,8 +366,31 @@ public class ClassTransformer {
         body.elements.add(selfAssign);
 
         // Step 3: Add field initialization
-        // First initialize all fields
+        // Validate and initialize fields in declaration order. If a later
+        // required parameter is absent, Perl destroys the partially
+        // initialized instance, so earlier fields and DESTROY can observe
+        // their values.
         for (OperatorNode field : fields) {
+            if (isRequiredParameterField(field)) {
+                String paramName = parameterName(field);
+                OperatorNode argsVar = new OperatorNode("$", new IdentifierNode("args", 0), 0);
+                HashLiteralNode parameterKey = new HashLiteralNode(
+                        List.of(new StringNode(paramName, 0)), 0);
+                BinaryOperatorNode parameterAccess = new BinaryOperatorNode("{", argsVar, parameterKey, 0);
+                OperatorNode exists = new OperatorNode("exists",
+                        new ListNode(List.of(parameterAccess), 0), 0);
+                OperatorNode missing = new OperatorNode("!", exists, 0);
+                String message = "Required parameter '" + paramName + "' is missing for \""
+                        + className + "\" constructor";
+                OperatorNode die = new OperatorNode("die",
+                        new ListNode(List.of(new StringNode(message, 0)), 0), 0);
+                OperatorNode selfToRelease = new OperatorNode("$", new IdentifierNode("self", 0), 0);
+                OperatorNode undef = new OperatorNode("undef", null, 0);
+                BinaryOperatorNode releasePartialObject = new BinaryOperatorNode(
+                        "=", selfToRelease, undef, 0);
+                body.elements.add(new IfNode("if", missing,
+                        new BlockNode(new ArrayList<>(List.of(releasePartialObject, die)), 0), null, 0));
+            }
             Node fieldInit = generateFieldInitialization(field);
             if (fieldInit != null) {
                 body.elements.add(fieldInit);

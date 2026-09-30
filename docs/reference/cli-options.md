@@ -114,8 +114,8 @@ jperl [options] [program | -e 'command'] [arguments]
   propagated, and security-sensitive operations reject unsafe values on both
   execution backends.
 
-- **`-t`** - Accepted for compatibility, but warning-mode taint semantics are
-  not yet implemented.
+- **`-t`** - Enable warning-mode taint checks. External input is marked tainted
+  and propagated; unsafe uses emit warnings instead of being rejected.
 
 - **`-w`** - Enable warnings
   ```bash

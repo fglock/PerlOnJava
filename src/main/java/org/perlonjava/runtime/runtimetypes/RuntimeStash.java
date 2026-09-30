@@ -310,6 +310,11 @@ public class RuntimeStash extends RuntimeHash {
         // Clear stash alias if any
         GlobalVariable.clearStashAlias(childPrefix);
 
+        if (childPrefix.endsWith("::")) {
+            String packageName = childPrefix.substring(0, childPrefix.length() - 2);
+            org.perlonjava.runtime.perlmodule.Mro.removePackageGeneration(packageName);
+        }
+
         // Method resolution and package existence caches are now stale
         InheritanceResolver.invalidateCache();
         String className = childPrefix.endsWith("::")
@@ -479,6 +484,10 @@ public class RuntimeStash extends RuntimeHash {
         // We must remove all slots from the GlobalVariable maps, not just clear the view.
         String prefix = this.namespace;
 
+        String packageName = prefix.endsWith("::")
+                ? prefix.substring(0, prefix.length() - 2) : prefix;
+        org.perlonjava.runtime.perlmodule.Mro.resetPackageGeneration(packageName);
+
         GlobalVariable.clearStashAlias(prefix);
 
         GlobalVariable.clearGlobalPseudoConstantsForNamespace(prefix);
@@ -523,6 +532,9 @@ public class RuntimeStash extends RuntimeHash {
         }
 
         String prefix = namespace;
+        String packageName = prefix.endsWith("::")
+                ? prefix.substring(0, prefix.length() - 2) : prefix;
+        org.perlonjava.runtime.perlmodule.Mro.resetPackageGeneration(packageName);
         GlobalVariable.clearStashAlias(prefix);
         GlobalVariable.clearGlobalPseudoConstantsForNamespace(prefix);
         GlobalVariable.globalVariables.keySet().removeIf(k -> k.startsWith(prefix));

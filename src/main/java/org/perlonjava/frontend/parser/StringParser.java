@@ -141,6 +141,11 @@ public class StringParser {
     }
 
     public static ParsedString parseRawStringWithDelimiter(EmitterContext ctx, List<LexerToken> tokens, int index, boolean redo, Parser parser, boolean isRegex) {
+        return parseRawStringWithDelimiter(ctx, tokens, index, redo, parser, isRegex, null);
+    }
+
+    private static ParsedString parseRawStringWithDelimiter(EmitterContext ctx, List<LexerToken> tokens,
+            int index, boolean redo, Parser parser, boolean isRegex, String replacementDiagnostic) {
         int tokPos = index;  // Current position in the tokens list
         char startDelim = 0;  // Starting delimiter
         char endDelim = 0;  // Ending delimiter
@@ -175,6 +180,9 @@ public class StringParser {
                         ? "Search pattern not terminated"
                         : "Can't find string terminator " + delimiterDescription
                         + " anywhere before EOF";
+                if (replacementDiagnostic != null && !buffers.isEmpty()) {
+                    errorMsg = replacementDiagnostic;
+                }
                 throw PerlCompilerException.withSourceLocation(index, errorMsg, ctx.errorUtil);
             }
 
@@ -457,13 +465,22 @@ public class StringParser {
     }
 
     public static ParsedString parseRawStrings(Parser parser, EmitterContext ctx, List<LexerToken> tokens, int tokenIndex, int stringCount) {
-        return parseRawStrings(parser, ctx, tokens, tokenIndex, stringCount, false);
+        return parseRawStrings(parser, ctx, tokens, tokenIndex, stringCount, false, null);
     }
 
     public static ParsedString parseRawStrings(Parser parser, EmitterContext ctx, List<LexerToken> tokens, int tokenIndex, int stringCount, boolean isRegex) {
+        return parseRawStrings(parser, ctx, tokens, tokenIndex, stringCount, isRegex, null);
+    }
+
+    private static ParsedString parseRawStrings(Parser parser, EmitterContext ctx, List<LexerToken> tokens,
+            int tokenIndex, int stringCount, boolean isRegex, String operator) {
         int pos = tokenIndex;
         boolean redo = (stringCount == 3);
-        ParsedString ast = parseRawStringWithDelimiter(ctx, tokens, pos, redo, parser, isRegex); // use redo flag to extract 2 strings
+        String replacementDiagnostic = operator == null ? null : "s".equals(operator)
+                ? "Substitution replacement not terminated"
+                : "Transliteration replacement not terminated";
+        ParsedString ast = parseRawStringWithDelimiter(ctx, tokens, pos, redo, parser, isRegex,
+                stringCount == 3 ? replacementDiagnostic : null);
         if (stringCount == 1) {
             return ast;
         }
@@ -473,7 +490,18 @@ public class StringParser {
             char delim = ast.startDelim; // / or {
             if (QUOTE_PAIR.containsKey(delim)) {
                 pos = Whitespace.skipWhitespace(parser, pos, tokens);
-                ParsedString ast2 = parseRawStringWithDelimiter(ctx, tokens, pos, false, parser);
+                ParsedString ast2;
+                try {
+                    ast2 = parseRawStringWithDelimiter(ctx, tokens, pos, false, parser, false,
+                            replacementDiagnostic);
+                } catch (PerlCompilerException error) {
+                    if (replacementDiagnostic != null && error.getMessage() != null
+                            && error.getMessage().startsWith("Can't find string terminator")) {
+                        throw PerlCompilerException.withSourceLocation(pos,
+                                replacementDiagnostic, ctx.errorUtil);
+                    }
+                    throw error;
+                }
                 ast.buffers.add(ast2.buffers.getFirst());
                 ast.next = ast2.next;
                 ast.secondBufferStartDelim = ast2.startDelim;
@@ -1244,7 +1272,8 @@ public class StringParser {
             case "m", "qr", "/", "//", "/=", "s" -> true;
             default -> false;
         };
-        rawStr = parseRawStrings(parser, parser.ctx, parser.tokens, parser.tokenIndex, stringParts, isRegex);
+        rawStr = parseRawStrings(parser, parser.ctx, parser.tokens, parser.tokenIndex,
+                stringParts, isRegex, parser.baseSourceFileName == null ? operator : null);
         if (operator.equals("q")) {
             parser.ctx.errorUtil.addLiteralQuoteRange(parser.tokenIndex, rawStr.next);
         }

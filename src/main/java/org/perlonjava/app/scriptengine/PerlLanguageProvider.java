@@ -168,7 +168,8 @@ public class PerlLanguageProvider {
 
         if (isTopLevelScript) {
             ArgumentParser.applyPerlShebangSwitches(compilerOptions.code, compilerOptions);
-            GlobalContext.setThreadTaintMode(compilerOptions.taintMode);
+            GlobalContext.setThreadTaintMode(compilerOptions.taintMode || compilerOptions.taintWarnings);
+            GlobalContext.setThreadTaintWarningMode(compilerOptions.taintWarnings);
             RuntimeIO.configureCommandLineUnicode(
                     compilerOptions.unicodeInput || compilerOptions.unicodeStdin,
                     compilerOptions.unicodeOutput || compilerOptions.unicodeStdout,
@@ -186,7 +187,7 @@ public class PerlLanguageProvider {
             // -Ci/-Co are scoped to the current file. A require/do compilation
             // must not inherit the top-level command-line open defaults.
             RuntimeIO.configureCommandLineUnicode(false, false, false);
-            if (compilerOptions.taintMode) {
+            if (compilerOptions.taintMode || compilerOptions.taintWarnings) {
             // A nested require/do inherits its caller's runtime taint mode.
             // It may enable taint explicitly, but default nested options must
             // not disable a top-level -T program.
@@ -538,6 +539,10 @@ public class PerlLanguageProvider {
 
         if (compilerOptions.taintMode) {
             GlobalContext.setThreadTaintMode(true);
+        }
+        if (compilerOptions.taintWarnings) {
+            GlobalContext.setThreadTaintMode(true);
+            GlobalContext.setThreadTaintWarningMode(true);
         }
 
         // Save the current scope so we can restore it after execution.
@@ -1037,7 +1042,8 @@ public class PerlLanguageProvider {
         ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
         try {
         ArgumentParser.applyPerlShebangSwitches(compilerOptions.code, compilerOptions);
-        GlobalContext.setThreadTaintMode(compilerOptions.taintMode);
+        GlobalContext.setThreadTaintMode(compilerOptions.taintMode || compilerOptions.taintWarnings);
+        GlobalContext.setThreadTaintWarningMode(compilerOptions.taintWarnings);
         ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
         globalSymbolTable.enterScope();
         globalSymbolTable.addVariable("this", "", null); // anon sub instance is local variable 0

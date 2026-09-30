@@ -361,6 +361,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // narrow guard for live CODE refs whose captures must survive void discard.
     RuntimeBase containerOwner;
 
+    /** Return the aggregate slot that directly owns this scalar, if any. */
+    public RuntimeBase getContainerOwner() {
+        return containerOwner;
+    }
+
     void markContainerOwner(RuntimeBase owner) {
         this.containerOwner = owner;
         propagateTiedHandlerMarkerToReferent();
@@ -1705,9 +1710,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public static void checkTaint(RuntimeScalar scalar, String operation) {
         if (GlobalContext.isTaintModeActive() && scalar != null && scalar.isTainted()) {
-            throw new PerlCompilerException(
-                    "Insecure dependency in " + operation + " while running with -T switch");
+            reportTaintViolation("Insecure dependency in " + operation);
         }
+    }
+
+    /** Report an insecure use according to strict (-T) or warning (-t) mode. */
+    public static void reportTaintViolation(String message) {
+        if (GlobalContext.isTaintWarningModeActive()) {
+            if (!WarningFlags.isWarningSuppressedAtRuntime("taint")) {
+                WarnDie.warn(new RuntimeScalar(message + " while running with -t switch"),
+                        RuntimeScalarCache.scalarEmptyString);
+            }
+            return;
+        }
+        throw new PerlCompilerException(message + " while running with -T switch");
     }
 
     // Add itself to a RuntimeArray.
@@ -2470,6 +2486,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Do the assignment
         this.type = value.type;
         this.value = value.value;
+        // Hash-element slots remain durable owners when their existing
+        // scalar wrapper is assigned a new referent (the normal class-field
+        // ADJUST path). RuntimeHash's map hook covers slot replacement; this
+        // covers mutation of a slot that is already in the map.
+        if (containerOwner instanceof RuntimeHash && oldBase != this.value) {
+            if (oldBase != null && oldBase.hashSlotOwnerCount > 0) {
+                oldBase.hashSlotOwnerCount--;
+            }
+            if (this.value instanceof RuntimeBase newBase) {
+                newBase.hashSlotOwnerCount++;
+            }
+        }
         if (this.captureCount > 0 && (this.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && this.value instanceof RuntimeBase capturedBase
                 && !WeakRefRegistry.isweak(this)) {

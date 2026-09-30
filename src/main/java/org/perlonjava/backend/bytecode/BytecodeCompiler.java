@@ -8965,11 +8965,12 @@ public class BytecodeCompiler implements Visitor {
         if (currentCallContext == RuntimeContextType.SCALAR) {
             // Evaluate all elements except the last in SCALAR context for side effects
             for (int i = 0; i < node.elements.size() - 1; i++) {
-                node.elements.get(i).accept(this);
+                compileNode(node.elements.get(i), -1, RuntimeContextType.VOID);
                 // Result is discarded (side effects only)
             }
             // Evaluate and keep the last element
-            node.elements.get(node.elements.size() - 1).accept(this);
+            compileNode(node.elements.get(node.elements.size() - 1), -1,
+                    RuntimeContextType.SCALAR);
             // lastResultReg already contains the last element's value
             return;
         }

@@ -6,6 +6,8 @@ import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -66,6 +68,14 @@ public class UtimeOperator {
         try {
             if (fileArg.type == RuntimeScalarType.GLOB ||
                     fileArg.type == RuntimeScalarType.GLOBREFERENCE) {
+                RuntimeIO fileHandle = RuntimeIO.getRuntimeIO(fileArg);
+                if (fileHandle != null && fileHandle.ioHandle instanceof org.perlonjava.runtime.io.ClosedIOHandle) {
+                    GlobalVariable.getGlobalVariable("main::!").set("Bad file descriptor");
+                    return false;
+                }
+                if (fileHandle != null) {
+                    throw new PerlCompilerException("The futimes function is unimplemented");
+                }
                 return changeFilehandleTimes(fileArg, accessTime, modTime);
             }
 
@@ -81,6 +91,8 @@ public class UtimeOperator {
                 return changeFileTimesPosix(filename, accessTime, modTime);
             }
 
+        } catch (PerlCompilerException e) {
+            throw e;
         } catch (Exception e) {
             return false;
         }

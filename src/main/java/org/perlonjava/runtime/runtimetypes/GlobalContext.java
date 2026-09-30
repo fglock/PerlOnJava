@@ -34,6 +34,15 @@ public class GlobalContext {
         return PerlRuntime.current().executionState().taintMode;
     }
 
+    /** Enable or disable nonfatal taint warnings for command-line {@code -t}. */
+    public static void setThreadTaintWarningMode(boolean enabled) {
+        PerlRuntime.current().executionState().taintWarnings = enabled;
+    }
+
+    public static boolean isTaintWarningModeActive() {
+        return PerlRuntime.current().executionState().taintWarnings;
+    }
+
     /** Record the taint state left by join(), used by Perl's legacy taint probe. */
     public static void setThreadJoinTaint(boolean tainted) {
         PerlRuntime.current().executionState().joinTaint = tainted;
@@ -104,7 +113,7 @@ public class GlobalContext {
             // Fallback to "jperl" if environment variable is not set
             executableVariable.set("jperl");
         }
-        if (compilerOptions.taintMode) {
+        if (compilerOptions.taintMode || compilerOptions.taintWarnings) {
             executableVariable.tainted = true;
         }
 
@@ -146,17 +155,20 @@ public class GlobalContext {
             GlobalVariable.globalVariables.put("main::0",
                     new ProgramNameVariable().initialize(compilerOptions.fileName));
         }
-        if (compilerOptions.taintMode) {
+        if (compilerOptions.taintMode || compilerOptions.taintWarnings) {
             GlobalVariable.getGlobalVariable("main::0").tainted = true;
         }
         GlobalVariable.getGlobalVariable(GLOBAL_PHASE).set("RUN"); // ${^GLOBAL_PHASE}
-        // ${^TAINT} - set to 1 if -T (taint mode) was specified, 0 otherwise
+        // ${^TAINT} distinguishes fatal -T from warning-only -t mode.
         // Only initialize if not already set (to avoid overwriting during re-initialization)
         String taintVarName = encodeSpecialVar("TAINT");
-        if (!GlobalVariable.globalVariables.containsKey(taintVarName) || 
-            (compilerOptions.taintMode && GlobalVariable.globalVariables.get(taintVarName) == RuntimeScalarCache.scalarZero)) {
-            GlobalVariable.globalVariables.put(taintVarName, 
-                compilerOptions.taintMode ? RuntimeScalarCache.scalarOne : RuntimeScalarCache.scalarZero);
+        RuntimeScalar taintStatus = compilerOptions.taintMode
+                ? RuntimeScalarCache.scalarOne
+                : compilerOptions.taintWarnings ? new RuntimeScalar(-1) : RuntimeScalarCache.scalarZero;
+        if (!GlobalVariable.globalVariables.containsKey(taintVarName)
+                || ((compilerOptions.taintMode || compilerOptions.taintWarnings)
+                && GlobalVariable.globalVariables.get(taintVarName) == RuntimeScalarCache.scalarZero)) {
+            GlobalVariable.globalVariables.put(taintVarName, taintStatus);
         }
         GlobalVariable.globalVariables.put("main::>", new ScalarSpecialVariable(ScalarSpecialVariable.Id.EFFECTIVE_UID));  // $> - effective UID (lazy)
         GlobalVariable.globalVariables.put("main::<", new ScalarSpecialVariable(ScalarSpecialVariable.Id.REAL_UID));  // $< - real UID (lazy)
@@ -261,12 +273,12 @@ public class GlobalContext {
         Map<String, RuntimeScalar> env = environmentHash.elements;
         System.getenv().forEach((k, v) -> {
             RuntimeScalar envValue = new RuntimeScalar(v);
-            envValue.tainted = compilerOptions.taintMode;
+            envValue.tainted = compilerOptions.taintMode || compilerOptions.taintWarnings;
             env.put(k, envValue);
         });
 
         // Command-line arguments are external input just like %ENV and file data.
-        if (compilerOptions.taintMode) {
+        if (compilerOptions.taintMode || compilerOptions.taintWarnings) {
             for (RuntimeScalar argument : compilerOptions.argumentList.elements) {
                 argument.tainted = true;
             }

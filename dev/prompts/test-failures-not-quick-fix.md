@@ -41,11 +41,9 @@ estimated difficulty level.
 
 ## 1. Taint Tracking
 
-**Status:** SKIP WORKAROUND IMPLEMENTED (2026-04-01)
-
-`Config.pm` now has `taint_support => ''` and `ccflags => '-DSILENT_NO_TAINT_SUPPORT'`, so `op/taint.t` skips gracefully. Full taint tracking remains unimplemented (`RuntimeScalar.isTainted()` always returns `false`).
-
-### Difficulty: Very Hard (full implementation) - skip workaround already applied
+**Status:** Implemented. `-T` rejects tainted values at security-sensitive
+operations; `-t` emits warnings. Taint propagates through scalar and regex
+operations on both execution backends.
 
 ---
 
@@ -632,7 +630,7 @@ Items marked FIXED were implemented on the `feature/test-failure-fixes` branch.
 ### Already Implemented
 | Feature | Status |
 |---------|--------|
-| Taint skip workaround | Done - Config.pm has `taint_support => ''` |
+| Taint tracking | Implemented for `-T` and warning-mode `-t` |
 | Tied scalar code deref | Done - all apply() overloads handle TIED_SCALAR |
 | delete local | Done - full implementation across all layers |
 | \(LIST) reference creation | Done - JVM backend + interpreter (without flattenElements) |
@@ -729,17 +727,15 @@ After rebasing `feature/test-failure-fixes` onto latest master, the following re
 
 **Difficulty:** Medium - glob assignment when loop variable aliases a read-only constant.
 
-### run/switcht.t (9/13 → 0/0, -9) - DELIBERATE (master)
+### run/switcht.t
 
-**Root cause:** `Config.pm` now has `taint_support => ''` which causes the test to skip all 13 tests. Previously the key didn't exist, so the skip check short-circuited and 9 tests passed by coincidence (not actually testing taint). This is a deliberate design decision from the `fix/test-pass-rate-quick-wins` PR merged into master.
+Taint mode is supported; this test must run and validate command-line taint
+switch behavior rather than being skipped through configuration metadata.
 
-**No action needed.**
+### op/taint.t
 
-### op/taint.t (4/1065 → 0/0, -4) - DELIBERATE (master)
-
-**Root cause:** Same as run/switcht.t — `taint_support => ''` in Config.pm causes graceful skip of all 1065 tests. The 4 that previously passed were coincidental. This is the intended behavior. The same applies to `perf/taint.t` which also skips gracefully.
-
-**No action needed.**
+Taint mode is supported and the upstream test should run; remaining gaps should
+be tracked as implementation failures, not treated as deliberate skips.
 
 ---
 

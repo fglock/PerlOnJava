@@ -25,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -883,6 +884,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             // Note: flags /e /ee are processed at parse time, in parseRegexReplace()
 
             regex.regexFlags = fromModifiers(modifiers, compilePatternString);
+            List<String> loweredSetWarnings = loweredSetSourceWarnings(
+                    compilePatternString);
+            if (loweredSetWarnings.isEmpty()) {
+                // The set lowering pass can normalize a singleton class back
+                // to ordinary bracket syntax. Retain source diagnostics from
+                // that form too.
+                loweredSetWarnings = loweredSetSourceWarnings(originalPatternString);
+            }
 
             LeftBraceIssue leftBraceIssue = unescapedLeftBraceIssue(
                     originalPatternString, regex.regexFlags);
@@ -976,6 +985,18 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     }
                     regex.inlineModifierWarnings.addAll(
                             regex.recursivePattern.compileWarnings());
+                    // The lowered program normally retains these diagnostics.
+                    // Only use the source-level fallback when lowering erased
+                    // them; comparing complete strings is insufficient because
+                    // the two source views have different caret locations.
+                    boolean compilerKeptNumericClassEscapeWarning =
+                            regex.inlineModifierWarnings.stream().anyMatch(warning ->
+                                    warning.startsWith("Unrecognized escape \\")
+                                            && warning.contains(
+                                                    " in character class passed through"));
+                    if (!compilerKeptNumericClassEscapeWarning) {
+                        regex.inlineModifierWarnings.addAll(loweredSetWarnings);
+                    }
                     if (lexicalReStrict) {
                         for (String warning : regex.inlineModifierWarnings) {
                             if (warning.startsWith("False [] range")) {
@@ -1444,6 +1465,49 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static String looseUnicodePropertyDiagnosticName(String property) {
         return property == null ? "" : property.replaceAll("[\\s_-]+", "")
                 .toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /**
+     * Preserve source diagnostics that would otherwise be lost when a normal
+     * bracket-class leaf has been lowered to a spaced (?[ [ ... ] ]) program.
+     * This intentionally excludes native extended-class text such as
+     * {@code (?[[:w:]])}, whose short POSIX-looking names are literal text.
+     */
+    private static List<String> loweredSetSourceWarnings(String pattern) {
+        if (pattern == null) return List.of();
+        // regexp.t converts ordinary bracket classes to a deliberately
+        // space-padded (?[ [ ... ] ]) program for regex_sets_compat.t.  That
+        // shape identifies a lowered class; a native (?[[:w:]]) expression
+        // must retain its own interpretation of POSIX-looking text.
+        boolean loweredBracketClass = pattern.matches("(?s).*\\(\\?\\[\\s+\\[.*");
+        Matcher posix = Pattern.compile("\\[:(\\^?[a-z]+):\\]").matcher(pattern);
+        if (loweredBracketClass) {
+            while (posix.find()) {
+                String name = posix.group(1);
+                String bare = name.startsWith("^") ? name.substring(1) : name;
+                if (bare.length() > 1 && bare.equals(bare.toLowerCase(java.util.Locale.ROOT))
+                        && !Set.of("alnum", "alpha", "ascii", "blank", "cntrl", "digit",
+                        "graph", "lower", "print", "punct", "space", "upper", "word",
+                        "xdigit").contains(bare)) {
+                    throw new PerlCompilerException("POSIX class [:" + name + ":] unknown");
+                }
+            }
+        }
+        List<String> warnings = new ArrayList<>();
+        Matcher numericEscape = Pattern.compile("(?<!\\\\)\\\\([89])").matcher(pattern);
+        while (numericEscape.find()) {
+            if (pattern.contains("(?[")) {
+                throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(pattern,
+                        numericEscape.end(), "Unrecognized escape "
+                                + "\\"
+                                + numericEscape.group(1)
+                                + " in character class"));
+            }
+            warnings.add(RegexDiagnosticFormatter.markedPerl(pattern,
+                    numericEscape.end(), "Unrecognized escape \\\\" + numericEscape.group(1)
+                            + " in character class passed through"));
+        }
+        return warnings;
     }
 
     private static List<String> unicodePropertyWildcardWarnings(String pattern) {

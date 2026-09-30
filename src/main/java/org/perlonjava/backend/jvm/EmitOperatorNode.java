@@ -53,7 +53,13 @@ public class EmitOperatorNode {
             }
             // Subroutine related
             case "__SUB__" -> EmitSubroutine.handleSelfCallOperator(emitterVisitor, node);
-            case "package" -> EmitOperator.handlePackageOperator(emitterVisitor, node);
+            case "__CLASS__" -> emitterVisitor.ctx.mv.visitMethodInsn(
+                    org.objectweb.asm.Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "currentClassName",
+                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            case "package", "class" -> EmitOperator.handlePackageOperator(emitterVisitor, node);
 
             // Variable access operators
             case "$", "@", "%", "*", "&" -> EmitVariable.handleVariableOperator(emitterVisitor, node);

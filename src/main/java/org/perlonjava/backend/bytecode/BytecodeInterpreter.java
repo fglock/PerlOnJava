@@ -1274,6 +1274,8 @@ public class BytecodeInterpreter {
                                         }
                                     }
                                     registers[rd] = RuntimeCode.selfReferenceMaybeNull(selfReference);
+                                } else if (name.equals("__CLASS__")) {
+                                    registers[rd] = RuntimeCode.currentClassName();
                                 } else {
                                     registers[rd] = GlobalVariable.getGlobalCodeRefForDirectCall(name);
                                 }

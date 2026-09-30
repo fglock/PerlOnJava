@@ -437,6 +437,17 @@ public class WarnDie {
 
     public static RuntimeBase warnWithCategory(RuntimeBase message, RuntimeScalar where, String category,
                                                 String fileName, int lineNumber) {
+        return warnWithCategory(message, where, category, fileName, lineNumber, null);
+    }
+
+    /** Emit a category warning using the lexical bits of the Perl code that raised it. */
+    public static RuntimeBase warnWithCategoryFromCode(RuntimeBase message, RuntimeScalar where,
+            String category, String warningBits) {
+        return warnWithCategory(message, where, category, null, 0, warningBits);
+    }
+
+    private static RuntimeBase warnWithCategory(RuntimeBase message, RuntimeScalar where, String category,
+            String fileName, int lineNumber, String warningBitsOverride) {
         if (WarningFlags.areWarningsForcedOff()) {
             return new RuntimeScalar();
         }
@@ -451,7 +462,10 @@ public class WarnDie {
         // definition-time warning bits, while statement flag nodes refine the
         // runtime channel for nested lexical scopes. This makes the runtime
         // value authoritative for ordinary warnings on both backends.
-        String warningBits = org.perlonjava.runtime.WarningBitsRegistry.getRuntimeWarningBits();
+        String warningBits = warningBitsOverride;
+        if (warningBits == null) {
+            warningBits = org.perlonjava.runtime.WarningBitsRegistry.getRuntimeWarningBits();
+        }
         if (warningBits == null) {
             warningBits = getWarningBitsFromCurrentContext();
         }
@@ -487,10 +501,11 @@ public class WarnDie {
         // even when a caller has localized $^W to a true value: Perl's
         // dynamic all-warnings switch must not re-enable a category that the
         // currently executing callee disabled lexically.
-        if (WarningFlags.hasRuntimeWarningScope()
-                ? WarningFlags.isWarningSuppressedAtRuntime(category)
-                : org.perlonjava.runtime.WarningBitsRegistry
-                        .isRuntimeWarningCategoryDisabled(category)) {
+        if (warningBitsOverride == null
+                && (WarningFlags.hasRuntimeWarningScope()
+                    ? WarningFlags.isWarningSuppressedAtRuntime(category)
+                    : org.perlonjava.runtime.WarningBitsRegistry
+                            .isRuntimeWarningCategoryDisabled(category))) {
             return new RuntimeScalar();
         }
         
@@ -708,10 +723,14 @@ public class WarnDie {
                 DynamicVariableManager.popToLocalLevel(level);
             }
 
-            throw new PerlDieException(errVariable, snapshotWarningHandler());
+            throw new PerlDieException(errVariable, snapshotWarningHandler(),
+                    org.perlonjava.runtime.WarningBitsRegistry.getRuntimeWarningBits(),
+                    WarningFlags.isWarningSuppressedAtRuntime("misc"));
         }
 
-        throw new PerlDieException(errVariable, snapshotWarningHandler());
+        throw new PerlDieException(errVariable, snapshotWarningHandler(),
+                org.perlonjava.runtime.WarningBitsRegistry.getRuntimeWarningBits(),
+                WarningFlags.isWarningSuppressedAtRuntime("misc"));
     }
 
     /**
