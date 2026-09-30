@@ -7372,17 +7372,20 @@ public class BytecodeCompiler implements Visitor {
         if (errorUtil == null) {
             return;
         }
+        // The SubroutineNode owns the declaration token location. Its block
+        // index is a child token and can point at the wrong line for adjacent
+        // anonymous subs, so use the node location for the CV start metadata.
+        var loc = errorUtil.getSourceLocationAccurate(node.getIndex());
+        code.cvStartLine = loc.lineNumber();
+        if (loc.fileName() != null && !loc.fileName().isEmpty()) {
+            code.cvStartFile = loc.fileName();
+        }
         // Eval strings intentionally retain their historical DUMMY fallback
         // for source that cannot be mapped back to a file.  File-backed
         // compilation, including CPAN test files, has a stable source unit
         // and can safely expose the exact parser span.
         if (sourceName == null || !new java.io.File(sourceName).isFile()) {
             return;
-        }
-        var loc = errorUtil.getSourceLocationAccurate(node.block.getIndex());
-        code.cvStartLine = loc.lineNumber();
-        if (loc.fileName() != null && !loc.fileName().isEmpty()) {
-            code.cvStartFile = loc.fileName();
         }
         int endOffset = node.sourceEndTokenIndex >= 0
                 ? errorUtil.getSourceOffset(node.sourceEndTokenIndex) : -1;

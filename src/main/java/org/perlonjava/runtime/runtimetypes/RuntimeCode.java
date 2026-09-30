@@ -5421,7 +5421,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         && activeCode.lexicalSubDisplayName) {
                     subName = callerSubNameForCode(activeCode);
                 }
-                if (virtualEvalFrame && activeCode != null
+                if (virtualEvalFrame && !interpreterVirtualEvalFrame && activeCode != null
                         && !PerlRuntime.current().executionState().insideDieHandler) {
                     // A synthetic eval frame can occupy the formatted slot for
                     // a still-active named subroutine. At that same logical
@@ -5673,23 +5673,56 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         } else if (frame >= stackTraceSize) {
             int trackedOriginalFrame = Math.max(0, originalFrame - countSyntheticOwnSubFramesBefore(stackTrace, stackTrace.size()));
+            int activeCodeFrame = activeCodeFrameForCaller(
+                    result.firstFrameFromInterpreter() ? originalFrame : trackedOriginalFrame);
             RuntimeCode activeCode = hasExplicitExpr
-                    ? activeCodeAtCallerFrame(activeCodeFrameForCaller(
-                            result.firstFrameFromInterpreter() ? originalFrame : trackedOriginalFrame))
+                    ? activeCodeAtCallerFrame(activeCodeFrame)
                     : null;
+            if (activeCode != null
+                    && activeCode instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
+                    && interpreted.sourceName != null
+                    && interpreted.sourceName.startsWith("(eval ")
+                    && PerlRuntime.current().executionState().insideDieHandler) {
+                // For eval STRING, the first active interpreter code at this
+                // caller depth is the temporary eval implementation itself.
+                // That CV has no Perl caller level; advance to the enclosing
+                // interpreted CV which the remapped stack trace omitted.
+                activeCode = activeCodeAtCallerFrame(activeCodeFrame + 1);
+            }
             String activeSubName = activeCode != null
                     ? applyAnonNameOverride(callerSubNameForCode(activeCode))
                     : null;
+            boolean missingInterpreterDieFrame = activeCode != null
+                    && activeCode instanceof org.perlonjava.backend.bytecode.InterpretedCode
+                    && frame == stackTraceSize + 1
+                    && PerlRuntime.current().executionState().insideDieHandler;
+            if (missingInterpreterDieFrame
+                    && (activeSubName == null || activeSubName.isEmpty())) {
+                activeSubName = normalizeCallerPackage(activeCode.packageName) + "::__ANON__";
+            }
             if (activeCode != null && !calledFromDB
-                    && hasExplicitlyRenamedActiveCode()
+                    && (hasExplicitlyRenamedActiveCode() || missingInterpreterDieFrame)
                     && activeSubName != null && !activeSubName.isEmpty()) {
                 String pkg = normalizeCallerPackage(activeCode.packageName);
                 if (ctx == RuntimeContextType.SCALAR) {
                     res.add(new RuntimeScalar(pkg));
                 } else {
+                    String activeFile = activeCode.cvStartFile != null
+                            ? activeCode.cvStartFile : "";
+                    int activeLine = activeCode.cvStartLine;
+                    if (missingInterpreterDieFrame && stackTraceSize > 0) {
+                        ArrayList<String> evalFrame = stackTrace.get(stackTraceSize - 1);
+                        if (evalFrame.size() > 3 && "(eval)".equals(evalFrame.get(3))) {
+                            // The omitted anonymous CV is called at the same
+                            // source site as this remapped eval-string frame;
+                            // its own start metadata may be synthetic here.
+                            activeFile = evalFrame.get(1);
+                            activeLine = Integer.parseInt(evalFrame.get(2));
+                        }
+                    }
                     res.add(new RuntimeScalar(pkg));
-                    res.add(new RuntimeScalar(activeCode.cvStartFile != null ? activeCode.cvStartFile : ""));
-                    res.add(new RuntimeScalar(activeCode.cvStartLine));
+                    res.add(new RuntimeScalar(activeFile));
+                    res.add(new RuntimeScalar(activeLine));
                     res.add(new RuntimeScalar(activeSubName));
                     Boolean hasArgsFromStack = getHasArgsAt(trackedOriginalFrame);
                     res.add(hasArgsFromStack != null && hasArgsFromStack
