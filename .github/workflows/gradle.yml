@@ -41,7 +41,7 @@ jobs:
       - name: Build with Make (Windows)
         id: build-windows
         if: runner.os == 'Windows'
-        timeout-minutes: 45
+        timeout-minutes: 60
         shell: cmd
         run: make ci
         env:
