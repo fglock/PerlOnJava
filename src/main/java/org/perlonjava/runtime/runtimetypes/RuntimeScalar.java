@@ -1889,11 +1889,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     /** Store a value and produce the scalar value of an assignment expression. */
     public static RuntimeScalar assignToExpression(RuntimeBase value, RuntimeScalar target) {
-        // Assignment invokes STORE on tied lvalues but does not subsequently
-        // invoke FETCH merely to produce the assignment result.  In
-        // particular, assignments to tied aggregate elements and ties that
-        // implement STORE only must remain valid.
-        return assignTo(value, target);
+        RuntimeScalar assigned = assignTo(value, target);
+        // A scalar assignment expression reads its lvalue result. For tied
+        // scalars Perl therefore invokes FETCH after STORE; STORE's own return
+        // value is ignored. Keep void assignments on assignTo() so they do
+        // not introduce an observable fetch.
+        return target.type == TIED_SCALAR ? target.tiedFetch() : assigned;
     }
 
     /**

@@ -14,6 +14,9 @@ priorities and future plans.
 - Resolve dynamic `require` package names as portable module paths before
   filesystem lookup, including on Windows.
 
+- Restore `class/accessor.t`, `op/smartkve.t`, `comp/utf.t`, `op/gmagic.t`,
+  and `uni/overload.t` compatibility.
+
 - Restore `op/stash.t` namespace spellings, stash clearing, and forward-CV
   provenance on both execution backends.
 
