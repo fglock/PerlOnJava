@@ -72,32 +72,58 @@ public class BytecodeCompiler implements Visitor {
     }
 
     private static void collectConstructEntryLabels(Node node, Set<String> out, boolean expressionContext) {
+        collectConstructEntryLabels(node, out, expressionContext, false);
+    }
+
+    private static void collectConstructEntryLabels(Node node, Set<String> out,
+            boolean expressionContext, boolean fieldInitializer) {
         if (node == null) return;
+        if (node instanceof AbstractNode abstractNode) {
+            fieldInitializer |= abstractNode.getBooleanAnnotation("fieldInitializer");
+        }
+        if (node instanceof LabelNode labelNode) {
+            if (expressionContext && !fieldInitializer) out.add(labelNode.label);
+            return;
+        }
         if (node instanceof BlockNode block) {
             if (expressionContext && block.getBooleanAnnotation("blockIsDoBlock")
-                    && !block.getBooleanAnnotation("fieldInitializer")) {
+                    && !fieldInitializer) {
                 out.addAll(block.labels);
             }
-            for (Node child : block.elements) collectConstructEntryLabels(child, out, expressionContext);
+            for (Node child : block.elements) {
+                collectConstructEntryLabels(child, out, expressionContext, fieldInitializer);
+            }
+            return;
+        }
+        if (node instanceof SubroutineNode subroutine) {
+            collectConstructEntryLabels(subroutine.block, out, true, fieldInitializer);
+            return;
+        }
+        if (node instanceof IfNode ifNode) {
+            collectConstructEntryLabels(ifNode.condition, out, true, fieldInitializer);
+            collectConstructEntryLabels(ifNode.thenBranch, out, false, fieldInitializer);
+            collectConstructEntryLabels(ifNode.elseBranch, out, false, fieldInitializer);
             return;
         }
         if (node instanceof OperatorNode op) {
-            collectConstructEntryLabels(op.operand, out, true);
+            collectConstructEntryLabels(op.operand, out, true, fieldInitializer);
             return;
         }
         if (node instanceof ListNode list) {
-            for (Node child : list.elements) collectConstructEntryLabels(child, out, true);
+            for (Node child : list.elements) {
+                collectConstructEntryLabels(child, out, true, fieldInitializer);
+            }
             return;
         }
         if (node instanceof BinaryOperatorNode binary) {
-            collectConstructEntryLabels(binary.left, out, true);
-            collectConstructEntryLabels(binary.right, out, true);
+            collectConstructEntryLabels(binary.left, out, true, fieldInitializer);
+            collectConstructEntryLabels(binary.right, out, true, fieldInitializer);
             return;
         }
         if (node instanceof TernaryOperatorNode ternary) {
-            collectConstructEntryLabels(ternary.condition, out, true);
-            collectConstructEntryLabels(ternary.trueExpr, out, true);
-            collectConstructEntryLabels(ternary.falseExpr, out, true);
+            collectConstructEntryLabels(ternary.condition, out, true, fieldInitializer);
+            collectConstructEntryLabels(ternary.trueExpr, out, true, fieldInitializer);
+            collectConstructEntryLabels(ternary.falseExpr, out, true, fieldInitializer);
         }
     }
 
@@ -339,9 +365,11 @@ public class BytecodeCompiler implements Visitor {
                 });
                 gotoLabelTargetsByToken.put(label.getIndex(), target);
             }
-            // A block's statements are ordinary statement context.  Only a
-            // separately nested expression block needs entry protection.
-            for (Node child : block.elements) predeclareGotoLabels(child, false, insideLoopBody);
+            // Preserve expression context through nested blocks.  A do block
+            // may be wrapped by parser-introduced blocks (as in $#{; do {
+            // LABEL: ... }}); resetting it here made its label look like an
+            // ordinary jump target and allowed goto to enter the construct.
+            for (Node child : block.elements) predeclareGotoLabels(child, expressionContext, insideLoopBody);
             return;
         }
         if (node instanceof For1Node loop) {
@@ -529,6 +557,11 @@ public class BytecodeCompiler implements Visitor {
     int evalBlockDepth;
     private final ArrayDeque<Integer> evalReturnTargetRegs = new ArrayDeque<>();
     private final ArrayDeque<List<Integer>> evalReturnGotoPatchPositions = new ArrayDeque<>();
+    // A return inside a try/finally expression must first run the finally
+    // block, then escape its synthetic wrapper as a non-local return.
+    private final ArrayDeque<TryFinallyReturnTarget> tryFinallyReturnTargets = new ArrayDeque<>();
+    private record TryFinallyReturnTarget(int valueReg, int pendingReg,
+                                          List<Integer> gotoPatchPositions) {}
     // Counter tracking nesting depth inside finally blocks (control flow out of finally is prohibited)
     private int finallyBlockDepth;
     // Tracks whether any LOCAL_* or PUSH_LOCAL_VARIABLE opcodes are emitted (for DynamicVariableManager optimization)
@@ -8738,6 +8771,17 @@ public class BytecodeCompiler implements Visitor {
 
         int resultReg = allocateOutputRegister();
         int firstBodyReg = nextRegister;
+        TryFinallyReturnTarget tryFinallyTarget = null;
+        if (node.finallyBlock != null) {
+            int returnValueReg = allocateRegister();
+            int returnPendingReg = allocateRegister();
+            emit(Opcodes.LOAD_INT);
+            emitReg(returnPendingReg);
+            emitInt(0);
+            tryFinallyTarget = new TryFinallyReturnTarget(returnValueReg,
+                    returnPendingReg, new ArrayList<>());
+            tryFinallyReturnTargets.push(tryFinallyTarget);
+        }
 
         emitWithToken(Opcodes.EVAL_TRY, node.getIndex());
         int catchTargetPos = bytecode.size();
@@ -8792,6 +8836,11 @@ public class BytecodeCompiler implements Visitor {
 
         int finallyPc = bytecode.size();
         patchIntOffset(gotoEndPos, finallyPc);
+        if (tryFinallyTarget != null) {
+            for (int patchPos : tryFinallyTarget.gotoPatchPositions) {
+                patchIntOffset(patchPos, finallyPc);
+            }
+        }
         if (node.finallyBlock != null) {
             finallyBlockDepth++;
             try {
@@ -8802,7 +8851,33 @@ public class BytecodeCompiler implements Visitor {
         }
         emit(Opcodes.POP_LOCAL_LEVEL);
         emitReg(errorLocalLevelReg);
+        if (tryFinallyTarget != null) {
+            tryFinallyReturnTargets.pop();
+            emit(Opcodes.GOTO_IF_FALSE);
+            emitReg(tryFinallyTarget.pendingReg);
+            int normalCompletionPos = bytecode.size();
+            emitInt(0);
+            emit(Opcodes.RETURN_NONLOCAL);
+            emitReg(tryFinallyTarget.valueReg);
+            patchIntOffset(normalCompletionPos, bytecode.size());
+        }
         lastResultReg = resultReg;
+    }
+
+    boolean hasTryFinallyReturnTarget() {
+        return !tryFinallyReturnTargets.isEmpty();
+    }
+
+    void emitTryFinallyReturn(int valueReg) {
+        TryFinallyReturnTarget target = tryFinallyReturnTargets.peek();
+        emitAliasWithTarget(target.valueReg, valueReg);
+        emit(Opcodes.LOAD_INT);
+        emitReg(target.pendingReg);
+        emitInt(1);
+        emit(Opcodes.GOTO);
+        int patchPos = bytecode.size();
+        emitInt(0);
+        target.gotoPatchPositions.add(patchPos);
     }
 
     @Override

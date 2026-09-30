@@ -195,7 +195,21 @@ public class RuntimeIO extends RuntimeScalar {
     public static RuntimeIO getLastWrittenHandle() { return PerlRuntime.current().ioLastWrittenHandle; }
     public static void setLastWrittenHandle(RuntimeIO io) { PerlRuntime.current().ioLastWrittenHandle = io; }
     public static RuntimeIO getSelectedHandle() { return PerlRuntime.current().ioSelectedHandle; }
-    public static void setSelectedHandle(RuntimeIO io) { PerlRuntime.current().ioSelectedHandle = io; }
+    public static RuntimeScalar getSelectedHandleValue() {
+        PerlRuntime runtime = PerlRuntime.current();
+        return runtime.ioSelectedHandleValue == null
+                ? new RuntimeScalar(runtime.ioSelectedHandle)
+                : new RuntimeScalar(runtime.ioSelectedHandleValue);
+    }
+    public static void setSelectedHandle(RuntimeIO io) {
+        PerlRuntime runtime = PerlRuntime.current();
+        runtime.ioSelectedHandle = io;
+        runtime.ioSelectedHandleValue = io == runtime.ioStdout
+                ? new RuntimeScalar("main::STDOUT") : new RuntimeScalar(io);
+    }
+    public static void setSelectedHandleValue(RuntimeScalar value) {
+        PerlRuntime.current().ioSelectedHandleValue = new RuntimeScalar(value);
+    }
 
     private static Map<IOHandle, Boolean> openHandles() { return PerlRuntime.current().ioOpenHandles; }
 
@@ -1016,7 +1030,8 @@ public class RuntimeIO extends RuntimeScalar {
             return false;
         }
 
-        return true;
+        close();
+        return false;
     }
 
     /** Apply lexical {@code use open} hints to sysopen, otherwise stay raw. */

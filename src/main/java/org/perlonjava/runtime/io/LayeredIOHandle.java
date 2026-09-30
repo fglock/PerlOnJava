@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.io;
 
 import org.perlonjava.runtime.operators.ModuleOperators;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlJavaUnimplementedException;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -363,9 +364,10 @@ public class LayeredIOHandle implements IOHandle {
         } catch (PerlCompilerException e) {
             throw e;
         } catch (Exception e) {
+            GlobalVariable.getGlobalVariable("main::!").set(22); // EINVAL
             if (e.getMessage() != null && !e.getMessage().isEmpty()) {
                 org.perlonjava.runtime.operators.WarnDie.warn(
-                        new RuntimeScalar(e.getMessage() + "\n"),
+                        new RuntimeScalar(e.getMessage() + " in PerlIO layer specification\n"),
                         new RuntimeScalar(""));
             }
             return new RuntimeScalar(0);

@@ -338,6 +338,15 @@ public class NumberParser {
             if (invalidFractionalDigit) {
                 parser.tokenIndex = beforeFractionalPart;
                 hasFractionalPart = false;
+            } else if (format == OCTAL_FORMAT && fractionalPart.isEmpty()
+                    && parser.tokenIndex < parser.tokens.size()
+                    && parser.tokens.get(parser.tokenIndex).type == LexerTokenType.IDENTIFIER
+                    && !parser.tokens.get(parser.tokenIndex).text.toLowerCase().startsWith("p")) {
+                // With no fractional digits, `07.name` is an octal integer
+                // followed by Perl's concatenation operator and a bareword,
+                // not a floating literal with an empty fractional part.
+                parser.tokenIndex = beforeFractionalPart;
+                hasFractionalPart = false;
             } else if (format == HEX_FORMAT && exponentStr.isEmpty()) {
                 if (numberStr.isEmpty()) {
                     parser.throwError("Invalid hexadecimal number");

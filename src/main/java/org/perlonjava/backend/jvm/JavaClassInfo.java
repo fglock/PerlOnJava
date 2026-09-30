@@ -16,6 +16,25 @@ import java.util.*;
  */
 public class JavaClassInfo {
 
+    /** Return-unwind state for an expression-level try/catch/finally wrapper. */
+    public static final class TryFinallyContext {
+        public final Label finallyStart;
+        public final int returnValueSlot;
+        public final int returnPendingSlot;
+        public final TryFinallyContext parent;
+
+        public TryFinallyContext(Label finallyStart, int returnValueSlot,
+                                 int returnPendingSlot, TryFinallyContext parent) {
+            this.finallyStart = finallyStart;
+            this.returnValueSlot = returnValueSlot;
+            this.returnPendingSlot = returnPendingSlot;
+            this.parent = parent;
+        }
+    }
+
+    /** Active finally whose body must run before a Perl return leaves its wrapper. */
+    public TryFinallyContext activeTryFinallyContext;
+
     /**
      * Outermost boolean short-circuit expression token used for caller().
      * Perl attributes calls anywhere in an &&/and/||/or expression to the

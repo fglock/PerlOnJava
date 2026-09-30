@@ -225,6 +225,10 @@ public class EmitBlock {
         if (node instanceof AbstractNode abstractNode) {
             fieldInitializer |= abstractNode.getBooleanAnnotation("fieldInitializer");
         }
+        if (node instanceof LabelNode labelNode) {
+            if (expressionContext && !fieldInitializer) out.add(labelNode.label);
+            return;
+        }
         if (node instanceof BlockNode block) {
             if (expressionContext && block.getBooleanAnnotation("blockIsDoBlock") && !fieldInitializer) out.addAll(block.labels);
             for (Node child : block.elements) collectConstructEntryLabels(child, out, expressionContext, fieldInitializer);

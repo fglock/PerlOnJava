@@ -96,6 +96,8 @@ public final class ExecutionRuntimeState {
     public final IdentityHashMap<Throwable, Boolean> unhandledDieHandlerSeen =
             new IdentityHashMap<>();
     public boolean insideUnhandledDieHandler;
+    /** True while a Perl $SIG{__DIE__} callback is executing. */
+    public boolean insideDieHandler;
     /** __WARN__ snapshot retained until an uncaught die reaches the ithread boundary. */
     public RuntimeScalar pendingThreadWarningHandler;
     ControlFlowMarker controlFlowMarker;

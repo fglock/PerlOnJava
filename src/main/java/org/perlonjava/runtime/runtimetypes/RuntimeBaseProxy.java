@@ -75,6 +75,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         if (lvalue != null) {
             this.type = lvalue.type;
             this.value = lvalue.value;
+            this.firstClassRegexScalar = lvalue.firstClassRegexScalar;
         }
     }
 

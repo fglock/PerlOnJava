@@ -1315,6 +1315,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case "NAME" -> {
                 // Return the name of this glob (without the package prefix)
                 if (this.globName == null) yield new RuntimeScalar();
+                // A stash glob names the package itself, so its NAME slot
+                // retains the trailing separator (e.g. *Config::{NAME} is
+                // the string "Config::", not the empty string).
+                if (this.globName.endsWith("::")) yield new RuntimeScalar(this.globName);
                 int lastColonIndex = this.globName.lastIndexOf("::");
                 String name = lastColonIndex >= 0 ? this.globName.substring(lastColonIndex + 2) : this.globName;
                 yield new RuntimeScalar(name);

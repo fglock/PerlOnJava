@@ -219,7 +219,9 @@ public class TieOperators {
                     NameNormalizer.normalizeVariableName(methodName, className));
         }
 
-        return RuntimeCode.apply(method, args, RuntimeContextType.SCALAR).getFirst();
+        RuntimeList result = RuntimeCode.apply(method, args, RuntimeContextType.SCALAR);
+        TiedVariableBase.rejectEscapedControlFlow(result);
+        return result.getFirst();
     }
 
     /** True when TIEHANDLE returned a reference to the handle being tied. */

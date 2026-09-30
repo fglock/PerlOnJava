@@ -170,6 +170,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     List<RuntimeRegexCallback> executableCallbacks = List.of();
     private boolean executableCallbacksReleased;
     public String patternString;
+    private boolean scalarized;
+    private String scalarizedValue;
     // Perl source spelling used only for diagnostics and debug lifecycle
     // output. The executable pattern may contain private structural callout
     // slots that must never leak into user-visible traces.
@@ -270,6 +272,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         copy.userPropertyConstructedBeforeRun = this.userPropertyConstructedBeforeRun;
         copy.setExecutableCallbacks(callbacks);
         copy.patternString = this.patternString;
+        copy.scalarized = this.scalarized;
+        copy.scalarizedValue = this.scalarizedValue;
         copy.debugPatternString = this.debugPatternString;
         copy.sourcePatternByteBacked = this.sourcePatternByteBacked;
         copy.patternByteBacked = this.patternByteBacked;
@@ -2684,6 +2688,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // Unwrap readonly scalar
         if (patternString.type == RuntimeScalarType.READONLY_SCALAR) patternString = (RuntimeScalar) patternString.value;
+        // `${\do { qr/.../ }}` reaches the bytecode regex operator as a
+        // reference to the scalar holding the qr object.  Treat that exact
+        // representation as the first-class regex it denotes, preserving
+        // callback provenance without admitting arbitrary string source.
+        RuntimeScalar firstClassCandidate =
+                RuntimeRegexTemplate.unwrapFirstClassRegex(patternString);
+        if (firstClassCandidate != null) {
+            patternString = firstClassCandidate;
+        }
 
         if (patternString.firstClassRegexScalar
                 && patternString.firstClassRegexValue != null) {
@@ -2861,7 +2874,19 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     throw new PerlCompilerException(recursionDiagnostic);
                 }
             }
-            boolean firstClassRegex = patternString.firstClassRegexScalar;
+            // Interpolation materializes a first-class qr// scalar to its PV
+            // before arriving here.  Its RuntimeRegex source remains marked
+            // as scalarized, which is the retained provenance needed to
+            // distinguish it from an untrusted runtime string containing
+            // an executable group.
+            boolean firstClassRegex = patternString.firstClassRegexScalar
+                    || patternString.value instanceof RuntimeRegex regex
+                            && regex.isScalarized()
+                    || patternString.type == RuntimeScalarType.REFERENCE
+                            && patternString.value instanceof RuntimeScalar scalar
+                            && scalar.type == RuntimeScalarType.REGEX
+                            && scalar.value instanceof RuntimeRegex regex
+                            && regex.isScalarized();
             if (!allowEval && !firstClassRegex) {
                 throw new PerlCompilerException(
                         "Eval-group not allowed at runtime, use re 'eval'");
@@ -2886,7 +2911,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return new RuntimeScalar(compiled).propagateTaint(patternString);
     }
 
-    static boolean containsExecutableSource(String pattern) {
+    public static boolean containsExecutableSource(String pattern) {
         return containsExecutableSource(pattern, false);
     }
 
@@ -4325,6 +4350,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 || (regex.regexFlags.taintResults() && inputTainted);
         boolean destructiveReplacement = !regex.regexFlags.isNonDestructive();
 
+        if (destructiveReplacement && isReadOnlySubstitutionTarget(string)) {
+            throw new PerlCompilerException("Modification of a read-only value attempted");
+        }
+
         if (!destructiveReplacement && ctx == RuntimeContextType.VOID) {
             Warnings.emitCategoryWarning(
                     "void", "Useless use of non-destructive substitution (s///r)");
@@ -4530,6 +4559,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     private static RuntimeScalar stringifyReplacementValue(RuntimeScalar value) {
         return RuntimeScalarType.blessedId(value) != 0 ? Overload.stringify(value) : value;
+    }
+
+    private static boolean isReadOnlySubstitutionTarget(RuntimeScalar target) {
+        if (target instanceof RuntimeBaseProxy proxy) {
+            target = proxy.resolveLvalue();
+        }
+        return target instanceof RuntimeScalarReadOnly
+                || target.type == RuntimeScalarType.READONLY_SCALAR
+                || target instanceof RuntimeStashEntry;
     }
 
     /**
@@ -4884,6 +4922,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     @Override
     public String toString() {
+        if (scalarized) {
+            String className = blessId == 0 ? "Regexp" : NameNormalizer.getBlessStr(blessId);
+            return className + "=" + toStringRef();
+        }
         // Construct the Perl-like regex string with flags
         String displayPattern = executableCallbacks.isEmpty()
                 ? patternString
@@ -4982,7 +5024,24 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * @return A string representing the regex reference.
      */
     public String toStringRef() {
+        if (scalarized) {
+            return "SCALAR(0x" + referenceAddressHex() + ")";
+        }
         return "REGEXP(0x" + Integer.toHexString(this.hashCode()) + ")";
+    }
+
+    /** Replace the scalar PV exposed by dereferencing a first-class qr value. */
+    public void setScalarValue(String value) {
+        scalarized = true;
+        scalarizedValue = value;
+    }
+
+    public String scalarValueString() {
+        return scalarized ? scalarizedValue == null ? "" : scalarizedValue : toString();
+    }
+
+    public boolean isScalarized() {
+        return scalarized;
     }
 
     /**

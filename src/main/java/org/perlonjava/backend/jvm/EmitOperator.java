@@ -306,8 +306,32 @@ public class EmitOperator {
             emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
         }
 
-        // Call the operator, return Scalar
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/operators/IOOperator", operator, "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        // Pass the source site to print so warnings raised inside the runtime
+        // builtin retain their Perl location even when the generated frame is
+        // hidden by tied-handle dispatch.
+        if ("print".equals(operator)) {
+            var location = emitterVisitor.ctx.errorUtil != null
+                    ? emitterVisitor.ctx.errorUtil.getSourceLocationAccurate(node.tokenIndex) : null;
+            String fileName = location != null ? location.fileName()
+                    : (emitterVisitor.ctx.compilerOptions.fileName != null
+                            ? emitterVisitor.ctx.compilerOptions.fileName : "(eval)");
+            int lineNumber = location != null ? location.lineNumber() : 0;
+            emitterVisitor.ctx.mv.visitLdcInsn(fileName);
+            emitterVisitor.ctx.mv.visitLdcInsn(lineNumber);
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/operators/IOOperator", operator,
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;"
+                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                            + "Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        } else {
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/operators/IOOperator", operator,
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;"
+                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
+                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        }
         // If the context is VOID, pop the result from the stack.
         handleVoidContext(emitterVisitor);
     }

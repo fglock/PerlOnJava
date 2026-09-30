@@ -23,6 +23,9 @@ priorities and future plans.
   `op/gmagic.t`, and `uni/overload.t` compatibility.
 
 - Preserve tied scalar magic when deleting tied hash elements and stash entries.
+- Restore JVM compatibility for `goto.t`, `qr.t`, `runlevel.t`, `select.t`,
+  `sselect.t`, `perlio_fail.t`, `try.t`, and the three substitution tests,
+  including source-site diagnostics, eval caller frames, and regex identity.
 
 - Restore `op/stash.t` namespace spellings, stash clearing, and forward-CV
   provenance on both execution backends.

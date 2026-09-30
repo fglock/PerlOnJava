@@ -19,6 +19,9 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.runEndBlocks;
  * respectively. These operations can trigger custom signal handlers if defined.
  */
 public class WarnDie {
+
+    private static final ThreadLocal<Boolean> WRITING_WARNING =
+            ThreadLocal.withInitial(() -> Boolean.FALSE);
     public static boolean isInsideUnhandledDieHandler() {
         return PerlRuntime.current().executionState().insideUnhandledDieHandler;
     }
@@ -123,6 +126,15 @@ public class WarnDie {
     }
 
     private static void writeWarningToStderr(String message) {
+        if (WRITING_WARNING.get()) {
+            // A tied STDERR::PRINT can itself warn. Re-entering the tied
+            // handle would recurse until the JVM stack is exhausted.
+            System.err.print(message);
+            System.err.flush();
+            return;
+        }
+        WRITING_WARNING.set(Boolean.TRUE);
+        try {
         RuntimeIO stderrIO = getGlobalIO("main::STDERR").getRuntimeIO();
         if (stderrIO == null) {
             stderrIO = RuntimeIO.getStderr();
@@ -133,6 +145,38 @@ public class WarnDie {
         } else {
             System.err.print(message);
             System.err.flush();
+        }
+        } finally {
+            WRITING_WARNING.remove();
+        }
+    }
+
+    /**
+     * Deliver an unhandled fatal diagnostic without permitting a tied STDERR
+     * method's own warning to recursively invoke that method again.
+     */
+    public static void writeFatalDiagnostic(RuntimeIO stderr, String message) {
+        if (stderr == null) {
+            System.err.print(message);
+            System.err.flush();
+            return;
+        }
+        if (!(stderr instanceof TieHandle)) {
+            stderr.write(message);
+            stderr.flush();
+            return;
+        }
+        WRITING_WARNING.set(Boolean.TRUE);
+        try {
+            stderr.write(message);
+            stderr.flush();
+        } catch (RuntimeException tiedFailure) {
+            // The tied method itself attempted forbidden control flow. Its
+            // diagnostic cannot safely pass through the same handle again.
+            System.err.print(ErrorMessageUtil.stringifyException(tiedFailure));
+            System.err.flush();
+        } finally {
+            WRITING_WARNING.remove();
         }
     }
 
@@ -356,9 +400,14 @@ public class WarnDie {
                 if (callbackLocation != null && !callbackLocation.isEmpty()) {
                     whereStr = callbackLocation;
                 }
-                // If no explicit location provided, derive from Perl call stack
-                if (whereStr.isEmpty() && (fileName == null || fileName.isEmpty())) {
-                    whereStr = getPerlLocationFromStack();
+                // Prefer an explicit source site supplied by a runtime builtin;
+                // otherwise derive one from the Perl call stack.
+                if (whereStr.isEmpty()) {
+                    if (fileName != null && !fileName.isEmpty()) {
+                        whereStr = " at " + fileName + " line " + lineNumber;
+                    } else {
+                        whereStr = getPerlLocationFromStack();
+                    }
                 }
                 out += whereStr;
                 if (sig.getDefinedBoolean() && !isReservedSigString(sig)) {
@@ -372,6 +421,7 @@ public class WarnDie {
                         String filehandleContext = getFilehandleContext();
                         if (filehandleContext != null && !filehandleContext.isEmpty()) {
                             out += filehandleContext;
+                            }
                         }
                     }
                 }
@@ -740,6 +790,9 @@ public class WarnDie {
 
             boolean pushedEvalFrame = RuntimeCode.getEvalDepth() > 0
                     && InterpreterState.pushEvalFrameForCurrentInterpreter();
+            var runtimeState = PerlRuntime.current().executionState();
+            boolean wasInsideDieHandler = runtimeState.insideDieHandler;
+            runtimeState.insideDieHandler = true;
             try {
                 // Perl passes the actual value stored in $@ to __DIE__.  For a
                 // string exception that includes the source-location suffix;
@@ -765,6 +818,7 @@ public class WarnDie {
                     }
                 }
             } finally {
+                runtimeState.insideDieHandler = wasInsideDieHandler;
                 if (pushedEvalFrame) {
                     InterpreterState.pop();
                 }

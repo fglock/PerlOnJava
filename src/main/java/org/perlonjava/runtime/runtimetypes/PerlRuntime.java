@@ -98,6 +98,7 @@ public final class PerlRuntime implements AutoCloseable {
     RuntimeIO ioStderr;
     RuntimeIO ioStdin;
     RuntimeIO ioSelectedHandle;
+    RuntimeScalar ioSelectedHandleValue;
     RuntimeIO ioLastWrittenHandle;
     RuntimeIO ioLastAccessedHandle;
     String ioLastReadlineHandleName;
@@ -145,6 +146,7 @@ public final class PerlRuntime implements AutoCloseable {
                         ? java.io.InputStream.nullInputStream()
                         : System.in));
         ioSelectedHandle = ioStdout;
+        ioSelectedHandleValue = new RuntimeScalar("main::STDOUT");
         ioLastWrittenHandle = ioStdout;
 
         installInitialStandardGlob("main::STDOUT", ioStdout);
@@ -173,7 +175,10 @@ public final class PerlRuntime implements AutoCloseable {
         replaceStandardHandle("main::stdout", stdout);
         replaceStandardHandle("main::STDIN", stdin);
         replaceStandardHandle("main::stdin", stdin);
-        if (ioSelectedHandle == muted) ioSelectedHandle = stdout;
+        if (ioSelectedHandle == muted) {
+            ioSelectedHandle = stdout;
+            ioSelectedHandleValue = new RuntimeScalar("main::STDOUT");
+        }
         if (ioLastWrittenHandle == muted) ioLastWrittenHandle = stdout;
         GlobalVariable.getGlobalVariable("main::$").set(pid);
         GlobalVariable.getGlobalHash("main::ENV").elements.remove(ForkOpenState.REPLAY_ENV);
@@ -676,6 +681,7 @@ public final class PerlRuntime implements AutoCloseable {
         ioStderr.autoFlush = true;
         ioStdin = new RuntimeIO(new StandardIO(System.in));
         ioSelectedHandle = ioStdout;
+        ioSelectedHandleValue = new RuntimeScalar("main::STDOUT");
         ioLastWrittenHandle = ioStdout;
         ioLastAccessedHandle = null;
         ioLastReadlineHandleName = null;

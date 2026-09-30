@@ -7,6 +7,7 @@ import org.perlonjava.frontend.parser.NumberParser;
 import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.regex.RuntimeRegexTemplate;
+import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.math.BigInteger;
@@ -664,6 +665,7 @@ public class StringOperators {
     }
 
     private static RuntimeScalar propagateTaint(RuntimeScalar result, RuntimeScalar... inputs) {
+        boolean trustedFirstClassRegex = false;
         for (RuntimeScalar input : inputs) {
             if (input != null && input.formatPictureTainted) {
                 result.formatPictureTainted = true;
@@ -673,6 +675,17 @@ public class StringOperators {
                 result.tainted = true;
             }
         }
+        if (inputs.length == 2) {
+            RuntimeScalar left = inputs[0];
+            RuntimeScalar right = inputs[1];
+            if (left != null && right != null) {
+                trustedFirstClassRegex = left.firstClassRegexScalar
+                        && !RuntimeRegex.containsExecutableSource(right.toString())
+                        || right.firstClassRegexScalar
+                        && !RuntimeRegex.containsExecutableSource(left.toString());
+            }
+        }
+        result.firstClassRegexScalar = trustedFirstClassRegex;
         return result;
     }
 
@@ -1043,6 +1056,7 @@ public class StringOperators {
                 res.type = BYTE_STRING;
             }
             res.tainted = resolved.isTainted();
+            res.firstClassRegexScalar = resolved.firstClassRegexScalar;
             return recordJoinTaint(res);
         }
 

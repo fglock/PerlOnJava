@@ -250,6 +250,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /** Weak referent metadata for Internals::SvREFCNT on a dereferenced qr// scalar. */
     public WeakReference<RuntimeRegex> firstClassRegexReferent;
 
+    /** Backing qr value for the mutable scalar view returned by qr dereference. */
+    public RuntimeRegex firstClassRegexValue() {
+        return null;
+    }
+
     /** True for scalar proxies whose reference is exposed as Perl's LVALUE type. */
     public boolean isLvalueScalar() {
         return false;
@@ -3005,7 +3010,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case DUALVAR -> ((DualVar) this.value).stringValue().toString();
             case CODE -> Overload.stringify(this).toString();
             default -> {
-                if (type == REGEX) yield value.toString();
+                if (type == REGEX) {
+                    RuntimeRegex regex = (RuntimeRegex) value;
+                    if (!regex.isScalarized()) yield value.toString();
+                    int regexBlessId = blessId != 0 ? blessId : regex.blessId;
+                    String className = regexBlessId == 0
+                            ? "Regexp" : NameNormalizer.getBlessStr(regexBlessId);
+                    yield className + "=" + regex.toStringRef();
+                }
                 // Overload.stringify calls the ("" method. If it returns THIS
                 // exact scalar (or another object whose ("" points back here),
                 // naively calling .toString() on the result would recurse. Perl
@@ -3155,17 +3167,58 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (value == null) {
                     yield "Regexp=REGEXP(0x" + scalarUndef.hashCode() + ")";
                 }
-                yield "Regexp=" + ((RuntimeRegex) value).toStringRef();
+                RuntimeRegex regex = (RuntimeRegex) value;
+                int regexBlessId = blessId != 0 ? blessId : regex.blessId;
+                yield regex.isScalarized()
+                        ? (regexBlessId == 0 ? "Regexp="
+                                : NameNormalizer.getBlessStr(regexBlessId) + "=")
+                                + regex.toStringRef()
+                        : "Regexp=" + regex.toStringRef();
             }
             case REFERENCE -> {
                 // Determine the proper type name for the reference
                 // References to references show as "REF", references to plain scalars show as "SCALAR"
                 String typeName = "SCALAR";
-                int valueBlessId = 0;
+                int valueBlessId = value instanceof RuntimeBase base
+                        ? base.blessId : 0;
+                if (value instanceof RuntimeRegex regex && regex.isScalarized()) {
+                    String refStr = "SCALAR(0x" + regex.referenceAddressHex() + ")";
+                    int regexBlessId = valueBlessId != 0 ? valueBlessId
+                            : blessId != 0 ? blessId : regex.blessId;
+                    yield regexBlessId == 0 ? refStr
+                            : NameNormalizer.getBlessStr(regexBlessId) + "=" + refStr;
+                }
                 if (value instanceof RuntimeScalar scalar) {
-                    valueBlessId = ((RuntimeBase) value).blessId;
+                    RuntimeScalar regexScalar = scalar;
+                    int nestedBlessId = 0;
+                    for (int depth = 0; depth < 8; depth++) {
+                        if (regexScalar.blessId != 0) nestedBlessId = regexScalar.blessId;
+                        if (regexScalar.type == REGEX
+                                && regexScalar.value instanceof RuntimeRegex regex
+                                && regex.isScalarized()) {
+                            int regexBlessId = nestedBlessId != 0 ? nestedBlessId
+                                    : valueBlessId != 0 ? valueBlessId
+                                    : blessId != 0 ? blessId : regex.blessId;
+                            String regexRef = "SCALAR(0x" + regex.referenceAddressHex() + ")";
+                            yield regexBlessId == 0 ? regexRef
+                                    : NameNormalizer.getBlessStr(regexBlessId) + "=" + regexRef;
+                        }
+                        if (regexScalar.type != REFERENCE
+                                || !(regexScalar.value instanceof RuntimeScalar next)) break;
+                        regexScalar = next;
+                    }
+                    if (scalar.type == REGEX && scalar.value instanceof RuntimeRegex regex
+                            && regex.isScalarized()) {
+                        int regexBlessId = valueBlessId != 0 ? valueBlessId
+                                : blessId != 0 ? blessId : regex.blessId;
+                        String regexRef = "SCALAR(0x" + regex.referenceAddressHex() + ")";
+                        yield regexBlessId == 0 ? regexRef
+                                : NameNormalizer.getBlessStr(regexBlessId) + "=" + regexRef;
+                    }
                     if (scalar.firstClassRegexScalar) {
-                        yield scalar.toString();
+                        String regexRef = scalar.toString();
+                        yield valueBlessId == 0 ? regexRef
+                                : NameNormalizer.getBlessStr(valueBlessId) + "=" + regexRef;
                     }
                     if (scalar.isLvalueScalar()) {
                         String lvalueRef = "LVALUE(0x" + ((RuntimeBase) value).referenceAddressHex() + ")";
@@ -3193,7 +3246,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Only apply outer blessId for non-REFERENCE types.
         // REFERENCE type already handles blessing through valueBlessId above.
         if (type == REFERENCE) {
-            return ref;
+            int effectiveBlessId = RuntimeScalarType.blessedId(this);
+            if (effectiveBlessId == 0) return ref;
+            String className = NameNormalizer.getBlessStr(effectiveBlessId);
+            return ref.startsWith(className + "=") ? ref : className + "=" + ref;
         }
         return (blessId == 0 ? ref : NameNormalizer.getBlessStr(blessId) + "=" + ref);
     }
@@ -3531,7 +3587,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.formatPictureTainted = false;
                 yield newScalar;
             }
-            case REFERENCE -> (RuntimeScalar) value;
+            case REFERENCE -> {
+                RuntimeScalar referent = (RuntimeScalar) value;
+                // A blessed qr// is represented as a reference to a REGEX
+                // scalar. Dereferencing it must expose the mutable PV view,
+                // retaining the blessing that lives on the reference cell.
+                if (referent.type == REGEX && referent.value instanceof RuntimeRegex regex) {
+                    int regexBlessId = referent.blessId != 0 ? referent.blessId
+                            : this.blessId != 0 ? this.blessId
+                            : blessedId(this) != 0 ? blessedId(this) : regex.blessId;
+                    if (regexBlessId != 0) regex.setBlessId(regexBlessId);
+                    yield new RegexScalarLvalue(regex, regexBlessId).propagateTaint(referent);
+                }
+                yield referent;
+            }
             case REGEX -> dereferencedRegexScalar();
             case GLOB -> {
                 // Dereferencing a glob as scalar returns the scalar slot
@@ -3644,7 +3713,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         return switch (type) {
-            case REFERENCE -> (RuntimeScalar) value;
+            case REFERENCE -> {
+                RuntimeScalar referent = (RuntimeScalar) value;
+                if (referent.type == REGEX && referent.value instanceof RuntimeRegex regex) {
+                    int regexBlessId = referent.blessId != 0 ? referent.blessId
+                            : this.blessId != 0 ? this.blessId
+                            : blessedId(this) != 0 ? blessedId(this) : regex.blessId;
+                    if (regexBlessId != 0) regex.setBlessId(regexBlessId);
+                    yield new RegexScalarLvalue(regex, regexBlessId).propagateTaint(referent);
+                }
+                yield referent;
+            }
             case REGEX -> dereferencedRegexScalar();
             case GLOB -> {
                 // Dereferencing a glob as scalar returns the scalar slot
@@ -3676,13 +3755,82 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     private RuntimeScalar dereferencedRegexScalar() {
-        RuntimeScalar result = new RuntimeScalar();
-        result.type = RuntimeScalarType.STRING;
-        result.value = this.value.toString();
-        result.firstClassRegexScalar = true;
-        result.firstClassRegexReferent = new WeakReference<>((RuntimeRegex) this.value);
-        result.firstClassRegexValue = ((RuntimeRegex) this.value).cloneTracked();
-        return result.propagateTaint(this);
+        RuntimeRegex regex = (RuntimeRegex) this.value;
+        int regexBlessId = this.blessId != 0 ? this.blessId
+                : blessedId(this) != 0 ? blessedId(this) : regex.blessId;
+        if (regexBlessId != 0) regex.setBlessId(regexBlessId);
+        return new RegexScalarLvalue(regex, regexBlessId).propagateTaint(this);
+    }
+
+    /** Mutable scalar PV view used by Perl's dereference of an SVt_REGEXP. */
+    private static final class RegexScalarLvalue extends RuntimeScalar {
+        private final RuntimeRegex regex;
+
+        private RegexScalarLvalue(RuntimeRegex regex, int blessId) {
+            super(regex.scalarValueString());
+            this.regex = regex;
+            this.blessId = blessId;
+            if (blessId != 0) regex.setBlessId(blessId);
+            this.firstClassRegexScalar = true;
+            this.firstClassRegexValue = regex;
+            this.firstClassRegexReferent = new WeakReference<>(regex);
+        }
+
+        @Override
+        public RuntimeRegex firstClassRegexValue() {
+            return regex;
+        }
+
+        private RuntimeScalar store(RuntimeScalar value) {
+            int savedBlessId = blessId;
+            RuntimeScalar result = super.set(value);
+            blessId = savedBlessId;
+            regex.setScalarValue(super.toStringNoOverload());
+            firstClassRegexScalar = true;
+            return result;
+        }
+
+        @Override public RuntimeScalar set(RuntimeScalar value) { return store(value); }
+        @Override public RuntimeScalar set(String value) {
+            int savedBlessId = blessId;
+            RuntimeScalar result = super.set(value);
+            blessId = savedBlessId;
+            regex.setScalarValue(super.toStringNoOverload());
+            firstClassRegexScalar = true;
+            return result;
+        }
+        @Override public RuntimeScalar set(int value) {
+            int savedBlessId = blessId;
+            RuntimeScalar result = super.set(value);
+            blessId = savedBlessId;
+            regex.setScalarValue(super.toStringNoOverload());
+            firstClassRegexScalar = true;
+            return result;
+        }
+        @Override public RuntimeScalar set(long value) {
+            int savedBlessId = blessId;
+            RuntimeScalar result = super.set(value);
+            blessId = savedBlessId;
+            regex.setScalarValue(super.toStringNoOverload());
+            firstClassRegexScalar = true;
+            return result;
+        }
+        @Override public RuntimeScalar set(BigInteger value) {
+            int savedBlessId = blessId;
+            RuntimeScalar result = super.set(value);
+            blessId = savedBlessId;
+            regex.setScalarValue(super.toStringNoOverload());
+            firstClassRegexScalar = true;
+            return result;
+        }
+        @Override public RuntimeScalar set(boolean value) {
+            int savedBlessId = blessId;
+            RuntimeScalar result = super.set(value);
+            blessId = savedBlessId;
+            regex.setScalarValue(super.toStringNoOverload());
+            firstClassRegexScalar = true;
+            return result;
+        }
     }
 
     // Method to implement `%$v`, when "no strict refs" is in effect

@@ -262,18 +262,13 @@ public class ListOperators {
                         // sort block. Preserve upstream's source location detail.
                         if (result.isNonLocalGoto()) {
                             RuntimeControlFlowList controlFlow = (RuntimeControlFlowList) result;
-                            ControlFlowType cfType = controlFlow.getControlFlowType();
-                            String keyword = switch (cfType) {
-                                case GOTO, TAILCALL -> "goto";
-                                case LAST -> "last";
-                                case NEXT -> "next";
-                                case REDO -> "redo";
-                                case RETURN -> "return";
-                            };
                             ControlFlowMarker marker = controlFlow.marker;
-                            throw new PerlCompilerException("Can't \"" + keyword
-                                    + "\" out of a pseudo block at " + marker.fileName
-                                    + " line " + marker.lineNumber + ".\n");
+                            if (controlFlow.getControlFlowType() == ControlFlowType.GOTO
+                                    || controlFlow.getControlFlowType() == ControlFlowType.TAILCALL) {
+                                throw new PerlCompilerException("Can't \"goto\" out of a pseudo block at "
+                                        + marker.fileName + " line " + marker.lineNumber + ".\n");
+                            }
+                            throw new PerlCompilerException(marker.buildErrorMessage() + ".\n");
                         }
 
                         // Retrieve the comparison result and return it as an integer

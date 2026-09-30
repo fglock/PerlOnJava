@@ -1418,6 +1418,12 @@ public class CompileOperator {
                     break;
                 }
 
+                if (bytecodeCompiler.hasTryFinallyReturnTarget()) {
+                    bytecodeCompiler.emitTryFinallyReturn(exprReg);
+                    bytecodeCompiler.lastResultReg = -1;
+                    break;
+                }
+
                 // Explicit 'return' bypasses the normal block-end cleanup.
                 // Use return-specific cleanup opcodes so the returned register remains
                 // readable by RETURN while lexical owner counts are still released.
