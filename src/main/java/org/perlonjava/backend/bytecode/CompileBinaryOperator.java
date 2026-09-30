@@ -76,7 +76,7 @@ public class CompileBinaryOperator {
             } else {
                 // PRINT can fail (including a tied handle returning false), so
                 // preserve IOOperator.print's actual result for expression use.
-                bytecodeCompiler.emit(Opcodes.PRINT_RESULT);
+                bytecodeCompiler.emitWithToken(Opcodes.PRINT_RESULT, node.getIndex());
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(contentReg);
                 bytecodeCompiler.emitReg(filehandleReg);

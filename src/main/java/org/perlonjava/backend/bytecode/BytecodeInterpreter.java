@@ -309,6 +309,7 @@ public class BytecodeInterpreter {
         // When exception occurs, pop from stack and jump to catch PC
         // Use ArrayDeque instead of Stack for better performance (no synchronization)
         java.util.ArrayDeque<Integer> evalCatchStack = frame.evalCatchStack;
+        java.util.ArrayDeque<Boolean> evalCallerFrameStack = frame.evalCallerFrameStack;
 
         // Parallel stack tracking the frame-relative DynamicVariableManager level at
         // eval entry. A suspended frame can resume from a Future callback whose
@@ -372,8 +373,9 @@ public class BytecodeInterpreter {
         frame.suspended = false;
         if (frame.pc > 0 && !frame.evalCatchStack.isEmpty()) {
             RuntimeCode.adjustEvalDepth(frame.evalCatchStack.size());
-            for (int i = 0; i < frame.evalCatchStack.size(); i++) {
-                if (InterpreterState.pushEvalFrameForCurrentInterpreter()) {
+            for (java.util.Iterator<Boolean> it = frame.evalCallerFrameStack.descendingIterator(); it.hasNext(); ) {
+                boolean visibleEvalFrame = it.next();
+                if (visibleEvalFrame && InterpreterState.pushEvalFrameForCurrentInterpreter()) {
                     frame.virtualEvalFrameDepth++;
                 }
             }
@@ -684,10 +686,7 @@ public class BytecodeInterpreter {
                                             evalMethodInvocantHoldDepthStack, methodInvocantHolds);
                                     pc = evalCatchStack.pop();
                                     RuntimeCode.decrementEvalDepth();
-                                    if (frame.virtualEvalFrameDepth > 0) {
-                                        InterpreterState.pop();
-                                        frame.virtualEvalFrameDepth--;
-                                    }
+                                    popEvalCallerFrame(frame);
                                     break;
                                 }
                                 RuntimeCode.requireInterpreterLvalueReturn(code, retVal, callContext);
@@ -753,11 +752,13 @@ public class BytecodeInterpreter {
                                     }
                                 }
                                 // If target is a CODE reference, treat as goto &sub (tail call)
+                                ErrorMessageUtil.SourceLocation gotoLocation =
+                                        InlineOpcodeHandler.sourceLocation(code, pcHolder[0]);
                                 if (target.type == RuntimeScalarType.CODE) {
                                     // Create a TAILCALL marker - pass current @_ (register 1)
                                     RuntimeArray currentArgs = registers[1].getTailCallArrayOfAlias();
                                     RuntimeControlFlowList marker = new RuntimeControlFlowList(
-                                            target, currentArgs, code.sourceName, code.sourceLine,
+                                            target, currentArgs, gotoLocation.fileName(), gotoLocation.lineNumber(),
                                             evalScope);
                                     if (evalScope != null) {
                                         RuntimeCode.resolveTailCalls(marker, callContext);
@@ -807,11 +808,11 @@ public class BytecodeInterpreter {
                                 if (code.isSortComparator) {
                                     throw new PerlCompilerException(
                                             "Can't \"goto\" out of a pseudo block at "
-                                            + code.sourceName + " line " + code.sourceLine + ".\n");
+                                            + gotoLocation.fileName() + " line " + gotoLocation.lineNumber() + ".\n");
                                 }
                                 // Label not found locally - create GOTO marker and propagate
                                 RuntimeControlFlowList marker = new RuntimeControlFlowList(
-                                        ControlFlowType.GOTO, labelName, code.sourceName, code.sourceLine,
+                                        ControlFlowType.GOTO, labelName, gotoLocation.fileName(), gotoLocation.lineNumber(),
                                         evalScope);
                                 // A missing label is a runtime error caught by the innermost
                                 // eval BLOCK. Returning the marker here bypasses this frame's
@@ -2081,6 +2082,7 @@ public class BytecodeInterpreter {
                                                     methodInvocantHolds);
                                             // Jump to eval catch handler
                                             pc = evalCatchStack.pop();
+                                            popEvalCallerFrame(frame);
                                             RuntimeCode.decrementEvalDepth();
                                             break;
                                         }
@@ -2254,6 +2256,7 @@ public class BytecodeInterpreter {
                                                     evalMethodInvocantHoldDepthStack,
                                                     methodInvocantHolds);
                                             pc = evalCatchStack.pop();
+                                            popEvalCallerFrame(frame);
                                             RuntimeCode.decrementEvalDepth();
                                             break;
                                         }
@@ -2280,11 +2283,11 @@ public class BytecodeInterpreter {
                             // =================================================================
 
                             case Opcodes.CREATE_LAST -> {
-                                pc = InlineOpcodeHandler.executeCreateLast(bytecode, pc, registers, code);
+                                pc = InlineOpcodeHandler.executeCreateLast(bytecode, pc, registers, code, pcHolder[0]);
                             }
 
                             case Opcodes.CREATE_NEXT -> {
-                                pc = InlineOpcodeHandler.executeCreateNext(bytecode, pc, registers, code);
+                                pc = InlineOpcodeHandler.executeCreateNext(bytecode, pc, registers, code, pcHolder[0]);
                             }
 
                             case Opcodes.CREATE_SWITCH_CONTINUE, Opcodes.CREATE_SWITCH_BREAK,
@@ -2296,14 +2299,17 @@ public class BytecodeInterpreter {
                                 String switchControl = isContinue ? "continue"
                                         : opcode == Opcodes.CREATE_SWITCH_BREAK_LOOP_TOPICALIZER
                                         ? "break-loop-topicalizer" : "break";
-                                registers[rd] = new RuntimeControlFlowList(
+                                ErrorMessageUtil.SourceLocation location =
+                                        InlineOpcodeHandler.sourceLocation(code, pcHolder[0]);
+                                RuntimeControlFlowList marker = new RuntimeControlFlowList(
                                         isContinue ? ControlFlowType.NEXT : ControlFlowType.LAST,
-                                        label, code.sourceName, code.sourceLine, null,
+                                        label, location.fileName(), location.lineNumber(), null,
                                         switchControl);
+                                registers[rd] = marker;
                             }
 
                             case Opcodes.CREATE_REDO -> {
-                                pc = InlineOpcodeHandler.executeCreateRedo(bytecode, pc, registers, code);
+                                pc = InlineOpcodeHandler.executeCreateRedo(bytecode, pc, registers, code, pcHolder[0]);
                             }
 
                             case Opcodes.CREATE_LAST_DYNAMIC, Opcodes.CREATE_NEXT_DYNAMIC, Opcodes.CREATE_REDO_DYNAMIC -> {
@@ -2313,11 +2319,16 @@ public class BytecodeInterpreter {
                                 ControlFlowType type = opcode == Opcodes.CREATE_LAST_DYNAMIC ? ControlFlowType.LAST
                                         : opcode == Opcodes.CREATE_NEXT_DYNAMIC ? ControlFlowType.NEXT
                                         : ControlFlowType.REDO;
-                                registers[rd] = new RuntimeControlFlowList(type, label, code.sourceName, code.sourceLine);
+                                ErrorMessageUtil.SourceLocation location =
+                                        InlineOpcodeHandler.sourceLocation(code, pcHolder[0]);
+                                RuntimeControlFlowList marker = new RuntimeControlFlowList(
+                                        type, label, location.fileName(), location.lineNumber());
+                                InlineOpcodeHandler.rejectSortComparatorLoopControl(code, marker);
+                                registers[rd] = marker;
                             }
 
                             case Opcodes.CREATE_GOTO -> {
-                                pc = InlineOpcodeHandler.executeCreateGoto(bytecode, pc, registers, code);
+                                pc = InlineOpcodeHandler.executeCreateGoto(bytecode, pc, registers, code, pcHolder[0]);
                             }
 
                             case Opcodes.GOTO_TAILCALL -> {
@@ -2405,7 +2416,7 @@ public class BytecodeInterpreter {
                             }
 
                             case Opcodes.PRINT_RESULT -> {
-                                pc = OpcodeHandlerExtended.executePrintResult(bytecode, pc, registers);
+                                pc = OpcodeHandlerExtended.executePrintResult(bytecode, pc, registers, code, pcHolder[0]);
                             }
 
                             case Opcodes.SAY -> {
@@ -2728,7 +2739,9 @@ public class BytecodeInterpreter {
                                 int catchPc = readInt(bytecode, pc);  // Read 4-byte absolute address
                                 pc += 1;  // Skip the int we just read
 
-                                int firstBodyReg = bytecode[pc++];  // First register in eval body
+                                int encodedFirstBodyReg = bytecode[pc++];
+                                boolean visibleEvalFrame = encodedFirstBodyReg >= 0;
+                                int firstBodyReg = Math.abs(encodedFirstBodyReg);
 
                                 // Push catch PC onto eval stack
                                 evalCatchStack.push(catchPc);
@@ -2745,7 +2758,10 @@ public class BytecodeInterpreter {
                                 // Track eval depth for $^S
                                 RuntimeCode.incrementEvalDepth();
 
-                                if (InterpreterState.pushEvalFrameForCurrentInterpreter()) {
+                                boolean pushedCallerFrame = visibleEvalFrame
+                                        && InterpreterState.pushEvalFrameForCurrentInterpreter();
+                                evalCallerFrameStack.push(pushedCallerFrame);
+                                if (pushedCallerFrame) {
                                     frame.virtualEvalFrameDepth++;
                                 }
 
@@ -2766,6 +2782,7 @@ public class BytecodeInterpreter {
                                 if (!evalCatchStack.isEmpty()) {
                                     evalCatchStack.pop();
                                 }
+                                popEvalCallerFrame(frame);
 
                                 // Pop the base register (not needed on success path)
                                 if (!evalBaseRegStack.isEmpty()) {
@@ -2788,10 +2805,6 @@ public class BytecodeInterpreter {
                                 // Track eval depth for $^S
                                 RuntimeCode.decrementEvalDepth();
 
-                                if (frame.virtualEvalFrameDepth > 0) {
-                                    InterpreterState.pop();
-                                    frame.virtualEvalFrameDepth--;
-                                }
                             }
 
                             case Opcodes.EVAL_CATCH -> {
@@ -3551,6 +3564,7 @@ public class BytecodeInterpreter {
                     // Check if we're inside an eval block first
                     if (!evalCatchStack.isEmpty()) {
                         int catchPc = evalCatchStack.pop();
+                        popEvalCallerFrame(frame);
                         unwindEvalMethodInvocantHolds(
                                 evalMethodInvocantHoldDepthStack, methodInvocantHolds);
                         // Restore local variables pushed inside the eval block
@@ -3560,10 +3574,6 @@ public class BytecodeInterpreter {
                                     savedLocalLevel + relativeLevel);
                         }
                         RuntimeCode.decrementEvalDepth();
-                        if (frame.virtualEvalFrameDepth > 0) {
-                            InterpreterState.pop();
-                            frame.virtualEvalFrameDepth--;
-                        }
                         WarnDie.catchEval(e);
                         pc = catchPc;
                         continue outer;
@@ -3601,6 +3611,7 @@ public class BytecodeInterpreter {
                         Throwable evalException = e;
                         // Inside eval block - catch the exception
                         int catchPc = evalCatchStack.pop(); // Pop the catch handler
+                        popEvalCallerFrame(frame);
                         unwindEvalMethodInvocantHolds(
                                 evalMethodInvocantHoldDepthStack, methodInvocantHolds);
 
@@ -3652,11 +3663,6 @@ public class BytecodeInterpreter {
 
                         // Track eval depth for $^S
                         RuntimeCode.decrementEvalDepth();
-
-                        if (frame.virtualEvalFrameDepth > 0) {
-                            InterpreterState.pop();
-                            frame.virtualEvalFrameDepth--;
-                        }
 
                         // Call WarnDie.catchEval() to set $@
                         WarnDie.catchEval(evalException);
@@ -4750,6 +4756,16 @@ public class BytecodeInterpreter {
         }
 
         return new CallerStack.CallerInfo(currentPkg, filename, lineNumber);
+    }
+
+    /** Pop only the virtual eval caller frame owned by the current eval boundary. */
+    private static void popEvalCallerFrame(SuspendedInterpreterFrame frame) {
+        if (frame.evalCallerFrameStack.isEmpty()) return;
+        boolean pushed = frame.evalCallerFrameStack.pop();
+        if (pushed && frame.virtualEvalFrameDepth > 0) {
+            InterpreterState.pop();
+            frame.virtualEvalFrameDepth--;
+        }
     }
 
     /**

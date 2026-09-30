@@ -1366,36 +1366,69 @@ public class InlineOpcodeHandler {
     // CONTROL FLOW - SPECIAL (RuntimeControlFlowList)
     // =========================================================================
 
-    public static int executeCreateLast(int[] bytecode, int pc, RuntimeBase[] registers, InterpretedCode code) {
+    public static int executeCreateLast(int[] bytecode, int pc, RuntimeBase[] registers, InterpretedCode code, int opcodePc) {
         int rd = bytecode[pc++];
         int labelIdx = bytecode[pc++];
         String label = labelIdx == 255 ? null : code.stringPool[labelIdx];
-        registers[rd] = new RuntimeControlFlowList(ControlFlowType.LAST, label, code.sourceName, code.sourceLine);
+        var location = sourceLocation(code, opcodePc);
+        RuntimeControlFlowList marker = new RuntimeControlFlowList(
+                ControlFlowType.LAST, label, location.fileName(), location.lineNumber());
+        rejectSortComparatorLoopControl(code, marker);
+        registers[rd] = marker;
         return pc;
     }
 
-    public static int executeCreateNext(int[] bytecode, int pc, RuntimeBase[] registers, InterpretedCode code) {
+    public static int executeCreateNext(int[] bytecode, int pc, RuntimeBase[] registers, InterpretedCode code, int opcodePc) {
         int rd = bytecode[pc++];
         int labelIdx = bytecode[pc++];
         String label = labelIdx == 255 ? null : code.stringPool[labelIdx];
-        registers[rd] = new RuntimeControlFlowList(ControlFlowType.NEXT, label, code.sourceName, code.sourceLine);
+        var location = sourceLocation(code, opcodePc);
+        RuntimeControlFlowList marker = new RuntimeControlFlowList(
+                ControlFlowType.NEXT, label, location.fileName(), location.lineNumber());
+        rejectSortComparatorLoopControl(code, marker);
+        registers[rd] = marker;
         return pc;
     }
 
-    public static int executeCreateRedo(int[] bytecode, int pc, RuntimeBase[] registers, InterpretedCode code) {
+    public static int executeCreateRedo(int[] bytecode, int pc, RuntimeBase[] registers, InterpretedCode code, int opcodePc) {
         int rd = bytecode[pc++];
         int labelIdx = bytecode[pc++];
         String label = labelIdx == 255 ? null : code.stringPool[labelIdx];
-        registers[rd] = new RuntimeControlFlowList(ControlFlowType.REDO, label, code.sourceName, code.sourceLine);
+        var location = sourceLocation(code, opcodePc);
+        RuntimeControlFlowList marker = new RuntimeControlFlowList(
+                ControlFlowType.REDO, label, location.fileName(), location.lineNumber());
+        rejectSortComparatorLoopControl(code, marker);
+        registers[rd] = marker;
         return pc;
     }
 
-    public static int executeCreateGoto(int[] bytecode, int pc, RuntimeBase[] registers, InterpretedCode code) {
+    public static int executeCreateGoto(int[] bytecode, int pc, RuntimeBase[] registers, InterpretedCode code, int opcodePc) {
         int rd = bytecode[pc++];
         int labelIdx = bytecode[pc++];
         String label = labelIdx == 255 ? null : code.stringPool[labelIdx];
-        registers[rd] = new RuntimeControlFlowList(ControlFlowType.GOTO, label, code.sourceName, code.sourceLine);
+        var location = sourceLocation(code, opcodePc);
+        registers[rd] = new RuntimeControlFlowList(ControlFlowType.GOTO, label, location.fileName(), location.lineNumber());
         return pc;
+    }
+
+    public static org.perlonjava.runtime.runtimetypes.ErrorMessageUtil.SourceLocation sourceLocation(
+            InterpretedCode code, int opcodePc) {
+        if (code.pcToTokenIndex != null && code.errorUtil != null) {
+            var entry = code.pcToTokenIndex.floorEntry(opcodePc);
+            if (entry != null) {
+                return code.errorUtil.getSourceLocationAccurate(entry.getValue());
+            }
+        }
+        return new org.perlonjava.runtime.runtimetypes.ErrorMessageUtil.SourceLocation(
+                code.sourceName, code.sourceLine);
+    }
+
+    public static void rejectSortComparatorLoopControl(
+            InterpretedCode code, RuntimeControlFlowList marker) {
+        if (!code.isSortComparator) return;
+        String message = marker.marker.buildErrorMessage();
+        if (!message.endsWith(".")) message += ".";
+        throw new PerlCompilerException(message + "\n");
     }
 
     public static int executeIsControlFlow(int[] bytecode, int pc, RuntimeBase[] registers) {
@@ -1412,7 +1445,16 @@ public class InlineOpcodeHandler {
 
     public static int executeIncReg(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
-        RuntimeBase incResult = MathOperators.add((RuntimeScalar) registers[rd], 1);
+        RuntimeScalar operand = (RuntimeScalar) registers[rd];
+        // The fused ++ path must preserve the lvalue check performed by
+        // RuntimeScalar.preAutoIncrement(). Arithmetic alone accepts a
+        // READONLY_SCALAR value and returns a writable result, which made
+        // `map ++$_, 1` succeed only on the interpreter backend.
+        if (operand instanceof RuntimeScalarReadOnly
+                || operand.type == RuntimeScalarType.READONLY_SCALAR) {
+            throw new PerlCompilerException("Modification of a read-only value attempted");
+        }
+        RuntimeBase incResult = MathOperators.add(operand, 1);
         registers[rd] = isImmutableProxy(incResult) ? ensureMutableScalar(incResult) : incResult;
         return pc;
     }

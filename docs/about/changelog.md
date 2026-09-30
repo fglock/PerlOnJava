@@ -26,6 +26,8 @@ priorities and future plans.
 - Restore JVM compatibility for `goto.t`, `qr.t`, `runlevel.t`, `select.t`,
   `sselect.t`, `perlio_fail.t`, `try.t`, and the three substitution tests,
   including source-site diagnostics, eval caller frames, and regex identity.
+- Fix source-site control-flow diagnostics, try caller frames, regex identity,
+  and other reported JVM/interpreter compatibility gaps.
 
 - Restore `op/stash.t` namespace spellings, stash clearing, and forward-CV
   provenance on both execution backends.

@@ -2221,7 +2221,7 @@ public class CompileOperator {
                 // Check if EXPR could be a CODE reference (goto &sub handled above)
                 bc.compileNode(arg, -1, RuntimeContextType.SCALAR);
                 int exprReg = bc.lastResultReg;
-                bc.emit(Opcodes.GOTO_DYNAMIC);
+                bc.emitWithToken(Opcodes.GOTO_DYNAMIC, node.getIndex());
                 bc.emit(exprReg);
                 String evalScope = bc.getEvalScopeType();
                 bc.emit(evalScope == null ? -1 : bc.addToStringPool(evalScope));
@@ -2236,7 +2236,7 @@ public class CompileOperator {
             bc.emit(Opcodes.LOAD_STRING);
             bc.emitReg(rd);
             bc.emit(emptyIdx);
-            bc.emit(Opcodes.GOTO_DYNAMIC);
+            bc.emitWithToken(Opcodes.GOTO_DYNAMIC, node.getIndex());
             bc.emit(rd);
             bc.emit(-1);
             bc.lastResultReg = -1;
@@ -2301,7 +2301,7 @@ public class CompileOperator {
         bc.emit(Opcodes.LOAD_STRING);
         bc.emitReg(rd);
         bc.emit(labelIdx);
-        bc.emit(Opcodes.GOTO_DYNAMIC);
+        bc.emitWithToken(Opcodes.GOTO_DYNAMIC, node.getIndex());
         bc.emit(rd);
         bc.emit(evalScope == null ? -1 : bc.addToStringPool(evalScope));
         bc.lastResultReg = -1;

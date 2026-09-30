@@ -5421,7 +5421,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         && activeCode.lexicalSubDisplayName) {
                     subName = callerSubNameForCode(activeCode);
                 }
-                if (virtualEvalFrame && activeCode != null) {
+                if (virtualEvalFrame && activeCode != null
+                        && !PerlRuntime.current().executionState().insideDieHandler) {
                     // A synthetic eval frame can occupy the formatted slot for
                     // a still-active named subroutine. At that same logical
                     // depth the active-code stack is authoritative; only keep
@@ -6038,9 +6039,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             frame.set(1, callSite.get(1));
             frame.set(2, callSite.get(2));
             frame.set(3, "(eval)");
-            if (frame.size() > 4 && isVirtualEvalFrame(frame)) {
-                frame.subList(4, frame.size()).clear();
-            }
+            // Keep the virtual-eval tag. caller() uses it to preserve the
+            // explicit `(eval)` subroutine name when this implementation frame
+            // has been remapped to its Perl call site, especially on the
+            // interpreter backend where active-code frames otherwise supply
+            // the enclosing named subroutine's name.
             if (callSiteIndex > i + 1) {
                 stackTrace.subList(i + 1, callSiteIndex).clear();
             }

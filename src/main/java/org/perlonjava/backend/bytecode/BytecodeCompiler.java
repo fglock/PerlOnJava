@@ -8786,7 +8786,10 @@ public class BytecodeCompiler implements Visitor {
         emitWithToken(Opcodes.EVAL_TRY, node.getIndex());
         int catchTargetPos = bytecode.size();
         emitInt(0);
-        emitReg(firstBodyReg);
+        // Try/catch is not a Perl caller frame. Encode a negative register to
+        // distinguish it from eval BLOCK, which shares EVAL_TRY but is visible
+        // to caller().
+        emitReg(-firstBodyReg);
 
         compileNode(node.tryBlock, resultReg, currentCallContext);
         if (lastResultReg >= 0) {
@@ -9256,7 +9259,7 @@ public class BytecodeCompiler implements Visitor {
                     : op.equals("next") ? Opcodes.CREATE_NEXT_DYNAMIC
                     : Opcodes.CREATE_REDO_DYNAMIC;
             int rd = allocateOutputRegister();
-            emit(createDynOp);
+            emitWithToken(createDynOp, node.getIndex());
             emitReg(rd);
             emitReg(dynamicLabelReg);
             emit(Opcodes.MORTAL_FLUSH);
@@ -9347,7 +9350,7 @@ public class BytecodeCompiler implements Visitor {
                     : op.equals("next") ? Opcodes.CREATE_NEXT
                     : Opcodes.CREATE_REDO;
             int rd = allocateOutputRegister();
-            emit(createOp);
+            emitWithToken(createOp, node.getIndex());
             emitReg(rd);
             int labelIdx = labelStr != null ? addToStringPool(labelStr) : 255;
             emitReg(labelIdx);
