@@ -559,7 +559,7 @@ public class LayeredIOHandle implements IOHandle {
                 // No-op layers - binary mode with no transformation
                 // These layers essentially remove other layers when used alone
             }
-            case "perlio" -> perlioBuffering = true;
+            case "perlio", "stdio" -> perlioBuffering = true;
             case "crlf" -> {
                 // CRLF layer for line ending conversion
                 CrlfLayer layer = new CrlfLayer();

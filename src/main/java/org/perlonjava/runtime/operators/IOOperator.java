@@ -171,9 +171,7 @@ public class IOOperator {
     private static RuntimeScalar selectedHandleValue(RuntimeScalar argument) {
         if (argument.value instanceof RuntimeGlob glob) {
             String name = glob.globName;
-            if (name != null && (name.endsWith("::STDOUT") || name.endsWith("::stdout")
-                    || name.endsWith("::STDERR") || name.endsWith("::stderr")
-                    || name.endsWith("::STDIN") || name.endsWith("::stdin"))) {
+            if (name != null) {
                 return new RuntimeScalar(name);
             }
             return argument.type == RuntimeScalarType.GLOBREFERENCE

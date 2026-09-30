@@ -10,6 +10,7 @@ GRADLE_LAUNCH_ARGS = --no-daemon $(GRADLE_ARGS)
 THREAD_TOOLING_TESTS := \
 	dev/tools/tests/check_thread_core_parity.t \
 	dev/tools/tests/ci_workflow_contract.t \
+	dev/tools/tests/ci_windows_unit_gate_budget.t \
 	dev/regex/tools/tests/collect_direct_thread.t \
 	dev/tools/tests/perl_test_runner_ansi_tap.t \
 	dev/tools/tests/perl_test_runner_anyof_parallel_schedule.t \

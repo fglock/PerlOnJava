@@ -55,14 +55,38 @@ through scalar copies, mutation snapshots, localization, and graph cloning.
   changed test files and 175 assertions.
 - [x] Reproduce interpreter eval-stack regression with a permanent focused
   test; system Perl passes and unfixed interpreter fails (2026-09-30).
-- [ ] Validate corrected eval-stack candidate with full make and both backends.
+- [x] Validate `73af43548` with unfiltered make: 2,506 cases, three skips,
+  zero failures/errors; all 35 changed Perl files (185 assertions) pass on
+  JVM and interpreter (2026-09-30).
+- [x] Publish draft PR 1580 and complete initial full UAT (2026-09-30).
+- [ ] Validate the batched UAT corrections and require regression-free full
+  UAT comparison plus green final-head CI.
 
 ### Next steps
 
-Validate the corrected eval candidate with a focused gate, then unfiltered
-make and changed regression files on JVM and interpreter using its development
-JAR. Publish the PR, run full UAT, compare against the requested baseline, and
-require green CI. Keep full logs under `/tmp/integration-*`.
+Validate the UAT correction batch with a focused gate, then unfiltered make,
+changed regression files on both backends, and the owning imported files.
+Update PR 1580 and repeat full UAT against the supplied baseline; require green
+final-head CI. Preserve the initial UAT evidence and keep full validation logs
+under `/tmp/integration-*`.
+
+### Full UAT correction batch (2026-09-30)
+
+The initial 575-file UAT on `73af43548` gained 145 passing assertions overall,
+but the raw comparison reports decreases in 14 files. Seven regex files
+share a callback-program encoding mismatch after Unicode promotion. The other
+causes are selected-glob capture before localization/restoration installation,
+named Unicode handle return identity, runtime void assignment tails fetching
+tied lvalues, duplicate symbolic-directory fetches, rejected `:stdio`, missing
+JVM eval compilation caller frames, and a host print warning while reporting
+a wide compilation error. Nine focused Perl regression files cover these
+behaviors and pass system Perl; failure evidence is retained against the
+unfixed `73af43548` development JAR.
+
+Linux CI passed. Windows progressed through its serial unit suite until the
+45-minute build cutoff, without a reported assertion failure. The batch raises
+only that whole-build budget to 60 minutes, retaining per-test watchdogs and
+all tests, with a project-owned CI budget contract test.
 
 ### Eval commit audit (2026-09-30)
 

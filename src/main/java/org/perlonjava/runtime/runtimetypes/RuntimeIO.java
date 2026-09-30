@@ -1893,6 +1893,15 @@ public class RuntimeIO extends RuntimeScalar {
      * @return RuntimeScalar indicating success/failure or bytes written
      */
     public RuntimeScalar write(String data) {
+        return write(data, true);
+    }
+
+    /** CLI diagnostics are host output, not a Perl print operation. */
+    public RuntimeScalar writeDiagnostic(String data) {
+        return write(data, false);
+    }
+
+    private RuntimeScalar write(String data, boolean perlPrint) {
         needFlush = true;
         // Only flush lastAccessedHandle if it's a different handle AND doesn't share the same ioHandle
         // (duplicated handles share the same ioHandle, so flushing would be redundant and could cause deadlocks)
@@ -1916,7 +1925,7 @@ public class RuntimeIO extends RuntimeScalar {
                 }
             }
             if (hasWide) {
-                WarnDie.warnWithCategoryByDefault(
+                if (perlPrint) WarnDie.warnWithCategoryByDefault(
                         new RuntimeScalar("Wide character in print"),
                         new RuntimeScalar(""),
                         "utf8");

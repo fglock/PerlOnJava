@@ -3544,6 +3544,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     int level = DynamicVariableManager.getLocalLevel();
                     DynamicVariableManager.pushLocalVariable(sig);
 
+                    // Compilation failed before an eval CV could contribute
+                    // its Perl caller level. Retain that boundary while the
+                    // __DIE__ hook runs, rather than losing caller(1).
+                    ArrayList<ArrayList<String>> compileCallers =
+                            ExceptionFormatter.formatExceptionDetailed(new Throwable()).frames();
+                    boolean pushedCompileFrame = !compileCallers.isEmpty();
+                    if (pushedCompileFrame) {
+                        ArrayList<String> site = compileCallers.getFirst();
+                        pushSyntheticCallerFrame(site.get(0), site.get(1),
+                                Integer.parseInt(site.get(2)), "(eval)", "eval-compile");
+                    }
                     try {
                         RuntimeArray args = new RuntimeArray();
                         RuntimeArray.push(args, new RuntimeScalar(err));
@@ -3563,6 +3574,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         }
                         // If handler throws other exceptions, ignore them (keep original error in $@)
                     } finally {
+                        if (pushedCompileFrame) popSyntheticCallerFrame();
                         // Restore $SIG{__DIE__}
                         DynamicVariableManager.popToLocalLevel(level);
                     }
@@ -5260,6 +5272,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     stackTrace.add(syntheticOwnSubInsertAt(stackTrace, syntheticFrame), syntheticFrame);
                 } else if (isVirtualEvalFrame(syntheticFrame)) {
                     stackTrace.add(virtualEvalInsertAt(stackTrace), syntheticFrame);
+                } else if (syntheticFrame.size() > 4
+                        && "eval-compile".equals(syntheticFrame.get(4))) {
+                    // JVM frame zero is the hook's own source position. The
+                    // missing compile boundary belongs immediately after it.
+                    stackTrace.add(Math.min(1, stackTrace.size()), syntheticFrame);
                 } else {
                     framesToInsert.add(syntheticFrame);
                 }

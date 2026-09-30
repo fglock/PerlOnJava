@@ -2103,10 +2103,14 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             RuntimeIO stubIO = new RuntimeIO();
             stubIO.globName = this.globName;
             newGlob.IO = new RuntimeScalar(stubIO);
-            RuntimeIO.setSelectedHandle(stubIO);
         }
 
         GlobalVariable.replaceGlobalIO(this.globName, newGlob);
+        if (isSelectedHandle) {
+            // Selection also captures the visible glob identity. Install the
+            // localized glob first, rather than retaining the outer GV.
+            RuntimeIO.setSelectedHandle((RuntimeIO) newGlob.IO.value);
+        }
     }
 
     @Override
@@ -2129,13 +2133,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // Restore the saved IO object reference on this (old) glob.
         this.IO = snap.io;
 
-        // Restore selectedHandle if it was saved during dynamicSaveState.
-        // This ensures that after local(*STDOUT) + restore, print without explicit
-        // filehandle goes through the correct (possibly tied) handle.
-        if (snap.savedSelectedHandle != null) {
-            RuntimeIO.setSelectedHandle(snap.savedSelectedHandle);
-        }
-
         // Put this (old) glob back in globalIORefs, replacing the local scope's glob.
         // Any references captured during the local scope still point to the local glob,
         // which is now an independent orphaned glob (matching Perl 5 GV behavior).
@@ -2150,6 +2147,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             tieHandle.releaseTiedObject();
         }
         GlobalVariable.replaceGlobalIO(snap.globName, this);
+        if (snap.savedSelectedHandle != null) {
+            // Reinstall the original GV before selection captures its identity;
+            // otherwise implicit print resolves the closed localized IO slot.
+            RuntimeIO.setSelectedHandle(snap.savedSelectedHandle);
+        }
 
         // Restore saved objects directly - they were never mutated, so no
         // dynamicRestoreState() call is needed.

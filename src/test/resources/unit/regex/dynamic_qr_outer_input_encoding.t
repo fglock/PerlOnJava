@@ -1,0 +1,18 @@
+use strict;
+use warnings;
+use Test::More tests => 8;
+use threads;
+use re 'eval';
+my $subject = "a_\xF7";
+my $local = qr'^(\x{100}|a)(??{ qr/.?\xF7/d })';
+ok($subject =~ /(?:)$local(?:)/, 'local dynamic regex matches byte subject');
+ok('a_q' !~ /(?:)$local(?:)/, 'local dynamic regex rejects different suffix');
+my $cloned = threads->new(sub { qr'^(\x{100}|a)(??{ qr/.?\xF7/d })' })->join();
+ok($subject =~ /(?:)$cloned(?:)/, 'thread-cloned dynamic regex matches byte subject');
+ok('a_q' !~ /(?:)$cloned(?:)/, 'thread-cloned dynamic regex rejects different suffix');
+my $wide = "\x{100}_\xF7";
+ok($wide =~ /(?:)$local(?:)/, 'local dynamic regex matches a wide subject');
+ok($wide =~ /(?:)$cloned(?:)/, 'thread-cloned dynamic regex matches a wide subject');
+my $bytes = qr'^a(??{ qr/.?\xF7/d })';
+ok($subject =~ /(?:)$bytes(?:)/, 'byte outer and dynamic programs share byte input');
+ok('a_q' !~ /(?:)$bytes(?:)/, 'byte programs reject a different suffix');

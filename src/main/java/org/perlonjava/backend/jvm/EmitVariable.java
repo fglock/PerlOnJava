@@ -1312,11 +1312,15 @@ public class EmitVariable {
                     mv.visitInsn(Opcodes.SWAP); // move the target first
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, leftDescriptor, "set", rightDescriptor, false);
                 } else {
+                    boolean runtimeAssignment = ctx.contextType == RuntimeContextType.RUNTIME;
+                    if (runtimeAssignment) emitterVisitor.pushCallContext();
                     mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                             "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
                             ctx.contextType == RuntimeContextType.VOID
                                     ? "assignTo" : "assignToExpression",
-                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                            runtimeAssignment
+                                    ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                                    : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                 }
 
                 if (Boolean.TRUE.equals(node.getAnnotation("magicReadlineAssignment"))) {

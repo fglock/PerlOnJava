@@ -1913,6 +1913,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return target.type == TIED_SCALAR ? target.tiedFetch() : assigned;
     }
 
+    /** A final assignment inherits the caller's context, including void. */
+    public static RuntimeScalar assignToExpression(RuntimeBase value, RuntimeScalar target, int context) {
+        return context == RuntimeContextType.VOID
+                ? assignTo(value, target) : assignToExpression(value, target);
+    }
+
     /**
      * Vivifies this scalar as an lvalue. For plain scalars this is a no-op.
      * For hash/array element proxies (RuntimeBaseProxy subclasses), this creates

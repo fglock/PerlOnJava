@@ -1499,13 +1499,13 @@ final class JoniRegexPattern {
             RuntimeRegex firstClassRegex = value.firstClassRegexScalar
                     ? value.firstClassRegexValue : null;
             if (firstClassRegex != null) {
-                nestedPattern = firstClassRegex.selectRecursivePattern(subject);
+                nestedPattern = firstClassRegex.selectRecursivePatternForCallout(subject, byteMode);
                 nestedCallbacks = firstClassRegex.executableCallbacks;
                 if (firstClassRegex.getRegexFlags() != null) {
                     nestedCallbackFlags = firstClassRegex.getRegexFlags();
                 }
             } else if (value.value instanceof RuntimeRegex runtimeRegex) {
-                nestedPattern = runtimeRegex.selectRecursivePattern(subject);
+                nestedPattern = runtimeRegex.selectRecursivePatternForCallout(subject, byteMode);
                 nestedCallbacks = runtimeRegex.executableCallbacks;
                 if (runtimeRegex.getRegexFlags() != null) {
                     nestedCallbackFlags = runtimeRegex.getRegexFlags();

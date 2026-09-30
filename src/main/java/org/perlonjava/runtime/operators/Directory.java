@@ -247,6 +247,7 @@ public class Directory {
     }
 
     public static RuntimeBase readdir(RuntimeScalar dirHandle, int ctx) {
+        dirHandle = RuntimeScalar.dereferenceAndFetchOnce(dirHandle);
         RuntimeIO runtimeIO = dirHandle.getRuntimeIO();
         if (runtimeIO != null && runtimeIO.directoryIO != null) {
             return runtimeIO.directoryIO.readdir(ctx);

@@ -351,6 +351,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return recursivePattern;
     }
 
+    /** Dynamic subprograms consume the enclosing matcher's encoded buffer. */
+    JoniRegexPattern selectRecursivePatternForCallout(RuntimeScalar string, boolean byteMode) {
+        JoniRegexPattern selected = selectRecursivePattern(string);
+        // A wide outer pattern upgrades byte subjects to UTF-8. Preserve the
+        // callback qr's own /d semantics but do not execute its ISO-8859-1
+        // program against that upgraded buffer.
+        return !byteMode && selected == recursivePatternBytes
+                ? recursivePattern : selected;
+    }
+
     /** The Perl source pattern, before backend-specific translation. */
     public String sourcePattern() {
         return patternString;

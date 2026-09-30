@@ -162,7 +162,7 @@ public class WarnDie {
             return;
         }
         if (!(stderr instanceof TieHandle)) {
-            stderr.write(message);
+            stderr.writeDiagnostic(message);
             stderr.flush();
             return;
         }

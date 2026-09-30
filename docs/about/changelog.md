@@ -6,6 +6,11 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve selected filehandles across glob localization, named Unicode handle
+  names, void tied-assignment tails, dynamic regex input encoding, syntax-error
+  eval callers, and stdio layers; keep wide CLI diagnostics free of host print
+  warnings and give the complete Windows unit gate adequate bounded time.
+
 - Restore core-test compatibility for regex-set diagnostics (including
   POSIX-looking text in extended-class comments), classes and MRO, op subs,
   filesystem metadata, `die` state, and scalar flip-flop warnings on both
