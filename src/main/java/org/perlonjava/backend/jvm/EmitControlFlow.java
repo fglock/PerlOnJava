@@ -120,7 +120,9 @@ public class EmitControlFlow {
         String operator = node.operator;
         
         // Check if we're inside a defer block - control flow out of defer is prohibited
-        if (ctx.javaClassInfo.isInDeferBlock) {
+        if ((ctx.javaClassInfo.isInDeferBlock
+                || org.perlonjava.runtime.runtimetypes.DynamicVariableManager.isExecutingDefer())
+                && !ctx.javaClassInfo.isInEvalString && !ctx.javaClassInfo.isInEvalBlock) {
             throwControlFlowBlockError(ctx, node, operator, "defer");
         }
         
@@ -753,11 +755,6 @@ public class EmitControlFlow {
     static void handleGotoLabel(EmitterVisitor emitterVisitor, OperatorNode node) {
         EmitterContext ctx = emitterVisitor.ctx;
 
-        // Check if we're inside a defer block - goto out of defer is prohibited
-        if (ctx.javaClassInfo.isInDeferBlock) {
-            throwControlFlowBlockError(ctx, node, "goto", "defer");
-        }
-        
         // Check if we're inside a finally block - goto out of finally is prohibited
         if (ctx.javaClassInfo.finallyBlockDepth > 0) {
             throwControlFlowBlockError(ctx, node, "goto", "finally");
@@ -774,6 +771,14 @@ public class EmitControlFlow {
             // tail-call path below instead of treating it as a goto label.
             if (arg instanceof IdentifierNode identifier && identifier.name.equals("__SUB__")) {
                 arg = new OperatorNode("__SUB__", null, identifier.tokenIndex);
+            }
+
+            // A goto in defer may branch within its own closure, but may not
+            // tail-call or compute a target that can escape that closure.
+            if ((ctx.javaClassInfo.isInDeferBlock
+                    || org.perlonjava.runtime.runtimetypes.DynamicVariableManager.isExecutingDefer())
+                    && !(arg instanceof IdentifierNode)) {
+                throwControlFlowBlockError(ctx, node, "goto", "defer");
             }
 
             // Check if it's a static label (IdentifierNode)
@@ -891,6 +896,13 @@ public class EmitControlFlow {
             }
         }
 
+        if ((ctx.javaClassInfo.isInDeferBlock
+                || org.perlonjava.runtime.runtimetypes.DynamicVariableManager.isExecutingDefer())
+                && (labelName == null
+                        || ctx.javaClassInfo.findGotoLabelsByName(labelName) == null)) {
+            throwControlFlowBlockError(ctx, node, "goto", "defer");
+        }
+
         // Ensure label is provided for static goto
         if (labelName == null) {
             // Bare `goto` without arguments - emit runtime die like Perl 5
@@ -951,6 +963,13 @@ public class EmitControlFlow {
 
         // For static label, check if it's local
         GotoLabels targetLabel = ctx.javaClassInfo.findGotoLabelsByName(labelName);
+        if (!ctx.javaClassInfo.isInDeferBlock
+                && ctx.javaClassInfo.gotoLabelsInsideDefer.contains(labelName)) {
+            var location = ctx.errorUtil.getSourceLocationAccurate(node.tokenIndex);
+            emitRuntimeControlFlowError(ctx, "Can't \"goto\" into a \"defer\" block at "
+                    + location.fileName() + " line " + location.lineNumber() + ".");
+            return;
+        }
         if (targetLabel == null) {
             if (ctx.javaClassInfo.isSmartmatchPredicate) {
                 throw PerlCompilerException.withSourceLocation(node.tokenIndex,
@@ -1036,5 +1055,16 @@ public class EmitControlFlow {
         throw new PerlCompilerException("Can't \"" + operator + "\" out of a \""
                 + blockType + "\" block at " + location.fileName() + " line "
                 + location.lineNumber() + ".\n");
+    }
+
+    private static void emitRuntimeControlFlowError(EmitterContext ctx, String message) {
+        ctx.mv.visitTypeInsn(Opcodes.NEW,
+                "org/perlonjava/runtime/runtimetypes/PerlCompilerException");
+        ctx.mv.visitInsn(Opcodes.DUP);
+        ctx.mv.visitLdcInsn(message);
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                "org/perlonjava/runtime/runtimetypes/PerlCompilerException", "<init>",
+                "(Ljava/lang/String;)V", false);
+        ctx.mv.visitInsn(Opcodes.ATHROW);
     }
 }

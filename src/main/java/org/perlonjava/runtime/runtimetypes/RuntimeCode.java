@@ -6549,11 +6549,29 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // not re-entered (no inTailCallTrampoline bump needed).
                 } else {
                     if (result instanceof RuntimeControlFlowList flow) {
+                        if (flow.getControlFlowType() == ControlFlowType.GOTO
+                                && DynamicVariableManager.isExecutingDefer()) {
+                            throw new PerlCompilerException("Can't \"goto\" out of a \"defer\" block at "
+                                    + flow.marker.fileName + " line " + flow.marker.lineNumber + ".\n");
+                        }
                         if (code.classAdjustBlock) {
                             flow.markClassAdjustOrigin();
                         }
                         handleEscapingLoopControl(result, code.generatedClassConstructor,
                                 code.classAdjustBlock);
+                        ControlFlowType flowType = flow.getControlFlowType();
+                        if (DynamicVariableManager.isExecutingDefer()
+                                && (flowType == ControlFlowType.LAST
+                                || flowType == ControlFlowType.NEXT
+                                || flowType == ControlFlowType.REDO)) {
+                            int line = flow.marker.fileName != null
+                                    && flow.marker.fileName.startsWith("(eval ")
+                                    ? 1 : flow.marker.lineNumber;
+                            throw new PerlCompilerException("Can't \""
+                                    + flowType.name().toLowerCase()
+                                    + "\" out of a \"defer\" block at "
+                                    + flow.marker.fileName + " line " + line + ".\n");
+                        }
                         MyVarCleanupStack.unwindTo(cleanupMark);
                         MortalList.flush();
                     }
@@ -6738,9 +6756,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return;
         }
         String operation = flow.getControlFlowType().name().toLowerCase();
-        WarnDie.warn(new RuntimeScalar("Exiting subroutine via " + operation),
+        String source = flow.marker.fileName;
+        String scope = flow.marker.evalScope != null
+                || (source != null && source.startsWith("(eval ")) ? "eval" : "subroutine";
+        WarnDie.warn(new RuntimeScalar("Exiting " + scope + " via " + operation),
                 new RuntimeScalar(" at " + flow.marker.fileName + " line "
                         + flow.marker.lineNumber));
+    }
+
+    /** Error assigned to {@code $@} when loop control from eval cannot reach a loop. */
+    public static String evalLoopControlError(ControlFlowMarker marker) {
+        if (!DynamicVariableManager.isExecutingDefer()) {
+            return marker.buildErrorMessage();
+        }
+        int line = marker.fileName != null && marker.fileName.startsWith("(eval ")
+                ? 1 : marker.lineNumber;
+        return "Can't \"" + marker.type.name().toLowerCase()
+                + "\" out of a \"defer\" block at " + marker.fileName + " line " + line + ".\n";
     }
 
     public static RuntimeScalar markGeneratedClassConstructor(RuntimeScalar codeRef) {
@@ -6798,6 +6830,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         try {
             RuntimeList result = apply(runtimeScalar, a, callContext);
             result = resolveTailCalls(result, callContext);
+            if (DynamicVariableManager.isExecutingDefer()
+                    && result instanceof RuntimeControlFlowList flow
+                    && (flow.getControlFlowType() == ControlFlowType.LAST
+                    || flow.getControlFlowType() == ControlFlowType.NEXT
+                    || flow.getControlFlowType() == ControlFlowType.REDO)) {
+                int line = flow.marker.fileName != null
+                        && flow.marker.fileName.startsWith("(eval ")
+                        ? 1 : flow.marker.lineNumber;
+                throw new PerlCompilerException("Can't \""
+                        + flow.getControlFlowType().name().toLowerCase()
+                        + "\" out of a \"defer\" block at "
+                        + flow.marker.fileName + " line " + line + ".\n");
+            }
             // Perl clears $@ on successful eval (even if nested evals previously set it).
             GlobalVariable.setGlobalVariable("main::@", "");
             return result;

@@ -414,13 +414,14 @@ public class WarnDie {
                     RuntimeIO lastRead = RuntimeIO.getLastReadlineHandle();
                     String diagnosticName = lastRead == null ? null : lastRead.getDiagnosticReadlineHandleName();
                     // Only a source-level lexical filehandle expression retains
-                    // readline context for a subsequent custom warning handler.
-                    // Named handles such as DATA are used internally while loading
-                    // source and must not decorate unrelated warnings.
-                    if (diagnosticName != null && diagnosticName.startsWith("$")) {
-                        String filehandleContext = getFilehandleContext();
-                        if (filehandleContext != null && !filehandleContext.isEmpty()) {
-                            out += filehandleContext;
+                        // readline context for a subsequent custom warning handler.
+                        // Named handles such as DATA are used internally while loading
+                        // source and must not decorate unrelated warnings.
+                        if (diagnosticName != null && (diagnosticName.startsWith("$")
+                                || messageStr.startsWith("utf8 \""))) {
+                            String filehandleContext = getFilehandleContext();
+                            if (filehandleContext != null && !filehandleContext.isEmpty()) {
+                                out += filehandleContext;
                         }
                     }
                 }
@@ -530,22 +531,27 @@ public class WarnDie {
      * @return A RuntimeBase representing the result of the warning operation.
      */
     public static RuntimeBase warnWithCategory(RuntimeBase message, RuntimeScalar where, String category) {
-        return warnWithCategory(message, where, category, null, 0);
+        return warnWithCategory(message, where, category, null, 0, false, null);
     }
 
     public static RuntimeBase warnWithCategory(RuntimeBase message, RuntimeScalar where, String category,
                                                 String fileName, int lineNumber) {
-        return warnWithCategory(message, where, category, fileName, lineNumber, null);
+        return warnWithCategory(message, where, category, fileName, lineNumber, false, null);
+    }
+
+    public static RuntimeBase warnWithCategoryByDefault(
+            RuntimeBase message, RuntimeScalar where, String category) {
+        return warnWithCategory(message, where, category, null, 0, true, null);
     }
 
     /** Emit a category warning using the lexical bits of the Perl code that raised it. */
     public static RuntimeBase warnWithCategoryFromCode(RuntimeBase message, RuntimeScalar where,
             String category, String warningBits) {
-        return warnWithCategory(message, where, category, null, 0, warningBits);
+        return warnWithCategory(message, where, category, null, 0, false, warningBits);
     }
 
     private static RuntimeBase warnWithCategory(RuntimeBase message, RuntimeScalar where, String category,
-            String fileName, int lineNumber, String warningBitsOverride) {
+            String fileName, int lineNumber, boolean enabledByDefault, String warningBitsOverride) {
         if (WarningFlags.areWarningsForcedOff()) {
             return new RuntimeScalar();
         }
@@ -582,14 +588,14 @@ public class WarnDie {
                     return die(message, where, fileName, lineNumber);
                 }
                 // Fall through to emit warning
-            } else if (!Warnings.isWarnFlagSet()) {
+            } else if (!Warnings.isWarnFlagSet() && !enabledByDefault) {
                 // Category not lexically enabled AND $^W not set - suppress
                 return new RuntimeScalar();
             }
             // If $^W is set, fall through to emit warning even if not lexically enabled
         } else {
             // No bits from caller - fall back to $^W global flag
-            if (!Warnings.isWarnFlagSet()) {
+            if (!Warnings.isWarnFlagSet() && !enabledByDefault) {
                 return new RuntimeScalar();
             }
         }
@@ -752,6 +758,9 @@ public class WarnDie {
                 String location = signatureMismatchLocation(out, where);
                 if (location.isEmpty() && fileName != null && lineNumber > 0) {
                     location = " at " + fileName + " line " + lineNumber;
+                }
+                if (location.isEmpty() && (where == null || where.toString().isEmpty())) {
+                    location = getPerlLocationFromStack();
                 }
                 out += location;
                 // Add filehandle context if available (e.g., ", <DATA> chunk 1")
@@ -994,11 +1003,11 @@ public class WarnDie {
     public static String getFilehandleContext() {
         RuntimeIO handle = RuntimeIO.getLastAccessedHandle();
         boolean usingRetainedReadlineHandle = false;
-        if (handle == null || handle.currentLineNumber == 0) {
+        if (handle == null || (handle.currentLineNumber == 0 && handle.currentChunkNumber == 0)) {
             handle = RuntimeIO.getLastReadlineHandle();
             usingRetainedReadlineHandle = handle != null;
         }
-        if (handle != null && handle.currentLineNumber > 0) {
+        if (handle != null && (handle.currentLineNumber > 0 || handle.currentChunkNumber > 0)) {
             String handleName = findFilehandleName(handle);
             if (handleName != null) {
                 // Perl 5 uses "line" only when $/ is exactly "\n".
@@ -1012,7 +1021,10 @@ public class WarnDie {
                 } catch (Exception ignored) {
                     // Default to "chunk" if we can't read $/
                 }
-                String context = ", <" + handleName + "> " + unit + " " + handle.currentLineNumber;
+                int recordNumber = "chunk".equals(unit)
+                        ? Math.max(handle.currentChunkNumber, handle.currentLineNumber)
+                        : handle.currentLineNumber;
+                String context = ", <" + handleName + "> " + unit + " " + recordNumber;
                 if (usingRetainedReadlineHandle) {
                     RuntimeIO.setLastReadlineHandle(null);
                 }

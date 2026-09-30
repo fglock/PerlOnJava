@@ -152,8 +152,7 @@ public class IOOperator {
             newIO = anonIO;
         }
         RuntimeIO.setSelectedHandle(newIO);
-        RuntimeIO.setSelectedHandleValue(newIO == RuntimeIO.getStdout()
-                ? new RuntimeScalar("main::STDOUT") : fileHandleArg);
+        RuntimeIO.setSelectedHandleValue(selectedHandleValue(fileHandleArg));
         RuntimeIO.setLastAccessedHandle(newIO);
         return fh;
     }
@@ -169,6 +168,20 @@ public class IOOperator {
      * @param timeout timeout in seconds (undef = block forever, 0 = poll)
      * @return number of ready descriptors, or -1 on error
      */
+    private static RuntimeScalar selectedHandleValue(RuntimeScalar argument) {
+        if (argument.value instanceof RuntimeGlob glob) {
+            String name = glob.globName;
+            if (name != null && (name.endsWith("::STDOUT") || name.endsWith("::stdout")
+                    || name.endsWith("::STDERR") || name.endsWith("::stderr")
+                    || name.endsWith("::STDIN") || name.endsWith("::stdin"))) {
+                return new RuntimeScalar(name);
+            }
+            return argument.type == RuntimeScalarType.GLOBREFERENCE
+                    ? new RuntimeScalar(argument) : glob.createReference();
+        }
+        return new RuntimeScalar(argument);
+    }
+
     private static RuntimeScalar selectWithNIO(RuntimeScalar rbits, RuntimeScalar wbits,
                                                 RuntimeScalar ebits, RuntimeScalar timeout) throws IOException {
         byte[] rdata = rbits.getDefinedBoolean() ? getVecBytes(rbits) : new byte[0];

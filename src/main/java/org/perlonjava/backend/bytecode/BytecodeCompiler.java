@@ -207,6 +207,50 @@ public class BytecodeCompiler implements Visitor {
         }
     }
 
+    /** Collect labels in defer bodies before a goto can be compiled. */
+    private static void collectDeferLabels(Node node, Set<String> labels, boolean insideDefer) {
+        if (node == null) return;
+        if (node instanceof DeferNode defer) {
+            collectDeferLabels(defer.block, labels, true);
+            return;
+        }
+        if (node instanceof SubroutineNode) return;
+        if (node instanceof LabelNode label) {
+            if (insideDefer) labels.add(label.label);
+            return;
+        }
+        if (node instanceof BlockNode block) {
+            if (insideDefer) labels.addAll(block.labels);
+            for (Node child : block.elements) collectDeferLabels(child, labels, insideDefer);
+        } else if (node instanceof IfNode conditional) {
+            collectDeferLabels(conditional.condition, labels, insideDefer);
+            collectDeferLabels(conditional.thenBranch, labels, insideDefer);
+            collectDeferLabels(conditional.elseBranch, labels, insideDefer);
+        } else if (node instanceof For1Node loop) {
+            collectDeferLabels(loop.variable, labels, insideDefer);
+            collectDeferLabels(loop.list, labels, insideDefer);
+            collectDeferLabels(loop.body, labels, insideDefer);
+            collectDeferLabels(loop.continueBlock, labels, insideDefer);
+        } else if (node instanceof For3Node loop) {
+            collectDeferLabels(loop.initialization, labels, insideDefer);
+            collectDeferLabels(loop.condition, labels, insideDefer);
+            collectDeferLabels(loop.increment, labels, insideDefer);
+            collectDeferLabels(loop.body, labels, insideDefer);
+            collectDeferLabels(loop.continueBlock, labels, insideDefer);
+        } else if (node instanceof OperatorNode operator) {
+            collectDeferLabels(operator.operand, labels, insideDefer);
+        } else if (node instanceof ListNode list) {
+            for (Node child : list.elements) collectDeferLabels(child, labels, insideDefer);
+        } else if (node instanceof BinaryOperatorNode binary) {
+            collectDeferLabels(binary.left, labels, insideDefer);
+            collectDeferLabels(binary.right, labels, insideDefer);
+        } else if (node instanceof TernaryOperatorNode ternary) {
+            collectDeferLabels(ternary.condition, labels, insideDefer);
+            collectDeferLabels(ternary.trueExpr, labels, insideDefer);
+            collectDeferLabels(ternary.falseExpr, labels, insideDefer);
+        }
+    }
+
     private void registerGotoLoopRanges(int bodyStartPc, int bodyEndPc) {
         for (Map.Entry<String, Integer> label : gotoLabelPcs.entrySet()) {
             if (label.getValue() >= bodyStartPc && label.getValue() < bodyEndPc) {
@@ -227,6 +271,7 @@ public class BytecodeCompiler implements Visitor {
     // pendingGotos tracks forward references (goto before label) needing patch-up.
     final Map<String, Integer> gotoLabelPcs = new HashMap<>();
     final Set<String> gotoLabelsInsideLoop = new HashSet<>();
+    final Set<String> gotoLabelsInsideDefer = new HashSet<>();
     final Set<String> gotoLabelsInsideConstruct = new HashSet<>();
     final Set<String> gotoLabelsInsideGiven = new HashSet<>();
     private int givenBlockDepth;
@@ -340,7 +385,8 @@ public class BytecodeCompiler implements Visitor {
             // do-blocks (notably nested dereference/prototype expressions).
             // Entering any such block by goto skips its enclosing expression
             // setup and is forbidden by Perl.
-            boolean constructEntry = expressionContext
+            boolean constructEntry = (expressionContext
+                    || block.getBooleanAnnotation("blockIsDoBlock"))
                     && !block.getBooleanAnnotation("fieldInitializer");
             Map<String, GotoLabelTarget> local = new HashMap<>();
             // StatementParser keeps labels that prefix a statement in the
@@ -550,6 +596,10 @@ public class BytecodeCompiler implements Visitor {
     private boolean tracksRuntimeRegexLexicals;
     // True when compiling inside a defer block (control flow out of defer is prohibited)
     private boolean isInDeferBlock;
+
+    boolean isInDeferBlock() {
+        return isInDeferBlock || DynamicVariableManager.isExecutingDefer();
+    }
     // True when compiling inside a map/grep block (explicit return must use RETURN_NONLOCAL)
     boolean isInMapGrepBlock;
     // Nesting depth inside eval blocks (goto &sub from eval is prohibited)
@@ -1338,7 +1388,8 @@ public class BytecodeCompiler implements Visitor {
      * @param operator   The control flow operator (e.g., "return", "goto", "last")
      */
     void checkNotInDeferBlock(int tokenIndex, String operator) {
-        if (isInDeferBlock) {
+        if ((isInDeferBlock || DynamicVariableManager.isExecutingDefer())
+                && getEvalScopeType() == null) {
             throwCleanCompilerException("Can't \"" + operator + "\" out of a \"defer\" block", tokenIndex);
         }
         if (finallyBlockDepth > 0) {
@@ -1410,6 +1461,7 @@ public class BytecodeCompiler implements Visitor {
                 && abstractNode.getBooleanAnnotation("subroutineIsLvalue");
 
         collectLoopBodyLabels(node, gotoLabelsInsideLoop, false);
+        collectDeferLabels(node, gotoLabelsInsideDefer, false);
         collectConstructEntryLabels(node, gotoLabelsInsideConstruct, false);
         collectGivenLabels(node, gotoLabelsInsideGiven, false);
         predeclareGotoLabels(node, false, false);
@@ -1565,6 +1617,9 @@ public class BytecodeCompiler implements Visitor {
         }
         if (!this.gotoLabelsInsideLoop.isEmpty()) {
             code.gotoLabelsInsideLoop = new HashSet<>(this.gotoLabelsInsideLoop);
+        }
+        if (!this.gotoLabelsInsideDefer.isEmpty()) {
+            code.gotoLabelsInsideDefer = new HashSet<>(this.gotoLabelsInsideDefer);
         }
         if (!this.gotoLabelsInsideConstruct.isEmpty()) {
             code.gotoLabelsInsideConstruct = new HashSet<>(this.gotoLabelsInsideConstruct);
@@ -2397,7 +2452,8 @@ public class BytecodeCompiler implements Visitor {
                 && varName.matches(".*::[A-Z][A-Z0-9_]*");
         if (getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_STRICT_SUBS)
                 && !qualifiedConstant) {
-            throwCompilerException("Bareword \"" + varName + "\" not allowed while \"strict subs\" in use");
+            throwCompilerException("Bareword \"" + varName
+                    + "\" not allowed while \"strict subs\" in use", node.getIndex());
         }
         if (currentCallContext == RuntimeContextType.VOID) {
             lastResultReg = -1;
@@ -7073,6 +7129,7 @@ public class BytecodeCompiler implements Visitor {
                 collectVariableDeclarations(closureVarNames),
                 collectOurVariablePackages(closureVarNames)
         );
+        subCompiler.gotoLabelsInsideDefer.addAll(this.gotoLabelsInsideDefer);
         // The parentRegistry constructor sets isEvalString=true (for eval STRING closures),
         // but named subs are NOT eval strings - clear the flag.
         subCompiler.isEvalString = false;

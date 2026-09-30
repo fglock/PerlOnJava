@@ -100,13 +100,7 @@ public class TieOperators {
         // passes the blessed object as $_[0] to TIEHANDLE.
         RuntimeScalar invocant = blessId != 0 ? classArg : new RuntimeScalar(className);
         RuntimeScalar self = blessId != 0
-                ? RuntimeCode.call(
-                        invocant,
-                        new RuntimeScalar(method),
-                        null,
-                        args,
-                        RuntimeContextType.SCALAR
-                ).getFirst()
+                ? callTieMethod(invocant, method, args)
                 : callTieConstructor(className, method, args, includeLoadHint);
 
         if (stashScalar) {
@@ -220,6 +214,14 @@ public class TieOperators {
         }
 
         RuntimeList result = RuntimeCode.apply(method, args, RuntimeContextType.SCALAR);
+        TiedVariableBase.rejectEscapedControlFlow(result);
+        return result.getFirst();
+    }
+
+    private static RuntimeScalar callTieMethod(RuntimeScalar invocant, String methodName,
+                                               RuntimeArray args) {
+        RuntimeList result = RuntimeCode.call(invocant, new RuntimeScalar(methodName),
+                null, args, RuntimeContextType.SCALAR);
         TiedVariableBase.rejectEscapedControlFlow(result);
         return result.getFirst();
     }

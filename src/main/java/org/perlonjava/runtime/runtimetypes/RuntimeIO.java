@@ -204,8 +204,16 @@ public class RuntimeIO extends RuntimeScalar {
     public static void setSelectedHandle(RuntimeIO io) {
         PerlRuntime runtime = PerlRuntime.current();
         runtime.ioSelectedHandle = io;
-        runtime.ioSelectedHandleValue = io == runtime.ioStdout
-                ? new RuntimeScalar("main::STDOUT") : new RuntimeScalar(io);
+        if (io == null) {
+            runtime.ioSelectedHandleValue = new RuntimeScalar();
+        } else if (io == runtime.ioStdout || io == runtime.ioStderr || io == runtime.ioStdin) {
+            runtime.ioSelectedHandleValue = new RuntimeScalar(io == runtime.ioStdout
+                    ? "main::STDOUT" : io == runtime.ioStderr ? "main::STDERR" : "main::STDIN");
+        } else {
+            RuntimeGlob owner = io.getOwnerGlob();
+            if (owner == null && io.globName != null) owner = GlobalVariable.getExistingGlobalIO(io.globName);
+            runtime.ioSelectedHandleValue = owner != null ? owner.createReference() : new RuntimeScalar(io);
+        }
     }
     public static void setSelectedHandleValue(RuntimeScalar value) {
         PerlRuntime.current().ioSelectedHandleValue = new RuntimeScalar(value);
@@ -452,6 +460,8 @@ public class RuntimeIO extends RuntimeScalar {
      * Incremented for each line read from this handle.
      */
     public int currentLineNumber = 0;
+    /** Fixed-length record counter used in PerlIO warning context. */
+    public int currentChunkNumber = 0;
     /**
      * Tracks whether slurp-mode readline has already produced this handle's
      * one record.  This cannot be inferred from {@link #currentLineNumber}:
@@ -547,6 +557,7 @@ public class RuntimeIO extends RuntimeScalar {
         }
 
         this.currentLineNumber = other.currentLineNumber;
+        this.currentChunkNumber = other.currentChunkNumber;
         this.slurpReadAttempted = other.slurpReadAttempted;
         this.ioHandle = other.ioHandle;
         this.directoryIO = other.directoryIO;
@@ -1810,6 +1821,7 @@ public class RuntimeIO extends RuntimeScalar {
         // This ensures $. becomes 0 and error messages don't include
         // stale filehandle context after close.
         currentLineNumber = 0;
+        currentChunkNumber = 0;
         if (getLastReadlineHandle() == this) {
             setLastReadlineHandle(null);
         }
@@ -1904,7 +1916,7 @@ public class RuntimeIO extends RuntimeScalar {
                 }
             }
             if (hasWide) {
-                WarnDie.warnWithCategory(
+                WarnDie.warnWithCategoryByDefault(
                         new RuntimeScalar("Wide character in print"),
                         new RuntimeScalar(""),
                         "utf8");

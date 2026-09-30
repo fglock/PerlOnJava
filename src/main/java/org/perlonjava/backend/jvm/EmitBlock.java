@@ -193,6 +193,69 @@ public class EmitBlock {
         collectConstructEntryLabels(node, out, expressionContext, false);
     }
 
+    /** Collect labels inside defer blocks so goto validation crosses their boundary. */
+    static void collectDeferLabels(Node node, Set<String> out) {
+        collectDeferLabels(node, out, false);
+    }
+
+    private static void collectDeferLabels(Node node, Set<String> out, boolean insideDefer) {
+        if (node == null) return;
+        if (node instanceof BinaryOperatorNode binary && isDeferBlockCall(binary)) {
+            collectDeferLabels(binary.left, out, true);
+            return;
+        }
+        if (node instanceof DeferNode defer) {
+            collectDeferLabels(defer.block, out, true);
+            return;
+        }
+        if (node instanceof SubroutineNode) return;
+        if (node instanceof LabelNode label) {
+            if (insideDefer) out.add(label.label);
+            return;
+        }
+        if (node instanceof BlockNode block) {
+            if (insideDefer) out.addAll(block.labels);
+            for (Node child : block.elements) collectDeferLabels(child, out, insideDefer);
+        } else if (node instanceof IfNode conditional) {
+            collectDeferLabels(conditional.condition, out, insideDefer);
+            collectDeferLabels(conditional.thenBranch, out, insideDefer);
+            collectDeferLabels(conditional.elseBranch, out, insideDefer);
+        } else if (node instanceof For3Node loop) {
+            collectDeferLabels(loop.initialization, out, insideDefer);
+            collectDeferLabels(loop.condition, out, insideDefer);
+            collectDeferLabels(loop.increment, out, insideDefer);
+            collectDeferLabels(loop.body, out, insideDefer);
+            collectDeferLabels(loop.continueBlock, out, insideDefer);
+        } else if (node instanceof For1Node loop) {
+            collectDeferLabels(loop.variable, out, insideDefer);
+            collectDeferLabels(loop.list, out, insideDefer);
+            collectDeferLabels(loop.body, out, insideDefer);
+            collectDeferLabels(loop.continueBlock, out, insideDefer);
+        } else if (node instanceof OperatorNode operator) {
+            collectDeferLabels(operator.operand, out, insideDefer);
+        } else if (node instanceof ListNode list) {
+            for (Node child : list.elements) collectDeferLabels(child, out, insideDefer);
+        } else if (node instanceof BinaryOperatorNode binary) {
+            collectDeferLabels(binary.left, out, insideDefer);
+            collectDeferLabels(binary.right, out, insideDefer);
+        } else if (node instanceof TernaryOperatorNode ternary) {
+            collectDeferLabels(ternary.condition, out, insideDefer);
+            collectDeferLabels(ternary.trueExpr, out, insideDefer);
+            collectDeferLabels(ternary.falseExpr, out, insideDefer);
+        }
+    }
+
+    private static boolean isDeferBlockCall(BinaryOperatorNode binary) {
+        if (!"->".equals(binary.operator)
+                || !(binary.left instanceof BlockNode)
+                || !(binary.right instanceof BinaryOperatorNode invocation)
+                || !"(".equals(invocation.operator)
+                || !(invocation.left instanceof OperatorNode ampersand)
+                || !"&".equals(ampersand.operator)
+                || !(ampersand.operand instanceof IdentifierNode identifier)) return false;
+        return "defer".equals(identifier.name);
+    }
+
     private static void collectGivenLabels(Node node, Set<String> out,
             Map<String, Integer> tokenIndices, boolean insideGiven) {
         if (node == null) return;
@@ -338,6 +401,7 @@ public class EmitBlock {
                 emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideBinaryOrListExpression);
         collectGivenLabels(node, emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideGiven,
                 emitterVisitor.ctx.javaClassInfo.gotoGivenLabelTokenIndices, false);
+        collectDeferLabels(node, emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideDefer);
 
         // Try to refactor large blocks using the helper class
         if (LargeBlockRefactorer.processBlock(emitterVisitor, node)) {

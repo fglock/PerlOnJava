@@ -307,6 +307,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public boolean utf8UncheckedOctets;
 
+    /** Deferred malformed UTF-8 diagnostic associated with this input value. */
+    public String utf8MalformedWarning;
+
     /**
      * True when this scalar value came from a tainted source such as %ENV while
      * running under -T. This is intentionally lightweight; enforcement remains
@@ -818,6 +821,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.type = scalar.type;
         this.value = scalar.value;
         this.utf8UncheckedOctets = scalar.utf8UncheckedOctets;
+        this.utf8MalformedWarning = scalar.utf8MalformedWarning;
         this.tainted = scalar.tainted;
         this.numericLiteralText = scalar.numericLiteralText;
         this.numericContextSeen = scalar.numericContextSeen;
@@ -914,6 +918,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.type = scalar.type;
                 this.value = scalar.value;
                 this.utf8UncheckedOctets = scalar.utf8UncheckedOctets;
+                this.utf8MalformedWarning = scalar.utf8MalformedWarning;
                 this.tainted = scalar.tainted;
                 this.numericLiteralText = scalar.numericLiteralText;
                 this.numericContextSeen = scalar.numericContextSeen;
@@ -2140,6 +2145,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.type = value.type;
                 this.value = value.value;
                 this.utf8UncheckedOctets = value.utf8UncheckedOctets;
+                this.utf8MalformedWarning = value.utf8MalformedWarning;
                 this.tainted = value.tainted;
                 this.numericLiteralText = value.numericLiteralText;
                 this.numericContextSeen = value.numericContextSeen;
@@ -2155,6 +2161,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.type = value.type;
                 this.value = value.value;
                 this.utf8UncheckedOctets = value.utf8UncheckedOctets;
+                this.utf8MalformedWarning = value.utf8MalformedWarning;
                 this.tainted = value.tainted;
                 this.numericLiteralText = value.numericLiteralText;
                 this.numericContextSeen = value.numericContextSeen;
@@ -2295,6 +2302,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.type = value.type;
         this.value = value.value;
         this.utf8UncheckedOctets = value.utf8UncheckedOctets;
+        this.utf8MalformedWarning = value.utf8MalformedWarning;
         this.tainted = value.tainted;
         this.numericLiteralText = value.numericLiteralText;
         this.numericContextSeen = value.numericContextSeen;
@@ -2347,6 +2355,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     this.type = value.type;
                     this.value = value.value;
                     this.utf8UncheckedOctets = value.utf8UncheckedOctets;
+                    this.utf8MalformedWarning = value.utf8MalformedWarning;
                     this.tainted = value.tainted;
                     this.numericLiteralText = value.numericLiteralText;
                     this.numericContextSeen = value.numericContextSeen;
@@ -2530,6 +2539,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (capturedBase.blessId != 0) capturedBase.acquireSemanticCaptureOwner(this);
         }
         this.utf8UncheckedOctets = value.utf8UncheckedOctets;
+        this.utf8MalformedWarning = value.utf8MalformedWarning;
         this.tainted = value.tainted;
         this.numericLiteralText = value.numericLiteralText;
         this.numericContextSeen = value.numericContextSeen;
@@ -2936,6 +2946,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         this.value = value;
         this.utf8UncheckedOctets = false;
+        this.utf8MalformedWarning = null;
         this.tainted = false;
         this.numericLiteralText = null;
         this.numericContextSeen = false;

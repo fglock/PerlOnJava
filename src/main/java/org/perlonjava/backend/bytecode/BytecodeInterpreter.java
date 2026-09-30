@@ -779,6 +779,12 @@ public class BytecodeInterpreter {
                                     throw new PerlCompilerException("goto must have label");
                                 }
                                 rejectGotoIntoGiven(code, labelName);
+                                if (!org.perlonjava.runtime.runtimetypes.DynamicVariableManager.isExecutingDefer()
+                                        && code.gotoLabelsInsideDefer != null
+                                        && code.gotoLabelsInsideDefer.contains(labelName)) {
+                                    throw new PerlCompilerException("Can't \"goto\" into a \"defer\" block at "
+                                            + code.sourceName + " line " + code.sourceLine + ".\n");
+                                }
                                 if (code.gotoLabelPcs != null) {
                                     Integer targetPc = code.gotoLabelPcs.get(labelName);
                                     if (targetPc != null) {
@@ -3085,6 +3091,17 @@ public class BytecodeInterpreter {
                                         break;
                                     }
                                     if (!handled) {
+                                        if (DynamicVariableManager.isExecutingDefer()) {
+                                            int line = flow.marker.fileName != null
+                                                    && flow.marker.fileName.startsWith("(eval ")
+                                                    ? 1 : flow.marker.lineNumber;
+                                            GlobalVariable.setGlobalVariable("main::@", "Can't \""
+                                                    + flow.getControlFlowType().name().toLowerCase()
+                                                    + "\" out of a \"defer\" block at "
+                                                    + flow.marker.fileName + " line " + line + ".\n");
+                                            registers[resultReg] = RuntimeScalarCache.scalarUndef;
+                                            break;
+                                        }
                                         // This marker originated in eval STRING.  No active
                                         // loop can consume it, so eval succeeds with undef and
                                         // records Perl's normal missing-label diagnostic in $@.
