@@ -10,6 +10,17 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  * It provides methods to manipulate and access a dynamic list of Perl values.
  */
 public class RuntimeList extends RuntimeBase {
+    private RuntimeArray reverseSourceArray;
+
+    /** Preserve the source array for list operators with slot semantics. */
+    public void setReverseSourceArray(RuntimeArray array) {
+        this.reverseSourceArray = array;
+    }
+
+    public RuntimeArray getReverseSourceArray() {
+        return reverseSourceArray;
+    }
+
     /** Alternating key/value elements produced by %hash{...}. */
     public boolean keyValueHashSlice;
 

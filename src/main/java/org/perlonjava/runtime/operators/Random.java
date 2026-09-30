@@ -13,12 +13,31 @@ import java.math.BigInteger;
  */
 public class Random {
     private static final BigInteger UV_MAX = BigInteger.ONE.shiftLeft(Long.SIZE).subtract(BigInteger.ONE);
+    private static final long DRAND48_MASK = (1L << 48) - 1;
+    private static final long DRAND48_MULTIPLIER = 0x5DEECE66DL;
+    private static final long DRAND48_ADDEND = 0xBL;
     /**
      * The current seed used for random number generation.
      */
     public static final class State {
         long currentSeed = System.currentTimeMillis();
         final java.util.Random random = new java.util.Random(currentSeed);
+        private long drand48State;
+
+        public State() {
+            reseed(currentSeed);
+        }
+
+        void reseed(long seed) {
+            currentSeed = seed;
+            random.setSeed(seed);
+            drand48State = ((seed << 16) | 0x330EL) & DRAND48_MASK;
+        }
+
+        double nextDouble() {
+            drand48State = (drand48State * DRAND48_MULTIPLIER + DRAND48_ADDEND) & DRAND48_MASK;
+            return drand48State / (double) (1L << 48);
+        }
     }
 
     private static State state() {
@@ -49,13 +68,13 @@ public class Random {
                 seed = UV_MAX;
             }
             seed = seed.mod(BigInteger.ONE.shiftLeft(Long.SIZE));
-            state.currentSeed = seed.longValue();
+            state.reseed(seed.longValue());
         } else {
             // Semi-randomly choose a seed if no argument is provided
             state.currentSeed = System.nanoTime() ^ System.identityHashCode(Thread.currentThread());
             seed = unsignedLong(state.currentSeed);
+            state.reseed(state.currentSeed);
         }
-        state.random.setSeed(state.currentSeed);
         RuntimeScalar result = new RuntimeScalar();
         result.type = RuntimeScalarType.DUALVAR;
         RuntimeScalar numeric = new RuntimeScalar(seed);
@@ -76,6 +95,6 @@ public class Random {
      * @return A {@link RuntimeScalar} containing the scaled random number.
      */
     public static RuntimeScalar rand(RuntimeScalar runtimeScalar) {
-        return new RuntimeScalar(state().random.nextDouble() * runtimeScalar.getDouble());
+        return new RuntimeScalar(state().nextDouble() * runtimeScalar.getDouble());
     }
 }

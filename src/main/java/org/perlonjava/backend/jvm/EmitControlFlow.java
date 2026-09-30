@@ -269,7 +269,39 @@ public class EmitControlFlow {
         }
 
         // Handle return values based on context
-        if (loopLabels.context != RuntimeContextType.VOID) {
+        boolean storesLastResult = operator.equals("last")
+                && !implicitGivenLast && loopLabels.resultRegisterSlot >= 0;
+        if (storesLastResult) {
+            int resultContext = loopLabels.resultRegisterContext;
+            Label scalarLastResult = null;
+            if (resultContext == RuntimeContextType.RUNTIME) {
+                scalarLastResult = new Label();
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "currentRawCallContext", "()I", false);
+                ctx.mv.visitInsn(Opcodes.ICONST_2); // RuntimeContextType.LIST
+                ctx.mv.visitJumpInsn(Opcodes.IF_ICMPNE, scalarLastResult);
+            }
+            if (resultContext == RuntimeContextType.LIST || resultContext == RuntimeContextType.RUNTIME) {
+                ctx.mv.visitTypeInsn(Opcodes.NEW,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeList");
+                ctx.mv.visitInsn(Opcodes.DUP);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                        "<init>", "()V", false);
+            } else {
+                EmitOperator.emitUndef(ctx.mv);
+            }
+            ctx.mv.visitVarInsn(Opcodes.ASTORE, loopLabels.resultRegisterSlot);
+            if (scalarLastResult != null) {
+                Label resultStored = new Label();
+                ctx.mv.visitJumpInsn(Opcodes.GOTO, resultStored);
+                ctx.mv.visitLabel(scalarLastResult);
+                EmitOperator.emitUndef(ctx.mv);
+                ctx.mv.visitVarInsn(Opcodes.ASTORE, loopLabels.resultRegisterSlot);
+                ctx.mv.visitLabel(resultStored);
+            }
+        } else if (loopLabels.context != RuntimeContextType.VOID) {
             if ((operator.equals("next") || operator.equals("last")) && !implicitGivenLast) {
                 emitLoopControlExitValue(ctx, loopLabels);
             }
