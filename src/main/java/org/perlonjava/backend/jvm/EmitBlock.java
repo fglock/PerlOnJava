@@ -520,6 +520,14 @@ public class EmitBlock {
                     topicalizerLoopBody ? false : isBareBlock,
                     topicalizerLoopBody ? false : isBareBlock);
             LoopLabels loopLabels = emitterVisitor.ctx.javaClassInfo.getInnermostLoopLabels();
+            Object resultRegister = node.getAnnotation("resultRegister");
+            if (resultRegister instanceof Integer resultSlot) {
+                loopLabels.resultRegisterSlot = resultSlot;
+                Object resultContext = node.getAnnotation("resultRegisterContext");
+                if (resultContext instanceof Integer context) {
+                    loopLabels.resultRegisterContext = context;
+                }
+            }
             loopLabels.implicitWhenTarget = node.getBooleanAnnotation("givenBlock") || topicalizerLoopBody;
             // An implicit `last` from a when, or an explicit `break`, jumps
             // past this synthetic given block.  Record its lexical boundary

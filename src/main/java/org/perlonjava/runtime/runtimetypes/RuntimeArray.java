@@ -717,6 +717,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         for (RuntimeScalar arrElem : sourceElements) {
             if (arrElem == null) {
                 targetElements.add(null);
+            } else if (arrElem instanceof RuntimeArrayReverseHoleProxy reverseHole
+                    && reverseHole.isUnmaterializedSourceHole()) {
+                targetElements.add(null);
             } else {
                 RuntimeScalar v = new RuntimeScalar();
                 arrElem.addToScalar(v);
@@ -1726,6 +1729,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         // Otherwise, copy all elements to ensure independence from the original array
         // This is important for returning local arrays from functions
         RuntimeList result = new RuntimeList();
+        result.setReverseSourceArray(this);
         for (RuntimeScalar element : this.elements) {
             result.elements.add(element == null ? new RuntimeScalar() : new RuntimeScalar(element));
         }
@@ -2002,6 +2006,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             RuntimeScalar element = this.elements.get(i);
             if (element == null) {
                 arr.elements.add(new RuntimeArrayProxyEntry(this, i));
+            } else if (element instanceof RuntimeArrayReverseHoleProxy reverseHole
+                    && reverseHole.isUnmaterializedSourceHole()) {
+                // List-context reverse carries an explicit writable marker
+                // for a sparse slot. Copy the slot absence, not the marker.
+                arr.elements.add(null);
             } else {
                 arr.elements.add(element);
                 if (this.elementsAliased && this.ownsElement(element)) {

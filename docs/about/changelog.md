@@ -16,6 +16,10 @@ priorities and future plans.
   eval callers, and stdio layers; keep wide CLI diagnostics free of host print
   warnings and give the complete Windows unit gate adequate bounded time.
 
+- Restore sparse tied-array reversal, typed declarations in `eval`, regex
+  capture restoration across loop control, and `PERL5OPT` include ordering;
+  match Perl's seeded random sequence and Unicode `quotemeta` rules.
+
 - Restore core-test compatibility for regex-set diagnostics (including
   POSIX-looking text in extended-class comments), classes and MRO, op subs,
   filesystem metadata, `die` state, and scalar flip-flop warnings on both

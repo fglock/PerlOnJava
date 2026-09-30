@@ -8311,6 +8311,8 @@ public class BytecodeCompiler implements Visitor {
             LoopInfo loopInfo = new LoopInfo(
                     isUnlabeledTarget ? null : node.labelName,
                     bodyStartPc, true);
+            loopInfo.resultReg = outerResultReg;
+            loopInfo.context = currentCallContext;
             loopInfo.dynamicLocalLevelReg = blockLocalLevelReg;
             loopStack.push(loopInfo);
 
@@ -9478,6 +9480,11 @@ public class BytecodeCompiler implements Visitor {
             targetLoop.nextPcs.add(patchPc);
         } else { // redo
             targetLoop.redoPcs.add(patchPc);
+        }
+        if (op.equals("last")) {
+            // A control-transfer statement has no block value. Avoid carrying
+            // the previous expression's temporary into a surrounding do/block.
+            lastResultReg = -1;
         }
     }
 

@@ -41,6 +41,7 @@ public class ScalarUnaryOpcodeHandler {
             case Opcodes.CHR_BYTES -> StringOperators.chrBytes((RuntimeScalar) registers[rs]);
             case Opcodes.LENGTH_BYTES -> StringOperators.lengthBytes((RuntimeScalar) registers[rs]);
             case Opcodes.QUOTEMETA -> StringOperators.quotemeta((RuntimeScalar) registers[rs]);
+            case Opcodes.QUOTEMETA_UNICODE -> StringOperators.quotemetaUnicode((RuntimeScalar) registers[rs]);
             case Opcodes.FC -> StringOperators.fc((RuntimeScalar) registers[rs]);
             case Opcodes.FC_BYTES -> StringOperators.fcBytes((RuntimeScalar) registers[rs]);
             case Opcodes.FC_UNICODE -> StringOperators.fcUnicode((RuntimeScalar) registers[rs]);
@@ -106,6 +107,8 @@ public class ScalarUnaryOpcodeHandler {
                     sb.append("LENGTH_BYTES r").append(rd).append(" = lengthBytes(r").append(rs).append(")\n");
             case Opcodes.QUOTEMETA ->
                     sb.append("QUOTEMETA r").append(rd).append(" = quotemeta(r").append(rs).append(")\n");
+            case Opcodes.QUOTEMETA_UNICODE ->
+                    sb.append("QUOTEMETA_UNICODE r").append(rd).append(" = quotemeta(r").append(rs).append(")\n");
             case Opcodes.FC -> sb.append("FC r").append(rd).append(" = fc(r").append(rs).append(")\n");
             case Opcodes.FC_BYTES ->
                     sb.append("FC_BYTES r").append(rd).append(" = fcBytes(r").append(rs).append(")\n");
