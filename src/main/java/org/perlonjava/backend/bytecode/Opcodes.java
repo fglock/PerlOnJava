@@ -265,10 +265,10 @@ public class Opcodes {
     public static final short STRICT_NE_NUM = 553;
 
     /** Defined numeric equality under {@code use integer}. */
-    public static final short INTEGER_STRICT_EQ_NUM = 623;
+    public static final short INTEGER_STRICT_EQ_NUM = 628;
 
     /** Defined numeric inequality under {@code use integer}. */
-    public static final short INTEGER_STRICT_NE_NUM = 624;
+    public static final short INTEGER_STRICT_NE_NUM = 629;
 
     // =================================================================
     // LOGICAL OPERATORS (39-41)
