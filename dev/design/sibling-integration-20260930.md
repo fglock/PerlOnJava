@@ -62,17 +62,19 @@ through scalar copies, mutation snapshots, localization, and graph cloning.
 - [x] Validate the batched UAT corrections locally: 14/14 target files and
   16,681/16,681 assertions pass; 46 changed unit files and 236 assertions
   pass on both JVM and interpreter; unfiltered `make` passes (2026-09-30).
-- [ ] Commit and publish the validated correction batch, require green
-  final-head CI, then run the full UAT once and compare it with the supplied
-  baseline.
+- [x] Publish correction commit `408200cc1`; Linux and Windows CI pass on that
+  head (2026-09-30).
+- [x] Run the full 575-file UAT on `408200cc1` and compare with the supplied
+  baseline: zero per-file regressions, 22 improved files, and 169 net more
+  passing assertions (2026-09-30).
 
-### Next steps
+### Final status
 
-The correction batch has passed its focused gate, all 14 previously regressed
-UAT files, changed regression files on both backends, and unfiltered make.
-Next commit and update PR 1580, wait for green final-head CI, and only then
-repeat full UAT against the supplied baseline. Preserve the initial UAT
-evidence and keep full validation logs under `/tmp/integration-*`.
+The correction batch passed its focused gate, all 14 previously regressed UAT
+files, changed regression files on both backends, unfiltered make, and full
+UAT against the supplied baseline. PR 1580 has green Linux and Windows CI on
+the runtime candidate. The original pre-fix UAT artifacts are preserved under
+`/private/tmp`; current full-run logs remain at the user-requested paths.
 
 ### Full UAT correction batch (2026-09-30)
 
@@ -99,8 +101,17 @@ unit tests validated with system Perl and on JVM/interpreter, and the full
 
 Validation evidence for this batch (2026-09-30): filtered make passed; all 14
 target UAT files passed 16,681/16,681; 46 changed unit files passed 236/236
-on each backend; and unfiltered make passed in 7m06. Full UAT remains deferred
-until final-head CI is green.
+on each backend; unfiltered make passed on the integration and final runtime
+candidate; and Linux and Windows CI passed on `408200cc1`.
+
+The final full UAT ran 575/575 files. The baseline had 680,488 passing
+assertions out of 680,740; the candidate had 680,657 out of 680,762. The
+requested comparator reports zero regressed files, 22 improved files, 553
+unchanged files, and a net gain of 169 passing assertions. The three execution
+errors and zero-TAP files are inherited from the baseline; strict comparison
+reports zero new invalid rows, no timeouts, and no incomplete candidate files.
+Its fail-on-invalid exit reflects 56 inherited invalid rows, not a new issue.
+The remaining 63 failing files are baseline behavior, not regressions.
 
 Linux CI passed. Windows progressed through its serial unit suite until the
 45-minute build cutoff, without a reported assertion failure. The batch raises
