@@ -173,7 +173,7 @@ public class ClassTransformer {
                 validateGeneratedMethodName(parser, field,
                         readerName == null || readerName.isEmpty()
                                 ? defaultAccessorName((String) field.getAnnotation("name")) : readerName);
-                SubroutineNode reader = generateReaderMethod(field, className);
+                SubroutineNode reader = generateReaderMethod(field, className, parser);
                 block.elements.add(reader);
                 deferredAccessors.add(reader);
             }
@@ -185,7 +185,7 @@ public class ClassTransformer {
                             parser.ctx.errorUtil);
                 }
                 validateGeneratedMethodName(parser, field, (String) field.getAnnotation("attr:writer"));
-                SubroutineNode writer = generateWriterMethod(field);
+                SubroutineNode writer = generateWriterMethod(field, className, parser);
                 block.elements.add(writer);
                 deferredAccessors.add(writer);
             }
@@ -659,7 +659,7 @@ public class ClassTransformer {
     /**
      * Generate a reader method for a field.
      */
-    private static SubroutineNode generateReaderMethod(OperatorNode field, String className) {
+    private static SubroutineNode generateReaderMethod(OperatorNode field, String className, Parser parser) {
         String name = (String) field.getAnnotation("name");
         String sigil = (String) field.getAnnotation("sigil");
         String readerName = (String) field.getAnnotation("attr:reader");
@@ -671,10 +671,7 @@ public class ClassTransformer {
         List<Node> bodyElements = new ArrayList<>();
         BlockNode body = new BlockNode(bodyElements, 0);
 
-        // TODO: Add argument validation for reader methods
-        // Readers should only accept the object itself (no additional arguments)
-        // Currently disabled due to if operator implementation issues
-        // Will need alternative approach for validation
+        body.elements.add(accessorArityCheck(parser, className + "::" + readerName, 1));
 
         // $_[0]->{fieldname}
         // Correct structure: BinaryOperatorNode("[", $_, ArrayLiteralNode([0]))
@@ -690,9 +687,11 @@ public class ClassTransformer {
         HashLiteralNode hashSubscript = new HashLiteralNode(keyList, 0);
         BinaryOperatorNode fieldAccess = new BinaryOperatorNode("->", arg0, hashSubscript, 0);
 
-        // Reader methods should return the field value as-is (including references)
-        // For array and hash fields, we store arrayrefs/hashrefs, so return them directly
-        body.elements.add(fieldAccess);
+        // Array and hash fields are stored as aggregates.  A reader exposes the
+        // field with its declared sigil, so list/scalar context sees the
+        // aggregate rather than the implementation reference.
+        body.elements.add(("@".equals(sigil) || "%".equals(sigil))
+                ? new OperatorNode(sigil, fieldAccess, 0) : fieldAccess);
 
         // Create the subroutine node
         SubroutineNode reader = new SubroutineNode(
@@ -768,7 +767,7 @@ public class ClassTransformer {
      * Generate a writer (setter) method for a field.
      * The setter returns $self to allow method chaining.
      */
-    private static SubroutineNode generateWriterMethod(OperatorNode field) {
+    private static SubroutineNode generateWriterMethod(OperatorNode field, String className, Parser parser) {
         String name = (String) field.getAnnotation("name");
         String writerName = (String) field.getAnnotation("attr:writer");
         if (writerName == null || writerName.isEmpty()) {
@@ -778,6 +777,8 @@ public class ClassTransformer {
         // Create method body: $_[0]->{fieldname} = $_[1]; return $_[0]
         List<Node> bodyElements = new ArrayList<>();
         BlockNode body = new BlockNode(bodyElements, 0);
+
+        body.elements.add(accessorArityCheck(parser, className + "::" + writerName, 2));
 
         // $_[0]->{fieldname} = $_[1]
         // First create $_[0]
@@ -824,6 +825,36 @@ public class ClassTransformer {
         );
 
         return writer;
+    }
+
+    private static Node accessorArityCheck(Parser parser, String name, int expected) {
+        Node count = new OperatorNode("scalar", ParserNodeUtils.atUnderscore(parser), 0);
+        Node tooFew = new BinaryOperatorNode(">=", count,
+                new NumberNode(Integer.toString(expected), 0), 0);
+        Node tooMany = new BinaryOperatorNode("<=", count,
+                new NumberNode(Integer.toString(expected), 0), 0);
+        Node got = new OperatorNode("scalar", ParserNodeUtils.atUnderscore(parser), 0);
+        Node tooFewMessage = new BinaryOperatorNode(".",
+                new BinaryOperatorNode(".",
+                        new BinaryOperatorNode(".",
+                                new StringNode("Too few arguments for subroutine '" + name + "' (got ", 0),
+                                got, 0),
+                        new StringNode("; expected " + expected + ")", 0), 0),
+                new StringNode("", 0), 0);
+        Node tooManyMessage = new BinaryOperatorNode(".",
+                new BinaryOperatorNode(".",
+                        new BinaryOperatorNode(".",
+                                new StringNode("Too many arguments for subroutine '" + name + "' (got ", 0),
+                                got, 0),
+                        new StringNode("; expected " + expected + ")", 0), 0),
+                new StringNode("", 0), 0);
+        Node failFew = OperatorParser.dieWarnNode(parser, "die",
+                new ListNode(List.of(tooFewMessage), 0), 0);
+        Node failMany = OperatorParser.dieWarnNode(parser, "die",
+                new ListNode(List.of(tooManyMessage), 0), 0);
+        return new ListNode(List.of(
+                new BinaryOperatorNode("||", tooFew, failFew, 0),
+                new BinaryOperatorNode("||", tooMany, failMany, 0)), 0);
     }
 
     private static String defaultAccessorName(String fieldName) {

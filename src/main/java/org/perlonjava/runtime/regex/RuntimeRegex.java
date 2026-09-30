@@ -531,10 +531,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return patternString + "/" + modifiers
                 + "#debug=" + lexicalDebugMode
                 + "#callouts=" + trustedCalloutCount
-                + "#sourcebytepattern=" + requestedPatternByteBacked
                 + "#charnamessource=" + namedCharacterSourceMode
                 + "#unicodepromotion=" + unicodePromotingPatternSyntax
-                + "#bytepattern=" + effectivePatternByteBacked
                 + "#strict=" + lexicalReStrict
                 + "#propertyPackage=" + UnicodeResolver.activeUserPropertyPackage()
                 + (namedCharacterTranslator == null ? "" : "#charnames="
@@ -843,22 +841,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 ? null : state().compiledRegexCache.get(nonPromotingCacheKey);
         RuntimeRegex promotingCached = refreshLexicalNamedCharacter
                 ? null : state().compiledRegexCache.get(promotingCacheKey);
-        if (nonPromotingCached != null && promotingCached != null
-                && nonPromotingCached != promotingCached) {
-            throw new IllegalStateException(
-                    "Conflicting regex Unicode-promotion cache identities");
-        }
         RuntimeRegex regex = nonPromotingCached != null
                 ? nonPromotingCached : promotingCached;
-        if (regex != null
-                && (regex.sourcePatternByteBacked != patternByteBacked
-                        || regex.namedCharacterSourceMode
-                                != namedCharacterSourceMode
-                        || regex.unicodePromotingPatternSyntax
-                                != (regex == promotingCached))) {
-            throw new IllegalStateException(
-                    "Regex Unicode-promotion cache identity mismatch");
-        }
         if (regex == null) {
             String cacheKey = nonPromotingCacheKey;
             if (DEBUG_REGEX) {

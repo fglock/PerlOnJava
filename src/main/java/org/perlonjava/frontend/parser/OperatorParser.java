@@ -1177,6 +1177,12 @@ public class OperatorParser {
             if (operand == null) {
                 throw new PerlCompilerException(currentIndex, "Not enough arguments for " + operator, parser.ctx.errorUtil);
             }
+            // Perl parses a trailing parenthesis-free qw list as an extra
+            // argument here. Consume it so the scalar aggregate diagnostic is
+            // emitted by the operator at runtime rather than by the lexer.
+            if (!operator.equals("scalar") && peek(parser).text.equals("qw")) {
+                ParsePrimary.parsePrimary(parser);
+            }
             // scalar can accept comma expressions like scalar((nil) x 3, 1)
             // but values/keys/each need single operand check
             if (!operator.equals("scalar")) {

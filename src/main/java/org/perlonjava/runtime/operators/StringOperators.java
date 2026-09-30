@@ -258,6 +258,7 @@ public class StringOperators {
     }
 
     private static RuntimeScalar lcUnpropagated(RuntimeScalar runtimeScalar) {
+        runtimeScalar = stringifyForStringContext(runtimeScalar);
         // Regex captures such as $1 are live special-variable scalars.  Inspect
         // their current value rather than the placeholder object's own type so
         // byte captures remain byte strings through lc.
@@ -316,6 +317,7 @@ public class StringOperators {
     }
 
     private static RuntimeScalar lcfirstUnpropagated(RuntimeScalar runtimeScalar) {
+        runtimeScalar = stringifyForStringContext(runtimeScalar);
         if (runtimeScalar instanceof ScalarSpecialVariable) {
             runtimeScalar = new RuntimeScalar(runtimeScalar);
         }
@@ -360,6 +362,7 @@ public class StringOperators {
     }
 
     private static RuntimeScalar ucUnpropagated(RuntimeScalar runtimeScalar) {
+        runtimeScalar = stringifyForStringContext(runtimeScalar);
         if (runtimeScalar instanceof ScalarSpecialVariable) {
             runtimeScalar = new RuntimeScalar(runtimeScalar);
         }
@@ -396,6 +399,7 @@ public class StringOperators {
     }
 
     private static RuntimeScalar ucfirstUnpropagated(RuntimeScalar runtimeScalar) {
+        runtimeScalar = stringifyForStringContext(runtimeScalar);
         if (runtimeScalar instanceof ScalarSpecialVariable) {
             runtimeScalar = new RuntimeScalar(runtimeScalar);
         }

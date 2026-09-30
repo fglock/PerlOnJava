@@ -122,9 +122,9 @@ public class FileUtils {
     private static Charset detectCharsetWithoutBOM(byte[] bytes) {
         if (bytes.length >= 2) {
             // Check for UTF-16LE pattern (ASCII chars would have 0x00 as second byte)
-            boolean couldBeUTF16LE = true;
-            boolean couldBeUTF16BE = true;
             int nullCount = 0;
+            int littleEndianAsciiPairs = 0;
+            int bigEndianAsciiPairs = 0;
 
             int lookSize = 1000;
             int zeroesSize = lookSize / 5;
@@ -135,22 +135,27 @@ public class FileUtils {
 
             // If we have a lot of null bytes, it might be UTF-16
             if (nullCount > bytes.length / 4) {
-                // Try to determine byte order by looking for ASCII patterns
+                // Determine byte order by the dominant ASCII/zero pattern.
+                // Individual non-ASCII code units can look like ASCII in the
+                // opposite byte position (notably U+2000 and U+4000), so a
+                // single contradictory pair must not flip the whole source.
                 for (int i = 0; i < Math.min(bytes.length - 1, zeroesSize); i += 2) {
                     byte b1 = bytes[i];
                     byte b2 = bytes[i + 1];
 
                     // Common ASCII characters in range 0x20-0x7E
                     if (b1 >= 0x20 && b1 <= 0x7E && b2 == 0) {
-                        couldBeUTF16BE = false;
+                        littleEndianAsciiPairs++;
                     } else if (b2 >= 0x20 && b2 <= 0x7E && b1 == 0) {
-                        couldBeUTF16LE = false;
+                        bigEndianAsciiPairs++;
                     }
                 }
 
-                if (couldBeUTF16LE && !couldBeUTF16BE) {
+                if (littleEndianAsciiPairs > bigEndianAsciiPairs
+                        && littleEndianAsciiPairs > 1) {
                     return StandardCharsets.UTF_16LE;
-                } else if (couldBeUTF16BE && !couldBeUTF16LE) {
+                } else if (bigEndianAsciiPairs > littleEndianAsciiPairs
+                        && bigEndianAsciiPairs > 1) {
                     return StandardCharsets.UTF_16BE;
                 }
             }

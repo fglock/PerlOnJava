@@ -8483,15 +8483,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public RuntimeArray keys() {
-        throw new PerlCompilerException("Type of arg 1 to keys must be hash or array");
+        throw PerlCompilerException.atCurrentExecutionLocation(
+                "Experimental keys on scalar is now forbidden at line 1.\n"
+                + "Type of arg 1 to keys must be hash or array (not scalar) at line 1,");
     }
 
     public RuntimeArray values() {
-        throw new PerlCompilerException("Type of arg 1 to values must be hash or array");
+        throw PerlCompilerException.atCurrentExecutionLocation(
+                "Experimental values on scalar is now forbidden at line 1.\n"
+                + "Type of arg 1 to values must be hash or array (not scalar) at line 1,");
     }
 
     public RuntimeList each(int ctx) {
-        throw new PerlCompilerException("Type of arg 1 to each must be hash or array");
+        throw PerlCompilerException.atCurrentExecutionLocation(
+                "Experimental each on scalar is now forbidden at line 1.\n"
+                + "Type of arg 1 to each must be hash or array (not scalar) at line 1,");
     }
 
     public RuntimeScalar chop() {
