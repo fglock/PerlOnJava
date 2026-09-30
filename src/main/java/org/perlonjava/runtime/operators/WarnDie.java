@@ -389,6 +389,9 @@ public class WarnDie {
         if (RuntimeScalarType.isReference(finalMessage) && !hasWarningHandler) {
             String out = finalMessage.toString();
             String whereStr = where.toString();
+            if (whereStr.isEmpty() && (fileName == null || fileName.isEmpty())) {
+                whereStr = getPerlLocationFromStack();
+            }
             out += whereStr;
             if (!out.endsWith("\n")) {
                 out += whereStr.isEmpty() ? "\n" : ".\n";

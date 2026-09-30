@@ -538,7 +538,7 @@ sub run_single_test {
     my $test_name;
     my $test_launcher = $abs_jperl;
     if ($^O ne 'MSWin32' && $^O ne 'cygwin' && $^O ne 'msys'
-            && $test_file =~ m{(?:^|/)perl5_t/t/(?:japh/abigail|op/magic|run/fresh_perl)\.t$}) {
+            && $test_file =~ m{(?:^|/)perl5_t/t/(?:japh/abigail|op/(?:magic|taint)|run/fresh_perl)\.t$}) {
         my $source_test_dir = File::Spec->rel2abs('perl5_t/t', $old_dir);
         my $source_lib_dir = File::Spec->rel2abs('perl5_t/lib', $old_dir);
         $private_test_root = tempdir('perlonjava-core-XXXXXX', TMPDIR => 1, CLEANUP => 1);
@@ -597,6 +597,7 @@ NATIVE_LAUNCHER
         }
         $local_test_dir = $private_test_dir;
         $test_name = $test_file =~ m{/op/magic\.t$} ? 'op/magic.t'
+                   : $test_file =~ m{/op/taint\.t$} ? 'op/taint.t'
                    : $test_file =~ m{/run/fresh_perl\.t$} ? 'run/fresh_perl.t'
                    : 'japh/abigail.t';
         # Run through the private ./perl name so Perl's $^X matches the

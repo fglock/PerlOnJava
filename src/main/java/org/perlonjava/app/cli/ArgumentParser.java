@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -41,8 +42,12 @@ public class ArgumentParser {
 
         // Process PERL5OPT environment variable first
         processPerl5Opt(parsedArgs);
+        int perl5OptModuleCount = parsedArgs.moduleUseStatements.size();
 
         processArgs(args, parsedArgs);
+        if (perl5OptModuleCount > 0 && perl5OptModuleCount < parsedArgs.moduleUseStatements.size()) {
+            Collections.rotate(parsedArgs.moduleUseStatements, -perl5OptModuleCount);
+        }
 
         // A program supplied with -e can itself begin with a Perl shebang.
         // Its switches affect the implicit -n/-p wrapper, so they must be
@@ -109,7 +114,9 @@ public class ArgumentParser {
         String[] options = optionsList.toArray(new String[0]);
 
         // Process the PERL5OPT arguments using existing argument processing logic
+        int includePathStart = parsedArgs.inc.elements.size();
         processArgs(options, parsedArgs);
+        Collections.reverse(parsedArgs.inc.elements.subList(includePathStart, parsedArgs.inc.elements.size()));
     }
 
     /**

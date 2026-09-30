@@ -61,7 +61,8 @@ public class ListOperators {
         boolean savedTemporaryAlias = GlobalVariable.isTemporaryGlobalAlias("main::_");
         // Map results are captured by the caller after the operator returns;
         // flushing between iterations can destroy blessed return values early.
-        boolean wasFlushing = MortalList.suppressFlush(true);
+        boolean suppressFlush = ctx != RuntimeContextType.VOID;
+        boolean wasFlushing = suppressFlush && MortalList.suppressFlush(true);
 
         try {
             // Use the outer @_ instead of an empty array
@@ -89,6 +90,13 @@ public class ListOperators {
                     return cfList;
                 }
 
+                if (ctx == RuntimeContextType.VOID) {
+                    // map's callback still runs in list context, but its values
+                    // are discarded after each iteration in void context.
+                    MortalList.flush();
+                    continue;
+                }
+
                 // `result` list contains aliases to the original array;
                 // We need to make copies of the result elements
                 RuntimeArray arr = new RuntimeArray();
@@ -111,7 +119,7 @@ public class ListOperators {
                 return transformedList;
             }
         } finally {
-            MortalList.suppressFlush(wasFlushing);
+            if (suppressFlush) MortalList.suppressFlush(wasFlushing);
             GlobalVariable.restoreTemporaryGlobalVariable("main::_", saveValue, savedTemporaryAlias);
             releaseEphemeralCaptures(perlMapClosure);
         }

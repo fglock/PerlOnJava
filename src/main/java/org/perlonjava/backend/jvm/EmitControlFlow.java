@@ -287,6 +287,7 @@ public class EmitControlFlow {
                 : loopLabels.redoLabel;
         emitLoopControlScopeCleanup(ctx, loopLabels, operator.equals("last"));
         emitMortalFlushAboveMark(ctx);
+        emitLoopEntryRegexRestore(ctx, loopLabels, operator.equals("last"));
         ctx.mv.visitJumpInsn(Opcodes.GOTO, label);
     }
 
@@ -320,6 +321,16 @@ public class EmitControlFlow {
                 "flush",
                 "()V",
                 false);
+        emitLoopEntryRegexRestore(ctx, loopLabels, exitsLoop);
+    }
+
+    private static void emitLoopEntryRegexRestore(
+            EmitterContext ctx, LoopLabels loopLabels, boolean exitsLoop) {
+        if (!exitsLoop && loopLabels.regexStateRestoreLocal >= 0) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, loopLabels.regexStateRestoreLocal);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RegexState", "restore", "()V", false);
+        }
     }
 
     private static void emitMortalFlushAboveMark(EmitterContext ctx) {

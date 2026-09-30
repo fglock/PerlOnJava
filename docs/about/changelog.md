@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore core compatibility for `kill` numeric captures, void-context `map`
+  cleanup, sparse tied-array reversal, typed declarations in `eval`, regex
+  capture restoration across loop control, and `PERL5OPT` include ordering.
+
 - Restore core-test compatibility for regex-set diagnostics (including
   POSIX-looking text in extended-class comments), classes and MRO, op subs,
   filesystem metadata, `die` state, and scalar flip-flop warnings on both

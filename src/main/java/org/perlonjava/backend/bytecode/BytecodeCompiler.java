@@ -98,6 +98,12 @@ public class BytecodeCompiler implements Visitor {
             collectConstructEntryLabels(ternary.condition, out, true);
             collectConstructEntryLabels(ternary.trueExpr, out, true);
             collectConstructEntryLabels(ternary.falseExpr, out, true);
+            return;
+        }
+        if (node instanceof IfNode conditional) {
+            collectConstructEntryLabels(conditional.condition, out, true);
+            collectConstructEntryLabels(conditional.thenBranch, out, true);
+            collectConstructEntryLabels(conditional.elseBranch, out, true);
         }
     }
 
@@ -366,8 +372,8 @@ public class BytecodeCompiler implements Visitor {
             // become a static goto target (op/goto.t GH #23810).
             boolean alwaysFalse = conditional.condition instanceof NumberNode number
                     && number.value.equals("0");
-            if (!alwaysFalse) predeclareGotoLabels(conditional.thenBranch, false, insideLoopBody);
-            predeclareGotoLabels(conditional.elseBranch, false, insideLoopBody);
+            if (!alwaysFalse) predeclareGotoLabels(conditional.thenBranch, true, insideLoopBody);
+            predeclareGotoLabels(conditional.elseBranch, true, insideLoopBody);
             return;
         }
         if (node instanceof OperatorNode operator) { predeclareGotoLabels(operator.operand, true, insideLoopBody); return; }
@@ -1006,6 +1012,17 @@ public class BytecodeCompiler implements Visitor {
         }
         if (loopInfo.cleanupScopeIndex >= 0) {
             emitScopeCleanup(loopInfo.cleanupScopeIndex, true);
+        }
+    }
+
+    private void emitLoopRegexStateRestore(LoopInfo loopInfo, String operator) {
+        if (!operator.equals("last") && loopInfo.regexStateRestoreReg >= 0) {
+            emit(Opcodes.RESTORE_REGEX_STATE);
+            emitReg(loopInfo.regexStateRestoreReg);
+            // Interpreter RESTORE_REGEX_STATE consumes the snapshot. Keep the
+            // loop-entry baseline available for later iterations and loop exit.
+            emit(Opcodes.SAVE_REGEX_STATE);
+            emitReg(loopInfo.regexStateRestoreReg);
         }
     }
 
@@ -8346,6 +8363,9 @@ public class BytecodeCompiler implements Visitor {
         // do-while is NOT a true loop (can't use last/next/redo); while/for are true loops
         LoopInfo loopInfo = new LoopInfo(node.labelName, loopStartPc, !node.isDoWhile);
         loopInfo.dynamicLocalLevelReg = for3LocalLevelReg;
+        if (loopRegexSaveReg >= 0 && !RegexUsageDetector.containsRegexOperation(node.condition)) {
+            loopInfo.regexStateRestoreReg = loopRegexSaveReg;
+        }
         loopStack.push(loopInfo);
 
         int loopEndJumpPc = -1;
@@ -9199,6 +9219,7 @@ public class BytecodeCompiler implements Visitor {
 
                 emitLoopControlScopeCleanup(targetLoop);
                 emit(Opcodes.MORTAL_FLUSH);
+                emitLoopRegexStateRestore(targetLoop, op);
                 emitWithToken(localOpcode, node.getIndex());
                 int patchPc = bytecode.size();
                 emitInt(0); // patched when loop boundaries are finalized
@@ -9327,6 +9348,7 @@ public class BytecodeCompiler implements Visitor {
 
         emitLoopControlScopeCleanup(targetLoop);
         emit(Opcodes.MORTAL_FLUSH);
+        emitLoopRegexStateRestore(targetLoop, op);
         emitWithToken(opcode, node.getIndex());
 
         // Record the PC to be patched (it's the PC of the jump offset operand)
@@ -9355,6 +9377,7 @@ public class BytecodeCompiler implements Visitor {
         int continuePc;              // PC for next (continue block or increment)
         int cleanupScopeIndex;       // Lower bound for scopes bypassed by local loop control
         int dynamicLocalLevelReg;    // Saved DVM level for locals bypassed by loop control
+        int regexStateRestoreReg;    // Saved regex state restored by next/redo control flow
         int resultReg;               // Result register for value-producing synthetic blocks
         int context;                 // Context of a value-producing synthetic block
 
@@ -9370,6 +9393,7 @@ public class BytecodeCompiler implements Visitor {
             this.continuePc = -1;  // Will be set later
             this.cleanupScopeIndex = -1;
             this.dynamicLocalLevelReg = -1;
+            this.regexStateRestoreReg = -1;
             this.resultReg = -1;
             this.context = RuntimeContextType.VOID;
             this.breakPcs = new ArrayList<>();

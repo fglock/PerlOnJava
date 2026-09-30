@@ -804,13 +804,12 @@ public class Operator {
         for (int i = 0; i < size; i++) {
             if (TieArray.tiedExists(tiedArray, getScalarInt(i)).getBoolean()) {
                 reversedElements.set(targetIndex, TieArray.tiedFetch(tiedArray, getScalarInt(i)));
-            } else {
-                // For deleted tied array elements, set an undef RuntimeScalar
-                reversedElements.set(targetIndex, new RuntimeScalar());
             }
             targetIndex--;
         }
-        return new RuntimeList(reversedElements.toArray(new RuntimeBase[0]));
+        RuntimeList result = new RuntimeList();
+        result.elements.addAll(reversedElements);
+        return result;
     }
 
     private static RuntimeList reversePlainArray(RuntimeArray array) {

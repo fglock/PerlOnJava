@@ -1479,8 +1479,14 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 // Use direct element addition (not push()) to avoid spurious refCount
                 // increments on the temporary materialized list.
                 RuntimeArray materializedList = new RuntimeArray();
-                for (RuntimeScalar element : list) {
-                    materializedList.elements.add(new RuntimeScalar(element));
+                for (RuntimeBase element : list.elements) {
+                    if (element == null) {
+                        materializedList.elements.add(null);
+                    } else {
+                        for (RuntimeScalar scalar : element) {
+                            materializedList.elements.add(new RuntimeScalar(scalar));
+                        }
+                    }
                 }
 
                 // Now clear and repopulate from the materialized list
@@ -1493,8 +1499,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     TieArray.tiedExtend(this, getScalarInt(extendTo));
                 }
                 int index = 0;
-                for (RuntimeScalar element : materializedList) {
-                    TieArray.tiedStore(this, getScalarInt(index), element);
+                for (RuntimeBase element : materializedList.elements) {
+                    if (element == null) {
+                        TieArray.tiedDelete(this, getScalarInt(index));
+                    } else {
+                        TieArray.tiedStore(this, getScalarInt(index), (RuntimeScalar) element);
+                    }
                     index++;
                 }
                 // Return the materialized list instead of `this` to avoid calling

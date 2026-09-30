@@ -55,6 +55,9 @@ public class LoopLabels {
     /** JVM local containing the dynamic-local level at loop-body entry. */
     public int dynamicLocalLevelSlot = -1;
 
+    /** JVM local holding loop-entry regex state to restore on next/redo. */
+    public int regexStateRestoreLocal = -1;
+
     /**
      * The context type in which this loop operates
      */

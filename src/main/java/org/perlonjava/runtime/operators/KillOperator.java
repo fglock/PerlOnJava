@@ -61,6 +61,11 @@ public class KillOperator {
         for (int i = 1; i < args.length; i++) {
             for (RuntimeScalar scalar : args[i]) {
                 RuntimeScalar.checkTaint(scalar, "kill");
+                RuntimeScalar numericValue = scalar.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.PROXY
+                        ? new RuntimeScalar(scalar.toString()) : scalar;
+                if (!org.perlonjava.runtime.runtimetypes.ScalarUtils.looksLikeNumber(numericValue)) {
+                    throw new PerlCompilerException("Can't kill a non-numeric process ID");
+                }
                 int pid = scalar.getInt();
 
                 // Special case: negative PID means process group

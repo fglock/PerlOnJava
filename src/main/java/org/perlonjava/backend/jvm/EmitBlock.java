@@ -255,8 +255,8 @@ public class EmitBlock {
         }
         if (node instanceof IfNode ifNode) {
             collectConstructEntryLabels(ifNode.condition, out, true, fieldInitializer);
-            collectConstructEntryLabels(ifNode.thenBranch, out, false, fieldInitializer);
-            collectConstructEntryLabels(ifNode.elseBranch, out, false, fieldInitializer);
+            collectConstructEntryLabels(ifNode.thenBranch, out, true, fieldInitializer);
+            collectConstructEntryLabels(ifNode.elseBranch, out, true, fieldInitializer);
         }
     }
 
@@ -414,16 +414,15 @@ public class EmitBlock {
                 ? new Local.localRecord(false, -1)
                 : Local.localSetup(emitterVisitor.ctx, node, mv, true);
 
-        int regexStateLocal = -1;
+        int regexStateLevelLocal = -1;
         if (!node.getBooleanAnnotation("blockIsSubroutine")
                 && !node.getBooleanAnnotation("skipRegexSaveRestore")
                 && RegexUsageDetector.containsRegexOperation(node)) {
-            regexStateLocal = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RegexState");
-            mv.visitInsn(Opcodes.DUP);
-            mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
-                    "org/perlonjava/runtime/runtimetypes/RegexState", "<init>", "()V", false);
-            mv.visitVarInsn(Opcodes.ASTORE, regexStateLocal);
+            regexStateLevelLocal = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
+                    "getLocalLevel", "()I", false);
+            mv.visitVarInsn(Opcodes.ISTORE, regexStateLevelLocal);
         }
 
         // Add redo label
@@ -431,6 +430,17 @@ public class EmitBlock {
 
         // Restore 'local' environment if 'redo' was called
         Local.localTeardown(localRecord, mv);
+
+        // Save regex state after the redo cleanup. A redo jumps back here, so
+        // each pass needs a fresh snapshot that loop-control cleanup can pop.
+        if (regexStateLevelLocal >= 0) {
+            mv.visitVarInsn(Opcodes.ILOAD, regexStateLevelLocal);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
+                    "popToLocalLevel", "(I)V", false);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RegexState", "save", "()V", false);
+        }
 
         if (node.isLoop) {
             // A labeled/bare block used as a loop target (e.g. SKIP: { ... }) is a
@@ -624,7 +634,7 @@ public class EmitBlock {
         // BEFORE restoring regex state, so the values reflect the block's regex matches
         // rather than the restored caller state.
         // Only in SCALAR context where we know the stack has a RuntimeScalar.
-        if (regexStateLocal >= 0 && emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+        if (regexStateLevelLocal >= 0 && emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "materializeBlockResult",
@@ -650,10 +660,11 @@ public class EmitBlock {
 
         Local.localTeardown(localRecord, mv);
 
-        if (regexStateLocal >= 0) {
-            mv.visitVarInsn(Opcodes.ALOAD, regexStateLocal);
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/runtimetypes/RegexState", "restore", "()V", false);
+        if (regexStateLevelLocal >= 0) {
+            mv.visitVarInsn(Opcodes.ILOAD, regexStateLevelLocal);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
+                    "popToLocalLevel", "(I)V", false);
         }
 
         // Flush mortal list for void non-subroutine blocks. Value-producing blocks

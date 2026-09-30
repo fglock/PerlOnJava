@@ -233,6 +233,9 @@ public class ParseMapGrepSort {
         String previousForbiddenContext = parser.futureAsyncAwaitForbiddenContext;
         parser.futureAsyncAwaitForbiddenContext = token.text;
         try {
+            if (token.text.equals("grep") && hasMissingCommaAfterScalarBlock(parser)) {
+                parser.throwCleanError("Missing comma after first argument to grep function");
+            }
             // The feature-gated all/any keywords require a literal block;
             // unlike map and grep they do not accept a unary callback.
             if ((token.text.equals("all") || token.text.equals("any"))
@@ -287,6 +290,31 @@ public class ParseMapGrepSort {
             block = subNode;
         }
         return new BinaryOperatorNode(token.text, block, operand, parser.tokenIndex);
+    }
+
+    private static boolean hasMissingCommaAfterScalarBlock(Parser parser) {
+        int index = parser.tokenIndex;
+        while (index < parser.tokens.size()
+                && parser.tokens.get(index).type == LexerTokenType.WHITESPACE) index++;
+        if (index < parser.tokens.size() && parser.tokens.get(index).text.equals("grep")) index++;
+        if (index >= parser.tokens.size() || !parser.tokens.get(index).text.startsWith("$")) return false;
+        if (parser.tokens.get(index).text.equals("$")) {
+            index++;
+            if (index >= parser.tokens.size()
+                    || parser.tokens.get(index).type != LexerTokenType.IDENTIFIER) return false;
+        }
+        index++;
+        boolean separated = false;
+        while (index < parser.tokens.size()) {
+            LexerToken current = parser.tokens.get(index);
+            if (current.type == LexerTokenType.WHITESPACE) {
+                separated = true;
+                index++;
+            } else {
+                return separated && current.text.equals("(");
+            }
+        }
+        return false;
     }
 
     /**

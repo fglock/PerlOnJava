@@ -632,9 +632,6 @@ public class EmitStatement {
                 mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
                         "org/perlonjava/runtime/runtimetypes/RegexState", "<init>", "()V", false);
                 mv.visitVarInsn(Opcodes.ASTORE, regexStateLocal);
-                if (node.body != null) {
-                    node.body.setAnnotation("skipRegexSaveRestore", true);
-                }
             }
 
             // Visit the initialization node (executed once at the start)
@@ -737,6 +734,10 @@ public class EmitStatement {
                 loopLabels.cleanupScopeIndex = scopeIndex + 1;
                 loopLabels.lastCleanupScopeIndex = scopeIndex + 1;
                 loopLabels.dynamicLocalLevelSlot = Local.saveLocalLevel(emitterVisitor.ctx, mv);
+                if (regexStateLocal >= 0
+                        && !RegexUsageDetector.containsRegexOperation(node.condition)) {
+                    loopLabels.regexStateRestoreLocal = regexStateLocal;
+                }
                 loopLabels.cleanupMarkSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/MyVarCleanupStack",
@@ -857,9 +858,6 @@ public class EmitStatement {
             mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
                     "org/perlonjava/runtime/runtimetypes/RegexState", "<init>", "()V", false);
             mv.visitVarInsn(Opcodes.ASTORE, regexStateLocal);
-            if (node.body != null) {
-                node.body.setAnnotation("skipRegexSaveRestore", true);
-            }
         }
 
         // Register loop labels as pseudo-loop (isTrueLoop = false)
