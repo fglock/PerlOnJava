@@ -11,6 +11,9 @@ priorities and future plans.
   filesystem metadata, `die` state, and scalar flip-flop warnings on both
   execution backends.
 
+- Resolve dynamic `require` package names as portable module paths before
+  filesystem lookup, including on Windows.
+
 - Restore `op/stash.t` namespace spellings, stash clearing, and forward-CV
   provenance on both execution backends.
 
