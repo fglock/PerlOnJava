@@ -1143,7 +1143,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                                       boolean utf8UncheckedOctets, boolean tainted,
                                       String numericLiteralText, boolean numericContextSeen,
                                       boolean firstClassRegexScalar,
-                                      boolean formatPictureTainted,
                                       RuntimeRegex firstClassRegexValue,
                                       boolean formatPictureTainted,
                                       WeakReference<RuntimeRegex> firstClassRegexReferent) {}

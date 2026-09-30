@@ -421,7 +421,6 @@ public class WarnDie {
                         String filehandleContext = getFilehandleContext();
                         if (filehandleContext != null && !filehandleContext.isEmpty()) {
                             out += filehandleContext;
-                            }
                         }
                     }
                 }
