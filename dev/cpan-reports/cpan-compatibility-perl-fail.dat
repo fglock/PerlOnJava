@@ -55,7 +55,6 @@ Amazon::DynamoDB::Simple	PERL_FAIL	1		1 subtests failed in test files	2026-09-11
 Amibroker::OLE::Interface	PERL_FAIL	4	3	1/4 subtests failed; 1/2 test programs failed	2026-09-28	Perl failed	
 Amon2	PERL_FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-09-26	Perl failed	
 AnnoCPAN	PERL_FAIL			Make failed	2026-09-18	Perl failed	
-AntTweakBar	PERL_FAIL	1	0	1/1 subtests failed; 3/3 test programs failed	2026-09-08	Perl failed	
 AnyEvent::Collect	PERL_FAIL			1/4 test programs failed; 0/0 subtests failed	2026-09-17	Perl failed	
 AnyEvent::Curl::Multi	PERL_FAIL	1		1 subtests failed in test files	2026-09-22	Perl failed	
 AnyEvent::DBI::Abstract::Limit	PERL_FAIL	1	0	1/1 subtests failed; 2/2 test programs failed	2026-09-20	Perl failed	
@@ -84,7 +83,6 @@ Apache2::Layout	PERL_FAIL	4	2	2/4 subtests failed; 2/5 test programs failed	2026
 Apache2::ModLogConfig	PERL_FAIL			2/2 test programs failed; 0/0 subtests failed	2026-09-10	Perl failed	
 Apache2::Pod	PERL_FAIL	21	11	10/21 subtests failed; 3/4 test programs failed	2026-09-26	Perl failed	
 Apache2::Protocol	PERL_FAIL			Unknown test outcome	2026-09-21	Perl failed	
-Apache2::Response::FileMerge	PERL_FAIL	58	12	46/58 subtests failed; 15/16 test programs failed	2026-09-08	Perl failed	
 Apache2::ScoreBoardFile	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-26	Perl failed	
 Apache2::TaintRequest	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-19	Perl failed	
 Apache2::WebApp::Plugin::Cookie	PERL_FAIL	2	1	1/2 subtests failed; 2/2 test programs failed	2026-09-23	Perl failed	
@@ -315,7 +313,6 @@ Cairo	PERL_FAIL	2	1	1/2 subtests failed; 9/9 test programs failed	2026-09-22	Per
 CairoX::Sweet	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-09-13	Perl failed	
 Callback::Cleanup	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-12	Perl failed	
 Callerid	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-23	Perl failed	
-Carp::Datum	PERL_FAIL	18	16	2/18 subtests failed; 2/5 test programs failed	2026-09-08	Perl failed	
 Catalog	PERL_FAIL			Configure failed	2026-09-19	Perl failed	
 Catalyst::Controller::DBIC::Transaction	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-19	Perl failed	
 Catalyst::Engine::Embeddable	PERL_FAIL	6	3	3/6 subtests failed; 3/3 test programs failed	2026-09-20	Perl failed	
@@ -904,7 +901,6 @@ MColPro	PERL_FAIL	37	23	14/37 subtests failed; 1/5 test programs failed	2026-09-
 MFab::Plugins::Datadog	PERL_FAIL			2/2 test programs failed; 0/0 subtests failed	2026-09-12	Perl failed	
 MIDI::ALSA	PERL_FAIL				2026-09-20	Perl failed	
 MIME::Charset	PERL_FAIL	92	88	4/92 subtests failed; 6/10 test programs failed	2026-09-30	Perl failed	
-MIME::Lite::HTML	PERL_FAIL	195	85	110/195 subtests failed; 2/3 test programs failed	2026-09-08	Perl failed	
 MLDBM::Easy	PERL_FAIL	1		1/1 test programs failed; 0/1 subtests failed	2026-09-22	Perl failed	
 MPE::CIvar	PERL_FAIL	1		1/1 test programs failed; 0/1 subtests failed	2026-09-21	Perl failed	
 MPE::IMAGE::0.98a	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-28	Perl failed	
