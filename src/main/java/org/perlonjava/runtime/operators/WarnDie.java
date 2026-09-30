@@ -298,11 +298,30 @@ public class WarnDie {
         }
         RuntimeScalar sig = getGlobalHash("main::SIG").get("__WARN__");
 
+        // FETCH a tied warn argument once before deciding whether it is a
+        // reference. Perl passes a referenced value through __WARN__ handlers
+        // unchanged, while the default handler stringifies it with location.
+        // warn LIST concatenates every argument before deciding whether the
+        // resulting text already ends in a newline.  Looking at only the
+        // first list item incorrectly appends a source location to
+        // `warn "foo", "bar\n"`.
+        RuntimeBase messageValue = message instanceof RuntimeList list && list.size() > 1
+                ? new RuntimeScalar(list.toString()) : message.getFirst();
+        if (messageValue instanceof RuntimeScalar scalar
+                && scalar.type == RuntimeScalarType.TIED_SCALAR) {
+            messageValue = scalar.tiedFetch();
+        }
         // If message is empty or just whitespace, handle special cases
-        String messageStr = message.toString();
+        String messageStr = messageValue.toString();
         RuntimeScalar finalMessage;
 
-        if (messageStr.isEmpty()) {
+        if (messageValue instanceof RuntimeScalar messageScalar
+                && RuntimeScalarType.isReference(messageScalar)) {
+            // A reference remains the warning argument even when its string
+            // overload produces an empty string. Perl passes that reference
+            // through to __WARN__ unchanged.
+            finalMessage = messageScalar;
+        } else if (messageStr.isEmpty()) {
             RuntimeScalar err = getGlobalVariable("main::@");
             // Resolve tied $@ once to avoid double FETCH (Perl 5 fetches $@ exactly once)
             if (err.type == RuntimeScalarType.TIED_SCALAR) {
@@ -328,51 +347,56 @@ public class WarnDie {
                 }
             }
         } else {
-            // Handle non-empty message
-            if (RuntimeScalarType.isReference(message.getFirst())) {
-                // Message is a reference, pass it as-is
-                finalMessage = new RuntimeScalar(message.getFirst());
-            } else {
-                // String message
-                String out = messageStr;
-                if (!out.endsWith("\n")) {
-                    String whereStr = where.toString();
-                    String callbackLocation = PerlRuntime.current().executionState()
-                            .activeRegexCallbackLocations.peek();
-                    if (callbackLocation != null && !callbackLocation.isEmpty()) {
-                        whereStr = callbackLocation;
-                    }
-                    // If no explicit location provided, derive from Perl call stack
-                    if (whereStr.isEmpty() && (fileName == null || fileName.isEmpty())) {
-                        whereStr = getPerlLocationFromStack();
-                    }
-                    out += whereStr;
-                    if (sig.getDefinedBoolean() && !isReservedSigString(sig)) {
-                        RuntimeIO lastRead = RuntimeIO.getLastReadlineHandle();
-                        String diagnosticName = lastRead == null ? null : lastRead.getDiagnosticReadlineHandleName();
-                        // Only a source-level lexical filehandle expression retains
-                        // readline context for a subsequent custom warning handler.
-                        // Named handles such as DATA are used internally while loading
-                        // source and must not decorate unrelated warnings.
-                        if (diagnosticName != null && diagnosticName.startsWith("$")) {
-                            String filehandleContext = getFilehandleContext();
-                            if (filehandleContext != null && !filehandleContext.isEmpty()) {
-                                out += filehandleContext;
-                            }
+            // String message
+            String out = messageStr;
+            if (!out.endsWith("\n")) {
+                String whereStr = where.toString();
+                String callbackLocation = PerlRuntime.current().executionState()
+                        .activeRegexCallbackLocations.peek();
+                if (callbackLocation != null && !callbackLocation.isEmpty()) {
+                    whereStr = callbackLocation;
+                }
+                // If no explicit location provided, derive from Perl call stack
+                if (whereStr.isEmpty() && (fileName == null || fileName.isEmpty())) {
+                    whereStr = getPerlLocationFromStack();
+                }
+                out += whereStr;
+                if (sig.getDefinedBoolean() && !isReservedSigString(sig)) {
+                    RuntimeIO lastRead = RuntimeIO.getLastReadlineHandle();
+                    String diagnosticName = lastRead == null ? null : lastRead.getDiagnosticReadlineHandleName();
+                    // Only a source-level lexical filehandle expression retains
+                    // readline context for a subsequent custom warning handler.
+                    // Named handles such as DATA are used internally while loading
+                    // source and must not decorate unrelated warnings.
+                    if (diagnosticName != null && diagnosticName.startsWith("$")) {
+                        String filehandleContext = getFilehandleContext();
+                        if (filehandleContext != null && !filehandleContext.isEmpty()) {
+                            out += filehandleContext;
                         }
                     }
-                    // Add period and newline if location info was added
-                    if (!whereStr.isEmpty()) {
-                        out += ".\n";
-                    } else if (!out.endsWith("\n")) {
-                        out += "\n";
-                    }
                 }
-                finalMessage = new RuntimeScalar(out);
+                // Add period and newline if location info was added
+                if (!whereStr.isEmpty()) {
+                    out += ".\n";
+                } else if (!out.endsWith("\n")) {
+                    out += "\n";
+                }
             }
+            finalMessage = new RuntimeScalar(out);
         }
 
-        if (hasUsableSigHandler(sig) && !isReservedSigString(sig)) {
+        boolean hasWarningHandler = hasUsableSigHandler(sig) && !isReservedSigString(sig);
+        if (RuntimeScalarType.isReference(finalMessage) && !hasWarningHandler) {
+            String out = finalMessage.toString();
+            String whereStr = where.toString();
+            out += whereStr;
+            if (!out.endsWith("\n")) {
+                out += whereStr.isEmpty() ? "\n" : ".\n";
+            }
+            finalMessage = new RuntimeScalar(out);
+        }
+
+        if (hasWarningHandler) {
             RuntimeArray args = new RuntimeArray();
             RuntimeArray.push(args, finalMessage);
 
@@ -415,9 +439,34 @@ public class WarnDie {
             return new RuntimeScalar(1);
         }
 
-        writeWarningToStderr(finalMessage.toString());
+        String warningText = finalMessage.toString();
+        RuntimeIO stderrIO = getGlobalIO("main::STDERR").getRuntimeIO();
+        if (stderrIO == null) {
+            stderrIO = RuntimeIO.getStderr();
+        }
+        if (stderrIO != null && stderrIO.isByteMode() && containsWideCharacter(warningText)) {
+            String location = where.toString();
+            writeWarningToStderr("Wide character in warn" + location
+                    + (location.isEmpty() ? "\n" : ".\n"));
+            warningText = encodeUtf8BytesAsCharacters(warningText);
+        }
+        writeWarningToStderr(warningText);
 
         return new RuntimeScalar(1);  // Perl's warn() always returns 1
+    }
+
+    private static boolean containsWideCharacter(String text) {
+        return text.codePoints().anyMatch(codePoint -> codePoint > 0xFF);
+    }
+
+    /** Perl writes UTF-8 bytes to a byte-oriented handle after warning. */
+    private static String encodeUtf8BytesAsCharacters(String text) {
+        byte[] bytes = text.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        StringBuilder encoded = new StringBuilder(bytes.length);
+        for (byte value : bytes) {
+            encoded.append((char) (value & 0xFF));
+        }
+        return encoded.toString();
     }
 
     /**
@@ -437,6 +486,17 @@ public class WarnDie {
 
     public static RuntimeBase warnWithCategory(RuntimeBase message, RuntimeScalar where, String category,
                                                 String fileName, int lineNumber) {
+        return warnWithCategory(message, where, category, fileName, lineNumber, null);
+    }
+
+    /** Emit a category warning using the lexical bits of the Perl code that raised it. */
+    public static RuntimeBase warnWithCategoryFromCode(RuntimeBase message, RuntimeScalar where,
+            String category, String warningBits) {
+        return warnWithCategory(message, where, category, null, 0, warningBits);
+    }
+
+    private static RuntimeBase warnWithCategory(RuntimeBase message, RuntimeScalar where, String category,
+            String fileName, int lineNumber, String warningBitsOverride) {
         if (WarningFlags.areWarningsForcedOff()) {
             return new RuntimeScalar();
         }
@@ -451,7 +511,10 @@ public class WarnDie {
         // definition-time warning bits, while statement flag nodes refine the
         // runtime channel for nested lexical scopes. This makes the runtime
         // value authoritative for ordinary warnings on both backends.
-        String warningBits = org.perlonjava.runtime.WarningBitsRegistry.getRuntimeWarningBits();
+        String warningBits = warningBitsOverride;
+        if (warningBits == null) {
+            warningBits = org.perlonjava.runtime.WarningBitsRegistry.getRuntimeWarningBits();
+        }
         if (warningBits == null) {
             warningBits = getWarningBitsFromCurrentContext();
         }
@@ -487,10 +550,11 @@ public class WarnDie {
         // even when a caller has localized $^W to a true value: Perl's
         // dynamic all-warnings switch must not re-enable a category that the
         // currently executing callee disabled lexically.
-        if (WarningFlags.hasRuntimeWarningScope()
-                ? WarningFlags.isWarningSuppressedAtRuntime(category)
-                : org.perlonjava.runtime.WarningBitsRegistry
-                        .isRuntimeWarningCategoryDisabled(category)) {
+        if (warningBitsOverride == null
+                && (WarningFlags.hasRuntimeWarningScope()
+                    ? WarningFlags.isWarningSuppressedAtRuntime(category)
+                    : org.perlonjava.runtime.WarningBitsRegistry
+                            .isRuntimeWarningCategoryDisabled(category))) {
             return new RuntimeScalar();
         }
         
@@ -708,10 +772,14 @@ public class WarnDie {
                 DynamicVariableManager.popToLocalLevel(level);
             }
 
-            throw new PerlDieException(errVariable, snapshotWarningHandler());
+            throw new PerlDieException(errVariable, snapshotWarningHandler(),
+                    org.perlonjava.runtime.WarningBitsRegistry.getRuntimeWarningBits(),
+                    WarningFlags.isWarningSuppressedAtRuntime("misc"));
         }
 
-        throw new PerlDieException(errVariable, snapshotWarningHandler());
+        throw new PerlDieException(errVariable, snapshotWarningHandler(),
+                org.perlonjava.runtime.WarningBitsRegistry.getRuntimeWarningBits(),
+                WarningFlags.isWarningSuppressedAtRuntime("misc"));
     }
 
     /**

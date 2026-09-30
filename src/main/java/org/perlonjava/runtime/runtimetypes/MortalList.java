@@ -4,6 +4,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -558,7 +559,9 @@ public class MortalList {
                 && hash.refCount >= 0
                 && hash.hadCountedReference
                 && isReachableFromExternalRootCached(hash)) return;
-        for (RuntimeScalar val : hash.elements.values()) {
+        List<RuntimeScalar> valuesInDestructionOrder = new ArrayList<>(hash.elements.values());
+        Collections.reverse(valuesInDestructionOrder);
+        for (RuntimeScalar val : valuesInDestructionOrder) {
             deferDecrementRecursive(val);
         }
     }

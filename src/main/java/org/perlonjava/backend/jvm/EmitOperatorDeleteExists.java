@@ -179,6 +179,8 @@ public class EmitOperatorDeleteExists {
                               EmitterVisitor emitterVisitor) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
+        markDefinedArrayProbeInputs(node.operand, true);
+
         if (node.operand instanceof ListNode listNode && listNode.elements.size() == 1) {
             Node operand2 = listNode.elements.getFirst();
             if (operand2 instanceof OperatorNode operatorNode && operatorNode.operator.equals("+")) {
@@ -247,6 +249,18 @@ public class EmitOperatorDeleteExists {
                     "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
             EmitOperator.handleVoidContext(emitterVisitor);
+        }
+    }
+
+    /** See the bytecode backend equivalent: defined() must not vivify nested array slots. */
+    private static void markDefinedArrayProbeInputs(Node node, boolean root) {
+        if (node instanceof ListNode list) {
+            for (Node element : list.elements) markDefinedArrayProbeInputs(element, true);
+        } else if (node instanceof BinaryOperatorNode binary && binary.operator.equals("[")) {
+            if (!root) binary.setAnnotation("definedProbeArrayAccess", true);
+            markDefinedArrayProbeInputs(binary.left, false);
+        } else if (node instanceof OperatorNode op && op.operator.equals("$")) {
+            markDefinedArrayProbeInputs(op.operand, root);
         }
     }
 

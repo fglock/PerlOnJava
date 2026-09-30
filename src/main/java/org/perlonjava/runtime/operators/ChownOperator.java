@@ -71,6 +71,14 @@ public class ChownOperator {
                     // Check if this is a filehandle (glob reference)
                     if (fileArg.type == RuntimeScalarType.GLOB ||
                             fileArg.type == RuntimeScalarType.GLOBREFERENCE) {
+                        RuntimeIO fileHandle = RuntimeIO.getRuntimeIO(fileArg);
+                        if (fileHandle != null && fileHandle.ioHandle instanceof org.perlonjava.runtime.io.ClosedIOHandle) {
+                            GlobalVariable.getGlobalVariable("main::!").set("Bad file descriptor");
+                            continue;
+                        }
+                        if (fileHandle != null) {
+                            throw new PerlCompilerException("The fchown function is unimplemented");
+                        }
                         // Handle filehandle case
                         result = changeFilehandleOwnership(fileArg, uid, gid);
                     } else {// Regular filename case
@@ -84,6 +92,8 @@ public class ChownOperator {
                         }
                     }
 
+                } catch (PerlCompilerException e) {
+                    throw e;
                 } catch (Exception e) {
                 }
                 if (result) {

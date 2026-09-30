@@ -116,36 +116,9 @@ package B::SV {
 
         if (ref($r) eq 'SCALAR') {
             my $v = $$r;
-            my $flags = 0;
-
             return 0 unless defined $v;
-
-            # Use builtin introspection to determine creation type
-            no warnings 'experimental::builtin';
-
-            if (builtin::created_as_number($v)) {
-                # Value was originally created as a number
-                # Determine integer vs float
-                no warnings 'numeric';
-                if ($v == $v) {  # not NaN
-                    # Check if it's an integer (no fractional part)
-                    # Use int() comparison; Inf fails this check (good, it's NOK)
-                    my $is_int = ($v == int($v)) && $v != 9**9**9 && $v != -9**9**9;
-                    if ($is_int) {
-                        $flags |= B::SVf_IOK() | B::SVp_IOK();
-                    } else {
-                        $flags |= B::SVf_NOK() | B::SVp_NOK();
-                    }
-                } else {
-                    # NaN
-                    $flags |= B::SVf_NOK() | B::SVp_NOK();
-                }
-            } elsif (length($v)) {
-                # Value was created as a string (or is non-empty)
-                $flags |= B::SVf_POK() | B::SVp_POK();
-            }
-
-            return $flags;
+            require Internals;
+            return Internals::jperl_b_scalar_flags($v);
         }
 
         return 0;

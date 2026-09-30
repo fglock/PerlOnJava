@@ -305,28 +305,30 @@ public class SystemOperator {
         }
         RuntimeHash env = GlobalVariable.getGlobalHash("main::ENV");
         if (env.taintEnvironmentAliasDescription != null) {
-            throw new PerlCompilerException(
-                    "%ENV is aliased to " + env.taintEnvironmentAliasDescription
-                            + " while running with -T switch");
+            RuntimeScalar.reportTaintViolation(
+                    "%ENV is aliased to " + env.taintEnvironmentAliasDescription);
         }
         for (String name : List.of("PATH", "IFS", "CDPATH", "ENV", "BASH_ENV")) {
             RuntimeScalar value = env.elements.get(name);
             if (value != null && value.isTainted()) {
-                throw new PerlCompilerException(
-                        "Insecure $ENV{" + name + "} while running with -T switch");
+                RuntimeScalar.reportTaintViolation("Insecure $ENV{" + name + "}");
             }
         }
 
         RuntimeScalar path = env.elements.get("PATH");
         if (path != null && path.getDefinedBoolean()) {
-            checkPathDirectories(path.toString());
+            try {
+                checkPathDirectories(path.toString());
+            } catch (PerlCompilerException error) {
+                RuntimeScalar.reportTaintViolation(error.getMessage()
+                        .replace(" while running with -T switch", ""));
+            }
         }
 
         RuntimeScalar term = env.elements.get("TERM");
         if (term != null && term.isTainted()
                 && TAINTED_ENV_METACHARACTERS.matcher(term.toString()).find()) {
-            throw new PerlCompilerException(
-                    "Insecure $ENV{TERM} while running with -T switch");
+            RuntimeScalar.reportTaintViolation("Insecure $ENV{TERM}");
         }
     }
 

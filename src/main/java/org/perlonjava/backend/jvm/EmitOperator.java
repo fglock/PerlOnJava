@@ -58,6 +58,16 @@ public class EmitOperator {
                     ? OperatorHandler.getWarn(operator)
                     : OperatorHandler.get(operator);
         }
+        if (node instanceof BinaryOperatorNode binary
+                && (operator.equals("===") || operator.equals("!=="))) {
+            Object useInteger = binary.getAnnotation("useInteger");
+            boolean integerComparison = useInteger instanceof Boolean value
+                    ? value
+                    : symbolTable != null && symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER);
+            if (integerComparison) {
+                operatorHandler = OperatorHandler.get(operator + "_integer");
+            }
+        }
         if (operatorHandler == null) {
             throw new PerlCompilerException(node.getIndex(), "Operator \"" + operator + "\" doesn't have a defined JVM descriptor", emitterVisitor.ctx.errorUtil);
         }
@@ -1098,7 +1108,8 @@ public class EmitOperator {
             int leftCtx;
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
                 leftCtx = RuntimeContextType.SCALAR;
-            } else if (node.left instanceof ListNode) {
+            } else if (node.left instanceof ListNode
+                    && emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
                 leftCtx = RuntimeContextType.LIST;
             } else {
                 leftCtx = RuntimeContextType.SCALAR;
@@ -1123,7 +1134,8 @@ public class EmitOperator {
         } else {
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
                 node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-            } else if (node.left instanceof ListNode) {
+            } else if (node.left instanceof ListNode
+                    && emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
                 node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));
             } else {
                 node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));

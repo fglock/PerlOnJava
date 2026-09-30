@@ -94,10 +94,14 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     public RuntimeScalar set(RuntimeScalar value) {
         if (variableId == Id.INPUT_LINE_NUMBER) {
             vivify();
-            // Perl leaves the handle-backed line number intact on `$. =
-            // undef`; this is observable when a typeglob aliases `$_` to
-            // `$.` and diamond readline reaches EOF.
             if (value.type == RuntimeScalarType.UNDEF) {
+                // A line number belongs to the last-read handle and survives
+                // undef, but with no active handle $. is an ordinary undefined
+                // scalar.  This distinction is observable by scalar flip-flop
+                // numeric endpoints before the first read.
+                if (RuntimeIO.getLastAccessedHandle() == null) {
+                    lvalue.set(value);
+                }
                 return lvalue;
             }
             if (RuntimeIO.getLastAccessedHandle() != null) {

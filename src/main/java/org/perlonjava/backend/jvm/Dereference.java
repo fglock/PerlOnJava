@@ -1275,7 +1275,6 @@ public class Dereference {
         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
 
         ArrayLiteralNode right = (ArrayLiteralNode) node.right;
-
         boolean isSingleRange = right.elements.size() == 1 &&
                 right.elements.getFirst() instanceof BinaryOperatorNode binOp &&
                 "..".equals(binOp.operator);

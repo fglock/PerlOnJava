@@ -218,10 +218,7 @@ my $startperl = $is_windows
     # these to the real compiler does not accidentally enable native builds.
     cc => $system_cc,
     ld => $system_cc,
-    # ccflags includes -DSILENT_NO_TAINT_SUPPORT because PerlOnJava does not
-    # implement full taint checking. This allows tests that check for taint
-    # support to skip gracefully.
-    ccflags => '-DSILENT_NO_TAINT_SUPPORT',
+    ccflags => '',
     ldflags => '',
     lddlflags => '',
     optimize => '',

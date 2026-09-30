@@ -1956,7 +1956,16 @@ public class GlobalVariable {
      */
     public static RuntimeHash removeGlobalHash(String key) {
         RuntimeHash removed = globalHashes.remove(key);
-        if (removed != null) invalidatePackageRootSnapshot();
+        if (removed != null) {
+            invalidatePackageRootSnapshot();
+            if (key.endsWith("::") && !key.equals("main::")) {
+                String packageName = key.startsWith("main::") ? key.substring(6) : key;
+                if (packageName.endsWith("::")) {
+                    packageName = packageName.substring(0, packageName.length() - 2);
+                }
+                org.perlonjava.runtime.perlmodule.Mro.removePackageGeneration(packageName);
+            }
+        }
         return removed;
     }
 

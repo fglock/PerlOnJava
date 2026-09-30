@@ -395,6 +395,7 @@ public class Re extends PerlModuleBase {
     /** Handle {@code use re ...}, including Perl's complete lexical flag set. */
     public static RuntimeList importRe(RuntimeArray args, int ctx) {
         ScopedSymbolTable symbolTable = getCurrentScope();
+        symbolTable.markLexicalRegexPragmaChanged();
         
         for (int i = 0; i < args.size(); i++) {
             String opt = args.get(i).toString();
@@ -466,6 +467,7 @@ public class Re extends PerlModuleBase {
     /** Handle {@code no re ...}, including selective lexical cancellation. */
     public static RuntimeList unimportRe(RuntimeArray args, int ctx) {
         ScopedSymbolTable symbolTable = getCurrentScope();
+        symbolTable.markLexicalRegexPragmaChanged();
         
         for (int i = 0; i < args.size(); i++) {
             String opt = args.get(i).toString();

@@ -4,6 +4,7 @@ import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.core.Configuration;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.io.LayeredIOHandle;
 import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
@@ -25,6 +26,9 @@ import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import java.util.ArrayDeque;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.perlonjava.runtime.runtimetypes.ExceptionFormatter.findInnermostCause;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalHash;
@@ -65,11 +69,43 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
  * @see <a href="https://perldoc.perl.org/functions/require">perldoc require</a>
  */
 public class ModuleOperators {
+    private record CachedTiedIncEntry(RuntimeScalar tiedScalar, RuntimeScalar value) { }
+
     /** Entries actually consulted by the current require search, in order. */
     private static final ThreadLocal<List<String>> INC_ENTRIES_CHECKED =
             ThreadLocal.withInitial(ArrayList::new);
     private static final ThreadLocal<Set<Object>> ACTIVE_INC_HOOKS =
             ThreadLocal.withInitial(() -> Collections.newSetFromMap(new IdentityHashMap<>()));
+
+    /** Explicit returns compiled under feature 'module_true' during a module load. */
+    private static final ThreadLocal<ArrayDeque<boolean[]>> MODULE_TRUE_RETURNS =
+            ThreadLocal.withInitial(ArrayDeque::new);
+
+    /** Completed scope of the current thread's most recently loaded file. */
+    private static final ThreadLocal<ScopedSymbolTable> LAST_LOADED_SCOPE = new ThreadLocal<>();
+
+    /** Consume the pragma scope produced by a just-completed require. */
+    public static ScopedSymbolTable takeLastLoadedScope() {
+        ScopedSymbolTable scope = LAST_LOADED_SCOPE.get();
+        LAST_LOADED_SCOPE.remove();
+        return scope;
+    }
+
+    public static void beginModuleTrueTracking() {
+        MODULE_TRUE_RETURNS.get().push(new boolean[1]);
+    }
+
+    public static void markModuleTrueReturn() {
+        ArrayDeque<boolean[]> frames = MODULE_TRUE_RETURNS.get();
+        if (!frames.isEmpty()) frames.peek()[0] = true;
+    }
+
+    private static boolean endModuleTrueTracking() {
+        ArrayDeque<boolean[]> frames = MODULE_TRUE_RETURNS.get();
+        boolean marked = !frames.isEmpty() && frames.pop()[0];
+        if (frames.isEmpty()) MODULE_TRUE_RETURNS.remove();
+        return marked;
+    }
 
     /**
      * Public entry point for `do` operator.
@@ -186,6 +222,12 @@ public class ModuleOperators {
             return new RuntimeScalar();
         }
         fileName = sanitizedFileName;
+        // A require expression may evaluate to a package name such as
+        // "Foo::Bar". Keep that spelling for %INC, hooks, and diagnostics,
+        // but use Perl's module path when probing the filesystem. In
+        // particular, Paths.get("Foo::Bar") throws on Windows because ':'
+        // is not a legal filename character there.
+        String searchFileName = requireSearchFileName(fileName, isRequire);
         Path fullName = null;
         String code = null;
         String actualFileName = null;
@@ -483,11 +525,11 @@ public class ModuleOperators {
             // modules therefore legitimately require an explicit
             // jar:PERL5LIB/... path instead of searching that virtual
             // directory through @INC again.
-            if (Jar.isJarPath(fileName)) {
-                URL resource = Jar.getResource(fileName);
+            if (Jar.isJarPath(searchFileName)) {
+                URL resource = Jar.getResource(searchFileName);
                 if (resource != null && !isDirectoryResource(resource)) {
-                    actualFileName = fileName;
-                    fullName = Paths.get(Jar.toResourcePath(fileName));
+                    actualFileName = searchFileName;
+                    fullName = Paths.get(Jar.toResourcePath(searchFileName));
                     try (InputStream is = resource.openStream()) {
                         jarPrefetchedBytes = is.readAllBytes();
                     } catch (IOException ignored) {
@@ -501,13 +543,13 @@ public class ModuleOperators {
             // and if it exists on the filesystem
             Path filePath = fullName;
             if (filePath == null) {
-                filePath = Paths.get(fileName);
+                filePath = Paths.get(searchFileName);
             }
-            boolean tryDirectPath = filePath.isAbsolute() || fileName.startsWith("./") || fileName.startsWith("../");
+            boolean tryDirectPath = filePath.isAbsolute() || searchFileName.startsWith("./") || searchFileName.startsWith("../");
 
             if (tryDirectPath) {
                 // For absolute or explicit relative paths, resolve using RuntimeIO.getPath
-                filePath = RuntimeIO.resolvePath(fileName);
+                filePath = RuntimeIO.resolvePath(searchFileName);
                 if (pathExistsOrIsInaccessible(filePath)) {
                     // Check if it's a directory
                     if (Files.isDirectory(filePath)) {
@@ -531,11 +573,11 @@ public class ModuleOperators {
                 String preferred = System.getenv("PERLONJAVA_PREFER_BUNDLED_MODULES");
                 if (preferred != null) {
                     for (String candidate : preferred.split(",")) {
-                        if (!fileName.equals(candidate.trim())) continue;
-                        String resourcePath = "/lib/" + fileName;
+                        if (!searchFileName.equals(candidate.trim())) continue;
+                        String resourcePath = "/lib/" + searchFileName;
                         URL resource = RuntimeScalar.class.getResource(resourcePath);
                         if (resource != null && !isDirectoryResource(resource)) {
-                            actualFileName = GlobalContext.JAR_PERLLIB + "/" + fileName;
+                            actualFileName = GlobalContext.JAR_PERLLIB + "/" + searchFileName;
                             fullName = Paths.get(resourcePath);
                             try (InputStream is = resource.openStream()) {
                                 jarPrefetchedBytes = is.readAllBytes();
@@ -550,6 +592,7 @@ public class ModuleOperators {
 
                 // Search in INC directories
                 RuntimeArray incArray = GlobalVariable.getGlobalArray("main::INC");
+                RuntimeArray prefetchedIncArray = incArray;
 
                 // The launcher may supply only project test paths. Keep the
                 // bundled library available for runtime loading, but do not
@@ -557,9 +600,14 @@ public class ModuleOperators {
                 // entry in Perl's diagnostic.
                 boolean syntheticBundledInc = false;
                 boolean seenBundledInc = false;
+                Map<Integer, CachedTiedIncEntry> prefetchedTiedEntries = new HashMap<>();
                 for (int i = 0; i < incArray.size(); i++) {
-                    RuntimeScalar dir = incArray.get(i);
-                    if (dir.type == RuntimeScalarType.TIED_SCALAR) dir = dir.tiedFetch();
+                    RuntimeScalar rawDir = incArray.get(i);
+                    RuntimeScalar dir = rawDir;
+                    if (rawDir.type == RuntimeScalarType.TIED_SCALAR) {
+                        dir = rawDir.tiedFetch();
+                        prefetchedTiedEntries.put(i, new CachedTiedIncEntry(rawDir, dir));
+                    }
                     if (GlobalContext.JAR_PERLLIB.equals(dir.toString())) {
                         seenBundledInc = true;
                         break;
@@ -580,7 +628,13 @@ public class ModuleOperators {
 
                     // If this is a tied scalar, fetch the actual value
                     if (dirScalar.type == RuntimeScalarType.TIED_SCALAR) {
-                        dirScalar = dirScalar.tiedFetch();
+                        CachedTiedIncEntry prefetched = incArray == prefetchedIncArray
+                                ? prefetchedTiedEntries.remove(i) : null;
+                        if (prefetched != null && prefetched.tiedScalar() == dirScalar) {
+                            dirScalar = prefetched.value();
+                        } else {
+                            dirScalar = dirScalar.tiedFetch();
+                        }
                     }
                     if (!(syntheticBundledInc
                             && GlobalContext.JAR_PERLLIB.equals(dirScalar.toString()))) {
@@ -648,21 +702,21 @@ public class ModuleOperators {
                     }
                     if (dirName.equals(GlobalContext.JAR_PERLLIB)) {
                         // Try to find in jar at "src/main/perl/lib"
-                        String resourcePath = "/lib/" + fileName;
+                        String resourcePath = "/lib/" + searchFileName;
                         URL resource = RuntimeScalar.class.getResource(resourcePath);
                         // Case-variant fallback: macOS builds store Sys/ioctl.ph but
                         // Perl code expects sys/ioctl.ph (lowercase). Try swapping
                         // the case of the first letter of the first path component.
-                        if (resource == null && fileName.contains("/")) {
-                            String first = fileName.substring(0, 1);
+                        if (resource == null && searchFileName.contains("/")) {
+                            String first = searchFileName.substring(0, 1);
                             String alt = first.equals(first.toLowerCase())
-                                    ? first.toUpperCase() + fileName.substring(1)
-                                    : first.toLowerCase() + fileName.substring(1);
+                                    ? first.toUpperCase() + searchFileName.substring(1)
+                                    : first.toLowerCase() + searchFileName.substring(1);
                             resource = RuntimeScalar.class.getResource("/lib/" + alt);
                         }
                         if (resource != null && !isDirectoryResource(resource)) {
                             // Use "jar:PERL5LIB/DBI.pm" format for %INC - matches catfile output
-                            actualFileName = GlobalContext.JAR_PERLLIB + "/" + fileName;
+                            actualFileName = GlobalContext.JAR_PERLLIB + "/" + searchFileName;
                             fullName = Paths.get(resourcePath);  // Just for compatibility
 
                             try (InputStream is = resource.openStream()) {
@@ -676,20 +730,20 @@ public class ModuleOperators {
                     } else {
                         // Use RuntimeIO.getPath to properly resolve the directory path first
                         Path dirPath = RuntimeIO.resolvePath(dirName);
-                        if (fileName.endsWith(".pm")) {
+                        if (searchFileName.endsWith(".pm")) {
                             // Try to find a .pmc file
-                            Path fullPath = dirPath.resolve(fileName + "c");
+                            Path fullPath = dirPath.resolve(searchFileName + "c");
                             if (Files.exists(fullPath) && !Files.isDirectory(fullPath)) {
                                 fullName = fullPath;
                                 // Preserve the @INC entry's relativity for display/error messages
                                 // (Perl 5 uses "lib/Foo.pm" not "/abs/path/lib/Foo.pm")
                                 // Strip trailing slash from dirName to avoid double slashes
                                 String cleanDir = displayIncDirectory(dirName);
-                                actualFileName = cleanDir + "/" + fileName + "c";
+                                actualFileName = cleanDir + "/" + searchFileName + "c";
                                 break;
                             }
                         }
-                        Path fullPath = dirPath.resolve(fileName);
+                        Path fullPath = dirPath.resolve(searchFileName);
                         if (pathExistsOrIsInaccessible(fullPath)) {
                             // Check if it's a directory
                             if (Files.isDirectory(fullPath)) {
@@ -702,7 +756,7 @@ public class ModuleOperators {
                             // Preserve the @INC entry's relativity for display/error messages
                             // Strip trailing slash from dirName to avoid double slashes
                             String cleanDir = displayIncDirectory(dirName);
-                            actualFileName = cleanDir + "/" + fileName;
+                            actualFileName = cleanDir + "/" + searchFileName;
                             break;
                         }
                     }
@@ -777,6 +831,7 @@ public class ModuleOperators {
         }
 
         RuntimeList result;
+        PerlLanguageProvider.clearLastNestedCompilationScope();
         FeatureFlags outerFeature = Feature.getFeatureManager();
         String savedPackage = InterpreterState.currentPackage.get().toString();
 
@@ -809,6 +864,8 @@ public class ModuleOperators {
                 filterSnapshot = org.perlonjava.runtime.perlmodule.FilterUtilCall
                         .saveAndResetFilterState();
 
+        boolean moduleTrueReturn = false;
+        beginModuleTrueTracking();
         try {
             Feature.setFeatureManager(new FeatureFlags());
             
@@ -816,12 +873,17 @@ public class ModuleOperators {
             hintHash.clearForHintHashContextTransfer();
 
             result = PerlLanguageProvider.executePerlCode(parsedArgs, false, ctx);
+            ScopedSymbolTable loadedScope = PerlLanguageProvider.takeLastNestedCompilationScope();
+            if (loadedScope != null) {
+                LAST_LOADED_SCOPE.set(loadedScope);
+            }
 
             // feature 'module_true' relaxes require's true-value contract; it
             // does not alter the value returned by do FILE. In particular,
             // application loaders rely on do preserving a blessed object.
             boolean moduleTrue = Feature.getFeatureManager().isFeatureEnabled("module_true");
-            if (isRequire && moduleTrue) {
+            moduleTrueReturn = endModuleTrueTracking();
+            if (isRequire && (moduleTrue || moduleTrueReturn)) {
                 result = scalarTrue.getList();
             }
 
@@ -830,10 +892,12 @@ public class ModuleOperators {
             // eval { die ... } blocks would leak through to the caller.
             GlobalVariable.setGlobalVariable("main::@", "");
         } catch (PerlExitException e) {
+            endModuleTrueTracking();
             // Let exit() propagate through do/require - it should terminate the process,
             // not be caught as a file-loading error
             throw e;
         } catch (Throwable t) {
+            endModuleTrueTracking();
             // For require, on compilation failure leave the %INC entry as
             // undef (a marker that this file was tried and failed). Subsequent
             // `require <same-file>` should fail with the cached error rather
@@ -958,6 +1022,7 @@ public class ModuleOperators {
      */
     public static RuntimeScalar require(RuntimeScalar runtimeScalar) {
         try (PerlRuntime.Binding ignored = PerlRuntime.current().bind()) {
+        LAST_LOADED_SCOPE.remove();
         // https://perldoc.perl.org/functions/require
 
         // ===== CASE 1: Version checking =====
@@ -1111,6 +1176,13 @@ public class ModuleOperators {
     private static String displayIncDirectory(String directory) {
         String clean = directory.endsWith("/") ? directory.substring(0, directory.length() - 1) : directory;
         return clean.startsWith("./") ? clean.substring(2) : clean;
+    }
+
+    /** Convert a dynamic package name to the path Perl searches for require. */
+    private static String requireSearchFileName(String fileName, boolean isRequire) {
+        if (!isRequire || !fileName.contains("::")) return fileName;
+        String path = fileName.replace("::", "/");
+        return path.endsWith(".pm") ? path : path + ".pm";
     }
 
     /** Format Perl's missing-require diagnostic without suggesting invalid module names. */

@@ -71,7 +71,8 @@ public class EmitLogicalOperator {
         mv.visitVarInsn(Opcodes.ALOAD, rightSlot);
         mv.visitInsn(node.left instanceof NumberNode ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
         mv.visitInsn(node.right instanceof NumberNode ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/operators/ScalarFlipFlopOperator", "evaluate", "(ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;ZZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        mv.visitInsn(Opcodes.ICONST_1);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/operators/ScalarFlipFlopOperator", "evaluate", "(ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;ZZZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
 
         // If the context is VOID, pop the result from the stack
         EmitOperator.handleVoidContext(emitterVisitor);
@@ -91,9 +92,10 @@ public class EmitLogicalOperator {
                 "currentRawCallContext", "()I", false);
         mv.visitInsn(node.left instanceof NumberNode ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
         mv.visitInsn(node.right instanceof NumberNode ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        mv.visitInsn(Opcodes.ICONST_1);
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/operators/ScalarFlipFlopOperator", "evaluateInContext",
-                "(ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;IZZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                "(ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;IZZZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
                 false);
         EmitOperator.handleVoidContext(emitterVisitor);
     }

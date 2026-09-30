@@ -151,7 +151,6 @@ The built-in Perl debugger (`perl -d`) provides interactive debugging. See [Debu
 - ✅  Accept command line switches from the shebang line.
 - ✅  Accept command line switches: `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-d`, `-f`, `-F`, `-m`, `-M`, `-g`, `-l`, `-h`, `-s`, `-S`, `-T`, `-x`, `-v`, `-V`, `-?`, `-w`, `-W`, `-X` are implemented.
 - ❌  Missing command line switches include:
-  - `-t`: Taint checks with warnings. The option is accepted, but warning-mode taint semantics are not implemented.
   - `-u`: Dumps core after compiling.
   - `-U`: Allows unsafe operations.
   - `-D[number/list]`: Sets debugging flags.
@@ -226,7 +225,8 @@ my @copy = @{$z};         # ERROR
 - ✅  **Taint checks**: `-T` marks external inputs, propagates taint through
   scalar and regular-expression operations, supports capture-based untainting,
   and rejects tainted values at security-sensitive operations. Supported by
-  both JVM and interpreter backends.
+  both JVM and interpreter backends. `-t` uses the same taint propagation but
+  reports unsafe uses as warnings instead of rejecting them.
 - ❌  **`local` special cases**: `local *HANDLE = *HANDLE` doesn't create a new typeglob.
 - 🚧  **Variable attributes**: `my $x : attr` supported via `MODIFY_SCALAR_ATTRIBUTES` etc.
 

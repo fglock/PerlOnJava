@@ -180,7 +180,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 }
             }
             owner.markPackageRootedValue(value);
-            return super.put(key, value);
+            RuntimeScalar result = super.put(key, value);
+            updateReferentHashSlotOwnership(previous, value);
+            return result;
         }
 
         @Override
@@ -626,6 +628,23 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             case READONLY_HASH -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + type);
+        }
+    }
+
+    private static RuntimeBase directReferent(RuntimeScalar scalar) {
+        return scalar != null && scalar.value instanceof RuntimeBase base ? base : null;
+    }
+
+    private static void updateReferentHashSlotOwnership(
+            RuntimeScalar oldValue, RuntimeScalar newValue) {
+        RuntimeBase oldReferent = directReferent(oldValue);
+        RuntimeBase newReferent = directReferent(newValue);
+        if (oldReferent == newReferent) return;
+        if (oldReferent != null && oldReferent.hashSlotOwnerCount > 0) {
+            oldReferent.hashSlotOwnerCount--;
+        }
+        if (newReferent != null) {
+            newReferent.hashSlotOwnerCount++;
         }
     }
 

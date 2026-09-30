@@ -8,6 +8,7 @@ import org.perlonjava.frontend.analysis.ExtractValueVisitor;
 import org.perlonjava.frontend.analysis.LValueVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.SymbolTable;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
@@ -1446,6 +1447,15 @@ public class StatementParser {
                 } else {
                     ret = ModuleOperators.require(new RuntimeScalar(fullName));
                 }
+                // A module loaded by `use` may invoke re->import while its
+                // own compilation unit is active. That pragma is lexical to
+                // the surrounding use site; transfer only re's public state,
+                // never the module's strict/warnings/features.
+                ScopedSymbolTable loadedScope = ModuleOperators.takeLastLoadedScope();
+                if (loadedScope != null) {
+                    parser.ctx.symbolTable.copyLexicalRegexPragmaFrom(loadedScope);
+                }
+                SpecialBlockParser.setCurrentScope(parser.ctx.symbolTable);
                 if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Use statement return: " + ret);
 
                 if (versionNode != null) {

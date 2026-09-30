@@ -419,6 +419,16 @@ public class FileTestOperator {
             // cache: an outer stacked test such as -e -t $fh consumes the
             // cache established before the inner -t test.
             if (operator.equals("-t")) {
+                // Java file channels receive a virtual Perl descriptor, which
+                // cannot be passed to libc isatty().  Preserve the observable
+                // terminal identity for a handle explicitly opened on /dev/tty.
+                if (innerHandle instanceof CustomFileChannel channel
+                        && channel.getFilePath() != null
+                        && "/dev/tty".equals(channel.getFilePath().toString())) {
+                    updateLastStat(fileHandle, false, 0);
+                    getGlobalVariable("main::!").set(0);
+                    return scalarTrue;
+                }
                 RuntimeScalar descriptor = fh.fileno();
                 if (!descriptor.getDefinedBoolean()) {
                     getGlobalVariable("main::!").set(9);
@@ -435,7 +445,12 @@ public class FileTestOperator {
                     return scalarUndef;
                 }
                 try {
-                    boolean isTty = FFMPosix.get().isatty(fd) != 0;
+                    // Standard input keeps its native descriptor even when
+                    // wrapped by Perl's RuntimeIO facade.
+                    int nativeFd = (fh == RuntimeIO.getStdin()
+                            || "main::STDIN".equals(fh.globName)
+                            || "main::stdin".equals(fh.globName)) ? 0 : fd;
+                    boolean isTty = FFMPosix.get().isatty(nativeFd) != 0;
                     // -t has no stat result.  Invalidate the cache instead of
                     // allowing a prior -e/-f result to leak into an outer
                     // stacked test such as -e -t $fh.

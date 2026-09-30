@@ -81,7 +81,8 @@ public class CompileBinaryOperatorHelper {
     /** Compile a range where a subroutine's list/scalar context may be dynamic. */
     public static int compileRangeOrFlipFlop(BytecodeCompiler bytecodeCompiler, String operator,
             int rs1, int rs2, int tokenIndex, int context,
-            boolean leftIsLineNumberEndpoint, boolean rightIsLineNumberEndpoint) {
+            boolean leftIsLineNumberEndpoint, boolean rightIsLineNumberEndpoint,
+            boolean warnUninitialized) {
         if (RuntimeContextType.isListLike(context)) {
             return compileBinaryOperatorSwitch(bytecodeCompiler, "..", rs1, rs2, tokenIndex);
         }
@@ -98,6 +99,7 @@ public class CompileBinaryOperatorHelper {
         bytecodeCompiler.emitReg(rs2);
         bytecodeCompiler.emit(leftIsLineNumberEndpoint ? 1 : 0);
         bytecodeCompiler.emit(rightIsLineNumberEndpoint ? 1 : 0);
+        bytecodeCompiler.emit(warnUninitialized ? 1 : 0);
         return rd;
     }
 
@@ -268,13 +270,13 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emitReg(rs2);
             }
             case "===" -> {
-                bytecodeCompiler.emit(Opcodes.STRICT_EQ_NUM);
+                bytecodeCompiler.emit(useInteger ? Opcodes.INTEGER_STRICT_EQ_NUM : Opcodes.STRICT_EQ_NUM);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
             }
             case "!==" -> {
-                bytecodeCompiler.emit(Opcodes.STRICT_NE_NUM);
+                bytecodeCompiler.emit(useInteger ? Opcodes.INTEGER_STRICT_NE_NUM : Opcodes.STRICT_NE_NUM);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);

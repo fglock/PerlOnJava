@@ -25,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -883,6 +884,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             // Note: flags /e /ee are processed at parse time, in parseRegexReplace()
 
             regex.regexFlags = fromModifiers(modifiers, compilePatternString);
+            List<String> loweredSetWarnings = loweredSetSourceWarnings(
+                    compilePatternString);
+            if (loweredSetWarnings.isEmpty()) {
+                // The set lowering pass can normalize a singleton class back
+                // to ordinary bracket syntax. Retain source diagnostics from
+                // that form too.
+                loweredSetWarnings = loweredSetSourceWarnings(originalPatternString);
+            }
 
             LeftBraceIssue leftBraceIssue = unescapedLeftBraceIssue(
                     originalPatternString, regex.regexFlags);
@@ -976,6 +985,18 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     }
                     regex.inlineModifierWarnings.addAll(
                             regex.recursivePattern.compileWarnings());
+                    // The lowered program normally retains these diagnostics.
+                    // Only use the source-level fallback when lowering erased
+                    // them; comparing complete strings is insufficient because
+                    // the two source views have different caret locations.
+                    boolean compilerKeptNumericClassEscapeWarning =
+                            regex.inlineModifierWarnings.stream().anyMatch(warning ->
+                                    warning.startsWith("Unrecognized escape \\")
+                                            && warning.contains(
+                                                    " in character class passed through"));
+                    if (!compilerKeptNumericClassEscapeWarning) {
+                        regex.inlineModifierWarnings.addAll(loweredSetWarnings);
+                    }
                     if (lexicalReStrict) {
                         for (String warning : regex.inlineModifierWarnings) {
                             if (warning.startsWith("False [] range")) {
@@ -1444,6 +1465,133 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static String looseUnicodePropertyDiagnosticName(String property) {
         return property == null ? "" : property.replaceAll("[\\s_-]+", "")
                 .toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /**
+     * Preserve source diagnostics that would otherwise be lost when a normal
+     * bracket-class leaf has been lowered to a spaced (?[ [ ... ] ]) program.
+     * This intentionally excludes native extended-class text such as
+     * {@code (?[[:w:]])}, whose short POSIX-looking names are literal text.
+     */
+    private static List<String> loweredSetSourceWarnings(String pattern) {
+        if (pattern == null) return List.of();
+        // regexp.t converts ordinary bracket classes to a deliberately
+        // space-padded (?[ [ ... ] ]) program for regex_sets_compat.t.  That
+        // shape identifies a lowered class; a native (?[[:w:]]) expression
+        // must retain its own interpretation of POSIX-looking text.
+        boolean loweredBracketClass = pattern.matches("(?s).*\\(\\?\\[\\s+\\[.*");
+        String diagnosticPattern = maskPerlExtendedClassComments(pattern);
+        Matcher posix = Pattern.compile("\\[:(\\^?[a-z]+):\\]").matcher(diagnosticPattern);
+        if (loweredBracketClass) {
+            while (posix.find()) {
+                String name = posix.group(1);
+                String bare = name.startsWith("^") ? name.substring(1) : name;
+                if (bare.length() > 1 && bare.equals(bare.toLowerCase(java.util.Locale.ROOT))
+                        && !Set.of("alnum", "alpha", "ascii", "blank", "cntrl", "digit",
+                        "graph", "lower", "print", "punct", "space", "upper", "word",
+                        "xdigit").contains(bare)) {
+                    throw new PerlCompilerException("POSIX class [:" + name + ":] unknown");
+                }
+            }
+        }
+        List<String> warnings = new ArrayList<>();
+        Matcher numericEscape = Pattern.compile("(?<!\\\\)\\\\([89])").matcher(diagnosticPattern);
+        while (numericEscape.find()) {
+            if (pattern.contains("(?[")) {
+                throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(pattern,
+                        numericEscape.end(), "Unrecognized escape "
+                                + "\\"
+                                + numericEscape.group(1)
+                                + " in character class"));
+            }
+            warnings.add(RegexDiagnosticFormatter.markedPerl(pattern,
+                    numericEscape.end(), "Unrecognized escape \\\\" + numericEscape.group(1)
+                            + " in character class passed through"));
+        }
+        return warnings;
+    }
+
+    /** Hide text ignored as a comment by Perl's extended character-class parser. */
+    private static String maskPerlExtendedClassComments(String pattern) {
+        char[] masked = pattern.toCharArray();
+        int cursor = 0;
+        while (cursor + 2 < pattern.length()) {
+            int start = pattern.indexOf("(?[", cursor);
+            if (start < 0) break;
+            cursor = maskPerlExtendedClassComments(pattern, masked, start);
+        }
+        return new String(masked);
+    }
+
+    private static int maskPerlExtendedClassComments(String pattern, char[] masked, int start) {
+        int nestedSets = 1;
+        int cursor = start + 3;
+        while (cursor < pattern.length()) {
+            if (pattern.charAt(cursor) == '\\') {
+                cursor = Math.min(pattern.length(), cursor + 2);
+                continue;
+            }
+            if (pattern.startsWith("(?#", cursor)) {
+                int commentEnd = pattern.indexOf(')', cursor + 3);
+                cursor = commentEnd < 0 ? pattern.length() : commentEnd + 1;
+                continue;
+            }
+            if (pattern.startsWith("(?[", cursor)) {
+                nestedSets++;
+                cursor += 3;
+                continue;
+            }
+            char current = pattern.charAt(cursor);
+            if (current == '[') {
+                cursor = skipExtendedSetCharacterClass(pattern, cursor);
+                continue;
+            }
+            if (current == '#') {
+                while (cursor < pattern.length()
+                        && !isPerlLineBreak(pattern.charAt(cursor))) {
+                    masked[cursor++] = ' ';
+                }
+                continue;
+            }
+            if (current == ']' && cursor + 1 < pattern.length()
+                    && pattern.charAt(cursor + 1) == ')') {
+                nestedSets--;
+                cursor += 2;
+                if (nestedSets == 0) return cursor;
+                continue;
+            }
+            cursor++;
+        }
+        return pattern.length();
+    }
+
+    private static int skipExtendedSetCharacterClass(String pattern, int open) {
+        int cursor = open + 1;
+        while (cursor < pattern.length()) {
+            char current = pattern.charAt(cursor);
+            if (current == '\\') {
+                cursor = Math.min(pattern.length(), cursor + 2);
+                continue;
+            }
+            if (current == '[' && cursor + 1 < pattern.length()) {
+                char delimiter = pattern.charAt(cursor + 1);
+                if (delimiter == ':' || delimiter == '.' || delimiter == '=') {
+                    int terminator = pattern.indexOf("" + delimiter + "]", cursor + 2);
+                    if (terminator >= 0) {
+                        cursor = terminator + 2;
+                        continue;
+                    }
+                }
+            }
+            if (current == ']') return cursor + 1;
+            cursor++;
+        }
+        return cursor;
+    }
+
+    private static boolean isPerlLineBreak(char character) {
+        return character == '\n' || character == '\r' || character == '\u0085'
+                || character == '\u2028' || character == '\u2029';
     }
 
     private static List<String> unicodePropertyWildcardWarnings(String pattern) {
@@ -2487,7 +2635,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             RuntimeRegex originalRegex = (RuntimeRegex) patternString.value;
 
             if (modifierStr.isEmpty() && callSiteDebugMode == 0) {
-                // No new modifiers, return the original regex as-is
+                // No new modifiers, retain the compiled regex. The scalar
+                // assignment path records the ownership of this result.
                 return patternString;
             }
 

@@ -522,6 +522,29 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return null;
     }
 
+    /** Resolve {@code __CLASS__} from the active method or constructor invocant. */
+    public static RuntimeScalar currentClassName() {
+        java.util.List<java.util.List<RuntimeScalar>> pristineArgs = snapshotPristineArgsStack();
+        if (!pristineArgs.isEmpty() && !pristineArgs.getFirst().isEmpty()) {
+            RuntimeScalar invocant = pristineArgs.getFirst().getFirst();
+            while (invocant.type == RuntimeScalarType.READONLY_SCALAR) {
+                invocant = (RuntimeScalar) invocant.value;
+            }
+            if (RuntimeScalarType.isReference(invocant)
+                    && invocant.value instanceof RuntimeBase referent
+                    && referent.blessId != 0) {
+                String className = NameNormalizer.getBlessStr(referent.blessId);
+                if (className != null) return new RuntimeScalar(className);
+            }
+            if (invocant.isString() && invocant.getDefinedBoolean()) {
+                return new RuntimeScalar(invocant.toString());
+            }
+        }
+        RuntimeCode activeCode = getActiveCodeAt(0);
+        return new RuntimeScalar(activeCode != null && activeCode.declaringClass != null
+                ? activeCode.declaringClass : "");
+    }
+
     /**
      * Snapshot the original arguments of active calls before @_ mutations.
      * A method commonly shifts its invocant into a lexical; retaining these

@@ -1194,7 +1194,25 @@ public class OperatorParser {
             }
             operand = ensureOneOperand(parser, token, operand);
         }
+        if (operator.equals("scalar")) {
+            // Retain scalar's context through prototype-driven call argument
+            // compilation, where the bytecode backend otherwise sees only
+            // the enclosing list context.
+            markScalarRanges(operand);
+        }
         return new OperatorNode(operator, operand, currentIndex);
+    }
+
+    private static void markScalarRanges(Node node) {
+        if (node instanceof BinaryOperatorNode range
+                && (range.operator.equals("..") || range.operator.equals("..."))) {
+            range.setAnnotation("forceScalarRange", true);
+            return;
+        }
+        if (node instanceof ListNode list && !list.elements.isEmpty()) {
+            // scalar LIST returns its final expression.
+            markScalarRanges(list.elements.getLast());
+        }
     }
 
     public static Node ensureOneOperand(Parser parser, LexerToken token, Node operand) {
@@ -2111,6 +2129,16 @@ public class OperatorParser {
                 ListNode op = ListParser.parseZeroOrOneList(parser, 1);
                 operand = op;
                 return new OperatorNode("require", operand, parser.tokenIndex);
+            }
+
+            // CORE::foo is an explicitly qualified builtin invocation, not a
+            // module name.  In particular, `require CORE::lc "THREADS"`
+            // computes a filename and must reach the ordinary expression
+            // parser (perl #24482).
+            if (moduleName.startsWith("CORE::")) {
+                parser.tokenIndex = savedIndex;
+                ListNode op = ListParser.parseZeroOrOneList(parser, 1);
+                return new OperatorNode("require", op, parser.tokenIndex);
             }
 
             // Check if module name starts with ::

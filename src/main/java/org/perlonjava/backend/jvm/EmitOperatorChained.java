@@ -22,6 +22,7 @@ public class EmitOperatorChained {
         // Collect all nodes in the chain from left to right
         List<Node> operands = new ArrayList<>();
         List<String> operators = new ArrayList<>();
+        List<Boolean> integerComparison = new ArrayList<>();
 
         boolean isComparisonChain = isComparisonOperator(node.operator);
         boolean isEqualityChain = isEqualityOperator(node.operator);
@@ -30,6 +31,11 @@ public class EmitOperatorChained {
         BinaryOperatorNode current = node;
         while (true) {
             operators.add(0, current.operator);
+            Object integer = current.getAnnotation("useInteger");
+            integerComparison.add(0, integer instanceof Boolean value
+                    ? value
+                    : emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(
+                            org.perlonjava.runtime.perlmodule.Strict.HINT_INTEGER));
             operands.add(0, current.right);
 
             if (current.left instanceof BinaryOperatorNode leftNode) {
@@ -63,8 +69,10 @@ public class EmitOperatorChained {
             if (pooledLeft) {
                 emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
             }
-            EmitOperator.emitOperator(new BinaryOperatorNode(
-                    operators.getFirst(), operands.get(0), operands.get(1), node.tokenIndex), scalarVisitor);
+            BinaryOperatorNode comparison = new BinaryOperatorNode(
+                    operators.getFirst(), operands.get(0), operands.get(1), node.tokenIndex);
+            comparison.setAnnotation("useInteger", integerComparison.getFirst());
+            EmitOperator.emitOperator(comparison, scalarVisitor);
             EmitOperator.handleVoidContext(emitterVisitor);
             return;
         }
@@ -87,6 +95,7 @@ public class EmitOperatorChained {
 
             BinaryOperatorNode compNode = new BinaryOperatorNode(
                     operators.get(i), operands.get(i), operands.get(i + 1), node.tokenIndex);
+            compNode.setAnnotation("useInteger", integerComparison.get(i));
             EmitOperator.emitOperator(compNode, scalarVisitor);
 
             if (i + 1 < operators.size()) {

@@ -70,6 +70,7 @@ public class InheritanceResolver {
      */
     public static MROAlgorithm getPackageMRO(String packageName) {
         MroRuntimeState state = currentState();
+        state.knownPackageMroQueries().add(packageName);
         return state.packageMro().getOrDefault(packageName, state.defaultMro());
     }
 

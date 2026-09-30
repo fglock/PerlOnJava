@@ -807,6 +807,7 @@ public class RuntimeGraphCloner {
         target.type = source.type;
         target.numericLiteralText = source.numericLiteralText;
         target.firstClassRegexScalar = source.firstClassRegexScalar;
+        target.firstClassRegexReferent = source.firstClassRegexReferent;
         target.formatPictureTainted = source.formatPictureTainted;
         target.numericContextSeen = source.numericContextSeen;
         target.utf8UncheckedOctets = source.utf8UncheckedOctets;
