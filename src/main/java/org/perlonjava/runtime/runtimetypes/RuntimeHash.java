@@ -1008,8 +1008,13 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 if (byteKeys != null) byteKeys.remove(k);
                 if (value != null) {
                     if (value.type == RuntimeScalarType.TIED_SCALAR) {
+                        // Deleting a scalar-tied hash element returns its fetched
+                        // value, not the tied SV itself. Fetch before releasing the
+                        // slot's magic so delete has the same get-magic semantics as
+                        // Perl (including when this value crosses a sub boundary).
+                        RuntimeScalar fetchedValue = new RuntimeScalar(value.tiedFetch());
                         RuntimeScalar.scopeExitCleanup(value);
-                        yield new RuntimeScalar();
+                        yield fetchedValue;
                     }
                     // Schedule deferred refCount decrement — fires at next safe point
                     // (setLarge or RuntimeCode.apply). This prevents premature DESTROY
@@ -1040,8 +1045,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 if (byteKeys != null) byteKeys.remove(key);
                 if (value != null) {
                     if (value.type == RuntimeScalarType.TIED_SCALAR) {
+                        RuntimeScalar fetchedValue = new RuntimeScalar(value.tiedFetch());
                         RuntimeScalar.scopeExitCleanup(value);
-                        yield new RuntimeScalar();
+                        yield fetchedValue;
                     }
                     // Schedule deferred refCount decrement (see delete(RuntimeScalar) above)
                     MortalList.deferDecrementIfTracked(value);

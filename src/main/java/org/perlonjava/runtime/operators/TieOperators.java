@@ -81,7 +81,9 @@ public class TieOperators {
             args = new RuntimeArray(Arrays.copyOfRange(scalars, 2, scalars.length));
         }
 
-        String method = switch (variable.type) {
+        boolean stashScalar = variable.type == GLOBREFERENCE
+                && variable.value instanceof RuntimeStashEntry;
+        String method = stashScalar ? "TIESCALAR" : switch (variable.type) {
             case REFERENCE -> "TIESCALAR";
             case ARRAYREFERENCE -> "TIEARRAY";
             case HASHREFERENCE -> "TIEHASH";
@@ -106,6 +108,14 @@ public class TieOperators {
                         RuntimeContextType.SCALAR
                 ).getFirst()
                 : callTieConstructor(className, method, args, includeLoadHint);
+
+        if (stashScalar) {
+            RuntimeStashEntry scalar = (RuntimeStashEntry) variable.value;
+            RuntimeScalar previousValue = new RuntimeScalar(scalar);
+            scalar.type = TIED_SCALAR;
+            scalar.value = new TieScalar(className, previousValue, self, scalar);
+            return self;
+        }
 
         switch (variable.type) {
             case REFERENCE -> {
@@ -311,6 +321,16 @@ public class TieOperators {
                 return scalarTrue;
             }
             case GLOBREFERENCE -> {
+                if (variable.value instanceof RuntimeStashEntry stashEntry
+                        && stashEntry.type == TIED_SCALAR
+                        && stashEntry.value instanceof TieScalar tieScalar) {
+                    TieScalar.tiedUntie(stashEntry);
+                    RuntimeScalar previousValue = tieScalar.getPreviousValue();
+                    stashEntry.type = previousValue.type;
+                    stashEntry.value = previousValue.value;
+                    tieScalar.releaseTiedObject();
+                    return scalarTrue;
+                }
                 RuntimeGlob glob = variable.globDeref();
                 RuntimeScalar IO = glob.IO;
                 if (IO.type == TIED_SCALAR) {
@@ -410,6 +430,11 @@ public class TieOperators {
                 if (hash.threadShared) return sharedTieMarker();
             }
             case GLOBREFERENCE -> {
+                if (variable.value instanceof RuntimeStashEntry stashEntry
+                        && stashEntry.type == TIED_SCALAR
+                        && stashEntry.value instanceof TieScalar tieScalar) {
+                    return tieScalar.getSelf();
+                }
                 RuntimeGlob glob = variable.globDeref();
                 RuntimeScalar IO = glob.IO;
                 if (IO.type == TIED_SCALAR) {
