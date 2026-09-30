@@ -59,11 +59,28 @@ through scalar copies, mutation snapshots, localization, and graph cloning.
 
 ### Next steps
 
-Run the unfiltered build on the committed corrected candidate, then run all
-changed Perl regression files on JVM and interpreter using its development
-JAR. Record final results here. Keep full logs under `/tmp/integration-*`.
+Validate the corrected eval candidate with a focused gate, then unfiltered
+make and changed regression files on JVM and interpreter using its development
+JAR. Publish the PR, run full UAT, compare against the requested baseline, and
+require green CI. Keep full logs under `/tmp/integration-*`.
+
+### Eval commit audit (2026-09-30)
+
+The existing eval propagation commit `219525804` is already an ancestor of the
+integration base. The imported nested-eval commit `1faa6bda5` repairs caller
+metadata; it does not supply the missing immediate while-loop dispatch.
+The direct dispatch in `26a58a882` exposed a JVM stack-shape error: value-producing
+block exits require undef or an empty list on their incoming next/last edges.
+Verification failure then exposed a separate fallback gap: the interpreter
+factory ignored `useTryCatch` and compiled only the eval body without its catcher.
+The candidate supplies the same exit values as ordinary next/last and preserves
+the eval boundary through the existing interpreter eval-block compiler.
+Coverage includes a direct fallback-factory Java test and Perl runtime-fault
+tests, alongside the caught-exception control-stack regression.
 
 ### Open questions
 
-None. Sibling directories have switched to other branches for new ongoing work;
+The requested UAT baseline log is missing and must be restored before the final
+regression comparison. GitHub access works outside the local sandbox.
+Sibling directories have switched to other branches for new ongoing work;
 the preserved imported refs define this integration's committed input snapshot.

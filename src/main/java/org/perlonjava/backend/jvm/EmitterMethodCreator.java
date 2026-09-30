@@ -2116,7 +2116,13 @@ public class EmitterMethodCreator implements Opcodes {
                 );
 
         // Compile AST to interpreter bytecode (pass ctx for package context and closure detection)
-        InterpretedCode code = compiler.compile(ast, ctx);
+        // A JVM eval BLOCK owns its catcher in the generated method. Preserve
+        // that boundary when only its body falls back to the interpreter.
+        Node interpreterAst = useTryCatch
+                ? new SubroutineNode(null, null, null, ast, true, ast.getIndex())
+                : ast;
+        InterpretedCode code = compiler.compile(interpreterAst, ctx);
+        code.isEvalBlock = useTryCatch;
 
         if (ctx.compilerOptions.disassembleEnabled) {
             System.out.println(Disassemble.disassemble(code));
