@@ -2074,9 +2074,6 @@ public class CompileOperator {
     }
 
     private static void visitGoto(BytecodeCompiler bc, OperatorNode node) {
-        // Check if we're inside a defer block - goto out of defer is prohibited
-        bc.checkNotInDeferBlock(node.getIndex(), "goto");
-        
         String labelStr = null;
         if (node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
             Node arg = labelNode.elements.getFirst();
@@ -2086,6 +2083,12 @@ public class CompileOperator {
             // tail-call path below instead of treating it as a goto label.
             if (arg instanceof IdentifierNode identifier && identifier.name.equals("__SUB__")) {
                 arg = new OperatorNode("__SUB__", null, identifier.tokenIndex);
+            }
+
+            // Static gotos within a defer closure are legal. Computed labels
+            // and tail calls can escape that closure and remain prohibited.
+            if (bc.isInDeferBlock() && !(arg instanceof IdentifierNode)) {
+                bc.throwCleanCompilerException("Can't \"goto\" out of a \"defer\" block", node.getIndex());
             }
             
             // Check if this is goto &NAME or goto &{expr} - a subroutine call form
@@ -2249,6 +2252,9 @@ public class CompileOperator {
         BytecodeCompiler.GotoLabelTarget staticTarget =
                 labelStr.startsWith("\u0000invalid-goto-into-construct:")
                         ? null : bc.resolveStaticGotoTarget(labelStr, node.getIndex());
+        if (bc.isInDeferBlock() && staticTarget == null) {
+            bc.throwCleanCompilerException("Can't \"goto\" out of a \"defer\" block", node.getIndex());
+        }
         boolean sourceFollowsTargetBlockStart = staticTarget != null
                 && staticTarget.owner != null
                 && staticTarget.owner.getIndex() <= node.getIndex();

@@ -2,6 +2,7 @@ package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.runtimetypes.*;
 import org.perlonjava.runtime.io.ClosedIOHandle;
+import org.perlonjava.runtime.io.LayeredIOHandle;
 
 import java.nio.charset.StandardCharsets;
 
@@ -195,7 +196,7 @@ public class Readline {
             if (isByteData) {
                 result.type = RuntimeScalarType.BYTE_STRING;
             }
-            return result.taintFromExternalInput();
+            return finishInputRecord(runtimeIO, result.taintFromExternalInput());
         }
 
         if (rs != null && rs.isParagraphMode()) {
@@ -309,7 +310,7 @@ public class Readline {
         if (isByteMode) {
             result.type = RuntimeScalarType.BYTE_STRING;
         }
-        return result.taintFromExternalInput();
+        return finishInputRecord(runtimeIO, result.taintFromExternalInput());
     }
 
     private static RuntimeScalar readFixedLength(RuntimeIO runtimeIO, int length) {
@@ -331,12 +332,13 @@ public class Readline {
 
         // Don't increment line numbers for fixed-length reads
         // (this matches Perl behavior for record-length mode)
+        runtimeIO.currentChunkNumber++;
 
         RuntimeScalar rslt = new RuntimeScalar(result.toString());
         if (isByteMode) {
             rslt.type = RuntimeScalarType.BYTE_STRING;
         }
-        return rslt.taintFromExternalInput();
+        return finishInputRecord(runtimeIO, rslt.taintFromExternalInput());
     }
 
     private static RuntimeScalar readUntilCharacter(RuntimeIO runtimeIO, char separator) {
@@ -368,7 +370,7 @@ public class Readline {
         if (isByteMode) {
             result.type = RuntimeScalarType.BYTE_STRING;
         }
-        return result.taintFromExternalInput();
+        return finishInputRecord(runtimeIO, result.taintFromExternalInput());
     }
 
     private static RuntimeScalar readUntilString(RuntimeIO runtimeIO, String separator) {
@@ -408,7 +410,17 @@ public class Readline {
         if (isByteMode) {
             result.type = RuntimeScalarType.BYTE_STRING;
         }
-        return result.taintFromExternalInput();
+        return finishInputRecord(runtimeIO, result.taintFromExternalInput());
+    }
+
+    private static RuntimeScalar finishInputRecord(RuntimeIO runtimeIO, RuntimeScalar result) {
+        if (runtimeIO.ioHandle instanceof LayeredIOHandle layeredIOHandle) {
+            for (String warning : layeredIOHandle.drainUtf8InputWarnings()) {
+                WarnDie.warnWithCategory(new RuntimeScalar(warning), new RuntimeScalar(""), "utf8");
+            }
+            result.utf8MalformedWarning = layeredIOHandle.takeDeferredMalformedUtf8Warning();
+        }
+        return result;
     }
 
     private static RuntimeScalar externalUndef() {
@@ -486,21 +498,22 @@ public class Readline {
 
         boolean isByteData = readResult.type == RuntimeScalarType.BYTE_STRING;
         String readData = readResult.toString();
-        int charsRead = readData.length();
+        int charsRead = isByteData ? readData.length()
+                : readData.codePointCount(0, readData.length());
 
         if (charsRead == 0) {
             if (offsetValue != 0) {
                 StringBuilder scalarValue = new StringBuilder(scalar.toString());
                 if (offsetValue < 0) {
-                    offsetValue = scalarValue.length() + offsetValue;
+                    offsetValue = logicalLength(scalarValue, isByteData) + offsetValue;
                     if (offsetValue < 0) {
                         offsetValue = 0;
                     }
                 }
-                while (scalarValue.length() < offsetValue) {
+                while (logicalLength(scalarValue, isByteData) < offsetValue) {
                     scalarValue.append('\0');
                 }
-                scalarValue.setLength(offsetValue);
+                scalarValue.setLength(javaOffset(scalarValue, offsetValue, isByteData));
                 scalar.set(scalarValue.toString());
             } else {
                 scalar.set("");
@@ -511,17 +524,20 @@ public class Readline {
         StringBuilder scalarValue = new StringBuilder(scalar.toString());
 
         if (offsetValue < 0) {
-            offsetValue = scalarValue.length() + offsetValue;
+            offsetValue = logicalLength(scalarValue, isByteData) + offsetValue;
             if (offsetValue < 0) {
                 offsetValue = 0;
             }
         }
 
-        int newLength = offsetValue + charsRead;
-        while (scalarValue.length() < offsetValue) {
+        int offsetChars = javaOffset(scalarValue, offsetValue, isByteData);
+        int newLength = offsetChars + readData.length();
+        while (logicalLength(scalarValue, isByteData) < offsetValue) {
             scalarValue.append('\0');
+            offsetChars = scalarValue.length();
+            newLength = offsetChars + readData.length();
         }
-        scalarValue.replace(offsetValue, scalarValue.length(), readData);
+        scalarValue.replace(offsetChars, scalarValue.length(), readData);
         scalarValue.setLength(newLength);
 
         if (isByteData && scalar.type != RuntimeScalarType.STRING) {
@@ -545,5 +561,15 @@ public class Readline {
 
         // Return the number of characters read
         return new RuntimeScalar(charsRead);
+    }
+
+    private static int logicalLength(StringBuilder value, boolean byteData) {
+        return byteData ? value.length() : value.codePointCount(0, value.length());
+    }
+
+    private static int javaOffset(StringBuilder value, int logicalOffset, boolean byteData) {
+        if (byteData) return Math.min(logicalOffset, value.length());
+        int codePoints = Math.min(logicalOffset, value.codePointCount(0, value.length()));
+        return value.offsetByCodePoints(0, codePoints);
     }
 }

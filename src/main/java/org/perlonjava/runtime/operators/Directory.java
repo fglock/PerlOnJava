@@ -156,8 +156,9 @@ public class Directory {
             if ((dirHandle.type == RuntimeScalarType.GLOB || dirHandle.type == RuntimeScalarType.GLOBREFERENCE) && dirHandle.value instanceof RuntimeGlob glob) {
                 glob.setIO(new RuntimeIO(dirIO));
             } else {
-                dirHandle.type = RuntimeScalarType.GLOBREFERENCE;
-                dirHandle.value = new RuntimeGlob(null).setIO(new RuntimeIO(dirIO));
+                RuntimeScalar directoryGlob = new RuntimeGlob(null)
+                        .setIO(new RuntimeIO(dirIO)).createReference();
+                dirHandle.set(directoryGlob);
             }
 
             return scalarTrue;
@@ -197,12 +198,16 @@ public class Directory {
             dirIO.directoryIO = null;
             return scalarTrue;
         }
+        warnIfNotDirectoryHandle(runtimeScalar, "closedir");
         return scalarFalse; // Not a directory handle
     }
 
     public static RuntimeScalar rewinddir(RuntimeScalar runtimeScalar) {
         RuntimeIO dirIO = runtimeScalar.getRuntimeIO();
         if (dirIO.directoryIO == null) {
+            if (warnIfNotDirectoryHandle(runtimeScalar, "rewinddir")) {
+                return scalarFalse;
+            }
             return RuntimeIO.handleIOError("seekdir is not supported for non-directory streams");
         } else {
             return dirIO.directoryIO.seekdir(0);
@@ -212,6 +217,9 @@ public class Directory {
     public static RuntimeScalar telldir(RuntimeScalar runtimeScalar) {
         RuntimeIO dirIO = runtimeScalar.getRuntimeIO();
         if (dirIO.directoryIO == null) {
+            if (warnIfNotDirectoryHandle(runtimeScalar, "telldir")) {
+                return scalarFalse;
+            }
             return RuntimeIO.handleIOError("telldir is not supported for non-directory streams");
         }
         return dirIO.directoryIO.telldir();
@@ -243,6 +251,7 @@ public class Directory {
         if (runtimeIO != null && runtimeIO.directoryIO != null) {
             return runtimeIO.directoryIO.readdir(ctx);
         }
+        warnIfNotDirectoryHandle(dirHandle, "readdir");
         return scalarFalse;
     }
 
@@ -256,12 +265,28 @@ public class Directory {
         RuntimeIO dirIO = dirHandle.getRuntimeIO();
         int position1 = position.getInt();
         if (dirIO.directoryIO == null) {
-            RuntimeIO.handleIOError("seekdir() attempted on handle opened with open");
+            if (!warnIfNotDirectoryHandle(dirHandle, "seekdir")) {
+                RuntimeIO.handleIOError("seekdir is not supported for non-directory streams");
+            }
             return scalarFalse;  // Return false, not true
         } else {
             dirIO.directoryIO.seekdir(position1);
             return scalarTrue;
         }
+    }
+
+    private static boolean warnIfNotDirectoryHandle(RuntimeScalar handle, String operation) {
+        RuntimeIO io = handle.getRuntimeIO();
+        if (io == null || io.ioHandle == null || io.directoryIO != null) {
+            return false;
+        }
+        String name = filehandleName(handle);
+        if (!name.startsWith("$")) {
+            name = "$" + name;
+        }
+        WarnDie.warn(new RuntimeScalar(operation + "() attempted on handle " + name
+                + " opened with open"), new RuntimeScalar(""));
+        return true;
     }
 
     public static RuntimeScalar mkdir(RuntimeList args) {

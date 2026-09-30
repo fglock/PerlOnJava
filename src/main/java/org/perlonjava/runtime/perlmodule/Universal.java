@@ -619,6 +619,7 @@ public class Universal extends PerlModuleBase {
 
         // Retrieve the $VERSION variable from the package
         String versionVariableName = NameNormalizer.normalizeVariableName("VERSION", perlClassName);
+        boolean packageExists = GlobalVariable.isPackageLoaded(perlClassName);
         RuntimeScalar hasVersion = GlobalVariable.getGlobalVariable(versionVariableName);
 
         // If no version argument was provided, just return the current $VERSION (may be undef)
@@ -629,6 +630,10 @@ public class Universal extends PerlModuleBase {
 
         // A version argument was provided - check requirement
         if (hasVersion.toString().isEmpty()) {
+            if (!packageExists) {
+                throw new PerlCompilerException(perlClassName
+                        + " defines neither package nor VERSION--version check failed");
+            }
             throw new PerlCompilerException(perlClassName + " does not define $" + perlClassName + "::VERSION--version check failed");
         }
 

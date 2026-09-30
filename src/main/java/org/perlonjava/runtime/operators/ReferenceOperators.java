@@ -372,7 +372,8 @@ public class ReferenceOperators {
                     } else {
                         ref = switch (scalar.type) {
                             case VSTRING -> "VSTRING";
-                            case REGEX, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE, REFERENCE -> "REF";
+                            case REGEX -> "REF";
+                            case ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE, REFERENCE -> "REF";
                             case GLOB -> "GLOB";
                             case READONLY_SCALAR -> ref((RuntimeScalar) scalar.value).toString();
                             default -> "SCALAR";

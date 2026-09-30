@@ -802,7 +802,9 @@ public class StringOperators {
         // Always update the original scalar if we modified the string
         if (!str.equals(originalStr)) {
             boolean wasByteString = runtimeScalar.type == RuntimeScalarType.BYTE_STRING;
+            String malformedUtf8Warning = runtimeScalar.utf8MalformedWarning;
             runtimeScalar.set(str);
+            runtimeScalar.utf8MalformedWarning = malformedUtf8Warning;
             if (wasByteString) {
                 runtimeScalar.type = RuntimeScalarType.BYTE_STRING;
             }

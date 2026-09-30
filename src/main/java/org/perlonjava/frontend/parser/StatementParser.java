@@ -38,7 +38,6 @@ import static org.perlonjava.frontend.parser.SpecialBlockParser.runSpecialBlock;
 import static org.perlonjava.frontend.parser.SpecialBlockParser.setCurrentScope;
 import static org.perlonjava.frontend.parser.StringParser.parseVstring;
 import static org.perlonjava.runtime.operators.VersionHelper.normalizeVersion;
-import static org.perlonjava.runtime.perlmodule.Strict.useStrict;
 import static org.perlonjava.runtime.runtimetypes.WarningFlags.getLastScopeId;
 import static org.perlonjava.runtime.runtimetypes.WarningFlags.clearLastScopeId;
 import static org.perlonjava.runtime.perlmodule.Warnings.useWarnings;
@@ -1365,8 +1364,10 @@ public class StatementParser {
                         if (minorVersion >= 12) {
                             // If the specified Perl version is 5.12 or higher,
                             // strictures are enabled lexically.
-                            useStrict(new RuntimeArray(
-                                    new RuntimeScalar("strict")), RuntimeContextType.VOID);
+                            parser.ctx.symbolTable.enableStrictOptionUnlessExplicit(
+                                    org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_REFS
+                                            | org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_SUBS
+                                            | org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_VARS);
                         }
                         if (minorVersion >= 35) {
                             // If the specified Perl version is 5.35.0 or higher,

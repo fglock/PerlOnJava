@@ -405,10 +405,10 @@ public class EmitEval {
                 "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
                 "marker",
                 "Lorg/perlonjava/runtime/runtimetypes/ControlFlowMarker;");
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                "org/perlonjava/runtime/runtimetypes/ControlFlowMarker",
-                "buildErrorMessage",
-                "()Ljava/lang/String;",
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                "evalLoopControlError",
+                "(Lorg/perlonjava/runtime/runtimetypes/ControlFlowMarker;)Ljava/lang/String;",
                 false);
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/GlobalVariable",
@@ -516,10 +516,10 @@ public class EmitEval {
                     "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
                     "marker",
                     "Lorg/perlonjava/runtime/runtimetypes/ControlFlowMarker;");
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/runtimetypes/ControlFlowMarker",
-                    "buildErrorMessage",
-                    "()Ljava/lang/String;",
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "evalLoopControlError",
+                    "(Lorg/perlonjava/runtime/runtimetypes/ControlFlowMarker;)Ljava/lang/String;",
                     false);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/GlobalVariable",

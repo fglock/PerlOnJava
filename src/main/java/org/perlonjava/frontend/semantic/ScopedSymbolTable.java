@@ -106,6 +106,9 @@ public class ScopedSymbolTable {
     private final Stack<Boolean> enhancedXxStack = new Stack<>();
     // Stack to manage strict options for each scope
     public final Stack<Integer> strictOptionsStack = new Stack<>();
+    // Strict categories explicitly set by use/no strict. `use VERSION` enables
+    // strict only where the source has not explicitly chosen otherwise.
+    private final Stack<Integer> explicitStrictOptionsStack = new Stack<>();
     // Lexical default regex modifiers installed by `use re '/flags'`.
     // These do not fit in PerlOnJava's legacy 32-bit strict-options mask and
     // must follow the same lexical enter/exit/snapshot rules independently.
@@ -168,6 +171,7 @@ public class ScopedSymbolTable {
         enhancedXxStack.push(false);
         // Initialize the strict options stack with 0 for the global scope
         strictOptionsStack.push(0);
+        explicitStrictOptionsStack.push(0);
         regexModifierStack.push("");
         regexDebugFlagsStack.push(0);
         useVersionStack.push(null);
@@ -247,6 +251,7 @@ public class ScopedSymbolTable {
         enhancedXxStack.push(enhancedXxStack.peek());
         // Push a copy of the current strict options onto the stack
         strictOptionsStack.push(strictOptionsStack.peek());
+        explicitStrictOptionsStack.push(explicitStrictOptionsStack.peek());
         regexModifierStack.push(regexModifierStack.peek());
         regexDebugFlagsStack.push(regexDebugFlagsStack.peek());
         useVersionStack.push(null);
@@ -291,6 +296,7 @@ public class ScopedSymbolTable {
             postderefQqStack.pop();
             enhancedXxStack.pop();
             strictOptionsStack.pop();
+            explicitStrictOptionsStack.pop();
             regexModifierStack.pop();
             regexDebugFlagsStack.pop();
             useVersionStack.pop();
@@ -427,6 +433,19 @@ public class ScopedSymbolTable {
      */
     public void enableStrictOption(int option) {
         strictOptionsStack.push(strictOptionsStack.pop() | option);
+    }
+
+    /** Enable strict categories selected by a version declaration, unless an
+     * explicit use/no strict declaration has already chosen their state. */
+    public void enableStrictOptionUnlessExplicit(int option) {
+        int implicitOptions = option & ~explicitStrictOptionsStack.peek();
+        enableStrictOption(implicitOptions);
+    }
+
+    /** Record that a strict pragma, rather than a version default, chose these
+     * categories in the current lexical scope. */
+    public void markStrictOptionExplicit(int option) {
+        explicitStrictOptionsStack.push(explicitStrictOptionsStack.pop() | option);
     }
 
     /**
@@ -960,6 +979,8 @@ public class ScopedSymbolTable {
         // Clone strict options
         st.strictOptionsStack.pop(); // Remove the initial value pushed by enterScope
         st.strictOptionsStack.push(this.strictOptionsStack.peek());
+        st.explicitStrictOptionsStack.pop();
+        st.explicitStrictOptionsStack.push(this.explicitStrictOptionsStack.peek());
         st.regexModifierStack.pop();
         st.regexModifierStack.push(this.regexModifierStack.peek());
         st.regexDebugFlagsStack.pop();
@@ -1321,6 +1342,8 @@ public class ScopedSymbolTable {
         // Copy strict options
         this.strictOptionsStack.pop();
         this.strictOptionsStack.push(source.strictOptionsStack.get(index));
+        this.explicitStrictOptionsStack.pop();
+        this.explicitStrictOptionsStack.push(source.explicitStrictOptionsStack.get(index));
         int regexModifierIndex = Math.max(0,
                 Math.min(sourceScopeIndex, source.regexModifierStack.size() - 1));
         this.regexModifierStack.pop();

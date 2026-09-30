@@ -80,7 +80,7 @@ public class For3Node extends AbstractNode {
         }
         String operator = "";
         if (node instanceof OperatorNode) {
-            // "<>", "each", "glob"
+            // "<>", "each", "glob", "readdir"
             operator = ((OperatorNode) node).operator;
         } else if (node instanceof BinaryOperatorNode bin) {
             // "readline", or "(" for subroutine calls rewritten as &(glob)(args)
@@ -95,6 +95,7 @@ public class For3Node extends AbstractNode {
         return operator.equals("<>") ||
                 operator.equals("each") ||
                 operator.equals("glob") ||
+                operator.equals("readdir") ||
                 operator.equals("readline");
     }
 

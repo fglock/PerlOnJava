@@ -176,7 +176,8 @@ public class ScalarUtil extends PerlModuleBase {
                     if (inner.firstClassRegexScalar) yield "REGEXP";
                     yield switch (inner.type) {
                         case VSTRING -> "VSTRING";
-                        case REGEX, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE, REFERENCE -> "REF";
+                        case REGEX -> "REF";
+                        case ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE, REFERENCE -> "REF";
                         case GLOB -> "GLOB";
                         default -> "SCALAR";
                     };

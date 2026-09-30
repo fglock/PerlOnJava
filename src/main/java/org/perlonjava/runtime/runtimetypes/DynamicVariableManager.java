@@ -15,6 +15,9 @@ import java.util.function.Supplier;
  * to their original states.
  */
 public class DynamicVariableManager {
+    private static final ThreadLocal<Integer> DEFER_EXECUTION_DEPTH =
+            ThreadLocal.withInitial(() -> 0);
+
     public record SuspendedState(DynamicState state, Object token) {}
     public record CapturedFrame<T>(T result, List<SuspendedState> states) {}
 
@@ -102,6 +105,20 @@ public class DynamicVariableManager {
     public static void pushLocalVariable(DynamicState variable) {
         variable.dynamicSaveState();
         variableStack().addLast(variable);
+    }
+
+    public static void enterDeferExecution() {
+        DEFER_EXECUTION_DEPTH.set(DEFER_EXECUTION_DEPTH.get() + 1);
+    }
+
+    public static void leaveDeferExecution() {
+        int depth = DEFER_EXECUTION_DEPTH.get() - 1;
+        if (depth <= 0) DEFER_EXECUTION_DEPTH.remove();
+        else DEFER_EXECUTION_DEPTH.set(depth);
+    }
+
+    public static boolean isExecutingDefer() {
+        return DEFER_EXECUTION_DEPTH.get() > 0;
     }
 
     /**

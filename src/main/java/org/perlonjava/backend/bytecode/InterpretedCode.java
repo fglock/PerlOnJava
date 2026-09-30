@@ -54,6 +54,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     // Labels compiled inside a loop body.  A non-local goto from eval may not
     // enter one because its iterator/control-block setup has not run.
     public Set<String> gotoLabelsInsideLoop;
+    /** Labels inside deferred blocks, which an outer goto may not enter. */
+    public Set<String> gotoLabelsInsideDefer;
     // Labels inside expression-level `do { ... }` blocks. Entering one with
     // goto skips the enclosing operator's setup and is forbidden by Perl.
     public Set<String> gotoLabelsInsideConstruct;
@@ -432,8 +434,11 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                 if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
                     throw RuntimeCode.sortTailCallError();
                 }
-                throw new PerlCompilerException("Can't \"goto\" out of a pseudo block at "
-                        + flow.marker.fileName + " line " + flow.marker.lineNumber + ".\n");
+                if (flow.getControlFlowType() == ControlFlowType.GOTO) {
+                    throw new PerlCompilerException("Can't \"goto\" out of a pseudo block at "
+                            + flow.marker.fileName + " line " + flow.marker.lineNumber + ".\n");
+                }
+                throw new PerlCompilerException(flow.marker.buildErrorMessage() + ".\n");
             }
             RuntimeList returned;
             if (futureAsyncAwaitSub) {
@@ -630,6 +635,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         // Preserve compiler-set fields that are not passed through the constructor
         copy.gotoLabelPcs = this.gotoLabelPcs;
         copy.gotoLabelsInsideLoop = this.gotoLabelsInsideLoop;
+        copy.gotoLabelsInsideDefer = this.gotoLabelsInsideDefer;
         copy.gotoLabelsInsideConstruct = this.gotoLabelsInsideConstruct;
         copy.gotoLabelsInsideGiven = this.gotoLabelsInsideGiven;
         copy.gotoLabelLoopRanges = this.gotoLabelLoopRanges;
