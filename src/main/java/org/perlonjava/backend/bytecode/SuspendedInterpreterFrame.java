@@ -31,6 +31,8 @@ public final class SuspendedInterpreterFrame {
     Set<RuntimeCode> returnedClosures;
 
     final ArrayDeque<Integer> evalCatchStack = new ArrayDeque<>();
+    /** Whether each active eval handler contributed a visible caller() frame. */
+    final ArrayDeque<Boolean> evalVirtualFrameStack = new ArrayDeque<>();
     final ArrayDeque<Integer> evalLocalLevelStack = new ArrayDeque<>();
     final ArrayDeque<Integer> evalBaseRegStack = new ArrayDeque<>();
     final ArrayDeque<Integer> evalMethodInvocantHoldDepthStack = new ArrayDeque<>();

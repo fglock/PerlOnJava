@@ -2631,6 +2631,16 @@ public class GlobalVariable {
         if (Boolean.TRUE.equals(cached)) {
             return cached;
         }
+        // A stash spelling with a trailing :: denotes the package itself.
+        // Explicit package declarations cache the normalized package name,
+        // while an empty hash entry can also be created by an unresolved
+        // typed declaration and must not count as a loaded package.
+        if (className != null && className.endsWith("::") && className.length() > 2) {
+            String normalizedClassName = className.substring(0, className.length() - 2);
+            if (Boolean.TRUE.equals(packageExistsCache.get(normalizedClassName))) {
+                return true;
+            }
+        }
 
         // Ensure we have the :: suffix for the prefix check
         final String prefix = className.endsWith("::") ? className : className + "::";
@@ -2640,13 +2650,21 @@ public class GlobalVariable {
         // After stripping the prefix, the remaining part must NOT contain "::"
         // to be a direct member of this package.
         boolean exists = globalCodeRefs.keySet().stream()
-                .anyMatch(key -> key.startsWith(prefix) && !key.substring(prefix.length()).contains("::"))
+                .anyMatch(key -> key.startsWith(prefix)
+                        && !key.substring(prefix.length()).isEmpty()
+                        && !key.substring(prefix.length()).contains("::"))
                 || globalVariables.keySet().stream()
-                .anyMatch(key -> key.startsWith(prefix) && !key.substring(prefix.length()).contains("::"))
+                .anyMatch(key -> key.startsWith(prefix)
+                        && !key.substring(prefix.length()).isEmpty()
+                        && !key.substring(prefix.length()).contains("::"))
                 || globalArrays.keySet().stream()
-                .anyMatch(key -> key.startsWith(prefix) && !key.substring(prefix.length()).contains("::"))
+                .anyMatch(key -> key.startsWith(prefix)
+                        && !key.substring(prefix.length()).isEmpty()
+                        && !key.substring(prefix.length()).contains("::"))
                 || globalHashes.keySet().stream()
-                .anyMatch(key -> key.startsWith(prefix) && !key.substring(prefix.length()).contains("::"));
+                .anyMatch(key -> key.startsWith(prefix)
+                        && !key.substring(prefix.length()).isEmpty()
+                        && !key.substring(prefix.length()).contains("::"));
 
         // Cache the result
         packageExistsCache.put(className, exists);

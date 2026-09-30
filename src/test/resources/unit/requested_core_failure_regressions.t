@@ -1,6 +1,7 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
+use B ();
 
 # Exercise the PerlIO loader recursion before Test::More or another module can
 # preload Encode.pm or Symbol.pm and hide the @INC hook path.
@@ -55,6 +56,75 @@ print {$anonymous_fh} "temporary data";
 seek($anonymous_fh, 0, 0) or die "seek failed: $!";
 is(scalar <$anonymous_fh>, "temporary data", 'anonymous temporary handle is readable and seekable');
 close $anonymous_fh;
+
+for my $case ([':-)', qr/in PerlIO layer/],
+              [':RequestedMissingLayer', qr/RequestedMissingLayer/]) {
+    my ($layer, $expected_warning) = @$case;
+    my ($open_ok, $open_errno, $layer_warning);
+    {
+        use warnings 'layer';
+        local $SIG{__WARN__} = sub { $layer_warning .= shift };
+        local $! = 0;
+        my $layer_fh;
+        $open_ok = open($layer_fh, "<$layer", __FILE__);
+        $open_errno = 0 + $!;
+    }
+    ok(!$open_ok, "open rejects invalid PerlIO layer $layer");
+    isnt($open_errno, 0, "open with invalid PerlIO layer $layer sets errno");
+    like($layer_warning, $expected_warning,
+        "open with invalid PerlIO layer $layer warns about the layer");
+}
+
+for my $mode ('+>', '+>>') {
+    open my $mode_fh, $mode, undef
+        or die "anonymous tempfile open failed for $mode: $!";
+    ok(defined fileno($mode_fh), "$mode with undef creates an open temporary handle");
+    print {$mode_fh} "temporary data";
+    seek($mode_fh, 0, 0) or die "seek failed for $mode: $!";
+    is(scalar <$mode_fh>, "temporary data", "$mode temporary handle is readable and seekable");
+    close $mode_fh;
+}
+
+my $missing_type_error;
+eval q{my RequestedMissingClass $typed;};
+$missing_type_error = $@;
+like($missing_type_error, qr/\ANo such class RequestedMissingClass\b/,
+    'a typed lexical rejects a package that is not loaded');
+eval q{sub { my RequestedMissingClass $typed; }};
+like($@, qr/\ANo such class RequestedMissingClass\b/,
+    'eval rejects an unknown typed lexical inside an uncalled sub');
+{
+    package RequestedTypedAliasClass;
+    sub marker {}
+}
+use constant RequestedTypedAlias => 'RequestedTypedAliasClass';
+eval q{sub { my RequestedTypedAlias $typed; }};
+is($@, '', 'typed lexical class names resolve constant aliases during eval');
+
+our $forward_cv;
+{
+    package RequestedForwardCVOrigin;
+    BEGIN { $main::forward_cv = \&main::requested_forward_cv_target }
+}
+my $defined_forward_cv = eval q{sub requested_forward_cv_target {}; \&requested_forward_cv_target};
+die $@ if $@;
+is(B::svref_2object($defined_forward_cv)->STASH->NAME, 'main',
+    'defining a forward CV replaces its source package with the definition package');
+
+{
+    no warnings 'once';
+    my $saved_glob = \*RequestedAnonymousStashDuringDestroy::saved;
+    {
+        package RequestedAnonymousStashDuringDestroy;
+        no strict 'refs';
+        no warnings 'once';
+        sub DESTROY { eval '++$RequestedAnonymousStashDuringDestroy::during_destroy' }
+        ${'RequestedAnonymousStashDuringDestroy::object'} = bless [], __PACKAGE__;
+        undef %RequestedAnonymousStashDuringDestroy::;
+    }
+    is("$$saved_glob", '*__ANON__::saved',
+        'a stash stays anonymous while its destructor runs during undef');
+}
 
 my $directory_errno;
 {

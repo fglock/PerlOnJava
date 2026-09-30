@@ -207,6 +207,10 @@ public class Disassemble {
                         rd = interpretedCode.bytecode[pc++];
                         sb.append("MATERIALIZE_LEXICAL_SCALAR r").append(rd).append("\\n");
                         break;
+                    case Opcodes.CHECK_CLASS_EXISTS:
+                        strIdx = interpretedCode.bytecode[pc++];
+                        sb.append("CHECK_CLASS_EXISTS ").append(interpretedCode.stringPool[strIdx]).append("\\n");
+                        break;
                     case Opcodes.INITIALIZE_LEXICAL_SCALAR:
                         rd = interpretedCode.bytecode[pc++];
                         sb.append("INITIALIZE_LEXICAL_SCALAR r").append(rd).append("\\n");

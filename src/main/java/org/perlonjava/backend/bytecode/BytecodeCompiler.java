@@ -3597,6 +3597,11 @@ public class BytecodeCompiler implements Visitor {
      * Extracted to reduce visit(OperatorNode) bytecode size.
      */
     void compileVariableDeclaration(OperatorNode node, String op) {
+        Object declaredType = node.getAnnotation("varType");
+        if (declaredType instanceof String className) {
+            emitWithToken(Opcodes.CHECK_CLASS_EXISTS, node.getIndex());
+            emit(addToStringPool(className));
+        }
         if (op.equals("state")) {
             hasStateVariableDeclarations = true;
         }
@@ -8755,7 +8760,10 @@ public class BytecodeCompiler implements Visitor {
         emitInt(0);
 
         int catchPc = bytecode.size();
-        patchIntOffset(catchTargetPos, catchPc);
+        // A negative EVAL_TRY target marks Perl's core try/catch. It uses the
+        // same exception handler as eval BLOCK but does not add a caller()
+        // frame; ordinary eval BLOCK targets remain positive.
+        patchIntOffset(catchTargetPos, -catchPc);
 
         int ignoredEvalResult = allocateRegister();
         emit(Opcodes.EVAL_CATCH);

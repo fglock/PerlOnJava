@@ -1010,13 +1010,9 @@ public class RuntimeIO extends RuntimeScalar {
         if (status.getBoolean()) {
             return true;
         }
-
-        if (containsViaLayer(ioLayers)) {
-            close();
-            return false;
-        }
-
-        return true;
+        close();
+        handleIOError(22); // EINVAL: the requested PerlIO layer stack is invalid
+        return false;
     }
 
     /** Apply lexical {@code use open} hints to sysopen, otherwise stay raw. */
@@ -1027,10 +1023,6 @@ public class RuntimeIO extends RuntimeScalar {
         return applyOpenLayers(
                 lexicalLayer == null || lexicalLayer.isEmpty() ? ":raw" : lexicalLayer,
                 mode);
-    }
-
-    private static boolean containsViaLayer(String ioLayers) {
-        return ioLayers != null && ioLayers.contains("via(");
     }
 
     /**

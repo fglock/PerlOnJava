@@ -344,6 +344,14 @@ public class NumberParser {
                 }
                 parser.tokenIndex = beforeFractionalPart;
                 hasFractionalPart = false;
+            } else if (fractionalPart.isEmpty() && exponentStr.isEmpty()
+                    && parser.tokenIndex < parser.tokens.size()
+                    && parser.tokens.get(parser.tokenIndex).type == LexerTokenType.IDENTIFIER) {
+                // A dot followed immediately by a bareword is concatenation
+                // (`00.y0` means `00 . y0`), not a base-specific float with
+                // an empty fractional part. Leave the dot for infix parsing.
+                parser.tokenIndex = beforeFractionalPart;
+                hasFractionalPart = false;
             } else {
                 numberStr.append(".").append(fractionalPart);
             }

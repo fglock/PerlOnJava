@@ -300,7 +300,10 @@ public class RuntimeTransliterate {
 
             // Check if the next character is a dash (range operator)
             int nextPos = i + consumed;
-            if (nextPos < input.length() && input.charAt(nextPos) == '-' &&
+            boolean currentIsEscapedDash = input.charAt(i) == '\\'
+                    && i + 1 < input.length() && input.charAt(i + 1) == '-';
+            if (!currentIsEscapedDash
+                    && nextPos < input.length() && input.charAt(nextPos) == '-' &&
                     nextPos + 1 < input.length()) {
 
                 // This might be a range - parse the character after the dash

@@ -11,11 +11,19 @@ priorities and future plans.
   filesystem metadata, `die` state, and scalar flip-flop warnings on both
   execution backends.
 
+- Restore `io/perlio_open.t` anonymous read/write temporary opens for `+<`,
+  `+>`, and `+>>`.
+
+- Restore `io/perlio_fail.t`, `op/try.t`, `re/subst.t`, `re/substT.t`,
+  `re/subst_wamp.t`, and `uni/stash.t` behavior for invalid PerlIO layers,
+  `try`/`finally`, substitution edge cases, and stash typing.
+
 - Resolve dynamic `require` package names as portable module paths before
   filesystem lookup, including on Windows.
 
-- Restore `op/stash.t` namespace spellings, stash clearing, and forward-CV
-  provenance on both execution backends.
+- Restore `op/stash.t` namespace spellings, stash clearing, anonymous glob
+  names, typed lexical checks during eval, and forward-CV provenance on both
+  execution backends.
 
 - Restore `op/reset.t`, `io/perlio.t`, `uni/lex_utf8.t`, and `op/bop.t`
   compatibility for scoped reset, PerlIO encoding recursion, byte unpacking,

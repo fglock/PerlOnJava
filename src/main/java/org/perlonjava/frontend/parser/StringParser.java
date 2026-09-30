@@ -1194,6 +1194,7 @@ public class StringParser {
         } else {
             // For other delimiters, process double-quote escape sequences
             // but without variable interpolation
+            searchList = preserveEscapedTransliterationDashes(searchList);
             ParsedString searchParsed = new ParsedString(
                     rawStr.index,
                     rawStr.next,
@@ -1234,6 +1235,32 @@ public class StringParser {
 
         ListNode list = new ListNode(elements, rawStr.index);
         return new OperatorNode(operator, list, rawStr.index);
+    }
+
+    /** Keep an escaped dash distinguishable from a transliteration range marker. */
+    private static String preserveEscapedTransliterationDashes(String source) {
+        StringBuilder preserved = new StringBuilder(source.length());
+        for (int i = 0; i < source.length();) {
+            char current = source.charAt(i);
+            if (current == '\\' && i + 1 < source.length()) {
+                char next = source.charAt(i + 1);
+                if (next == '\\') {
+                    preserved.append("\\\\");
+                    i += 2;
+                    continue;
+                }
+                if (next == '-') {
+                    // StringDoubleQuoted consumes one level of escapes. Double
+                    // the slash here so RuntimeTransliterate still sees \-.
+                    preserved.append("\\\\-");
+                    i += 2;
+                    continue;
+                }
+            }
+            preserved.append(current);
+            i++;
+        }
+        return preserved.toString();
     }
 
     /** Perl rejects Unicode named sequences in either side of tr/// before

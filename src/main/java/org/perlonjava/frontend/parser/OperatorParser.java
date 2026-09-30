@@ -681,6 +681,7 @@ public class OperatorParser {
                 // architectural difference (entire file compiled before execution).
                 int currentIndex2 = parser.tokenIndex;
                 String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
+                packageName = resolveTypedClassConstant(parser, packageName);
                 LexerToken afterType = peek(parser);
                 boolean followedBySigil = "$".equals(afterType.text) || "@".equals(afterType.text)
                         || "%".equals(afterType.text) || "\\".equals(afterType.text)
@@ -688,6 +689,13 @@ public class OperatorParser {
                 if (followedBySigil) {
                     // Unambiguously a type annotation (followed by a variable sigil or paren list)
                     if (parser.parsingForLoopVariable && !GlobalVariable.isPackageLoaded(packageName)) {
+                        parser.throwCleanError("No such class " + packageName);
+                    }
+                    // Eval STRING is compiled before it runs, so a check
+                    // emitted into an anonymous sub body would otherwise be
+                    // delayed until that sub is called. Perl rejects unknown
+                    // typed lexicals while compiling the eval itself.
+                    if (parser.parsingEvalString && !GlobalVariable.isPackageLoaded(packageName)) {
                         parser.throwCleanError("No such class " + packageName);
                     }
                     varType = packageName;
@@ -1605,6 +1613,23 @@ public class OperatorParser {
             result.setAnnotation("implicitArgvReadline", true);
         }
         return result;
+    }
+
+    /** Resolve a constant used as a class name in {@code my TYPE $var}. */
+    private static String resolveTypedClassConstant(Parser parser, String packageName) {
+        if (packageName == null || packageName.contains("::")) {
+            return packageName;
+        }
+        String codeName = NameNormalizer.normalizeVariableName(
+                packageName, parser.ctx.symbolTable.getCurrentPackage());
+        RuntimeScalar codeScalar = GlobalVariable.globalCodeRefs.get(codeName);
+        if (codeScalar == null || codeScalar.type != RuntimeScalarType.CODE
+                || !(codeScalar.value instanceof RuntimeCode code)
+                || code.constantValue == null || code.constantValue.size() != 1) {
+            return packageName;
+        }
+        RuntimeScalar value = code.constantValue.getFirst().scalar();
+        return value.type == RuntimeScalarType.UNDEF ? packageName : value.toString();
     }
 
     static BinaryOperatorNode parseSplit(Parser parser, LexerToken token, int currentIndex) {

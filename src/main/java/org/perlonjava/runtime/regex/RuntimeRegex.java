@@ -4175,6 +4175,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 || (regex.regexFlags.taintResults() && inputTainted);
         boolean destructiveReplacement = !regex.regexFlags.isNonDestructive();
 
+        if (destructiveReplacement
+                && (string.type == RuntimeScalarType.READONLY_SCALAR
+                || string instanceof RuntimeScalarReadOnly
+                || string instanceof RuntimeStashEntry)) {
+            throw new PerlCompilerException("Modification of a read-only value attempted");
+        }
+
         if (!destructiveReplacement && ctx == RuntimeContextType.VOID) {
             Warnings.emitCategoryWarning(
                     "void", "Useless use of non-destructive substitution (s///r)");

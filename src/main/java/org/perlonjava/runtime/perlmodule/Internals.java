@@ -1228,6 +1228,12 @@ public class Internals extends PerlModuleBase {
         if (scalar.type != RuntimeScalarType.CODE || !(scalar.value instanceof RuntimeCode code)) {
             return new RuntimeScalar().getList();
         }
+        // The reference-site package describes only an unresolved named CV.
+        // Once the declaration is compiled, CvSTASH belongs to the package
+        // where its body was defined.
+        if (code.defined()) {
+            return new RuntimeScalar().getList();
+        }
         return new RuntimeScalar(code.forwardReferencePackageName).getList();
     }
 

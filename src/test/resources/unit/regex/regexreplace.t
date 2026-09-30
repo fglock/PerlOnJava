@@ -1,6 +1,7 @@
 use feature 'say';
 use strict;
 use Test::More;
+use Config;
 
 ###################
 # Perl s/// Operator Tests
@@ -76,6 +77,37 @@ $string = "test123";
 $substituted = $string =~ s/123/456/r;
 ok($string eq "test123", "s///r preserves original string: [$string]");
 ok($substituted eq "test456", "s///r returns modified string: [$substituted]");
+
+use constant COW_SUBSTITUTION_INPUT => 'Config::';
+$substituted = COW_SUBSTITUTION_INPUT =~ s/Config/David/r;
+is($substituted, 'David::', 's///r can read a copy-on-write constant');
+
+use constant COW_STASH_NAME => *Config::{NAME};
+$substituted = COW_STASH_NAME =~ s/Config/David/r;
+is($substituted, 'David::', 's///r preserves a copy-on-write stash NAME value');
+
+{
+    no strict 'subs';
+    my $bareword_concat = eval q{00.y0};
+    is($bareword_concat, '0y0', 'a bareword after a base-prefixed number uses concatenation');
+}
+
+my $readonly_substitution_error;
+eval { for (__PACKAGE__) { s/b/c/; } };
+$readonly_substitution_error = $@;
+like($readonly_substitution_error, qr/^Modification of a read-only value/,
+    'destructive substitution rejects a read-only input even when it does not match');
+
+{
+    no strict 'refs';
+    delete $::{requested_missing_substitution_slot};
+    eval {
+        no warnings;
+        $::{requested_missing_substitution_slot} =~ s/(?:)/*{'requested_missing_substitution_slot'}; 4/e;
+    };
+    like($@, qr/^Modification of a read-only value/,
+        'destructive substitution cannot vivify a missing stash entry');
+}
 
 # Empty pattern with /r
 $string = "test";

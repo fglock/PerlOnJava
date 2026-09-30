@@ -660,7 +660,17 @@ public class StatementParser {
 
         // Parse the catch block
         TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "catch"
+        if (!TokenUtils.peek(parser).text.equals("(")) {
+            var location = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
+            throw new PerlParserException("catch block requires a (VAR) at "
+                    + location.fileName() + " line " + location.lineNumber() + ".\n");
+        }
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
+        if (TokenUtils.peek(parser).text.equals(")")) {
+            var location = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
+            throw new PerlParserException("catch block requires a (VAR) at "
+                    + location.fileName() + " line " + location.lineNumber() + ".\n");
+        }
         LexerToken catchToken = TokenUtils.peek(parser);
         if (catchToken.type == LexerTokenType.IDENTIFIER
                 && (catchToken.text.equals("my") || catchToken.text.equals("our")
@@ -697,7 +707,9 @@ public class StatementParser {
 
             // Parse the optional finally block
             Node finallyBlock = null;
+            int finallyIndex = -1;
             if (TokenUtils.peek(parser).text.equals("finally")) {
+                finallyIndex = parser.tokenIndex;
                 TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "finally"
                 TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
                 finallyBlock = ParseBlock.parseBlock(parser);
@@ -706,24 +718,26 @@ public class StatementParser {
 
             TryNode tryNode = new TryNode(
                     tryBlock, catchParameter, catchBlock, finallyBlock, index);
-            // A return inside core try/catch returns from the containing
-            // subroutine. Keep try/catch without finally inline; lowering it
-            // through an anonymous wrapper traps that return in the wrapper
-            // and lets execution incorrectly continue after the try statement.
-            // Async bodies also stay inline so await suspends the owning frame.
-            if (finallyBlock == null || parser.parsingFutureAsyncAwaitSub) {
-                return tryNode;
+            if (finallyBlock != null
+                    && parser.ctx.symbolTable.isWarningCategoryEnabled("experimental::try")) {
+                WarnDie.warn(new RuntimeScalar("try/catch/finally is experimental"),
+                        new RuntimeScalar(parser.ctx.errorUtil.warningLocation(finallyIndex)));
             }
 
-            // The generated wrapper is internal syntax for the try expression.
-            // Let it accept lvalue contexts so :lvalue subs can return aliases
-            // through try { ... } without failing the subroutine lvalue check.
-            return new BinaryOperatorNode("->",
-                    new SubroutineNode(null, null, List.of("lvalue"),
-                            new BlockNode(List.of(tryNode), index),
-                        false, index),
-                atUnderscoreArgs(parser),
-                index);
+            // Model finally as a scope-exit defer so it runs on normal
+            // completion, exceptions, and returns from the containing sub.
+            // This keeps try/catch in the owning frame instead of wrapping it
+            // in a synthetic anonymous subroutine.
+            if (finallyBlock != null && !parser.parsingFutureAsyncAwaitSub) {
+                TryNode tryWithoutFinally = new TryNode(
+                        tryBlock, catchParameter, catchBlock, null, index);
+                return new BlockNode(List.of(new DeferNode(finallyBlock, finallyIndex),
+                        tryWithoutFinally), index);
+            }
+
+            // Async bodies stay inline so await suspends the owning frame;
+            // try/catch without finally is already in the owning frame too.
+            return tryNode;
         } finally {
             if (catchScopeIndex >= 0) {
                 parser.ctx.symbolTable.exitScope(catchScopeIndex);

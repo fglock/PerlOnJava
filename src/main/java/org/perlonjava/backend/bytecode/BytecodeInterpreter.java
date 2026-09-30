@@ -267,6 +267,81 @@ public class BytecodeInterpreter {
         code.releaseRegisters();
     }
 
+    private static void unwindEvalFramesCrossedByJump(
+            SuspendedInterpreterFrame frame,
+            int targetPc,
+            int savedLocalLevel,
+            java.util.ArrayDeque<Integer> evalCatchStack,
+            java.util.ArrayDeque<Boolean> evalVirtualFrameStack,
+            java.util.ArrayDeque<Integer> evalLocalLevelStack,
+            java.util.ArrayDeque<Integer> evalBaseRegStack,
+            java.util.ArrayDeque<Integer> evalMethodInvocantHoldDepthStack,
+            java.util.ArrayList<RuntimeBase> methodInvocantHolds) {
+        while (!evalCatchStack.isEmpty() && targetPc > evalCatchStack.peek()) {
+            evalCatchStack.pop();
+            boolean hasVirtualFrame = !evalVirtualFrameStack.isEmpty()
+                    && evalVirtualFrameStack.pop();
+            if (!evalBaseRegStack.isEmpty()) {
+                evalBaseRegStack.pop();
+            }
+            if (!evalMethodInvocantHoldDepthStack.isEmpty()) {
+                releaseMethodInvocantHoldsAbove(methodInvocantHolds,
+                        evalMethodInvocantHoldDepthStack.pop());
+            }
+            if (!evalLocalLevelStack.isEmpty()) {
+                int relativeLevel = evalLocalLevelStack.pop();
+                DynamicVariableManager.popToLocalLevel(savedLocalLevel + relativeLevel);
+            }
+            RuntimeCode.decrementEvalDepth();
+            if (hasVirtualFrame && frame.virtualEvalFrameDepth > 0) {
+                InterpreterState.pop();
+                frame.virtualEvalFrameDepth--;
+            }
+        }
+    }
+
+    private static void popEvalVirtualFrame(
+            SuspendedInterpreterFrame frame,
+            java.util.ArrayDeque<Boolean> evalVirtualFrameStack) {
+        boolean hasVirtualFrame = !evalVirtualFrameStack.isEmpty()
+                && evalVirtualFrameStack.pop();
+        if (hasVirtualFrame && frame.virtualEvalFrameDepth > 0) {
+            InterpreterState.pop();
+            frame.virtualEvalFrameDepth--;
+        }
+    }
+
+    private static void unwindEvalFramesToDepth(
+            SuspendedInterpreterFrame frame,
+            int targetDepth,
+            int savedLocalLevel,
+            java.util.ArrayDeque<Integer> evalCatchStack,
+            java.util.ArrayDeque<Boolean> evalVirtualFrameStack,
+            java.util.ArrayDeque<Integer> evalLocalLevelStack,
+            java.util.ArrayDeque<Integer> evalBaseRegStack,
+            java.util.ArrayDeque<Integer> evalMethodInvocantHoldDepthStack,
+            java.util.ArrayList<RuntimeBase> methodInvocantHolds) {
+        while (evalCatchStack.size() > targetDepth) {
+            evalCatchStack.pop();
+            boolean hasVirtualFrame = !evalVirtualFrameStack.isEmpty()
+                    && evalVirtualFrameStack.pop();
+            if (!evalBaseRegStack.isEmpty()) evalBaseRegStack.pop();
+            if (!evalMethodInvocantHoldDepthStack.isEmpty()) {
+                releaseMethodInvocantHoldsAbove(methodInvocantHolds,
+                        evalMethodInvocantHoldDepthStack.pop());
+            }
+            if (!evalLocalLevelStack.isEmpty()) {
+                int relativeLevel = evalLocalLevelStack.pop();
+                DynamicVariableManager.popToLocalLevel(savedLocalLevel + relativeLevel);
+            }
+            RuntimeCode.decrementEvalDepth();
+            if (hasVirtualFrame && frame.virtualEvalFrameDepth > 0) {
+                InterpreterState.pop();
+                frame.virtualEvalFrameDepth--;
+            }
+        }
+    }
+
     private static RuntimeList execute(SuspendedInterpreterFrame frame) {
         InterpretedCode code = frame.code;
         int callContext = frame.callContext;
@@ -309,6 +384,7 @@ public class BytecodeInterpreter {
         // When exception occurs, pop from stack and jump to catch PC
         // Use ArrayDeque instead of Stack for better performance (no synchronization)
         java.util.ArrayDeque<Integer> evalCatchStack = frame.evalCatchStack;
+        java.util.ArrayDeque<Boolean> evalVirtualFrameStack = frame.evalVirtualFrameStack;
 
         // Parallel stack tracking the frame-relative DynamicVariableManager level at
         // eval entry. A suspended frame can resume from a Future callback whose
@@ -372,8 +448,8 @@ public class BytecodeInterpreter {
         frame.suspended = false;
         if (frame.pc > 0 && !frame.evalCatchStack.isEmpty()) {
             RuntimeCode.adjustEvalDepth(frame.evalCatchStack.size());
-            for (int i = 0; i < frame.evalCatchStack.size(); i++) {
-                if (InterpreterState.pushEvalFrameForCurrentInterpreter()) {
+            for (java.util.Iterator<Boolean> it = evalVirtualFrameStack.descendingIterator(); it.hasNext();) {
+                if (it.next() && InterpreterState.pushEvalFrameForCurrentInterpreter()) {
                     frame.virtualEvalFrameDepth++;
                 }
             }
@@ -442,6 +518,11 @@ public class BytecodeInterpreter {
 
                             case Opcodes.NOP -> {
                                 // No operation
+                            }
+
+                            case Opcodes.CHECK_CLASS_EXISTS -> {
+                                int classNameIdx = bytecode[pc++];
+                                GlobalVariable.checkClassExists(code.stringPool[classNameIdx]);
                             }
 
                             case Opcodes.MORTAL_FLUSH -> {
@@ -683,11 +764,8 @@ public class BytecodeInterpreter {
                                     unwindEvalMethodInvocantHolds(
                                             evalMethodInvocantHoldDepthStack, methodInvocantHolds);
                                     pc = evalCatchStack.pop();
+                                    popEvalVirtualFrame(frame, evalVirtualFrameStack);
                                     RuntimeCode.decrementEvalDepth();
-                                    if (frame.virtualEvalFrameDepth > 0) {
-                                        InterpreterState.pop();
-                                        frame.virtualEvalFrameDepth--;
-                                    }
                                     break;
                                 }
                                 RuntimeCode.requireInterpreterLvalueReturn(code, retVal, callContext);
@@ -827,6 +905,34 @@ public class BytecodeInterpreter {
                                 // Format: opcode, target (absolute PC as int)
                                 int target = readInt(bytecode, pc);
                                 releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
+                                // Static block labels can jump out of a try
+                                // body without passing its EVAL_END opcode.
+                                // Retire every crossed try frame before the
+                                // jump, including the interpreter's virtual
+                                // caller frame and its dynamically localized
+                                // state. A redo target inside the try body is
+                                // below catchPc and keeps that frame active.
+                                boolean unwoundToBlockDepth = false;
+                                int targetSlot = opcode == Opcodes.LAST ? 1
+                                        : opcode == Opcodes.NEXT ? 2 : 3;
+                                for (int i = controlBlockStack.size() - 1; i >= 0; i--) {
+                                    int[] entry = controlBlockStack.get(i);
+                                    if (entry[targetSlot] == target) {
+                                        unwindEvalFramesToDepth(frame, entry[4], savedLocalLevel,
+                                                evalCatchStack, evalVirtualFrameStack,
+                                                evalLocalLevelStack,
+                                                evalBaseRegStack, evalMethodInvocantHoldDepthStack,
+                                                methodInvocantHolds);
+                                        unwoundToBlockDepth = true;
+                                        break;
+                                    }
+                                }
+                                if (!unwoundToBlockDepth) {
+                                    unwindEvalFramesCrossedByJump(frame, target, savedLocalLevel,
+                                            evalCatchStack, evalVirtualFrameStack,
+                                            evalLocalLevelStack, evalBaseRegStack,
+                                            evalMethodInvocantHoldDepthStack, methodInvocantHolds);
+                                }
                                 pc = target;
                             }
 
@@ -2039,6 +2145,12 @@ public class BytecodeInterpreter {
                                                     default -> -1;
                                                 };
                                                 if (targetPc >= 0) {
+                                                    unwindEvalFramesToDepth(frame, entry[4],
+                                                            savedLocalLevel, evalCatchStack,
+                                                            evalVirtualFrameStack,
+                                                            evalLocalLevelStack, evalBaseRegStack,
+                                                            evalMethodInvocantHoldDepthStack,
+                                                            methodInvocantHolds);
                                                     pc = targetPc;
                                                     releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
                                                     handled = true;
@@ -2056,6 +2168,12 @@ public class BytecodeInterpreter {
                                             while (labeledBlockStack.size() > i) {
                                                 labeledBlockStack.removeLast();
                                             }
+                                            unwindEvalFramesToDepth(frame, entry[2], savedLocalLevel,
+                                                    evalCatchStack, evalVirtualFrameStack,
+                                                    evalLocalLevelStack,
+                                                    evalBaseRegStack,
+                                                    evalMethodInvocantHoldDepthStack,
+                                                    methodInvocantHolds);
                                             pc = entry[1]; // jump to block exit
                                             releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
                                             handled = true;
@@ -2081,6 +2199,7 @@ public class BytecodeInterpreter {
                                                     methodInvocantHolds);
                                             // Jump to eval catch handler
                                             pc = evalCatchStack.pop();
+                                            popEvalVirtualFrame(frame, evalVirtualFrameStack);
                                             RuntimeCode.decrementEvalDepth();
                                             break;
                                         }
@@ -2213,10 +2332,16 @@ public class BytecodeInterpreter {
                                                     case NEXT -> entry[2];
                                                     case REDO -> entry[3];
                                                     default -> -1;
-                                                };
-                                                if (targetPc >= 0) {
-                                                    pc = targetPc;
-                                                    releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
+                                            };
+                                            if (targetPc >= 0) {
+                                                unwindEvalFramesToDepth(frame, entry[4],
+                                                        savedLocalLevel, evalCatchStack,
+                                                        evalVirtualFrameStack,
+                                                        evalLocalLevelStack, evalBaseRegStack,
+                                                        evalMethodInvocantHoldDepthStack,
+                                                        methodInvocantHolds);
+                                                pc = targetPc;
+                                                releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
                                                     handled = true;
                                                     break;
                                                 }
@@ -2231,6 +2356,12 @@ public class BytecodeInterpreter {
                                             while (labeledBlockStack.size() > i) {
                                                 labeledBlockStack.removeLast();
                                             }
+                                            unwindEvalFramesToDepth(frame, entry[2], savedLocalLevel,
+                                                    evalCatchStack, evalVirtualFrameStack,
+                                                    evalLocalLevelStack,
+                                                    evalBaseRegStack,
+                                                    evalMethodInvocantHoldDepthStack,
+                                                    methodInvocantHolds);
                                             pc = entry[1];
                                             releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
                                             handled = true;
@@ -2254,6 +2385,7 @@ public class BytecodeInterpreter {
                                                     evalMethodInvocantHoldDepthStack,
                                                     methodInvocantHolds);
                                             pc = evalCatchStack.pop();
+                                            popEvalVirtualFrame(frame, evalVirtualFrameStack);
                                             RuntimeCode.decrementEvalDepth();
                                             break;
                                         }
@@ -2725,13 +2857,18 @@ public class BytecodeInterpreter {
                                 // Format: [EVAL_TRY] [catch_target(4 bytes)] [firstBodyReg]
                                 // catch_target is absolute bytecode address
 
-                                int catchPc = readInt(bytecode, pc);  // Read 4-byte absolute address
+                                int encodedCatchPc = readInt(bytecode, pc);
+                                boolean needsCallerFrame = encodedCatchPc >= 0;
+                                int catchPc = Math.abs(encodedCatchPc);
                                 pc += 1;  // Skip the int we just read
 
                                 int firstBodyReg = bytecode[pc++];  // First register in eval body
 
                                 // Push catch PC onto eval stack
                                 evalCatchStack.push(catchPc);
+                                boolean pushedEvalCallerFrame = needsCallerFrame
+                                        && InterpreterState.pushEvalFrameForCurrentInterpreter();
+                                evalVirtualFrameStack.push(pushedEvalCallerFrame);
 
                                 // Save first body register for scope cleanup on exception
                                 evalBaseRegStack.push(firstBodyReg);
@@ -2745,7 +2882,7 @@ public class BytecodeInterpreter {
                                 // Track eval depth for $^S
                                 RuntimeCode.incrementEvalDepth();
 
-                                if (InterpreterState.pushEvalFrameForCurrentInterpreter()) {
+                                if (pushedEvalCallerFrame) {
                                     frame.virtualEvalFrameDepth++;
                                 }
 
@@ -2766,6 +2903,8 @@ public class BytecodeInterpreter {
                                 if (!evalCatchStack.isEmpty()) {
                                     evalCatchStack.pop();
                                 }
+                                boolean hadEvalCallerFrame = !evalVirtualFrameStack.isEmpty()
+                                        && evalVirtualFrameStack.pop();
 
                                 // Pop the base register (not needed on success path)
                                 if (!evalBaseRegStack.isEmpty()) {
@@ -2788,7 +2927,7 @@ public class BytecodeInterpreter {
                                 // Track eval depth for $^S
                                 RuntimeCode.decrementEvalDepth();
 
-                                if (frame.virtualEvalFrameDepth > 0) {
+                                if (hadEvalCallerFrame && frame.virtualEvalFrameDepth > 0) {
                                     InterpreterState.pop();
                                     frame.virtualEvalFrameDepth--;
                                 }
@@ -2818,12 +2957,18 @@ public class BytecodeInterpreter {
                                 int labelIdx = bytecode[pc++];
                                 int exitPc = readInt(bytecode, pc);
                                 pc += 1;
-                                labeledBlockStack.add(new int[]{labelIdx, exitPc});
+                                labeledBlockStack.add(new int[]{labelIdx, exitPc,
+                                        evalCatchStack.size()});
                             }
 
                             case Opcodes.POP_LABELED_BLOCK -> {
                                 if (!labeledBlockStack.isEmpty()) {
-                                    labeledBlockStack.removeLast();
+                                    int[] entry = labeledBlockStack.removeLast();
+                                    unwindEvalFramesToDepth(frame, entry[2], savedLocalLevel,
+                                            evalCatchStack, evalVirtualFrameStack,
+                                            evalLocalLevelStack,
+                                            evalBaseRegStack, evalMethodInvocantHoldDepthStack,
+                                            methodInvocantHolds);
                                 }
                             }
 
@@ -2832,12 +2977,18 @@ public class BytecodeInterpreter {
                                 int lastPc = readInt(bytecode, pc++);
                                 int nextPc = readInt(bytecode, pc++);
                                 int redoPc = readInt(bytecode, pc++);
-                                controlBlockStack.add(new int[]{labelIdx, lastPc, nextPc, redoPc});
+                                controlBlockStack.add(new int[]{labelIdx, lastPc, nextPc, redoPc,
+                                        evalCatchStack.size()});
                             }
 
                             case Opcodes.POP_CONTROL_BLOCK -> {
                                 if (!controlBlockStack.isEmpty()) {
-                                    controlBlockStack.removeLast();
+                                    int[] entry = controlBlockStack.removeLast();
+                                    unwindEvalFramesToDepth(frame, entry[4], savedLocalLevel,
+                                            evalCatchStack, evalVirtualFrameStack,
+                                            evalLocalLevelStack,
+                                            evalBaseRegStack, evalMethodInvocantHoldDepthStack,
+                                            methodInvocantHolds);
                                 }
                             }
 
@@ -3551,6 +3702,7 @@ public class BytecodeInterpreter {
                     // Check if we're inside an eval block first
                     if (!evalCatchStack.isEmpty()) {
                         int catchPc = evalCatchStack.pop();
+                        popEvalVirtualFrame(frame, evalVirtualFrameStack);
                         unwindEvalMethodInvocantHolds(
                                 evalMethodInvocantHoldDepthStack, methodInvocantHolds);
                         // Restore local variables pushed inside the eval block
@@ -3560,10 +3712,6 @@ public class BytecodeInterpreter {
                                     savedLocalLevel + relativeLevel);
                         }
                         RuntimeCode.decrementEvalDepth();
-                        if (frame.virtualEvalFrameDepth > 0) {
-                            InterpreterState.pop();
-                            frame.virtualEvalFrameDepth--;
-                        }
                         WarnDie.catchEval(e);
                         pc = catchPc;
                         continue outer;
@@ -3601,6 +3749,7 @@ public class BytecodeInterpreter {
                         Throwable evalException = e;
                         // Inside eval block - catch the exception
                         int catchPc = evalCatchStack.pop(); // Pop the catch handler
+                        popEvalVirtualFrame(frame, evalVirtualFrameStack);
                         unwindEvalMethodInvocantHolds(
                                 evalMethodInvocantHoldDepthStack, methodInvocantHolds);
 
@@ -3652,11 +3801,6 @@ public class BytecodeInterpreter {
 
                         // Track eval depth for $^S
                         RuntimeCode.decrementEvalDepth();
-
-                        if (frame.virtualEvalFrameDepth > 0) {
-                            InterpreterState.pop();
-                            frame.virtualEvalFrameDepth--;
-                        }
 
                         // Call WarnDie.catchEval() to set $@
                         WarnDie.catchEval(evalException);

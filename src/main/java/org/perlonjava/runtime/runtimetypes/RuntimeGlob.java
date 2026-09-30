@@ -1315,6 +1315,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case "NAME" -> {
                 // Return the name of this glob (without the package prefix)
                 if (this.globName == null) yield new RuntimeScalar();
+                if (this.globName.endsWith("::")) {
+                    yield new RuntimeScalar(this.globName);
+                }
                 int lastColonIndex = this.globName.lastIndexOf("::");
                 String name = lastColonIndex >= 0 ? this.globName.substring(lastColonIndex + 2) : this.globName;
                 yield new RuntimeScalar(name);
@@ -1656,7 +1659,16 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     private String effectiveStringificationName() {
-        return stringificationName != null ? stringificationName : globName;
+        String name = stringificationName != null ? stringificationName : globName;
+        if (name == null) {
+            return null;
+        }
+        int separator = name.lastIndexOf("::");
+        if (separator > 0
+                && GlobalVariable.isAnonymousStashPackage(name.substring(0, separator))) {
+            return "__ANON__::" + name.substring(separator + 2);
+        }
+        return name;
     }
 
     /** Set a display-only GV name for a detached lexical or anonymous glob. */

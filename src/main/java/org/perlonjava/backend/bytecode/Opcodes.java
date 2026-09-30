@@ -2759,6 +2759,9 @@ public class Opcodes {
     /** Release the active lexical foreach alias before replacing its slot or leaving the loop. */
     public static final short FOREACH_ALIAS_RELEASE = 624;
 
+    /** Validate a typed lexical's package when its declaration executes. */
+    public static final short CHECK_CLASS_EXISTS = 630;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }
