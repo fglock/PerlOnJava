@@ -1337,7 +1337,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                         ioOwner = canonical;
                     }
                 }
-                if (effectiveIO != null && effectiveIO.value instanceof RuntimeIO runtimeIO) {
+                // Only detached glob wrappers need to remember the canonical
+                // owner.  A direct *STDOUT{IO}, for example, must still
+                // dereference to Perl's anonymous PVIO glob.
+                if (ioOwner != this && effectiveIO != null
+                        && effectiveIO.value instanceof RuntimeIO runtimeIO) {
                     runtimeIO.setOwnerGlob(ioOwner);
                 }
                 if (effectiveIO != null && effectiveIO.type == RuntimeScalarType.GLOB

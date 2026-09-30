@@ -47,6 +47,11 @@ public class RuntimePosLvalue {
         // pos() evaluates a tied scalar once before obtaining its lvalue
         // storage, matching ordinary scalar operators' FETCH semantics.
         perlVariable = RuntimeScalar.fetchTiedOnce(perlVariable).posStorage();
+        return posResolvedStorage(perlVariable, byteView);
+    }
+
+    /** Look up pos state for storage that has already had tied magic resolved. */
+    private static RuntimeScalar posResolvedStorage(RuntimeScalar perlVariable, boolean byteView) {
 
         RuntimeScalar position;
 
@@ -122,8 +127,8 @@ public class RuntimePosLvalue {
         // that same canonical storage here: looking up the original tied
         // wrapper after pos() has populated the fetched scalar's entry loses
         // the entry and crashes destructive s///e substitutions.
-        RuntimeScalar storage = RuntimeScalar.fetchTiedOnce(perlVariable).posStorage();
-        RuntimeScalar stored = pos(storage);
+        RuntimeScalar storage = perlVariable.posStorage();
+        RuntimeScalar stored = posResolvedStorage(storage, false);
         ((PosLvalueScalar) stored).setFromMatcher(position);
         CacheEntry entry = positionCache().get(storage);
         entry.matcherBytePosition = storage.type == RuntimeScalarType.BYTE_STRING
@@ -132,8 +137,8 @@ public class RuntimePosLvalue {
 
     /** Publish an integer position produced by the regex engine. */
     public static void publishMatchPosition(RuntimeScalar perlVariable, int position) {
-        RuntimeScalar storage = RuntimeScalar.fetchTiedOnce(perlVariable).posStorage();
-        RuntimeScalar stored = pos(storage);
+        RuntimeScalar storage = perlVariable.posStorage();
+        RuntimeScalar stored = posResolvedStorage(storage, false);
         ((PosLvalueScalar) stored).setFromMatcher(position);
         CacheEntry entry = positionCache().get(storage);
         entry.matcherBytePosition = storage.type == RuntimeScalarType.BYTE_STRING
