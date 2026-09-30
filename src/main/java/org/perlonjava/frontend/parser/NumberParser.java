@@ -248,12 +248,28 @@ public class NumberParser {
      * Unified parsing method for special number formats (binary, octal, hex)
      */
     private static Node parseSpecialNumber(Parser parser, String initialPart, NumberFormat format) {
+        if (format == HEX_FORMAT && initialPart.toLowerCase().startsWith("p")) {
+            warnMissingOperatorBeforeHexExponent(
+                    parser, initialPart, parser.tokenIndex - 1, "0x" + initialPart);
+            deferNoDigitsForLiteral(parser, initialPart, format);
+            return new NumberNode("0", parser.tokenIndex);
+        }
         if (!containsDigitForFormat(initialPart, format)
                 && !hasLeadingFractionalDigit(parser, format)) {
             PerlParserException adjacentNumberError =
                     missingOperatorBeforeIncompleteBaseLiteral(parser, format);
             if (adjacentNumberError != null) {
                 throw adjacentNumberError;
+            }
+            if (format == HEX_FORMAT && initialPart.isEmpty()
+                    && parser.tokenIndex > 0 && parser.tokenIndex < parser.tokens.size()) {
+                LexerToken exponent = parser.tokens.get(parser.tokenIndex);
+                if (exponent.type == LexerTokenType.IDENTIFIER
+                        && exponent.text.toLowerCase().startsWith("p")
+                        && parser.tokens.get(parser.tokenIndex - 1).text.equalsIgnoreCase("x")) {
+                    warnMissingOperatorBeforeHexExponent(parser, exponent.text,
+                            parser.tokenIndex, "0x" + exponent.text);
+                }
             }
             deferNoDigitsForLiteral(parser, initialPart, format);
             return new NumberNode("0", parser.tokenIndex);
@@ -500,6 +516,23 @@ public class NumberParser {
                 return;
             }
             parser.tokenIndex++;
+        }
+    }
+
+    private static void warnMissingOperatorBeforeHexExponent(
+            Parser parser, String exponent, int tokenIndex, String near) {
+        if (tokenIndex < 0 || tokenIndex >= parser.tokens.size()) {
+            return;
+        }
+        String location = parser.ctx.errorUtil.warningLocation(tokenIndex);
+        String message = "Bareword found where operator expected" + location
+                + ", near \"" + near + "\"\n"
+                + "\t(Missing operator before \"" + exponent + "\"?)\n";
+        RuntimeScalar warning = new RuntimeScalar(message);
+        if (parser.ctx.symbolTable.isFatalWarningCategory("misc")) {
+            WarnDie.die(warning, RuntimeScalarCache.scalarEmptyString);
+        } else {
+            WarnDie.warn(warning, RuntimeScalarCache.scalarEmptyString);
         }
     }
 

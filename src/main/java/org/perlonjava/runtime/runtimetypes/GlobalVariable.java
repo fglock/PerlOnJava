@@ -2964,8 +2964,10 @@ public class GlobalVariable {
             return RuntimeScalarCache.scalarTrue;
         }
         
-        // Check IO slot (via globalIORefs)
-        if (globalIORefs.containsKey(varName)) {
+        // A failed symbolic filehandle probe may allocate an internal RuntimeGlob
+        // without adding a visible Perl stash entry.  defined *{$name} must not
+        // expose that implementation cache as a user-visible glob.
+        if (existsGlobalIO(varName)) {
             return RuntimeScalarCache.scalarTrue;
         }
         

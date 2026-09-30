@@ -1433,6 +1433,11 @@ public class RuntimeIO extends RuntimeScalar {
             // Normalize the name to include the package qualifier
             // This converts "HANDLE" to "Package::HANDLE" format
             name = NameNormalizer.normalizeVariableName(name, packageName);
+            // Inspecting an unopened symbolic handle (for example fileno($name)
+            // or close($name)) must not create a visible typeglob as a side effect.
+            if (!GlobalVariable.existsGlobalIO(name)) {
+                return null;
+            }
             runtimeScalar = GlobalVariable.getGlobalIO(name);
         }
 

@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore `op/fh.t`, `op/grent.t`, and `op/hexfp.t` behavior for non-vivifying symbolic handles, group database entries, and malformed hex-float warnings.
+
 - Restore core-test compatibility for regex-set diagnostics (including
   POSIX-looking text in extended-class comments), classes and MRO, op subs,
   filesystem metadata, `die` state, and scalar flip-flop warnings on both

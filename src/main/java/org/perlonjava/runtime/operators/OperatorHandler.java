@@ -217,10 +217,10 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("getlogin", "getlogin", "org/perlonjava/runtime/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("getpwnam", "getpwnam", "org/perlonjava/runtime/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;");
         put("getpwuid", "getpwuid", "org/perlonjava/runtime/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;");
-        put("getgrnam", "getgrnam", "org/perlonjava/runtime/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;");
-        put("getgrgid", "getgrgid", "org/perlonjava/runtime/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;");
+        put("getgrnam", "getgrnam", "org/perlonjava/runtime/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;");
+        put("getgrgid", "getgrgid", "org/perlonjava/runtime/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;");
         put("getpwent", "getpwent", "org/perlonjava/runtime/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;");
-        put("getgrent", "getgrent", "org/perlonjava/runtime/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;");
+        put("getgrent", "getgrent", "org/perlonjava/runtime/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;");
         put("setpwent", "setpwent", "org/perlonjava/runtime/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("setgrent", "setgrent", "org/perlonjava/runtime/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("endpwent", "endpwent", "org/perlonjava/runtime/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");

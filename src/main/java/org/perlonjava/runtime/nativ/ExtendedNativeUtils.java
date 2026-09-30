@@ -13,12 +13,15 @@ import java.util.concurrent.ConcurrentHashMap;
 import static org.perlonjava.runtime.runtimetypes.RuntimeContextType.SCALAR;
 
 public class ExtendedNativeUtils extends NativeUtils {
+    private record GroupEntry(String name, String password, String gid, List<String> members) {}
+
     public static final class State {
         final Map<String, RuntimeArray> userInfoCache = new ConcurrentHashMap<>();
-        final Map<String, RuntimeArray> groupInfoCache = new ConcurrentHashMap<>();
+        final Map<String, GroupEntry> groupInfoCache = new ConcurrentHashMap<>();
         final Map<String, RuntimeArray> hostInfoCache = new ConcurrentHashMap<>();
         Iterator<String> userIterator;
-        Iterator<String> groupIterator;
+        Iterator<GroupEntry> groupIterator;
+        List<GroupEntry> systemGroups;
         Iterator<String> hostIterator;
         Iterator<String> netIterator;
         Iterator<String> protoIterator;
@@ -35,6 +38,7 @@ public class ExtendedNativeUtils extends NativeUtils {
             hostInfoCache.clear();
             userIterator = null;
             groupIterator = null;
+            systemGroups = null;
             hostIterator = null;
             netIterator = null;
             protoIterator = null;
@@ -179,57 +183,38 @@ public class ExtendedNativeUtils extends NativeUtils {
         return new RuntimeList();
     }
 
-    public static RuntimeArray getgrnam(int ctx, RuntimeBase... args) {
-        if (args.length < 1) return new RuntimeArray();
+    public static RuntimeList getgrnam(int ctx, RuntimeBase... args) {
+        if (args.length < 1) return new RuntimeList();
         String groupname = args[0].toString();
 
-        String cacheKey = "group:" + groupname;
-        if (state().groupInfoCache.containsKey(cacheKey)) {
-            return state().groupInfoCache.get(cacheKey);
-        }
-
-        RuntimeArray result = new RuntimeArray();
-        try {
-            if (IS_WINDOWS) {
-                String computerName = System.getenv("COMPUTERNAME");
-                if (groupname.equals("Users") || groupname.equals(computerName)) {
-                    RuntimeArray.push(result, new RuntimeScalar(groupname));
-                    RuntimeArray.push(result, new RuntimeScalar("x"));
-                    RuntimeArray.push(result, getgid(SCALAR));
-                    RuntimeArray members = new RuntimeArray();
-                    RuntimeArray.push(members, new RuntimeScalar(System.getProperty("user.name")));
-                    RuntimeArray.push(result, members);
-                }
-            } else {
-                if (groupname.equals("users") || groupname.equals(System.getProperty("user.name"))) {
-                    RuntimeArray.push(result, new RuntimeScalar(groupname));
-                    RuntimeArray.push(result, new RuntimeScalar("x"));
-                    RuntimeArray.push(result, getgid(SCALAR));
-                    RuntimeArray members = new RuntimeArray();
-                    RuntimeArray.push(members, new RuntimeScalar(System.getProperty("user.name")));
-                    RuntimeArray.push(result, members);
+        GroupEntry entry = state().groupInfoCache.get(groupname);
+        if (entry == null) {
+            for (GroupEntry candidate : getSystemGroupEntries()) {
+                if (candidate.name().equals(groupname)) {
+                    entry = candidate;
+                    state().groupInfoCache.put(groupname, entry);
+                    break;
                 }
             }
-
-            state().groupInfoCache.put(cacheKey, result);
-        } catch (Exception e) {
         }
-
-        return result;
+        return entry == null ? new RuntimeList() : groupEntryToList(entry, ctx);
     }
 
-    public static RuntimeArray getgrgid(int ctx, RuntimeBase... args) {
-        if (args.length < 1) return new RuntimeArray();
+    public static RuntimeList getgrgid(int ctx, RuntimeBase... args) {
+        if (args.length < 1) return new RuntimeList();
 
-        int gid = args[0].scalar().getInt();
-        int currentGid = getgid(ctx).getInt();
-
-        if (gid == currentGid) {
-            String groupName = IS_WINDOWS ? "Users" : "users";
-            return getgrnam(ctx, new RuntimeScalar(groupName));
+        long gid = args[0].scalar().getLong();
+        for (GroupEntry entry : getSystemGroupEntries()) {
+            try {
+                if (Long.parseLong(entry.gid()) == gid) {
+                    state().groupInfoCache.put(entry.name(), entry);
+                    return groupEntryToList(entry, ctx);
+                }
+            } catch (NumberFormatException ignored) {
+                // Ignore malformed entries in platform group databases.
+            }
         }
-
-        return new RuntimeArray();
+        return new RuntimeList();
     }
 
     public static RuntimeList getpwent(int ctx, RuntimeBase... args) {
@@ -246,19 +231,20 @@ public class ExtendedNativeUtils extends NativeUtils {
         }
     }
 
-    public static RuntimeArray getgrent(int ctx, RuntimeBase... args) {
-        Iterator<String> iterator = state().groupIterator;
+    public static RuntimeList getgrent(int ctx, RuntimeBase... args) {
+        Iterator<GroupEntry> iterator = state().groupIterator;
         if (iterator == null) {
-            List<String> groups = getSystemGroups();
-            iterator = groups.iterator();
+            iterator = getSystemGroupEntries().iterator();
             state().groupIterator = iterator;
         }
 
         if (iterator.hasNext()) {
-            return getgrnam(ctx, new RuntimeScalar(iterator.next()));
+            GroupEntry entry = iterator.next();
+            state().groupInfoCache.put(entry.name(), entry);
+            return groupEntryToList(entry, ctx);
         }
 
-        return new RuntimeArray();
+        return new RuntimeList();
     }
 
     public static RuntimeScalar setpwent(int ctx, RuntimeBase... args) {
@@ -537,39 +523,69 @@ public class ExtendedNativeUtils extends NativeUtils {
         return users;
     }
 
-    private static List<String> getSystemGroups() {
-        List<String> groups = new ArrayList<>();
-
-        try {
-            if (IS_WINDOWS) {
-                groups.addAll(Arrays.asList("Users", "Administrators", "Guests", "Power Users"));
-            } else {
-                try (Scanner scanner = new Scanner(new java.io.File("/etc/group"))) {
-                    while (scanner.hasNextLine()) {
-                        String line = scanner.nextLine();
-                        if (line.startsWith("#") || line.trim().isEmpty()) {
-                            continue;
-                        }
-
-                        String[] parts = line.split(":");
-                        if (parts.length >= 3) {
-                            String groupname = parts[0];
-                            int gid = Integer.parseInt(parts[2]);
-
-                            if (gid <= 65534) {
-                                groups.add(groupname);
-                            }
-                        }
-                    }
-                } catch (Exception e) {
-                    groups.addAll(Arrays.asList("root", "users", "wheel"));
-                }
-            }
-        } catch (Exception e) {
-            groups.add(IS_WINDOWS ? "Users" : "users");
+    private static RuntimeList groupEntryToList(GroupEntry entry, int ctx) {
+        RuntimeList result = new RuntimeList();
+        result.elements.add(new RuntimeScalar(entry.name()));
+        if (ctx == RuntimeContextType.SCALAR) {
+            return new RuntimeScalar(entry.name()).getList();
         }
 
-        return groups;
+        result.elements.add(new RuntimeScalar(entry.password()));
+        try {
+            result.elements.add(new RuntimeScalar(Long.parseLong(entry.gid())));
+        } catch (NumberFormatException ignored) {
+            result.elements.add(new RuntimeScalar(entry.gid()));
+        }
+        RuntimeArray members = new RuntimeArray();
+        for (String member : entry.members()) {
+            RuntimeArray.push(members, new RuntimeScalar(member));
+        }
+        result.elements.add(members);
+        return result;
+    }
+
+    private static List<GroupEntry> getSystemGroupEntries() {
+        State runtimeState = state();
+        if (runtimeState.systemGroups != null) {
+            return runtimeState.systemGroups;
+        }
+
+        List<GroupEntry> groups = new ArrayList<>();
+        if (IS_WINDOWS) {
+            String user = System.getProperty("user.name", "");
+            String gid = Integer.toString(getgid(SCALAR).getInt());
+            groups.add(new GroupEntry("Users", "x", gid, List.of(user)));
+            groups.add(new GroupEntry("Administrators", "x", "544", List.of()));
+            groups.add(new GroupEntry("Guests", "x", "546", List.of()));
+            groups.add(new GroupEntry("Power Users", "x", "547", List.of()));
+        } else {
+            try (Scanner scanner = new Scanner(new java.io.File("/etc/group"))) {
+                while (scanner.hasNextLine()) {
+                    String line = scanner.nextLine();
+                    if (line.startsWith("#") || line.trim().isEmpty()) {
+                        continue;
+                    }
+
+                    String[] fields = line.split(":", -1);
+                    if (fields.length < 4) {
+                        continue;
+                    }
+                    try {
+                        Long.parseLong(fields[2]);
+                    } catch (NumberFormatException ignored) {
+                        continue;
+                    }
+                    List<String> members = fields[3].isEmpty()
+                            ? List.of() : Arrays.asList(fields[3].split(",", -1));
+                    groups.add(new GroupEntry(fields[0], fields[1], fields[2], members));
+                }
+            } catch (Exception ignored) {
+                // An unavailable local group file means no enumerable entries.
+            }
+        }
+
+        runtimeState.systemGroups = List.copyOf(groups);
+        return runtimeState.systemGroups;
     }
 
     // ================== System V IPC Functions ==================

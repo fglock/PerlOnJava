@@ -801,6 +801,25 @@ public class ParseInfix {
         ErrorMessageUtil.SourceLocation location =
                 parser.ctx.errorUtil.getSourceLocationAccurate(barewordIndex);
         String near = left.value + bareword.text;
+        boolean plainDecimalExponent = bareword.text.matches("(?i)p[0-9]+")
+                && barewordIndex > 0
+                && parser.tokens.get(barewordIndex - 1).type == LexerTokenType.NUMBER
+                && parser.tokens.get(barewordIndex - 1).text.matches("[0-9]+")
+                && left.value.equals(parser.tokens.get(barewordIndex - 1).text)
+                && (barewordIndex < 2
+                    || !parser.tokens.get(barewordIndex - 2).text.equals("."));
+        if (plainDecimalExponent || parser.ctx.symbolTable.isWarningCategoryEnabled("misc")) {
+            String warningText = "Bareword found where operator expected"
+                    + parser.ctx.errorUtil.warningLocation(barewordIndex)
+                    + ", near \"" + near + "\"\n"
+                    + "\t(Missing operator before \"" + bareword.text + "\"?)\n";
+            RuntimeScalar warning = new RuntimeScalar(warningText);
+            if (parser.ctx.symbolTable.isFatalWarningCategory("misc")) {
+                WarnDie.die(warning, new RuntimeScalar(""));
+            } else {
+                WarnDie.warn(warning, new RuntimeScalar(""));
+            }
+        }
         String at = " at " + location.fileName() + " line " + location.lineNumber()
                 + ", near \"" + near + "\"\n";
         String message = "Bareword found where operator expected (Missing operator before \""
