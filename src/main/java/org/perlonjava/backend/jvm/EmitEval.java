@@ -451,62 +451,18 @@ public class EmitEval {
             mv.visitJumpInsn(Opcodes.GOTO, evalNotNextLastRedo);
 
             mv.visitLabel(isLast);
-            mv.visitVarInsn(Opcodes.ALOAD, cfSlot);
-            mv.visitFieldInsn(Opcodes.GETFIELD,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
-                    "marker",
-                    "Lorg/perlonjava/runtime/runtimetypes/ControlFlowMarker;");
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowRegistry",
-                    "register",
-                    "(Lorg/perlonjava/runtime/runtimetypes/ControlFlowMarker;)V",
-                    false);
-
-            // Return undef/empty list from eval after registering control flow
-            if (emitterVisitor.ctx.contextType == RuntimeContextType.LIST) {
-                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeList");
-                mv.visitInsn(Opcodes.DUP);
-                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/runtimetypes/RuntimeList", "<init>", "()V", false);
-            } else {
-                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeList");
-                mv.visitInsn(Opcodes.DUP);
-                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
-                mv.visitInsn(Opcodes.DUP);
-                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "<init>", "()V", false);
-                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/runtimetypes/RuntimeList", "<init>", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V", false);
-            }
-            mv.visitVarInsn(Opcodes.ASTORE, evalResultSlot);
-            mv.visitJumpInsn(Opcodes.GOTO, evalNoControlFlow);
+            EmitControlFlow.emitLoopControlScopeCleanupForDispatcher(
+                    emitterVisitor.ctx, unlabeledTarget, true);
+            mv.visitJumpInsn(Opcodes.GOTO, unlabeledTarget.lastLabel);
 
             mv.visitLabel(isNext);
-            mv.visitVarInsn(Opcodes.ALOAD, cfSlot);
-            mv.visitFieldInsn(Opcodes.GETFIELD,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
-                    "marker",
-                    "Lorg/perlonjava/runtime/runtimetypes/ControlFlowMarker;");
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowRegistry",
-                    "register",
-                    "(Lorg/perlonjava/runtime/runtimetypes/ControlFlowMarker;)V",
-                    false);
-
-            // Return undef/empty list from eval after registering control flow
-            if (emitterVisitor.ctx.contextType == RuntimeContextType.LIST) {
-                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeList");
-                mv.visitInsn(Opcodes.DUP);
-                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/runtimetypes/RuntimeList", "<init>", "()V", false);
-            } else {
-                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeList");
-                mv.visitInsn(Opcodes.DUP);
-                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
-                mv.visitInsn(Opcodes.DUP);
-                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "<init>", "()V", false);
-                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/runtimetypes/RuntimeList", "<init>", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V", false);
-            }
-            mv.visitVarInsn(Opcodes.ASTORE, evalResultSlot);
-            mv.visitJumpInsn(Opcodes.GOTO, evalNoControlFlow);
+            EmitControlFlow.emitLoopControlScopeCleanupForDispatcher(
+                    emitterVisitor.ctx, unlabeledTarget, false);
+            mv.visitJumpInsn(Opcodes.GOTO, unlabeledTarget.nextLabel);
 
             mv.visitLabel(isRedo);
+            EmitControlFlow.emitLoopControlScopeCleanupForDispatcher(
+                    emitterVisitor.ctx, unlabeledTarget, false);
             mv.visitJumpInsn(Opcodes.GOTO, unlabeledTarget.redoLabel);
         } else {
             // next/last/redo outside any loop

@@ -29,6 +29,9 @@ priorities and future plans.
 - Unwind interpreter control-block entries after caught eval exceptions so
   subsequent loop control cannot re-enter an abandoned block.
 
+- Route loop control from eval STRING directly to the active caller loop,
+  including while loops.
+
 - Fix source-site control-flow diagnostics, nested eval caller frames, try
   caller frames, regex identity, and other reported JVM/interpreter compatibility
   gaps.
