@@ -80,7 +80,7 @@ tests, alongside the caught-exception control-stack regression.
 
 ### Open questions
 
-The requested UAT baseline log is missing and must be restored before the final
-regression comparison. GitHub access works outside the local sandbox.
+The user supplied `../PerlOnJava/logs/test_20260930_090000_multi.log` as the
+UAT comparison baseline; the file exists. GitHub access works outside the local sandbox.
 Sibling directories have switched to other branches for new ongoing work;
 the preserved imported refs define this integration's committed input snapshot.

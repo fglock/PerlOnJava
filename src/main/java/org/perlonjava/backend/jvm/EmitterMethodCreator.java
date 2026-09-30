@@ -18,6 +18,7 @@ import org.perlonjava.frontend.analysis.TempLocalCountVisitor;
 import org.perlonjava.frontend.astnode.BlockNode;
 import org.perlonjava.frontend.astnode.CompilerFlagNode;
 import org.perlonjava.frontend.astnode.Node;
+import org.perlonjava.frontend.astnode.SubroutineNode;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.runtimetypes.*;
 
