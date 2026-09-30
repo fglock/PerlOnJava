@@ -14,18 +14,21 @@ priorities and future plans.
 - Resolve dynamic `require` package names as portable module paths before
   filesystem lookup, including on Windows.
 
-- Restore `class/accessor.t`, `op/smartkve.t`, `comp/utf.t`, `op/gmagic.t`,
-  and `uni/overload.t` compatibility.
-
-- Restore `re/recompile.t` compatibility and cover the remaining `op/gmagic.t`
-  assertions.
 - Restore `re/recompile.t`, `class/accessor.t`, `op/smartkve.t`, `comp/utf.t`,
   `op/gmagic.t`, and `uni/overload.t` compatibility.
 
 - Preserve tied scalar magic when deleting tied hash elements and stash entries.
-- Restore JVM compatibility for `goto.t`, `qr.t`, `runlevel.t`, `select.t`,
+
+- Restore JVM/interpreter compatibility for `goto.t`, `qr.t`, `runlevel.t`, `select.t`,
   `sselect.t`, `perlio_fail.t`, `try.t`, and the three substitution tests,
   including source-site diagnostics, eval caller frames, and regex identity.
+
+- Restore UTF-8 I/O warnings, defer control flow, directory reads, and
+  version-declaration semantics on both execution backends.
+
+- Unwind interpreter control-block entries after caught eval exceptions so
+  subsequent loop control cannot re-enter an abandoned block.
+
 - Fix source-site control-flow diagnostics, nested eval caller frames, try
   caller frames, regex identity, and other reported JVM/interpreter compatibility
   gaps.

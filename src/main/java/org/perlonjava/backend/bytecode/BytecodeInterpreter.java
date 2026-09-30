@@ -2751,6 +2751,8 @@ public class BytecodeInterpreter {
 
                                 // Push catch PC onto eval stack
                                 evalCatchStack.push(catchPc);
+                                frame.evalControlBlockDepthStack.push(new int[]{
+                                        controlBlockStack.size(), labeledBlockStack.size()});
 
                                 // Save first body register for scope cleanup on exception
                                 evalBaseRegStack.push(firstBodyReg);
@@ -4775,8 +4777,17 @@ public class BytecodeInterpreter {
         return new CallerStack.CallerInfo(currentPkg, filename, lineNumber);
     }
 
-    /** Pop only the virtual eval caller frame owned by the current eval boundary. */
+    /** Restore the control stacks and virtual caller frame owned by this eval. */
     private static void popEvalCallerFrame(SuspendedInterpreterFrame frame) {
+        if (!frame.evalControlBlockDepthStack.isEmpty()) {
+            int[] depths = frame.evalControlBlockDepthStack.pop();
+            while (frame.controlBlockStack.size() > depths[0]) {
+                frame.controlBlockStack.removeLast();
+            }
+            while (frame.labeledBlockStack.size() > depths[1]) {
+                frame.labeledBlockStack.removeLast();
+            }
+        }
         if (frame.evalCallerFrameStack.isEmpty()) return;
         boolean pushed = frame.evalCallerFrameStack.pop();
         if (pushed && frame.virtualEvalFrameDepth > 0) {

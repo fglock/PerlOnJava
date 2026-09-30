@@ -156,7 +156,7 @@ public class WarnDie {
      * method's own warning to recursively invoke that method again.
      */
     public static void writeFatalDiagnostic(RuntimeIO stderr, String message) {
-        if (stderr == null) {
+        if (stderr == null || WRITING_WARNING.get()) {
             System.err.print(message);
             System.err.flush();
             return;
@@ -170,14 +170,26 @@ public class WarnDie {
         try {
             stderr.write(message);
             stderr.flush();
-        } catch (RuntimeException tiedFailure) {
-            // The tied method itself attempted forbidden control flow. Its
-            // diagnostic cannot safely pass through the same handle again.
-            System.err.print(ErrorMessageUtil.stringifyException(tiedFailure));
+        } catch (Throwable tiedFailure) {
+            Throwable failure = unwrapException(tiedFailure);
+            // Escaped control flow from PRINT replaces the original error.
+            // Other reporting failures must retain the original diagnostic.
+            System.err.print(isEscapedControlFlowFailure(failure)
+                    ? ErrorMessageUtil.stringifyException(failure) : message);
             System.err.flush();
         } finally {
             WRITING_WARNING.remove();
         }
+    }
+
+    private static boolean isEscapedControlFlowFailure(Throwable failure) {
+        if (!(failure instanceof PerlCompilerException)) return false;
+        String message = failure.getMessage();
+        if (message == null) return false;
+        for (String operator : new String[]{"last", "next", "redo", "goto", "return", "continue", "break"}) {
+            if (message.startsWith("Can't \"" + operator + "\"")) return true;
+        }
+        return false;
     }
 
     public static RuntimeException maybeInvokeUnhandledDieHandler(RuntimeException e) {
