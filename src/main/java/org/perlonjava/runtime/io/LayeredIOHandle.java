@@ -512,9 +512,11 @@ public class LayeredIOHandle implements IOHandle {
         }
 
         switch (layerSpec) {
-            case "bytes", "raw", "unix", "scalar" -> {
+            case "bytes", "raw", "unix", "scalar", "stdio", "pop" -> {
                 // No-op layers - binary mode with no transformation
-                // These layers essentially remove other layers when used alone
+                // These compatibility layers do not add a transformation in
+                // this implementation. RuntimeIO.binmode replaces the active
+                // stack, so :pop is also an identity operation here.
             }
             case "perlio" -> perlioBuffering = true;
             case "crlf" -> {
@@ -573,7 +575,7 @@ public class LayeredIOHandle implements IOHandle {
                     ViaLayer layer = new ViaLayer(className, currentLowerHandle(), currentMode());
                     activeLayers.add(layer);
                 } else {
-                    throw new IllegalArgumentException("Unknown layer \"" + layerSpec
+                    throw new IllegalArgumentException("Unknown PerlIO layer \"" + layerSpec
                             + "\" in PerlIO layer stack");
                 }
             }

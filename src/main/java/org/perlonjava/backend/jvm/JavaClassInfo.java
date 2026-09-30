@@ -86,6 +86,8 @@ public class JavaClassInfo {
      * Control flow statements (last, next, redo, return, goto) are prohibited in defer blocks.
      */
     public boolean isInDeferBlock;
+    /** True when this generated closure implements a synthetic finally block. */
+    public boolean isInFinallyBlock;
 
     /**
      * Flag indicating if this method is an eval block (eval { ... }).

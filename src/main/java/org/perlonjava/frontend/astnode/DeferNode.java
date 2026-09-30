@@ -35,6 +35,12 @@ public class DeferNode extends AbstractNode {
         this.tokenIndex = tokenIndex;
     }
 
+    /** Marks a synthetic defer used to implement a Perl finally block. */
+    public DeferNode asFinallyBlock() {
+        setAnnotation("isFinallyBlock", true);
+        return this;
+    }
+
     /**
      * Accepts a visitor that performs some operation on this node.
      * This method is part of the Visitor design pattern, which allows

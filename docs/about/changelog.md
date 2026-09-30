@@ -8,6 +8,8 @@ priorities and future plans.
 
 - Restore `op/fh.t`, `op/grent.t`, and `op/hexfp.t` behavior for non-vivifying symbolic handles, group database entries, and malformed hex-float warnings.
 
+- Restore `io/perlio_leaks.t`, `io/open.t`, `op/utf8cache.t`, and `lib/croak.t` compatibility for core PerlIO layers, aliased glob names after stash clearing, and `finally` control-flow diagnostics.
+
 - Restore core-test compatibility for regex-set diagnostics (including
   POSIX-looking text in extended-class comments), classes and MRO, op subs,
   filesystem metadata, `die` state, and scalar flip-flop warnings on both

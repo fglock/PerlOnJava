@@ -731,7 +731,7 @@ public class StatementParser {
             if (finallyBlock != null && !parser.parsingFutureAsyncAwaitSub) {
                 TryNode tryWithoutFinally = new TryNode(
                         tryBlock, catchParameter, catchBlock, null, index);
-                return new BlockNode(List.of(new DeferNode(finallyBlock, finallyIndex),
+                return new BlockNode(List.of(new DeferNode(finallyBlock, finallyIndex).asFinallyBlock(),
                         tryWithoutFinally), index);
             }
 

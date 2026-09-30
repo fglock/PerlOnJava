@@ -522,6 +522,7 @@ public class BytecodeCompiler implements Visitor {
     private boolean tracksRuntimeRegexLexicals;
     // True when compiling inside a defer block (control flow out of defer is prohibited)
     private boolean isInDeferBlock;
+    private boolean isInFinallyBlock;
     // True when compiling inside a map/grep block (explicit return must use RETURN_NONLOCAL)
     boolean isInMapGrepBlock;
     // Nesting depth inside eval blocks (goto &sub from eval is prohibited)
@@ -1305,10 +1306,10 @@ public class BytecodeCompiler implements Visitor {
      * @param operator   The control flow operator (e.g., "return", "goto", "last")
      */
     void checkNotInDeferBlock(int tokenIndex, String operator) {
-        if (isInDeferBlock) {
+        if (isInDeferBlock && !isInFinallyBlock) {
             throwCleanCompilerException("Can't \"" + operator + "\" out of a \"defer\" block", tokenIndex);
         }
-        if (finallyBlockDepth > 0) {
+        if (isInFinallyBlock || finallyBlockDepth > 0) {
             throwCleanCompilerException("Can't \"" + operator + "\" out of a \"finally\" block", tokenIndex);
         }
     }
@@ -1428,6 +1429,9 @@ public class BytecodeCompiler implements Visitor {
                 }
                 if (ctx.javaClassInfo.isInDeferBlock) {
                     isInDeferBlock = true;
+                }
+                if (ctx.javaClassInfo.isInFinallyBlock) {
+                    isInFinallyBlock = true;
                 }
             }
         }
@@ -7191,6 +7195,7 @@ public class BytecodeCompiler implements Visitor {
         if (isDeferBlock != null && isDeferBlock) {
             subCompiler.isInDeferBlock = true;
         }
+        subCompiler.isInFinallyBlock = node.getBooleanAnnotation("isFinallyBlock");
 
         // Check if this subroutine is a map/grep block - explicit return must use RETURN_NONLOCAL
         Boolean isMapGrepBlock = (Boolean) node.getAnnotation("isMapGrepBlock");
@@ -8821,6 +8826,9 @@ public class BytecodeCompiler implements Visitor {
                 null, null, null, node.block, false, node.tokenIndex);
         // Mark the closure as a defer block so control flow checks can be performed
         closureNode.setAnnotation("isDeferBlock", true);
+        if (node.getBooleanAnnotation("isFinallyBlock")) {
+            closureNode.setAnnotation("isFinallyBlock", true);
+        }
         closureNode.accept(this);
         int codeReg = lastResultReg;
 

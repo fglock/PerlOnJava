@@ -1666,6 +1666,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         int separator = name.lastIndexOf("::");
         if (separator > 0
                 && GlobalVariable.isAnonymousStashPackage(name.substring(0, separator))) {
+            String sourceNamespace = name.substring(0, separator + 2);
+            for (Map.Entry<String, String> alias : GlobalVariable.stashAliases.entrySet()) {
+                if (sourceNamespace.equals(alias.getValue())) {
+                    return alias.getKey() + name.substring(separator);
+                }
+            }
             return "__ANON__::" + name.substring(separator + 2);
         }
         return name;

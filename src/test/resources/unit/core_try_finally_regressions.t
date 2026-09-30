@@ -94,4 +94,25 @@ eval q{
 like($@, qr/^catch block requires a \(VAR\) at /,
     'catch without a variable reports the dedicated syntax error');
 
+for my $case (
+    [return => q{try { 1 } catch ($error) {} finally { return } }],
+    [goto   => q{try { 1 } catch ($error) {} finally { goto TARGET } }],
+    [last   => q{try { 1 } catch ($error) {} finally { last } }],
+) {
+    my ($operator, $body) = @$case;
+    my $sub_name = "requested_finally_control_$operator";
+    my $source = qq{
+        use feature 'try';
+        no warnings 'experimental::try';
+        sub $sub_name { $body }
+        $sub_name();
+        1;
+    };
+    my $compiled = eval $source;
+    my $error = $@;
+    ok(!$compiled, "$operator out of finally is rejected");
+    like($error, qr/Can't "$operator" out of a "finally" block/,
+        "$operator out of finally names the finally block");
+}
+
 done_testing();

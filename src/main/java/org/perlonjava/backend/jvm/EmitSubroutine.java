@@ -268,6 +268,7 @@ public class EmitSubroutine {
         if (isDeferBlock != null && isDeferBlock) {
             newJavaClassInfo.isInDeferBlock = true;
         }
+        newJavaClassInfo.isInFinallyBlock = node.getBooleanAnnotation("isFinallyBlock");
 
         // Check if this is an eval block - goto &sub is prohibited
         if (node.useTryCatch) {

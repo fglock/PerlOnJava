@@ -120,12 +120,12 @@ public class EmitControlFlow {
         String operator = node.operator;
         
         // Check if we're inside a defer block - control flow out of defer is prohibited
-        if (ctx.javaClassInfo.isInDeferBlock) {
+        if (ctx.javaClassInfo.isInDeferBlock && !ctx.javaClassInfo.isInFinallyBlock) {
             throwControlFlowBlockError(ctx, node, operator, "defer");
         }
         
         // Check if we're inside a finally block - control flow out of finally is prohibited
-        if (ctx.javaClassInfo.finallyBlockDepth > 0) {
+        if (ctx.javaClassInfo.isInFinallyBlock || ctx.javaClassInfo.finallyBlockDepth > 0) {
             throwControlFlowBlockError(ctx, node, operator, "finally");
         }
 
@@ -341,12 +341,12 @@ public class EmitControlFlow {
         EmitterContext ctx = emitterVisitor.ctx;
 
         // Check if we're inside a defer block - return out of defer is prohibited
-        if (ctx.javaClassInfo.isInDeferBlock) {
+        if (ctx.javaClassInfo.isInDeferBlock && !ctx.javaClassInfo.isInFinallyBlock) {
             throwControlFlowBlockError(ctx, node, "return", "defer");
         }
         
         // Check if we're inside a finally block - return out of finally is prohibited
-        if (ctx.javaClassInfo.finallyBlockDepth > 0) {
+        if (ctx.javaClassInfo.isInFinallyBlock || ctx.javaClassInfo.finallyBlockDepth > 0) {
             throwControlFlowBlockError(ctx, node, "return", "finally");
         }
 
@@ -727,12 +727,12 @@ public class EmitControlFlow {
         EmitterContext ctx = emitterVisitor.ctx;
 
         // Check if we're inside a defer block - goto out of defer is prohibited
-        if (ctx.javaClassInfo.isInDeferBlock) {
+        if (ctx.javaClassInfo.isInDeferBlock && !ctx.javaClassInfo.isInFinallyBlock) {
             throwControlFlowBlockError(ctx, node, "goto", "defer");
         }
         
         // Check if we're inside a finally block - goto out of finally is prohibited
-        if (ctx.javaClassInfo.finallyBlockDepth > 0) {
+        if (ctx.javaClassInfo.isInFinallyBlock || ctx.javaClassInfo.finallyBlockDepth > 0) {
             throwControlFlowBlockError(ctx, node, "goto", "finally");
         }
 

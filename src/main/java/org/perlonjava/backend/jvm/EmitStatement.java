@@ -1072,6 +1072,9 @@ public class EmitStatement {
                 null, null, null, node.block, false, node.tokenIndex);
         // Mark this subroutine as a defer block - control flow restrictions apply
         closureNode.setAnnotation("isDeferBlock", true);
+        if (node.getBooleanAnnotation("isFinallyBlock")) {
+            closureNode.setAnnotation("isFinallyBlock", true);
+        }
         closureNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         // Stack: RuntimeScalar (the code reference)
 
