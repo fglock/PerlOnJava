@@ -100,11 +100,6 @@ public class BytecodeCompiler implements Visitor {
             collectConstructEntryLabels(ternary.falseExpr, out, true);
             return;
         }
-        if (node instanceof IfNode conditional) {
-            collectConstructEntryLabels(conditional.condition, out, true);
-            collectConstructEntryLabels(conditional.thenBranch, out, true);
-            collectConstructEntryLabels(conditional.elseBranch, out, true);
-        }
     }
 
     /** Record labels in given blocks; entering one skips topicalizer setup. */
@@ -372,8 +367,8 @@ public class BytecodeCompiler implements Visitor {
             // become a static goto target (op/goto.t GH #23810).
             boolean alwaysFalse = conditional.condition instanceof NumberNode number
                     && number.value.equals("0");
-            if (!alwaysFalse) predeclareGotoLabels(conditional.thenBranch, true, insideLoopBody);
-            predeclareGotoLabels(conditional.elseBranch, true, insideLoopBody);
+            if (!alwaysFalse) predeclareGotoLabels(conditional.thenBranch, false, insideLoopBody);
+            predeclareGotoLabels(conditional.elseBranch, false, insideLoopBody);
             return;
         }
         if (node instanceof OperatorNode operator) { predeclareGotoLabels(operator.operand, true, insideLoopBody); return; }

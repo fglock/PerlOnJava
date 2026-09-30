@@ -1726,14 +1726,6 @@ public class OperatorParser {
         }
         int savedIndex = parser.tokenIndex;
         LexerToken next = TokenUtils.peek(parser);
-        if (parser.ctx.compilerOptions.isByteStringSource
-                && !ListParser.isListTerminator(parser, next)
-                && next.text.codePoints().anyMatch(cp -> cp > 0x7f)) {
-            int cp = next.text.codePoints().filter(value -> value > 0x7f).findFirst().orElse(0);
-            parser.throwCleanError("Unrecognized character " + String.format("\\x%02X", cp)
-                    + "; marked by <-- HERE after label <-- HERE near column 1");
-        }
-
         // In Perl, `last FOO` / `next FOO` / `redo FOO` uses the bareword as
         // the literal loop label FOO. A constant subroutine named FOO must not
         // rewrite that bareword into a dynamic label expression.

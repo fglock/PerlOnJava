@@ -54,4 +54,8 @@ WHILE: while (1) {
     }
 }
 
+my $last_sub = eval 'sub { last }';
+ok(ref($last_sub) eq 'CODE',
+    'eval ending in last does not treat EOF as a label character');
+
 done_testing;

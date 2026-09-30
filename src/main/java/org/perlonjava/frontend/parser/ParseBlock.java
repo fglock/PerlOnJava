@@ -253,17 +253,6 @@ public class ParseBlock {
     private static String parseLabel(Parser parser, List<Node> statements, List<String> blockLabels) {
         int currentIndexLabel = parser.tokenIndex;
         String id = TokenUtils.peek(parser).text;
-        if (parser.ctx.compilerOptions.isByteStringSource) {
-            for (int offset = 0; offset < id.length(); ) {
-                int cp = id.codePointAt(offset);
-                if (cp > 0x7f) {
-                    parser.throwCleanError("Unrecognized character "
-                            + String.format("\\x%02X", cp)
-                            + "; marked by <-- HERE after label <-- HERE near column 1");
-                }
-                offset += Character.charCount(cp);
-            }
-        }
         if (isIsQuoteLikeOperator(id)) {
             // `m:` not a label, but a quote-like operator
             return null;
@@ -276,6 +265,17 @@ public class ParseBlock {
 
         TokenUtils.consume(parser);
         if (peek(parser).text.equals(":")) {
+            if (parser.ctx.compilerOptions.isByteStringSource) {
+                for (int offset = 0; offset < id.length(); ) {
+                    int cp = id.codePointAt(offset);
+                    if (cp > 0x7f) {
+                        parser.throwCleanError("Unrecognized character "
+                                + String.format("\\x%02X", cp)
+                                + "; marked by <-- HERE after label <-- HERE near column 1");
+                    }
+                    offset += Character.charCount(cp);
+                }
+            }
             statements.add(new LabelNode(id, currentIndexLabel));
             blockLabels.add(id); // Add each found label to our list
             TokenUtils.consume(parser); // Consume the colon
