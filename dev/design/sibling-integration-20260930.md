@@ -59,16 +59,20 @@ through scalar copies, mutation snapshots, localization, and graph cloning.
   zero failures/errors; all 35 changed Perl files (185 assertions) pass on
   JVM and interpreter (2026-09-30).
 - [x] Publish draft PR 1580 and complete initial full UAT (2026-09-30).
-- [ ] Validate the batched UAT corrections and require regression-free full
-  UAT comparison plus green final-head CI.
+- [x] Validate the batched UAT corrections locally: 14/14 target files and
+  16,681/16,681 assertions pass; 46 changed unit files and 236 assertions
+  pass on both JVM and interpreter; unfiltered `make` passes (2026-09-30).
+- [ ] Commit and publish the validated correction batch, require green
+  final-head CI, then run the full UAT once and compare it with the supplied
+  baseline.
 
 ### Next steps
 
-Validate the UAT correction batch with a focused gate, then unfiltered make,
-changed regression files on both backends, and the owning imported files.
-Update PR 1580 and repeat full UAT against the supplied baseline; require green
-final-head CI. Preserve the initial UAT evidence and keep full validation logs
-under `/tmp/integration-*`.
+The correction batch has passed its focused gate, all 14 previously regressed
+UAT files, changed regression files on both backends, and unfiltered make.
+Next commit and update PR 1580, wait for green final-head CI, and only then
+repeat full UAT against the supplied baseline. Preserve the initial UAT
+evidence and keep full validation logs under `/tmp/integration-*`.
 
 ### Full UAT correction batch (2026-09-30)
 
@@ -82,6 +86,21 @@ JVM eval compilation caller frames, and a host print warning while reporting
 a wide compilation error. Nine focused Perl regression files cover these
 behaviors and pass system Perl; failure evidence is retained against the
 unfixed `73af43548` development JAR.
+
+The remaining `op/tie.t` failure was caused by delete expressions inheriting
+runtime context: the bytecode path treated that context as a fixed list
+context, so a void-context delete fetched the tied scalar while removing it.
+Delete opcodes and JVM hash-delete calls now pass the compile-time context or
+resolve runtime context dynamically; the runtime avoids tied FETCH while
+cleaning up removed scalar magic in void context. A separate void-return fix
+prevents result cloning from fetching tied scalars. Both fixes have permanent
+unit tests validated with system Perl and on JVM/interpreter, and the full
+`op/tie.t` file now passes 95/95.
+
+Validation evidence for this batch (2026-09-30): filtered make passed; all 14
+target UAT files passed 16,681/16,681; 46 changed unit files passed 236/236
+on each backend; and unfiltered make passed in 7m06. Full UAT remains deferred
+until final-head CI is green.
 
 Linux CI passed. Windows progressed through its serial unit suite until the
 45-minute build cutoff, without a reported assertion failure. The batch raises

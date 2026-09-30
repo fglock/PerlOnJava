@@ -836,15 +836,19 @@ public class InlineOpcodeHandler {
 
     /**
      * Delete hash key: rd = delete $hash{key}
-     * Format: HASH_DELETE rd hashReg keyReg
+     * Format: HASH_DELETE rd hashReg keyReg callContext
      */
     public static int executeHashDelete(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int hashReg = bytecode[pc++];
         int keyReg = bytecode[pc++];
+        int callContext = bytecode[pc++];
+        if (callContext == -1) {
+            callContext = ((RuntimeScalar) registers[2]).getInt();
+        }
         RuntimeHash hash = (RuntimeHash) registers[hashReg];
         RuntimeScalar key = (RuntimeScalar) registers[keyReg];
-        registers[rd] = hash.delete(key);
+        registers[rd] = hash.deleteInContext(key, callContext);
         return pc;
     }
 

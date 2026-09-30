@@ -100,7 +100,6 @@ public class SlowOpcodeHandler {
         int rd = bytecode[pc++];
         int hashReg = bytecode[pc++];
         int keysListReg = bytecode[pc++];
-
         RuntimeHash hash = (RuntimeHash) registers[hashReg];
         RuntimeList keysList = (RuntimeList) registers[keysListReg];
 
@@ -1125,7 +1124,7 @@ public class SlowOpcodeHandler {
 
     /**
      * SLOW_HASH_SLICE_DELETE: rd = hash.deleteSlice(keys_list)
-     * Format: [SLOW_HASH_SLICE_DELETE] [rd] [hashReg] [keysListReg]
+     * Format: [SLOW_HASH_SLICE_DELETE] [rd] [hashReg] [keysListReg] [callContext]
      * Effect: rd = RuntimeList of deleted values
      */
     public static int executeHashSliceDelete(
@@ -1136,12 +1135,16 @@ public class SlowOpcodeHandler {
         int rd = bytecode[pc++];
         int hashReg = bytecode[pc++];
         int keysListReg = bytecode[pc++];
+        int callContext = bytecode[pc++];
+        if (callContext == -1) {
+            callContext = ((RuntimeScalar) registers[2]).getInt();
+        }
 
         RuntimeHash hash = (RuntimeHash) registers[hashReg];
         RuntimeList keysList = (RuntimeList) registers[keysListReg];
 
         // Delete values for all keys and return them
-        RuntimeList deletedValuesList = hash.deleteSlice(keysList);
+        RuntimeList deletedValuesList = hash.deleteSliceInContext(keysList, callContext);
 
         // Convert to RuntimeArray for array assignment
         RuntimeArray result = new RuntimeArray();
@@ -1195,7 +1198,6 @@ public class SlowOpcodeHandler {
         int rd = bytecode[pc++];
         int hashReg = bytecode[pc++];
         int keysListReg = bytecode[pc++];
-
         RuntimeHash hash = (RuntimeHash) registers[hashReg];
         RuntimeList keysList = (RuntimeList) registers[keysListReg];
 
@@ -1239,7 +1241,7 @@ public class SlowOpcodeHandler {
 
     /**
      * HASH_KV_SLICE_DELETE: rd = hash.deleteKeyValueSlice(keys_list)
-     * Format: [HASH_KV_SLICE_DELETE] [rd] [hashReg] [keysListReg]
+     * Format: [HASH_KV_SLICE_DELETE] [rd] [hashReg] [keysListReg] [callContext]
      * Effect: rd = RuntimeList of alternating keys and deleted values
      */
     public static int executeHashKVSliceDelete(
@@ -1250,12 +1252,16 @@ public class SlowOpcodeHandler {
         int rd = bytecode[pc++];
         int hashReg = bytecode[pc++];
         int keysListReg = bytecode[pc++];
+        int callContext = bytecode[pc++];
+        if (callContext == -1) {
+            callContext = ((RuntimeScalar) registers[2]).getInt();
+        }
 
         RuntimeHash hash = (RuntimeHash) registers[hashReg];
         RuntimeList keysList = (RuntimeList) registers[keysListReg];
 
         // Delete key-value pairs and return them
-        RuntimeList deletedPairsList = hash.deleteKeyValueSlice(keysList);
+        RuntimeList deletedPairsList = hash.deleteKeyValueSliceInContext(keysList, callContext);
 
         // Convert to RuntimeArray for array assignment
         RuntimeArray result = new RuntimeArray();

@@ -22,7 +22,8 @@ priorities and future plans.
 - Restore `re/recompile.t`, `class/accessor.t`, `op/smartkve.t`, `comp/utf.t`,
   `op/gmagic.t`, and `uni/overload.t` compatibility.
 
-- Preserve tied scalar magic when deleting tied hash elements and stash entries.
+- Preserve tied scalar magic when deleting tied hash elements and stash entries,
+  without triggering tied `FETCH` in void context.
 
 - Restore JVM/interpreter compatibility for `goto.t`, `qr.t`, `runlevel.t`, `select.t`,
   `sselect.t`, `perlio_fail.t`, `try.t`, and the three substitution tests,

@@ -3307,9 +3307,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return this.hashDeref().delete(index);
     }
 
+    public RuntimeScalar hashDerefDeleteInContext(RuntimeScalar index, int callContext) {
+        return this.hashDeref().deleteInContext(index, callContext);
+    }
+
     // Method to implement `delete $v->{key}`, when "no strict refs" is in effect
     public RuntimeScalar hashDerefDeleteNonStrict(RuntimeScalar index, String packageName) {
         return this.hashDerefNonStrict(packageName).delete(index);
+    }
+
+    public RuntimeScalar hashDerefDeleteInContextNonStrict(RuntimeScalar index, String packageName, int callContext) {
+        return this.hashDerefNonStrict(packageName).deleteInContext(index, callContext);
     }
 
     // Method to implement `delete local $v->{key}`

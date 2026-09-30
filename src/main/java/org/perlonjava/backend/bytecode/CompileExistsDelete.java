@@ -137,6 +137,7 @@ public class CompileExistsDelete {
         bc.emitReg(rd);
         bc.emitReg(hashReg);
         bc.emitReg(keyReg);
+        bc.emit(bc.currentCallContext == RuntimeContextType.RUNTIME ? -1 : bc.currentCallContext);
         bc.lastResultReg = rd;
     }
 
@@ -174,6 +175,7 @@ public class CompileExistsDelete {
         bc.emitReg(rd);
         bc.emitReg(hashReg);
         bc.emitReg(keysListReg);
+        bc.emit(bc.currentCallContext == RuntimeContextType.RUNTIME ? -1 : bc.currentCallContext);
         bc.lastResultReg = rd;
     }
 
@@ -211,6 +213,7 @@ public class CompileExistsDelete {
         bc.emitReg(rd);
         bc.emitReg(hashReg);
         bc.emitReg(keysListReg);
+        bc.emit(bc.currentCallContext == RuntimeContextType.RUNTIME ? -1 : bc.currentCallContext);
         bc.lastResultReg = rd;
     }
 
@@ -322,6 +325,7 @@ public class CompileExistsDelete {
             bc.emitReg(rd);
             bc.emitReg(hashReg);
             bc.emitReg(keyReg);
+            bc.emit(bc.currentCallContext == RuntimeContextType.RUNTIME ? -1 : bc.currentCallContext);
             bc.lastResultReg = rd;
         } else if (arrowAccess.right instanceof ArrayLiteralNode indexNode) {
             bc.compileNode(arrowAccess.left, -1, RuntimeContextType.SCALAR);

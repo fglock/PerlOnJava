@@ -1362,6 +1362,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (result == null) {
                 return null;
             }
+            if (effectiveContext == RuntimeContextType.VOID) {
+                return result;
+            }
             if (result instanceof RuntimeControlFlowList) {
                 return result;
             }
@@ -7955,6 +7958,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static void materializeSpecialVarsInResult(RuntimeList result, int callContext) {
+        if (callContext == RuntimeContextType.VOID) {
+            return;
+        }
         boolean preserveAggregateLvalues = callContext == RuntimeContextType.LVALUE_LIST;
         List<RuntimeBase> elems = result.elements;
         for (int i = 0; i < elems.size(); i++) {

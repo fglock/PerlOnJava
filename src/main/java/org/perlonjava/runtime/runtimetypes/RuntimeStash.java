@@ -178,6 +178,16 @@ public class RuntimeStash extends RuntimeHash {
         return deleteGlob(key.toString());
     }
 
+    @Override
+    public RuntimeScalar deleteInContext(RuntimeScalar key, int callContext) {
+        return delete(key);
+    }
+
+    @Override
+    public RuntimeScalar deleteInContext(String key, int callContext) {
+        return delete(key);
+    }
+
     private RuntimeScalar deleteGlob(String k) {
         // Special handling for namespace keys.  A package name ending in a
         // single colon is stored in its parent stash under a key ending in
