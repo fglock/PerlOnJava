@@ -75,6 +75,15 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
 public class RuntimeIO extends RuntimeScalar {
     /** The glob from which this escaped IO-slot value originated, if still live. */
     private WeakReference<RuntimeGlob> ownerGlob;
+    /** Ties visible through escaped PVIO values without retaining their glob cycle. */
+    private static final Map<RuntimeIO, WeakReference<TieHandle>> tiedAliases =
+            Collections.synchronizedMap(new WeakHashMap<>());
+
+    public static void registerTiedAlias(RuntimeIO io, TieHandle tieHandle) {
+        if (io != null) {
+            tiedAliases.put(io, new WeakReference<>(tieHandle));
+        }
+    }
 
     public void setOwnerGlob(RuntimeGlob ownerGlob) {
         this.ownerGlob = new WeakReference<>(ownerGlob);
@@ -1465,6 +1474,11 @@ public class RuntimeIO extends RuntimeScalar {
                 }
             }
         } else if (runtimeScalar.value instanceof RuntimeIO runtimeIO) {
+            WeakReference<TieHandle> aliasReference = tiedAliases.get(runtimeIO);
+            TieHandle alias = aliasReference == null ? null : aliasReference.get();
+            if (alias != null) {
+                return alias;
+            }
             // Symbol::geniosym may create an unnamed PVIO wrapper.  Preserve
             // its alias to the source glob without introducing a strong cycle.
             RuntimeGlob owner = runtimeIO.ownerGlob == null ? null : runtimeIO.ownerGlob.get();

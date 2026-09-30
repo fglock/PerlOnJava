@@ -5,6 +5,9 @@ import org.perlonjava.runtime.runtimetypes.*;
 import org.perlonjava.runtime.perlmodule.TieHashNamedCapture;
 
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeArray.TIED_ARRAY;
@@ -167,7 +170,9 @@ public class TieOperators {
                     tieHandle.globName = previousValue.globName;
                 }
                 glob.IO.value = tieHandle;
+                RuntimeIO.registerTiedAlias(previousValue, tieHandle);
                 if (directPvioWrapper != null) {
+                    directPvioWrapper.type = TIED_SCALAR;
                     directPvioWrapper.value = tieHandle;
                 }
                 // Update selectedHandle so that `print` without explicit filehandle
@@ -217,11 +222,17 @@ public class TieOperators {
 
     /** Finds the scalar wrapper that owns a direct PVIO, including its proxy form. */
     private static RuntimeScalar directPvioWrapper(RuntimeScalar variable) {
-        if (variable.value instanceof RuntimeIO) {
-            return variable;
+        if (variable.value instanceof RuntimeGlob glob
+                && glob.IO != null && glob.IO.value instanceof RuntimeIO) {
+            return glob.IO;
         }
-        if (variable.value instanceof RuntimeScalar scalar && scalar.value instanceof RuntimeIO) {
-            return scalar;
+        RuntimeScalar wrapper = variable;
+        Set<RuntimeScalar> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        while (seen.add(wrapper) && wrapper.value instanceof RuntimeScalar nested) {
+            wrapper = nested;
+        }
+        if (wrapper.value instanceof RuntimeIO) {
+            return wrapper;
         }
         return null;
     }
