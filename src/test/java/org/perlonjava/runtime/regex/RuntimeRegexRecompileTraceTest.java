@@ -64,14 +64,16 @@ class RuntimeRegexRecompileTraceTest {
         ByteArrayOutputStream debugOutput = new ByteArrayOutputStream();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeIO.setStderr(new RuntimeIO(new StandardIO(debugOutput, false)));
-            CompilerOptions options = new CompilerOptions();
-            options.fileName = "<regex-recompile-trace-test>";
-            options.code = source;
-            options.useInterpreter = interpreter;
-            PerlLanguageProvider.executePerlCode(options, true);
-            RuntimeIO.getStderr().flush();
-        } finally {
-            RuntimeIO.setStderr(new RuntimeIO(new StandardIO(System.err, false)));
+            try {
+                CompilerOptions options = new CompilerOptions();
+                options.fileName = "<regex-recompile-trace-test>";
+                options.code = source;
+                options.useInterpreter = interpreter;
+                PerlLanguageProvider.executePerlCode(options, true);
+                RuntimeIO.getStderr().flush();
+            } finally {
+                RuntimeIO.setStderr(new RuntimeIO(new StandardIO(System.err, false)));
+            }
         }
         String output = debugOutput.toString(StandardCharsets.UTF_8);
         return (int) output.lines().filter("Final program:"::equals).count();

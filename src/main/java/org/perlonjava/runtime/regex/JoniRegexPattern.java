@@ -1481,7 +1481,11 @@ final class JoniRegexPattern {
             }
             Evaluation evaluation = evaluate(callback, match);
             RuntimeScalar value = evaluation.result();
+            if (value.type == RuntimeScalarType.READONLY_SCALAR) {
+                value = (RuntimeScalar) value.value;
+            }
             RegexFlags scopedFlags = scopedDynamicFlags(outerFlags, effectiveOptions);
+            RegexFlags nestedCallbackFlags = scopedFlags;
             if (value.type == RuntimeScalarType.UNDEF
                     && callback.uninitializedWarningsEnabled) {
                 WarnDie.warnWithCategory(
@@ -1492,15 +1496,20 @@ final class JoniRegexPattern {
             List<RuntimeRegexCallback> nestedCallbacks = List.of();
             boolean inputEncodingCompatible = true;
             String dynamicPackage = RuntimeRegex.currentUserPropertyPackage();
-            if (value.value instanceof RuntimeRegex runtimeRegex) {
-                RegexFlags nestedFlags = runtimeRegex.getRegexFlags() == null
-                        ? scopedFlags : runtimeRegex.getRegexFlags();
-                nestedPattern = UnicodeResolver.withUserPropertyPackage(
-                        runtimeRegex.userPropertyPackage(),
-                        () -> new JoniRegexPattern(runtimeRegex.patternString,
-                                nestedFlags,
-                                runtimeRegex.executableCallbacks.size()));
+            RuntimeRegex firstClassRegex = value.firstClassRegexScalar
+                    ? value.firstClassRegexValue : null;
+            if (firstClassRegex != null) {
+                nestedPattern = firstClassRegex.selectRecursivePattern(subject);
+                nestedCallbacks = firstClassRegex.executableCallbacks;
+                if (firstClassRegex.getRegexFlags() != null) {
+                    nestedCallbackFlags = firstClassRegex.getRegexFlags();
+                }
+            } else if (value.value instanceof RuntimeRegex runtimeRegex) {
+                nestedPattern = runtimeRegex.selectRecursivePattern(subject);
                 nestedCallbacks = runtimeRegex.executableCallbacks;
+                if (runtimeRegex.getRegexFlags() != null) {
+                    nestedCallbackFlags = runtimeRegex.getRegexFlags();
+                }
             } else if (value.value instanceof RuntimeRegexTemplate template) {
                 nestedPattern = UnicodeResolver.withUserPropertyPackage(
                         dynamicPackage,
@@ -1532,10 +1541,12 @@ final class JoniRegexPattern {
                     if ((debugMode & RuntimeRegex.LEXICAL_DEBUG_PARSE) != 0) {
                         modifiers.append(RuntimeRegex.INTERNAL_DEBUG_PARSE_MARKER);
                     }
+                    RuntimeScalar dynamicPatternScalar = value;
                     RuntimeScalar compiled = UnicodeResolver.withUserPropertyPackage(
                             dynamicPackage,
                             () -> RuntimeRegex.getQuotedRegex(
-                                    value, new RuntimeScalar(modifiers.toString())));
+                                    dynamicPatternScalar,
+                                    new RuntimeScalar(modifiers.toString())));
                     RuntimeRegex runtimeRegex = (RuntimeRegex) compiled.value;
                     nestedPattern = UnicodeResolver.withUserPropertyPackage(
                             runtimeRegex.userPropertyPackage(),
@@ -1580,9 +1591,7 @@ final class JoniRegexPattern {
             CalloutHandler nestedHandler = nestedCallbacks.isEmpty() ? null
                     : new PerlCalloutHandler(input, byteToChar, nestedCallbacks,
                             nestedPattern.namedGroups,
-                            value.value instanceof RuntimeRegex runtimeRegex
-                                    && runtimeRegex.getRegexFlags() != null
-                                    ? runtimeRegex.getRegexFlags() : scopedFlags,
+                            nestedCallbackFlags,
                             nestedPattern.hasControlVerbState,
                             byteMode,
                             subject,

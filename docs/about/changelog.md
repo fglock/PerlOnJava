@@ -17,6 +17,9 @@ priorities and future plans.
 - Restore `class/accessor.t`, `op/smartkve.t`, `comp/utf.t`, `op/gmagic.t`,
   and `uni/overload.t` compatibility.
 
+- Restore `re/recompile.t` compatibility and cover the remaining `op/gmagic.t`
+  assertions.
+
 - Restore `op/stash.t` namespace spellings, stash clearing, and forward-CV
   provenance on both execution backends.
 

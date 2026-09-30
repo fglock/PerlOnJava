@@ -100,6 +100,8 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         this.lvalue.set(value);
         this.type = lvalue.type;
         this.value = lvalue.value;
+        this.firstClassRegexScalar = lvalue.firstClassRegexScalar;
+        this.firstClassRegexValue = lvalue.firstClassRegexValue;
         // D-W6.18: propagate package-global metadata flag.
         // If this proxy is for an element of a package-global hash,
         // mark the stored value's referent as storedInPackageGlobal

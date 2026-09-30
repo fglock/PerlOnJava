@@ -244,6 +244,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     /** True for the non-reference scalar produced by dereferencing a qr// value. */
     public boolean firstClassRegexScalar;
+    /** Compiled regex identity carried by the string-like PV from ${qr//}. */
+    public RuntimeRegex firstClassRegexValue;
 
     /** Weak referent metadata for Internals::SvREFCNT on a dereferenced qr// scalar. */
     public WeakReference<RuntimeRegex> firstClassRegexReferent;
@@ -816,6 +818,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.numericContextSeen = scalar.numericContextSeen;
         this.firstClassRegexScalar = scalar.firstClassRegexScalar;
         this.firstClassRegexReferent = scalar.firstClassRegexReferent;
+        this.firstClassRegexValue = scalar.firstClassRegexValue;
         this.formatPictureTainted = scalar.formatPictureTainted;
         this.lexicalSubName = scalar.lexicalSubName;
         this.lexicalDisplayName = scalar.lexicalDisplayName;
@@ -912,6 +915,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.scalarStoredGlob = scalar.scalarStoredGlob;
                 this.firstClassRegexScalar = scalar.firstClassRegexScalar;
                 this.firstClassRegexReferent = scalar.firstClassRegexReferent;
+                this.firstClassRegexValue = scalar.firstClassRegexValue;
                 this.formatPictureTainted = scalar.formatPictureTainted;
                 this.lexicalSubName = scalar.lexicalSubName;
                 this.lexicalDisplayName = scalar.lexicalDisplayName;
@@ -1111,7 +1115,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (type < INTEGER || type > BOOLEAN) return null;
         return new RegexMutationState(type, value, utf8UncheckedOctets, tainted,
                 numericLiteralText, numericContextSeen, firstClassRegexScalar,
-                formatPictureTainted, firstClassRegexReferent);
+                firstClassRegexValue, formatPictureTainted, firstClassRegexReferent);
     }
 
     void restoreRegexMutationState(Object token) {
@@ -1125,6 +1129,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         restored.numericContextSeen = state.numericContextSeen;
         restored.firstClassRegexScalar = state.firstClassRegexScalar;
         restored.firstClassRegexReferent = state.firstClassRegexReferent;
+        restored.firstClassRegexValue = state.firstClassRegexValue;
         restored.formatPictureTainted = state.formatPictureTainted;
         set(restored);
     }
@@ -1133,6 +1138,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                                       boolean utf8UncheckedOctets, boolean tainted,
                                       String numericLiteralText, boolean numericContextSeen,
                                       boolean firstClassRegexScalar,
+                                      boolean formatPictureTainted,
+                                      RuntimeRegex firstClassRegexValue,
                                       boolean formatPictureTainted,
                                       WeakReference<RuntimeRegex> firstClassRegexReferent) {}
 
@@ -2135,7 +2142,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.scalarStoredGlob = value.scalarStoredGlob
                         || (value.type == GLOB && value.value instanceof RuntimeGlob);
                 this.firstClassRegexScalar = value.firstClassRegexScalar;
-                this.firstClassRegexReferent = value.firstClassRegexReferent;
+               this.firstClassRegexReferent = value.firstClassRegexReferent;
+               this.firstClassRegexValue = value.firstClassRegexValue;
                 this.formatPictureTainted = value.formatPictureTainted;
                 this.globalCodeRefFqn = value.globalCodeRefFqn;
                 RuntimePosLvalue.invalidatePos(this);
@@ -2149,7 +2157,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.scalarStoredGlob = value.scalarStoredGlob
                         || (value.type == GLOB && value.value instanceof RuntimeGlob);
                 this.firstClassRegexScalar = value.firstClassRegexScalar;
-                this.firstClassRegexReferent = value.firstClassRegexReferent;
+               this.firstClassRegexReferent = value.firstClassRegexReferent;
+               this.firstClassRegexValue = value.firstClassRegexValue;
                 this.formatPictureTainted = value.formatPictureTainted;
                 this.globalCodeRefFqn = value.globalCodeRefFqn;
             }
@@ -2288,7 +2297,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.scalarStoredGlob = value.scalarStoredGlob
                 || (value.type == GLOB && value.value instanceof RuntimeGlob);
         this.firstClassRegexScalar = value.firstClassRegexScalar;
-        this.firstClassRegexReferent = value.firstClassRegexReferent;
+       this.firstClassRegexReferent = value.firstClassRegexReferent;
+       this.firstClassRegexValue = value.firstClassRegexValue;
         this.formatPictureTainted = value.formatPictureTainted;
         return this;
     }
@@ -2520,7 +2530,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.numericLiteralText = value.numericLiteralText;
         this.numericContextSeen = value.numericContextSeen;
         this.firstClassRegexScalar = value.firstClassRegexScalar;
-        this.firstClassRegexReferent = value.firstClassRegexReferent;
+       this.firstClassRegexReferent = value.firstClassRegexReferent;
+       this.firstClassRegexValue = value.firstClassRegexValue;
         this.formatPictureTainted = value.formatPictureTainted;
         this.globalCodeRefFqn = value.globalCodeRefFqn;
         if (transferDetachedIoOwner) {
@@ -3670,6 +3681,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         result.value = this.value.toString();
         result.firstClassRegexScalar = true;
         result.firstClassRegexReferent = new WeakReference<>((RuntimeRegex) this.value);
+        result.firstClassRegexValue = ((RuntimeRegex) this.value).cloneTracked();
         return result.propagateTaint(this);
     }
 
@@ -5658,6 +5670,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         currentState.numericContextSeen = this.numericContextSeen;
         currentState.firstClassRegexScalar = this.firstClassRegexScalar;
         currentState.firstClassRegexReferent = this.firstClassRegexReferent;
+        currentState.firstClassRegexValue = this.firstClassRegexValue;
         currentState.formatPictureTainted = this.formatPictureTainted;
         // Push the current state onto the stack
         dynamicStateStack().push(currentState);
@@ -5670,7 +5683,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.numericLiteralText = null;
         this.numericContextSeen = false;
         this.firstClassRegexScalar = false;
-        this.firstClassRegexReferent = null;
+       this.firstClassRegexReferent = null;
+       this.firstClassRegexValue = null;
         this.formatPictureTainted = false;
     }
 
@@ -5721,7 +5735,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             this.numericLiteralText = previousState.numericLiteralText;
             this.numericContextSeen = previousState.numericContextSeen;
             this.firstClassRegexScalar = previousState.firstClassRegexScalar;
-            this.firstClassRegexReferent = previousState.firstClassRegexReferent;
+           this.firstClassRegexReferent = previousState.firstClassRegexReferent;
+           this.firstClassRegexValue = previousState.firstClassRegexValue;
             this.formatPictureTainted = previousState.formatPictureTainted;
             if (owner != null) {
                 if (owner.scalarLocalContainerCleared()) {

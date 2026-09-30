@@ -89,6 +89,8 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
         this.lvalue = referent;
         this.type = referent.type;
         this.value = referent.value;
+        this.firstClassRegexScalar = referent.firstClassRegexScalar;
+        this.firstClassRegexValue = referent.firstClassRegexValue;
         if (!parent.elementsAliased) {
             parent.elementsOwned = true;
         }

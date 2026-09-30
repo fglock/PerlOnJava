@@ -100,6 +100,23 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     /** Callback-bearing and executable-source patterns must compile per evaluation. */
     private static final ThreadLocal<Boolean> FORCE_DYNAMIC_COMPILE =
             ThreadLocal.withInitial(() -> false);
+    /** Runtime-source patterns without embedded callbacks have a second compile phase. */
+    private static final ThreadLocal<Boolean> FORCE_RUNTIME_SOURCE_COMPILE_TRACE =
+            ThreadLocal.withInitial(() -> false);
+
+    static boolean setForceRuntimeSourceCompileTrace(boolean force) {
+        boolean previous = FORCE_RUNTIME_SOURCE_COMPILE_TRACE.get();
+        FORCE_RUNTIME_SOURCE_COMPILE_TRACE.set(force);
+        return previous;
+    }
+
+    static void restoreForceRuntimeSourceCompileTrace(boolean previous) {
+        if (previous) {
+            FORCE_RUNTIME_SOURCE_COMPILE_TRACE.set(true);
+        } else {
+            FORCE_RUNTIME_SOURCE_COMPILE_TRACE.remove();
+        }
+    }
 
     private static final Pattern USER_DEFINED_PROPERTY_PATTERN =
             Pattern.compile("\\\\([pP])\\{((?:[A-Za-z_][A-Za-z0-9_]*::)*(?:Is|In)[A-Za-z_][A-Za-z0-9_]*)}");
@@ -310,7 +327,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 this::emitNonUnicodePropertyWarning);
     }
 
-    private JoniRegexPattern selectRecursivePattern(RuntimeScalar string) {
+    JoniRegexPattern selectRecursivePattern(RuntimeScalar string) {
         boolean byteDefaultSemantics = patternByteBacked && regexFlags != null
                 && !regexFlags.isUnicode()
                 && !regexFlags.isAscii();
@@ -892,6 +909,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         "Regex Unicode-promotion cache identity mismatch");
             }
         }
+        boolean compileCacheMiss = regex == null;
         boolean dynamicCacheMiss = dynamicCallsiteId != 0 && regex == null;
         if (regex == null) {
             String cacheKey = nonPromotingCacheKey;
@@ -1303,11 +1321,28 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 // Literal validation is the source compile point. Emit its
                 // transcript before execution, but leave lifecycle ownership
                 // for the qr// object constructed at runtime.
-                regex.emitCompileDebugTrace(false);
+                boolean deferredPattern = regex.recursivePattern != null
+                        && regex.recursivePattern.engineRegex()
+                                .hasDeferredCharacterProperties();
+                String deferredReportKey = "#deferred-compile="
+                        + regex.debugPatternDescription()
+                        + "#flags=" + regex.regexFlags.toInternalFlagString()
+                        + "#debug=" + lexicalDebugMode
+                        + "#propertyPackage=" + regex.userPropertyPackage;
+                boolean firstDeferredReport = !deferredPattern
+                        || state().reportedDebugCompilations.add(deferredReportKey);
+                if (compileCacheMiss && firstDeferredReport) {
+                    regex.emitCompileDebugTrace(false);
+                }
                 state().recordLiteralDebugCompilation(literalReportKey);
                 return regex;
             }
-            if (state().consumeLiteralDebugCompilation(literalReportKey)) {
+            boolean runtimeExecutableSourceCompile =
+                    FORCE_RUNTIME_SOURCE_COMPILE_TRACE.get()
+                            && RuntimeRegexSourceCompiler.isCompilingRuntimeSource()
+                            && trustedCalloutCount > 0;
+            if (state().consumeLiteralDebugCompilation(literalReportKey)
+                    && !runtimeExecutableSourceCompile) {
                 regex.registerDebugLifecycle();
                 return regex;
             }
@@ -1323,7 +1358,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
             boolean firstGlobalReport = state().reportedDebugCompilations
                     .add(debugReportKey);
-            if (dynamicCacheMiss || firstGlobalReport) {
+            boolean deferredPattern = regex.recursivePattern != null
+                    && regex.recursivePattern.engineRegex()
+                            .hasDeferredCharacterProperties();
+            if (runtimeExecutableSourceCompile
+                    || (dynamicCacheMiss && !deferredPattern)
+                    || firstGlobalReport) {
                 regex.emitCompileDebugTrace(true);
             }
         }
@@ -2645,6 +2685,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Unwrap readonly scalar
         if (patternString.type == RuntimeScalarType.READONLY_SCALAR) patternString = (RuntimeScalar) patternString.value;
 
+        if (patternString.firstClassRegexScalar
+                && patternString.firstClassRegexValue != null) {
+            patternString = new RuntimeScalar(
+                    patternString.firstClassRegexValue.cloneTracked())
+                    .propagateTaint(patternString);
+        }
+
         validateTaintedPatternSecurity(patternString);
 
         if (patternString.value instanceof RuntimeRegexTemplate template
@@ -3126,7 +3173,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     static RuntimeScalar compileExecutableTemplate(
             String executablePattern, String modifiers,
             List<RuntimeRegexCallback> callbacks, RuntimeScalar original,
-            boolean patternByteBacked) {
+            boolean patternByteBacked, boolean reportRuntimeSourceCompile) {
         int lexicalDebugMode = debugMode(modifiers);
         if (lexicalDebugMode == 0
                 && RuntimeRegexSourceCompiler.isCompilingRuntimeSource()) {
@@ -3134,9 +3181,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
         String displayPattern = RuntimeRegexTemplate.displayPattern(
                 executablePattern, callbacks);
-        RuntimeRegex regex = compile(executablePattern, modifiers,
-                lexicalDebugMode, callbacks.size(), patternByteBacked,
-                reStrictMode(modifiers), displayPattern).cloneTracked();
+        boolean previousRuntimeSourceTrace = setForceRuntimeSourceCompileTrace(
+                reportRuntimeSourceCompile);
+        RuntimeRegex regex;
+        try {
+            regex = compile(executablePattern, modifiers,
+                    lexicalDebugMode, callbacks.size(), patternByteBacked,
+                    reStrictMode(modifiers), displayPattern).cloneTracked();
+        } finally {
+            restoreForceRuntimeSourceCompileTrace(previousRuntimeSourceTrace);
+        }
         regex.debugPatternString = displayPattern;
         regex.setExecutableCallbacks(callbacks);
         return new RuntimeScalar(regex).propagateTaint(original);
@@ -3816,7 +3870,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // state and break tests that rely on @-/@+.
 
         int previousActiveDebugMode = ACTIVE_DEBUG_MODE.get();
-        ACTIVE_DEBUG_MODE.set(regex.lexicalDebugMode);
+        ACTIVE_DEBUG_MODE.set(regex.lexicalDebugMode == 0
+                ? previousActiveDebugMode : regex.lexicalDebugMode);
         try {
             while (skipFirstFind || matcher.find()) {
                 skipFirstFind = false;
@@ -4024,6 +4079,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      */
     private static RuntimeBase matchRegexWithTimeout(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx, int timeoutSeconds) {
         PerlRuntime owner = PerlRuntime.current();
+        int callerDebugMode = ACTIVE_DEBUG_MODE.get();
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newSingleThreadExecutor(task -> {
             Thread worker = new Thread(task, "PerlRegexTimeout");
             worker.setDaemon(true);
@@ -4031,10 +4087,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         });
         java.util.concurrent.Future<RuntimeBase> future = executor.submit(() -> {
             try (PerlRuntime.Binding ignored = owner.bind()) {
-                // Perl's alarm semantics depend on the matcher remaining in
-                // interruptible backtracking instead of rejecting the input
-                // through a candidate-search shortcut.
-                return matchRegexDirect(quotedRegex, string, ctx, true);
+                int previousDebugMode = ACTIVE_DEBUG_MODE.get();
+                ACTIVE_DEBUG_MODE.set(callerDebugMode);
+                try {
+                    // Perl's alarm semantics depend on the matcher remaining in
+                    // interruptible backtracking instead of rejecting the input
+                    // through a candidate-search shortcut.
+                    return matchRegexDirect(quotedRegex, string, ctx, true);
+                } finally {
+                    ACTIVE_DEBUG_MODE.set(previousDebugMode);
+                }
             }
         });
 

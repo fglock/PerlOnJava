@@ -1193,6 +1193,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     result.elements.add(value);
                 }
             }
+        } else if (callContext == RuntimeContextType.SCALAR
+                && (retVal instanceof RuntimeArray || retVal instanceof RuntimeHash)) {
+            // An array/hash dereference is itself context-sensitive: in scalar
+            // context Perl returns the aggregate's scalar value, not its final
+            // flattened element.  Preserve that distinction before getList()
+            // turns the aggregate into its list-context elements.
+            result = retVal.scalar().getList();
         } else {
             result = retVal.getList();
         }

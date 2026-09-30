@@ -185,6 +185,7 @@ public class RuntimeGraphCloner {
             return value;
         }
         if (value instanceof RuntimeCode code) return cloneCode(code);
+        if (value instanceof RuntimeRegex regex) return cloneRegex(regex);
         if (value instanceof RuntimeStash stash) return cloneStash(stash);
         if (value instanceof RuntimeGlob glob) return cloneGlob(glob);
         if (value instanceof RuntimeScalar scalar) return cloneScalar(scalar);
@@ -244,6 +245,14 @@ public class RuntimeGraphCloner {
         if (existing != null) return (RuntimeRegexCallback) existing;
         RuntimeRegexCallback target = source.cloneForThread(
                 code -> (RuntimeCode) cloneValue(code));
+        clones.put(source, target);
+        return target;
+    }
+
+    private RuntimeRegex cloneRegex(RuntimeRegex source) {
+        Object existing = clones.get(source);
+        if (existing != null) return (RuntimeRegex) existing;
+        RuntimeRegex target = source.cloneTrackedForThread(this::cloneRegexCallback);
         clones.put(source, target);
         return target;
     }
@@ -510,7 +519,7 @@ public class RuntimeGraphCloner {
         } else if (source.type == CODE && source.value instanceof RuntimeCode code) {
             target.value = cloneCode(code);
         } else if (source.value instanceof RuntimeRegex regex) {
-            target.value = regex.cloneTrackedForThread(this::cloneRegexCallback);
+            target.value = cloneRegex(regex);
         } else if (source.value instanceof RuntimeIO io) {
             RuntimeIO inherited = cloneRuntimeIO(io);
             if (inherited != null) {
@@ -808,6 +817,8 @@ public class RuntimeGraphCloner {
         target.numericLiteralText = source.numericLiteralText;
         target.firstClassRegexScalar = source.firstClassRegexScalar;
         target.firstClassRegexReferent = source.firstClassRegexReferent;
+        target.firstClassRegexValue = source.firstClassRegexValue == null ? null
+                : (RuntimeRegex) cloneValue(source.firstClassRegexValue);
         target.formatPictureTainted = source.formatPictureTainted;
         target.numericContextSeen = source.numericContextSeen;
         target.utf8UncheckedOctets = source.utf8UncheckedOctets;
