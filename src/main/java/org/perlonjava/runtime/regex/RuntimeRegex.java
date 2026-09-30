@@ -1480,7 +1480,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // shape identifies a lowered class; a native (?[[:w:]]) expression
         // must retain its own interpretation of POSIX-looking text.
         boolean loweredBracketClass = pattern.matches("(?s).*\\(\\?\\[\\s+\\[.*");
-        Matcher posix = Pattern.compile("\\[:(\\^?[a-z]+):\\]").matcher(pattern);
+        String diagnosticPattern = maskPerlExtendedClassComments(pattern);
+        Matcher posix = Pattern.compile("\\[:(\\^?[a-z]+):\\]").matcher(diagnosticPattern);
         if (loweredBracketClass) {
             while (posix.find()) {
                 String name = posix.group(1);
@@ -1494,7 +1495,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
         }
         List<String> warnings = new ArrayList<>();
-        Matcher numericEscape = Pattern.compile("(?<!\\\\)\\\\([89])").matcher(pattern);
+        Matcher numericEscape = Pattern.compile("(?<!\\\\)\\\\([89])").matcher(diagnosticPattern);
         while (numericEscape.find()) {
             if (pattern.contains("(?[")) {
                 throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(pattern,
@@ -1508,6 +1509,89 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             + " in character class passed through"));
         }
         return warnings;
+    }
+
+    /** Hide text ignored as a comment by Perl's extended character-class parser. */
+    private static String maskPerlExtendedClassComments(String pattern) {
+        char[] masked = pattern.toCharArray();
+        int cursor = 0;
+        while (cursor + 2 < pattern.length()) {
+            int start = pattern.indexOf("(?[", cursor);
+            if (start < 0) break;
+            cursor = maskPerlExtendedClassComments(pattern, masked, start);
+        }
+        return new String(masked);
+    }
+
+    private static int maskPerlExtendedClassComments(String pattern, char[] masked, int start) {
+        int nestedSets = 1;
+        int cursor = start + 3;
+        while (cursor < pattern.length()) {
+            if (pattern.charAt(cursor) == '\\') {
+                cursor = Math.min(pattern.length(), cursor + 2);
+                continue;
+            }
+            if (pattern.startsWith("(?#", cursor)) {
+                int commentEnd = pattern.indexOf(')', cursor + 3);
+                cursor = commentEnd < 0 ? pattern.length() : commentEnd + 1;
+                continue;
+            }
+            if (pattern.startsWith("(?[", cursor)) {
+                nestedSets++;
+                cursor += 3;
+                continue;
+            }
+            char current = pattern.charAt(cursor);
+            if (current == '[') {
+                cursor = skipExtendedSetCharacterClass(pattern, cursor);
+                continue;
+            }
+            if (current == '#') {
+                while (cursor < pattern.length()
+                        && !isPerlLineBreak(pattern.charAt(cursor))) {
+                    masked[cursor++] = ' ';
+                }
+                continue;
+            }
+            if (current == ']' && cursor + 1 < pattern.length()
+                    && pattern.charAt(cursor + 1) == ')') {
+                nestedSets--;
+                cursor += 2;
+                if (nestedSets == 0) return cursor;
+                continue;
+            }
+            cursor++;
+        }
+        return pattern.length();
+    }
+
+    private static int skipExtendedSetCharacterClass(String pattern, int open) {
+        int cursor = open + 1;
+        while (cursor < pattern.length()) {
+            char current = pattern.charAt(cursor);
+            if (current == '\\') {
+                cursor = Math.min(pattern.length(), cursor + 2);
+                continue;
+            }
+            if (current == '[' && cursor + 1 < pattern.length()) {
+                char delimiter = pattern.charAt(cursor + 1);
+                if (delimiter == ':' || delimiter == '.' || delimiter == '=') {
+                    int terminator = pattern.indexOf("" + delimiter + "]", cursor + 2);
+                    if (terminator >= 0) {
+                        cursor = terminator + 2;
+                        continue;
+                    }
+                }
+            }
+            if (current == ']') return cursor + 1;
+            cursor++;
+        }
+        return cursor;
+    }
+
+    private static boolean isPerlLineBreak(char character) {
+        return character == '\n' || character == '\r' || character == '\u0085'
+                || character == '\u2028' || character == '\u2029';
     }
 
     private static List<String> unicodePropertyWildcardWarnings(String pattern) {
