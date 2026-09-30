@@ -161,8 +161,7 @@ public class TieOperators {
                 RuntimeIO previousValue = (RuntimeIO) glob.IO.value;
                 glob.IO.type = TIED_SCALAR;
                 boolean selfIsTiedGlob = self != null && (self.value == glob
-                        || isSameHandle(self, previousValue)
-                        || directPvioWrapper != null);
+                        || isSameHandle(self, previousValue));
                 TieHandle tieHandle = new TieHandle(className, previousValue, self, !selfIsTiedGlob);
                 // Propagate the glob name so select() returns the correct name
                 // (e.g., "main::STDOUT") even when the handle is tied.
@@ -170,7 +169,9 @@ public class TieOperators {
                     tieHandle.globName = previousValue.globName;
                 }
                 glob.IO.value = tieHandle;
-                RuntimeIO.registerTiedAlias(previousValue, tieHandle);
+                if (selfIsTiedGlob) {
+                    RuntimeIO.registerTiedAlias(previousValue, tieHandle);
+                }
                 if (directPvioWrapper != null) {
                     directPvioWrapper.type = TIED_SCALAR;
                     directPvioWrapper.value = tieHandle;
@@ -213,9 +214,14 @@ public class TieOperators {
 
     /** True when TIEHANDLE returned a reference to the handle being tied. */
     private static boolean isSameHandle(RuntimeScalar value, RuntimeIO handle) {
-        if (!(value.value instanceof RuntimeIO selfHandle) || handle == null) {
+        if (handle == null) {
             return false;
         }
+        if (value.value instanceof RuntimeGlob glob
+                && glob.IO != null && glob.IO.value instanceof RuntimeIO selfHandle) {
+            return selfHandle == handle;
+        }
+        if (!(value.value instanceof RuntimeIO selfHandle)) return false;
         return selfHandle == handle
                 || (selfHandle.globName != null && selfHandle.globName.equals(handle.globName));
     }
