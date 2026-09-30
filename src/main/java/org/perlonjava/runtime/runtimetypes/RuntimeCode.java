@@ -2855,6 +2855,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         pushSyntheticCallerFrame(packageName, filename, line, "(eval)", "virtual-eval");
     }
 
+    private static boolean pushEvalCompilationCallerFrame() {
+        ArrayList<ArrayList<String>> callers =
+                ExceptionFormatter.formatExceptionDetailed(new Throwable()).frames();
+        if (callers.isEmpty()) return false;
+        ArrayList<String> site = callers.getFirst();
+        pushSyntheticCallerFrame(site.get(0), site.get(1),
+                Integer.parseInt(site.get(2)), "(eval)", "eval-compile");
+        return true;
+    }
+
     public static void pushSyntheticCallerFrame(String packageName, String filename, int line, String subName) {
         pushSyntheticCallerFrame(packageName, filename, line, subName, "synthetic-own-sub");
     }
@@ -3547,14 +3557,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // Compilation failed before an eval CV could contribute
                     // its Perl caller level. Retain that boundary while the
                     // __DIE__ hook runs, rather than losing caller(1).
-                    ArrayList<ArrayList<String>> compileCallers =
-                            ExceptionFormatter.formatExceptionDetailed(new Throwable()).frames();
-                    boolean pushedCompileFrame = !compileCallers.isEmpty();
-                    if (pushedCompileFrame) {
-                        ArrayList<String> site = compileCallers.getFirst();
-                        pushSyntheticCallerFrame(site.get(0), site.get(1),
-                                Integer.parseInt(site.get(2)), "(eval)", "eval-compile");
-                    }
+                    boolean pushedCompileFrame = pushEvalCompilationCallerFrame();
                     try {
                         RuntimeArray args = new RuntimeArray();
                         RuntimeArray.push(args, new RuntimeScalar(err));
@@ -4259,21 +4262,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
                     incrementEvalDepth();
                     boolean pushedEvalFrame = InterpreterState.pushEvalFrameForCurrentInterpreter();
-                    boolean pushedSyntheticEvalFrame = false;
-                    // Eval-string frames are already represented by the Perl
-                    // caller relationship around eval STRING.  A synthetic
-                    // frame here describes the eval compiler wrapper instead,
-                    // so it appears as a spurious extra caller() level (for
-                    // example `(eval 1)` between an eval and its caller).
-                    if (!pushedEvalFrame && evalString == null
-                            && (evalCompilerOptions.fileName == null
-                                    || !evalCompilerOptions.fileName.startsWith("(eval "))) {
-                        pushSyntheticEvalCallerFrame(
-                                InterpreterState.currentPackage.get().toString(),
-                                evalCompilerOptions.fileName,
-                                1);
-                        pushedSyntheticEvalFrame = true;
-                    }
+                    // JVM callers also use the interpreter eval compiler, but
+                    // have no active interpreter frame before compilation.
+                    // Supply exactly the missing Perl boundary at its call
+                    // site, not a temporary compiler-source `(eval N)` frame.
+                    boolean pushedSyntheticEvalFrame = !pushedEvalFrame
+                            && pushEvalCompilationCallerFrame();
                     var runtimeState = PerlRuntime.current().executionState();
                     boolean wasInsideDieHandler = runtimeState.insideDieHandler;
                     runtimeState.insideDieHandler = true;
