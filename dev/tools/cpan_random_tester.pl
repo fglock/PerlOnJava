@@ -96,6 +96,7 @@ my $packages_gz  = glob('~/.cpan/sources/modules/02packages.details.txt.gz');
 # CLI options
 # ──────────────────────────────────────────────────────────────────────
 my $count       = 10;
+my $count_option_supplied = 0;
 my $timeout        = 2400;  # soft wall-clock timeout; progress can extend it
 my $activity_grace = 600;   # after soft timeout, allow this many idle seconds
 my $max_runtime    = $DEFAULT_MAX_RUNTIME;  # hard cap per target module
@@ -112,7 +113,10 @@ my $perl_oracle_timeout = 600;
 my $strict_exit = 0;          # fail if an explicitly selected target is not PASS
 
 GetOptions(
-    'count|n=i'    => \$count,
+    'count|n=i'    => sub {
+        $count = $_[1];
+        $count_option_supplied = 1;
+    },
     'timeout=i'    => \$timeout,
     'activity-grace=i' => \$activity_grace,
     'max-runtime=i' => \$max_runtime,
@@ -186,6 +190,13 @@ $git_commit ||= 'unknown';
 my (%pass_modules, %fail_modules, %skip_modules, %perl_fail_modules);
 with_report_lock(sub {
     reload_report_state();
+    if ($count_option_supplied) {
+        my $removed = trim_report_state($count);
+        if ($removed) {
+            save_report_state();
+            print "Removed $removed oldest report entries at startup; Modules Tested is capped at $count.\n";
+        }
+    }
 });
 
 if ($report_only) {
@@ -286,10 +297,7 @@ for my $i (0 .. scalar(@candidates) - 1) {
 
 if (!@candidates) {
     print "All modules have been tested! Use --report-only to regenerate the report.\n";
-    with_report_lock(sub {
-        reload_report_state();
-        generate_report();
-    });
+    finalize_report_state();
     exit 0;
 }
 
@@ -437,10 +445,7 @@ for my $module (@selected) {
 # ──────────────────────────────────────────────────────────────────────
 # Summary
 # ──────────────────────────────────────────────────────────────────────
-with_report_lock(sub {
-    reload_report_state();
-    generate_report();
-});
+finalize_report_state();
 
 print "=" x 70, "\n";
 printf "This run:   %d targets | +%d pass | +%d fail | +%d skip | +%d Perl fail | %d upgraded (FAIL->PASS) | %d regressed (PASS->FAIL)\n",
@@ -1669,6 +1674,61 @@ sub save_report_state {
     generate_report();
 }
 
+sub finalize_report_state {
+    with_report_lock(sub {
+        reload_report_state();
+        if ($count_option_supplied) {
+            my $removed = trim_report_state($count);
+            if ($removed) {
+                save_report_state();
+                print "Removed $removed oldest report entries; Modules Tested is capped at $count.\n";
+            } else {
+                generate_report();
+            }
+        } else {
+            generate_report();
+        }
+    });
+}
+
+sub trim_report_state {
+    my ($limit) = @_;
+    my @entries;
+    my @categories = (
+        [PASS      => \%pass_modules],
+        [FAIL      => \%fail_modules],
+        [SKIP      => \%skip_modules],
+        [PERL_FAIL => \%perl_fail_modules],
+    );
+
+    for my $category (@categories) {
+        my ($status, $modules) = @$category;
+        for my $module (keys %$modules) {
+            push @entries, {
+                status  => $status,
+                module  => $module,
+                date    => $modules->{$module}{date} // '',
+                modules => $modules,
+            };
+        }
+    }
+
+    my $excess = @entries - $limit;
+    return 0 unless $excess > 0;
+
+    @entries = sort {
+        $a->{date} cmp $b->{date}
+            || $a->{module} cmp $b->{module}
+            || $a->{status} cmp $b->{status}
+    } @entries;
+
+    for my $entry (@entries[0 .. $excess - 1]) {
+        delete $entry->{modules}{$entry->{module}};
+    }
+
+    return $excess;
+}
+
 sub persist_module_results {
     my ($results, $record_pass_regressions, $target_module, $source_log_path) = @_;
     my %changes = (
@@ -2235,6 +2295,8 @@ Behavior:
     isolated CPAN home. Failures reproduced there are listed separately as
     "Skipped because Perl failed" and excluded from the Pass/Fail percentage.
   - Results accumulate across runs (never discarded).
+  - When --count/-n is supplied, the oldest dated report entries are removed
+    before and after the run as needed to keep "Modules Tested" at that count.
   - Multiple instances can run concurrently. Report updates are protected
     by a lock, reload the latest shared state before each write, and replace
     files atomically so results from parallel runs are not lost.
