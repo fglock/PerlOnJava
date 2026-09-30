@@ -270,13 +270,13 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emitReg(rs2);
             }
             case "===" -> {
-                bytecodeCompiler.emit(Opcodes.STRICT_EQ_NUM);
+                bytecodeCompiler.emit(useInteger ? Opcodes.INTEGER_STRICT_EQ_NUM : Opcodes.STRICT_EQ_NUM);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
             }
             case "!==" -> {
-                bytecodeCompiler.emit(Opcodes.STRICT_NE_NUM);
+                bytecodeCompiler.emit(useInteger ? Opcodes.INTEGER_STRICT_NE_NUM : Opcodes.STRICT_NE_NUM);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);

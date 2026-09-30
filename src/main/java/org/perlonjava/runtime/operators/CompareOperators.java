@@ -382,6 +382,10 @@ public class CompareOperators {
      * @return A RuntimeScalar representing a boolean value (true if arg1 == arg2).
      */
     public static RuntimeScalar equalTo(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return equalTo(arg1, arg2, false);
+    }
+
+    private static RuntimeScalar equalTo(RuntimeScalar arg1, RuntimeScalar arg2, boolean useInteger) {
         arg1 = RuntimeScalar.fetchTiedOnce(arg1);
         arg2 = RuntimeScalar.fetchTiedOnce(arg2);
         // A stash traversal can compare a typeglob with a coderef while
@@ -419,6 +423,9 @@ public class CompareOperators {
         // Convert strings to numbers if necessary
         arg1 = comparisonNumber(arg1, "numeric eq (==)");
         arg2 = comparisonNumber(arg2, "numeric eq (==)");
+        if (useInteger) {
+            return getScalarBoolean(arg1.getLong() == arg2.getLong());
+        }
         // Perform comparison based on type
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return getScalarBoolean(arg1.getDouble() == arg2.getDouble());
@@ -435,6 +442,10 @@ public class CompareOperators {
      * @return A RuntimeScalar representing a boolean value (true if arg1 != arg2).
      */
     public static RuntimeScalar notEqualTo(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return notEqualTo(arg1, arg2, false);
+    }
+
+    private static RuntimeScalar notEqualTo(RuntimeScalar arg1, RuntimeScalar arg2, boolean useInteger) {
         arg1 = RuntimeScalar.fetchTiedOnce(arg1);
         arg2 = RuntimeScalar.fetchTiedOnce(arg2);
         // Fast path: both INTEGER - skip blessedId check, getNumber()
@@ -464,6 +475,9 @@ public class CompareOperators {
         // Convert strings to numbers if necessary
         arg1 = arg1.getNumber("numeric ne (!=)");
         arg2 = arg2.getNumber("numeric ne (!=)");
+        if (useInteger) {
+            return getScalarBoolean(arg1.getLong() != arg2.getLong());
+        }
         // Perform comparison based on type
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return getScalarBoolean(arg1.getDouble() != arg2.getDouble());
@@ -650,6 +664,18 @@ public class CompareOperators {
         return equalTo(arg1, arg2);
     }
 
+    /** Defined numeric equality under lexical {@code use integer}. */
+    public static RuntimeScalar strictEqualInteger(RuntimeScalar arg1, RuntimeScalar arg2) {
+        arg1 = fetchDefinedComparisonOperand(arg1);
+        arg2 = fetchDefinedComparisonOperand(arg2);
+        boolean defined1 = arg1.getDefinedBoolean();
+        boolean defined2 = arg2.getDefinedBoolean();
+        if (!defined1 || !defined2) {
+            return getScalarBoolean(defined1 == defined2);
+        }
+        return equalTo(arg1, arg2, true);
+    }
+
     /** Defined numeric inequality ({@code !==}), the inverse of {@code ===}. */
     public static RuntimeScalar strictNotEqual(RuntimeScalar arg1, RuntimeScalar arg2) {
         arg1 = fetchDefinedComparisonOperand(arg1);
@@ -660,6 +686,18 @@ public class CompareOperators {
             return getScalarBoolean(defined1 != defined2);
         }
         return notEqualTo(arg1, arg2);
+    }
+
+    /** Defined numeric inequality under lexical {@code use integer}. */
+    public static RuntimeScalar strictNotEqualInteger(RuntimeScalar arg1, RuntimeScalar arg2) {
+        arg1 = fetchDefinedComparisonOperand(arg1);
+        arg2 = fetchDefinedComparisonOperand(arg2);
+        boolean defined1 = arg1.getDefinedBoolean();
+        boolean defined2 = arg2.getDefinedBoolean();
+        if (!defined1 || !defined2) {
+            return getScalarBoolean(defined1 != defined2);
+        }
+        return notEqualTo(arg1, arg2, true);
     }
 
     /**

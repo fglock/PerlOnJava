@@ -81,6 +81,7 @@ public class Internals extends PerlModuleBase {
             internals.registerMethod("jperl_mark_pseudo_constant", "jperlMarkPseudoConstant", "$$");
             internals.registerMethod("jperl_end_av_ref", "jperlEndAvRef", "");
             internals.registerMethod("jperl_b_object_2svref", "jperlBObject2svref", "$");
+            internals.registerMethod("jperl_b_scalar_flags", "jperlBScalarFlags", "$");
             internals.registerMethod("jperl_set_closed_over", "jperlSetClosedOver", null);
             internals.registerMethod("jperl_closed_over", "jperlClosedOver", null);
             internals.registerMethod("jperl_peek_sub", "jperlPeekSub", null);
@@ -106,6 +107,41 @@ public class Internals extends PerlModuleBase {
             throw new IllegalArgumentException("Usage: Internals::jperl_b_object_2svref(ADDRESS)");
         }
         return BObjectRegistry.resolve(args.get(0).getLong()).getList();
+    }
+
+    /** Return the scalar flags exposed by the bundled B.pm compatibility shim. */
+    public static RuntimeList jperlBScalarFlags(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) return new RuntimeScalar(0).getList();
+        return new RuntimeScalar(bScalarFlags(args.get(0))).getList();
+    }
+
+    private static int bScalarFlags(RuntimeScalar scalar) {
+        int flags = switch (scalar.type) {
+            case RuntimeScalarType.INTEGER -> 0x100 | 0x1000;
+            case RuntimeScalarType.DOUBLE -> 0x200 | 0x2000;
+            case RuntimeScalarType.DUALVAR -> bScalarFlags(
+                    ((DualVar) scalar.value).numericValue());
+            case RuntimeScalarType.STRING, RuntimeScalarType.BYTE_STRING -> {
+                int stringFlags = scalar.toString().isEmpty() ? 0 : 0x400 | 0x4000;
+                if (scalar.numericContextSeen) {
+                    String value = scalar.toString().trim();
+                    try {
+                        new java.math.BigDecimal(value).toBigIntegerExact();
+                        stringFlags |= 0x100 | 0x1000;
+                    } catch (NumberFormatException | ArithmeticException ignored) {
+                        try {
+                            Double.parseDouble(value);
+                            stringFlags |= 0x200 | 0x2000;
+                        } catch (NumberFormatException ignoredAgain) {
+                            // Perl leaves the string flags intact for non-numeric text.
+                        }
+                    }
+                }
+                yield stringFlags;
+            }
+            default -> 0;
+        };
+        return flags;
     }
 
     /**
@@ -430,10 +466,33 @@ public class Internals extends PerlModuleBase {
             WarnDie.die(new RuntimeScalar("Usage: Internals::SvREFCNT(SCALAR[, REFCOUNT])"), new RuntimeScalar(""));
         }
         RuntimeScalar arg = args.get(0);
-        if (arg.value instanceof RuntimeBase base) {
+        RuntimeBase base = arg.value instanceof RuntimeBase value ? value : null;
+        if (base == null && arg.firstClassRegexScalar && arg.firstClassRegexReferent != null) {
+            base = arg.firstClassRegexReferent.get();
+            if (base == null) return new RuntimeScalar(0).getList();
+        }
+        if (base != null) {
             int rc = base.refCount;
             if (rc == Integer.MIN_VALUE) return new RuntimeScalar(0).getList();
             if (rc < 0) return new RuntimeScalar(1).getList(); // untracked
+            // An ampersand-style call may pass a weak qr// scalar directly
+            // (qr-72922's refcount_is helper does this).  The call-frame alias
+            // is represented as a transient counted regex holder here, whereas
+            // Perl does not make a weak RV strong merely to inspect it.
+            // The &-style helper in qr-72922 passes the weak regexp as a
+            // regex-typed call-frame alias. The alias is no longer registered
+            // as weak itself, but Perl does not count it as a new strong RV.
+            // A direct `SvREFCNT($$weak)` probe is a first-class string
+            // scalar, so it deliberately does not take this path.
+            if (arg.type == RuntimeScalarType.REGEX && WeakRefRegistry.hasWeakRefsTo(base)) {
+                // A weak regexp reaches an ampersand-style helper through a
+                // transient REGEX alias. Its selective count contains JVM
+                // holder bookkeeping, rather than a Perl-visible strong RV.
+                // Perl's core helper accounts for that calling convention
+                // separately (qr-72922's helper adds one after this call), so
+                // expose no direct owners here.
+                return new RuntimeScalar(0).getList();
+            }
             // PerlOnJava's `refCount` counts *external* refs (RVs, container
             // slots). Real Perl's SvREFCNT also counts the lexical pad slot
             // that owns the SV. We model the lexical slot via the separate

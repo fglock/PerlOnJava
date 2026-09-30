@@ -677,6 +677,7 @@ public class CompileOperator {
      * Perl allows `defined *$var` even under strict refs without auto-vivifying.
      */
     private static void visitDefined(BytecodeCompiler bc, OperatorNode node) {
+        markDefinedArrayProbeInputs(node.operand, true);
         // Check for special cases
         if (node.operand instanceof ListNode listNode && listNode.elements.size() == 1) {
             Node operand = listNode.elements.getFirst();
@@ -762,6 +763,18 @@ public class CompileOperator {
         }
         // Default case: regular defined
         emitSimpleUnary(bc, node, Opcodes.DEFINED);
+    }
+
+    /** Mark only intermediate array accesses: the final defined target remains a normal fetch. */
+    private static void markDefinedArrayProbeInputs(Node node, boolean root) {
+        if (node instanceof ListNode list) {
+            for (Node element : list.elements) markDefinedArrayProbeInputs(element, true);
+        } else if (node instanceof BinaryOperatorNode binary && binary.operator.equals("[")) {
+            if (!root) binary.setAnnotation("definedProbeArrayAccess", true);
+            markDefinedArrayProbeInputs(binary.left, false);
+        } else if (node instanceof OperatorNode operator && operator.operator.equals("$")) {
+            markDefinedArrayProbeInputs(operator.operand, root);
+        }
     }
 
     private static void visitPopShiftOp(BytecodeCompiler bc, OperatorNode node, short opcode) {
@@ -1418,6 +1431,10 @@ public class CompileOperator {
                     bytecodeCompiler.compileNode(node.operand, -1, returnContext);
                 }
                 int exprReg = bytecodeCompiler.lastResultReg;
+
+                if (bytecodeCompiler.symbolTable.isFeatureCategoryEnabled("module_true")) {
+                    bytecodeCompiler.emit(Opcodes.MARK_MODULE_TRUE_RETURN);
+                }
 
                 if (bytecodeCompiler.shouldReturnFromInlineEvalBlock()) {
                     bytecodeCompiler.emitInlineEvalReturn(exprReg);

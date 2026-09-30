@@ -62,6 +62,25 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.*;
 public class PerlLanguageProvider {
 
     /**
+     * Scope produced by the most recently completed nested file compilation.
+     * A require/do restores its caller's scope before returning, but a `use`
+     * declaration still needs the loaded file's lexical pragma state while it
+     * continues parsing the caller.
+     */
+    private static final ThreadLocal<ScopedSymbolTable> lastNestedCompilationScope =
+            new ThreadLocal<>();
+
+    public static void clearLastNestedCompilationScope() {
+        lastNestedCompilationScope.remove();
+    }
+
+    public static ScopedSymbolTable takeLastNestedCompilationScope() {
+        ScopedSymbolTable scope = lastNestedCompilationScope.get();
+        lastNestedCompilationScope.remove();
+        return scope;
+    }
+
+    /**
      * Serializes source parsing and code generation while compiler state is still
      * process-global. The lock is deliberately reentrant because BEGIN, use,
      * require, and eval STRING can compile recursively on the parser thread.
@@ -120,6 +139,7 @@ public class PerlLanguageProvider {
             RuntimeIO.setStdin(new RuntimeIO(new StandardIO(System.in)));
             RuntimeIO.resetLastReadlineHandle();
             DataSection.reset();
+            lastNestedCompilationScope.remove();
         }
     }
 
@@ -151,6 +171,7 @@ public class PerlLanguageProvider {
         try (PerlRuntime.Binding runtimeBinding = PerlRuntime.bindCurrentOrNew()) {
         CompilationLockGuard compilationLock = acquireCompilationLock();
         ScopedSymbolTable savedCurrentScope = null;
+        EmitterContext completedContext = null;
         RuntimeCode.EvalRuntimeContext savedEvalRuntimeContext = null;
         boolean evalRuntimeContextSaved = false;
         RuntimeIO.CommandLineUnicodeState savedCommandLineUnicode = RuntimeIO.commandLineUnicodeState();
@@ -249,6 +270,7 @@ public class PerlLanguageProvider {
                 compilerOptions,
                 new RuntimeArray()
         );
+        completedContext = ctx;
 
         if (!PerlRuntime.current().globalState().coreGlobalsInitialized()) {
             PerlRuntime.current().globalState().markCoreGlobalsInitialized();
@@ -426,6 +448,9 @@ public class PerlLanguageProvider {
             // Restore the caller's scope so require/do doesn't leak its scope to the caller.
             // But do NOT restore for top-level scripts - we want the main script's pragmas to persist.
             if (savedCurrentScope != null && !isTopLevelScript) {
+                if (completedContext != null) {
+                    lastNestedCompilationScope.set(completedContext.symbolTable);
+                }
                 SpecialBlockParser.setCurrentScope(savedCurrentScope);
             }
             // Restore the eval runtime context so the caller's eval STRING compilation

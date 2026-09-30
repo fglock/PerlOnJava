@@ -388,6 +388,12 @@ public class EmitControlFlow {
             node.operand.accept(emitterVisitor.with(returnContext));
         }
 
+        if (ctx.symbolTable.isFeatureCategoryEnabled("module_true")) {
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/operators/ModuleOperators",
+                    "markModuleTrueReturn", "()V", false);
+        }
+
         // Clone scalar elements to prevent aliasing issues with local variable teardown.
         // Without this, returning a symbolic dereference like ${$name} with local *{$name}
         // would return the restored (empty) value instead of the value at return time.

@@ -4,6 +4,7 @@ import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.core.Configuration;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.io.LayeredIOHandle;
 import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
@@ -25,6 +26,9 @@ import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import java.util.ArrayDeque;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.perlonjava.runtime.runtimetypes.ExceptionFormatter.findInnermostCause;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalHash;
@@ -65,11 +69,43 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
  * @see <a href="https://perldoc.perl.org/functions/require">perldoc require</a>
  */
 public class ModuleOperators {
+    private record CachedTiedIncEntry(RuntimeScalar tiedScalar, RuntimeScalar value) { }
+
     /** Entries actually consulted by the current require search, in order. */
     private static final ThreadLocal<List<String>> INC_ENTRIES_CHECKED =
             ThreadLocal.withInitial(ArrayList::new);
     private static final ThreadLocal<Set<Object>> ACTIVE_INC_HOOKS =
             ThreadLocal.withInitial(() -> Collections.newSetFromMap(new IdentityHashMap<>()));
+
+    /** Explicit returns compiled under feature 'module_true' during a module load. */
+    private static final ThreadLocal<ArrayDeque<boolean[]>> MODULE_TRUE_RETURNS =
+            ThreadLocal.withInitial(ArrayDeque::new);
+
+    /** Completed scope of the current thread's most recently loaded file. */
+    private static final ThreadLocal<ScopedSymbolTable> LAST_LOADED_SCOPE = new ThreadLocal<>();
+
+    /** Consume the pragma scope produced by a just-completed require. */
+    public static ScopedSymbolTable takeLastLoadedScope() {
+        ScopedSymbolTable scope = LAST_LOADED_SCOPE.get();
+        LAST_LOADED_SCOPE.remove();
+        return scope;
+    }
+
+    public static void beginModuleTrueTracking() {
+        MODULE_TRUE_RETURNS.get().push(new boolean[1]);
+    }
+
+    public static void markModuleTrueReturn() {
+        ArrayDeque<boolean[]> frames = MODULE_TRUE_RETURNS.get();
+        if (!frames.isEmpty()) frames.peek()[0] = true;
+    }
+
+    private static boolean endModuleTrueTracking() {
+        ArrayDeque<boolean[]> frames = MODULE_TRUE_RETURNS.get();
+        boolean marked = !frames.isEmpty() && frames.pop()[0];
+        if (frames.isEmpty()) MODULE_TRUE_RETURNS.remove();
+        return marked;
+    }
 
     /**
      * Public entry point for `do` operator.
@@ -550,6 +586,7 @@ public class ModuleOperators {
 
                 // Search in INC directories
                 RuntimeArray incArray = GlobalVariable.getGlobalArray("main::INC");
+                RuntimeArray prefetchedIncArray = incArray;
 
                 // The launcher may supply only project test paths. Keep the
                 // bundled library available for runtime loading, but do not
@@ -557,9 +594,14 @@ public class ModuleOperators {
                 // entry in Perl's diagnostic.
                 boolean syntheticBundledInc = false;
                 boolean seenBundledInc = false;
+                Map<Integer, CachedTiedIncEntry> prefetchedTiedEntries = new HashMap<>();
                 for (int i = 0; i < incArray.size(); i++) {
-                    RuntimeScalar dir = incArray.get(i);
-                    if (dir.type == RuntimeScalarType.TIED_SCALAR) dir = dir.tiedFetch();
+                    RuntimeScalar rawDir = incArray.get(i);
+                    RuntimeScalar dir = rawDir;
+                    if (rawDir.type == RuntimeScalarType.TIED_SCALAR) {
+                        dir = rawDir.tiedFetch();
+                        prefetchedTiedEntries.put(i, new CachedTiedIncEntry(rawDir, dir));
+                    }
                     if (GlobalContext.JAR_PERLLIB.equals(dir.toString())) {
                         seenBundledInc = true;
                         break;
@@ -580,7 +622,13 @@ public class ModuleOperators {
 
                     // If this is a tied scalar, fetch the actual value
                     if (dirScalar.type == RuntimeScalarType.TIED_SCALAR) {
-                        dirScalar = dirScalar.tiedFetch();
+                        CachedTiedIncEntry prefetched = incArray == prefetchedIncArray
+                                ? prefetchedTiedEntries.remove(i) : null;
+                        if (prefetched != null && prefetched.tiedScalar() == dirScalar) {
+                            dirScalar = prefetched.value();
+                        } else {
+                            dirScalar = dirScalar.tiedFetch();
+                        }
                     }
                     if (!(syntheticBundledInc
                             && GlobalContext.JAR_PERLLIB.equals(dirScalar.toString()))) {
@@ -777,6 +825,7 @@ public class ModuleOperators {
         }
 
         RuntimeList result;
+        PerlLanguageProvider.clearLastNestedCompilationScope();
         FeatureFlags outerFeature = Feature.getFeatureManager();
         String savedPackage = InterpreterState.currentPackage.get().toString();
 
@@ -809,6 +858,8 @@ public class ModuleOperators {
                 filterSnapshot = org.perlonjava.runtime.perlmodule.FilterUtilCall
                         .saveAndResetFilterState();
 
+        boolean moduleTrueReturn = false;
+        beginModuleTrueTracking();
         try {
             Feature.setFeatureManager(new FeatureFlags());
             
@@ -816,12 +867,17 @@ public class ModuleOperators {
             hintHash.clearForHintHashContextTransfer();
 
             result = PerlLanguageProvider.executePerlCode(parsedArgs, false, ctx);
+            ScopedSymbolTable loadedScope = PerlLanguageProvider.takeLastNestedCompilationScope();
+            if (loadedScope != null) {
+                LAST_LOADED_SCOPE.set(loadedScope);
+            }
 
             // feature 'module_true' relaxes require's true-value contract; it
             // does not alter the value returned by do FILE. In particular,
             // application loaders rely on do preserving a blessed object.
             boolean moduleTrue = Feature.getFeatureManager().isFeatureEnabled("module_true");
-            if (isRequire && moduleTrue) {
+            moduleTrueReturn = endModuleTrueTracking();
+            if (isRequire && (moduleTrue || moduleTrueReturn)) {
                 result = scalarTrue.getList();
             }
 
@@ -830,10 +886,12 @@ public class ModuleOperators {
             // eval { die ... } blocks would leak through to the caller.
             GlobalVariable.setGlobalVariable("main::@", "");
         } catch (PerlExitException e) {
+            endModuleTrueTracking();
             // Let exit() propagate through do/require - it should terminate the process,
             // not be caught as a file-loading error
             throw e;
         } catch (Throwable t) {
+            endModuleTrueTracking();
             // For require, on compilation failure leave the %INC entry as
             // undef (a marker that this file was tried and failed). Subsequent
             // `require <same-file>` should fail with the cached error rather
@@ -958,6 +1016,7 @@ public class ModuleOperators {
      */
     public static RuntimeScalar require(RuntimeScalar runtimeScalar) {
         try (PerlRuntime.Binding ignored = PerlRuntime.current().bind()) {
+        LAST_LOADED_SCOPE.remove();
         // https://perldoc.perl.org/functions/require
 
         // ===== CASE 1: Version checking =====

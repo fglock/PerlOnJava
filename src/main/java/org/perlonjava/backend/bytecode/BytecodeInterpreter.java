@@ -10,6 +10,7 @@ import org.perlonjava.runtime.NamedCharacterExpansionMap;
 import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.debugger.DebugHooks;
 import org.perlonjava.runtime.operators.CompareOperators;
+import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.regex.RegexQuoteMeta;
@@ -1535,6 +1536,7 @@ public class BytecodeInterpreter {
                                  Opcodes.LT_NUM, Opcodes.GT_NUM, Opcodes.LE_NUM, Opcodes.GE_NUM, Opcodes.EQ_STR,
                                  Opcodes.NE_STR, Opcodes.EQU_STR, Opcodes.NEU_STR,
                                  Opcodes.STRICT_EQ_NUM, Opcodes.STRICT_NE_NUM,
+                                 Opcodes.INTEGER_STRICT_EQ_NUM, Opcodes.INTEGER_STRICT_NE_NUM,
                                  Opcodes.NOT, Opcodes.NOT_NO_OVERLOAD -> {
                                 pc = executeComparisons(opcode, bytecode, pc, registers);
                             }
@@ -1732,6 +1734,17 @@ public class BytecodeInterpreter {
                             }
                             case Opcodes.ARRAY_GET_FOR_LOCAL -> {
                                 pc = InlineOpcodeHandler.executeArrayGetForLocal(bytecode, pc, registers);
+                            }
+                            case Opcodes.ARRAY_GET_FOR_LOCAL_DEREFERENCE -> {
+                                pc = InlineOpcodeHandler.executeArrayGetForLocalDereference(
+                                        bytecode, pc, registers);
+                            }
+                            case Opcodes.ARRAY_GET_FOR_DEFINED_PROBE -> {
+                                pc = InlineOpcodeHandler.executeArrayGetForDefinedProbe(
+                                        bytecode, pc, registers);
+                            }
+                            case Opcodes.MARK_MODULE_TRUE_RETURN -> {
+                                ModuleOperators.markModuleTrueReturn();
                             }
                             case Opcodes.ARRAY_KEYVALUE_SLICE -> {
                                 int rd = bytecode[pc++];
@@ -2940,7 +2953,8 @@ public class BytecodeInterpreter {
 
                             // Group 1-2: Dereferencing and Slicing (114-121)
                             case Opcodes.DEREF_ARRAY, Opcodes.DEREF_HASH, Opcodes.DEREF_HASH_NONSTRICT,
-                                 Opcodes.DEREF_ARRAY_NONSTRICT, Opcodes.ARRAY_SLICE, Opcodes.ARRAY_SLICE_LVALUE,
+                                 Opcodes.DEREF_ARRAY_NONSTRICT,
+                                 Opcodes.ARRAY_SLICE, Opcodes.ARRAY_SLICE_LVALUE,
                                  Opcodes.ARRAY_SLICE_SET,
                                  Opcodes.HASH_SLICE, Opcodes.HASH_SLICE_SET, Opcodes.HASH_SLICE_DELETE,
                                  Opcodes.HASH_KEYVALUE_SLICE, Opcodes.LIST_SLICE_FROM -> {
@@ -3945,7 +3959,8 @@ public class BytecodeInterpreter {
                 return pc;
             }
 
-            case Opcodes.EQU_STR, Opcodes.NEU_STR, Opcodes.STRICT_EQ_NUM, Opcodes.STRICT_NE_NUM -> {
+            case Opcodes.EQU_STR, Opcodes.NEU_STR, Opcodes.STRICT_EQ_NUM, Opcodes.STRICT_NE_NUM,
+                 Opcodes.INTEGER_STRICT_EQ_NUM, Opcodes.INTEGER_STRICT_NE_NUM -> {
                 int rd = bytecode[pc++];
                 int rs1 = bytecode[pc++];
                 int rs2 = bytecode[pc++];
@@ -3957,7 +3972,9 @@ public class BytecodeInterpreter {
                     case Opcodes.EQU_STR -> CompareOperators.equ(s1, s2);
                     case Opcodes.NEU_STR -> CompareOperators.neu(s1, s2);
                     case Opcodes.STRICT_EQ_NUM -> CompareOperators.strictEqual(s1, s2);
-                    default -> CompareOperators.strictNotEqual(s1, s2);
+                    case Opcodes.STRICT_NE_NUM -> CompareOperators.strictNotEqual(s1, s2);
+                    case Opcodes.INTEGER_STRICT_EQ_NUM -> CompareOperators.strictEqualInteger(s1, s2);
+                    default -> CompareOperators.strictNotEqualInteger(s1, s2);
                 };
                 return pc;
             }

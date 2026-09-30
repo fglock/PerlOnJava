@@ -2131,6 +2131,16 @@ public class OperatorParser {
                 return new OperatorNode("require", operand, parser.tokenIndex);
             }
 
+            // CORE::foo is an explicitly qualified builtin invocation, not a
+            // module name.  In particular, `require CORE::lc "THREADS"`
+            // computes a filename and must reach the ordinary expression
+            // parser (perl #24482).
+            if (moduleName.startsWith("CORE::")) {
+                parser.tokenIndex = savedIndex;
+                ListNode op = ListParser.parseZeroOrOneList(parser, 1);
+                return new OperatorNode("require", op, parser.tokenIndex);
+            }
+
             // Check if module name starts with ::
             if (moduleName.startsWith("::")) {
                 throw new PerlCompilerException(parser.tokenIndex, "Bareword in require must not start with a double-colon: \"" + moduleName + "\"", parser.ctx.errorUtil);

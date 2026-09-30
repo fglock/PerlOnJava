@@ -2382,8 +2382,12 @@ public class BytecodeCompiler implements Visitor {
      * Example: $ARGV[0] or $array[$i]
      */
     void handleArrayElementAccess(BinaryOperatorNode node, OperatorNode leftOp) {
-        handleArrayElementAccess(node, leftOp,
-                shouldEmitHashFetchForLocal() ? Opcodes.ARRAY_GET_FOR_LOCAL : Opcodes.ARRAY_GET);
+        short opcode = node.getBooleanAnnotation("localIntermediateArrayAccess")
+                ? Opcodes.ARRAY_GET_FOR_LOCAL_DEREFERENCE
+                : node.getBooleanAnnotation("definedProbeArrayAccess")
+                        ? Opcodes.ARRAY_GET_FOR_DEFINED_PROBE
+                        : shouldEmitHashFetchForLocal() ? Opcodes.ARRAY_GET_FOR_LOCAL : Opcodes.ARRAY_GET;
+        handleArrayElementAccess(node, leftOp, opcode);
     }
 
     /** Handle an array-element access that must retain the slot proxy. */
@@ -4818,6 +4822,7 @@ public class BytecodeCompiler implements Visitor {
             }
             throwCompilerException("Unsupported our operand: " + node.operand.getClass().getSimpleName());
         } else if (op.equals("local")) {
+            markLocalArrayDereferenceInputs(node.operand, true);
             // `local undef $var` is parsed by Perl as local(undef($var)).
             // It performs the undef operation without registering restoration
             // state for local(), so compile the operand as an ordinary expression.
@@ -5543,6 +5548,21 @@ public class BytecodeCompiler implements Visitor {
             throwCompilerException("Unsupported local operand: " + node.operand.getClass().getSimpleName());
         }
         throwCompilerException("Unsupported variable declaration operator: " + op);
+    }
+
+    private static void markLocalArrayDereferenceInputs(Node node, boolean root) {
+        if (node instanceof ListNode list) {
+            for (Node element : list.elements) markLocalArrayDereferenceInputs(element, true);
+        } else if (node instanceof BinaryOperatorNode binary && binary.operator.equals("[")) {
+            if (!root) binary.setAnnotation("localIntermediateArrayAccess", true);
+            markLocalArrayDereferenceInputs(binary.left, false);
+        } else if (node instanceof OperatorNode operator && operator.operator.equals("$")) {
+            // The scalar sigil wraps the complete local target; it is not an
+            // array dereference level itself.  Keep the root marker so only
+            // nested subscripts, rather than the localized final slot, are
+            // guarded against autovivification.
+            markLocalArrayDereferenceInputs(operator.operand, root);
+        }
     }
 
     private static boolean isReferenceLocalizationTarget(Node operand) {

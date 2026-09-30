@@ -5,6 +5,7 @@ import org.perlonjava.runtime.runtimetypes.FeatureFlags;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.WarningFlags;
+import org.perlonjava.runtime.perlmodule.Strict;
 
 import java.util.*;
 
@@ -114,6 +115,8 @@ public class ScopedSymbolTable {
     // execute ownership without baking a particular engine's bit layout into
     // the AST.
     private final Stack<Integer> regexDebugFlagsStack = new Stack<>();
+    /** True when this compilation unit explicitly invoked re->import/unimport. */
+    private boolean lexicalRegexPragmaChanged;
     // `use VERSION` is lexical: a second declaration in the same scope is
     // rejected, while an inner block gets its own declaration state.
     private final Stack<String> useVersionStack = new Stack<>();
@@ -549,6 +552,23 @@ public class ScopedSymbolTable {
         setLexicalRegexDebugFlags(getLexicalRegexDebugFlags() & ~flags);
     }
 
+    /** Transfer only the public lexical re pragma state from a use-loaded module. */
+    public void copyLexicalRegexPragmaFrom(ScopedSymbolTable source) {
+        if (source == null || !source.lexicalRegexPragmaChanged) return;
+        regexModifierStack.set(regexModifierStack.size() - 1, source.getLexicalRegexModifiers());
+        regexDebugFlagsStack.set(regexDebugFlagsStack.size() - 1, source.getLexicalRegexDebugFlags());
+        final int reMask = Strict.HINT_RE_ASCII | Strict.HINT_RE_UNICODE | Strict.HINT_RE_ASCII_AA
+                | Strict.HINT_RE_EVAL | Strict.HINT_RE_TAINT | Strict.HINT_RE_DEBUG
+                | Strict.HINT_RE_DEBUGCOLOR | Strict.HINT_RE_STRICT;
+        int ours = strictOptionsStack.peek();
+        strictOptionsStack.set(strictOptionsStack.size() - 1,
+                (ours & ~reMask) | (source.getStrictOptions() & reMask));
+    }
+
+    public void markLexicalRegexPragmaChanged() {
+        lexicalRegexPragmaChanged = true;
+    }
+
     /**
      * Adds a variable to the current scope.
      *
@@ -944,6 +964,7 @@ public class ScopedSymbolTable {
         st.regexModifierStack.push(this.regexModifierStack.peek());
         st.regexDebugFlagsStack.pop();
         st.regexDebugFlagsStack.push(this.regexDebugFlagsStack.peek());
+        st.lexicalRegexPragmaChanged = this.lexicalRegexPragmaChanged;
 
         return st;
     }

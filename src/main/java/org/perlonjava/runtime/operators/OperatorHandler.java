@@ -124,6 +124,8 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("neu", "neu", "org/perlonjava/runtime/operators/CompareOperators");
         put("===", "strictEqual", "org/perlonjava/runtime/operators/CompareOperators");
         put("!==", "strictNotEqual", "org/perlonjava/runtime/operators/CompareOperators");
+        put("===_integer", "strictEqualInteger", "org/perlonjava/runtime/operators/CompareOperators");
+        put("!==_integer", "strictNotEqualInteger", "org/perlonjava/runtime/operators/CompareOperators");
         put("lt", "lt", "org/perlonjava/runtime/operators/CompareOperators");
         put("le", "le", "org/perlonjava/runtime/operators/CompareOperators");
         put("gt", "gt", "org/perlonjava/runtime/operators/CompareOperators");

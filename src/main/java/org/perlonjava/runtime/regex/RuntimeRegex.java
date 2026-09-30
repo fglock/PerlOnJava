@@ -2551,7 +2551,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             RuntimeRegex originalRegex = (RuntimeRegex) patternString.value;
 
             if (modifierStr.isEmpty() && callSiteDebugMode == 0) {
-                // No new modifiers, return the original regex as-is
+                // No new modifiers, retain the compiled regex. The scalar
+                // assignment path records the ownership of this result.
                 return patternString;
             }
 

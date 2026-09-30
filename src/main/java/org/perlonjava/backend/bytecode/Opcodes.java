@@ -264,6 +264,12 @@ public class Opcodes {
     /** Defined numeric inequality: !==. */
     public static final short STRICT_NE_NUM = 553;
 
+    /** Defined numeric equality under {@code use integer}. */
+    public static final short INTEGER_STRICT_EQ_NUM = 623;
+
+    /** Defined numeric inequality under {@code use integer}. */
+    public static final short INTEGER_STRICT_NE_NUM = 624;
+
     // =================================================================
     // LOGICAL OPERATORS (39-41)
     // =================================================================
@@ -2615,6 +2621,15 @@ public class Opcodes {
     public static final short ARRAY_SLICE_LVALUE = 561;
     /** Array element fetch that preserves tied-array lvalue semantics for local(). */
     public static final short ARRAY_GET_FOR_LOCAL = 562;
+
+    /** Non-strict array dereference inside local() without vivifying an undefined intermediate slot. */
+    public static final short ARRAY_GET_FOR_LOCAL_DEREFERENCE = 625;
+
+    /** Explicit return compiled under lexical feature {@code module_true}. */
+    public static final short MARK_MODULE_TRUE_RETURN = 626;
+
+    /** Array fetch in a defined() probe without autovivifying an absent slot. */
+    public static final short ARRAY_GET_FOR_DEFINED_PROBE = 627;
 
     /** Declared-reference foreach scalar dereference without autovivification. */
     public static final short FOREACH_DEREF_SCALAR = 566;

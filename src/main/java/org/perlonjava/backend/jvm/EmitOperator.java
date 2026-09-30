@@ -58,6 +58,16 @@ public class EmitOperator {
                     ? OperatorHandler.getWarn(operator)
                     : OperatorHandler.get(operator);
         }
+        if (node instanceof BinaryOperatorNode binary
+                && (operator.equals("===") || operator.equals("!=="))) {
+            Object useInteger = binary.getAnnotation("useInteger");
+            boolean integerComparison = useInteger instanceof Boolean value
+                    ? value
+                    : symbolTable != null && symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER);
+            if (integerComparison) {
+                operatorHandler = OperatorHandler.get(operator + "_integer");
+            }
+        }
         if (operatorHandler == null) {
             throw new PerlCompilerException(node.getIndex(), "Operator \"" + operator + "\" doesn't have a defined JVM descriptor", emitterVisitor.ctx.errorUtil);
         }

@@ -587,9 +587,45 @@ public class InlineOpcodeHandler {
         RuntimeScalar idx = (RuntimeScalar) registers[indexReg];
         if (arrayBase instanceof RuntimeScalar scalar) arrayBase = scalar.arrayDeref();
         if (arrayBase instanceof RuntimeArray arr) {
-            registers[rd] = arr.type == RuntimeArray.TIED_ARRAY ? arr.getLocalLvalue(idx) : arr.get(idx);
+            registers[rd] = arr.type == RuntimeArray.TIED_ARRAY
+                    ? arr.getLocalLvalue(idx) : arr.get(idx);
         } else {
             throw new RuntimeException("ARRAY_GET_FOR_LOCAL: register " + arrayReg + " is not RuntimeArray");
+        }
+        return pc;
+    }
+
+    /** Array fetch whose result is an intermediate local lvalue dereferenced as an array. */
+    public static int executeArrayGetForLocalDereference(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int arrayReg = bytecode[pc++];
+        int indexReg = bytecode[pc++];
+        RuntimeBase arrayBase = registers[arrayReg];
+        RuntimeScalar idx = (RuntimeScalar) registers[indexReg];
+        if (arrayBase instanceof RuntimeScalar scalar) arrayBase = scalar.arrayDeref();
+        if (arrayBase instanceof RuntimeArray arr) {
+            registers[rd] = arr.type == RuntimeArray.TIED_ARRAY
+                    ? arr.getLocalLvalue(idx) : arr.getForLocalLvalue(idx);
+        } else {
+            throw new RuntimeException("ARRAY_GET_FOR_LOCAL_DEREFERENCE: register " + arrayReg
+                    + " is not RuntimeArray");
+        }
+        return pc;
+    }
+
+    /** Array fetch used by defined() where absent intermediates must not vivify. */
+    public static int executeArrayGetForDefinedProbe(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int arrayReg = bytecode[pc++];
+        int indexReg = bytecode[pc++];
+        RuntimeBase arrayBase = registers[arrayReg];
+        RuntimeScalar idx = (RuntimeScalar) registers[indexReg];
+        if (arrayBase instanceof RuntimeScalar scalar) arrayBase = scalar.arrayDeref();
+        if (arrayBase instanceof RuntimeArray arr) {
+            registers[rd] = arr.getForDefinedProbe(idx);
+        } else {
+            throw new RuntimeException("ARRAY_GET_FOR_DEFINED_PROBE: register " + arrayReg
+                    + " is not RuntimeArray");
         }
         return pc;
     }

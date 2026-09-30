@@ -1063,6 +1063,20 @@ public class Disassemble {
                         sb.append("ARRAY_GET_FOR_LOCAL r").append(rd).append(" = r").append(arrayReg)
                                 .append("[r").append(indexReg).append("]\n");
                         break;
+                    case Opcodes.ARRAY_GET_FOR_LOCAL_DEREFERENCE:
+                        rd = interpretedCode.bytecode[pc++];
+                        arrayReg = interpretedCode.bytecode[pc++];
+                        indexReg = interpretedCode.bytecode[pc++];
+                        sb.append("ARRAY_GET_FOR_LOCAL_DEREFERENCE r").append(rd).append(" = r")
+                                .append(arrayReg).append("[r").append(indexReg).append("]\n");
+                        break;
+                    case Opcodes.ARRAY_GET_FOR_DEFINED_PROBE:
+                        rd = interpretedCode.bytecode[pc++];
+                        arrayReg = interpretedCode.bytecode[pc++];
+                        indexReg = interpretedCode.bytecode[pc++];
+                        sb.append("ARRAY_GET_FOR_DEFINED_PROBE r").append(rd).append(" = r")
+                                .append(arrayReg).append("[r").append(indexReg).append("]\n");
+                        break;
                     case Opcodes.ARRAY_SET:
                         rd = interpretedCode.bytecode[pc++];
                         arrayReg = interpretedCode.bytecode[pc++];

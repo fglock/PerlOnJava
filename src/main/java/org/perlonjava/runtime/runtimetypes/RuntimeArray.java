@@ -1250,6 +1250,52 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return new RuntimeArrayProxyEntry(this, index, originalIndex);
     }
 
+    /**
+     * Return an array element used as an intermediate {@code local} lvalue.
+     * A missing/undef intermediate cannot be localized through a subsequent
+     * array dereference: unlike ordinary lvalue access, Perl raises instead
+     * of autovivifying it.
+     */
+    public RuntimeScalar getForLocalLvalue(RuntimeScalar index) {
+        if (type == TIED_ARRAY) return getLocalLvalue(index);
+
+        int slot = index.getInt();
+        if (slot < 0) slot = elements.size() + slot;
+        RuntimeScalar existing = slot >= 0 && slot < elements.size()
+                ? elements.get(slot) : null;
+        if (existing == null || existing.type == RuntimeScalarType.UNDEF
+                || existing instanceof RuntimeArrayProxyEntry proxy && !proxy.hasLvalue()) {
+            throw new PerlCompilerException(
+                    "Can't use an undefined value as an ARRAY reference");
+        }
+        return get(index);
+    }
+
+    public RuntimeScalar getForLocalLvalue(int index) {
+        return getForLocalLvalue(new RuntimeScalar(index));
+    }
+
+    /**
+     * Fetch an array element for a non-vivifying probe such as
+     * {@code defined $array[0][0]}.  Perl leaves an absent intermediate slot
+     * absent in that context; returning a detached undef lets the following
+     * dereference produce undef without installing an autovivified array.
+     */
+    public RuntimeScalar getForDefinedProbe(RuntimeScalar index) {
+        if (type == TIED_ARRAY) return get(index);
+
+        int slot = index.getInt();
+        if (slot < 0) slot = elements.size() + slot;
+        RuntimeScalar existing = slot >= 0 && slot < elements.size()
+                ? elements.get(slot) : null;
+        return existing == null || existing.type == RuntimeScalarType.UNDEF
+                ? new RuntimeScalar() : get(index);
+    }
+
+    public RuntimeScalar getForDefinedProbe(int index) {
+        return getForDefinedProbe(new RuntimeScalar(index));
+    }
+
     /** Scalar-index variant of {@link #getLvalue(int)}. */
     public RuntimeScalar getLvalue(RuntimeScalar index) {
         return getLvalue(index.getInt());

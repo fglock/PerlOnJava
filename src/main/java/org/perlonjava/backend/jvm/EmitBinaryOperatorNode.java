@@ -49,7 +49,11 @@ public class EmitBinaryOperatorNode {
                 }
                 Dereference.handleArrowOperator(emitterVisitor, node);
             }
-            case "[" -> Dereference.handleArrayElementOperator(emitterVisitor, node, "get");
+            case "[" -> Dereference.handleArrayElementOperator(emitterVisitor, node,
+                    node.getBooleanAnnotation("localIntermediateArrayAccess")
+                            ? "getForLocalLvalue"
+                            : node.getBooleanAnnotation("definedProbeArrayAccess")
+                                    ? "getForDefinedProbe" : "get");
             case "{" -> Dereference.handleHashElementOperator(emitterVisitor, node, "get");
             case "(" -> EmitSubroutine.handleApplyOperator(emitterVisitor, node);
 

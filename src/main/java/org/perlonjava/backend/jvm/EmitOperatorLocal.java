@@ -10,6 +10,19 @@ import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 public class EmitOperatorLocal {
+    private static void markLocalArrayDereferenceInputs(Node node, boolean root) {
+        if (node instanceof BinaryOperatorNode binary && binary.operator.equals("[")) {
+            if (!root) {
+                binary.setAnnotation("localIntermediateArrayAccess", true);
+            }
+            markLocalArrayDereferenceInputs(binary.left, false);
+        } else if (node instanceof OperatorNode operator && operator.operator.equals("$")) {
+            // The scalar sigil wraps the complete local target; it does not
+            // introduce an intermediate dereference level.
+            markLocalArrayDereferenceInputs(operator.operand, root);
+        }
+    }
+
     // Handles the 'local' operator.
     static void handleLocal(EmitterVisitor emitterVisitor, OperatorNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
@@ -295,6 +308,7 @@ public class EmitOperatorLocal {
                     false);
         } else {
             emitLocalDereferenceCheck(emitterVisitor, varToLocal);
+            markLocalArrayDereferenceInputs(varToLocal, true);
             // For direct hash element access (local $hash{key}), use getForLocal instead of get.
             // This ensures the proxy holds parent+key refs so restore survives hash reassignment.
             if (varToLocal instanceof BinaryOperatorNode binNode && binNode.operator.equals("{")
