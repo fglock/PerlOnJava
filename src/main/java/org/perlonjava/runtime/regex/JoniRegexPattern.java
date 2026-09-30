@@ -1517,11 +1517,25 @@ final class JoniRegexPattern {
                         throw new PerlCompilerException(
                                 "Eval-group not allowed at runtime, use re 'eval'");
                     }
-                    String modifiers = scopedFlags.toInternalFlagString() + "E";
+                    StringBuilder modifiers = new StringBuilder(
+                            scopedFlags.toInternalFlagString()).append('E');
+                    int debugMode = RuntimeRegex.activeDebugMode();
+                    if ((debugMode & RuntimeRegex.LEXICAL_DEBUG_COMPILE) != 0) {
+                        modifiers.append(RuntimeRegex.INTERNAL_DEBUG_COMPILE_MARKER);
+                    }
+                    if ((debugMode & RuntimeRegex.LEXICAL_DEBUG_EXECUTE) != 0) {
+                        modifiers.append(RuntimeRegex.INTERNAL_DEBUG_EXECUTE_MARKER);
+                    }
+                    if ((debugMode & RuntimeRegex.LEXICAL_DEBUG_COLOR) != 0) {
+                        modifiers.append(RuntimeRegex.INTERNAL_DEBUG_COLOR_MARKER);
+                    }
+                    if ((debugMode & RuntimeRegex.LEXICAL_DEBUG_PARSE) != 0) {
+                        modifiers.append(RuntimeRegex.INTERNAL_DEBUG_PARSE_MARKER);
+                    }
                     RuntimeScalar compiled = UnicodeResolver.withUserPropertyPackage(
                             dynamicPackage,
                             () -> RuntimeRegex.getQuotedRegex(
-                                    value, new RuntimeScalar(modifiers)));
+                                    value, new RuntimeScalar(modifiers.toString())));
                     RuntimeRegex runtimeRegex = (RuntimeRegex) compiled.value;
                     nestedPattern = UnicodeResolver.withUserPropertyPackage(
                             runtimeRegex.userPropertyPackage(),
@@ -1546,6 +1560,8 @@ final class JoniRegexPattern {
                                     () -> new JoniRegexPattern(dynamicSource,
                                             scopedFlags, 0, compileAsBytes,
                                             compileAsBytes, compileAsBytes));
+                            RuntimeRegex.emitDynamicSubpatternCompileTrace(
+                                    dynamicSource, nestedPattern);
                             dynamicPatternCache.put(cacheKey, nestedPattern);
                         }
                     } catch (SyntaxException exception) {
@@ -1652,9 +1668,12 @@ final class JoniRegexPattern {
             callbackPosition.value = charOffset(match.currentBytePosition());
 
             try {
+                RuntimeArray activeArgs = RuntimeCode.getCurrentArgs();
+                RuntimeArray callbackArgs = activeArgs == null
+                        ? new RuntimeArray() : activeArgs;
                 DynamicVariableManager.CapturedFrame<RuntimeList> frame =
                         DynamicVariableManager.captureFrameLocals(() -> RuntimeCode.apply(
-                                new RuntimeScalar(callback.code), new RuntimeArray(),
+                                new RuntimeScalar(callback.code), callbackArgs,
                                 RuntimeContextType.SCALAR));
                 // Joni's complete() notification is delayed until the candidate
                 // path commits. Resume now so a later (?{ ... }) on that same

@@ -356,29 +356,17 @@ public class CompileOperator {
         flagsNode.accept(bc);
         int flagsReg = bc.lastResultReg;
         int regexReg = bc.allocateRegister();
-        if (needsCallsiteCache) {
-            int callsiteId = bc.allocateCallsiteId();
-            bc.emit(Opcodes.QUOTE_REGEX_O);
-            bc.emitReg(regexReg);
-            bc.emitReg(patternReg);
-            bc.emitReg(flagsReg);
-            bc.emitReg(callsiteId);
-            bc.emit(unicodeStringsImplicitUFlag(bc));
-            bc.emit(regexWarningState(node));
-            bc.emit(regexWarningBitsIndex(bc, node));
-            bc.emit(0);
-            bc.emit(namedCharacterExpansionIndex(bc, node, args));
-        } else {
-            bc.emit(Opcodes.QUOTE_REGEX);
-            bc.emitReg(regexReg);
-            bc.emitReg(patternReg);
-            bc.emitReg(flagsReg);
-            bc.emit(unicodeStringsImplicitUFlag(bc));
-            bc.emit(regexWarningState(node));
-            bc.emit(regexWarningBitsIndex(bc, node));
-            bc.emit(0);
-            bc.emit(namedCharacterExpansionIndex(bc, node, args));
-        }
+        int callsiteId = bc.allocateCallsiteId();
+        bc.emit(Opcodes.QUOTE_REGEX_O);
+        bc.emitReg(regexReg);
+        bc.emitReg(patternReg);
+        bc.emitReg(flagsReg);
+        bc.emitReg(needsCallsiteCache ? callsiteId : -callsiteId);
+        bc.emit(unicodeStringsImplicitUFlag(bc));
+        bc.emit(regexWarningState(node));
+        bc.emit(regexWarningBitsIndex(bc, node));
+        bc.emit(0);
+        bc.emit(namedCharacterExpansionIndex(bc, node, args));
         int stringReg;
         if (args.elements.size() > 2) {
             Node target = args.elements.get(2);
@@ -1352,7 +1340,8 @@ public class CompileOperator {
                         }
                     }
                 }
-                boolean needsCallsiteCache = false;
+                boolean needsCallsiteCache = RegexLiteralAnalyzer.constantString(
+                        operand.elements.get(0)) != null;
                 Node flagsNode = operand.elements.get(1);
                 if (flagsNode instanceof StringNode) {
                     String flags = ((StringNode) flagsNode).value;
@@ -1363,31 +1352,19 @@ public class CompileOperator {
                 flagsNode.accept(bytecodeCompiler);
                 int flagsReg = bytecodeCompiler.lastResultReg;
                 int rd = bytecodeCompiler.allocateOutputRegister();
-                if (needsCallsiteCache) {
-                    int callsiteId = bytecodeCompiler.allocateCallsiteId();
-                    bytecodeCompiler.emit(Opcodes.QUOTE_REGEX_O);
-                    bytecodeCompiler.emitReg(rd);
-                    bytecodeCompiler.emitReg(patternReg);
-                    bytecodeCompiler.emitReg(flagsReg);
-                    bytecodeCompiler.emitReg(callsiteId);
-                    bytecodeCompiler.emit(unicodeStringsImplicitUFlag(bytecodeCompiler));
-                    bytecodeCompiler.emit(regexWarningState(node));
-                    bytecodeCompiler.emit(regexWarningBitsIndex(bytecodeCompiler, node));
-                    bytecodeCompiler.emit(node.getBooleanAnnotation("syntacticQuoteRegex") ? 2 : 1);
-                    bytecodeCompiler.emit(namedCharacterExpansionIndex(
-                            bytecodeCompiler, node, operand));
-                } else {
-                    bytecodeCompiler.emit(Opcodes.QUOTE_REGEX);
-                    bytecodeCompiler.emitReg(rd);
-                    bytecodeCompiler.emitReg(patternReg);
-                    bytecodeCompiler.emitReg(flagsReg);
-                    bytecodeCompiler.emit(unicodeStringsImplicitUFlag(bytecodeCompiler));
-                    bytecodeCompiler.emit(regexWarningState(node));
-                    bytecodeCompiler.emit(regexWarningBitsIndex(bytecodeCompiler, node));
-                    bytecodeCompiler.emit(node.getBooleanAnnotation("syntacticQuoteRegex") ? 2 : 1);
-                    bytecodeCompiler.emit(namedCharacterExpansionIndex(
-                            bytecodeCompiler, node, operand));
-                }
+                int callsiteId = bytecodeCompiler.allocateCallsiteId();
+                bytecodeCompiler.emit(Opcodes.QUOTE_REGEX_O);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(patternReg);
+                bytecodeCompiler.emitReg(flagsReg);
+                bytecodeCompiler.emitReg(needsCallsiteCache
+                        ? callsiteId : -callsiteId);
+                bytecodeCompiler.emit(unicodeStringsImplicitUFlag(bytecodeCompiler));
+                bytecodeCompiler.emit(regexWarningState(node));
+                bytecodeCompiler.emit(regexWarningBitsIndex(bytecodeCompiler, node));
+                bytecodeCompiler.emit(node.getBooleanAnnotation("syntacticQuoteRegex") ? 2 : 1);
+                bytecodeCompiler.emit(namedCharacterExpansionIndex(
+                        bytecodeCompiler, node, operand));
                 bytecodeCompiler.lastResultReg = rd;
             }
             case "++", "--", "++postfix", "--postfix" -> visitIncrDecr(bytecodeCompiler, node, op);

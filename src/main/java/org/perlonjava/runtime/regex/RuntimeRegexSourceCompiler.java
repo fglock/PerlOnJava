@@ -283,8 +283,19 @@ final class RuntimeRegexSourceCompiler {
                 .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_EXECUTE_MARKER), "")
                 .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_COLOR_MARKER), "")
                 .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_PARSE_MARKER), "");
+        int debugMode = RuntimeRegex.debugMode(modifiers);
+        String compilationModifiers = sourceModifiers;
+        if ((debugMode & RuntimeRegex.LEXICAL_DEBUG_COMPILE) != 0) {
+            compilationModifiers += RuntimeRegex.INTERNAL_DEBUG_COMPILE_MARKER;
+        }
+        if ((debugMode & RuntimeRegex.LEXICAL_DEBUG_EXECUTE) != 0) {
+            compilationModifiers += RuntimeRegex.INTERNAL_DEBUG_EXECUTE_MARKER;
+        }
+        if ((debugMode & RuntimeRegex.LEXICAL_DEBUG_COLOR) != 0) {
+            compilationModifiers += RuntimeRegex.INTERNAL_DEBUG_COLOR_MARKER;
+        }
         RuntimeScalar compiled = compile(RuntimeRegexTemplate.patternScalar(
-                masked.pattern(), template.byteBackedPattern()), sourceModifiers);
+                masked.pattern(), template.byteBackedPattern()), compilationModifiers);
         if (!(compiled.value instanceof RuntimeRegex sourceRegex)) {
             throw new IllegalStateException("runtime regex source did not compile to qr//");
         }

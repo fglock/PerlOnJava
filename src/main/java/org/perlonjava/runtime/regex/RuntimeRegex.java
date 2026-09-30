@@ -30,6 +30,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import static org.perlonjava.runtime.regex.RegexFlags.fromModifiers;
 import static org.perlonjava.runtime.regex.RegexFlags.validateModifiers;
@@ -93,6 +94,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             ThreadLocal.withInitial(() -> 0);
     private static final ThreadLocal<Integer> ACTIVE_DEBUG_MODE =
             ThreadLocal.withInitial(() -> 0);
+    /** Dynamic match/qr call site currently constructing a runtime regex. */
+    private static final ThreadLocal<Integer> DYNAMIC_COMPILE_CALLSITE =
+            ThreadLocal.withInitial(() -> 0);
+    /** Callback-bearing and executable-source patterns must compile per evaluation. */
+    private static final ThreadLocal<Boolean> FORCE_DYNAMIC_COMPILE =
+            ThreadLocal.withInitial(() -> false);
 
     private static final Pattern USER_DEFINED_PROPERTY_PATTERN =
             Pattern.compile("\\\\([pP])\\{((?:[A-Za-z_][A-Za-z0-9_]*::)*(?:Is|In)[A-Za-z_][A-Za-z0-9_]*)}");
@@ -180,6 +187,19 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     public static void setActiveDebugMode(int mode) { ACTIVE_DEBUG_MODE.set(mode); }
     public static int activeDebugMode() { return ACTIVE_DEBUG_MODE.get(); }
+
+    /** Emit the compile event for a pattern produced by a {@code (??{...})} callout. */
+    static void emitDynamicSubpatternCompileTrace(
+            String source, JoniRegexPattern compiled) {
+        if ((ACTIVE_DEBUG_MODE.get() & LEXICAL_DEBUG_COMPILE) == 0) return;
+        RuntimeIO.getStderr().write("Compiling REx \"" + source + "\"\n"
+                + "Final program:\n"
+                + compiled.engineRegex().perlFirstProgramDebugDescription(true)
+                + "\nJONI_PATTERN native bytecode:\n"
+                + compiled.nativeCompileDebugDescription()
+                + "\n");
+        RuntimeIO.getStderr().flush();
+    }
     public void markSplitWhitespaceDebug() {
         splitWhitespaceDebug = true;
         lexicalDebugMode = ACTIVE_DEBUG_MODE.get();
@@ -839,26 +859,40 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 namedCharacterSourceMode, true, lexicalReStrict,
                 namedCharacterTranslator);
 
-        RuntimeRegex nonPromotingCached = refreshLexicalNamedCharacter
-                ? null : state().compiledRegexCache.get(nonPromotingCacheKey);
-        RuntimeRegex promotingCached = refreshLexicalNamedCharacter
-                ? null : state().compiledRegexCache.get(promotingCacheKey);
-        if (nonPromotingCached != null && promotingCached != null
-                && nonPromotingCached != promotingCached) {
-            throw new IllegalStateException(
-                    "Conflicting regex Unicode-promotion cache identities");
+        int dynamicCallsiteId = DYNAMIC_COMPILE_CALLSITE.get();
+        String dynamicRequestKey = nonPromotingCacheKey + '\0' + promotingCacheKey;
+        RuntimeRegex nonPromotingCached = null;
+        RuntimeRegex promotingCached = null;
+        RuntimeRegex regex;
+        if (dynamicCallsiteId != 0) {
+            RuntimeRegexState runtimeState = state();
+            regex = Boolean.TRUE.equals(FORCE_DYNAMIC_COMPILE.get())
+                    || !dynamicRequestKey.equals(
+                            runtimeState.dynamicRegexCompileKeys.get(dynamicCallsiteId))
+                    ? null : runtimeState.dynamicRegexCompileCache.get(dynamicCallsiteId);
+        } else {
+            nonPromotingCached = refreshLexicalNamedCharacter
+                    ? null : state().compiledRegexCache.get(nonPromotingCacheKey);
+            promotingCached = refreshLexicalNamedCharacter
+                    ? null : state().compiledRegexCache.get(promotingCacheKey);
+            if (nonPromotingCached != null && promotingCached != null
+                    && nonPromotingCached != promotingCached) {
+                throw new IllegalStateException(
+                        "Conflicting regex Unicode-promotion cache identities");
+            }
+            regex = nonPromotingCached != null
+                    ? nonPromotingCached : promotingCached;
+            if (regex != null
+                    && (regex.sourcePatternByteBacked != patternByteBacked
+                            || regex.namedCharacterSourceMode
+                                    != namedCharacterSourceMode
+                            || regex.unicodePromotingPatternSyntax
+                                    != (regex == promotingCached))) {
+                throw new IllegalStateException(
+                        "Regex Unicode-promotion cache identity mismatch");
+            }
         }
-        RuntimeRegex regex = nonPromotingCached != null
-                ? nonPromotingCached : promotingCached;
-        if (regex != null
-                && (regex.sourcePatternByteBacked != patternByteBacked
-                        || regex.namedCharacterSourceMode
-                                != namedCharacterSourceMode
-                        || regex.unicodePromotingPatternSyntax
-                                != (regex == promotingCached))) {
-            throw new IllegalStateException(
-                    "Regex Unicode-promotion cache identity mismatch");
-        }
+        boolean dynamicCacheMiss = dynamicCallsiteId != 0 && regex == null;
         if (regex == null) {
             String cacheKey = nonPromotingCacheKey;
             if (DEBUG_REGEX) {
@@ -1238,8 +1272,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             validateModifiersWithPendingDiagnostics(modifiers, regex);
 
             // Cache the result if the cache is not full
-            if (state().compiledRegexCache.size() < MAX_REGEX_CACHE_SIZE
-                    || state().compiledRegexCache.containsKey(cacheKey)) {
+            if (dynamicCallsiteId == 0
+                    && (state().compiledRegexCache.size() < MAX_REGEX_CACHE_SIZE
+                    || state().compiledRegexCache.containsKey(cacheKey))) {
                 state().compiledRegexCache.put(cacheKey, regex);
             }
             String debugReportKey = cacheKey;
@@ -1257,6 +1292,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             if (DEBUG_REGEX) {
                 System.err.println("  cache hit, reusing cached regex");
             }
+        }
+        if (dynamicCacheMiss) {
+            state().dynamicRegexCompileKeys.put(dynamicCallsiteId, dynamicRequestKey);
+            state().dynamicRegexCompileCache.put(dynamicCallsiteId, regex);
         }
         if (lexicalDebugMode != 0) {
             String literalReportKey = regex.literalDebugReportKey();
@@ -1282,7 +1321,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         + "#debug=" + lexicalDebugMode
                         + "#propertyPackage=" + regex.userPropertyPackage;
             }
-            if (state().reportedDebugCompilations.add(debugReportKey)) {
+            boolean firstGlobalReport = state().reportedDebugCompilations
+                    .add(debugReportKey);
+            if (dynamicCacheMiss || firstGlobalReport) {
                 regex.emitCompileDebugTrace(true);
             }
         }
@@ -3087,6 +3128,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             List<RuntimeRegexCallback> callbacks, RuntimeScalar original,
             boolean patternByteBacked) {
         int lexicalDebugMode = debugMode(modifiers);
+        if (lexicalDebugMode == 0
+                && RuntimeRegexSourceCompiler.isCompilingRuntimeSource()) {
+            lexicalDebugMode = ACTIVE_DEBUG_MODE.get();
+        }
         String displayPattern = RuntimeRegexTemplate.displayPattern(
                 executablePattern, callbacks);
         RuntimeRegex regex = compile(executablePattern, modifiers,
@@ -3189,6 +3234,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public static RuntimeScalar getQuotedRegex(
             RuntimeScalar patternString, RuntimeScalar modifiers, int callsiteId,
             NamedCharacterExpansionMap preResolvedNamedCharacters) {
+        if (callsiteId < 0) {
+            int dynamicCallsiteId = Math.negateExact(callsiteId);
+            boolean forceFresh = requiresFreshDynamicCompile(
+                    patternString, modifiers);
+            return withDynamicCompileCallsite(dynamicCallsiteId, forceFresh,
+                    () -> getQuotedRegex(patternString, modifiers,
+                            preResolvedNamedCharacters));
+        }
         // A callsite ID is emitted only for a syntactically static match, /o,
         // or m?PAT?.  Reusing its private wrapper is safe: unlike qr//, it
         // cannot escape into Perl code, and /g progress remains on the target
@@ -3212,6 +3265,37 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 patternString, modifiers, preResolvedNamedCharacters);
         runtimeState.optimizedRegexCache.put(cacheKey, result);
         return result;
+    }
+
+    /** Reuse only a dynamic source pattern's one-entry native compile cache. */
+    private static boolean requiresFreshDynamicCompile(
+            RuntimeScalar pattern, RuntimeScalar modifiers) {
+        if (pattern == null) return false;
+        if (pattern.value instanceof RuntimeRegexTemplate template) {
+            return !template.callbacks().isEmpty();
+        }
+        if (pattern.value instanceof RuntimeRegex regex) {
+            return !regex.executableCallbacks.isEmpty();
+        }
+        String modifierString = modifiers == null ? "" : modifiers.toString();
+        return containsExecutableSource(pattern.toString(),
+                modifierString.indexOf('x') >= 0);
+    }
+
+    private static RuntimeScalar withDynamicCompileCallsite(
+            int callsiteId, boolean forceFresh, Supplier<RuntimeScalar> action) {
+        int previousCallsiteId = DYNAMIC_COMPILE_CALLSITE.get();
+        boolean previousForceFresh = FORCE_DYNAMIC_COMPILE.get();
+        DYNAMIC_COMPILE_CALLSITE.set(callsiteId);
+        FORCE_DYNAMIC_COMPILE.set(forceFresh || previousForceFresh);
+        try {
+            return action.get();
+        } finally {
+            if (previousCallsiteId == 0) DYNAMIC_COMPILE_CALLSITE.remove();
+            else DYNAMIC_COMPILE_CALLSITE.set(previousCallsiteId);
+            if (!previousForceFresh) FORCE_DYNAMIC_COMPILE.remove();
+            else FORCE_DYNAMIC_COMPILE.set(true);
+        }
     }
 
     /**
@@ -3731,6 +3815,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Clearing these variables would incorrectly erase the previous successful capture
         // state and break tests that rely on @-/@+.
 
+        int previousActiveDebugMode = ACTIVE_DEBUG_MODE.get();
+        ACTIVE_DEBUG_MODE.set(regex.lexicalDebugMode);
         try {
             while (skipFirstFind || matcher.find()) {
                 skipFirstFind = false;
@@ -3856,6 +3942,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             // recursion ceiling is reached; do not let the JVM error abort the
             // whole program for the equivalent pathological failure case.
             found = false;
+        } finally {
+            ACTIVE_DEBUG_MODE.set(previousActiveDebugMode);
         }
 
         if (!found) {

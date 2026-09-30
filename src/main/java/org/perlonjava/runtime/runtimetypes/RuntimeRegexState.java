@@ -62,6 +62,9 @@ public final class RuntimeRegexState {
 
     /** Per-runtime callsite state for static matches, {@code /o}, and {@code m?PAT?}. */
     public final Map<Integer, RuntimeScalar> optimizedRegexCache = new LinkedHashMap<>();
+    /** Last compiled dynamic regex at each match or qr// call site. */
+    public final Map<Integer, String> dynamicRegexCompileKeys = new LinkedHashMap<>();
+    public final Map<Integer, RuntimeRegex> dynamicRegexCompileCache = new LinkedHashMap<>();
     /** Package and stable numeric key for each compiled static-regex call site. */
     public final Map<String, Integer> optimizedRegexCallsiteIds = new LinkedHashMap<>();
     public final Map<Integer, String> optimizedRegexCallsitePackages = new LinkedHashMap<>();
@@ -147,6 +150,8 @@ public final class RuntimeRegexState {
     public void resetForTopLevel() {
         compiledRegexCache.clear();
         optimizedRegexCache.clear();
+        dynamicRegexCompileKeys.clear();
+        dynamicRegexCompileCache.clear();
         optimizedRegexCallsiteIds.clear();
         optimizedRegexCallsitePackages.clear();
         nextOptimizedRegexCallsiteId = 1;

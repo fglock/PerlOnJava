@@ -372,6 +372,11 @@ public class EmitRegex {
         operand.elements.get(1).accept(scalarVisitor);  // Flags
         maybeApplyUnicodeStringsRegexModifiers(emitterVisitor);
         emitRegexWarningState(emitterVisitor, node);
+        boolean dynamicPattern = RegexLiteralAnalyzer.constantString(
+                operand.elements.get(0)) == null;
+        if (dynamicPattern) {
+            emitterVisitor.ctx.mv.visitLdcInsn(-nextCallsiteId.getAndIncrement());
+        }
         emitterVisitor.ctx.mv.visitLdcInsn(
                 emitterVisitor.ctx.symbolTable.getCurrentPackage());
         emitterVisitor.ctx.mv.visitInsn(Boolean.TRUE.equals(
@@ -379,9 +384,18 @@ public class EmitRegex {
                 ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
 
         // Create the quoted regex
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/regex/RuntimeRegex", "getQuotedRegexInPackage",
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Z)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        if (dynamicPattern) {
+            // A dynamic qr// site retains only its last compiled pattern, just
+            // like a dynamic m// site, while still producing a fresh Perl qr
+            // wrapper for each evaluation.
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/regex/RuntimeRegex", "getQuotedRegexInPackage",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;ILjava/lang/String;Z)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        } else {
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/regex/RuntimeRegex", "getQuotedRegexInPackage",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Z)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        }
         String markMethod = node.getBooleanAnnotation("syntacticQuoteRegex")
                 ? "markSyntacticQuoteConstruction"
                 : "markQuoteConstruction";
@@ -440,8 +454,9 @@ public class EmitRegex {
         // A static match is consumed immediately, unlike qr// which must create
         // a fresh Perl value for every evaluation.  Reuse one private wrapper
         // for the match call site to avoid cloning the cached native program.
-        boolean needsCallsiteCache = RegexLiteralAnalyzer.constantString(
+        boolean staticPattern = RegexLiteralAnalyzer.constantString(
                 operand.elements.get(0)) != null;
+        boolean needsCallsiteCache = staticPattern;
         Node flagsNode = operand.elements.get(1);
         if (flagsNode instanceof StringNode) {
             String flags = ((StringNode) flagsNode).value;
@@ -457,27 +472,18 @@ public class EmitRegex {
         boolean sourceCompiledBeforeRun = Boolean.TRUE.equals(
                 node.getAnnotation("regexSourceCompiledBeforeRun"));
 
-        // Create the regex matcher (use the callsite variant for static matches,
-        // /o, or m?PAT?).
-        if (needsCallsiteCache) {
-            int callsiteId = nextCallsiteId.getAndIncrement();
-            emitterVisitor.ctx.mv.visitLdcInsn(callsiteId);
-            emitterVisitor.ctx.mv.visitLdcInsn(
-                    emitterVisitor.ctx.symbolTable.getCurrentPackage());
-            emitterVisitor.ctx.mv.visitInsn(sourceCompiledBeforeRun
-                    ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/regex/RuntimeRegex", "getQuotedRegexInPackage",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;ILjava/lang/String;Z)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
-        } else {
-            emitterVisitor.ctx.mv.visitLdcInsn(
-                    emitterVisitor.ctx.symbolTable.getCurrentPackage());
-            emitterVisitor.ctx.mv.visitInsn(sourceCompiledBeforeRun
-                    ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/regex/RuntimeRegex", "getQuotedRegexInPackage",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Z)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
-        }
+        // Positive IDs retain static, /o, and m?PAT? wrappers. Negative IDs
+        // identify dynamic sites with one-pattern compile-cache semantics.
+        int callsiteId = nextCallsiteId.getAndIncrement();
+        emitterVisitor.ctx.mv.visitLdcInsn(needsCallsiteCache
+                ? callsiteId : -callsiteId);
+        emitterVisitor.ctx.mv.visitLdcInsn(
+                emitterVisitor.ctx.symbolTable.getCurrentPackage());
+        emitterVisitor.ctx.mv.visitInsn(sourceCompiledBeforeRun
+                ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/regex/RuntimeRegex", "getQuotedRegexInPackage",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;ILjava/lang/String;Z)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
 
         int regexSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
         boolean pooledRegex = regexSlot >= 0;
