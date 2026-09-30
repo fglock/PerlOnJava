@@ -1577,6 +1577,9 @@ public class Opcodes {
     /** Reject localizing through an actual reference; symbolic names remain valid. */
     public static final short REJECT_LOCALIZE_REFERENCE = 565;
 
+    /** Unicode-aware quotemeta selected under the lexical unicode_strings feature. */
+    public static final short QUOTEMETA_UNICODE = 630;
+
     /**
      * Unpack binary data into a list of scalars.
      * Format: UNPACK rd argsReg ctx

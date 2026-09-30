@@ -58,6 +58,12 @@ public class LoopLabels {
     /** JVM local holding loop-entry regex state to restore on next/redo. */
     public int regexStateRestoreLocal = -1;
 
+    /** JVM local holding an enclosing block/loop expression result. */
+    public int resultRegisterSlot = -1;
+
+    /** Context of the local result associated with this loop target. */
+    public int resultRegisterContext = -1;
+
     /**
      * The context type in which this loop operates
      */

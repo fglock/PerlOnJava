@@ -55,6 +55,18 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
         return moved >= 0 ? moved : key;
     }
 
+    /** Whether this proxy still points at an absent source slot. */
+    public boolean isUnmaterializedHole() {
+        int currentKey = currentKey();
+        return lvalue == null && currentKey >= 0 && currentKey < parent.elements.size()
+                && parent.elements.get(currentKey) == null;
+    }
+
+    /** Current source index, for operations that must preserve a sparse slot. */
+    public int getSourceIndex() {
+        return currentKey();
+    }
+
     /** Parent aggregate, used for diagnostics that retain an element's identity. */
     public RuntimeArray getParent() { return parent; }
 

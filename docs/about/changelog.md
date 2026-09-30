@@ -9,6 +9,8 @@ priorities and future plans.
 - Restore core compatibility for `kill` numeric captures, void-context `map`
   cleanup, sparse tied-array reversal, typed declarations in `eval`, regex
   capture restoration across loop control, and `PERL5OPT` include ordering.
+- Match Perl's seeded random sequence and Unicode `quotemeta` rules, and retain
+  writable sparse slots when iterating over `reverse`.
 
 - Restore core-test compatibility for regex-set diagnostics (including
   POSIX-looking text in extended-class comments), classes and MRO, op subs,

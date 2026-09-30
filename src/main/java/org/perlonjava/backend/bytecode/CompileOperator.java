@@ -1088,7 +1088,9 @@ public class CompileOperator {
             case "chr" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, bytecodeCompiler.isBytesEnabled() ? Opcodes.CHR_BYTES : Opcodes.CHR);
             case "chrBytes" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.CHR_BYTES);
             case "lengthBytes" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.LENGTH_BYTES);
-            case "quotemeta" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.QUOTEMETA);
+            case "quotemeta" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node,
+                    bytecodeCompiler.symbolTable.isFeatureCategoryEnabled("unicode_strings")
+                            ? Opcodes.QUOTEMETA_UNICODE : Opcodes.QUOTEMETA);
             case "fc" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node,
                     selectCaseOpcode(bytecodeCompiler, Opcodes.FC, Opcodes.FC_BYTES, Opcodes.FC_UNICODE));
             case "lc" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node,
