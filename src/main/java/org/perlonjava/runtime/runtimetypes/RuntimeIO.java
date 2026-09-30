@@ -26,6 +26,7 @@ import java.nio.file.StandardOpenOption;
 import java.lang.ref.PhantomReference;
 import java.lang.ref.Reference;
 import java.lang.ref.ReferenceQueue;
+import java.lang.ref.WeakReference;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -72,6 +73,18 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  * @see RuntimeScalarReference
  */
 public class RuntimeIO extends RuntimeScalar {
+    /** The glob from which this escaped IO-slot value originated, if still live. */
+    private WeakReference<RuntimeGlob> ownerGlob;
+
+    public void setOwnerGlob(RuntimeGlob ownerGlob) {
+        this.ownerGlob = new WeakReference<>(ownerGlob);
+    }
+
+    public RuntimeGlob getOwnerGlob() {
+        return ownerGlob == null ? null : ownerGlob.get();
+    }
+
+    /** Glob slot currently owning this IO object, when it has one. */
     private static final ThreadLocal<RuntimeIO> lastReadlineHandle = new ThreadLocal<>();
     private static final ThreadLocal<RuntimeScalar> lastAccessedScalar = new ThreadLocal<>();
 
@@ -1452,6 +1465,23 @@ public class RuntimeIO extends RuntimeScalar {
                 }
             }
         } else if (runtimeScalar.value instanceof RuntimeIO runtimeIO) {
+            // Symbol::geniosym may create an unnamed PVIO wrapper.  Preserve
+            // its alias to the source glob without introducing a strong cycle.
+            RuntimeGlob owner = runtimeIO.ownerGlob == null ? null : runtimeIO.ownerGlob.get();
+            if (owner != null && owner.IO != null
+                    && owner.IO.value instanceof TieHandle tieHandle) {
+                return tieHandle;
+            }
+            // Symbol::geniosym can expose a second PVIO wrapper for the same
+            // named glob.  That wrapper has its own Java identity, but Perl
+            // still requires operations on it to observe a tie on the glob.
+            if (runtimeIO.globName != null) {
+                RuntimeGlob glob = GlobalVariable.getExistingGlobalIO(runtimeIO.globName);
+                if (glob != null && glob.IO != null
+                        && glob.IO.value instanceof TieHandle tieHandle) {
+                    return tieHandle;
+                }
+            }
             // Direct I/O handle
             if (ioDebug) {
                 System.err.println("[JPERL_IO_DEBUG] getRuntimeIO: found direct RuntimeIO id=" + System.identityHashCode(runtimeIO));

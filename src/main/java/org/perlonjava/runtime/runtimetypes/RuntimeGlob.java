@@ -1329,11 +1329,16 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // RuntimeIO on the canonical glob in globalIORefs, so consult
                 // that as a fallback when the local IO slot is empty.
                 RuntimeScalar effectiveIO = this.IO;
+                RuntimeGlob ioOwner = this;
                 if ((effectiveIO == null || effectiveIO.value == null) && this.globName != null) {
                     RuntimeGlob canonical = GlobalVariable.peekGlobalIO(this.globName);
                     if (canonical != null && canonical != this && canonical.IO != null) {
                         effectiveIO = canonical.IO;
+                        ioOwner = canonical;
                     }
+                }
+                if (effectiveIO != null && effectiveIO.value instanceof RuntimeIO runtimeIO) {
+                    runtimeIO.setOwnerGlob(ioOwner);
                 }
                 if (effectiveIO != null && effectiveIO.type == RuntimeScalarType.GLOB
                         && effectiveIO.value instanceof RuntimeIO) {

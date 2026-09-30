@@ -153,10 +153,13 @@ public class TieOperators {
                 hash.resetIterator();
             }
             case GLOBREFERENCE -> {
+                RuntimeScalar directPvioWrapper = directPvioWrapper(variable);
                 RuntimeGlob glob = variable.globDeref();
                 RuntimeIO previousValue = (RuntimeIO) glob.IO.value;
                 glob.IO.type = TIED_SCALAR;
-                boolean selfIsTiedGlob = self != null && self.value == glob;
+                boolean selfIsTiedGlob = self != null && (self.value == glob
+                        || isSameHandle(self, previousValue)
+                        || directPvioWrapper != null);
                 TieHandle tieHandle = new TieHandle(className, previousValue, self, !selfIsTiedGlob);
                 // Propagate the glob name so select() returns the correct name
                 // (e.g., "main::STDOUT") even when the handle is tied.
@@ -164,6 +167,9 @@ public class TieOperators {
                     tieHandle.globName = previousValue.globName;
                 }
                 glob.IO.value = tieHandle;
+                if (directPvioWrapper != null) {
+                    directPvioWrapper.value = tieHandle;
+                }
                 // Update selectedHandle so that `print` without explicit filehandle
                 // goes through the tied handle (e.g., Test2::Plugin::IOEvents)
                 if (previousValue == RuntimeIO.getSelectedHandle()) {
@@ -198,6 +204,26 @@ public class TieOperators {
         }
 
         return RuntimeCode.apply(method, args, RuntimeContextType.SCALAR).getFirst();
+    }
+
+    /** True when TIEHANDLE returned a reference to the handle being tied. */
+    private static boolean isSameHandle(RuntimeScalar value, RuntimeIO handle) {
+        if (!(value.value instanceof RuntimeIO selfHandle) || handle == null) {
+            return false;
+        }
+        return selfHandle == handle
+                || (selfHandle.globName != null && selfHandle.globName.equals(handle.globName));
+    }
+
+    /** Finds the scalar wrapper that owns a direct PVIO, including its proxy form. */
+    private static RuntimeScalar directPvioWrapper(RuntimeScalar variable) {
+        if (variable.value instanceof RuntimeIO) {
+            return variable;
+        }
+        if (variable.value instanceof RuntimeScalar scalar && scalar.value instanceof RuntimeIO) {
+            return scalar;
+        }
+        return null;
     }
 
     /**

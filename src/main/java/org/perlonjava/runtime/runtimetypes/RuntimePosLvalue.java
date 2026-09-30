@@ -118,19 +118,25 @@ public class RuntimePosLvalue {
 
     /** Publish a position produced by the regex engine rather than Perl lvalue assignment. */
     public static void publishMatchPosition(RuntimeScalar perlVariable, RuntimeScalar position) {
-        RuntimeScalar stored = pos(perlVariable);
+        // pos() resolves a tied value before selecting its cache key.  Keep
+        // that same canonical storage here: looking up the original tied
+        // wrapper after pos() has populated the fetched scalar's entry loses
+        // the entry and crashes destructive s///e substitutions.
+        RuntimeScalar storage = RuntimeScalar.fetchTiedOnce(perlVariable).posStorage();
+        RuntimeScalar stored = pos(storage);
         ((PosLvalueScalar) stored).setFromMatcher(position);
-        CacheEntry entry = positionCache().get(perlVariable.posStorage());
-        entry.matcherBytePosition = perlVariable.type == RuntimeScalarType.BYTE_STRING
+        CacheEntry entry = positionCache().get(storage);
+        entry.matcherBytePosition = storage.type == RuntimeScalarType.BYTE_STRING
                 && position.getDefinedBoolean() ? position.getInt() : null;
     }
 
     /** Publish an integer position produced by the regex engine. */
     public static void publishMatchPosition(RuntimeScalar perlVariable, int position) {
-        RuntimeScalar stored = pos(perlVariable);
+        RuntimeScalar storage = RuntimeScalar.fetchTiedOnce(perlVariable).posStorage();
+        RuntimeScalar stored = pos(storage);
         ((PosLvalueScalar) stored).setFromMatcher(position);
-        CacheEntry entry = positionCache().get(perlVariable.posStorage());
-        entry.matcherBytePosition = perlVariable.type == RuntimeScalarType.BYTE_STRING
+        CacheEntry entry = positionCache().get(storage);
+        entry.matcherBytePosition = storage.type == RuntimeScalarType.BYTE_STRING
                 ? position : null;
     }
 

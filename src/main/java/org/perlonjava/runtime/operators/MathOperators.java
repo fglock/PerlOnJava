@@ -32,6 +32,16 @@ public class MathOperators {
         return quotientAndRemainder[1].signum() == 0 ? integerResult(quotientAndRemainder[0]) : null;
     }
 
+    /** Perl's integer division floors, unlike Java's truncation toward zero. */
+    private static long floorIntegerQuotient(long dividend, long divisor) {
+        long quotient = dividend / divisor;
+        long remainder = dividend % divisor;
+        if (remainder != 0 && (dividend < 0) != (divisor < 0)) {
+            quotient--;
+        }
+        return quotient;
+    }
+
     /**
      * Keep the string channel of a scalar which entered arithmetic as a
      * string. Perl's numeric operators add an IV/NV value to the existing PV
@@ -1216,7 +1226,7 @@ public class MathOperators {
             throw new PerlCompilerException("Illegal division by zero");
         }
 
-        long result = dividend / divisor;
+        long result = floorIntegerQuotient(dividend, divisor);
         return new RuntimeScalar(result);
     }
 
@@ -1249,7 +1259,7 @@ public class MathOperators {
             throw new PerlCompilerException("Illegal division by zero");
         }
 
-        long result = dividend / divisor;
+        long result = floorIntegerQuotient(dividend, divisor);
         return new RuntimeScalar(result);
     }
 
