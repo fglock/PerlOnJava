@@ -687,7 +687,10 @@ public class OperatorParser {
                         || "(".equals(afterType.text);
                 if (followedBySigil) {
                     // Unambiguously a type annotation (followed by a variable sigil or paren list)
-                    if (parser.parsingForLoopVariable && !GlobalVariable.isPackageLoaded(packageName)) {
+                    boolean evalSource = parser.ctx.compilerOptions.fileName != null
+                            && parser.ctx.compilerOptions.fileName.startsWith("(eval");
+                    if ((parser.parsingForLoopVariable || evalSource)
+                            && !GlobalVariable.isPackageLoaded(packageName)) {
                         parser.throwCleanError("No such class " + packageName);
                     }
                     varType = packageName;

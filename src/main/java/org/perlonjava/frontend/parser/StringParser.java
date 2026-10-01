@@ -80,6 +80,50 @@ public class StringParser {
     private static final int ESCAPE = 2;
     private static final int END_TOKEN = 3;
 
+    /**
+     * True when a slash starts an adjacent, unterminated pattern. This helper is
+     * used only at grammar boundaries where Perl treats {@code /2} as a regex
+     * term rather than division; ordinary {@code $x /2} expressions remain
+     * arithmetic.
+     */
+    static boolean isUnterminatedAdjacentSlashPattern(Parser parser, int slashIndex) {
+        if (slashIndex < 0 || slashIndex >= parser.tokens.size()
+                || !parser.tokens.get(slashIndex).text.equals("/")) {
+            return false;
+        }
+        int next = slashIndex + 1;
+        if (next >= parser.tokens.size()
+                || parser.tokens.get(next).type == LexerTokenType.WHITESPACE
+                || parser.tokens.get(next).type == LexerTokenType.NEWLINE
+                || parser.tokens.get(next).type == LexerTokenType.EOF) {
+            return false;
+        }
+
+        boolean escaped = false;
+        boolean inCharacterClass = false;
+        for (int i = next; i < parser.tokens.size(); i++) {
+            LexerToken token = parser.tokens.get(i);
+            if (token.type == LexerTokenType.EOF) {
+                return true;
+            }
+            for (int offset = 0; offset < token.text.length(); offset++) {
+                char ch = token.text.charAt(offset);
+                if (escaped) {
+                    escaped = false;
+                } else if (ch == '\\') {
+                    escaped = true;
+                } else if (inCharacterClass) {
+                    if (ch == ']') inCharacterClass = false;
+                } else if (ch == '[') {
+                    inCharacterClass = true;
+                } else if (ch == '/') {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     // Map to hold pairs of matching delimiters
     private static final Map<Character, Character> QUOTE_PAIR = Map.of(
             '<', '>',

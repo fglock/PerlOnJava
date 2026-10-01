@@ -3322,9 +3322,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Include package name in cache key to ensure source location info is correct per-package
             int featureFlags = ctx.symbolTable.featureFlagsStack.peek();
             String runtimePackage = InterpreterState.currentPackage.get().toString();
+            String callsiteSub = ctx.symbolTable.getCurrentSubroutine();
+            boolean topLevelMain = callsiteSub == null || callsiteSub.isEmpty()
+                    || "main".equals(callsiteSub);
             String currentPackage = ClassRegistry.isClass(runtimePackage)
                     ? runtimePackage
-                    : ctx.symbolTable.getCurrentPackage();
+                    : topLevelMain ? runtimePackage : ctx.symbolTable.getCurrentPackage();
             String cacheKey = evalString + '\0' + evalTag + '\0' + hasUnicode + '\0' + ctx.isEvalbytes + '\0' + evalbytesUtf8Source + '\0' + byteStringUtf8Source + '\0' + isByteStringSource + '\0' + featureFlags + '\0' + currentPackage;
             Class<?> cachedClass = null;
             if (!isDebugging) {
@@ -4041,9 +4044,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Create parser context
                 ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
                 String runtimePackage = InterpreterState.currentPackage.get().toString();
+                String callsiteSub = capturedSymbolTable.getCurrentSubroutine();
+                boolean topLevelMain = callsiteSub == null || callsiteSub.isEmpty()
+                        || "main".equals(callsiteSub);
                 String evalCurrentPackage = ClassRegistry.isClass(runtimePackage)
                         ? runtimePackage
-                        : capturedSymbolTable.getCurrentPackage();
+                        : topLevelMain ? runtimePackage : capturedSymbolTable.getCurrentPackage();
                 parseSymbolTable.setCurrentPackage(
                         evalCurrentPackage, ClassRegistry.isClass(evalCurrentPackage));
                 String lexicalEvalWarningBits = parseSymbolTable.getWarningBitsString();
@@ -4153,9 +4159,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 //   - evalCtx.errorUtil uses evalCompilerOptions.fileName (the outer script name),
                 //     not the eval string's tokens, so die/warn location baking is already
                 //     relative to the outer script and is unaffected by the package change.
-                //   - capturedSymbolTable.getCurrentPackage() gives the compile-time package
-                //     of the eval call site (e.g. "FOO3"), so bare names like *named are
-                //     correctly qualified to FOO3::named in the bytecode string pool.
+                //   - evalCurrentPackage is the package selected for this eval, so bare
+                //     names like *named are correctly qualified to the active namespace
+                //     in the bytecode string pool.
                 //   - Without this call, the BytecodeCompiler defaults to "main", causing
                 //     eval q[*named{CODE}] to look up main::named instead of FOO3::named.
                 BytecodeCompiler compiler = new BytecodeCompiler(
@@ -4165,7 +4171,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         adjustedRegistry,
                         adjustedDecls,
                         adjustedOurPackages);
-                compiler.setCompilePackage(capturedSymbolTable.getCurrentPackage());
+                compiler.setCompilePackage(evalCurrentPackage);
                 interpretedCode = compiler.compile(ast, evalCtx);
                 compiledSuccessfully = true;
                 evalTrace("evalStringWithInterpreter compiled tag=" + evalTag +
@@ -7861,12 +7867,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof RuntimeCode runtimeCode
                 && !runtimeCode.defined()) {
             runtimeCode.isDeclared = true;
-            // A named coderef creates a forward CV whose CvSTASH and source
-            // COP belong to the reference site, rather than the package in
-            // the referenced name.  Keep this here instead of the generic
-            // global-CV lookup path: Exporter performs ordinary lookups while
-            // installing imported symbols and must not retag those slots.
-            if (packageName != null && !packageName.isEmpty()) {
+            // A qualified coderef uses the explicitly named stash for its
+            // forward CV. Bare names were normalized with the reference-site
+            // package above, so their prefix already carries that package.
+            // Keep this here instead of the generic global-CV lookup path:
+            // Exporter performs ordinary lookups while installing imported
+            // symbols and must not retag those slots.
+            int packageSeparator = name.lastIndexOf("::");
+            if (packageSeparator >= 0) {
+                runtimeCode.forwardReferencePackageName = name.substring(0, packageSeparator);
+            } else if (packageName != null && !packageName.isEmpty()) {
                 runtimeCode.forwardReferencePackageName = packageName;
             }
             CallerStack.CallerInfo caller = CallerStack.peek(0);

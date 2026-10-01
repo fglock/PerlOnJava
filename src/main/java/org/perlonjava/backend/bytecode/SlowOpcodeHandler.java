@@ -1590,7 +1590,12 @@ public class SlowOpcodeHandler {
                 // named coderef retains the package and source location of
                 // the reference site for B::CV introspection.  Keep this as
                 // metadata rather than changing the callable CV identity.
-                referencedCode.forwardReferencePackageName = code.compilePackage;
+                String referencePackage = code.compilePackage;
+                int packageSeparator = name.lastIndexOf("::");
+                if (packageSeparator >= 0) {
+                    referencePackage = name.substring(0, packageSeparator);
+                }
+                referencedCode.forwardReferencePackageName = referencePackage;
                 referencedCode.cvStartFile = code.sourceName;
                 referencedCode.cvStartLine = code.sourceLine;
             }

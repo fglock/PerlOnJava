@@ -3,6 +3,7 @@ package org.perlonjava.frontend.parser;
 import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.backend.bytecode.VariableCollectorVisitor;
+import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerTokenType;
@@ -497,11 +498,31 @@ public class SpecialBlockParser {
                 // requested context because it executes immediately.
                 int executionContext = blockPhase.equals("BEGIN")
                         ? contextType : RuntimeContextType.SCALAR;
-                result = PerlLanguageProvider.executePerlAST(
-                        new BlockNode(nodes, tokenIndex),
-                        parser.tokens,
-                        parsedArgs,
-                        executionContext);
+                int beginPackageLocalLevel = DynamicVariableManager.getLocalLevel();
+                String beginSavedPackage = null;
+                if (blockPhase.equals("BEGIN")) {
+                    // Package declarations are lexical to their enclosing source
+                    // block. BEGIN executes immediately through a separate compiled
+                    // wrapper, so bracket its runtime package changes explicitly.
+                    beginSavedPackage = InterpreterState.currentPackage.get().toString();
+                    DynamicVariableManager.pushLocalVariable(InterpreterState.currentPackage.get());
+                }
+                try {
+                    result = PerlLanguageProvider.executePerlAST(
+                            new BlockNode(nodes, tokenIndex),
+                            parser.tokens,
+                            parsedArgs,
+                            executionContext);
+                } finally {
+                    if (blockPhase.equals("BEGIN")) {
+                        DynamicVariableManager.popToLocalLevel(beginPackageLocalLevel);
+                        // BEGIN's temporary wrapper can reset the dynamic stack as
+                        // part of its own frame teardown. Restore the package value
+                        // explicitly as well so its wrapper cannot escape the source
+                        // block's lexical package scope.
+                        InterpreterState.currentPackage.get().set(beginSavedPackage);
+                    }
+                }
             } finally {
                 CallerStack.pop();
                 Deque<ScopedSymbolTable> scopes = compileTimeMutationScopes.get();

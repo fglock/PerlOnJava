@@ -834,10 +834,14 @@ public class SubroutineParser {
                     codeRefNode.setAnnotation("directLvalueCall", true);
                 }
             }
-            return new BinaryOperatorNode("(",
+            BinaryOperatorNode call = new BinaryOperatorNode("(",
                     codeRefNode,
                     arguments,
                     currentIndex);
+            if (arguments.getBooleanAnnotation("prototypeUnarySlashFollows")) {
+                call.setAnnotation("prototypeUnarySlashFollows", true);
+            }
+            return call;
         } finally {
             // Restore the previous subroutine context
             parser.ctx.symbolTable.setCurrentSubroutine(previousSubroutine);

@@ -1660,7 +1660,15 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     private String effectiveStringificationName() {
-        return stringificationName != null ? stringificationName : globName;
+        String name = stringificationName != null ? stringificationName : globName;
+        if (name == null) return null;
+        int packageSeparator = name.lastIndexOf("::");
+        if (packageSeparator <= 0) return name;
+        String packageName = name.substring(0, packageSeparator);
+        if (GlobalVariable.isAnonymousStashPackage(packageName)) {
+            return "__ANON__" + name.substring(packageSeparator);
+        }
+        return name;
     }
 
     /** Set a display-only GV name for a detached lexical or anonymous glob. */
