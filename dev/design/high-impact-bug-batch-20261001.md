@@ -41,7 +41,7 @@ proven fix emerges from profiling.
 
 ## Progress tracking
 
-### Current status: Phase 6 in progress
+### Current status: Implementation complete; PR #1598 open for review
 
 ### Completed phases
 
@@ -78,11 +78,15 @@ proven fix emerges from profiling.
 - [x] Phase 5: Locale::CLDR triage (2026-10-01)
   - The 1.1-million-line generated source requires a separate Module::Build
     investigation; no contained, proven fix emerged. #1252 stays out of scope.
+- [x] Phase 6: Validation and review submission (2026-10-01)
+  - Rebased onto current master, passed the unfiltered repository build and
+    documentation link check, and opened [PR #1598](https://github.com/fglock/PerlOnJava/pull/1598).
+  - Validated the focused regressions on system Perl and both backends, plus
+    IO::Die, Log::Dump, and JavaScript::Const::Exporter integration cases.
 
 ### Next steps
 
-1. Rebase on current master, run the final build and link checks, and submit
-   the combined PR.
+1. Review PR #1598; address any review or CI findings before merge.
 2. Follow up on the full Math::Decimal pure-Perl suite under a dedicated test
    budget; the focused reported case and snapshot parity checks pass.
 
