@@ -16,7 +16,9 @@ priorities and future plans.
 
 - Keep imported `try`/`catch` and declared `dump` calls free of false CORE
   ambiguity warnings, restore filehandle `chdir` and invalid-descriptor errors,
-  and reuse root reachability snapshots during weak-reference cleanup.
+  preserve dynamic package variables and monotonic clocks needed by
+  AnyEvent::Tools, and reuse root reachability snapshots during weak-reference
+  cleanup.
 
 - Preserve selected filehandles across glob localization, named Unicode handle
   names, void tied-assignment tails, dynamic regex input encoding, syntax-error

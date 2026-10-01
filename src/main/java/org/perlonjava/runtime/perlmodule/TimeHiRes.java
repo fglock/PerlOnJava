@@ -27,6 +27,7 @@ public class TimeHiRes extends PerlModuleBase {
             module.registerMethod("usleep", null);
             module.registerMethod("nanosleep", null);
             module.registerMethod("gettimeofday", null);
+            module.registerMethod("clock_gettime", null);
             module.registerMethod("time", "");
             module.registerMethod("sleep", null);
             module.registerMethod("alarm", null);
@@ -63,6 +64,22 @@ public class TimeHiRes extends PerlModuleBase {
         result.add(new RuntimeScalar(seconds));
         result.add(new RuntimeScalar(micros));
         return result;
+    }
+
+    /** Return a high-resolution clock reading in seconds. */
+    public static RuntimeList clock_gettime(RuntimeArray args, int ctx) {
+        long clockId = args.get(0).getLong();
+        double value = switch ((int) clockId) {
+            case 0 -> {
+                Instant now = Instant.now();
+                yield now.getEpochSecond() + now.getNano() / 1_000_000_000.0;
+            }
+            // CLOCK_MONOTONIC is 1 on Linux and 6 on Darwin. Accept both so
+            // Perl code that passes the host's POSIX identifier keeps working.
+            case 1, 6 -> System.nanoTime() / 1_000_000_000.0;
+            default -> throw new IllegalArgumentException("Unsupported clock id: " + clockId);
+        };
+        return new RuntimeScalar(value).getList();
     }
 
     /**

@@ -4,6 +4,7 @@
 
 Fix open high-impact bugs [#1577](https://github.com/fglock/PerlOnJava/issues/1577),
 [#1473](https://github.com/fglock/PerlOnJava/issues/1473),
+[#1470](https://github.com/fglock/PerlOnJava/issues/1470),
 [#1336](https://github.com/fglock/PerlOnJava/issues/1336),
 [#1307](https://github.com/fglock/PerlOnJava/issues/1307), and
 [#1187](https://github.com/fglock/PerlOnJava/issues/1187) in one feature branch
@@ -18,8 +19,9 @@ proven fix emerges from profiling.
    preserving Perl's genuine CORE ambiguity diagnostics.
 2. Implement handle-based `chdir` and correct invalid or closed filehandle
    behavior for `read`, `binmode`, `closedir`, `chmod`, and repeated `close`.
-3. Reduce the MooX::Options `new_with_options` failure and repair its runtime
-   or compiler cause. Track unrelated native dependencies separately.
+3. Fix AnyEvent::Tools' package-variable closure failure and timer behavior;
+   separately verify MooX::Options `new_with_options` and track unrelated
+   native dependencies.
 4. Reduce the Math::Decimal pure-Perl slowdown, identify the shared hotspot
    using JFR and deterministic work counts, then fix it for both backends.
 5. Inspect the large-source Module::Build path. Include #1252 only if a single
@@ -41,7 +43,7 @@ proven fix emerges from profiling.
 
 ## Progress tracking
 
-### Current status: Implementation complete; PR #1598 open for review
+### Current status: implementation complete; PR #1598 needs the #1470 update
 
 ### Completed phases
 
@@ -56,15 +58,29 @@ proven fix emerges from profiling.
   - Updated `RuntimeIO`, `Directory`, `IOOperator`, `Readline`, `StandardIO`,
     `LayeredIOHandle`, and `Operator` for handle path capture and EBADF behavior.
   - Added `filehandle_error_semantics_high_impact.t`; all 16 assertions pass
-    on system Perl and both PerlOnJava backends. A direct IO::Die binmode
-    case also passes. The full upstream IO::Die test currently stops before TAP
-    on an unrelated `Test::Class` CODE attribute parsing error.
-- [x] Phase 3: MooX::Options triage (2026-10-01)
+    on system Perl and both PerlOnJava backends. After installing `Test::Class`,
+    IO::Die `t/IO-Die.t` also passes all 387 assertions (fork-dependent cases
+    are skipped on PerlOnJava).
+- [x] Phase 3: CPAN compatibility triage (2026-10-01)
   - PR #1322 already fixed the reported list-context and role behavior on
     master. JavaScript::Const::Exporter `t/script.t` now passes all four
     assertions with its test prerequisites installed and MooX::Options supplied
     from its CPAN source tree. Both `js-const` invocations emit the expected
     JavaScript constants with no MooX::Options error.
+  - #1470 was present in the original query but missed in the initial plan.
+    Changed anonymous constant-prototype CV optimization to apply only to
+    `my`/`state` variables, so `our` package variables remain live. Added a
+    regression for the reported `AnyEvent::detect` compile error and added
+    `Time::HiRes::clock_gettime` with Linux and Darwin monotonic clock IDs.
+    The new tests pass on system Perl and both backends. AnyEvent::Tools 0.12
+    passes all 103 system-Perl assertions. Its JVM run passes 102/103; the one
+    failure is the upstream `<1 ms` timestamp-equality assertion for read-lock
+    callbacks. An event-order probe confirms both readers enter before the
+    first releases on system Perl and both PerlOnJava backends. Mutex, repeat,
+    buffer, and remaining ordering cases pass in bounded focused runs on both
+    backends. The aggregate interpreter `prove` run exceeded its bound under
+    host load after the buffer child emitted all 25 passing assertions; running
+    `07_buffer.t` directly against the rebuilt JAR exits successfully.
 - [x] Phase 4: Math::Decimal root-walk reuse (2026-10-01)
   - A JFR sample of `t/add_pp.t` identified repeated
     `ReachabilityWalker.isReachableFromRoots` work during mortal cleanup.
@@ -83,10 +99,15 @@ proven fix emerges from profiling.
     documentation link check, and opened [PR #1598](https://github.com/fglock/PerlOnJava/pull/1598).
   - Validated the focused regressions on system Perl and both backends, plus
     IO::Die, Log::Dump, and JavaScript::Const::Exporter integration cases.
+  - Revalidated the final source with `nice -n 19 make` (passed in 5m13s).
+    The focused tests pass on system Perl and both backends. The full
+    AnyEvent::Tools run is sensitive to its sub-millisecond timing assertion;
+    direct buffer and deterministic reader-order checks pass. The PR
+    description still needs the final #1470 update.
 
 ### Next steps
 
-1. Review PR #1598; address any review or CI findings before merge.
+1. Update PR #1598 with the #1470 fix, then monitor CI and address review.
 2. Follow up on the full Math::Decimal pure-Perl suite under a dedicated test
    budget; the focused reported case and snapshot parity checks pass.
 
@@ -106,7 +127,8 @@ proven fix emerges from profiling.
   left in its source tree after 41 of 97 distribution subtests failed; its
   source path was supplied to the passing #1307 integration test.
 - Rebased onto `origin/master` at `2399c79d4` on 2026-10-01. The post-rebase
-  unfiltered `nice -n 19 make` passed.
+  unfiltered `nice -n 19 make` passed; GitHub CI was still running when #1470
+  was discovered.
 
 ## Related guidance
 

@@ -1662,9 +1662,17 @@ public class SubroutineParser {
         IdentifierNode identifier = body instanceof IdentifierNode id ? id
                 : body instanceof OperatorNode op && "$".equals(op.operator)
                         && op.operand instanceof IdentifierNode id ? id : null;
-        return identifier != null
-                && (parser.ctx.symbolTable.getVariableIndex(identifier.name) >= 0
-                    || parser.ctx.symbolTable.getVariableIndex("$" + identifier.name) >= 0);
+        return identifier != null && isLexicalVariable(parser, identifier.name);
+    }
+
+    private static boolean isLexicalVariable(Parser parser, String name) {
+        for (String candidate : List.of(name, "$" + name)) {
+            SymbolTable.SymbolEntry entry = parser.ctx.symbolTable.getSymbolEntry(candidate);
+            if (entry != null && ("my".equals(entry.decl()) || "state".equals(entry.decl()))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static ListNode handleNamedSubWithFilter(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, boolean filterLexicalMethods, String declaration) {
