@@ -9,6 +9,11 @@ priorities and future plans.
 - Fix Unicode `IsPrint` aliases in character classes, `/x` literal-brace
   warnings and matching, and Joni backtracking across repeated whitespace.
 
+- Resolve Perl `IsWord` aliases without changing custom-property precedence;
+  preserve default `/d` classes inside `(?^:...)`, recognize ordinary hex-like
+  byte text during matching, and retain Unicode provenance when formatting
+  compiled regex values.
+
 - Preserve selected filehandles across glob localization, named Unicode handle
   names, void tied-assignment tails, dynamic regex input encoding, syntax-error
   eval callers, and stdio layers; keep wide CLI diagnostics free of host print
