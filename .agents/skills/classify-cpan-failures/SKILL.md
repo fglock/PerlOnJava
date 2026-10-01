@@ -154,21 +154,34 @@ state first:
 gh auth status --hostname github.com
 ```
 
+If the ordinary sandboxed CLI reports an API connectivity error or an invalid
+credential, retry the same read-only GitHub CLI check/search with elevated
+execution access before concluding that GitHub is unavailable. The sandboxed
+process may not have the same network or credential-store access as another
+terminal, even when that terminal is authenticated. Use the existing GitHub
+CLI credential store; never print, copy into chat, or otherwise expose an
+access token. If elevated access requires an approval prompt, request it for
+the specific GitHub CLI operation. Do not use elevation to bypass a genuine
+authentication failure: if elevated `gh auth status` still reports an invalid
+token, use the authentication fallback below. If the elevated read-only API
+request still fails with a connectivity error, retry it once before using the
+web fallback.
+
 If it is not authenticated, connect interactively without exposing a token:
 
 ```bash
 gh auth login --hostname github.com --web
 ```
 
-If a previously authenticated CLI reports an API connectivity error, retry the
-read-only search once. Authentication does not repair a network, VPN, proxy,
-or GitHub outage. When the API remains unavailable, use an available
+Authentication does not repair a network, VPN, proxy, or GitHub outage. When
+the API remains unavailable after the elevated retry, use an available
 read-only web search restricted to `github.com/<owner>/<repo>/issues` with the
 module name, stable failing test name, and confirmed cause. Do not treat an
 unavailable API or an incomplete web index as proof that no duplicate exists.
-Record the duplicate check as inconclusive, including the failed access method,
-and continue the classification; do not attempt an issue creation or comment
-until GitHub access is restored and the user explicitly authorizes that write.
+Record the duplicate check as inconclusive, including whether ordinary and
+elevated CLI access were tried, and continue the classification; do not attempt
+an issue creation or comment until GitHub access is restored and the user
+explicitly authorizes that write.
 
 For a new issue, apply an existing appropriate label (normally `bug`, and any
 other already-existing project label that accurately describes the confirmed
