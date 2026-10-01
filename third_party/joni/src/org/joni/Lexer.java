@@ -80,6 +80,10 @@ class Lexer extends ScannerSupport {
 
         if (!left()) {
             if (synAllow) {
+                // An incomplete `{` is a literal opener. Leave any interval
+                // whitespace for the ordinary lexer so /x can ignore it (or
+                // retain it as literal text when /x is disabled).
+                restore();
                 return 1; /* "....{" : OK! */
             } else {
                 newSyntaxException(END_PATTERN_AT_LEFT_BRACE);
