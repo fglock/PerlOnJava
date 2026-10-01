@@ -89,6 +89,19 @@ public class ListOperators {
                     return cfList;
                 }
 
+                if (ctx == RuntimeContextType.VOID) {
+                    // A void-context map discards each block result as soon
+                    // as that iteration completes. Keep the normal deferred
+                    // cleanup boundary for list/scalar results, but release
+                    // this iteration's result before invoking the next block.
+                    if (!wasFlushing) {
+                        MortalList.suppressFlush(false);
+                        MortalList.flushAboveMark();
+                        MortalList.suppressFlush(true);
+                    }
+                    continue;
+                }
+
                 // `result` list contains aliases to the original array;
                 // We need to make copies of the result elements
                 RuntimeArray arr = new RuntimeArray();
