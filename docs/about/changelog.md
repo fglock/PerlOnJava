@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Support anonymous temporary files for read/write opens with undefined paths,
+  and report non-numeric process IDs passed to `kill()`.
+
 - Preserve selected filehandles across glob localization, named Unicode handle
   names, void tied-assignment tails, dynamic regex input encoding, syntax-error
   eval callers, and stdio layers; keep wide CLI diagnostics free of host print
