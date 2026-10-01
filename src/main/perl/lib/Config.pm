@@ -322,6 +322,10 @@ my $startperl = $is_windows
     # pseudo-fork emulation.  Advertising either capability causes callers
     # to run process-isolation tests against an operation that always fails.
     d_pseudofork => undef,
+    # Filehandle variants are supported using the path captured when Perl
+    # opens the handle. This preserves the runtime's path-based handle model.
+    d_fchmod => 'define',
+    d_fchdir => 'define',
     d_alarm => 'define', # We now have alarm support with signal queue
     d_chown => _check_chown_support(),
     d_chroot => undef,

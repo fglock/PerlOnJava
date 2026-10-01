@@ -43,7 +43,7 @@ proven fix emerges from profiling.
 
 ## Progress tracking
 
-### Current status: implementation and local validation complete; PR #1598 open; current-head CI/review pending
+### Current status: implementation and full local UAT complete; PR #1598 open; current-head CI/review pending
 
 ### Completed phases
 
@@ -105,21 +105,38 @@ proven fix emerges from profiling.
     AnyEvent::Tools run is sensitive to its sub-millisecond timing assertion;
     direct buffer and deterministic reader-order checks pass. Pushed the #1470
     follow-up and updated the PR description.
+  - Added focused coverage for bareword filehandle `chdir`, including closed
+    and unopened diagnostics. `d_fchdir` and `d_fchmod` are advertised because
+    their path-based handle behavior is implemented. `d_dirfd` remains unset:
+    directory handles have no native descriptor, and advertising it caused
+    core tests to expect a numeric `fileno(DIRHANDLE)`. Directory-handle
+    `chdir` therefore reports the unsupported `dirfd` capability.
+  - The final `nice -n 19 make` passed in 5m22s. The affected core tests passed
+    (`io/fs.t` 61/61, `op/chdir.t` 51/51, and `io/perlio.t` 48/48). The
+    full UAT completed all 575 files with no timeouts. Comparison against the
+    2026-10-01 baseline reports 680,658/680,762 passing assertions versus
+    680,657/680,762, zero regressions, and one improvement (`io/read.t`).
+    Three execution errors and 53 zero-TAP rows are inherited from baseline.
+    `op/stat.t`'s four TTY assertions also fail in isolated runs under this
+    host's noninteractive runner, matching the baseline behavior.
   - The earlier GitHub Actions run passed on `cbd417d`, before the latest
     #1470 follow-up at `be7ba35`. The interpreter sweep and PR description are
-    now updated; GitHub has not reported a check run for the current PR head.
+    now updated. Current-head CI still needs checking after this follow-up.
 
 ### Next steps
 
-1. Monitor CI for PR #1598's current head and address review.
+1. Push the final local follow-up, update PR #1598 with the UAT evidence, and
+   verify the PR remains open with the expected files.
+2. Check CI for the updated PR head and address review.
 
 ### Open questions
 
 - #1252 still involves the 1.1-million-line Locale::CLDR distribution and a
   separate Module::Build path. No contained change was identified during this
   batch, so it remains outside the PR.
-- Handle-based `chdir` and `chmod` currently use the path captured at open time;
-  descriptor identity after a path is renamed needs separate native support.
+- Filehandle `chdir` and `chmod` use the path captured at open time; descriptor
+  identity after a path is renamed needs native support. Directory-handle
+  `chdir` and `fileno(DIRHANDLE)` remain unavailable, so `d_dirfd` stays unset.
 - Installed `Test::UseAllModules`, `Test::Class`, and `IO::Capture::Stderr`
   locally; Log::Dump passes 22 test files and 52 assertions when the host's
   `NO_COLOR` setting is unset for its color assertions. IO::Die passes all

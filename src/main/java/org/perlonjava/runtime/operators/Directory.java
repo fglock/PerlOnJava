@@ -35,9 +35,8 @@ public class Directory {
         //            fails. It returns true on success, false otherwise. See the
         //            example under "die".
         //
-        //            On systems that support fchdir(2), you may pass a filehandle or
-        //            directory handle as the argument. On systems that don't support
-        //            fchdir(2), passing handles raises an exception.
+        //            On systems that support fchdir(2), you may pass a filehandle as
+        //            the argument. Directory handles additionally require dirfd(3).
 
         String dirName;
 
@@ -46,13 +45,21 @@ public class Directory {
             // Try to get RuntimeIO from the scalar
             RuntimeIO io = RuntimeIO.getRuntimeIO(runtimeScalar);
             if (io != null) {
-                if ((io.ioHandle == null || io.ioHandle instanceof org.perlonjava.runtime.io.ClosedIOHandle)
-                        && (io.directoryIO == null || io.directoryIO.directoryStream == null)) {
+                if (io.directoryIO != null) {
+                    throw new PerlCompilerException("The dirfd function is unimplemented");
+                }
+                if (io.ioHandle == null || io.ioHandle instanceof org.perlonjava.runtime.io.ClosedIOHandle) {
                     getGlobalVariable("main::!").set(9);
+                    if (IOOperator.unopenedWarningsEnabled()) {
+                        String state = io.openedPath != null
+                                || io.directoryIO != null
+                                ? "closed" : "unopened";
+                        WarnDie.warn(new RuntimeScalar("chdir() on " + state
+                                + " filehandle " + filehandleName(runtimeScalar)), new RuntimeScalar(""));
+                    }
                     return scalarFalse;
                 }
-                Path opened = io.directoryIO != null
-                        ? io.directoryIO.getAbsoluteDirectoryPath() : io.openedPath;
+                Path opened = io.openedPath;
                 if (opened == null) {
                     getGlobalVariable("main::!").set(9);
                     return scalarFalse;
