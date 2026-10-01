@@ -1095,6 +1095,33 @@ public class OperatorParser {
         // Handle operators with one optional argument
         String text = token.text;
         int argumentIndex = parser.tokenIndex;
+        if (text.equals("chdir")) {
+            int argumentStart = parser.tokenIndex;
+            boolean parenthesized = TokenUtils.peek(parser).text.equals("(");
+            if (parenthesized) {
+                TokenUtils.consume(parser);
+            }
+            LexerToken next = TokenUtils.peek(parser);
+            if (next.type == IDENTIFIER && next.text.matches("^[A-Z_][A-Z0-9_]*$")) {
+                TokenUtils.consume(parser);
+                String name = next.text;
+                GlobalVariable.vivifyGlobalIO(FileHandle.normalizeBarewordHandle(parser, name));
+                operand = FileHandle.parseBarewordHandle(parser, name);
+                if (operand != null) {
+                    if (parenthesized) {
+                        TokenUtils.consume(parser, OPERATOR, ")");
+                    }
+                    return new OperatorNode(text, operand, parser.tokenIndex);
+                }
+                // A same-named subroutine is not a filehandle. Restore the
+                // ordinary argument path when FileHandle rejects the name.
+                parser.tokenIndex = argumentStart;
+            } else {
+                // Let the standard argument parser handle strings, variables,
+                // and other non-bareword operands below.
+                parser.tokenIndex = argumentStart;
+            }
+        }
         operand = ListParser.parseZeroOrOneList(parser, 0, text);
         if (text.equals("chdir") && operand instanceof ListNode list
                 && list.elements.size() == 1

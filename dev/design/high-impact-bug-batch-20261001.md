@@ -43,7 +43,7 @@ proven fix emerges from profiling.
 
 ## Progress tracking
 
-### Current status: implementation complete; PR #1598 updated, CI/review pending
+### Current status: implementation and full local UAT complete; PR #1598 open; current-head CI pending
 
 ### Completed phases
 
@@ -87,16 +87,17 @@ proven fix emerges from profiling.
     Added one identity-based full-root snapshot per drain and a Java parity
     test comparing membership with individual walks over 200 rooted objects.
   - Both backends completed all 16,363 `t/add_pp.t` assertions. JFR after the
-    change showed the per-object walk had left the sampled hot path. The wider
-    pure-Perl suite passed `add_pp.t`, `canon_pp.t`, and `classify_pp.t`; its
-    62,210-assertion `cmp_pp.t` was stopped to bound production-host load.
-    Wall-clock comparisons were not used as an acceptance criterion.
+    change showed the per-object walk had left the sampled hot path. All ten
+    Math::Decimal pure-Perl test files pass on system Perl (107,058 assertions)
+    and both PerlOnJava backends (107,059 each), including all 62,210
+    `cmp_pp.t` assertions. No wall-clock comparison was used as an acceptance
+    criterion.
 - [x] Phase 5: Locale::CLDR triage (2026-10-01)
   - The 1.1-million-line generated source requires a separate Module::Build
     investigation; no contained, proven fix emerged. #1252 stays out of scope.
 - [x] Phase 6: Validation and review submission (2026-10-01)
-  - Rebased onto current master, passed the unfiltered repository build and
-    documentation link check, and opened [PR #1598](https://github.com/fglock/PerlOnJava/pull/1598).
+  - Rebased onto current master at `231149ac1` and opened
+    [PR #1598](https://github.com/fglock/PerlOnJava/pull/1598).
   - Validated the focused regressions on system Perl and both backends, plus
     IO::Die, Log::Dump, and JavaScript::Const::Exporter integration cases.
   - Revalidated the final source with `nice -n 19 make` (passed in 5m13s).
@@ -104,22 +105,46 @@ proven fix emerges from profiling.
     AnyEvent::Tools run is sensitive to its sub-millisecond timing assertion;
     direct buffer and deterministic reader-order checks pass. Pushed the #1470
     follow-up and updated the PR description.
-  - The earlier GitHub Actions run passed on the pre-#1470 head. GitHub has
-    not reported a status check for the updated head yet.
+  - Added focused coverage for bareword filehandle `chdir`, including closed
+    and unopened diagnostics. `d_fchdir` and `d_fchmod` are advertised because
+    their path-based handle behavior is implemented. `d_dirfd` remains unset:
+    directory handles have no native descriptor, and advertising it caused
+    core tests to expect a numeric `fileno(DIRHANDLE)`. Directory-handle
+    `chdir` therefore reports the unsupported `dirfd` capability. A follow-up
+    makes the closed/unopened warning check respect lexical warnings on the
+    interpreter backend; the new regression and core `op/chdir.t` pass on both
+    backends, and the focused Perl test passes on system Perl.
+  - The rebased candidate passed `nice -n 19 make` (6m49s) and focused JVM
+    core tests (`io/fs.t` 61/61, `op/chdir.t` 51/51, and `io/perlio.t`
+    48/48). The full UAT completed all 575 files with no timeouts. Comparison
+    against the 2026-10-01 baseline reports 680,658/680,762 passing
+    assertions versus 680,657/680,762, zero regressions, and one improvement
+    (`io/read.t`). Three execution errors and 53 zero-TAP rows are inherited
+    from baseline. `op/stat.t`'s four TTY assertions also fail in isolated
+    runs under this host's noninteractive runner, matching the baseline
+    behavior. Full logs and strict comparison are in
+    `/Users/fglock/projects/PerlOnJava/logs/test_20261001_193000_math.log`,
+    `/private/tmp/math-uat-compare-rebased.txt`, and
+    `/private/tmp/math-uat-strict-rebased.txt`.
+  - Rebase replayed all nine PR commits onto `231149ac1`; the final pushed
+    head is `d419e5ec23a6cee937de34bfeeb35b31f6cd969f`. Current-head CI jobs
+    on Ubuntu and Windows are still running. Merge after both checks pass.
 
 ### Next steps
 
-1. Monitor CI for the updated PR #1598 head and address review.
-2. Follow up on the full Math::Decimal pure-Perl suite under a dedicated test
-   budget; the focused reported case and snapshot parity checks pass.
+1. Run the documentation link checks after the rebase and verify PR #1598 is
+   open with the expected files.
+2. Update PR #1598 with the rebased full-UAT evidence, then wait for CI on the
+   resulting head and merge when green.
 
 ### Open questions
 
 - #1252 still involves the 1.1-million-line Locale::CLDR distribution and a
   separate Module::Build path. No contained change was identified during this
   batch, so it remains outside the PR.
-- Handle-based `chdir` and `chmod` currently use the path captured at open time;
-  descriptor identity after a path is renamed needs separate native support.
+- Filehandle `chdir` and `chmod` use the path captured at open time; descriptor
+  identity after a path is renamed needs native support. Directory-handle
+  `chdir` and `fileno(DIRHANDLE)` remain unavailable, so `d_dirfd` stays unset.
 - Installed `Test::UseAllModules`, `Test::Class`, and `IO::Capture::Stderr`
   locally; Log::Dump passes 22 test files and 52 assertions when the host's
   `NO_COLOR` setting is unset for its color assertions. IO::Die passes all
@@ -128,9 +153,10 @@ proven fix emerges from profiling.
   97 subtests, and `Sub::Identify` after 1 of 147 failed. MooX::Options was
   left in its source tree after 41 of 97 distribution subtests failed; its
   source path was supplied to the passing #1307 integration test.
-- Rebased onto `origin/master` at `2399c79d4` on 2026-10-01. The post-rebase
-  unfiltered `nice -n 19 make` passed; GitHub CI was still running when #1470
-  was discovered.
+- Rebased onto `origin/master` at `231149ac1` on 2026-10-01 after it advanced
+  from `2399c79d4`; all nine PR commits were retained. The post-rebase
+  unfiltered `nice -n 19 make` and full UAT passed the batch's acceptance
+  criteria. GitHub CI for `d419e5ec` is still running.
 
 ## Related guidance
 

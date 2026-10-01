@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.io.DirectoryIO;
+import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.File;
@@ -35,9 +36,8 @@ public class Directory {
         //            fails. It returns true on success, false otherwise. See the
         //            example under "die".
         //
-        //            On systems that support fchdir(2), you may pass a filehandle or
-        //            directory handle as the argument. On systems that don't support
-        //            fchdir(2), passing handles raises an exception.
+        //            On systems that support fchdir(2), you may pass a filehandle as
+        //            the argument. Directory handles additionally require dirfd(3).
 
         String dirName;
 
@@ -53,17 +53,15 @@ public class Directory {
             if (io.directoryIO != null) {
                 throw new PerlCompilerException("The dirfd function is unimplemented");
             }
-            if (io.ioHandle instanceof org.perlonjava.runtime.io.ClosedIOHandle) {
+            if (io.ioHandle instanceof org.perlonjava.runtime.io.ClosedIOHandle
+                    || io.ioHandle == null) {
                 getGlobalVariable("main::!").set(9);
-                String state = io.explicitlyClosed ? "closed" : "unopened";
-                WarnDie.warn(new RuntimeScalar("chdir() on " + state + " filehandle " + name),
-                        new RuntimeScalar(""));
-                return scalarFalse;
-            }
-            if (io.ioHandle == null) {
-                getGlobalVariable("main::!").set(9);
-                WarnDie.warn(new RuntimeScalar("chdir() on unopened filehandle " + name),
-                        new RuntimeScalar(""));
+                if (IOOperator.unopenedWarningsEnabled()
+                        || Warnings.warningManager.isWarningEnabled("unopened")) {
+                    String state = io.explicitlyClosed ? "closed" : "unopened";
+                    WarnDie.warn(new RuntimeScalar("chdir() on " + state
+                            + " filehandle " + name), new RuntimeScalar(""));
+                }
                 return scalarFalse;
             }
             Path opened = io.openedPath;
@@ -85,8 +83,11 @@ public class Directory {
         }
         if (handleArgument) {
             getGlobalVariable("main::!").set(9);
-            WarnDie.warn(new RuntimeScalar("chdir() on unopened filehandle "
-                    + filehandleName(runtimeScalar, null)), new RuntimeScalar(""));
+            if (IOOperator.unopenedWarningsEnabled()
+                    || Warnings.warningManager.isWarningEnabled("unopened")) {
+                WarnDie.warn(new RuntimeScalar("chdir() on unopened filehandle "
+                        + filehandleName(runtimeScalar, null)), new RuntimeScalar(""));
+            }
             return scalarFalse;
         }
 
