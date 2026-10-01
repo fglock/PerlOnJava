@@ -1483,7 +1483,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 // increments on the temporary materialized list.
                 RuntimeArray materializedList = new RuntimeArray();
                 for (RuntimeScalar element : list) {
-                    materializedList.elements.add(new RuntimeScalar(element));
+                    materializedList.elements.add(element instanceof RuntimeTiedArrayHole
+                            ? null : new RuntimeScalar(element));
                 }
 
                 // Now clear and repopulate from the materialized list
@@ -1495,10 +1496,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 if (extendTo > 0) {
                     TieArray.tiedExtend(this, getScalarInt(extendTo));
                 }
-                int index = 0;
-                for (RuntimeScalar element : materializedList) {
-                    TieArray.tiedStore(this, getScalarInt(index), element);
-                    index++;
+                for (int index = 0; index < materializedList.elements.size(); index++) {
+                    RuntimeScalar element = materializedList.elements.get(index);
+                    if (element == null) {
+                        TieArray.tiedDelete(this, getScalarInt(index));
+                    } else {
+                        TieArray.tiedStore(this, getScalarInt(index), element);
+                    }
                 }
                 // Return the materialized list instead of `this` to avoid calling
                 // FETCHSIZE/FETCH on the tied array after assignment.

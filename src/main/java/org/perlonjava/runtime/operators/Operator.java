@@ -825,8 +825,9 @@ public class Operator {
             if (TieArray.tiedExists(tiedArray, getScalarInt(i)).getBoolean()) {
                 reversedElements.set(targetIndex, TieArray.tiedFetch(tiedArray, getScalarInt(i)));
             } else {
-                // For deleted tied array elements, set an undef RuntimeScalar
-                reversedElements.set(targetIndex, new RuntimeScalar());
+                // Preserve deleted slots through list assignment so the tied
+                // destination receives DELETE instead of STORE(undef).
+                reversedElements.set(targetIndex, new RuntimeTiedArrayHole());
             }
             targetIndex--;
         }

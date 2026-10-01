@@ -734,6 +734,7 @@ public class EmitStatement {
                         true,
                         true);
                 LoopLabels loopLabels = emitterVisitor.ctx.javaClassInfo.getInnermostLoopLabels();
+                loopLabels.regexStateRestoreLocal = regexStateLocal;
                 loopLabels.cleanupScopeIndex = scopeIndex + 1;
                 loopLabels.lastCleanupScopeIndex = scopeIndex + 1;
                 loopLabels.dynamicLocalLevelSlot = Local.saveLocalLevel(emitterVisitor.ctx, mv);
@@ -873,6 +874,7 @@ public class EmitStatement {
                 endLabel,
                 RuntimeContextType.VOID,
                 false); // isTrueLoop = false (do-while is not a true loop)
+        emitterVisitor.ctx.javaClassInfo.getInnermostLoopLabels().regexStateRestoreLocal = regexStateLocal;
 
         // Start of the loop body
         mv.visitLabel(redoLabel);
@@ -893,6 +895,7 @@ public class EmitStatement {
                 endLabel,
                 RuntimeContextType.VOID,
                 false);
+        loopLabels.regexStateRestoreLocal = regexStateLocal;
         emitRegistryCheck(mv, loopLabels, redoLabel, continueLabel, endLabel);
 
         // Continue label (for next iteration)

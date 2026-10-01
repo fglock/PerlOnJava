@@ -23,6 +23,9 @@ priorities and future plans.
   capture restoration across loop control, and `PERL5OPT` include ordering;
   match Perl's seeded random sequence and Unicode `quotemeta` rules.
 
+- Preserve missing slots when assigning reversed tied arrays and restore the
+  loop-entry regex captures when `next`, `redo`, or `last` exits nested scopes.
+
 - Restore core-test compatibility for regex-set diagnostics (including
   POSIX-looking text in extended-class comments), classes and MRO, op subs,
   filesystem metadata, `die` state, and scalar flip-flop warnings on both

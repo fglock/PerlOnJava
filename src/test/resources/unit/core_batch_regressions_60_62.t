@@ -18,6 +18,35 @@ ok(!exists $reverse_assignment[2],
     'assignment from reverse preserves a deleted array slot');
 
 {
+    require Tie::Array;
+    tie my @tied_reverse, 'Tie::StdArray';
+    @tied_reverse = (1, 2, 3, 4);
+    delete $tied_reverse[1];
+    @tied_reverse = reverse @tied_reverse;
+    ok(!exists $tied_reverse[2],
+        'assignment from reverse preserves a deleted tied array slot');
+    is(join('', @tied_reverse[0, 1, 3]), '431',
+        'reverse assignment retains defined tied array values');
+}
+
+{
+    no warnings 'deprecated';
+    my $iteration = 0;
+    'abc' =~ /b/;
+    LOOP: while (1) {
+        ++$iteration;
+        is($` . $& . $', 'abc',
+            "while loop control restores regex captures at iteration $iteration");
+        {
+            'end' =~ /end/;
+            redo LOOP if $iteration == 1;
+            next LOOP if $iteration == 2;
+            last LOOP if $iteration == 3;
+        }
+    }
+}
+
+{
     use feature 'unicode_strings';
     is(quotemeta("\x{df}"), "\x{df}",
         'quotemeta applies Unicode word rules under unicode_strings');

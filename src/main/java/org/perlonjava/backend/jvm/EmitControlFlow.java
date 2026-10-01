@@ -318,6 +318,11 @@ public class EmitControlFlow {
 
     private static void emitLoopControlScopeCleanup(
             EmitterContext ctx, LoopLabels loopLabels, boolean exitsLoop) {
+        if (loopLabels.regexStateRestoreLocal >= 0) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, loopLabels.regexStateRestoreLocal);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RegexState", "restore", "()V", false);
+        }
         if (loopLabels.dynamicLocalLevelSlot >= 0) {
             ctx.mv.visitVarInsn(Opcodes.ILOAD, loopLabels.dynamicLocalLevelSlot);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
