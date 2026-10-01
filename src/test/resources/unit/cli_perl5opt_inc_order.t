@@ -1,9 +1,13 @@
 use strict;
 use warnings;
+use File::Spec;
 
 local $ENV{PERL5OPT} = '-Mlib=optm1 -Iopti1 -Mlib=optm2 -Iopti2';
-local $ENV{PERL5LIB} = 'e1:e2';
-my $output_path = "/tmp/perlonjava-cli-inc-$$.txt";
+my $path_separator = $^O eq 'MSWin32' ? ';' : ':';
+local $ENV{PERL5LIB} = join($path_separator, 'e1', 'e2');
+my $output_path = File::Spec->catfile(
+    File::Spec->tmpdir, "perlonjava-cli-inc-$$.txt",
+);
 my @command = (
     ($ENV{PERLONJAVA_EXECUTABLE} || $^X),
     '-Ii1', '-Mlib=m1', '-Ii2', '-Mlib=m2',

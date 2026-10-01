@@ -57,6 +57,8 @@ priorities and future plans.
 - Resolve dynamic `require` package names as portable module paths before
   filesystem lookup, including on Windows.
 
+- Parse `PERL5LIB` with the host platform's path separator.
+
 - Restore `re/recompile.t`, `class/accessor.t`, `op/smartkve.t`, `comp/utf.t`,
   `op/gmagic.t`, and `uni/overload.t` compatibility.
 
