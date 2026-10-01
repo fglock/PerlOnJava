@@ -1775,7 +1775,8 @@ class Parser extends Lexer {
             case '^': /* loads default options */
                 if (left() && syntax.op2OptionPerl()) {
                     /* d-imsx */
-                    option = bsOnOff(option, Option.ASCII_RANGE, true);
+                    option = bsOnOff(option, Option.ASCII_RANGE,
+                            !Option.isPerlBytePattern(option));
                     option = bsOnOff(option, Option.IGNORECASE, true);
                     option = bsOnOff(option, Option.SINGLELINE, false);
                     option = bsOnOff(option, Option.MULTILINE, true);

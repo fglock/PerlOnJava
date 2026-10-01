@@ -4,6 +4,7 @@ import org.perlonjava.runtime.operators.sprintf.FormatSpecifier;
 import org.perlonjava.runtime.operators.sprintf.SprintfFormatParser;
 import org.perlonjava.runtime.operators.sprintf.SprintfNumericFormatter;
 import org.perlonjava.runtime.operators.sprintf.SprintfValueFormatter;
+import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.math.BigInteger;
@@ -61,7 +62,11 @@ public class SprintfOperator {
         boolean hasUtf8Input = runtimeScalar.type == RuntimeScalarType.STRING;
         if (!hasUtf8Input) {
             for (RuntimeBase elem : list.elements) {
-                if (elem instanceof RuntimeScalar rs && rs.type == RuntimeScalarType.STRING) {
+                if (elem instanceof RuntimeScalar rs
+                        && (rs.type == RuntimeScalarType.STRING
+                            || rs.type == RuntimeScalarType.REGEX
+                                && rs.value instanceof RuntimeRegex regex
+                                && !regex.isPatternByteBacked())) {
                     hasUtf8Input = true;
                     break;
                 }

@@ -299,7 +299,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return regexFlags;
     }
 
-    boolean isPatternByteBacked() {
+    public boolean isPatternByteBacked() {
         return patternByteBacked;
     }
 

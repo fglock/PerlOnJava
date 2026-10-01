@@ -123,6 +123,14 @@ final class JoniRegexPattern {
                 cursor++;
             }
             if (digits == 0 || cursor >= end || bytes[cursor] != '>') return null;
+            // The byte-view marker is the lossy Latin-1 encoding of
+            // PerlUtfString's U+FFFD<HEX> sentinel. Perl uses that sentinel
+            // only for surrogate scalars and values outside Unicode. Treating
+            // every hex-looking sequence as a marker turns ordinary byte text
+            // such as "?<a>" into a control character during class matching.
+            if (value <= 0x10ffff && (value < 0xd800 || value > 0xdfff)) {
+                return null;
+            }
             return new Decoded(value, cursor + 1);
         }
     };
