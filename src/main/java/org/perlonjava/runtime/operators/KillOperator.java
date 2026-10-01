@@ -61,6 +61,10 @@ public class KillOperator {
         for (int i = 1; i < args.length; i++) {
             for (RuntimeScalar scalar : args[i]) {
                 RuntimeScalar.checkTaint(scalar, "kill");
+                if (!scalar.getDefinedBoolean()
+                        || scalar.isString() && !isNumericString(scalar.toString())) {
+                    throw new PerlCompilerException("Can't kill a non-numeric process ID");
+                }
                 int pid = scalar.getInt();
 
                 // Special case: negative PID means process group
@@ -272,9 +276,13 @@ public class KillOperator {
         if (s == null || s.isEmpty()) {
             return false;
         }
-        // Handle optional leading minus sign
+        s = s.trim();
+        if (s.isEmpty()) return false;
+        // PID strings may come from regex captures with trailing whitespace.
+        // Accept the same surrounding whitespace and sign syntax before
+        // converting them to an integer.
         int start = 0;
-        if (s.charAt(0) == '-') {
+        if (s.charAt(0) == '-' || s.charAt(0) == '+') {
             if (s.length() == 1) return false;
             start = 1;
         }

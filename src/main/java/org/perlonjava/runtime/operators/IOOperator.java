@@ -986,10 +986,12 @@ public class IOOperator {
                         }
                     }
                 }
-            } else if (secondArg.type == RuntimeScalarType.UNDEF && mode.equals("+<")) {
-                // open($fh, "+<", undef) asks PerlIO for an anonymous,
-                // seekable temporary file. Keep the file alive for the
-                // process; its path is intentionally not exposed to Perl.
+            } else if (secondArg.type == RuntimeScalarType.UNDEF
+                    && (mode.equals("+<") || mode.equals("+>") || mode.equals("+>>"))) {
+                // The read/write forms of open with an undef path ask PerlIO
+                // for an anonymous, seekable temporary file. Keep the file
+                // alive for the process; its path is intentionally not exposed
+                // to Perl.
                 try {
                     Path temporaryFile = Files.createTempFile("PerlIO_", "");
                     temporaryFile.toFile().deleteOnExit();
