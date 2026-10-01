@@ -1096,6 +1096,16 @@ public class OperatorParser {
         String text = token.text;
         int argumentIndex = parser.tokenIndex;
         operand = ListParser.parseZeroOrOneList(parser, 0, text);
+        if (text.equals("chdir") && operand instanceof ListNode list
+                && list.elements.size() == 1
+                && list.elements.getFirst() instanceof IdentifierNode identifier) {
+            String name = identifier.name;
+            GlobalVariable.vivifyGlobalIO(FileHandle.normalizeBarewordHandle(parser, name));
+            Node fileHandle = FileHandle.parseBarewordHandle(parser, name);
+            if (fileHandle != null) {
+                list.elements.set(0, fileHandle);
+            }
+        }
         if (((ListNode) operand).elements.isEmpty()) {
             switch (text) {
                 case "sleep":

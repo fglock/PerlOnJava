@@ -50,14 +50,23 @@ public class Directory {
                 || runtimeScalar.value instanceof RuntimeGlob;
         if (io != null) {
             String name = filehandleName(runtimeScalar, io);
-            if (io.ioHandle == null || io.ioHandle instanceof org.perlonjava.runtime.io.ClosedIOHandle) {
+            if (io.directoryIO != null) {
+                throw new PerlCompilerException("The dirfd function is unimplemented");
+            }
+            if (io.ioHandle instanceof org.perlonjava.runtime.io.ClosedIOHandle) {
                 getGlobalVariable("main::!").set(9);
-                WarnDie.warn(new RuntimeScalar("chdir() on closed filehandle " + name),
+                String state = io.explicitlyClosed ? "closed" : "unopened";
+                WarnDie.warn(new RuntimeScalar("chdir() on " + state + " filehandle " + name),
                         new RuntimeScalar(""));
                 return scalarFalse;
             }
-            Path opened = io.directoryIO != null
-                    ? io.directoryIO.getAbsoluteDirectoryPath() : io.openedPath;
+            if (io.ioHandle == null) {
+                getGlobalVariable("main::!").set(9);
+                WarnDie.warn(new RuntimeScalar("chdir() on unopened filehandle " + name),
+                        new RuntimeScalar(""));
+                return scalarFalse;
+            }
+            Path opened = io.openedPath;
             if (opened == null) {
                 getGlobalVariable("main::!").set(9);
                 return scalarFalse;

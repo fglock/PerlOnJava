@@ -18,7 +18,8 @@ priorities and future plans.
   output, and diagnose loop control in unused subroutines.
 
 - Keep imported `try`/`catch` and declared `dump` calls free of false CORE
-  ambiguity warnings, support `chdir` and `chmod` through open handles, restore
+  ambiguity warnings, support `chdir` and `chmod` through open filehandles,
+  report directory `chdir` as unavailable without `dirfd`, restore
   invalid-descriptor errors, preserve dynamic package variables and monotonic
   clocks needed by AnyEvent::Tools, and reuse root reachability snapshots during
   weak-reference cleanup.

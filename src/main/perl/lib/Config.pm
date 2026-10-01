@@ -205,7 +205,6 @@ my $startperl = $is_windows
     PERL_SUBVERSION => 1,
     d_fchdir => 'define',
     d_fchmod => 'define',
-    d_dirfd => 'define',
 
     # PerlOnJava specific
     perlonjava => '5.44.1',

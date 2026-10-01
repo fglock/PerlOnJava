@@ -236,9 +236,7 @@ public class ClassTransformer {
             if (parameter == null) {
                 continue;
             }
-            if (parameter.isEmpty()) {
-                parameter = (String) field.getAnnotation("name");
-            }
+            parameter = parameterName(field);
             if (!names.add(parameter)) {
                 throw PerlCompilerException.withSourceLocation(field.getIndex(),
                         "Cannot assign :param(" + parameter + ") to field "
