@@ -43,7 +43,7 @@ proven fix emerges from profiling.
 
 ## Progress tracking
 
-### Current status: implementation complete; PR #1598 updated, CI/review pending
+### Current status: implementation complete; PR #1598 open; interpreter suite and current-head CI pending
 
 ### Completed phases
 
@@ -87,10 +87,12 @@ proven fix emerges from profiling.
     Added one identity-based full-root snapshot per drain and a Java parity
     test comparing membership with individual walks over 200 rooted objects.
   - Both backends completed all 16,363 `t/add_pp.t` assertions. JFR after the
-    change showed the per-object walk had left the sampled hot path. The wider
-    pure-Perl suite passed `add_pp.t`, `canon_pp.t`, and `classify_pp.t`; its
-    62,210-assertion `cmp_pp.t` was stopped to bound production-host load.
-    Wall-clock comparisons were not used as an acceptance criterion.
+    change showed the per-object walk had left the sampled hot path. All ten
+    Math::Decimal pure-Perl test files pass on system Perl (107,058 assertions)
+    and on the JVM backend, including all 62,210 `cmp_pp.t` assertions. The
+    interpreter sweep has passed `add_pp.t`, `canon_pp.t`, and `classify_pp.t`
+    and is still running `cmp_pp.t`. Wall-clock comparisons were not used as
+    an acceptance criterion.
 - [x] Phase 5: Locale::CLDR triage (2026-10-01)
   - The 1.1-million-line generated source requires a separate Module::Build
     investigation; no contained, proven fix emerged. #1252 stays out of scope.
@@ -104,14 +106,16 @@ proven fix emerges from profiling.
     AnyEvent::Tools run is sensitive to its sub-millisecond timing assertion;
     direct buffer and deterministic reader-order checks pass. Pushed the #1470
     follow-up and updated the PR description.
-  - The earlier GitHub Actions run passed on the pre-#1470 head. GitHub has
-    not reported a status check for the updated head yet.
+  - The earlier GitHub Actions run passed on `cbd417d`, before the latest
+    #1470 follow-up at `be7ba35`. GitHub has not reported a check run for the
+    current PR head yet; push a documentation progress update after the
+    interpreter sweep so CI validates the current branch head.
 
 ### Next steps
 
-1. Monitor CI for the updated PR #1598 head and address review.
-2. Follow up on the full Math::Decimal pure-Perl suite under a dedicated test
-   budget; the focused reported case and snapshot parity checks pass.
+1. Complete the interpreter Math::Decimal pure-Perl sweep and update the PR.
+2. Push the progress update, then monitor CI for PR #1598's current head and
+   address review.
 
 ### Open questions
 
