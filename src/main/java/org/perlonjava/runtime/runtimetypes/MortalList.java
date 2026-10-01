@@ -1246,6 +1246,7 @@ public class MortalList {
 
     static void invalidateExternalRootSnapshot() {
         state().externalRootSnapshot = null;
+        state().fullRootSnapshot = null;
     }
 
     static void invalidateAllRootSnapshots() {
@@ -1253,8 +1254,17 @@ public class MortalList {
         invalidateLiveRootSnapshot();
     }
 
+    private static boolean isReachableFromFullRootSnapshot(RuntimeBase base) {
+        LifecycleRuntimeState state = state();
+        if (state.fullRootSnapshot == null) {
+            state.fullRootSnapshot = ReachabilityWalker.reachableFromRootsSnapshot();
+        }
+        return state.fullRootSnapshot.contains(base);
+    }
+
     static void invalidateLiveRootSnapshot() {
         state().liveRootSnapshot = null;
+        state().fullRootSnapshot = null;
     }
 
     private static void invalidateDrainReachabilityCaches() {
@@ -1386,7 +1396,7 @@ public class MortalList {
             } else if (base.blessId != 0
                     && hasWeakRefs
                     && (isReachableFromExternalRootCached(base)
-                    || ReachabilityWalker.isReachableFromRoots(base))) {
+                    || isReachableFromFullRootSnapshot(base))) {
                 // A nested request can temporarily consume the selective owner
                 // count of an object that is still retained below a package
                 // root. Mojolicious::Lite keeps its route tree in a package
@@ -1405,7 +1415,7 @@ public class MortalList {
                     && hasWeakRefs
                     && !blessedClassHasDestroy(base)
                     && (isReachableFromExternalRootCached(base)
-                    || ReachabilityWalker.isReachableFromRoots(base))) {
+                    || isReachableFromFullRootSnapshot(base))) {
                 // A weakened probe copy can make the selective count reach
                 // zero while an ordinary blessed object is still held by a
                 // live lexical. Test::Refcount exercises this shape; clearing

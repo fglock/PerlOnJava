@@ -46,8 +46,28 @@ public class Directory {
             // Try to get RuntimeIO from the scalar
             RuntimeIO io = RuntimeIO.getRuntimeIO(runtimeScalar);
             if (io != null) {
-                // This is a filehandle or dirhandle - fchdir is not supported
-                throw new PerlCompilerException("The fchdir function is unimplemented");
+                if ((io.ioHandle == null || io.ioHandle instanceof org.perlonjava.runtime.io.ClosedIOHandle)
+                        && (io.directoryIO == null || io.directoryIO.directoryStream == null)) {
+                    getGlobalVariable("main::!").set(9);
+                    return scalarFalse;
+                }
+                Path opened = io.directoryIO != null
+                        ? io.directoryIO.getAbsoluteDirectoryPath() : io.openedPath;
+                if (opened == null) {
+                    getGlobalVariable("main::!").set(9);
+                    return scalarFalse;
+                }
+                if (!Files.isDirectory(opened)) {
+                    getGlobalVariable("main::!").set(20); // ENOTDIR
+                    return scalarFalse;
+                }
+                try {
+                    RuntimeEnvironment.setCurrentDirectory(opened.toFile().getCanonicalPath());
+                    return scalarTrue;
+                } catch (IOException e) {
+                    handleIOException(e, "chdir failed");
+                    return scalarFalse;
+                }
             }
         }
 
@@ -186,6 +206,11 @@ public class Directory {
 
     public static RuntimeScalar closedir(RuntimeScalar runtimeScalar) {
         RuntimeIO dirIO = runtimeScalar.getRuntimeIO();
+        if (dirIO == null || dirIO.directoryIO == null) {
+            getGlobalVariable("main::!").set(9);
+            warnIfNotDirectoryHandle(runtimeScalar, "closedir");
+            return RuntimeScalarCache.scalarUndef;
+        }
         if (dirIO.directoryIO != null) {
             try {
                 if (dirIO.directoryIO.directoryStream != null) {

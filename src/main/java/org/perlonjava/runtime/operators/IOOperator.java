@@ -1921,6 +1921,7 @@ public class IOOperator {
 
                     CustomFileChannel channel = new CustomFileChannel(file.toPath(), createOptions);
                     fh = new RuntimeIO(channel);
+                    fh.openedPath = file.toPath();
                     RuntimeIO.addHandle(channel);
                     // sysopen() is a descriptor-level open.  Unlike open(), it
                     // must not install the platform text layer (:crlf on

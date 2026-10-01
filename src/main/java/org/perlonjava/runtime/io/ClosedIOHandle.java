@@ -43,7 +43,8 @@ public class ClosedIOHandle implements IOHandle {
 
     @Override
     public RuntimeScalar doRead(int maxBytes, java.nio.charset.Charset charset) {
-        return RuntimeIO.handleIOError("Cannot read from a closed handle.");
+        RuntimeIO.handleIOError(9);
+        return scalarUndef;
     }
 
     @Override
