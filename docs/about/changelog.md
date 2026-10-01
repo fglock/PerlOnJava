@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Fix Unicode `IsPrint` aliases in character classes, `/x` literal-brace
+  warnings and matching, and Joni backtracking across repeated whitespace.
+
 - Preserve selected filehandles across glob localization, named Unicode handle
   names, void tied-assignment tails, dynamic regex input encoding, syntax-error
   eval callers, and stdio layers; keep wide CLI diagnostics free of host print

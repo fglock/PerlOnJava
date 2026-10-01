@@ -1870,7 +1870,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             if (ch != '{') continue;
             if (isEscapeArgumentBrace(pattern, i)
                     || isValidQuantifier(pattern, i)
-                    || isAllowedLiteralLeftBrace(pattern, i)) {
+                    || isAllowedLiteralLeftBrace(pattern, i, extended)) {
                 continue;
             }
             boolean followsAlphanumericEscape = i >= 2
@@ -1969,21 +1969,29 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == '\f';
     }
 
-    private static boolean isAllowedLiteralLeftBrace(String pattern, int offset) {
-        if (offset == 0) return true;
-        char previous = pattern.charAt(offset - 1);
+    private static boolean isAllowedLiteralLeftBrace(
+            String pattern, int offset, boolean extended) {
+        int effectiveOffset = offset;
+        if (extended) {
+            while (effectiveOffset > 0
+                    && isPerlIntervalWhitespace(pattern.charAt(effectiveOffset - 1))) {
+                effectiveOffset--;
+            }
+        }
+        if (effectiveOffset == 0) return true;
+        char previous = pattern.charAt(effectiveOffset - 1);
         if (previous == '^' || previous == '|' || previous == '(' || previous == '*'
                 || previous == '+' || previous == '?') {
             return true;
         }
-        if (offset >= 3 && (pattern.regionMatches(offset - 3, "(?:", 0, 3)
-                || pattern.regionMatches(offset - 3, "(:?", 0, 3))) {
+        if (effectiveOffset >= 3 && (pattern.regionMatches(effectiveOffset - 3, "(?:", 0, 3)
+                || pattern.regionMatches(effectiveOffset - 3, "(:?", 0, 3))) {
             return true;
         }
         if (previous != '}') return false;
-        int opening = pattern.lastIndexOf('{', offset - 2);
+        int opening = pattern.lastIndexOf('{', effectiveOffset - 2);
         return opening >= 0 && isValidQuantifier(pattern, opening)
-                && pattern.indexOf('}', opening + 1) == offset - 1;
+                && pattern.indexOf('}', opening + 1) == effectiveOffset - 1;
     }
 
     private static final class LeftBraceIssue {

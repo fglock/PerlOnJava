@@ -2867,8 +2867,18 @@ final class Analyser extends Parser {
 
                 if (varNum >= CEC_THRES_NUM_BIG_REPEAT) addState |= CEC_CONT_BIG_REPEAT;
 
-                if (((state & CEC_IN_INFINITE_REPEAT) != 0 && varNum != 0) ||
-                   ((state & CEC_CONT_BIG_REPEAT) != 0 && varNum >= CEC_THRES_NUM_BIG_REPEAT)) {
+                // A position-only CEC key is unsafe for an unbounded nullable
+                // repeat nested in another unbounded repeat: the inner repeat
+                // can be re-entered at the same input position after the
+                // enclosing repeat has made progress. Pruning that state can
+                // prevent the enclosing repeat from reaching its lower bound.
+                boolean reenteredNullableRepeat = qn.lower == 0
+                        && isRepeatInfinite(qn.upper);
+                if (((state & CEC_IN_INFINITE_REPEAT) != 0 && varNum != 0
+                        && !reenteredNullableRepeat) ||
+                   ((state & CEC_CONT_BIG_REPEAT) != 0
+                        && varNum >= CEC_THRES_NUM_BIG_REPEAT
+                        && !reenteredNullableRepeat)) {
                     if (qn.combExpCheckNum == 0) {
                         env.numCombExpCheck++;
                         qn.combExpCheckNum = env.numCombExpCheck;

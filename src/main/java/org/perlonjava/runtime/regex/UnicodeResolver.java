@@ -1832,7 +1832,7 @@ public class UnicodeResolver {
                     "XPosixDigit", "Decimal_Number", "Digit", "Nd", "IsDigit",
                     "XPosixGraph", "Graph",
                     "XPosixLower", "Lower", "Lowercase", "IsLower",
-                    "XPosixPrint", "Print",
+                    "XPosixPrint", "Print", "IsPrint",
                     "XPosixPunct", "Punct", "Punctuation",
                     "XPosixUpper", "Upper", "Uppercase", "IsUpper",
                     "Titlecase", "TitlecaseLetter", "Titlecase_Letter", "Lt",
