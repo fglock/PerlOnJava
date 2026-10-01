@@ -313,16 +313,12 @@ public class EmitControlFlow {
                 : loopLabels.redoLabel;
         emitLoopControlScopeCleanup(ctx, loopLabels, operator.equals("last"));
         emitMortalFlushAboveMark(ctx);
+        emitLoopRegexStateRestore(ctx, loopLabels);
         ctx.mv.visitJumpInsn(Opcodes.GOTO, label);
     }
 
     private static void emitLoopControlScopeCleanup(
             EmitterContext ctx, LoopLabels loopLabels, boolean exitsLoop) {
-        if (loopLabels.regexStateRestoreLocal >= 0) {
-            ctx.mv.visitVarInsn(Opcodes.ALOAD, loopLabels.regexStateRestoreLocal);
-            ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/runtimetypes/RegexState", "restore", "()V", false);
-        }
         if (loopLabels.dynamicLocalLevelSlot >= 0) {
             ctx.mv.visitVarInsn(Opcodes.ILOAD, loopLabels.dynamicLocalLevelSlot);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -334,6 +330,15 @@ public class EmitControlFlow {
                 : loopLabels.cleanupScopeIndex;
         if (cleanupScopeIndex >= 0) {
             EmitStatement.emitLoopControlScopeExit(ctx, cleanupScopeIndex);
+        }
+    }
+
+    private static void emitLoopRegexStateRestore(EmitterContext ctx, LoopLabels loopLabels) {
+        if (loopLabels.regexStateRestoreLocal >= 0) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, loopLabels.regexStateRestoreLocal);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RegexState", "restoreLoopState",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RegexState;)V", false);
         }
     }
 
@@ -351,6 +356,7 @@ public class EmitControlFlow {
                 "flush",
                 "()V",
                 false);
+        emitLoopRegexStateRestore(ctx, loopLabels);
     }
 
     /** Match the value expected at a value-producing block's next/last label. */

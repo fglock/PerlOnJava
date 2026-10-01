@@ -140,6 +140,7 @@ public class LoopLabels {
                 ", nextLabel=" + nextLabel +
                 ", redoLabel=" + redoLabel +
                 ", lastLabel=" + lastLabel +
+                ", regexStateRestoreLocal=" + regexStateRestoreLocal +
                 ", context=" + context +
                 '}';
     }

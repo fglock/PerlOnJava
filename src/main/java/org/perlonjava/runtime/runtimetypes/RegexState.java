@@ -59,6 +59,12 @@ public class RegexState implements DynamicState {
         manualCaptureStarts = state.manualCaptureStarts;
         manualCaptureEnds = state.manualCaptureEnds;
         provisionalCaptureResolver = state.provisionalCaptureResolver;
+        if (System.getenv("JPERL_REGEX_STATE_DEBUG") != null) {
+            System.err.println("RegexState created id=" + System.identityHashCode(this)
+                    + " matched=" + lastMatchedString + " global=" + globalMatchString
+                    + " pre=" + globalMatchString + ':' + lastMatchStart
+                    + " postEnd=" + lastMatchEnd);
+        }
     }
 
     public static void save() {
@@ -70,7 +76,22 @@ public class RegexState implements DynamicState {
     }
 
     public void restore() {
+        if (System.getenv("JPERL_REGEX_STATE_DEBUG") != null) {
+            System.err.println("RegexState restore current=" + owner.regexState.lastMatchedString
+                    + " saved=" + lastMatchedString);
+        }
         dynamicRestoreState();
+        if (System.getenv("JPERL_REGEX_STATE_DEBUG") != null) {
+            System.err.println("RegexState restored=" + owner.regexState.lastMatchedString);
+        }
+    }
+
+    public static void restoreLoopState(RegexState state) {
+        if (System.getenv("JPERL_REGEX_STATE_DEBUG") != null) {
+            System.err.println("Loop regex restore id=" + System.identityHashCode(state)
+                    + " matched=" + state.lastMatchedString + " global=" + state.globalMatchString);
+        }
+        state.restore();
     }
 
     @Override
