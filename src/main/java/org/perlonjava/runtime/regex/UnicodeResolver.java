@@ -1436,7 +1436,10 @@ public class UnicodeResolver {
                         false);
             }
         }
-        if (userDefined && !resolvingDeferred
+        if (userDefined
+                && !isPerlSpecialPropertyAlias(
+                        canonicalPerlPosixPropertyAlias(property).trim())
+                && !resolvingDeferred
                 && PerlRuntime.currentOrNull() != null
                 && (PerlLanguageProvider.COMPILE_LOCK.isHeldByCurrentThread()
                     || isUserPropertyMaterializationDeferred())) {

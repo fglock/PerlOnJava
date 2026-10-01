@@ -2,6 +2,7 @@ package org.perlonjava.runtime.regex;
 
 import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -59,6 +60,39 @@ class JoniRegexPatternTest {
 
         assertTrue(unicode.matcher("é", java.util.List.of()).find());
         assertFalse(ascii.matcher("é", java.util.List.of()).find());
+    }
+
+    @Test
+    void byteRangeSearchProgressionSkipsAsciiAfterHighByte() {
+        byte[] bytes = {'F', (byte) 0xf8, 'o', '(', '?', '<', 'a', '>'};
+        RuntimeScalar subject = new RuntimeScalar(bytes);
+        JoniRegexPattern pattern = new JoniRegexPattern(
+                "([^\\x20-\\x7e])", FLAGS, 0,
+                true, true, true);
+        RegexMatcher matcher = pattern.matcher(
+                subject.toString(), java.util.List.of(), subject);
+
+        assertTrue(matcher.find());
+        assertEquals(1, matcher.start());
+        assertEquals(2, matcher.end());
+        matcher.region(matcher.end(), subject.toString().length());
+        matcher.useAnchoringBounds(false);
+        matcher.useTransparentBounds(true);
+        boolean foundFollowingAscii = matcher.find();
+        assertFalse(foundFollowingAscii, foundFollowingAscii
+                ? "unexpected match " + matcher.group(0) + " at "
+                        + matcher.start() + ".." + matcher.end()
+                : "");
+
+        String wideMarker = PerlUtfString.encodeBeyondUnicode(0x110000);
+        RuntimeScalar wideSubject = new RuntimeScalar(
+                wideMarker.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
+        JoniRegexPattern widePattern = new JoniRegexPattern(
+                "\\x{110000}", FLAGS, 0,
+                true, true, true);
+        RegexMatcher wideMatcher = widePattern.matcher(
+                wideSubject.toString(), java.util.List.of(), wideSubject);
+        assertTrue(wideMatcher.find());
     }
 
     @Test
