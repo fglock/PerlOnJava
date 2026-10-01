@@ -214,3 +214,10 @@ Already working via `DebugState.stepOverDepth`:
 - **Breakpoint not hitting**: Verify line is breakable (has DEBUG opcode)
 - **Step-over not working**: Ensure `callDepth` tracking is correct
 - **Duplicate lines**: Check for missing `skipDebug` on internal nodes
+
+## Issue reporting and triage
+
+When reporting, classifying, or updating an issue, read the
+[issue triage guide](../../../docs/guides/issue-triage.md) for evidence, labels,
+ownership, related failures, and completion criteria. Its proposed labels and
+planning conventions require rollout; use existing GitHub labels until then.

@@ -386,3 +386,10 @@ Also available outside FFM:
 - Java FFM tutorial: https://docs.oracle.com/en/java/javase/22/core/foreign-function-and-memory-api.html
 - `src/main/java/org/perlonjava/runtime/nativ/ffm/` — existing FFM code (best reference)
 - `src/main/java/org/perlonjava/runtime/io/` — I/O handle implementations
+
+## Issue reporting and triage
+
+When reporting, classifying, or updating an issue, read the
+[issue triage guide](../../../docs/guides/issue-triage.md) for evidence, labels,
+ownership, related failures, and completion criteria. Its proposed labels and
+planning conventions require rollout; use existing GitHub labels until then.

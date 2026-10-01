@@ -543,3 +543,10 @@ public static RuntimeList myMethod(RuntimeArray args, int ctx) {
 - **Module test runner:** `src/test/java/org/perlonjava/ModuleTestExecutionTest.java`
 - Existing modules: `src/main/java/org/perlonjava/runtime/perlmodule/`
 - Runtime types: `src/main/java/org/perlonjava/runtime/runtimetypes/`
+
+## Issue reporting and triage
+
+When reporting, classifying, or updating an issue, read the
+[issue triage guide](../../../docs/guides/issue-triage.md) for evidence, labels,
+ownership, related failures, and completion criteria. Its proposed labels and
+planning conventions require rollout; use existing GitHub labels until then.

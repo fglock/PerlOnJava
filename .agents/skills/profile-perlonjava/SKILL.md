@@ -162,3 +162,10 @@ make dev   # Quick build - compiles only, NO tests
 7. Profile again to verify improvement
 8. Run tests to ensure correctness
 ```
+
+## Issue reporting and triage
+
+When reporting, classifying, or updating an issue, read the
+[issue triage guide](../../../docs/guides/issue-triage.md) for evidence, labels,
+ownership, related failures, and completion criteria. Its proposed labels and
+planning conventions require rollout; use existing GitHub labels until then.

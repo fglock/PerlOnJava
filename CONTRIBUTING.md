@@ -19,6 +19,9 @@ CPU and memory performance.
 - **Share compatibility results** - Report reproducible `jcpan -t` failures
 - **Measure performance** - Contribute repeatable CPU, memory, and startup benchmarks
 
+For issue evidence, classification, and planning conventions, see the proposed
+[Issue Reporting and Triage guide](docs/guides/issue-triage.md).
+
 ## Quick Start for Contributors
 
 ### 1. Set Up Development Environment

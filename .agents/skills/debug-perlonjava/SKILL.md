@@ -480,3 +480,10 @@ git add -A && git commit -m "Fix message"
 git push -u origin fix-name
 gh pr create --title "Fix: title" --body "Description"
 ```
+
+## Issue reporting and triage
+
+When reporting, classifying, or updating an issue, read the
+[issue triage guide](../../../docs/guides/issue-triage.md) for evidence, labels,
+ownership, related failures, and completion criteria. Its proposed labels and
+planning conventions require rollout; use existing GitHub labels until then.

@@ -199,3 +199,10 @@ gh run view <run-id> --log-failed 2>&1 | grep "DEBUG:"
 ```
 
 Remember to remove debug output before final commit.
+
+## Issue reporting and triage
+
+When reporting, classifying, or updating an issue, read the
+[issue triage guide](../../../docs/guides/issue-triage.md) for evidence, labels,
+ownership, related failures, and completion criteria. Its proposed labels and
+planning conventions require rollout; use existing GitHub labels until then.

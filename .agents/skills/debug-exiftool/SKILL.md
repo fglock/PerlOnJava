@@ -481,3 +481,10 @@ To trace which subs hit interpreter fallback:
 ```bash
 JPERL_SHOW_FALLBACK=1 java -jar target/perlonjava-3.0.0.jar -Ilib t/Writer.t 2>&1 | grep FALLBACK
 ```
+
+## Issue reporting and triage
+
+When reporting, classifying, or updating an issue, read the
+[issue triage guide](../../../docs/guides/issue-triage.md) for evidence, labels,
+ownership, related failures, and completion criteria. Its proposed labels and
+planning conventions require rollout; use existing GitHub labels until then.

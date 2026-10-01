@@ -379,3 +379,10 @@ JVM uses tableswitch (O(1)) for dense opcode ranges. Gaps cause lookupswitch (O(
 
 ### Disassembly cases are mandatory
 Every new opcode MUST have a disassembly case in InterpretedCode.java. Missing cases cause PC misalignment — the disassembler doesn't advance past the opcode's operands, corrupting all subsequent output.
+
+## Issue reporting and triage
+
+When reporting, classifying, or updating an issue, read the
+[issue triage guide](../../../docs/guides/issue-triage.md) for evidence, labels,
+ownership, related failures, and completion criteria. Its proposed labels and
+planning conventions require rollout; use existing GitHub labels until then.
