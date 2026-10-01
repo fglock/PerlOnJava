@@ -4,7 +4,9 @@ use File::Spec;
 my $output_path = File::Spec->catfile(
     File::Spec->tmpdir, "perlonjava-debug-eval-line-$$.txt",
 );
-my $perl5_t_lib = File::Spec->rel2abs(File::Spec->catdir(qw(perl5_t t lib)));
+my $unit_lib = File::Spec->rel2abs(
+    File::Spec->catdir(qw(src test resources unit lib)),
+);
 my $program = <<'PERL';
 BEGIN { $^P = 0x122 }
 our @lines;
@@ -23,7 +25,7 @@ close $out;
 PERL
 my @command = (
     ($ENV{PERLONJAVA_EXECUTABLE} || $^X),
-    "-I$perl5_t_lib", '-d:switchd_empty', '-e', $program, $output_path,
+    "-I$unit_lib", '-d:switchd_empty', '-e', $program, $output_path,
 );
 my $status = system @command;
 open my $output, '<', $output_path or die "could not read debugger output: $!";
