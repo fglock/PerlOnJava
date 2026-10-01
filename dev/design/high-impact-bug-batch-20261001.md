@@ -110,23 +110,27 @@ proven fix emerges from profiling.
     their path-based handle behavior is implemented. `d_dirfd` remains unset:
     directory handles have no native descriptor, and advertising it caused
     core tests to expect a numeric `fileno(DIRHANDLE)`. Directory-handle
-    `chdir` therefore reports the unsupported `dirfd` capability.
-  - The final `nice -n 19 make` passed in 5m22s. The affected core tests passed
-    (`io/fs.t` 61/61, `op/chdir.t` 51/51, and `io/perlio.t` 48/48). The
-    full UAT completed all 575 files with no timeouts. Comparison against the
-    2026-10-01 baseline reports 680,658/680,762 passing assertions versus
-    680,657/680,762, zero regressions, and one improvement (`io/read.t`).
-    Three execution errors and 53 zero-TAP rows are inherited from baseline.
-    `op/stat.t`'s four TTY assertions also fail in isolated runs under this
-    host's noninteractive runner, matching the baseline behavior.
+    `chdir` therefore reports the unsupported `dirfd` capability. A follow-up
+    makes the closed/unopened warning check respect lexical warnings on the
+    interpreter backend; the new regression and core `op/chdir.t` pass on both
+    backends, and the focused Perl test passes on system Perl.
+  - The final `nice -n 19 make` passed in 5m23s. The affected JVM core tests
+    passed (`io/fs.t` 61/61, `op/chdir.t` 51/51, and `io/perlio.t` 48/48).
+    The exact pushed head completed all 575 files with no timeouts.
+    Comparison against the 2026-10-01 baseline reports 680,658/680,762
+    passing assertions versus 680,657/680,762, zero regressions, and one
+    improvement (`io/read.t`). Three execution errors and 53 zero-TAP rows
+    are inherited from baseline. `op/stat.t`'s four TTY assertions also fail
+    in isolated runs under this host's noninteractive runner, matching the
+    baseline behavior.
   - The earlier GitHub Actions run passed on `cbd417d`, before the latest
-    #1470 follow-up at `be7ba35`. The interpreter sweep and PR description are
-    now updated. Current-head CI still needs checking after this follow-up.
+    #1470 follow-up at `be7ba35`. Commits `0045e34c4` and `42aa5ca4d` carry
+    the final `chdir` fixes. Current-head CI still needs checking.
 
 ### Next steps
 
-1. Push the final local follow-up, update PR #1598 with the UAT evidence, and
-   verify the PR remains open with the expected files.
+1. Update PR #1598 with the final UAT evidence and verify it remains open with
+   the expected files.
 2. Check CI for the updated PR head and address review.
 
 ### Open questions
