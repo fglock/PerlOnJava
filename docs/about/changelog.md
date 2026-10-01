@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve objects with counted collection owners during weak-reference sweeps,
+  and resolve deferred user-defined regex properties in the match caller's
+  package.
+
 - Fix Unicode `IsPrint` aliases in character classes, `/x` literal-brace
   warnings and matching, and Joni backtracking across repeated whitespace.
 

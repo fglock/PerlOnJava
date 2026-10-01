@@ -580,6 +580,30 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return active == null ? null : active.packageName;
     }
 
+    /**
+     * Return the package of the active Perl caller around a deferred regex
+     * callback. The callback's synthetic CV retains the package where the
+     * regex was compiled, while runtime user-property lookup follows the
+     * package that invoked the match.
+     */
+    public static String getActiveRegexPropertyCallerPackage() {
+        RuntimeCode previous = null;
+        for (RuntimeCode active : activeCodeStack()) {
+            if (isCompilerWrapperPair(active, previous)) {
+                continue;
+            }
+            previous = active;
+            if (active.isRegexCallbackPseudoBlock || active.isTryExpressionWrapper
+                    || active.isBuiltin || active.subName == null || active.subName.isBlank()) {
+                continue;
+            }
+            if (active.packageName != null && !active.packageName.isBlank()) {
+                return active.packageName;
+            }
+        }
+        return null;
+    }
+
     public static void popActiveCode(RuntimeCode code) {
         PerlRuntime runtime = PerlRuntime.current();
         ExecutionRuntimeState executionState = runtime.executionState();

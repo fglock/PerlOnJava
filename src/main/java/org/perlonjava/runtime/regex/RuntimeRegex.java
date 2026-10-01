@@ -571,6 +571,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return packageName == null || packageName.isBlank() ? "main" : packageName;
     }
 
+    static String currentDynamicUserPropertyPackage() {
+        String activeCallerPackage = RuntimeCode.getActiveRegexPropertyCallerPackage();
+        return activeCallerPackage != null ? activeCallerPackage : currentUserPropertyPackage();
+    }
+
     private static String compileCacheKey(String patternString, String modifiers,
             int lexicalDebugMode, int trustedCalloutCount,
             boolean requestedPatternByteBacked,

@@ -2055,6 +2055,14 @@ public class ReachabilityWalker {
         Set<RuntimeBase> live = new ReachabilityWalker()
                 .withTemporaryRoots(false)
                 .walk();
+        Set<RuntimeBase> countedStrongOwners =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+        for (RuntimeScalar owner : ScalarRefRegistry.snapshot()) {
+            if (owner == null || !owner.refCountOwned || WeakRefRegistry.isweak(owner)) continue;
+            if (owner.value instanceof RuntimeBase referent && referents.contains(referent)) {
+                countedStrongOwners.add(referent);
+            }
+        }
         // Targeted release sweeps run at the same quiet statement boundary as
         // sweepWeakRefs(true). Preserve strong cycle islands here too: Perl's
         // reference counting intentionally keeps an unreachable strong cycle
@@ -2066,6 +2074,12 @@ public class ReachabilityWalker {
             if (referent == null || referent.currentlyDestroying) {
                 continue;
             }
+            // A targeted release only means that one explicit owner went
+            // away. Other counted owners can still hold the referent through
+            // local aggregate slots that are not represented in the lexical
+            // root walk (notably file-scope my arrays and hashes). Preserve
+            // those objects until their counted owners release them.
+            if (referent.refCount > 0 && countedStrongOwners.contains(referent)) continue;
             if (live.contains(referent)) continue;
             if (strongCycleProtected.contains(referent)) continue;
             if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)

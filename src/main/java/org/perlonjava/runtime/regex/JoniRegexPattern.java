@@ -1495,7 +1495,7 @@ final class JoniRegexPattern {
             JoniRegexPattern nestedPattern;
             List<RuntimeRegexCallback> nestedCallbacks = List.of();
             boolean inputEncodingCompatible = true;
-            String dynamicPackage = RuntimeRegex.currentUserPropertyPackage();
+            String dynamicPackage = RuntimeRegex.currentDynamicUserPropertyPackage();
             RuntimeRegex firstClassRegex = value.firstClassRegexScalar
                     ? value.firstClassRegexValue : null;
             if (firstClassRegex != null) {
