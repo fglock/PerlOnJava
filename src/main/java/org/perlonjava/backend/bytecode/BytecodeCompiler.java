@@ -9426,10 +9426,9 @@ public class BytecodeCompiler implements Visitor {
         }
 
         if (targetLoop == null) {
-            // A normal subroutine cannot direct loop control at its caller.
-            // Eval STRING intentionally carries a marker to its lexical
-            // caller, where the surrounding loop is resolved.
-            if (isSmartmatchPredicate || isSubroutineBody && !isSortComparator) {
+            // Ordinary subroutines may target dynamically enclosing loops.
+            // Smartmatch predicates retain their pseudo-block boundary.
+            if (isSmartmatchPredicate) {
                 throwCleanCompilerException("Can't \"" + op + "\" outside a loop block", node.getIndex());
             }
             // No matching loop found - non-local control flow

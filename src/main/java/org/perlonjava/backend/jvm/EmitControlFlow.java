@@ -185,12 +185,9 @@ public class EmitControlFlow {
         }
 
         if (loopLabels == null) {
-            // A CV is a control-flow boundary: last/next/redo in an ordinary
-            // sub cannot target its caller's loop. Eval blocks are the one
-            // exception, because their markers are caught by the enclosing
-            // eval machinery and may target its lexical caller.
-            if (ctx.javaClassInfo.isSmartmatchPredicate
-                    || ctx.javaClassInfo.isSubroutineBody && !ctx.javaClassInfo.isSortComparator) {
+            // Ordinary subroutines may target dynamically enclosing loops.
+            // Smartmatch predicates retain their pseudo-block boundary.
+            if (ctx.javaClassInfo.isSmartmatchPredicate) {
                 throw PerlCompilerException.withSourceLocation(node.tokenIndex,
                         "Can't \"" + operator + "\" outside a loop block", ctx.errorUtil);
             }

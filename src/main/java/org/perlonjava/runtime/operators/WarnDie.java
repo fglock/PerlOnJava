@@ -183,7 +183,8 @@ public class WarnDie {
     }
 
     private static boolean isEscapedControlFlowFailure(Throwable failure) {
-        if (!(failure instanceof PerlCompilerException)) return false;
+        if (!(failure instanceof PerlCompilerException)
+                && !(failure instanceof PerlDieException)) return false;
         String message = failure.getMessage();
         if (message == null) return false;
         for (String operator : new String[]{"last", "next", "redo", "goto", "return", "continue", "break"}) {
