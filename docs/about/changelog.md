@@ -9,6 +9,9 @@ priorities and future plans.
 - Fix Unicode `IsPrint` aliases in character classes, `/x` literal-brace
   warnings and matching, and Joni backtracking across repeated whitespace.
 
+- Support anonymous temporary files for read/write opens with undefined paths,
+  and report non-numeric process IDs passed to `kill()`.
+
 - Preserve selected filehandles across glob localization, named Unicode handle
   names, void tied-assignment tails, dynamic regex input encoding, syntax-error
   eval callers, and stdio layers; keep wide CLI diagnostics free of host print
