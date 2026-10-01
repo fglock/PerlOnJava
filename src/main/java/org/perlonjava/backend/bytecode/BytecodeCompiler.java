@@ -1092,6 +1092,13 @@ public class BytecodeCompiler implements Visitor {
         }
     }
 
+    private void emitLoopRegexRestoreForControl(LoopInfo loopInfo) {
+        if (loopInfo.regexSaveReg >= 0) {
+            emit(Opcodes.RESTORE_LOOP_REGEX_STATE);
+            emitReg(loopInfo.regexSaveReg);
+        }
+    }
+
     private Set<Integer> myVariableIndexSet() {
         return new HashSet<>(symbolTable.getMyVariableIndicesInScope(0));
     }
@@ -8441,6 +8448,7 @@ public class BytecodeCompiler implements Visitor {
         // do-while is NOT a true loop (can't use last/next/redo); while/for are true loops
         LoopInfo loopInfo = new LoopInfo(node.labelName, loopStartPc, !node.isDoWhile);
         loopInfo.dynamicLocalLevelReg = for3LocalLevelReg;
+        loopInfo.regexSaveReg = loopRegexSaveReg;
         loopStack.push(loopInfo);
 
         int loopEndJumpPc = -1;
@@ -9339,6 +9347,7 @@ public class BytecodeCompiler implements Visitor {
 
                 emitLoopControlScopeCleanup(targetLoop);
                 emit(Opcodes.MORTAL_FLUSH);
+                emitLoopRegexRestoreForControl(targetLoop);
                 emitWithToken(localOpcode, node.getIndex());
                 int patchPc = bytecode.size();
                 emitInt(0); // patched when loop boundaries are finalized
@@ -9467,6 +9476,7 @@ public class BytecodeCompiler implements Visitor {
 
         emitLoopControlScopeCleanup(targetLoop);
         emit(Opcodes.MORTAL_FLUSH);
+        emitLoopRegexRestoreForControl(targetLoop);
         emitWithToken(opcode, node.getIndex());
 
         // Record the PC to be patched (it's the PC of the jump offset operand)
@@ -9502,6 +9512,7 @@ public class BytecodeCompiler implements Visitor {
         int dynamicLocalLevelReg;    // Saved DVM level for locals bypassed by loop control
         int resultReg;               // Result register for value-producing synthetic blocks
         int context;                 // Context of a value-producing synthetic block
+        int regexSaveReg;            // Loop-level regex baseline register, or -1
 
         LoopInfo(String label, int startPc, boolean isTrueLoop) {
             this(label, startPc, isTrueLoop, false);
@@ -9517,6 +9528,7 @@ public class BytecodeCompiler implements Visitor {
             this.dynamicLocalLevelReg = -1;
             this.resultReg = -1;
             this.context = RuntimeContextType.VOID;
+            this.regexSaveReg = -1;
             this.breakPcs = new ArrayList<>();
             this.nextPcs = new ArrayList<>();
             this.redoPcs = new ArrayList<>();

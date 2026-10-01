@@ -1165,6 +1165,20 @@ public class BytecodeInterpreter {
                                 }
                             }
 
+                            case Opcodes.RESTORE_LOOP_REGEX_STATE -> {
+                                int rs = bytecode[pc++];
+                                int savedDepth = ((RuntimeScalar) registers[rs]).getInt();
+                                while (regexStateStack.size() > savedDepth + 1) {
+                                    regexStateStack.pop();
+                                }
+                                if (regexStateStack.size() > savedDepth) {
+                                    regexStateStack.pop().restore();
+                                }
+                                // Keep a fresh baseline at this loop depth so
+                                // eventual loop exit restores the same state.
+                                regexStateStack.push(new RegexState());
+                            }
+
                             case Opcodes.FOREACH_GLOBAL_NEXT_OR_EXIT -> {
                                 // Superinstruction: foreach loop step for a global loop variable (e.g. $_).
                                 // Combines: hasNext check, next() into varReg, aliasGlobalVariable, conditional jump.

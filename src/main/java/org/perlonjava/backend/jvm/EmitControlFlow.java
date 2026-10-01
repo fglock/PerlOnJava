@@ -336,9 +336,8 @@ public class EmitControlFlow {
     private static void emitLoopRegexStateRestore(EmitterContext ctx, LoopLabels loopLabels) {
         if (loopLabels.regexStateRestoreLocal >= 0) {
             ctx.mv.visitVarInsn(Opcodes.ALOAD, loopLabels.regexStateRestoreLocal);
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RegexState", "restoreLoopState",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RegexState;)V", false);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RegexState", "restore", "()V", false);
         }
     }
 

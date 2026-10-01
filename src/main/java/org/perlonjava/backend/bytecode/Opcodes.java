@@ -2765,6 +2765,9 @@ public class Opcodes {
     /** Release the active lexical foreach alias before replacing its slot or leaving the loop. */
     public static final short FOREACH_ALIAS_RELEASE = 624;
 
+    /** Restore a loop regex baseline and retain a fresh baseline for its next iteration. Format: register. */
+    public static final short RESTORE_LOOP_REGEX_STATE = 631;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }
