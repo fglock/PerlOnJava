@@ -245,7 +245,8 @@ public class EmitSubroutine {
 
         // Create the new method context
         JavaClassInfo newJavaClassInfo = new JavaClassInfo();
-        newJavaClassInfo.isSubroutineBody = !node.useTryCatch;
+        newJavaClassInfo.isSubroutineBody = !node.useTryCatch
+                || node.name != null && !node.name.equals("(eval)");
         newJavaClassInfo.isSmartmatchPredicate = node.getBooleanAnnotation("smartmatchPredicate");
         newJavaClassInfo.isSortComparator = node.getBooleanAnnotation("isSortComparator");
         // Eval blocks are compiled as separate methods, but a goto inside one

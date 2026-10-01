@@ -10,6 +10,7 @@ import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.JavaClassInfo;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
+import org.perlonjava.frontend.analysis.ControlFlowDetectorVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
@@ -1349,6 +1350,18 @@ public class SubroutineParser {
                 block.setAnnotation("signatureSlurpySigil",
                         signature.getAnnotation("signatureSlurpySigil"));
                 block.elements.addAll(0, signature.elements);
+            }
+
+            // Named subroutines are compiled lazily. Check loop-control
+            // boundaries while parsing so an invalid next/last/redo is still
+            // diagnosed when the sub is defined but never called.
+            ControlFlowDetectorVisitor loopControlDetector = new ControlFlowDetectorVisitor();
+            loopControlDetector.scanLoopControls(block);
+            String invalidLoopControl = loopControlDetector.getUnsafeLoopControlOperator();
+            if (invalidLoopControl != null) {
+                parser.throwCleanError(
+                        loopControlDetector.getUnsafeLoopControlTokenIndex(),
+                        "Can't \"" + invalidLoopControl + "\" outside a loop block");
             }
 
             if (subName == null) {

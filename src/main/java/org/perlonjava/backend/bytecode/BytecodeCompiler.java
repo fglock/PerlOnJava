@@ -589,6 +589,7 @@ public class BytecodeCompiler implements Visitor {
     // True when this compiler was constructed for eval STRING (has parentRegistry)
     private boolean isEvalString;
     boolean isSubroutineBody;
+    private boolean isSortComparator;
     boolean isSmartmatchPredicate;
     // Runtime regex interpolation can synthesize executable source through
     // overload, so the containing CV must expose all of its live lexical cells.
@@ -1982,8 +1983,6 @@ public class BytecodeCompiler implements Visitor {
             int stmtTokenIndex = -1;
             if (stmt != null) {
                 stmtTokenIndex = stmt.getIndex();
-                int pc = bytecode.size();
-                pcToTokenIndex.put(pc, stmtTokenIndex);
             }
 
             // Publish the statement's COP token for the call compilers, so that
@@ -1999,6 +1998,29 @@ public class BytecodeCompiler implements Visitor {
                         : -1;
             }
 
+            int statementSourceTokenIndex = statementTokenIndex >= 0
+                    ? statementTokenIndex : stmtTokenIndex;
+            // A bare block has no executable header of its own. Perl's debugger
+            // steps onto the first statement in the block, while loop headers
+            // retain their own COP line. Use that first body statement for the
+            // block-entry PC as well, so caller() inside DB::DB sees the same
+            // source line as the DEBUG opcode.
+            if (stmt instanceof For3Node simpleBlock && simpleBlock.isSimpleBlock
+                    && simpleBlock.body instanceof BlockNode body && !body.elements.isEmpty()) {
+                Node firstBodyStatement = body.elements.getFirst();
+                if (firstBodyStatement instanceof AbstractNode bodyNode) {
+                    Object bodyStart = bodyNode.getAnnotation("statementStartIndex");
+                    if (bodyStart instanceof Integer start && start >= 0) {
+                        statementSourceTokenIndex = start;
+                    } else if (bodyNode.getIndex() >= 0) {
+                        statementSourceTokenIndex = bodyNode.getIndex();
+                    }
+                }
+            }
+            if (stmt != null) {
+                pcToTokenIndex.put(bytecode.size(), statementSourceTokenIndex);
+            }
+
             // Emit DEBUG opcode for debugger support (only when -d flag is active)
             // Skip debug opcodes for internal/infrastructure nodes (marked with skipDebug)
             if (DebugState.isDebugMode() && stmtTokenIndex >= 0) {
@@ -2011,9 +2033,7 @@ public class BytecodeCompiler implements Visitor {
                     // prepend synthetic imports bracketed by #line directives;
                     // the debugger must report the logical program COP, not
                     // the physical line after those imports.
-                    int debugTokenIndex = statementTokenIndex >= 0
-                            ? statementTokenIndex
-                            : stmtTokenIndex;
+                    int debugTokenIndex = statementSourceTokenIndex;
                     var sourceLocation = errorUtil.getSourceLocationAccurate(debugTokenIndex);
                     int lineNumber = sourceLocation.lineNumber();
                     int fileIdx = addToStringPool(sourceLocation.fileName());
@@ -7140,6 +7160,7 @@ public class BytecodeCompiler implements Visitor {
         // but named subs are NOT eval strings - clear the flag.
         subCompiler.isEvalString = false;
         subCompiler.isSubroutineBody = true;
+        subCompiler.isSortComparator = node.getBooleanAnnotation("isSortComparator");
         subCompiler.compilingLvalueSubroutine = node.getBooleanAnnotation("subroutineIsLvalue");
         subCompiler.isSmartmatchPredicate = node.getBooleanAnnotation("smartmatchPredicate");
         subCompiler.symbolTable.setCurrentPackage(getCurrentPackage(),
@@ -7269,6 +7290,7 @@ public class BytecodeCompiler implements Visitor {
         // but anonymous subs are NOT eval strings - clear the flag.
         subCompiler.isEvalString = false;
         subCompiler.isSubroutineBody = true;
+        subCompiler.isSortComparator = node.getBooleanAnnotation("isSortComparator");
         subCompiler.isSmartmatchPredicate = node.getBooleanAnnotation("smartmatchPredicate");
         subCompiler.symbolTable.setCurrentPackage(getCurrentPackage(),
                 symbolTable.currentPackageIsClass());
@@ -9407,7 +9429,7 @@ public class BytecodeCompiler implements Visitor {
             // A normal subroutine cannot direct loop control at its caller.
             // Eval STRING intentionally carries a marker to its lexical
             // caller, where the surrounding loop is resolved.
-            if (isSmartmatchPredicate) {
+            if (isSmartmatchPredicate || isSubroutineBody && !isSortComparator) {
                 throwCleanCompilerException("Can't \"" + op + "\" outside a loop block", node.getIndex());
             }
             // No matching loop found - non-local control flow

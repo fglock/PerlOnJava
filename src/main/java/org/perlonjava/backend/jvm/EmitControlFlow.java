@@ -189,7 +189,8 @@ public class EmitControlFlow {
             // sub cannot target its caller's loop. Eval blocks are the one
             // exception, because their markers are caught by the enclosing
             // eval machinery and may target its lexical caller.
-            if (ctx.javaClassInfo.isSmartmatchPredicate) {
+            if (ctx.javaClassInfo.isSmartmatchPredicate
+                    || ctx.javaClassInfo.isSubroutineBody && !ctx.javaClassInfo.isSortComparator) {
                 throw PerlCompilerException.withSourceLocation(node.tokenIndex,
                         "Can't \"" + operator + "\" outside a loop block", ctx.errorUtil);
             }

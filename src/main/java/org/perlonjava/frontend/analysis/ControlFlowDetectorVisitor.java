@@ -14,6 +14,9 @@ public class ControlFlowDetectorVisitor implements Visitor {
     private int loopDepth = 0;
     private Set<String> allowedGotoLabels = null;
     private boolean allowStaticGoto;
+    private boolean loopControlOnly;
+    private String unsafeLoopControlOperator;
+    private int unsafeLoopControlTokenIndex = -1;
 
     /**
      * Check if unsafe control flow was detected during traversal.
@@ -24,12 +27,37 @@ public class ControlFlowDetectorVisitor implements Visitor {
         return hasUnsafeControlFlow;
     }
 
+    /** Scan for an unlabeled next/last/redo that escapes the supplied CV body. */
+    public void scanLoopControls(Node root) {
+        loopControlOnly = true;
+        if (root instanceof BlockNode body) {
+            // The subroutine's outer block is a lexical container, not a
+            // loop-control target. ParseBlock may mark it as a synthetic
+            // control frame, so begin at its statements with loop depth zero.
+            BlockNode cvBody = new BlockNode(body.elements, body.getIndex());
+            scan(cvBody);
+        } else {
+            scan(root);
+        }
+        loopControlOnly = false;
+    }
+
+    public String getUnsafeLoopControlOperator() {
+        return unsafeLoopControlOperator;
+    }
+
+    public int getUnsafeLoopControlTokenIndex() {
+        return unsafeLoopControlTokenIndex;
+    }
+
     /**
      * Reset the detector for reuse.
      */
     public void reset() {
         hasUnsafeControlFlow = false;
         loopDepth = 0;
+        unsafeLoopControlOperator = null;
+        unsafeLoopControlTokenIndex = -1;
         allowedGotoLabels = null;
         allowStaticGoto = false;
     }
@@ -100,15 +128,14 @@ public class ControlFlowDetectorVisitor implements Visitor {
             if (node instanceof OperatorNode op) {
                 if (state == 0) {
                     String oper = op.operator;
-
-                    if ("return".equals(oper)) {
+                    if (!loopControlOnly && "return".equals(oper)) {
                         if (DEBUG)
                             System.err.println("ControlFlowDetector(scan): UNSAFE return at tokenIndex=" + op.tokenIndex);
                         hasUnsafeControlFlow = true;
                         continue;
                     }
 
-                    if ("goto".equals(oper)) {
+                    if (!loopControlOnly && "goto".equals(oper)) {
                         if (allowStaticGoto && op.operand instanceof ListNode labelNode
                                 && !labelNode.elements.isEmpty()
                                 && labelNode.elements.getFirst() instanceof IdentifierNode) {
@@ -144,12 +171,14 @@ public class ControlFlowDetectorVisitor implements Visitor {
                             }
                         }
 
-                        if (isLabeled) {
+                        if (isLabeled && !loopControlOnly) {
                             if (DEBUG)
                                 System.err.println("ControlFlowDetector(scan): UNSAFE " + oper + " (labeled) at tokenIndex=" + op.tokenIndex + " label=" + label);
                             hasUnsafeControlFlow = true;
                             continue;
-                        } else if (currentLoopDepth == 0) {
+                        } else if (currentLoopDepth == 0 && !isLabeled) {
+                            unsafeLoopControlOperator = oper;
+                            unsafeLoopControlTokenIndex = op.getIndex();
                             if (DEBUG)
                                 System.err.println("ControlFlowDetector(scan): UNSAFE " + oper + " at tokenIndex=" + op.tokenIndex + " loopDepth=" + currentLoopDepth + " isLabeled=" + isLabeled + " label=" + label);
                             hasUnsafeControlFlow = true;
@@ -199,6 +228,7 @@ public class ControlFlowDetectorVisitor implements Visitor {
                     continue;
                 }
                 int idx = indexStack[top];
+                boolean pushedChild = false;
                 while (idx >= 0) {
                     Node child = block.elements.get(idx);
                     idx--;
@@ -228,10 +258,11 @@ public class ControlFlowDetectorVisitor implements Visitor {
                         stateStack[top] = 0;
                         indexStack[top] = 0;
                         extraStack[top] = 0;
+                        pushedChild = true;
                         break;
                     }
                 }
-                if (idx < 0) {
+                if (!pushedChild && idx < 0) {
                     top--;
                 }
                 continue;

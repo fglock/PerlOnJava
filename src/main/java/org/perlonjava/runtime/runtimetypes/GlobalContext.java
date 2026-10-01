@@ -380,6 +380,9 @@ public class GlobalContext {
         GlobalVariable.ensurePackageStash("IO::File");
         GlobalVariable.ensurePackageStash("IO::Seekable");
         Version.initialize();   // Initialize version module for version objects
+        GlobalVariable.getGlobalVariable(
+                "main::" + Character.toString('V' - 'A' + 1))
+                .set(Version.packageDeclarationVersion(Configuration.getPerlVersionVString()));
         Attributes.initialize();  // attributes:: XS-equivalent functions (used by attributes.pm)
         Threads.initialize();  // unadvertised ithread API; Config flags remain disabled
         ThreadsShared.initialize();  // shared storage core; locking primitives are Phase 21

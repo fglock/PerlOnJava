@@ -9,6 +9,10 @@ priorities and future plans.
 - Fix Unicode `IsPrint` aliases in character classes, `/x` literal-brace
   warnings and matching, and Joni backtracking across repeated whitespace.
 
+- Preserve debugger eval caller lines, expose overloaded callbacks through
+  `$DB::sub`, initialize `$^V` as a `version` object, and diagnose loop control
+  in unused subroutines.
+
 - Support anonymous temporary files for read/write opens with undefined paths,
   report non-numeric process IDs passed to `kill()`, and release each result of
   a void-context `map` iteration before invoking the next block; diagnose the
