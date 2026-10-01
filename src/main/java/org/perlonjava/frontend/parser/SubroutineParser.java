@@ -1989,6 +1989,12 @@ public class SubroutineParser {
         placeholder.packageName = lastSep >= 0
                 ? fullName.substring(0, lastSep)
                 : parser.ctx.symbolTable.getCurrentPackage();
+        if (block != null) {
+            // The original stash is retained only while a forward CV is still
+            // undefined. Once a body is installed, B::CV must report the
+            // package of that definition instead.
+            placeholder.forwardReferencePackageName = null;
+        }
         placeholder.isClassMethod = "method".equals(declaration)
                 || (block != null && block.getBooleanAnnotation("isClassMethod"));
         placeholder.declaringClass = placeholder.isClassMethod ? placeholder.packageName : null;

@@ -7867,16 +7867,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof RuntimeCode runtimeCode
                 && !runtimeCode.defined()) {
             runtimeCode.isDeclared = true;
-            // A qualified coderef uses the explicitly named stash for its
-            // forward CV. Bare names were normalized with the reference-site
-            // package above, so their prefix already carries that package.
-            // Keep this here instead of the generic global-CV lookup path:
-            // Exporter performs ordinary lookups while installing imported
-            // symbols and must not retag those slots.
-            int packageSeparator = name.lastIndexOf("::");
-            if (packageSeparator >= 0) {
-                runtimeCode.forwardReferencePackageName = name.substring(0, packageSeparator);
-            } else if (packageName != null && !packageName.isEmpty()) {
+            // A named coderef creates a forward CV whose CvSTASH and source
+            // COP belong to the reference site, rather than the package in
+            // the referenced name. Keep this here instead of the generic
+            // global-CV lookup path: Exporter performs ordinary lookups while
+            // installing imported symbols and must not retag those slots.
+            if (packageName != null && !packageName.isEmpty()) {
                 runtimeCode.forwardReferencePackageName = packageName;
             }
             CallerStack.CallerInfo caller = CallerStack.peek(0);

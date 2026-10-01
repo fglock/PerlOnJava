@@ -681,6 +681,11 @@ public class OperatorParser {
                 // architectural difference (entire file compiled before execution).
                 int currentIndex2 = parser.tokenIndex;
                 String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
+                String typeAlias = resolveTypedPackageConstant(
+                        packageName, parser.ctx.symbolTable.getCurrentPackage());
+                if (typeAlias != null) {
+                    packageName = typeAlias;
+                }
                 LexerToken afterType = peek(parser);
                 boolean followedBySigil = "$".equals(afterType.text) || "@".equals(afterType.text)
                         || "%".equals(afterType.text) || "\\".equals(afterType.text)
@@ -956,6 +961,22 @@ public class OperatorParser {
     }
 
     /** Lexicals cannot declare a package-qualified variable target. */
+    /** Resolve a compile-time constant used as a typed lexical's class name. */
+    private static String resolveTypedPackageConstant(String candidate, String currentPackage) {
+        String constantName = NameNormalizer.normalizeVariableName(candidate, currentPackage);
+        RuntimeScalar constantRef = GlobalVariable.createPseudoConstantCodeRef(constantName);
+        if (constantRef == null || !(constantRef.value instanceof RuntimeCode code)
+                || code.constantValue == null || code.constantValue.elements.size() != 1) {
+            return null;
+        }
+        RuntimeBase value = code.constantValue.elements.getFirst();
+        if (value == null) {
+            return null;
+        }
+        String packageName = value.scalar().toString();
+        return GlobalVariable.isPackageLoaded(packageName) ? packageName : null;
+    }
+
     private static void validateQualifiedDeclarationTarget(Parser parser, String declaration, Node operand) {
         if (!(operand instanceof OperatorNode variable)
                 || !(variable.operand instanceof IdentifierNode identifier)) {
