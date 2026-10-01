@@ -203,3 +203,10 @@ Provide all of the following:
 Do not claim completion from a focused pass while an owned adjacent test is red.
 Preserve earlier accepted commits; add a follow-up commit when review exposes a
 new defect rather than rewriting delivered history.
+
+## Issue reporting and triage
+
+When reporting, classifying, or updating an issue, read the
+[issue triage guide](../../../docs/guides/issue-triage.md) for evidence, labels,
+ownership, related failures, and completion criteria. Its proposed labels and
+planning conventions require rollout; use existing GitHub labels until then.

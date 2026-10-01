@@ -140,3 +140,10 @@ jna-platform = { module = "net.java.dev.jna:jna-platform", version.ref = "jna" }
 - **macOS/Linux**: Full POSIX support required (stat, lstat, kill, waitpid, chmod, chown, umask, utime, passwd/group lookups)
 - **Windows**: Limited support via `kernel32` (`GetCurrentProcessId`), `msvcrt` (`_getpid`, stat)
 - The replacement must handle both platforms, or gracefully degrade on Windows (as JNA currently does)
+
+## Issue reporting and triage
+
+When reporting, classifying, or updating an issue, read the
+[issue triage guide](../../../docs/guides/issue-triage.md) for evidence, labels,
+ownership, related failures, and completion criteria. Its proposed labels and
+planning conventions require rollout; use existing GitHub labels until then.

@@ -55,6 +55,7 @@ Project information:
 Looking to contribute? See:
 
 - **[CONTRIBUTING.md](../CONTRIBUTING.md)** - Contribution guidelines
+- **[Issue Reporting and Triage](guides/issue-triage.md)** - Proposed classification, ownership, and planning workflow
 - **[dev/](../dev/)** - Developer documentation and internal architecture
 - **[Joni Callout Fork](design/joni-callout-fork.md)** - Vendored regex engine design and implementation contract
 
