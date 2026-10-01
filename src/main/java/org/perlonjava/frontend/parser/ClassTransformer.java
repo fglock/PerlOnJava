@@ -320,6 +320,11 @@ public class ClassTransformer {
                 new OperatorNode("@", new IdentifierNode("_", 0), 0), 0);
         body.elements.add(argsAssign);
 
+        Node validateParameters = generateUnknownParameterValidation(className);
+        if (validateParameters != null) {
+            body.elements.add(validateParameters);
+        }
+
         // Step 3: Create $self - either by calling SUPER::new or blessing empty hash
         ListNode mySelfDecl = new ListNode(0);
         OperatorNode mySelf = new OperatorNode("my",
@@ -507,6 +512,40 @@ public class ClassTransformer {
         }
         String fieldName = (String) field.getAnnotation("name");
         return fieldName.startsWith("_") ? fieldName.substring(1) : fieldName;
+    }
+
+    private static Node generateUnknownParameterValidation(String className) {
+        java.util.Set<String> parameterNames = FieldRegistry.getParameterNamesInHierarchy(className);
+
+        Node isKnownParameter = null;
+        for (String parameterName : parameterNames) {
+            OperatorNode parameterForComparison = new OperatorNode("$",
+                    new IdentifierNode("constructorParameter", 0), 0);
+            BinaryOperatorNode matchesName = new BinaryOperatorNode("eq",
+                    parameterForComparison, new StringNode(parameterName, 0), 0);
+            isKnownParameter = isKnownParameter == null
+                    ? matchesName
+                    : new BinaryOperatorNode("||", isKnownParameter, matchesName, 0);
+        }
+        Node isUnknownParameter = isKnownParameter == null
+                ? new NumberNode("1", 0)
+                : new OperatorNode("!", isKnownParameter, 0);
+        OperatorNode errorParameter = new OperatorNode("$",
+                new IdentifierNode("constructorParameter", 0), 0);
+        BinaryOperatorNode errorMessage = new BinaryOperatorNode(".",
+                new StringNode("Unrecognized parameters for \"" + className
+                        + "\" constructor: ", 0), errorParameter, 0);
+        OperatorNode throwError = new OperatorNode("die",
+                new ListNode(List.of(errorMessage), 0), 0);
+        IfNode rejectUnknown = new IfNode("if", isUnknownParameter,
+                new BlockNode(new ArrayList<>(List.of(throwError)), 0), null, 0);
+        For1Node validate = new For1Node(null, true,
+                new OperatorNode("my", new OperatorNode("$",
+                        new IdentifierNode("constructorParameter", 0), 0), 0),
+                new OperatorNode("keys",
+                        new OperatorNode("%", new IdentifierNode("args", 0), 0), 0),
+                new BlockNode(new ArrayList<>(List.of(rejectUnknown)), 0), null, 0);
+        return validate;
     }
 
     /**
