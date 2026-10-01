@@ -15,7 +15,9 @@ priorities and future plans.
 
 - Keep imported `try`/`catch` and declared `dump` calls free of false CORE
   ambiguity warnings, restore filehandle `chdir` and invalid-descriptor errors,
-  and reuse root reachability snapshots during weak-reference cleanup.
+  preserve dynamic package variables and monotonic clocks needed by
+  AnyEvent::Tools, and reuse root reachability snapshots during weak-reference
+  cleanup.
 
 - Support anonymous temporary files for read/write opens with undefined paths,
   report non-numeric process IDs passed to `kill()`, and release each result of
