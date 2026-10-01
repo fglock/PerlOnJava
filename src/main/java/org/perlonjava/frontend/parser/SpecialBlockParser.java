@@ -103,8 +103,13 @@ public class SpecialBlockParser {
                     new RuntimeScalar(parser.ctx.errorUtil.warningLocation(parser.tokenIndex)));
         }
 
-        // ADJUST blocks are only allowed inside class blocks
-        if ("ADJUST".equals(blockName) && !parser.isInClassBlock) {
+        boolean unitClassAdjust = "ADJUST".equals(blockName)
+                && !parser.isInClassBlock
+                && parser.ctx.symbolTable.currentPackageIsClass();
+
+        // ADJUST blocks are also valid after a unit-class declaration, where
+        // the package itself remains in class context without a braced body.
+        if ("ADJUST".equals(blockName) && !parser.isInClassBlock && !unitClassAdjust) {
             throw new PerlCompilerException(parser.tokenIndex,
                     "ADJUST blocks are only allowed inside class blocks", parser.ctx.errorUtil);
         }
@@ -115,7 +120,7 @@ public class SpecialBlockParser {
         // ADJUST blocks have implicit $self, so set isInMethod flag
         boolean wasInMethod = parser.isInMethod;
         int adjustScopeIndex = -1;
-        if ("ADJUST".equals(blockName) && parser.isInClassBlock) {
+        if ("ADJUST".equals(blockName) && (parser.isInClassBlock || unitClassAdjust)) {
             parser.isInMethod = true;
             // Register $self in a scope so the parse-time strict vars check
             // can find it inside ADJUST block bodies.
@@ -173,7 +178,7 @@ public class SpecialBlockParser {
 
         // ADJUST blocks in class context are not executed at parse time
         // They are compiled as anonymous subs and stored for the constructor
-            if ("ADJUST".equals(blockName) && parser.isInClassBlock) {
+        if ("ADJUST".equals(blockName) && (parser.isInClassBlock || unitClassAdjust)) {
 
             // Create an anonymous sub that captures lexical variables
             SubroutineNode adjustSub = new SubroutineNode(
@@ -186,12 +191,25 @@ public class SpecialBlockParser {
             adjustSub.setAnnotation("classAdjustBlock", Boolean.TRUE);
             block.setAnnotation("classAdjustBlock", Boolean.TRUE);
 
-            // Store in parser's ADJUST blocks list
-            parser.classAdjustBlocks.add(adjustSub);
-
-            // Return the anonymous sub node (won't be executed now)
+            if (parser.isInClassBlock) {
+                // A braced class hasn't generated its constructor yet.
+                parser.classAdjustBlocks.add(adjustSub);
                 return adjustSub;
             }
+
+            String className = parser.ctx.symbolTable.getCurrentPackage();
+            List<Node> adjustBlocks = parser.unitClassAdjustBlocks.computeIfAbsent(
+                    className, ignored -> new ArrayList<>());
+            adjustBlocks.add(adjustSub);
+            List<OperatorNode> fields = parser.unitClassFields.computeIfAbsent(
+                    className, ignored -> new ArrayList<>());
+            SubroutineNode constructor = ClassTransformer.generateUnitClassConstructor(
+                    fields, className, adjustBlocks);
+            SubroutineParser.handleNamedSubWithFilter(parser, constructor.name,
+                    constructor.prototype, constructor.attributes,
+                    (BlockNode) constructor.block, true, null);
+            return adjustSub;
+        }
 
         if ("BEGIN".equals(blockName)) {
             RuntimeCode.checkNestedEvalBeginLimit();

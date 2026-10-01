@@ -264,6 +264,8 @@ public class Parser {
     // Fields declared after a unit-class declaration (`class Name;`).  Unlike
     // a braced class, those declarations arrive as subsequent statements.
     public final Map<String, List<OperatorNode>> unitClassFields = new LinkedHashMap<>();
+    /** ADJUST blocks following unit-class declarations, keyed by class name. */
+    public final Map<String, List<Node>> unitClassAdjustBlocks = new LinkedHashMap<>();
     /** Prototypes published by declaration headers while this source is parsed. */
     public final Map<String, String> declaredSubPrototypes = new LinkedHashMap<>();
     // List to store heredoc nodes encountered during parsing.

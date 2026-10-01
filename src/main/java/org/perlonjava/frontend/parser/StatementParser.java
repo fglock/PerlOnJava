@@ -1832,6 +1832,7 @@ public class StatementParser {
         if (isClass) {
             // Create an empty block for the class
             BlockNode emptyBlock = new BlockNode(new ArrayList<>(), parser.tokenIndex);
+            emptyBlock.setAnnotation("unitClassDeclaration", Boolean.TRUE);
             emptyBlock.elements.add(packageNode);
 
             // Transform it to generate constructor

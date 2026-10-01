@@ -283,7 +283,12 @@ public class ClassTransformer {
      */
     /** Build the current synthetic constructor for a unit class. */
     static SubroutineNode generateUnitClassConstructor(List<OperatorNode> fields, String className) {
-        return generateConstructor(fields, className, List.of());
+        return generateUnitClassConstructor(fields, className, List.of());
+    }
+
+    static SubroutineNode generateUnitClassConstructor(
+            List<OperatorNode> fields, String className, List<Node> adjustNodes) {
+        return generateConstructor(fields, className, adjustNodes);
     }
 
     /** Apply the implicit receiver setup to a method declared in a unit class. */

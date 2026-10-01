@@ -3321,7 +3321,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Skip caching when $^P is set, so each eval gets a unique filename
             // Include package name in cache key to ensure source location info is correct per-package
             int featureFlags = ctx.symbolTable.featureFlagsStack.peek();
-            String currentPackage = ctx.symbolTable.getCurrentPackage();
+            String runtimePackage = InterpreterState.currentPackage.get().toString();
+            String currentPackage = ClassRegistry.isClass(runtimePackage)
+                    ? runtimePackage
+                    : ctx.symbolTable.getCurrentPackage();
             String cacheKey = evalString + '\0' + evalTag + '\0' + hasUnicode + '\0' + ctx.isEvalbytes + '\0' + evalbytesUtf8Source + '\0' + byteStringUtf8Source + '\0' + isByteStringSource + '\0' + featureFlags + '\0' + currentPackage;
             Class<?> cachedClass = null;
             if (!isDebugging) {
@@ -3377,6 +3380,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // IMPORTANT: The parseSymbolTable starts with the captured flags so that
             // the eval code is parsed with the correct feature/strict/warning context
             ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
+            parseSymbolTable.setCurrentPackage(currentPackage, ClassRegistry.isClass(currentPackage));
             // BEGIN blocks execute while eval STRING is parsed. Point the
             // special-variable pragma facade at this eval's private scope so
             // assignments to $^H/${^WARNING_BITS} affect the generated body,
@@ -4036,6 +4040,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
                 // Create parser context
                 ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
+                String runtimePackage = InterpreterState.currentPackage.get().toString();
+                String evalCurrentPackage = ClassRegistry.isClass(runtimePackage)
+                        ? runtimePackage
+                        : capturedSymbolTable.getCurrentPackage();
+                parseSymbolTable.setCurrentPackage(
+                        evalCurrentPackage, ClassRegistry.isClass(evalCurrentPackage));
                 String lexicalEvalWarningBits = parseSymbolTable.getWarningBitsString();
                 // Eval STRING inherits the caller's lexical warning bits. The
                 // interpreter does not have JVM call-site instructions to

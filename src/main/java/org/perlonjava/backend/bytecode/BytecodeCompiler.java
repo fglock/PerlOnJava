@@ -1864,7 +1864,7 @@ public class BytecodeCompiler implements Visitor {
             // Check for non-scoped package inside block: { package Foo; ... }
             // The runtime package (used by caller()) must be saved/restored on block exit.
             boolean hasNonScopedPackage = false;
-            if (!hasScopedPackage) {
+            if (!hasScopedPackage && !node.getBooleanAnnotation("unitClassDeclaration")) {
                 for (Node elem : node.elements) {
                     if (elem instanceof OperatorNode opNode
                             && (opNode.operator.equals("package") || opNode.operator.equals("class"))
