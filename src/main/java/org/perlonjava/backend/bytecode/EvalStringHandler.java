@@ -15,6 +15,7 @@ import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.regex.RegexQuoteMeta;
 import org.perlonjava.runtime.regex.RuntimeRegex;
+import org.perlonjava.runtime.debugger.DebugState;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
 import org.perlonjava.runtime.perlmodule.Strict;
@@ -346,6 +347,9 @@ public class EvalStringHandler {
             // different evals don't collide (each eval's token indices start from 0,
             // so sharing a single filename would mix package-at-location data).
             evalFileName = RuntimeCode.getNextEvalFilename(sourceName);
+            if (DebugState.isDebugMode() && sourceName != null && sourceLine > 0) {
+                evalFileName += "[" + sourceName + ":" + sourceLine + "]";
+            }
 
             CompilerOptions opts = new CompilerOptions();
             opts.fileName = evalFileName;

@@ -2958,6 +2958,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return PerlRuntime.current().runtimeCodeState().nextEvalFilename(sourceName);
     }
 
+    private static String getNextEvalFilenameForDebugger(String sourceName) {
+        String filename = getNextEvalFilename(sourceName);
+        if (!DebugState.isDebugMode()) {
+            return filename;
+        }
+        CallerStack.CallerInfo caller = CallerStack.peek(0);
+        if (caller == null || caller.filename() == null || caller.filename().isEmpty()
+                || caller.line() <= 0 || caller.filename().startsWith("(eval ")) {
+            return filename;
+        }
+        return filename + "[" + caller.filename() + ":" + caller.line() + "]";
+    }
+
     private static void warnSignatureArgsInEval(String source, String fileName) {
         if (source == null || !source.contains("@_")) return;
         // JVM-generated subroutine bodies do not always enter through a
@@ -3313,7 +3326,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             boolean isDebugging = debugFlags != 0;
 
             // Always generate a unique filename for each eval to prevent source location collisions
-            String actualFileName = getNextEvalFilename(ctx.compilerOptions.fileName);
+            String actualFileName = getNextEvalFilenameForDebugger(ctx.compilerOptions.fileName);
             evalCompilerOptions.fileName = actualFileName;
             warnSignatureArgsInEval(evalString, actualFileName);
 
@@ -3978,7 +3991,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // but retains the enclosing source in errorUtil. Allocate within
             // that enclosing source so distinct sites share its `(eval N)`
             // sequence without perturbing unrelated source files.
-            evalCompilerOptions.fileName = getNextEvalFilename(ctx.errorUtil.getFileName());
+            evalCompilerOptions.fileName = getNextEvalFilenameForDebugger(ctx.errorUtil.getFileName());
             evalFilename = evalCompilerOptions.fileName;
             warnSignatureArgsInEval(evalString, evalCompilerOptions.fileName);
 
