@@ -1758,6 +1758,7 @@ public class OperatorParser {
             parser.tokenIndex = savedIndex;
 
             if (afterLabel.type == EOF || ListParser.isListTerminator(parser, afterLabel)) {
+                rejectNonAsciiByteSourceLabel(parser, next);
                 TokenUtils.consume(parser);
                 ListNode labels = new ListNode(currentIndex);
                 labels.elements.add(new IdentifierNode(next.text, labelIndex));
@@ -1769,6 +1770,20 @@ public class OperatorParser {
 
         Node operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
         return new OperatorNode(token.text, operand, currentIndex);
+    }
+
+    private static void rejectNonAsciiByteSourceLabel(Parser parser, LexerToken label) {
+        if (!parser.ctx.compilerOptions.isByteStringSource) {
+            return;
+        }
+        for (int i = 0; i < label.text.length();) {
+            int codePoint = label.text.codePointAt(i);
+            if (codePoint > 0x7f) {
+                parser.throwCleanError(String.format(
+                        "Unrecognized character \\x%02X;", codePoint));
+            }
+            i += Character.charCount(codePoint);
+        }
     }
 
     static OperatorNode parseReturn(Parser parser, int currentIndex) {
@@ -1869,6 +1884,7 @@ public class OperatorParser {
             LexerToken afterLabel = peek(parser);
             parser.tokenIndex = labelIndex;
             if (afterLabel.type == EOF || ListParser.isListTerminator(parser, afterLabel)) {
+                rejectNonAsciiByteSourceLabel(parser, target);
                 consume(parser);
                 operand = new ListNode(List.of(new IdentifierNode(target.text, labelIndex)), currentIndex);
             } else {

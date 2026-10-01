@@ -293,7 +293,7 @@ public class EmitBlock {
             return;
         }
         if (node instanceof BlockNode block) {
-            if (expressionContext && block.getBooleanAnnotation("blockIsDoBlock") && !fieldInitializer) out.addAll(block.labels);
+            if (expressionContext && !fieldInitializer) out.addAll(block.labels);
             for (Node child : block.elements) collectConstructEntryLabels(child, out, expressionContext, fieldInitializer);
             return;
         }
@@ -322,8 +322,8 @@ public class EmitBlock {
         }
         if (node instanceof IfNode ifNode) {
             collectConstructEntryLabels(ifNode.condition, out, true, fieldInitializer);
-            collectConstructEntryLabels(ifNode.thenBranch, out, false, fieldInitializer);
-            collectConstructEntryLabels(ifNode.elseBranch, out, false, fieldInitializer);
+            collectConstructEntryLabels(ifNode.thenBranch, out, true, fieldInitializer);
+            collectConstructEntryLabels(ifNode.elseBranch, out, true, fieldInitializer);
         }
     }
 

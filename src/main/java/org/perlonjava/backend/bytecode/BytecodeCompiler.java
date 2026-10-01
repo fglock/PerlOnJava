@@ -86,8 +86,7 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
         if (node instanceof BlockNode block) {
-            if (expressionContext && block.getBooleanAnnotation("blockIsDoBlock")
-                    && !fieldInitializer) {
+            if (expressionContext && !fieldInitializer) {
                 out.addAll(block.labels);
             }
             for (Node child : block.elements) {
@@ -101,8 +100,8 @@ public class BytecodeCompiler implements Visitor {
         }
         if (node instanceof IfNode ifNode) {
             collectConstructEntryLabels(ifNode.condition, out, true, fieldInitializer);
-            collectConstructEntryLabels(ifNode.thenBranch, out, false, fieldInitializer);
-            collectConstructEntryLabels(ifNode.elseBranch, out, false, fieldInitializer);
+            collectConstructEntryLabels(ifNode.thenBranch, out, true, fieldInitializer);
+            collectConstructEntryLabels(ifNode.elseBranch, out, true, fieldInitializer);
             return;
         }
         if (node instanceof OperatorNode op) {
@@ -440,8 +439,8 @@ public class BytecodeCompiler implements Visitor {
             // become a static goto target (op/goto.t GH #23810).
             boolean alwaysFalse = conditional.condition instanceof NumberNode number
                     && number.value.equals("0");
-            if (!alwaysFalse) predeclareGotoLabels(conditional.thenBranch, false, insideLoopBody);
-            predeclareGotoLabels(conditional.elseBranch, false, insideLoopBody);
+            if (!alwaysFalse) predeclareGotoLabels(conditional.thenBranch, true, insideLoopBody);
+            predeclareGotoLabels(conditional.elseBranch, true, insideLoopBody);
             return;
         }
         if (node instanceof OperatorNode operator) { predeclareGotoLabels(operator.operand, true, insideLoopBody); return; }
