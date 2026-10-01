@@ -103,6 +103,13 @@ public class Overload {
             // Default string conversion for non-blessed or non-overloaded objects
             // For REFERENCE type, use the REFERENCE's toStringRef() to get "REF(...)" format
             // For other reference types, use the value's toStringRef()
+            // A blessed qr// stringifies through its SV wrapper, whose PV may
+            // have been changed by $$qr.  Going straight to the RuntimeRegex
+            // reference here would discard the wrapper's scalarized PV and
+            // blessing prefix.
+            if (runtimeScalar.type == RuntimeScalarType.REGEX) {
+                return new RuntimeScalar(runtimeScalar.toString());
+            }
             if (runtimeScalar.type == RuntimeScalarType.REFERENCE) {
                 return new RuntimeScalar(runtimeScalar.toStringRef());
             }

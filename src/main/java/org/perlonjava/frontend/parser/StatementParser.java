@@ -38,7 +38,6 @@ import static org.perlonjava.frontend.parser.SpecialBlockParser.runSpecialBlock;
 import static org.perlonjava.frontend.parser.SpecialBlockParser.setCurrentScope;
 import static org.perlonjava.frontend.parser.StringParser.parseVstring;
 import static org.perlonjava.runtime.operators.VersionHelper.normalizeVersion;
-import static org.perlonjava.runtime.perlmodule.Strict.useStrict;
 import static org.perlonjava.runtime.runtimetypes.WarningFlags.getLastScopeId;
 import static org.perlonjava.runtime.runtimetypes.WarningFlags.clearLastScopeId;
 import static org.perlonjava.runtime.perlmodule.Warnings.useWarnings;
@@ -660,6 +659,11 @@ public class StatementParser {
 
         // Parse the catch block
         TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "catch"
+        if (TokenUtils.peek(parser).text.equals("{")) {
+            var location = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
+            throw new PerlParserException("catch block requires a (VAR) at "
+                    + location.fileName() + " line " + location.lineNumber() + ".\n");
+        }
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
         LexerToken catchToken = TokenUtils.peek(parser);
         if (catchToken.type == LexerTokenType.IDENTIFIER
@@ -697,11 +701,19 @@ public class StatementParser {
 
             // Parse the optional finally block
             Node finallyBlock = null;
+            int warningIndex = index;
             if (TokenUtils.peek(parser).text.equals("finally")) {
+                warningIndex = parser.tokenIndex;
                 TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "finally"
                 TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
                 finallyBlock = ParseBlock.parseBlock(parser);
                 TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+            }
+
+            if (parser.ctx.symbolTable.isWarningCategoryEnabled("experimental::try")) {
+                WarnDie.warn(
+                        new RuntimeScalar("try/catch/finally is experimental"),
+                        new RuntimeScalar(parser.ctx.errorUtil.warningLocation(warningIndex)));
             }
 
             TryNode tryNode = new TryNode(
@@ -718,10 +730,10 @@ public class StatementParser {
             // The generated wrapper is internal syntax for the try expression.
             // Let it accept lvalue contexts so :lvalue subs can return aliases
             // through try { ... } without failing the subroutine lvalue check.
-            return new BinaryOperatorNode("->",
-                    new SubroutineNode(null, null, List.of("lvalue"),
-                            new BlockNode(List.of(tryNode), index),
-                        false, index),
+            SubroutineNode wrapper = new SubroutineNode(null, null, List.of("lvalue"),
+                    new BlockNode(List.of(tryNode), index), false, index);
+            wrapper.setAnnotation("tryExpressionWrapper", true);
+            return new BinaryOperatorNode("->", wrapper,
                 atUnderscoreArgs(parser),
                 index);
         } finally {
@@ -1352,8 +1364,10 @@ public class StatementParser {
                         if (minorVersion >= 12) {
                             // If the specified Perl version is 5.12 or higher,
                             // strictures are enabled lexically.
-                            useStrict(new RuntimeArray(
-                                    new RuntimeScalar("strict")), RuntimeContextType.VOID);
+                            parser.ctx.symbolTable.enableStrictOptionUnlessExplicit(
+                                    org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_REFS
+                                            | org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_SUBS
+                                            | org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_VARS);
                         }
                         if (minorVersion >= 35) {
                             // If the specified Perl version is 5.35.0 or higher,

@@ -131,4 +131,19 @@ is_deeply(
     'caller preserves consecutive eval frames and their distinct warning masks',
 );
 
+my @die_handler_frames;
+local $SIG{__DIE__} = sub {
+    for my $level (1 .. 5) {
+        my @frame = caller($level);
+        last unless @frame;
+        push @die_handler_frames, $frame[3];
+    }
+};
+&{sub { eval 'die' }}();
+is_deeply(
+    \@die_handler_frames,
+    ['(eval)', 'main::__ANON__'],
+    'caller in a die handler does not expose the eval-string implementation frame',
+);
+
 done_testing;

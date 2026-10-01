@@ -1,0 +1,16 @@
+use strict;
+use warnings;
+use Test::More tests => 6;
+use File::Temp qw(tempfile);
+my ($initial, $path) = tempfile();
+close $initial;
+my $opened = open my $out, '>:stdio', $path;
+ok($opened, 'stdio layer is accepted by open');
+ok($opened && print {$out} "buffered\n", 'stdio output accepts a write');
+ok($opened && close($out), 'closing stdio output flushes it');
+$opened = open my $in, '<:stdio', $path;
+ok($opened, 'stdio layer is accepted for input');
+my $line = $opened ? <$in> : undef;
+is($line, "buffered\n", 'stdio output round-trips through a file');
+ok($opened && close($in), 'stdio input closes successfully');
+unlink $path;

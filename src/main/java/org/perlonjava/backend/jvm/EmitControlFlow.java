@@ -120,7 +120,9 @@ public class EmitControlFlow {
         String operator = node.operator;
         
         // Check if we're inside a defer block - control flow out of defer is prohibited
-        if (ctx.javaClassInfo.isInDeferBlock) {
+        if ((ctx.javaClassInfo.isInDeferBlock
+                || org.perlonjava.runtime.runtimetypes.DynamicVariableManager.isExecutingDefer())
+                && !ctx.javaClassInfo.isInEvalString && !ctx.javaClassInfo.isInEvalBlock) {
             throwControlFlowBlockError(ctx, node, operator, "defer");
         }
         
@@ -211,10 +213,15 @@ public class EmitControlFlow {
             } else {
                 ctx.mv.visitInsn(Opcodes.ACONST_NULL);
             }
-            // Push fileName (from CompilerOptions)
-            ctx.mv.visitLdcInsn(ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
-            // Push lineNumber (from errorUtil if available)
-            int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(node.tokenIndex) : 0;
+            // Preserve logical source coordinates, including #line directives,
+            // on the marker because it may be reported after this block has
+            // unwound and its compiler/source map is no longer on the stack.
+            var sourceLocation = ctx.errorUtil != null
+                    ? ctx.errorUtil.getSourceLocationAccurate(node.tokenIndex) : null;
+            String sourceFile = sourceLocation != null ? sourceLocation.fileName()
+                    : (ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
+            ctx.mv.visitLdcInsn(sourceFile);
+            int lineNumber = sourceLocation != null ? sourceLocation.lineNumber() : 0;
             ctx.mv.visitLdcInsn(lineNumber);
             if (switchControlOperator instanceof String spelling) {
                 ctx.mv.visitInsn(Opcodes.ACONST_NULL); // eval scope
@@ -264,20 +271,7 @@ public class EmitControlFlow {
         // Handle return values based on context
         if (loopLabels.context != RuntimeContextType.VOID) {
             if ((operator.equals("next") || operator.equals("last")) && !implicitGivenLast) {
-                // A control transfer has no scalar value, but in list context
-                // it contributes an empty list.  Supplying scalar undef here
-                // corrupts a surrounding list expression after `break` from
-                // a given/when block.
-                if (loopLabels.context == RuntimeContextType.LIST) {
-                    ctx.mv.visitTypeInsn(Opcodes.NEW,
-                            "org/perlonjava/runtime/runtimetypes/RuntimeList");
-                    ctx.mv.visitInsn(Opcodes.DUP);
-                    ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
-                            "org/perlonjava/runtime/runtimetypes/RuntimeList",
-                            "<init>", "()V", false);
-                } else {
-                    EmitOperator.emitUndef(ctx.mv);
-                }
+                emitLoopControlExitValue(ctx, loopLabels);
             }
         }
 
@@ -320,6 +314,23 @@ public class EmitControlFlow {
                 "flush",
                 "()V",
                 false);
+    }
+
+    /** Match the value expected at a value-producing block's next/last label. */
+    static void emitLoopControlExitValue(EmitterContext ctx, LoopLabels loopLabels) {
+        if (loopLabels.context == RuntimeContextType.VOID) {
+            return;
+        }
+        if (loopLabels.context == RuntimeContextType.LIST) {
+            ctx.mv.visitTypeInsn(Opcodes.NEW,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeList");
+            ctx.mv.visitInsn(Opcodes.DUP);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                    "<init>", "()V", false);
+        } else {
+            EmitOperator.emitUndef(ctx.mv);
+        }
     }
 
     private static void emitMortalFlushAboveMark(EmitterContext ctx) {
@@ -433,10 +444,12 @@ public class EmitControlFlow {
             ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
             ctx.mv.visitInsn(Opcodes.DUP);
             ctx.mv.visitVarInsn(Opcodes.ALOAD, tempSlot);
-            // Push fileName
-            ctx.mv.visitLdcInsn(ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
-            // Push lineNumber
-            int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(node.tokenIndex) : 0;
+            var sourceLocation = ctx.errorUtil != null
+                    ? ctx.errorUtil.getSourceLocationAccurate(node.tokenIndex) : null;
+            String sourceFile = sourceLocation != null ? sourceLocation.fileName()
+                    : (ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
+            ctx.mv.visitLdcInsn(sourceFile);
+            int lineNumber = sourceLocation != null ? sourceLocation.lineNumber() : 0;
             ctx.mv.visitLdcInsn(lineNumber);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
                     "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
@@ -469,6 +482,20 @@ public class EmitControlFlow {
                 "materializeReturnedIoAliases",
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
                 false);
+
+        JavaClassInfo.TryFinallyContext tryFinally =
+                ctx.javaClassInfo.activeTryFinallyContext;
+        if (tryFinally != null) {
+            // A return in a try/finally expression belongs to the containing
+            // Perl subroutine, not the synthetic expression wrapper. Save it,
+            // run finally, then unwind through RuntimeCode's non-local-return
+            // boundary.
+            ctx.mv.visitVarInsn(Opcodes.ASTORE, tryFinally.returnValueSlot);
+            ctx.mv.visitInsn(Opcodes.ICONST_1);
+            ctx.mv.visitVarInsn(Opcodes.ISTORE, tryFinally.returnPendingSlot);
+            ctx.mv.visitJumpInsn(Opcodes.GOTO, tryFinally.finallyStart);
+            return;
+        }
 
         // Defer refCount decrements for blessed my-scalars in scope.
         // Explicit 'return' jumps to returnLabel, bypassing per-scope
@@ -589,8 +616,11 @@ public class EmitControlFlow {
         ctx.mv.visitInsn(Opcodes.DUP);
         ctx.mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
         ctx.mv.visitVarInsn(Opcodes.ALOAD, argsSlot);
-        ctx.mv.visitLdcInsn(ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
-        int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(tokenIndex) : 0;
+        var sourceLocation = ctx.errorUtil != null
+                ? ctx.errorUtil.getSourceLocationAccurate(tokenIndex) : null;
+        ctx.mv.visitLdcInsn(sourceLocation != null ? sourceLocation.fileName()
+                : (ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)"));
+        int lineNumber = sourceLocation != null ? sourceLocation.lineNumber() : 0;
         ctx.mv.visitLdcInsn(lineNumber);
         // Push evalScope (null if not in eval)
         if (evalScope != null) {
@@ -684,8 +714,11 @@ public class EmitControlFlow {
         ctx.mv.visitInsn(Opcodes.DUP);
         ctx.mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
         ctx.mv.visitVarInsn(Opcodes.ALOAD, argsSlot);
-        ctx.mv.visitLdcInsn(ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
-        int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(tokenIndex) : 0;
+        var sourceLocation = ctx.errorUtil != null
+                ? ctx.errorUtil.getSourceLocationAccurate(tokenIndex) : null;
+        ctx.mv.visitLdcInsn(sourceLocation != null ? sourceLocation.fileName()
+                : (ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)"));
+        int lineNumber = sourceLocation != null ? sourceLocation.lineNumber() : 0;
         ctx.mv.visitLdcInsn(lineNumber);
         // Push evalScope (null if not in eval)
         if (evalScope != null) {
@@ -726,11 +759,6 @@ public class EmitControlFlow {
     static void handleGotoLabel(EmitterVisitor emitterVisitor, OperatorNode node) {
         EmitterContext ctx = emitterVisitor.ctx;
 
-        // Check if we're inside a defer block - goto out of defer is prohibited
-        if (ctx.javaClassInfo.isInDeferBlock) {
-            throwControlFlowBlockError(ctx, node, "goto", "defer");
-        }
-        
         // Check if we're inside a finally block - goto out of finally is prohibited
         if (ctx.javaClassInfo.finallyBlockDepth > 0) {
             throwControlFlowBlockError(ctx, node, "goto", "finally");
@@ -747,6 +775,14 @@ public class EmitControlFlow {
             // tail-call path below instead of treating it as a goto label.
             if (arg instanceof IdentifierNode identifier && identifier.name.equals("__SUB__")) {
                 arg = new OperatorNode("__SUB__", null, identifier.tokenIndex);
+            }
+
+            // A goto in defer may branch within its own closure, but may not
+            // tail-call or compute a target that can escape that closure.
+            if ((ctx.javaClassInfo.isInDeferBlock
+                    || org.perlonjava.runtime.runtimetypes.DynamicVariableManager.isExecutingDefer())
+                    && !(arg instanceof IdentifierNode)) {
+                throwControlFlowBlockError(ctx, node, "goto", "defer");
             }
 
             // Check if it's a static label (IdentifierNode)
@@ -864,6 +900,13 @@ public class EmitControlFlow {
             }
         }
 
+        if ((ctx.javaClassInfo.isInDeferBlock
+                || org.perlonjava.runtime.runtimetypes.DynamicVariableManager.isExecutingDefer())
+                && (labelName == null
+                        || ctx.javaClassInfo.findGotoLabelsByName(labelName) == null)) {
+            throwControlFlowBlockError(ctx, node, "goto", "defer");
+        }
+
         // Ensure label is provided for static goto
         if (labelName == null) {
             // Bare `goto` without arguments - emit runtime die like Perl 5
@@ -924,6 +967,13 @@ public class EmitControlFlow {
 
         // For static label, check if it's local
         GotoLabels targetLabel = ctx.javaClassInfo.findGotoLabelsByName(labelName);
+        if (!ctx.javaClassInfo.isInDeferBlock
+                && ctx.javaClassInfo.gotoLabelsInsideDefer.contains(labelName)) {
+            var location = ctx.errorUtil.getSourceLocationAccurate(node.tokenIndex);
+            emitRuntimeControlFlowError(ctx, "Can't \"goto\" into a \"defer\" block at "
+                    + location.fileName() + " line " + location.lineNumber() + ".");
+            return;
+        }
         if (targetLabel == null) {
             if (ctx.javaClassInfo.isSmartmatchPredicate) {
                 throw PerlCompilerException.withSourceLocation(node.tokenIndex,
@@ -971,8 +1021,11 @@ public class EmitControlFlow {
             }
             // Label not in current JVM scope - use RuntimeControlFlowList to signal
             // goto to the caller, same mechanism as dynamic goto
-            String fileName = ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)";
-            int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(node.tokenIndex) : 0;
+            var sourceLocation = ctx.errorUtil != null
+                    ? ctx.errorUtil.getSourceLocationAccurate(node.tokenIndex) : null;
+            String fileName = sourceLocation != null ? sourceLocation.fileName()
+                    : (ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
+            int lineNumber = sourceLocation != null ? sourceLocation.lineNumber() : 0;
 
             ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
             ctx.mv.visitInsn(Opcodes.DUP);
@@ -1006,5 +1059,16 @@ public class EmitControlFlow {
         throw new PerlCompilerException("Can't \"" + operator + "\" out of a \""
                 + blockType + "\" block at " + location.fileName() + " line "
                 + location.lineNumber() + ".\n");
+    }
+
+    private static void emitRuntimeControlFlowError(EmitterContext ctx, String message) {
+        ctx.mv.visitTypeInsn(Opcodes.NEW,
+                "org/perlonjava/runtime/runtimetypes/PerlCompilerException");
+        ctx.mv.visitInsn(Opcodes.DUP);
+        ctx.mv.visitLdcInsn(message);
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                "org/perlonjava/runtime/runtimetypes/PerlCompilerException", "<init>",
+                "(Ljava/lang/String;)V", false);
+        ctx.mv.visitInsn(Opcodes.ATHROW);
     }
 }

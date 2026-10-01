@@ -65,6 +65,10 @@ public final class RuntimeRegexTemplate {
         parts = materializeTiedParts(flattenJoinedParts(parts));
         if (parts.elements.size() == 1) {
             RuntimeScalar only = parts.elements.getFirst().scalar();
+            RuntimeScalar firstClass = unwrapFirstClassRegex(only);
+            if (firstClass != null) {
+                return firstClass;
+            }
             // A lone interpolation must retain its runtime type so qr
             // overloading and an already-compiled regex remain observable.
             // Only a parser-created callback needs a new template skeleton.
@@ -92,6 +96,10 @@ public final class RuntimeRegexTemplate {
         boolean byteBackedPattern = true;
         for (RuntimeBase part : parts.elements) {
             RuntimeScalar scalar = part.scalar();
+            RuntimeScalar regexPart = unwrapFirstClassRegex(scalar);
+            if (regexPart != null) {
+                scalar = regexPart;
+            }
             tainted |= scalar.isTainted();
             byteBackedPattern &= isByteCompatiblePatternPart(scalar);
             if (scalar.value instanceof RuntimeRegexCallback callback) {
@@ -278,10 +286,31 @@ public final class RuntimeRegexTemplate {
     }
 
     public static boolean hasExecutableValue(RuntimeScalar scalar) {
-        return scalar != null && (scalar.value instanceof JoinedParts
-                || scalar.value instanceof RuntimeRegexTemplate
-                || scalar.value instanceof RuntimeRegex regex
-                && !regex.executableCallbacks.isEmpty());
+        if (scalar == null) return false;
+        RuntimeScalar candidate = unwrapFirstClassRegex(scalar);
+        if (candidate == null) candidate = scalar;
+        return candidate.value instanceof JoinedParts
+                || candidate.value instanceof RuntimeRegexTemplate
+                || candidate.value instanceof RuntimeRegex regex
+                && !regex.executableCallbacks.isEmpty();
+    }
+
+    /** Return the regex value represented directly or through a reference. */
+    static RuntimeScalar unwrapFirstClassRegex(RuntimeScalar scalar) {
+        RuntimeScalar candidate = scalar;
+        for (int depth = 0; depth < 8
+                && candidate.type == RuntimeScalarType.REFERENCE
+                && candidate.value instanceof RuntimeScalar referent; depth++) {
+            candidate = referent;
+        }
+        RuntimeRegex scalarizedRegex = candidate.firstClassRegexValue();
+        if (scalarizedRegex != null) return new RuntimeScalar(scalarizedRegex);
+        if (candidate.type == RuntimeScalarType.REGEX) return candidate;
+        if (candidate.type == RuntimeScalarType.REFERENCE
+                && candidate.value instanceof RuntimeRegex regex) {
+            return new RuntimeScalar(regex);
+        }
+        return null;
     }
 
     private static RuntimeList flattenJoinedParts(RuntimeList input) {

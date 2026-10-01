@@ -1193,6 +1193,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     result.elements.add(value);
                 }
             }
+        } else if (callContext == RuntimeContextType.SCALAR
+                && (retVal instanceof RuntimeArray || retVal instanceof RuntimeHash)) {
+            // An array/hash dereference is itself context-sensitive: in scalar
+            // context Perl returns the aggregate's scalar value, not its final
+            // flattened element.  Preserve that distinction before getList()
+            // turns the aggregate into its list-context elements.
+            result = retVal.scalar().getList();
         } else {
             result = retVal.getList();
         }
@@ -1354,6 +1361,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         try {
             if (result == null) {
                 return null;
+            }
+            if (effectiveContext == RuntimeContextType.VOID) {
+                return result;
             }
             if (result instanceof RuntimeControlFlowList) {
                 return result;
@@ -2848,6 +2858,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         pushSyntheticCallerFrame(packageName, filename, line, "(eval)", "virtual-eval");
     }
 
+    private static boolean pushEvalCompilationCallerFrame() {
+        ArrayList<ArrayList<String>> callers =
+                ExceptionFormatter.formatExceptionDetailed(new Throwable()).frames();
+        if (callers.isEmpty()) return false;
+        ArrayList<String> site = callers.getFirst();
+        pushSyntheticCallerFrame(site.get(0), site.get(1),
+                Integer.parseInt(site.get(2)), "(eval)", "eval-compile");
+        return true;
+    }
+
     public static void pushSyntheticCallerFrame(String packageName, String filename, int line, String subName) {
         pushSyntheticCallerFrame(packageName, filename, line, subName, "synthetic-own-sub");
     }
@@ -3537,6 +3557,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     int level = DynamicVariableManager.getLocalLevel();
                     DynamicVariableManager.pushLocalVariable(sig);
 
+                    // Compilation failed before an eval CV could contribute
+                    // its Perl caller level. Retain that boundary while the
+                    // __DIE__ hook runs, rather than losing caller(1).
+                    boolean pushedCompileFrame = pushEvalCompilationCallerFrame();
                     try {
                         RuntimeArray args = new RuntimeArray();
                         RuntimeArray.push(args, new RuntimeScalar(err));
@@ -3556,6 +3580,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         }
                         // If handler throws other exceptions, ignore them (keep original error in $@)
                     } finally {
+                        if (pushedCompileFrame) popSyntheticCallerFrame();
                         // Restore $SIG{__DIE__}
                         DynamicVariableManager.popToLocalLevel(level);
                     }
@@ -4240,14 +4265,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
                     incrementEvalDepth();
                     boolean pushedEvalFrame = InterpreterState.pushEvalFrameForCurrentInterpreter();
-                    boolean pushedSyntheticEvalFrame = false;
-                    if (!pushedEvalFrame) {
-                        pushSyntheticEvalCallerFrame(
-                                InterpreterState.currentPackage.get().toString(),
-                                evalCompilerOptions.fileName,
-                                1);
-                        pushedSyntheticEvalFrame = true;
-                    }
+                    // JVM callers also use the interpreter eval compiler, but
+                    // have no active interpreter frame before compilation.
+                    // Supply exactly the missing Perl boundary at its call
+                    // site, not a temporary compiler-source `(eval N)` frame.
+                    boolean pushedSyntheticEvalFrame = !pushedEvalFrame
+                            && pushEvalCompilationCallerFrame();
+                    var runtimeState = PerlRuntime.current().executionState();
+                    boolean wasInsideDieHandler = runtimeState.insideDieHandler;
+                    runtimeState.insideDieHandler = true;
                     try {
                         RuntimeArray handlerArgs = new RuntimeArray();
                         RuntimeArray.push(handlerArgs, new RuntimeScalar(err));
@@ -4267,6 +4293,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         }
                         // If handler throws other exceptions, ignore them (keep original error in $@)
                     } finally {
+                        runtimeState.insideDieHandler = wasInsideDieHandler;
                         if (pushedEvalFrame) {
                             InterpreterState.pop();
                         }
@@ -4877,7 +4904,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (e.targetCode != null && e.targetCode != code) {
                 throw e;
             }
-            if (code.isMapGrepBlock) {
+            if (code.isMapGrepBlock || code.isTryExpressionWrapper) {
                 throw e;
             }
             RuntimeList result = e.returnValue != null
@@ -5242,11 +5269,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     stackTrace.add(syntheticOwnSubInsertAt(stackTrace, syntheticFrame), syntheticFrame);
                 } else if (isVirtualEvalFrame(syntheticFrame)) {
                     stackTrace.add(virtualEvalInsertAt(stackTrace), syntheticFrame);
+                } else if (syntheticFrame.size() > 4
+                        && "eval-compile".equals(syntheticFrame.get(4))) {
+                    // JVM frame zero is the hook's own source position. The
+                    // missing compile boundary belongs immediately after it.
+                    stackTrace.add(Math.min(1, stackTrace.size()), syntheticFrame);
                 } else {
                     framesToInsert.add(syntheticFrame);
                 }
             }
             stackTrace.addAll(insertAt, framesToInsert);
+        }
+        if (PerlRuntime.current().executionState().insideDieHandler) {
+            remapEvalStringFramesToCallSites(stackTrace);
         }
         java.util.ArrayList<String> javaClassNames = extractJavaClassNames(t);
         int stackTraceSize = stackTrace.size();
@@ -5400,7 +5435,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         && activeCode.lexicalSubDisplayName) {
                     subName = callerSubNameForCode(activeCode);
                 }
-                if (virtualEvalFrame && !interpreterVirtualEvalFrame && activeCode != null) {
+                if (virtualEvalFrame && !interpreterVirtualEvalFrame && activeCode != null
+                        && !PerlRuntime.current().executionState().insideDieHandler) {
                     // A synthetic eval frame can occupy the formatted slot for
                     // a still-active named subroutine. At that same logical
                     // depth the active-code stack is authoritative; only keep
@@ -5651,23 +5687,56 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         } else if (frame >= stackTraceSize) {
             int trackedOriginalFrame = Math.max(0, originalFrame - countSyntheticOwnSubFramesBefore(stackTrace, stackTrace.size()));
+            int activeCodeFrame = activeCodeFrameForCaller(
+                    result.firstFrameFromInterpreter() ? originalFrame : trackedOriginalFrame);
             RuntimeCode activeCode = hasExplicitExpr
-                    ? activeCodeAtCallerFrame(activeCodeFrameForCaller(
-                            result.firstFrameFromInterpreter() ? originalFrame : trackedOriginalFrame))
+                    ? activeCodeAtCallerFrame(activeCodeFrame)
                     : null;
+            if (activeCode != null
+                    && activeCode instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
+                    && interpreted.sourceName != null
+                    && interpreted.sourceName.startsWith("(eval ")
+                    && PerlRuntime.current().executionState().insideDieHandler) {
+                // For eval STRING, the first active interpreter code at this
+                // caller depth is the temporary eval implementation itself.
+                // That CV has no Perl caller level; advance to the enclosing
+                // interpreted CV which the remapped stack trace omitted.
+                activeCode = activeCodeAtCallerFrame(activeCodeFrame + 1);
+            }
             String activeSubName = activeCode != null
                     ? applyAnonNameOverride(callerSubNameForCode(activeCode))
                     : null;
+            boolean missingInterpreterDieFrame = activeCode != null
+                    && activeCode instanceof org.perlonjava.backend.bytecode.InterpretedCode
+                    && frame == stackTraceSize + 1
+                    && PerlRuntime.current().executionState().insideDieHandler;
+            if (missingInterpreterDieFrame
+                    && (activeSubName == null || activeSubName.isEmpty())) {
+                activeSubName = normalizeCallerPackage(activeCode.packageName) + "::__ANON__";
+            }
             if (activeCode != null && !calledFromDB
-                    && hasExplicitlyRenamedActiveCode()
+                    && (hasExplicitlyRenamedActiveCode() || missingInterpreterDieFrame)
                     && activeSubName != null && !activeSubName.isEmpty()) {
                 String pkg = normalizeCallerPackage(activeCode.packageName);
                 if (ctx == RuntimeContextType.SCALAR) {
                     res.add(new RuntimeScalar(pkg));
                 } else {
+                    String activeFile = activeCode.cvStartFile != null
+                            ? activeCode.cvStartFile : "";
+                    int activeLine = activeCode.cvStartLine;
+                    if (missingInterpreterDieFrame && stackTraceSize > 0) {
+                        ArrayList<String> evalFrame = stackTrace.get(stackTraceSize - 1);
+                        if (evalFrame.size() > 3 && "(eval)".equals(evalFrame.get(3))) {
+                            // The omitted anonymous CV is called at the same
+                            // source site as this remapped eval-string frame;
+                            // its own start metadata may be synthetic here.
+                            activeFile = evalFrame.get(1);
+                            activeLine = Integer.parseInt(evalFrame.get(2));
+                        }
+                    }
                     res.add(new RuntimeScalar(pkg));
-                    res.add(new RuntimeScalar(activeCode.cvStartFile != null ? activeCode.cvStartFile : ""));
-                    res.add(new RuntimeScalar(activeCode.cvStartLine));
+                    res.add(new RuntimeScalar(activeFile));
+                    res.add(new RuntimeScalar(activeLine));
                     res.add(new RuntimeScalar(activeSubName));
                     Boolean hasArgsFromStack = getHasArgsAt(trackedOriginalFrame);
                     res.add(hasArgsFromStack != null && hasArgsFromStack
@@ -5894,7 +5963,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 continue;
             }
             previous = active;
-            if (active.isRegexCallbackPseudoBlock && !active.isQuotedRegexCallback) {
+            if ((active.isRegexCallbackPseudoBlock && !active.isQuotedRegexCallback)
+                    || active.isTryExpressionWrapper) {
                 physical++;
                 continue;
             }
@@ -5977,6 +6047,65 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return frame.size() > 4
                 && ("virtual-eval".equals(frame.get(4))
                 || "interpreter-virtual-eval".equals(frame.get(4)));
+    }
+
+    private static boolean isEvalStringImplementationFrame(ArrayList<String> frame) {
+        return frame.size() > 1
+                && frame.get(1) != null && frame.get(1).startsWith("(eval ");
+    }
+
+    /**
+     * A frame from an eval STRING names the temporary source ((eval N)), but
+     * caller() inside __DIE__ reports the eval expression at its Perl call
+     * site. Reuse the following Perl frame's location while retaining one
+     * explicit (eval) level ahead of that caller.
+     */
+    private static void remapEvalStringFramesToCallSites(
+            ArrayList<ArrayList<String>> stackTrace) {
+        for (int i = 0; i < stackTrace.size(); i++) {
+            ArrayList<String> frame = stackTrace.get(i);
+            if (!isEvalStringImplementationFrame(frame)) {
+                continue;
+            }
+            int callSiteIndex = i + 1;
+            while (callSiteIndex < stackTrace.size()
+                    && isEvalStringImplementationFrame(stackTrace.get(callSiteIndex))) {
+                callSiteIndex++;
+            }
+            if (callSiteIndex >= stackTrace.size()) {
+                stackTrace.subList(i, stackTrace.size()).clear();
+                break;
+            }
+            ArrayList<String> callSite = stackTrace.get(callSiteIndex);
+            if (callSite.size() < 3) {
+                stackTrace.subList(i, callSiteIndex).clear();
+                i--;
+                continue;
+            }
+            frame.set(0, callSite.get(0));
+            frame.set(1, callSite.get(1));
+            frame.set(2, callSite.get(2));
+            frame.set(3, "(eval)");
+            // Keep the virtual-eval tag. caller() uses it to preserve the
+            // explicit `(eval)` subroutine name when this implementation frame
+            // has been remapped to its Perl call site, especially on the
+            // interpreter backend where active-code frames otherwise supply
+            // the enclosing named subroutine's name.
+            if (callSiteIndex > i + 1) {
+                stackTrace.subList(i + 1, callSiteIndex).clear();
+            }
+        }
+        for (int i = 0; i + 1 < stackTrace.size(); i++) {
+            ArrayList<String> frame = stackTrace.get(i);
+            ArrayList<String> next = stackTrace.get(i + 1);
+            if (frame.size() > 3 && next.size() > 3
+                    && "(eval)".equals(frame.get(3)) && "(eval)".equals(next.get(3))
+                    && Objects.equals(frame.get(1), next.get(1))
+                    && Objects.equals(frame.get(2), next.get(2))) {
+                stackTrace.remove(i + 1);
+                i--;
+            }
+        }
     }
 
     /** Place an eval outside the contiguous interpreted calls executing inside it. */
@@ -6407,8 +6536,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
                         throw sortTailCallError();
                     }
-                    throw new PerlCompilerException("Can't \"goto\" out of a pseudo block at "
-                            + flow.marker.fileName + " line " + flow.marker.lineNumber + ".\n");
+                    String message = flow.getControlFlowType() == ControlFlowType.GOTO
+                            || flow.getControlFlowType() == ControlFlowType.TAILCALL
+                            ? "Can't \"goto\" out of a pseudo block at "
+                                    + flow.marker.fileName + " line " + flow.marker.lineNumber
+                            : flow.marker.buildErrorMessage();
+                    throw new PerlCompilerException(message + ".\n");
                 }
                 // Handle tail calls (goto &func).
                 // JVM-generated bytecode has its own trampoline; this handles calls from Java code.
@@ -6430,11 +6563,29 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // not re-entered (no inTailCallTrampoline bump needed).
                 } else {
                     if (result instanceof RuntimeControlFlowList flow) {
+                        if (flow.getControlFlowType() == ControlFlowType.GOTO
+                                && DynamicVariableManager.isExecutingDefer()) {
+                            throw new PerlCompilerException("Can't \"goto\" out of a \"defer\" block at "
+                                    + flow.marker.fileName + " line " + flow.marker.lineNumber + ".\n");
+                        }
                         if (code.classAdjustBlock) {
                             flow.markClassAdjustOrigin();
                         }
                         handleEscapingLoopControl(result, code.generatedClassConstructor,
                                 code.classAdjustBlock);
+                        ControlFlowType flowType = flow.getControlFlowType();
+                        if (DynamicVariableManager.isExecutingDefer()
+                                && (flowType == ControlFlowType.LAST
+                                || flowType == ControlFlowType.NEXT
+                                || flowType == ControlFlowType.REDO)) {
+                            int line = flow.marker.fileName != null
+                                    && flow.marker.fileName.startsWith("(eval ")
+                                    ? 1 : flow.marker.lineNumber;
+                            throw new PerlCompilerException("Can't \""
+                                    + flowType.name().toLowerCase()
+                                    + "\" out of a \"defer\" block at "
+                                    + flow.marker.fileName + " line " + line + ".\n");
+                        }
                         MyVarCleanupStack.unwindTo(cleanupMark);
                         MortalList.flush();
                     }
@@ -6475,7 +6626,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     throw e;
                 }
                 // Non-local return from map/grep block
-                if (code.isMapGrepBlock) {
+                if (code.isMapGrepBlock || code.isTryExpressionWrapper) {
                     throw e;  // Propagate through nested map/grep blocks
                 }
                 // Consume at normal subroutine and eval-block boundaries.
@@ -6619,9 +6770,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return;
         }
         String operation = flow.getControlFlowType().name().toLowerCase();
-        WarnDie.warn(new RuntimeScalar("Exiting subroutine via " + operation),
+        String source = flow.marker.fileName;
+        String scope = flow.marker.evalScope != null
+                || (source != null && source.startsWith("(eval ")) ? "eval" : "subroutine";
+        WarnDie.warn(new RuntimeScalar("Exiting " + scope + " via " + operation),
                 new RuntimeScalar(" at " + flow.marker.fileName + " line "
                         + flow.marker.lineNumber));
+    }
+
+    /** Error assigned to {@code $@} when loop control from eval cannot reach a loop. */
+    public static String evalLoopControlError(ControlFlowMarker marker) {
+        if (!DynamicVariableManager.isExecutingDefer()) {
+            return marker.buildErrorMessage();
+        }
+        int line = marker.fileName != null && marker.fileName.startsWith("(eval ")
+                ? 1 : marker.lineNumber;
+        return "Can't \"" + marker.type.name().toLowerCase()
+                + "\" out of a \"defer\" block at " + marker.fileName + " line " + line + ".\n";
     }
 
     public static RuntimeScalar markGeneratedClassConstructor(RuntimeScalar codeRef) {
@@ -6679,6 +6844,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         try {
             RuntimeList result = apply(runtimeScalar, a, callContext);
             result = resolveTailCalls(result, callContext);
+            if (DynamicVariableManager.isExecutingDefer()
+                    && result instanceof RuntimeControlFlowList flow
+                    && (flow.getControlFlowType() == ControlFlowType.LAST
+                    || flow.getControlFlowType() == ControlFlowType.NEXT
+                    || flow.getControlFlowType() == ControlFlowType.REDO)) {
+                int line = flow.marker.fileName != null
+                        && flow.marker.fileName.startsWith("(eval ")
+                        ? 1 : flow.marker.lineNumber;
+                throw new PerlCompilerException("Can't \""
+                        + flow.getControlFlowType().name().toLowerCase()
+                        + "\" out of a \"defer\" block at "
+                        + flow.marker.fileName + " line " + line + ".\n");
+            }
             // Perl clears $@ on successful eval (even if nested evals previously set it).
             GlobalVariable.setGlobalVariable("main::@", "");
             return result;
@@ -7005,7 +7183,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         throw e;
                     }
                     // Non-local return from map/grep block
-                    if (code.isMapGrepBlock) {
+                    if (code.isMapGrepBlock || code.isTryExpressionWrapper) {
                         throw e;  // Propagate through nested map/grep blocks
                     }
                     // Consume at normal subroutine and eval-block boundaries.
@@ -7361,7 +7539,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         throw e;
                     }
                     // Non-local return from map/grep block
-                    if (code.isMapGrepBlock) {
+                    if (code.isMapGrepBlock || code.isTryExpressionWrapper) {
                         throw e;  // Propagate through nested map/grep blocks
                     }
                     // Consume at normal subroutine and eval-block boundaries.
@@ -7780,6 +7958,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static void materializeSpecialVarsInResult(RuntimeList result, int callContext) {
+        if (callContext == RuntimeContextType.VOID) {
+            return;
+        }
         boolean preserveAggregateLvalues = callContext == RuntimeContextType.LVALUE_LIST;
         List<RuntimeBase> elems = result.elements;
         for (int i = 0; i < elems.size(); i++) {
@@ -8483,15 +8664,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public RuntimeArray keys() {
-        throw new PerlCompilerException("Type of arg 1 to keys must be hash or array");
+        throw PerlCompilerException.atCurrentExecutionLocation(
+                "Experimental keys on scalar is now forbidden at line 1.\n"
+                + "Type of arg 1 to keys must be hash or array (not scalar) at line 1,");
     }
 
     public RuntimeArray values() {
-        throw new PerlCompilerException("Type of arg 1 to values must be hash or array");
+        throw PerlCompilerException.atCurrentExecutionLocation(
+                "Experimental values on scalar is now forbidden at line 1.\n"
+                + "Type of arg 1 to values must be hash or array (not scalar) at line 1,");
     }
 
     public RuntimeList each(int ctx) {
-        throw new PerlCompilerException("Type of arg 1 to each must be hash or array");
+        throw PerlCompilerException.atCurrentExecutionLocation(
+                "Experimental each on scalar is now forbidden at line 1.\n"
+                + "Type of arg 1 to each must be hash or array (not scalar) at line 1,");
     }
 
     public RuntimeScalar chop() {

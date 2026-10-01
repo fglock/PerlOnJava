@@ -93,19 +93,24 @@ public class Strict extends PerlModuleBase {
         ScopedSymbolTable symbolTable = getCurrentScope();
         if (args.size() == 1) {
             // Enable all strict options if no specific category is provided
-            symbolTable.enableStrictOption(HINT_STRICT_REFS | HINT_STRICT_SUBS | HINT_STRICT_VARS);
+            int options = HINT_STRICT_REFS | HINT_STRICT_SUBS | HINT_STRICT_VARS;
+            symbolTable.enableStrictOption(options);
+            symbolTable.markStrictOptionExplicit(options);
         } else {
             for (int i = 1; i < args.size(); i++) {
                 String category = args.get(i).toString();
                 switch (category) {
                     case "refs":
                         symbolTable.enableStrictOption(HINT_STRICT_REFS);
+                        symbolTable.markStrictOptionExplicit(HINT_STRICT_REFS);
                         break;
                     case "subs":
                         symbolTable.enableStrictOption(HINT_STRICT_SUBS);
+                        symbolTable.markStrictOptionExplicit(HINT_STRICT_SUBS);
                         break;
                     case "vars":
                         symbolTable.enableStrictOption(HINT_STRICT_VARS);
+                        symbolTable.markStrictOptionExplicit(HINT_STRICT_VARS);
                         break;
                     default:
                         throw new IllegalArgumentException("Unknown strict category: " + category);
@@ -127,19 +132,24 @@ public class Strict extends PerlModuleBase {
         ScopedSymbolTable symbolTable = getCurrentScope();
         if (args.size() == 1) {
             // Disable all strict options if no specific category is provided
-            symbolTable.disableStrictOption(HINT_STRICT_REFS | HINT_STRICT_SUBS | HINT_STRICT_VARS);
+            int options = HINT_STRICT_REFS | HINT_STRICT_SUBS | HINT_STRICT_VARS;
+            symbolTable.disableStrictOption(options);
+            symbolTable.markStrictOptionExplicit(options);
         } else {
             for (int i = 1; i < args.size(); i++) {
                 String category = args.get(i).toString();
                 switch (category) {
                     case "refs":
                         symbolTable.disableStrictOption(HINT_STRICT_REFS);
+                        symbolTable.markStrictOptionExplicit(HINT_STRICT_REFS);
                         break;
                     case "subs":
                         symbolTable.disableStrictOption(HINT_STRICT_SUBS);
+                        symbolTable.markStrictOptionExplicit(HINT_STRICT_SUBS);
                         break;
                     case "vars":
                         symbolTable.disableStrictOption(HINT_STRICT_VARS);
+                        symbolTable.markStrictOptionExplicit(HINT_STRICT_VARS);
                         break;
                     default:
                         throw new IllegalArgumentException("Unknown strict category: " + category);

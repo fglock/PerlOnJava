@@ -493,16 +493,23 @@ public class Dereference {
                     // Special case: string literal - use get(String) directly
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
                     emitterVisitor.ctx.mv.visitLdcInsn(((StringNode) nodeZero).value);
+                    boolean contextualDelete = hashOperation.equals("delete");
+                    if (contextualDelete) {
+                        emitterVisitor.pushCallContext();
+                    }
                     String interpolationHashName = (String) node.getAnnotation("stringInterpolationHashName");
                     boolean interpolationGet = interpolationHashName != null && hashOperation.equals("get");
                     if (interpolationGet) {
                         emitterVisitor.ctx.mv.visitLdcInsn(interpolationHashName);
                     }
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeHash",
-                            interpolationGet ? "getForStringInterpolation" : hashOperation,
+                            interpolationGet ? "getForStringInterpolation"
+                                    : contextualDelete ? "deleteInContext" : hashOperation,
                             interpolationGet
                                     ? "(Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
-                                    : "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                                    : contextualDelete
+                                            ? "(Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                                            : "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                 } else if (nodeRight.elements.size() == 1) {
                     // Single element but not a string literal
                     Node elem = nodeRight.elements.getFirst();
@@ -517,16 +524,23 @@ public class Dereference {
 
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, keySlot);
+                    boolean contextualDelete = hashOperation.equals("delete");
+                    if (contextualDelete) {
+                        emitterVisitor.pushCallContext();
+                    }
                     String interpolationHashName = (String) node.getAnnotation("stringInterpolationHashName");
                     boolean interpolationGet = interpolationHashName != null && hashOperation.equals("get");
                     if (interpolationGet) {
                         emitterVisitor.ctx.mv.visitLdcInsn(interpolationHashName);
                     }
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeHash",
-                            interpolationGet ? "getForStringInterpolation" : hashOperation,
+                            interpolationGet ? "getForStringInterpolation"
+                                    : contextualDelete ? "deleteInContext" : hashOperation,
                             interpolationGet
                                     ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
-                                    : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                                    : contextualDelete
+                                            ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                                            : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
 
                     if (pooledKey) {
                         emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
@@ -611,25 +625,35 @@ public class Dereference {
                         // Use strict version (throws error on symbolic references)
                         String methodName = switch (hashOperation) {
                             case "get" -> "hashDerefGet";
-                            case "delete" -> "hashDerefDelete";
+                            case "delete" -> "hashDerefDeleteInContext";
                             case "exists" -> "hashDerefExists";
                             default ->
                                     throw new PerlCompilerException(node.tokenIndex, "Not implemented: hash operation: " + hashOperation, emitterVisitor.ctx.errorUtil);
                         };
+                        if (hashOperation.equals("delete")) {
+                            emitterVisitor.pushCallContext();
+                        }
                         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                                methodName, "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                                methodName, hashOperation.equals("delete")
+                                        ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                                        : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                     } else {
                         // Use non-strict version (allows symbolic references)
                         String methodName = switch (hashOperation) {
                             case "get" -> "hashDerefGetNonStrict";
-                            case "delete" -> "hashDerefDeleteNonStrict";
+                            case "delete" -> "hashDerefDeleteInContextNonStrict";
                             case "exists" -> "hashDerefExistsNonStrict";
                             default ->
                                     throw new PerlCompilerException(node.tokenIndex, "Not implemented: hash operation: " + hashOperation, emitterVisitor.ctx.errorUtil);
                         };
                         emitterVisitor.pushCurrentPackage();
+                        if (hashOperation.equals("delete")) {
+                            emitterVisitor.pushCallContext();
+                        }
                         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                                methodName, "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                                methodName, hashOperation.equals("delete")
+                                        ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                                        : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                     }
                 } else {
                     // Multiple elements - this is a hash slice, but that's not commonly used with ${}
@@ -644,25 +668,35 @@ public class Dereference {
                         // Use strict version (throws error on symbolic references)
                         String methodName = switch (hashOperation) {
                             case "get" -> "hashDerefGet";
-                            case "delete" -> "hashDerefDelete";
+                            case "delete" -> "hashDerefDeleteInContext";
                             case "exists" -> "hashDerefExists";
                             default ->
                                     throw new PerlCompilerException(node.tokenIndex, "Not implemented: hash operation: " + hashOperation, emitterVisitor.ctx.errorUtil);
                         };
+                        if (hashOperation.equals("delete")) {
+                            emitterVisitor.pushCallContext();
+                        }
                         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                                methodName, "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                                methodName, hashOperation.equals("delete")
+                                        ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                                        : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                     } else {
                         // Use non-strict version (allows symbolic references)
                         String methodName = switch (hashOperation) {
                             case "get" -> "hashDerefGetNonStrict";
-                            case "delete" -> "hashDerefDeleteNonStrict";
+                            case "delete" -> "hashDerefDeleteInContextNonStrict";
                             case "exists" -> "hashDerefExistsNonStrict";
                             default ->
                                     throw new PerlCompilerException(node.tokenIndex, "Not implemented: hash operation: " + hashOperation, emitterVisitor.ctx.errorUtil);
                         };
                         emitterVisitor.pushCurrentPackage();
+                        if (hashOperation.equals("delete")) {
+                            emitterVisitor.pushCallContext();
+                        }
                         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                                methodName, "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                                methodName, hashOperation.equals("delete")
+                                        ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                                        : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                     }
                 }
 
@@ -715,9 +749,15 @@ public class Dereference {
 
                 emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
                 emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, keyListSlot);
+                if (hashOperation.equals("delete")) {
+                    emitterVisitor.pushCallContext();
+                }
 
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeHash",
-                        hashOperation + "Slice", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;", false);
+                        hashOperation.equals("delete") ? "deleteSliceInContext" : hashOperation + "Slice",
+                        hashOperation.equals("delete")
+                                ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;"
+                                : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;", false);
 
                 if (pooledKeyList) {
                     emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
@@ -784,13 +824,18 @@ public class Dereference {
 
                 emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
                 emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, keyListSlot);
+                if (hashOperation.equals("delete")) {
+                    emitterVisitor.pushCallContext();
+                }
 
                 // Call the appropriate method based on operation
-                String methodName = hashOperation.equals("delete") ? "deleteKeyValueSlice"
+                String methodName = hashOperation.equals("delete") ? "deleteKeyValueSliceInContext"
                         : Boolean.TRUE.equals(node.getAnnotation("foreachSource"))
                                 ? "getSlice" : "getKeyValueSlice";
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeHash",
-                        methodName, "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;", false);
+                        methodName, hashOperation.equals("delete")
+                                ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;"
+                                : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;", false);
 
                 if (pooledKeyList) {
                     emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
@@ -1435,20 +1480,25 @@ public class Dereference {
             String methodName = switch (hashOperation) {
                 case "get" -> "hashDerefGet";
                 case "getForLocal" -> "hashDerefGetForLocal";
-                case "delete" -> "hashDerefDelete";
+                case "delete" -> "hashDerefDeleteInContext";
                 case "deleteLocal" -> "hashDerefDeleteLocal";
                 case "exists" -> "hashDerefExists";
                 default ->
                         throw new PerlCompilerException(node.tokenIndex, "Not implemented: hash operation: " + hashOperation, emitterVisitor.ctx.errorUtil);
             };
+            if (hashOperation.equals("delete")) {
+                emitterVisitor.pushCallContext();
+            }
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                    methodName, "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                    methodName, hashOperation.equals("delete")
+                            ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                            : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
         } else {
             // Use non-strict version (allows symbolic references)
             String methodName = switch (hashOperation) {
                 case "get" -> "hashDerefGetNonStrict";
                 case "getForLocal" -> "hashDerefGetForLocalNonStrict";
-                case "delete" -> "hashDerefDeleteNonStrict";
+                case "delete" -> "hashDerefDeleteInContextNonStrict";
                 case "deleteLocal" -> "hashDerefDeleteLocalNonStrict";
                 case "exists" -> "hashDerefExistsNonStrict";
                 default ->
@@ -1456,8 +1506,13 @@ public class Dereference {
             };
             // Push the current package name for symbolic reference resolution
             emitterVisitor.pushCurrentPackage();
+            if (hashOperation.equals("delete")) {
+                emitterVisitor.pushCallContext();
+            }
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                    methodName, "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                    methodName, hashOperation.equals("delete")
+                            ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                            : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
         }
 
         if (pooledKey) {

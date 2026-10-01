@@ -665,11 +665,28 @@ public class OpcodeHandlerExtended {
     }
 
     /** Execute print while retaining Perl's success/failure result. */
-    public static int executePrintResult(int[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executePrintResult(int[] bytecode, int pc, RuntimeBase[] registers,
+                                         InterpretedCode code, int opcodePc) {
         int rd = bytecode[pc++];
         int contentReg = bytecode[pc++];
         int filehandleReg = bytecode[pc++];
-        registers[rd] = print(registers[contentReg], registers[filehandleReg]);
+        RuntimeBase content = registers[contentReg];
+        RuntimeList list;
+        if (content instanceof RuntimeList runtimeList) {
+            list = runtimeList;
+        } else if (content instanceof RuntimeArray runtimeArray) {
+            list = new RuntimeList();
+            for (RuntimeScalar element : runtimeArray) list.add(element);
+        } else if (content instanceof RuntimeScalar scalar) {
+            list = new RuntimeList();
+            list.add(scalar);
+        } else {
+            list = new RuntimeList();
+        }
+        RuntimeBase fhBase = registers[filehandleReg];
+        RuntimeScalar fh = (fhBase instanceof RuntimeScalar) ? (RuntimeScalar) fhBase : fhBase.scalar();
+        var location = InlineOpcodeHandler.sourceLocation(code, opcodePc);
+        registers[rd] = IOOperator.print(list, fh, location.fileName(), location.lineNumber());
         return pc;
     }
 
@@ -861,9 +878,22 @@ public class OpcodeHandlerExtended {
                 element.vivifyLvalue();
                 last = element;
             }
+            rejectReadOnlyIncrementTarget(last);
             return last;
         }
-        return (RuntimeScalar) operand;
+        RuntimeScalar scalar = (RuntimeScalar) operand;
+        rejectReadOnlyIncrementTarget(scalar);
+        return scalar;
+    }
+
+    private static void rejectReadOnlyIncrementTarget(RuntimeScalar scalar) {
+        // ReadOnly literal proxies report their underlying scalar type, so the
+        // type tag alone is insufficient to distinguish them from writable
+        // scalars. Do this before the interpreter's copy-on-write fast path.
+        if (scalar instanceof RuntimeScalarReadOnly
+                || scalar.type == RuntimeScalarType.READONLY_SCALAR) {
+            throw new PerlCompilerException("Modification of a read-only value attempted");
+        }
     }
 
     /**

@@ -254,7 +254,13 @@ public class EmitSubroutine {
         // loop's iterator/control state has been initialized.
         if (ctx.javaClassInfo != null) {
             newJavaClassInfo.gotoLabelsInsideLoop.addAll(ctx.javaClassInfo.gotoLabelsInsideLoop);
+            newJavaClassInfo.gotoLabelsInsideDefer.addAll(ctx.javaClassInfo.gotoLabelsInsideDefer);
         }
+        // A subroutine body is emitted into a separate JavaClassInfo from the
+        // containing file/block. Collect its defer destinations here so a
+        // goto compiled before the defer registration can still diagnose an
+        // attempted entry rather than degrading to a missing-label error.
+        EmitBlock.collectDeferLabels(node.block, newJavaClassInfo.gotoLabelsInsideDefer);
         if (node.useTryCatch) {
             // The eval body is compiled into a fresh method before its own
             // visitor has emitted control flow.  Establish its protected

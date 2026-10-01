@@ -154,6 +154,16 @@ public class InterpreterState {
         return true;
     }
 
+    /** True when the active interpreter stack already exposes an eval caller frame. */
+    public static boolean hasActiveVirtualEvalFrame() {
+        for (InterpreterFrame frame : frameStack()) {
+            if (frame.virtualEvalFrame()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Pop the current interpreter frame from the stack.
      * Called at exit from BytecodeInterpreter.execute() (in finally block).

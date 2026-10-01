@@ -1191,9 +1191,11 @@ public class StringParser {
             // For single quotes, only remove \ from pairs of \\
             searchList = searchList.replace("\\\\", "\\");
             searchNode = new StringNode(searchList, rawStr.index);
+        } else if (searchList.contains("\\-")) {
+            // Preserve escaped dashes until RuntimeTransliterate expands the
+            // list; decoding one here would make it a range operator.
+            searchNode = new StringNode(searchList, rawStr.index);
         } else {
-            // For other delimiters, process double-quote escape sequences
-            // but without variable interpolation
             ParsedString searchParsed = new ParsedString(
                     rawStr.index,
                     rawStr.next,
@@ -1202,16 +1204,14 @@ public class StringParser {
                     rawStr.endDelim,
                     ' ', ' '
             );
-            // Transliteration lists use double-quoted escape rules but do not
-            // interpolate variables.  Preserving every escape here lets an
-            // invalid \\o reach range compilation instead of reporting Perl's
-            // braced-octal diagnostic at the source escape.
             searchNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, searchParsed, true, false, false);
         }
 
         // Same logic for replacement list
         if (rawStr.secondBufferStartDelim == '\'') {
             replacementList = replacementList.replace("\\\\", "\\");
+            replacementNode = new StringNode(replacementList, rawStr.index);
+        } else if (replacementList.contains("\\-")) {
             replacementNode = new StringNode(replacementList, rawStr.index);
         } else {
             ParsedString replaceParsed = new ParsedString(

@@ -195,7 +195,29 @@ public class RuntimeIO extends RuntimeScalar {
     public static RuntimeIO getLastWrittenHandle() { return PerlRuntime.current().ioLastWrittenHandle; }
     public static void setLastWrittenHandle(RuntimeIO io) { PerlRuntime.current().ioLastWrittenHandle = io; }
     public static RuntimeIO getSelectedHandle() { return PerlRuntime.current().ioSelectedHandle; }
-    public static void setSelectedHandle(RuntimeIO io) { PerlRuntime.current().ioSelectedHandle = io; }
+    public static RuntimeScalar getSelectedHandleValue() {
+        PerlRuntime runtime = PerlRuntime.current();
+        return runtime.ioSelectedHandleValue == null
+                ? new RuntimeScalar(runtime.ioSelectedHandle)
+                : new RuntimeScalar(runtime.ioSelectedHandleValue);
+    }
+    public static void setSelectedHandle(RuntimeIO io) {
+        PerlRuntime runtime = PerlRuntime.current();
+        runtime.ioSelectedHandle = io;
+        if (io == null) {
+            runtime.ioSelectedHandleValue = new RuntimeScalar();
+        } else if (io == runtime.ioStdout || io == runtime.ioStderr || io == runtime.ioStdin) {
+            runtime.ioSelectedHandleValue = new RuntimeScalar(io == runtime.ioStdout
+                    ? "main::STDOUT" : io == runtime.ioStderr ? "main::STDERR" : "main::STDIN");
+        } else {
+            RuntimeGlob owner = io.getOwnerGlob();
+            if (owner == null && io.globName != null) owner = GlobalVariable.getExistingGlobalIO(io.globName);
+            runtime.ioSelectedHandleValue = owner != null ? owner.createReference() : new RuntimeScalar(io);
+        }
+    }
+    public static void setSelectedHandleValue(RuntimeScalar value) {
+        PerlRuntime.current().ioSelectedHandleValue = new RuntimeScalar(value);
+    }
 
     private static Map<IOHandle, Boolean> openHandles() { return PerlRuntime.current().ioOpenHandles; }
 
@@ -438,6 +460,8 @@ public class RuntimeIO extends RuntimeScalar {
      * Incremented for each line read from this handle.
      */
     public int currentLineNumber = 0;
+    /** Fixed-length record counter used in PerlIO warning context. */
+    public int currentChunkNumber = 0;
     /**
      * Tracks whether slurp-mode readline has already produced this handle's
      * one record.  This cannot be inferred from {@link #currentLineNumber}:
@@ -533,6 +557,7 @@ public class RuntimeIO extends RuntimeScalar {
         }
 
         this.currentLineNumber = other.currentLineNumber;
+        this.currentChunkNumber = other.currentChunkNumber;
         this.slurpReadAttempted = other.slurpReadAttempted;
         this.ioHandle = other.ioHandle;
         this.directoryIO = other.directoryIO;
@@ -1016,7 +1041,8 @@ public class RuntimeIO extends RuntimeScalar {
             return false;
         }
 
-        return true;
+        close();
+        return false;
     }
 
     /** Apply lexical {@code use open} hints to sysopen, otherwise stay raw. */
@@ -1795,6 +1821,7 @@ public class RuntimeIO extends RuntimeScalar {
         // This ensures $. becomes 0 and error messages don't include
         // stale filehandle context after close.
         currentLineNumber = 0;
+        currentChunkNumber = 0;
         if (getLastReadlineHandle() == this) {
             setLastReadlineHandle(null);
         }
@@ -1866,6 +1893,15 @@ public class RuntimeIO extends RuntimeScalar {
      * @return RuntimeScalar indicating success/failure or bytes written
      */
     public RuntimeScalar write(String data) {
+        return write(data, true);
+    }
+
+    /** CLI diagnostics are host output, not a Perl print operation. */
+    public RuntimeScalar writeDiagnostic(String data) {
+        return write(data, false);
+    }
+
+    private RuntimeScalar write(String data, boolean perlPrint) {
         needFlush = true;
         // Only flush lastAccessedHandle if it's a different handle AND doesn't share the same ioHandle
         // (duplicated handles share the same ioHandle, so flushing would be redundant and could cause deadlocks)
@@ -1889,7 +1925,7 @@ public class RuntimeIO extends RuntimeScalar {
                 }
             }
             if (hasWide) {
-                WarnDie.warnWithCategory(
+                if (perlPrint) WarnDie.warnWithCategoryByDefault(
                         new RuntimeScalar("Wide character in print"),
                         new RuntimeScalar(""),
                         "utf8");

@@ -1000,6 +1000,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return The value associated with the deleted key, or an empty RuntimeScalar if the key did not exist.
      */
     public RuntimeScalar delete(RuntimeScalar key) {
+        return deleteInContext(key, RuntimeContextType.LIST);
+    }
+
+    public RuntimeScalar deleteInContext(RuntimeScalar key, int callContext) {
         if (isEnvironmentHash) key = new RuntimeScalar(normalizeEnvironmentKey(key.toString()));
         return switch (type) {
             case PLAIN_HASH -> {
@@ -1008,8 +1012,17 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 if (byteKeys != null) byteKeys.remove(k);
                 if (value != null) {
                     if (value.type == RuntimeScalarType.TIED_SCALAR) {
+                        if (callContext == RuntimeContextType.VOID) {
+                            RuntimeScalar.scopeExitCleanup(value);
+                            yield new RuntimeScalar();
+                        }
+                        // Deleting a scalar-tied hash element returns its fetched
+                        // value, not the tied SV itself. Fetch before releasing the
+                        // slot's magic so delete has the same get-magic semantics as
+                        // Perl (including when this value crosses a sub boundary).
+                        RuntimeScalar fetchedValue = new RuntimeScalar(value.tiedFetch());
                         RuntimeScalar.scopeExitCleanup(value);
-                        yield new RuntimeScalar();
+                        yield fetchedValue;
                     }
                     // Schedule deferred refCount decrement — fires at next safe point
                     // (setLarge or RuntimeCode.apply). This prevents premature DESTROY
@@ -1025,7 +1038,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             case AUTOVIVIFY_HASH -> {
                 AutovivificationHash.vivify(this);
-                yield delete(key);
+                yield deleteInContext(key, callContext);
             }
             case TIED_HASH -> TieHash.tiedDelete(this, key);
             case READONLY_HASH -> throw new PerlCompilerException("Modification of a read-only value attempted");
@@ -1034,14 +1047,23 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     public RuntimeScalar delete(String key) {
+        return deleteInContext(key, RuntimeContextType.LIST);
+    }
+
+    public RuntimeScalar deleteInContext(String key, int callContext) {
         return switch (type) {
             case PLAIN_HASH -> {
                 var value = elements.remove(key);
                 if (byteKeys != null) byteKeys.remove(key);
                 if (value != null) {
                     if (value.type == RuntimeScalarType.TIED_SCALAR) {
+                        if (callContext == RuntimeContextType.VOID) {
+                            RuntimeScalar.scopeExitCleanup(value);
+                            yield new RuntimeScalar();
+                        }
+                        RuntimeScalar fetchedValue = new RuntimeScalar(value.tiedFetch());
                         RuntimeScalar.scopeExitCleanup(value);
-                        yield new RuntimeScalar();
+                        yield fetchedValue;
                     }
                     // Schedule deferred refCount decrement (see delete(RuntimeScalar) above)
                     MortalList.deferDecrementIfTracked(value);
@@ -1052,7 +1074,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             case AUTOVIVIFY_HASH -> {
                 AutovivificationHash.vivify(this);
-                yield delete(key);
+                yield deleteInContext(key, callContext);
             }
             case TIED_HASH -> TieHash.tiedDelete(this, new RuntimeScalar(key));
             case READONLY_HASH -> throw new PerlCompilerException("Modification of a read-only value attempted");
@@ -1351,10 +1373,14 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeList containing the values associated with the deleted keys.
      */
     public RuntimeList deleteSlice(RuntimeList value) {
+        return deleteSliceInContext(value, RuntimeContextType.LIST);
+    }
+
+    public RuntimeList deleteSliceInContext(RuntimeList value, int callContext) {
         RuntimeList result = new RuntimeList();
         List<RuntimeBase> outElements = result.elements;
         for (RuntimeScalar runtimeScalar : value) {
-            outElements.add(this.delete(runtimeScalar));
+            outElements.add(this.deleteInContext(runtimeScalar, callContext));
         }
         return result;
     }
@@ -1366,11 +1392,15 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeList containing alternating keys and values of deleted elements.
      */
     public RuntimeList deleteKeyValueSlice(RuntimeList value) {
+        return deleteKeyValueSliceInContext(value, RuntimeContextType.LIST);
+    }
+
+    public RuntimeList deleteKeyValueSliceInContext(RuntimeList value, int callContext) {
         RuntimeList result = new RuntimeList();
         List<RuntimeBase> outElements = result.elements;
         for (RuntimeScalar keyScalar : value) {
             outElements.add(keyScalar);                    // Add the key
-            outElements.add(this.delete(keyScalar));       // Add the deleted value
+            outElements.add(this.deleteInContext(keyScalar, callContext)); // Add the deleted value
         }
         return result;
     }

@@ -356,29 +356,17 @@ public class CompileOperator {
         flagsNode.accept(bc);
         int flagsReg = bc.lastResultReg;
         int regexReg = bc.allocateRegister();
-        if (needsCallsiteCache) {
-            int callsiteId = bc.allocateCallsiteId();
-            bc.emit(Opcodes.QUOTE_REGEX_O);
-            bc.emitReg(regexReg);
-            bc.emitReg(patternReg);
-            bc.emitReg(flagsReg);
-            bc.emitReg(callsiteId);
-            bc.emit(unicodeStringsImplicitUFlag(bc));
-            bc.emit(regexWarningState(node));
-            bc.emit(regexWarningBitsIndex(bc, node));
-            bc.emit(0);
-            bc.emit(namedCharacterExpansionIndex(bc, node, args));
-        } else {
-            bc.emit(Opcodes.QUOTE_REGEX);
-            bc.emitReg(regexReg);
-            bc.emitReg(patternReg);
-            bc.emitReg(flagsReg);
-            bc.emit(unicodeStringsImplicitUFlag(bc));
-            bc.emit(regexWarningState(node));
-            bc.emit(regexWarningBitsIndex(bc, node));
-            bc.emit(0);
-            bc.emit(namedCharacterExpansionIndex(bc, node, args));
-        }
+        int callsiteId = bc.allocateCallsiteId();
+        bc.emit(Opcodes.QUOTE_REGEX_O);
+        bc.emitReg(regexReg);
+        bc.emitReg(patternReg);
+        bc.emitReg(flagsReg);
+        bc.emitReg(needsCallsiteCache ? callsiteId : -callsiteId);
+        bc.emit(unicodeStringsImplicitUFlag(bc));
+        bc.emit(regexWarningState(node));
+        bc.emit(regexWarningBitsIndex(bc, node));
+        bc.emit(0);
+        bc.emit(namedCharacterExpansionIndex(bc, node, args));
         int stringReg;
         if (args.elements.size() > 2) {
             Node target = args.elements.get(2);
@@ -1352,7 +1340,8 @@ public class CompileOperator {
                         }
                     }
                 }
-                boolean needsCallsiteCache = false;
+                boolean needsCallsiteCache = RegexLiteralAnalyzer.constantString(
+                        operand.elements.get(0)) != null;
                 Node flagsNode = operand.elements.get(1);
                 if (flagsNode instanceof StringNode) {
                     String flags = ((StringNode) flagsNode).value;
@@ -1363,31 +1352,19 @@ public class CompileOperator {
                 flagsNode.accept(bytecodeCompiler);
                 int flagsReg = bytecodeCompiler.lastResultReg;
                 int rd = bytecodeCompiler.allocateOutputRegister();
-                if (needsCallsiteCache) {
-                    int callsiteId = bytecodeCompiler.allocateCallsiteId();
-                    bytecodeCompiler.emit(Opcodes.QUOTE_REGEX_O);
-                    bytecodeCompiler.emitReg(rd);
-                    bytecodeCompiler.emitReg(patternReg);
-                    bytecodeCompiler.emitReg(flagsReg);
-                    bytecodeCompiler.emitReg(callsiteId);
-                    bytecodeCompiler.emit(unicodeStringsImplicitUFlag(bytecodeCompiler));
-                    bytecodeCompiler.emit(regexWarningState(node));
-                    bytecodeCompiler.emit(regexWarningBitsIndex(bytecodeCompiler, node));
-                    bytecodeCompiler.emit(node.getBooleanAnnotation("syntacticQuoteRegex") ? 2 : 1);
-                    bytecodeCompiler.emit(namedCharacterExpansionIndex(
-                            bytecodeCompiler, node, operand));
-                } else {
-                    bytecodeCompiler.emit(Opcodes.QUOTE_REGEX);
-                    bytecodeCompiler.emitReg(rd);
-                    bytecodeCompiler.emitReg(patternReg);
-                    bytecodeCompiler.emitReg(flagsReg);
-                    bytecodeCompiler.emit(unicodeStringsImplicitUFlag(bytecodeCompiler));
-                    bytecodeCompiler.emit(regexWarningState(node));
-                    bytecodeCompiler.emit(regexWarningBitsIndex(bytecodeCompiler, node));
-                    bytecodeCompiler.emit(node.getBooleanAnnotation("syntacticQuoteRegex") ? 2 : 1);
-                    bytecodeCompiler.emit(namedCharacterExpansionIndex(
-                            bytecodeCompiler, node, operand));
-                }
+                int callsiteId = bytecodeCompiler.allocateCallsiteId();
+                bytecodeCompiler.emit(Opcodes.QUOTE_REGEX_O);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(patternReg);
+                bytecodeCompiler.emitReg(flagsReg);
+                bytecodeCompiler.emitReg(needsCallsiteCache
+                        ? callsiteId : -callsiteId);
+                bytecodeCompiler.emit(unicodeStringsImplicitUFlag(bytecodeCompiler));
+                bytecodeCompiler.emit(regexWarningState(node));
+                bytecodeCompiler.emit(regexWarningBitsIndex(bytecodeCompiler, node));
+                bytecodeCompiler.emit(node.getBooleanAnnotation("syntacticQuoteRegex") ? 2 : 1);
+                bytecodeCompiler.emit(namedCharacterExpansionIndex(
+                        bytecodeCompiler, node, operand));
                 bytecodeCompiler.lastResultReg = rd;
             }
             case "++", "--", "++postfix", "--postfix" -> visitIncrDecr(bytecodeCompiler, node, op);
@@ -1438,6 +1415,12 @@ public class CompileOperator {
 
                 if (bytecodeCompiler.shouldReturnFromInlineEvalBlock()) {
                     bytecodeCompiler.emitInlineEvalReturn(exprReg);
+                    break;
+                }
+
+                if (bytecodeCompiler.hasTryFinallyReturnTarget()) {
+                    bytecodeCompiler.emitTryFinallyReturn(exprReg);
+                    bytecodeCompiler.lastResultReg = -1;
                     break;
                 }
 
@@ -2091,9 +2074,6 @@ public class CompileOperator {
     }
 
     private static void visitGoto(BytecodeCompiler bc, OperatorNode node) {
-        // Check if we're inside a defer block - goto out of defer is prohibited
-        bc.checkNotInDeferBlock(node.getIndex(), "goto");
-        
         String labelStr = null;
         if (node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
             Node arg = labelNode.elements.getFirst();
@@ -2103,6 +2083,12 @@ public class CompileOperator {
             // tail-call path below instead of treating it as a goto label.
             if (arg instanceof IdentifierNode identifier && identifier.name.equals("__SUB__")) {
                 arg = new OperatorNode("__SUB__", null, identifier.tokenIndex);
+            }
+
+            // Static gotos within a defer closure are legal. Computed labels
+            // and tail calls can escape that closure and remain prohibited.
+            if (bc.isInDeferBlock() && !(arg instanceof IdentifierNode)) {
+                bc.throwCleanCompilerException("Can't \"goto\" out of a \"defer\" block", node.getIndex());
             }
             
             // Check if this is goto &NAME or goto &{expr} - a subroutine call form
@@ -2238,7 +2224,7 @@ public class CompileOperator {
                 // Check if EXPR could be a CODE reference (goto &sub handled above)
                 bc.compileNode(arg, -1, RuntimeContextType.SCALAR);
                 int exprReg = bc.lastResultReg;
-                bc.emit(Opcodes.GOTO_DYNAMIC);
+                bc.emitWithToken(Opcodes.GOTO_DYNAMIC, node.getIndex());
                 bc.emit(exprReg);
                 String evalScope = bc.getEvalScopeType();
                 bc.emit(evalScope == null ? -1 : bc.addToStringPool(evalScope));
@@ -2253,7 +2239,7 @@ public class CompileOperator {
             bc.emit(Opcodes.LOAD_STRING);
             bc.emitReg(rd);
             bc.emit(emptyIdx);
-            bc.emit(Opcodes.GOTO_DYNAMIC);
+            bc.emitWithToken(Opcodes.GOTO_DYNAMIC, node.getIndex());
             bc.emit(rd);
             bc.emit(-1);
             bc.lastResultReg = -1;
@@ -2266,6 +2252,9 @@ public class CompileOperator {
         BytecodeCompiler.GotoLabelTarget staticTarget =
                 labelStr.startsWith("\u0000invalid-goto-into-construct:")
                         ? null : bc.resolveStaticGotoTarget(labelStr, node.getIndex());
+        if (bc.isInDeferBlock() && staticTarget == null) {
+            bc.throwCleanCompilerException("Can't \"goto\" out of a \"defer\" block", node.getIndex());
+        }
         boolean sourceFollowsTargetBlockStart = staticTarget != null
                 && staticTarget.owner != null
                 && staticTarget.owner.getIndex() <= node.getIndex();
@@ -2318,7 +2307,7 @@ public class CompileOperator {
         bc.emit(Opcodes.LOAD_STRING);
         bc.emitReg(rd);
         bc.emit(labelIdx);
-        bc.emit(Opcodes.GOTO_DYNAMIC);
+        bc.emitWithToken(Opcodes.GOTO_DYNAMIC, node.getIndex());
         bc.emit(rd);
         bc.emit(evalScope == null ? -1 : bc.addToStringPool(evalScope));
         bc.lastResultReg = -1;

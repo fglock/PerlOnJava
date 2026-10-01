@@ -72,12 +72,14 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
     }
 
     /** Magic methods cannot transfer control into their caller's lexical scope. */
-    protected static void rejectEscapedControlFlow(RuntimeList result) {
+    public static void rejectEscapedControlFlow(RuntimeList result) {
         if (result instanceof RuntimeControlFlowList flow) {
             // The marker already records the source location inside the magic
             // method. Preserve it verbatim instead of having the exception
             // constructor append the caller's location a second time.
-            throw new PerlCompilerException(flow.marker.buildErrorMessage() + ".\n");
+            String message = flow.marker.buildErrorMessage();
+            if (!message.endsWith(".")) message += ".";
+            throw new PerlDieException(new RuntimeScalar(message + "\n"));
         }
     }
 

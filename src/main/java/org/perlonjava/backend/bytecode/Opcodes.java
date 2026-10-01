@@ -357,7 +357,8 @@ public class Opcodes {
     public static final short HASH_EXISTS = 52;
 
     /**
-     * Hash delete: rd = hash_reg.delete(key_reg)
+     * Hash delete: rd = hash_reg.delete(key_reg, callContext)
+     * The callContext operand is -1 when resolved from runtime context register r2.
      */
     public static final short HASH_DELETE = 53;
 
@@ -770,7 +771,8 @@ public class Opcodes {
      */
     public static final short HASH_SLICE_SET = 119;
     /**
-     * Hash slice delete: rd = hash.deleteSlice(keys_list)
+     * Hash slice delete: rd = hash.deleteSlice(keys_list, callContext)
+     * The callContext operand is -1 when resolved from runtime context register r2.
      */
     public static final short HASH_SLICE_DELETE = 120;
     /**
@@ -2034,7 +2036,8 @@ public class Opcodes {
 
     /**
      * Hash key-value slice delete: rd = hash.deleteKeyValueSlice(keys_list)
-     * Format: HASH_KV_SLICE_DELETE rd hash_reg keys_reg
+     * Format: HASH_KV_SLICE_DELETE rd hash_reg keys_reg callContext
+     * callContext is -1 when resolved from runtime context register r2.
      * Effect: rd = hash_reg.deleteKeyValueSlice(keys_reg)
      * Returns a RuntimeList with alternating keys and values.
      */

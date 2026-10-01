@@ -7,6 +7,7 @@ import org.perlonjava.frontend.parser.NumberParser;
 import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.regex.RuntimeRegexTemplate;
+import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.math.BigInteger;
@@ -258,6 +259,7 @@ public class StringOperators {
     }
 
     private static RuntimeScalar lcUnpropagated(RuntimeScalar runtimeScalar) {
+        runtimeScalar = stringifyForStringContext(runtimeScalar);
         // Regex captures such as $1 are live special-variable scalars.  Inspect
         // their current value rather than the placeholder object's own type so
         // byte captures remain byte strings through lc.
@@ -316,6 +318,7 @@ public class StringOperators {
     }
 
     private static RuntimeScalar lcfirstUnpropagated(RuntimeScalar runtimeScalar) {
+        runtimeScalar = stringifyForStringContext(runtimeScalar);
         if (runtimeScalar instanceof ScalarSpecialVariable) {
             runtimeScalar = new RuntimeScalar(runtimeScalar);
         }
@@ -360,6 +363,7 @@ public class StringOperators {
     }
 
     private static RuntimeScalar ucUnpropagated(RuntimeScalar runtimeScalar) {
+        runtimeScalar = stringifyForStringContext(runtimeScalar);
         if (runtimeScalar instanceof ScalarSpecialVariable) {
             runtimeScalar = new RuntimeScalar(runtimeScalar);
         }
@@ -396,6 +400,7 @@ public class StringOperators {
     }
 
     private static RuntimeScalar ucfirstUnpropagated(RuntimeScalar runtimeScalar) {
+        runtimeScalar = stringifyForStringContext(runtimeScalar);
         if (runtimeScalar instanceof ScalarSpecialVariable) {
             runtimeScalar = new RuntimeScalar(runtimeScalar);
         }
@@ -660,6 +665,7 @@ public class StringOperators {
     }
 
     private static RuntimeScalar propagateTaint(RuntimeScalar result, RuntimeScalar... inputs) {
+        boolean trustedFirstClassRegex = false;
         for (RuntimeScalar input : inputs) {
             if (input != null && input.formatPictureTainted) {
                 result.formatPictureTainted = true;
@@ -669,6 +675,17 @@ public class StringOperators {
                 result.tainted = true;
             }
         }
+        if (inputs.length == 2) {
+            RuntimeScalar left = inputs[0];
+            RuntimeScalar right = inputs[1];
+            if (left != null && right != null) {
+                trustedFirstClassRegex = left.firstClassRegexScalar
+                        && !RuntimeRegex.containsExecutableSource(right.toString())
+                        || right.firstClassRegexScalar
+                        && !RuntimeRegex.containsExecutableSource(left.toString());
+            }
+        }
+        result.firstClassRegexScalar = trustedFirstClassRegex;
         return result;
     }
 
@@ -785,7 +802,9 @@ public class StringOperators {
         // Always update the original scalar if we modified the string
         if (!str.equals(originalStr)) {
             boolean wasByteString = runtimeScalar.type == RuntimeScalarType.BYTE_STRING;
+            String malformedUtf8Warning = runtimeScalar.utf8MalformedWarning;
             runtimeScalar.set(str);
+            runtimeScalar.utf8MalformedWarning = malformedUtf8Warning;
             if (wasByteString) {
                 runtimeScalar.type = RuntimeScalarType.BYTE_STRING;
             }
@@ -1039,6 +1058,7 @@ public class StringOperators {
                 res.type = BYTE_STRING;
             }
             res.tainted = resolved.isTainted();
+            res.firstClassRegexScalar = resolved.firstClassRegexScalar;
             return recordJoinTaint(res);
         }
 

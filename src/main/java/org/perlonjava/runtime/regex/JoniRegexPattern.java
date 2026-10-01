@@ -1481,7 +1481,11 @@ final class JoniRegexPattern {
             }
             Evaluation evaluation = evaluate(callback, match);
             RuntimeScalar value = evaluation.result();
+            if (value.type == RuntimeScalarType.READONLY_SCALAR) {
+                value = (RuntimeScalar) value.value;
+            }
             RegexFlags scopedFlags = scopedDynamicFlags(outerFlags, effectiveOptions);
+            RegexFlags nestedCallbackFlags = scopedFlags;
             if (value.type == RuntimeScalarType.UNDEF
                     && callback.uninitializedWarningsEnabled) {
                 WarnDie.warnWithCategory(
@@ -1492,15 +1496,20 @@ final class JoniRegexPattern {
             List<RuntimeRegexCallback> nestedCallbacks = List.of();
             boolean inputEncodingCompatible = true;
             String dynamicPackage = RuntimeRegex.currentUserPropertyPackage();
-            if (value.value instanceof RuntimeRegex runtimeRegex) {
-                RegexFlags nestedFlags = runtimeRegex.getRegexFlags() == null
-                        ? scopedFlags : runtimeRegex.getRegexFlags();
-                nestedPattern = UnicodeResolver.withUserPropertyPackage(
-                        runtimeRegex.userPropertyPackage(),
-                        () -> new JoniRegexPattern(runtimeRegex.patternString,
-                                nestedFlags,
-                                runtimeRegex.executableCallbacks.size()));
+            RuntimeRegex firstClassRegex = value.firstClassRegexScalar
+                    ? value.firstClassRegexValue : null;
+            if (firstClassRegex != null) {
+                nestedPattern = firstClassRegex.selectRecursivePatternForCallout(subject, byteMode);
+                nestedCallbacks = firstClassRegex.executableCallbacks;
+                if (firstClassRegex.getRegexFlags() != null) {
+                    nestedCallbackFlags = firstClassRegex.getRegexFlags();
+                }
+            } else if (value.value instanceof RuntimeRegex runtimeRegex) {
+                nestedPattern = runtimeRegex.selectRecursivePatternForCallout(subject, byteMode);
                 nestedCallbacks = runtimeRegex.executableCallbacks;
+                if (runtimeRegex.getRegexFlags() != null) {
+                    nestedCallbackFlags = runtimeRegex.getRegexFlags();
+                }
             } else if (value.value instanceof RuntimeRegexTemplate template) {
                 nestedPattern = UnicodeResolver.withUserPropertyPackage(
                         dynamicPackage,
@@ -1517,11 +1526,27 @@ final class JoniRegexPattern {
                         throw new PerlCompilerException(
                                 "Eval-group not allowed at runtime, use re 'eval'");
                     }
-                    String modifiers = scopedFlags.toInternalFlagString() + "E";
+                    StringBuilder modifiers = new StringBuilder(
+                            scopedFlags.toInternalFlagString()).append('E');
+                    int debugMode = RuntimeRegex.activeDebugMode();
+                    if ((debugMode & RuntimeRegex.LEXICAL_DEBUG_COMPILE) != 0) {
+                        modifiers.append(RuntimeRegex.INTERNAL_DEBUG_COMPILE_MARKER);
+                    }
+                    if ((debugMode & RuntimeRegex.LEXICAL_DEBUG_EXECUTE) != 0) {
+                        modifiers.append(RuntimeRegex.INTERNAL_DEBUG_EXECUTE_MARKER);
+                    }
+                    if ((debugMode & RuntimeRegex.LEXICAL_DEBUG_COLOR) != 0) {
+                        modifiers.append(RuntimeRegex.INTERNAL_DEBUG_COLOR_MARKER);
+                    }
+                    if ((debugMode & RuntimeRegex.LEXICAL_DEBUG_PARSE) != 0) {
+                        modifiers.append(RuntimeRegex.INTERNAL_DEBUG_PARSE_MARKER);
+                    }
+                    RuntimeScalar dynamicPatternScalar = value;
                     RuntimeScalar compiled = UnicodeResolver.withUserPropertyPackage(
                             dynamicPackage,
                             () -> RuntimeRegex.getQuotedRegex(
-                                    value, new RuntimeScalar(modifiers)));
+                                    dynamicPatternScalar,
+                                    new RuntimeScalar(modifiers.toString())));
                     RuntimeRegex runtimeRegex = (RuntimeRegex) compiled.value;
                     nestedPattern = UnicodeResolver.withUserPropertyPackage(
                             runtimeRegex.userPropertyPackage(),
@@ -1546,6 +1571,8 @@ final class JoniRegexPattern {
                                     () -> new JoniRegexPattern(dynamicSource,
                                             scopedFlags, 0, compileAsBytes,
                                             compileAsBytes, compileAsBytes));
+                            RuntimeRegex.emitDynamicSubpatternCompileTrace(
+                                    dynamicSource, nestedPattern);
                             dynamicPatternCache.put(cacheKey, nestedPattern);
                         }
                     } catch (SyntaxException exception) {
@@ -1564,9 +1591,7 @@ final class JoniRegexPattern {
             CalloutHandler nestedHandler = nestedCallbacks.isEmpty() ? null
                     : new PerlCalloutHandler(input, byteToChar, nestedCallbacks,
                             nestedPattern.namedGroups,
-                            value.value instanceof RuntimeRegex runtimeRegex
-                                    && runtimeRegex.getRegexFlags() != null
-                                    ? runtimeRegex.getRegexFlags() : scopedFlags,
+                            nestedCallbackFlags,
                             nestedPattern.hasControlVerbState,
                             byteMode,
                             subject,
@@ -1652,9 +1677,12 @@ final class JoniRegexPattern {
             callbackPosition.value = charOffset(match.currentBytePosition());
 
             try {
+                RuntimeArray activeArgs = RuntimeCode.getCurrentArgs();
+                RuntimeArray callbackArgs = activeArgs == null
+                        ? new RuntimeArray() : activeArgs;
                 DynamicVariableManager.CapturedFrame<RuntimeList> frame =
                         DynamicVariableManager.captureFrameLocals(() -> RuntimeCode.apply(
-                                new RuntimeScalar(callback.code), new RuntimeArray(),
+                                new RuntimeScalar(callback.code), callbackArgs,
                                 RuntimeContextType.SCALAR));
                 // Joni's complete() notification is delayed until the candidate
                 // path commits. Resume now so a later (?{ ... }) on that same

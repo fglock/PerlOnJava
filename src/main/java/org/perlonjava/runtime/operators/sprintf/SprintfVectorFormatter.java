@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.operators.sprintf;
 
 import org.perlonjava.runtime.operators.ReferenceOperators;
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
@@ -39,6 +40,10 @@ public class SprintfVectorFormatter {
 
     private String formatVectorStringInternal(RuntimeScalar value, String flags, int width,
                                               int precision, char conversionChar, String separator, boolean bytesMode) {
+        if (value.utf8MalformedWarning != null) {
+            WarnDie.warnWithCategoryByDefault(new RuntimeScalar(value.utf8MalformedWarning),
+                    new RuntimeScalar(""), "utf8");
+        }
         // Handle version objects specially
         if (value.isBlessed()) {
             String className = ReferenceOperators.ref(value).toString();

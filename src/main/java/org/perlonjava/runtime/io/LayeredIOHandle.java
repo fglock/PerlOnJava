@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.io;
 
 import org.perlonjava.runtime.operators.ModuleOperators;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlJavaUnimplementedException;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -244,13 +245,19 @@ public class LayeredIOHandle implements IOHandle {
         StringBuilder result = new StringBuilder();
         int charactersNeeded = maxBytes;
         boolean hasEncoding = hasEncodingLayer();
+        boolean singleCharacterUtf8Read = maxBytes == 1 && activeLayers.stream()
+                .filter(EncodingLayer.class::isInstance)
+                .map(EncodingLayer.class::cast)
+                .anyMatch(layer -> StandardCharsets.UTF_8.equals(layer.getCharset()));
 
         // First, drain any previously buffered decoded characters
         if (decodedCharBuffer.length() > 0) {
-            int charsFromBuffer = Math.min(decodedCharBuffer.length(), charactersNeeded);
+            int codePointsFromBuffer = Math.min(
+                    decodedCharBuffer.codePointCount(0, decodedCharBuffer.length()), charactersNeeded);
+            int charsFromBuffer = decodedCharBuffer.offsetByCodePoints(0, codePointsFromBuffer);
             result.append(decodedCharBuffer, 0, charsFromBuffer);
             decodedCharBuffer.delete(0, charsFromBuffer);
-            charactersNeeded -= charsFromBuffer;
+            charactersNeeded -= codePointsFromBuffer;
         }
 
         // Safety limit must be generous for multi-byte encodings (e.g., UTF-32 = 4 bytes/char)
@@ -262,7 +269,12 @@ public class LayeredIOHandle implements IOHandle {
             // conservatively to avoid over-consuming from the delegate (which would make
             // tell() inaccurate since it reports the delegate's position).
             int bytesToRead;
-            if (hasEncoding) {
+            if (singleCharacterUtf8Read) {
+                // Avoid reading past one requested UTF-8 character. Besides
+                // preserving unread bytes for seek/tell, this keeps tell()
+                // aligned with the byte length of the character just read.
+                bytesToRead = 1;
+            } else if (hasEncoding) {
                 bytesToRead = Math.min(128, Math.max(4, charactersNeeded * 4));
             } else {
                 bytesToRead = Math.min(128, charactersNeeded);
@@ -273,9 +285,11 @@ public class LayeredIOHandle implements IOHandle {
             if (chunkStr.isEmpty()) {
                 String pendingInput = flushPendingInput();
                 if (!pendingInput.isEmpty()) {
-                    int charsToTake = Math.min(pendingInput.length(), charactersNeeded);
+                    int codePointsToTake = Math.min(
+                            pendingInput.codePointCount(0, pendingInput.length()), charactersNeeded);
+                    int charsToTake = pendingInput.offsetByCodePoints(0, codePointsToTake);
                     result.append(pendingInput, 0, charsToTake);
-                    charactersNeeded -= charsToTake;
+                    charactersNeeded -= codePointsToTake;
                     if (pendingInput.length() > charsToTake) {
                         decodedCharBuffer.append(pendingInput, charsToTake, pendingInput.length());
                     }
@@ -283,16 +297,18 @@ public class LayeredIOHandle implements IOHandle {
                 break; // EOF reached
             }
 
-            safetyLimit -= chunkStr.length();
+            safetyLimit -= Math.max(1, chunkStr.codePointCount(0, chunkStr.length()));
 
             // Apply input pipeline to transform bytes to characters
             String processed = inputPipeline.apply(chunkStr);
 
             // Add the processed characters to the result
             if (!processed.isEmpty()) {
-                int charsToTake = Math.min(processed.length(), charactersNeeded);
+                int codePointsToTake = Math.min(
+                        processed.codePointCount(0, processed.length()), charactersNeeded);
+                int charsToTake = processed.offsetByCodePoints(0, codePointsToTake);
                 result.append(processed, 0, charsToTake);
-                charactersNeeded -= charsToTake;
+                charactersNeeded -= codePointsToTake;
 
                 // Buffer any excess decoded characters for the next doRead() call
                 if (processed.length() > charsToTake) {
@@ -307,16 +323,42 @@ public class LayeredIOHandle implements IOHandle {
 
     /** Flush stateful input layers when the underlying stream reaches EOF. */
     private String flushPendingInput() {
+        StringBuilder flushed = new StringBuilder();
         for (int i = 0; i < activeLayers.size(); i++) {
+            String pending = null;
             if (activeLayers.get(i) instanceof CrlfLayer crlfLayer) {
-                String pending = crlfLayer.flushInput();
+                pending = crlfLayer.flushInput();
+            } else if (activeLayers.get(i) instanceof EncodingLayer encodingLayer) {
+                pending = encodingLayer.flushInput();
+            }
+            if (pending != null) {
                 for (int j = i + 1; j < activeLayers.size() && !pending.isEmpty(); j++) {
                     pending = activeLayers.get(j).processInput(pending);
                 }
-                return pending;
+                flushed.append(pending);
             }
         }
-        return "";
+        return flushed.toString();
+    }
+
+    public List<String> drainUtf8InputWarnings() {
+        List<String> warnings = new ArrayList<>();
+        for (IOLayer layer : activeLayers) {
+            if (layer instanceof EncodingLayer encodingLayer) {
+                warnings.addAll(encodingLayer.drainUtf8InputWarnings());
+            }
+        }
+        return warnings;
+    }
+
+    public String takeDeferredMalformedUtf8Warning() {
+        for (IOLayer layer : activeLayers) {
+            if (layer instanceof EncodingLayer encodingLayer) {
+                String warning = encodingLayer.takeDeferredMalformedUtf8Warning();
+                if (warning != null) return warning;
+            }
+        }
+        return null;
     }
 
     /**
@@ -363,9 +405,10 @@ public class LayeredIOHandle implements IOHandle {
         } catch (PerlCompilerException e) {
             throw e;
         } catch (Exception e) {
+            GlobalVariable.getGlobalVariable("main::!").set(22); // EINVAL
             if (e.getMessage() != null && !e.getMessage().isEmpty()) {
                 org.perlonjava.runtime.operators.WarnDie.warn(
-                        new RuntimeScalar(e.getMessage() + "\n"),
+                        new RuntimeScalar(e.getMessage() + " in PerlIO layer specification\n"),
                         new RuntimeScalar(""));
             }
             return new RuntimeScalar(0);
@@ -516,7 +559,7 @@ public class LayeredIOHandle implements IOHandle {
                 // No-op layers - binary mode with no transformation
                 // These layers essentially remove other layers when used alone
             }
-            case "perlio" -> perlioBuffering = true;
+            case "perlio", "stdio" -> perlioBuffering = true;
             case "crlf" -> {
                 // CRLF layer for line ending conversion
                 CrlfLayer layer = new CrlfLayer();

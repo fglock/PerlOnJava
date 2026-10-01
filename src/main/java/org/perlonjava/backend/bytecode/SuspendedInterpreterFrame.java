@@ -31,6 +31,8 @@ public final class SuspendedInterpreterFrame {
     Set<RuntimeCode> returnedClosures;
 
     final ArrayDeque<Integer> evalCatchStack = new ArrayDeque<>();
+    final ArrayDeque<Boolean> evalCallerFrameStack = new ArrayDeque<>();
+    final ArrayDeque<int[]> evalControlBlockDepthStack = new ArrayDeque<>();
     final ArrayDeque<Integer> evalLocalLevelStack = new ArrayDeque<>();
     final ArrayDeque<Integer> evalBaseRegStack = new ArrayDeque<>();
     final ArrayDeque<Integer> evalMethodInvocantHoldDepthStack = new ArrayDeque<>();

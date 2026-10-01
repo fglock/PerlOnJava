@@ -202,11 +202,58 @@ public class VersionHelper {
                     String hint = getDidYouMeanHint(wantVersion, wantDisplay);
                     throw new PerlCompilerException("Perl v" + wantDisplay + " required" + hint + "--this is only " + hasVersion.toString() + ", stopped");
                 } else {
-                    throw new PerlCompilerException(perlClassName + " version " + wantVersion + " required--this is only version " + hasVersion);
+                    String wanted = wantVersion.toString();
+                    String available = hasVersion.toString();
+                    boolean requestedVString = wantVersion.type == VSTRING
+                            || wanted.startsWith("v");
+                    if (requestedVString) {
+                        wanted = displayAsVString(wantVersion);
+                        available = displayAsVString(hasVersion);
+                    } else if (hasVersion.type == VSTRING) {
+                        available = displayVStringWithoutPadding(hasVersion);
+                    }
+                    throw new PerlCompilerException(perlClassName + " version " + wanted
+                            + " required--this is only version " + available);
                 }
             }
         }
         return hasVersion;
+    }
+
+    private static String displayAsVString(RuntimeScalar version) {
+        String value = version.toString();
+        if (value.startsWith("v")) {
+            String[] parts = value.substring(1).split("\\.", -1);
+            StringBuilder display = new StringBuilder("v");
+            for (int i = 0; i < parts.length; i++) {
+                if (i > 0) display.append('.');
+                display.append(parts[i]);
+            }
+            if (parts.length == 2) display.append(".0");
+            return display.toString();
+        }
+        if ((version.type == STRING || version.type == BYTE_STRING)
+                && value.matches("\\d+\\.\\d+")) {
+            try {
+                version = new RuntimeScalar(Double.parseDouble(value));
+            } catch (NumberFormatException ignored) {
+                // Retain the original version's display if it is not numeric.
+            }
+        }
+        return "v" + getDisplayVersionForRequire(version);
+    }
+
+    private static String displayVStringWithoutPadding(RuntimeScalar version) {
+        if (version.value instanceof String vstring) {
+            StringBuilder display = new StringBuilder("v");
+            for (int i = 0; i < vstring.length(); i++) {
+                if (i > 0) display.append('.');
+                display.append((int) vstring.charAt(i));
+            }
+            return display.toString();
+        }
+        String value = version.toString();
+        return value.startsWith("v") ? value : "v" + value;
     }
 
     /** Perl VERSION accepts numeric values and canonical dotted version strings. */

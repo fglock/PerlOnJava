@@ -965,12 +965,30 @@ public class EmitStatement {
             mv.visitVarInsn(Opcodes.ASTORE, resultSlot);
         }
 
+        JavaClassInfo.TryFinallyContext tryFinallyContext = null;
+        if (node.finallyBlock != null) {
+            int returnValueSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            int returnPendingSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            mv.visitInsn(Opcodes.ICONST_0);
+            mv.visitVarInsn(Opcodes.ISTORE, returnPendingSlot);
+            tryFinallyContext = new JavaClassInfo.TryFinallyContext(
+                    null, returnValueSlot, returnPendingSlot,
+                    emitterVisitor.ctx.javaClassInfo.activeTryFinallyContext);
+        }
+
         // Labels for try-catch-finally
         Label tryStart = new Label();
         Label tryEnd = new Label();
         Label catchBlock = new Label();
         Label finallyStart = new Label();
         Label finallyEnd = new Label();
+
+        if (tryFinallyContext != null) {
+            tryFinallyContext = new JavaClassInfo.TryFinallyContext(
+                    finallyStart, tryFinallyContext.returnValueSlot,
+                    tryFinallyContext.returnPendingSlot, tryFinallyContext.parent);
+            emitterVisitor.ctx.javaClassInfo.activeTryFinallyContext = tryFinallyContext;
+        }
 
         // Define the try-catch block before visiting labels for maximum ASM compatibility
         mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Throwable");
@@ -1024,6 +1042,10 @@ public class EmitStatement {
             mv.visitVarInsn(Opcodes.ASTORE, resultSlot);
         }
 
+        if (tryFinallyContext != null) {
+            emitterVisitor.ctx.javaClassInfo.activeTryFinallyContext = tryFinallyContext.parent;
+        }
+
         // Finally block
         mv.visitLabel(finallyStart);
         if (node.finallyBlock != null) {
@@ -1037,6 +1059,21 @@ public class EmitStatement {
         }
         Local.localTeardown(errorLocalLevel, mv);
         mv.visitLabel(finallyEnd);
+
+        if (tryFinallyContext != null) {
+            Label normalCompletion = new Label();
+            mv.visitVarInsn(Opcodes.ILOAD, tryFinallyContext.returnPendingSlot);
+            mv.visitJumpInsn(Opcodes.IFEQ, normalCompletion);
+            mv.visitTypeInsn(Opcodes.NEW,
+                    "org/perlonjava/runtime/runtimetypes/PerlNonLocalReturnException");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitVarInsn(Opcodes.ALOAD, tryFinallyContext.returnValueSlot);
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/runtimetypes/PerlNonLocalReturnException",
+                    "<init>", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V", false);
+            mv.visitInsn(Opcodes.ATHROW);
+            mv.visitLabel(normalCompletion);
+        }
 
         if (resultSlot >= 0) {
             mv.visitVarInsn(Opcodes.ALOAD, resultSlot);

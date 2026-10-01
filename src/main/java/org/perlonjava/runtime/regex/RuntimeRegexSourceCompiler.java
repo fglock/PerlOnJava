@@ -56,12 +56,23 @@ final class RuntimeRegexSourceCompiler {
     static RuntimeScalar compile(
             RuntimeScalar pattern, String modifiers,
             String eagerInitialClassDiagnostic, boolean admitRuntimeEval) {
+        return compile(pattern, modifiers, eagerInitialClassDiagnostic,
+                admitRuntimeEval, true);
+    }
+
+    private static RuntimeScalar compile(
+            RuntimeScalar pattern, String modifiers,
+            String eagerInitialClassDiagnostic, boolean admitRuntimeEval,
+            boolean reportRuntimeSourceCompile) {
         int previousDepth = RUNTIME_SOURCE_DEPTH.get();
         RUNTIME_SOURCE_DEPTH.set(previousDepth + 1);
+        boolean previousTrace = RuntimeRegex.setForceRuntimeSourceCompileTrace(
+                reportRuntimeSourceCompile);
         try {
             return compileOnce(pattern, modifiers,
                     eagerInitialClassDiagnostic, admitRuntimeEval);
         } finally {
+            RuntimeRegex.restoreForceRuntimeSourceCompileTrace(previousTrace);
             if (previousDepth == 0) {
                 RUNTIME_SOURCE_DEPTH.remove();
             } else {
@@ -155,7 +166,11 @@ final class RuntimeRegexSourceCompiler {
             // code until the first match executes.
             symbolTable.setStrictOptions(
                     WarningBitsRegistry.getCallSiteHints() | HINT_RE_EVAL);
-            symbolTable.setLexicalRegexDebugFlags(RuntimeRegex.debugMode(modifiers));
+            int lexicalRegexDebugFlags = RuntimeRegex.debugMode(modifiers);
+            if (lexicalRegexDebugFlags == 0) {
+                lexicalRegexDebugFlags = RuntimeRegex.activeDebugMode();
+            }
+            symbolTable.setLexicalRegexDebugFlags(lexicalRegexDebugFlags);
             symbolTable.enableLexicalRegexModifiers(
                     publicModifiers.replaceAll("[^imsx]", ""));
             String warningBits = RegexQuoteMeta.getCallSiteWarningBits();
@@ -283,8 +298,20 @@ final class RuntimeRegexSourceCompiler {
                 .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_EXECUTE_MARKER), "")
                 .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_COLOR_MARKER), "")
                 .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_PARSE_MARKER), "");
+        int debugMode = RuntimeRegex.debugMode(modifiers);
+        String compilationModifiers = sourceModifiers;
+        if ((debugMode & RuntimeRegex.LEXICAL_DEBUG_COMPILE) != 0) {
+            compilationModifiers += RuntimeRegex.INTERNAL_DEBUG_COMPILE_MARKER;
+        }
+        if ((debugMode & RuntimeRegex.LEXICAL_DEBUG_EXECUTE) != 0) {
+            compilationModifiers += RuntimeRegex.INTERNAL_DEBUG_EXECUTE_MARKER;
+        }
+        if ((debugMode & RuntimeRegex.LEXICAL_DEBUG_COLOR) != 0) {
+            compilationModifiers += RuntimeRegex.INTERNAL_DEBUG_COLOR_MARKER;
+        }
         RuntimeScalar compiled = compile(RuntimeRegexTemplate.patternScalar(
-                masked.pattern(), template.byteBackedPattern()), sourceModifiers);
+                masked.pattern(), template.byteBackedPattern()), compilationModifiers,
+                null, true, template.callbacks().isEmpty());
         if (!(compiled.value instanceof RuntimeRegex sourceRegex)) {
             throw new IllegalStateException("runtime regex source did not compile to qr//");
         }
@@ -297,7 +324,8 @@ final class RuntimeRegexSourceCompiler {
         List<RuntimeRegexCallback> callbacks = new ArrayList<>(template.callbacks());
         callbacks.addAll(sourceRegex.executableCallbacks);
         RuntimeScalar result = RuntimeRegex.compileExecutableTemplate(
-                executablePattern, modifiers, callbacks, original, template.byteBackedPattern());
+                executablePattern, modifiers, callbacks, original,
+                template.byteBackedPattern(), template.callbacks().isEmpty());
         if (result.value != sourceRegex) {
             sourceRegex.releaseExecutableCallbacks();
         }

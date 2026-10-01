@@ -72,32 +72,58 @@ public class BytecodeCompiler implements Visitor {
     }
 
     private static void collectConstructEntryLabels(Node node, Set<String> out, boolean expressionContext) {
+        collectConstructEntryLabels(node, out, expressionContext, false);
+    }
+
+    private static void collectConstructEntryLabels(Node node, Set<String> out,
+            boolean expressionContext, boolean fieldInitializer) {
         if (node == null) return;
+        if (node instanceof AbstractNode abstractNode) {
+            fieldInitializer |= abstractNode.getBooleanAnnotation("fieldInitializer");
+        }
+        if (node instanceof LabelNode labelNode) {
+            if (expressionContext && !fieldInitializer) out.add(labelNode.label);
+            return;
+        }
         if (node instanceof BlockNode block) {
             if (expressionContext && block.getBooleanAnnotation("blockIsDoBlock")
-                    && !block.getBooleanAnnotation("fieldInitializer")) {
+                    && !fieldInitializer) {
                 out.addAll(block.labels);
             }
-            for (Node child : block.elements) collectConstructEntryLabels(child, out, expressionContext);
+            for (Node child : block.elements) {
+                collectConstructEntryLabels(child, out, expressionContext, fieldInitializer);
+            }
+            return;
+        }
+        if (node instanceof SubroutineNode subroutine) {
+            collectConstructEntryLabels(subroutine.block, out, true, fieldInitializer);
+            return;
+        }
+        if (node instanceof IfNode ifNode) {
+            collectConstructEntryLabels(ifNode.condition, out, true, fieldInitializer);
+            collectConstructEntryLabels(ifNode.thenBranch, out, false, fieldInitializer);
+            collectConstructEntryLabels(ifNode.elseBranch, out, false, fieldInitializer);
             return;
         }
         if (node instanceof OperatorNode op) {
-            collectConstructEntryLabels(op.operand, out, true);
+            collectConstructEntryLabels(op.operand, out, true, fieldInitializer);
             return;
         }
         if (node instanceof ListNode list) {
-            for (Node child : list.elements) collectConstructEntryLabels(child, out, true);
+            for (Node child : list.elements) {
+                collectConstructEntryLabels(child, out, true, fieldInitializer);
+            }
             return;
         }
         if (node instanceof BinaryOperatorNode binary) {
-            collectConstructEntryLabels(binary.left, out, true);
-            collectConstructEntryLabels(binary.right, out, true);
+            collectConstructEntryLabels(binary.left, out, true, fieldInitializer);
+            collectConstructEntryLabels(binary.right, out, true, fieldInitializer);
             return;
         }
         if (node instanceof TernaryOperatorNode ternary) {
-            collectConstructEntryLabels(ternary.condition, out, true);
-            collectConstructEntryLabels(ternary.trueExpr, out, true);
-            collectConstructEntryLabels(ternary.falseExpr, out, true);
+            collectConstructEntryLabels(ternary.condition, out, true, fieldInitializer);
+            collectConstructEntryLabels(ternary.trueExpr, out, true, fieldInitializer);
+            collectConstructEntryLabels(ternary.falseExpr, out, true, fieldInitializer);
         }
     }
 
@@ -181,6 +207,50 @@ public class BytecodeCompiler implements Visitor {
         }
     }
 
+    /** Collect labels in defer bodies before a goto can be compiled. */
+    private static void collectDeferLabels(Node node, Set<String> labels, boolean insideDefer) {
+        if (node == null) return;
+        if (node instanceof DeferNode defer) {
+            collectDeferLabels(defer.block, labels, true);
+            return;
+        }
+        if (node instanceof SubroutineNode) return;
+        if (node instanceof LabelNode label) {
+            if (insideDefer) labels.add(label.label);
+            return;
+        }
+        if (node instanceof BlockNode block) {
+            if (insideDefer) labels.addAll(block.labels);
+            for (Node child : block.elements) collectDeferLabels(child, labels, insideDefer);
+        } else if (node instanceof IfNode conditional) {
+            collectDeferLabels(conditional.condition, labels, insideDefer);
+            collectDeferLabels(conditional.thenBranch, labels, insideDefer);
+            collectDeferLabels(conditional.elseBranch, labels, insideDefer);
+        } else if (node instanceof For1Node loop) {
+            collectDeferLabels(loop.variable, labels, insideDefer);
+            collectDeferLabels(loop.list, labels, insideDefer);
+            collectDeferLabels(loop.body, labels, insideDefer);
+            collectDeferLabels(loop.continueBlock, labels, insideDefer);
+        } else if (node instanceof For3Node loop) {
+            collectDeferLabels(loop.initialization, labels, insideDefer);
+            collectDeferLabels(loop.condition, labels, insideDefer);
+            collectDeferLabels(loop.increment, labels, insideDefer);
+            collectDeferLabels(loop.body, labels, insideDefer);
+            collectDeferLabels(loop.continueBlock, labels, insideDefer);
+        } else if (node instanceof OperatorNode operator) {
+            collectDeferLabels(operator.operand, labels, insideDefer);
+        } else if (node instanceof ListNode list) {
+            for (Node child : list.elements) collectDeferLabels(child, labels, insideDefer);
+        } else if (node instanceof BinaryOperatorNode binary) {
+            collectDeferLabels(binary.left, labels, insideDefer);
+            collectDeferLabels(binary.right, labels, insideDefer);
+        } else if (node instanceof TernaryOperatorNode ternary) {
+            collectDeferLabels(ternary.condition, labels, insideDefer);
+            collectDeferLabels(ternary.trueExpr, labels, insideDefer);
+            collectDeferLabels(ternary.falseExpr, labels, insideDefer);
+        }
+    }
+
     private void registerGotoLoopRanges(int bodyStartPc, int bodyEndPc) {
         for (Map.Entry<String, Integer> label : gotoLabelPcs.entrySet()) {
             if (label.getValue() >= bodyStartPc && label.getValue() < bodyEndPc) {
@@ -201,6 +271,7 @@ public class BytecodeCompiler implements Visitor {
     // pendingGotos tracks forward references (goto before label) needing patch-up.
     final Map<String, Integer> gotoLabelPcs = new HashMap<>();
     final Set<String> gotoLabelsInsideLoop = new HashSet<>();
+    final Set<String> gotoLabelsInsideDefer = new HashSet<>();
     final Set<String> gotoLabelsInsideConstruct = new HashSet<>();
     final Set<String> gotoLabelsInsideGiven = new HashSet<>();
     private int givenBlockDepth;
@@ -314,7 +385,8 @@ public class BytecodeCompiler implements Visitor {
             // do-blocks (notably nested dereference/prototype expressions).
             // Entering any such block by goto skips its enclosing expression
             // setup and is forbidden by Perl.
-            boolean constructEntry = expressionContext
+            boolean constructEntry = (expressionContext
+                    || block.getBooleanAnnotation("blockIsDoBlock"))
                     && !block.getBooleanAnnotation("fieldInitializer");
             Map<String, GotoLabelTarget> local = new HashMap<>();
             // StatementParser keeps labels that prefix a statement in the
@@ -339,9 +411,11 @@ public class BytecodeCompiler implements Visitor {
                 });
                 gotoLabelTargetsByToken.put(label.getIndex(), target);
             }
-            // A block's statements are ordinary statement context.  Only a
-            // separately nested expression block needs entry protection.
-            for (Node child : block.elements) predeclareGotoLabels(child, false, insideLoopBody);
+            // Preserve expression context through nested blocks.  A do block
+            // may be wrapped by parser-introduced blocks (as in $#{; do {
+            // LABEL: ... }}); resetting it here made its label look like an
+            // ordinary jump target and allowed goto to enter the construct.
+            for (Node child : block.elements) predeclareGotoLabels(child, expressionContext, insideLoopBody);
             return;
         }
         if (node instanceof For1Node loop) {
@@ -522,6 +596,10 @@ public class BytecodeCompiler implements Visitor {
     private boolean tracksRuntimeRegexLexicals;
     // True when compiling inside a defer block (control flow out of defer is prohibited)
     private boolean isInDeferBlock;
+
+    boolean isInDeferBlock() {
+        return isInDeferBlock || DynamicVariableManager.isExecutingDefer();
+    }
     // True when compiling inside a map/grep block (explicit return must use RETURN_NONLOCAL)
     boolean isInMapGrepBlock;
     // Nesting depth inside eval blocks (goto &sub from eval is prohibited)
@@ -529,6 +607,11 @@ public class BytecodeCompiler implements Visitor {
     int evalBlockDepth;
     private final ArrayDeque<Integer> evalReturnTargetRegs = new ArrayDeque<>();
     private final ArrayDeque<List<Integer>> evalReturnGotoPatchPositions = new ArrayDeque<>();
+    // A return inside a try/finally expression must first run the finally
+    // block, then escape its synthetic wrapper as a non-local return.
+    private final ArrayDeque<TryFinallyReturnTarget> tryFinallyReturnTargets = new ArrayDeque<>();
+    private record TryFinallyReturnTarget(int valueReg, int pendingReg,
+                                          List<Integer> gotoPatchPositions) {}
     // Counter tracking nesting depth inside finally blocks (control flow out of finally is prohibited)
     private int finallyBlockDepth;
     // Tracks whether any LOCAL_* or PUSH_LOCAL_VARIABLE opcodes are emitted (for DynamicVariableManager optimization)
@@ -1305,7 +1388,8 @@ public class BytecodeCompiler implements Visitor {
      * @param operator   The control flow operator (e.g., "return", "goto", "last")
      */
     void checkNotInDeferBlock(int tokenIndex, String operator) {
-        if (isInDeferBlock) {
+        if ((isInDeferBlock || DynamicVariableManager.isExecutingDefer())
+                && getEvalScopeType() == null) {
             throwCleanCompilerException("Can't \"" + operator + "\" out of a \"defer\" block", tokenIndex);
         }
         if (finallyBlockDepth > 0) {
@@ -1377,6 +1461,7 @@ public class BytecodeCompiler implements Visitor {
                 && abstractNode.getBooleanAnnotation("subroutineIsLvalue");
 
         collectLoopBodyLabels(node, gotoLabelsInsideLoop, false);
+        collectDeferLabels(node, gotoLabelsInsideDefer, false);
         collectConstructEntryLabels(node, gotoLabelsInsideConstruct, false);
         collectGivenLabels(node, gotoLabelsInsideGiven, false);
         predeclareGotoLabels(node, false, false);
@@ -1532,6 +1617,9 @@ public class BytecodeCompiler implements Visitor {
         }
         if (!this.gotoLabelsInsideLoop.isEmpty()) {
             code.gotoLabelsInsideLoop = new HashSet<>(this.gotoLabelsInsideLoop);
+        }
+        if (!this.gotoLabelsInsideDefer.isEmpty()) {
+            code.gotoLabelsInsideDefer = new HashSet<>(this.gotoLabelsInsideDefer);
         }
         if (!this.gotoLabelsInsideConstruct.isEmpty()) {
             code.gotoLabelsInsideConstruct = new HashSet<>(this.gotoLabelsInsideConstruct);
@@ -2364,7 +2452,8 @@ public class BytecodeCompiler implements Visitor {
                 && varName.matches(".*::[A-Z][A-Z0-9_]*");
         if (getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_STRICT_SUBS)
                 && !qualifiedConstant) {
-            throwCompilerException("Bareword \"" + varName + "\" not allowed while \"strict subs\" in use");
+            throwCompilerException("Bareword \"" + varName
+                    + "\" not allowed while \"strict subs\" in use", node.getIndex());
         }
         if (currentCallContext == RuntimeContextType.VOID) {
             lastResultReg = -1;
@@ -7040,6 +7129,7 @@ public class BytecodeCompiler implements Visitor {
                 collectVariableDeclarations(closureVarNames),
                 collectOurVariablePackages(closureVarNames)
         );
+        subCompiler.gotoLabelsInsideDefer.addAll(this.gotoLabelsInsideDefer);
         // The parentRegistry constructor sets isEvalString=true (for eval STRING closures),
         // but named subs are NOT eval strings - clear the flag.
         subCompiler.isEvalString = false;
@@ -7339,17 +7429,20 @@ public class BytecodeCompiler implements Visitor {
         if (errorUtil == null) {
             return;
         }
+        // The SubroutineNode owns the declaration token location. Its block
+        // index is a child token and can point at the wrong line for adjacent
+        // anonymous subs, so use the node location for the CV start metadata.
+        var loc = errorUtil.getSourceLocationAccurate(node.getIndex());
+        code.cvStartLine = loc.lineNumber();
+        if (loc.fileName() != null && !loc.fileName().isEmpty()) {
+            code.cvStartFile = loc.fileName();
+        }
         // Eval strings intentionally retain their historical DUMMY fallback
         // for source that cannot be mapped back to a file.  File-backed
         // compilation, including CPAN test files, has a stable source unit
         // and can safely expose the exact parser span.
         if (sourceName == null || !new java.io.File(sourceName).isFile()) {
             return;
-        }
-        var loc = errorUtil.getSourceLocationAccurate(node.block.getIndex());
-        code.cvStartLine = loc.lineNumber();
-        if (loc.fileName() != null && !loc.fileName().isEmpty()) {
-            code.cvStartFile = loc.fileName();
         }
         int endOffset = node.sourceEndTokenIndex >= 0
                 ? errorUtil.getSourceOffset(node.sourceEndTokenIndex) : -1;
@@ -8738,11 +8831,25 @@ public class BytecodeCompiler implements Visitor {
 
         int resultReg = allocateOutputRegister();
         int firstBodyReg = nextRegister;
+        TryFinallyReturnTarget tryFinallyTarget = null;
+        if (node.finallyBlock != null) {
+            int returnValueReg = allocateRegister();
+            int returnPendingReg = allocateRegister();
+            emit(Opcodes.LOAD_INT);
+            emitReg(returnPendingReg);
+            emitInt(0);
+            tryFinallyTarget = new TryFinallyReturnTarget(returnValueReg,
+                    returnPendingReg, new ArrayList<>());
+            tryFinallyReturnTargets.push(tryFinallyTarget);
+        }
 
         emitWithToken(Opcodes.EVAL_TRY, node.getIndex());
         int catchTargetPos = bytecode.size();
         emitInt(0);
-        emitReg(firstBodyReg);
+        // Try/catch is not a Perl caller frame. Encode a negative register to
+        // distinguish it from eval BLOCK, which shares EVAL_TRY but is visible
+        // to caller().
+        emitReg(-firstBodyReg);
 
         compileNode(node.tryBlock, resultReg, currentCallContext);
         if (lastResultReg >= 0) {
@@ -8792,6 +8899,11 @@ public class BytecodeCompiler implements Visitor {
 
         int finallyPc = bytecode.size();
         patchIntOffset(gotoEndPos, finallyPc);
+        if (tryFinallyTarget != null) {
+            for (int patchPos : tryFinallyTarget.gotoPatchPositions) {
+                patchIntOffset(patchPos, finallyPc);
+            }
+        }
         if (node.finallyBlock != null) {
             finallyBlockDepth++;
             try {
@@ -8802,7 +8914,33 @@ public class BytecodeCompiler implements Visitor {
         }
         emit(Opcodes.POP_LOCAL_LEVEL);
         emitReg(errorLocalLevelReg);
+        if (tryFinallyTarget != null) {
+            tryFinallyReturnTargets.pop();
+            emit(Opcodes.GOTO_IF_FALSE);
+            emitReg(tryFinallyTarget.pendingReg);
+            int normalCompletionPos = bytecode.size();
+            emitInt(0);
+            emit(Opcodes.RETURN_NONLOCAL);
+            emitReg(tryFinallyTarget.valueReg);
+            patchIntOffset(normalCompletionPos, bytecode.size());
+        }
         lastResultReg = resultReg;
+    }
+
+    boolean hasTryFinallyReturnTarget() {
+        return !tryFinallyReturnTargets.isEmpty();
+    }
+
+    void emitTryFinallyReturn(int valueReg) {
+        TryFinallyReturnTarget target = tryFinallyReturnTargets.peek();
+        emitAliasWithTarget(target.valueReg, valueReg);
+        emit(Opcodes.LOAD_INT);
+        emitReg(target.pendingReg);
+        emitInt(1);
+        emit(Opcodes.GOTO);
+        int patchPos = bytecode.size();
+        emitInt(0);
+        target.gotoPatchPositions.add(patchPos);
     }
 
     @Override
@@ -9181,7 +9319,7 @@ public class BytecodeCompiler implements Visitor {
                     : op.equals("next") ? Opcodes.CREATE_NEXT_DYNAMIC
                     : Opcodes.CREATE_REDO_DYNAMIC;
             int rd = allocateOutputRegister();
-            emit(createDynOp);
+            emitWithToken(createDynOp, node.getIndex());
             emitReg(rd);
             emitReg(dynamicLabelReg);
             emit(Opcodes.MORTAL_FLUSH);
@@ -9272,7 +9410,7 @@ public class BytecodeCompiler implements Visitor {
                     : op.equals("next") ? Opcodes.CREATE_NEXT
                     : Opcodes.CREATE_REDO;
             int rd = allocateOutputRegister();
-            emit(createOp);
+            emitWithToken(createOp, node.getIndex());
             emitReg(rd);
             int labelIdx = labelStr != null ? addToStringPool(labelStr) : 255;
             emitReg(labelIdx);

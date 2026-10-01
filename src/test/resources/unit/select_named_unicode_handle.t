@@ -1,0 +1,14 @@
+use strict;
+use warnings;
+use utf8;
+use Test::More tests => 3;
+open DÙP, '>&', *STDERR or die $!;
+open 둪, '>&', *STDERR or die $!;
+my $standard = select(DÙP);
+my $latin = select(둪);
+my $wide = select(STDOUT);
+is($standard, 'main::STDOUT', 'named select returns the previous standard handle');
+is($latin, 'main::DÙP', 'named Latin-1 handle selection returns its package name');
+is($wide, "main::\x{B46A}", 'named wide handle selection returns its Unicode name');
+close DÙP;
+close 둪;

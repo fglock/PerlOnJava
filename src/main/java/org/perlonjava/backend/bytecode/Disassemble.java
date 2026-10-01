@@ -1152,7 +1152,10 @@ public class Disassemble {
                         rd = interpretedCode.bytecode[pc++];
                         int hashDeleteReg = interpretedCode.bytecode[pc++];
                         int keyDeleteReg = interpretedCode.bytecode[pc++];
-                        sb.append("HASH_DELETE r").append(rd).append(" = delete r").append(hashDeleteReg).append("{r").append(keyDeleteReg).append("}\n");
+                        int deleteContext = interpretedCode.bytecode[pc++];
+                        sb.append("HASH_DELETE r").append(rd).append(" = delete r").append(hashDeleteReg)
+                                .append("{r").append(keyDeleteReg).append("} context ")
+                                .append(deleteContext == -1 ? "RUNTIME(r2)" : deleteContext).append("\n");
                         break;
                     case Opcodes.ARRAY_EXISTS:
                         rd = interpretedCode.bytecode[pc++];
@@ -2371,8 +2374,10 @@ public class Disassemble {
                         rd = interpretedCode.bytecode[pc++];
                         int hsdHashReg = interpretedCode.bytecode[pc++];
                         int hsdKeysReg = interpretedCode.bytecode[pc++];
+                        int hsdContext = interpretedCode.bytecode[pc++];
                         sb.append("HASH_SLICE_DELETE r").append(rd).append(" = delete r").append(hsdHashReg)
-                                .append("{r").append(hsdKeysReg).append("}\n");
+                                .append("{r").append(hsdKeysReg).append("} context ")
+                                .append(hsdContext == -1 ? "RUNTIME(r2)" : hsdContext).append("\n");
                         break;
                     }
                     case Opcodes.ARRAY_SLICE_DELETE: {
@@ -2389,8 +2394,10 @@ public class Disassemble {
                         rd = interpretedCode.bytecode[pc++];
                         int hkvHashReg = interpretedCode.bytecode[pc++];
                         int hkvKeysReg = interpretedCode.bytecode[pc++];
+                        int hkvContext = interpretedCode.bytecode[pc++];
                         sb.append("HASH_KV_SLICE_DELETE r").append(rd).append(" = delete %r").append(hkvHashReg)
-                                .append("{r").append(hkvKeysReg).append("}\n");
+                                .append("{r").append(hkvKeysReg).append("} context ")
+                                .append(hkvContext == -1 ? "RUNTIME(r2)" : hkvContext).append("\n");
                         break;
                     }
                     case Opcodes.ARRAY_KV_SLICE_DELETE: {

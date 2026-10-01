@@ -73,7 +73,12 @@ public class DeferBlock implements DynamicState {
     @Override
     public void dynamicRestoreState() {
         // Execute the defer block by calling the code reference with the captured @_
-        RuntimeCode.apply(codeRef, capturedArgs, RuntimeContextType.VOID);
+        DynamicVariableManager.enterDeferExecution();
+        try {
+            RuntimeCode.apply(codeRef, capturedArgs, RuntimeContextType.VOID);
+        } finally {
+            DynamicVariableManager.leaveDeferExecution();
+        }
     }
 
     /**

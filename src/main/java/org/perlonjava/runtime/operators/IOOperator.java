@@ -58,10 +58,10 @@ public class IOOperator {
         if (runtimeList.isEmpty()) {
             // select() with no args returns the currently selected filehandle.
             // In Perl 5 this returns a string name like "main::STDOUT".
-            // We return the RuntimeIO wrapped as a GLOB scalar, which stringifies
-            // to the glob name. This preserves the round-trip: select(select())
-            // correctly restores the previous handle for tied handles too.
-            return new RuntimeScalar(RuntimeIO.getSelectedHandle());
+            // Keep the Perl-visible handle scalar as well as its underlying IO.
+            // Perl returns a name for standard handles and the selected glob
+            // reference for lexical handles.
+            return RuntimeIO.getSelectedHandleValue();
         }
         if (runtimeList.size() == 4) {
             // select RBITS,WBITS,EBITS,TIMEOUT (syscall)
@@ -98,13 +98,15 @@ public class IOOperator {
             // Implement 4-arg select() using NIO Selector
             try {
                 return selectWithNIO(rbits, wbits, ebits, timeout);
+            } catch (PerlCompilerException e) {
+                throw e;
             } catch (Exception e) {
                 getGlobalVariable("main::!").set(e.getMessage());
                 return new RuntimeScalar(-1);
             }
         }
         // select FILEHANDLE (returns/sets current filehandle)
-        RuntimeScalar fh = new RuntimeScalar(RuntimeIO.getSelectedHandle());
+        RuntimeScalar fh = RuntimeIO.getSelectedHandleValue();
         RuntimeScalar fileHandleArg = new RuntimeScalar(
                 RuntimeScalar.dereferenceAndFetchOnce(runtimeList.getFirst()));
         RuntimeIO newIO = fileHandleArg.getRuntimeIO();
@@ -150,6 +152,7 @@ public class IOOperator {
             newIO = anonIO;
         }
         RuntimeIO.setSelectedHandle(newIO);
+        RuntimeIO.setSelectedHandleValue(selectedHandleValue(fileHandleArg));
         RuntimeIO.setLastAccessedHandle(newIO);
         return fh;
     }
@@ -165,6 +168,18 @@ public class IOOperator {
      * @param timeout timeout in seconds (undef = block forever, 0 = poll)
      * @return number of ready descriptors, or -1 on error
      */
+    private static RuntimeScalar selectedHandleValue(RuntimeScalar argument) {
+        if (argument.value instanceof RuntimeGlob glob) {
+            String name = glob.globName;
+            if (name != null) {
+                return new RuntimeScalar(name);
+            }
+            return argument.type == RuntimeScalarType.GLOBREFERENCE
+                    ? new RuntimeScalar(argument) : glob.createReference();
+        }
+        return new RuntimeScalar(argument);
+    }
+
     private static RuntimeScalar selectWithNIO(RuntimeScalar rbits, RuntimeScalar wbits,
                                                 RuntimeScalar ebits, RuntimeScalar timeout) throws IOException {
         byte[] rdata = rbits.getDefinedBoolean() ? getVecBytes(rbits) : new byte[0];
@@ -472,7 +487,11 @@ public class IOOperator {
         String s = scalar.toString();
         byte[] data = new byte[s.length()];
         for (int i = 0; i < s.length(); i++) {
-            data[i] = (byte) s.charAt(i);
+            char ch = s.charAt(i);
+            if (ch > 0xff) {
+                throw new PerlCompilerException("Wide character in select bit vector");
+            }
+            data[i] = (byte) ch;
         }
         return data;
     }
@@ -1220,6 +1239,12 @@ public class IOOperator {
      * @return A RuntimeScalar indicating the result of the write operation.
      */
     public static RuntimeScalar print(RuntimeList runtimeList, RuntimeScalar fileHandle) {
+        return print(runtimeList, fileHandle, null, 0);
+    }
+
+    /** Print with the source location of the Perl print operator for diagnostics. */
+    public static RuntimeScalar print(RuntimeList runtimeList, RuntimeScalar fileHandle,
+                                      String fileName, int lineNumber) {
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
         for (RuntimeBase element : runtimeList.elements) {
@@ -1228,7 +1253,7 @@ public class IOOperator {
                 WarnDie.warnWithCategory(
                         new RuntimeScalar("Use of uninitialized value in print"),
                         RuntimeScalarCache.scalarEmptyString,
-                        "uninitialized");
+                        "uninitialized", fileName, lineNumber);
             }
         }
 
