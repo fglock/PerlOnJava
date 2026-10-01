@@ -10,7 +10,9 @@ priorities and future plans.
   warnings and matching, and Joni backtracking across repeated whitespace.
 
 - Support anonymous temporary files for read/write opens with undefined paths,
-  and report non-numeric process IDs passed to `kill()`.
+  report non-numeric process IDs passed to `kill()`, and release each result of
+  a void-context `map` iteration before invoking the next block; diagnose the
+  missing comma in malformed `grep` predicate syntax.
 
 - Preserve selected filehandles across glob localization, named Unicode handle
   names, void tied-assignment tails, dynamic regex input encoding, syntax-error

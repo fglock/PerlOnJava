@@ -230,6 +230,10 @@ public class ParseMapGrepSort {
     static BinaryOperatorNode parseMapGrep(Parser parser, LexerToken token) {
         ListNode operand;
         int currentIndex = parser.tokenIndex;
+        if (token.text.equals("grep")
+                && startsVariableFollowedByParenthesizedList(parser)) {
+            parser.throwError("Missing comma after first argument to grep function");
+        }
         String previousForbiddenContext = parser.futureAsyncAwaitForbiddenContext;
         parser.futureAsyncAwaitForbiddenContext = token.text;
         try {
@@ -307,5 +311,24 @@ public class ParseMapGrepSort {
             }
         }
         return index < parser.tokens.size() && parser.tokens.get(index).text.equals("{");
+    }
+
+    /**
+     * Perl diagnoses {@code grep $predicate (LIST)} as a missing comma
+     * between the predicate and its input list. Without this check the
+     * parenthesized list is absorbed as an invocation of the scalar.
+     */
+    private static boolean startsVariableFollowedByParenthesizedList(Parser parser) {
+        int index = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+        if (index >= parser.tokens.size() || !parser.tokens.get(index).text.equals("$")) {
+            return false;
+        }
+        index = Whitespace.skipWhitespace(parser, index + 1, parser.tokens);
+        if (index >= parser.tokens.size()
+                || parser.tokens.get(index).type != LexerTokenType.IDENTIFIER) {
+            return false;
+        }
+        index = Whitespace.skipWhitespace(parser, index + 1, parser.tokens);
+        return index < parser.tokens.size() && parser.tokens.get(index).text.equals("(");
     }
 }
