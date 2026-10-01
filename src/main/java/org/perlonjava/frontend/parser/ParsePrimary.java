@@ -5,6 +5,7 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.perlmodule.Strict;
+import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -328,6 +329,30 @@ public class ParsePrimary {
         if (operatorEnabled) {
             Node operation = CoreOperatorResolver.parseCoreOperator(parser, token, startIndex, calledWithCore);
             if (operation != null) {
+                // A declared package sub with the same spelling does not
+                // override a CORE operator by itself. Perl still diagnoses
+                // the ambiguity when the bare call resolves to CORE.
+                if (!calledWithCore && ParserTables.OVERRIDABLE_OP.contains(operator)) {
+                    String fullName = parser.ctx.symbolTable.getCurrentPackage() + "::" + operator;
+                    if (GlobalVariable.existsGlobalCodeRef(fullName)) {
+                        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+                        if (codeRef.value instanceof RuntimeCode code
+                                && code.isDeclared
+                                && !code.isBuiltin
+                                && code.subroutine == null
+                                && code.methodHandle == null
+                                && code.compilerSupplier == null
+                                && code.constantValue == null
+                                && (code.attributes == null || !code.attributes.contains("method"))) {
+                            String location = parser.ctx.errorUtil == null
+                                    ? "" : parser.ctx.errorUtil.warningLocation(startIndex);
+                            Warnings.warnWithCategory("ambiguous",
+                                    "Ambiguous call resolved as CORE::" + operator
+                                            + "(), qualify as such or use &",
+                                    location);
+                        }
+                    }
+                }
                 return operation;
             }
         }

@@ -197,7 +197,8 @@ public interface IOHandle {
 
     // Protected method that subclasses should override for actual reading
     default RuntimeScalar doRead(int maxBytes, Charset charset) {
-        return RuntimeIO.handleIOError("read operation is not supported.");
+        RuntimeIO.handleIOError(9);
+        return new RuntimeScalar();
     }
 
     default RuntimeScalar fileno() {

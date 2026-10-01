@@ -61,19 +61,17 @@ public class Operator {
         for (RuntimeScalar fileScalar : fileList) {
             fileScalar = RuntimeScalar.dereferenceAndFetchOnce(fileScalar);
             RuntimeScalar.checkTaint(fileScalar, "chmod");
-            RuntimeIO fileHandle = fileScalar.type == RuntimeScalarType.GLOB
-                    || fileScalar.type == RuntimeScalarType.GLOBREFERENCE
-                    ? RuntimeIO.getRuntimeIO(fileScalar) : null;
+            RuntimeIO fileHandle = fileScalar.getRuntimeIO();
             if (fileHandle != null && fileHandle.ioHandle instanceof ClosedIOHandle) {
                 GlobalVariable.getGlobalVariable("main::!").set("Bad file descriptor");
                 continue;
             }
-            if (fileHandle != null) {
-                throw new PerlCompilerException("The fchmod function is unimplemented");
-            }
-            String fileName = fileScalar.toString();
-            Path resolved = RuntimeIO.resolvePath(fileName, "chmod");
+            Path resolved = fileHandle != null ? fileHandle.openedPath
+                    : RuntimeIO.resolvePath(fileScalar.toString(), "chmod");
             if (resolved == null) {
+                if (fileHandle != null) {
+                    GlobalVariable.getGlobalVariable("main::!").set(9);
+                }
                 continue;
             }
             String path = resolved.toString();

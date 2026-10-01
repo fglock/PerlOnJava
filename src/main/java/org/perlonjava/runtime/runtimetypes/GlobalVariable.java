@@ -47,6 +47,9 @@ public class GlobalVariable {
     // as user-defined subroutines instead of built-in operators
     public static final Map<String, Boolean> isSubs =
             new CurrentRuntimePlainMap<>(state -> state.importedSubs());
+    /** Explicit declarations made by `use subs`, distinct from forward CVs. */
+    public static final Map<String, Boolean> subsPragmaDeclarations =
+            new CurrentRuntimePlainMap<>(state -> state.subsPragmaDeclarations());
     public static final Map<String, RuntimeScalar> globalCodeRefs = new GlobalCodeRefMap();
     static final Map<String, RuntimeGlob> globalIORefs =
             new StashSlotMap<>(state -> state.ioSlots());

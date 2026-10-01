@@ -27,6 +27,7 @@ public final class GlobalRuntimeState {
     private final Map<String, RuntimeScalar> foreachScalarAliases = new HashMap<>();
     private final Map<String, RuntimeScalar> temporaryScalarAliases = new HashMap<>();
     private final Map<String, Boolean> importedSubs = new HashMap<>();
+    private final Map<String, Boolean> subsPragmaDeclarations = new HashMap<>();
     private final Map<String, Boolean> operatorOverrideGlobs = new HashMap<>();
     /** Names promoted to full GVs by an explicit runtime typeglob assignment. */
     private final Map<String, Boolean> explicitGlobAssignments = new HashMap<>();
@@ -98,6 +99,10 @@ public final class GlobalRuntimeState {
 
     Map<String, Boolean> importedSubs() {
         return importedSubs;
+    }
+
+    Map<String, Boolean> subsPragmaDeclarations() {
+        return subsPragmaDeclarations;
     }
 
     Map<String, Boolean> operatorOverrideGlobs() {
@@ -280,6 +285,7 @@ public final class GlobalRuntimeState {
 
     void clearCodeValues() {
         importedSubs.clear();
+        subsPragmaDeclarations.clear();
         operatorOverrideGlobs.clear();
         explicitGlobAssignments.clear();
         codeRefs.clear();
@@ -353,6 +359,7 @@ public final class GlobalRuntimeState {
         }
 
         target.importedSubs.putAll(importedSubs);
+        target.subsPragmaDeclarations.putAll(subsPragmaDeclarations);
         target.operatorOverrideGlobs.putAll(operatorOverrideGlobs);
         target.explicitGlobAssignments.putAll(explicitGlobAssignments);
         target.deletedCodeRefPins.addAll(deletedCodeRefPins);

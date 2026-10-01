@@ -460,14 +460,14 @@ public class Readline {
         }
 
         if (fh == null) {
-            getGlobalVariable("main::!").set("read file handle is closed");
-            return scalarFalse;
+            getGlobalVariable("main::!").set(9);
+            return new RuntimeScalar();
         }
 
         // Check if the IO object is set up for reading
-        if (fh.ioHandle == null) {
-            getGlobalVariable("main::!").set("read is not open for input");
-            return scalarFalse;
+        if (fh.ioHandle == null || fh.ioHandle instanceof org.perlonjava.runtime.io.ClosedIOHandle) {
+            getGlobalVariable("main::!").set(9);
+            return new RuntimeScalar();
         }
 
         // Convert length and offset to integers

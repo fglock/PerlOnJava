@@ -787,6 +787,71 @@ public class ReachabilityWalker {
     }
 
     /**
+     * Collect the same bounded root graph as {@link #isReachableFromRoots},
+     * once for all weak referents in a mortal drain. The existing query's
+     * target-specific early returns become identity membership in this set.
+     */
+    static Set<RuntimeBase> reachableFromRootsSnapshot() {
+        final int maxVisits = 50_000;
+        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+
+        for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalCodeRefs.entrySet()) {
+            seedTarget(e.getValue(), null, seen, todo);
+            if (e.getValue() != null && e.getValue().value instanceof RuntimeCode code) {
+                followGlobalCodeCaptures(code, null, seen, todo);
+            }
+        }
+        for (RuntimeScalar scalar : GlobalVariable.globalVariables.values()) {
+            seedTarget(scalar, null, seen, todo);
+        }
+        for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrays.entrySet()) {
+            if (!isNonOwningDebugArgsArray(e.getKey()) && e.getValue() != null) {
+                if (seen.add(e.getValue())) todo.addLast(e.getValue());
+            }
+        }
+        for (RuntimeHash hash : GlobalVariable.globalHashes.values()) {
+            if (hash != null && seen.add(hash)) todo.addLast(hash);
+        }
+        for (RuntimeScalar scalar : ScalarRefRegistry.snapshot()) {
+            if (scalar == null || scalar.captureCount > 0 || WeakRefRegistry.isweak(scalar)
+                    || (!MyVarCleanupStack.isLive(scalar) && !scalar.refCountOwned)
+                    || scalar.scopeExited) continue;
+            seedTarget(scalar, null, seen, todo);
+        }
+        for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
+            if (liveVar instanceof RuntimeScalar scalar) {
+                seen.add(scalar);
+                seedTarget(scalar, null, seen, todo);
+            } else if (liveVar instanceof RuntimeBase base && seen.add(base)) {
+                todo.addLast(base);
+            }
+        }
+        for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
+            if (seen.add(rescued)) todo.addLast(rescued);
+        }
+
+        int visits = 0;
+        while (!todo.isEmpty() && visits++ < maxVisits) {
+            RuntimeBase cur = todo.removeFirst();
+            if (cur instanceof RuntimeStash) continue;
+            if (cur instanceof RuntimeHash hash) {
+                if (hash.elements instanceof TieHash tieHash) {
+                    followScalar(tieHash.getSelf(), null, seen, todo);
+                }
+                for (RuntimeScalar value : hash.elements.values()) {
+                    followScalar(value, null, seen, todo);
+                }
+            } else if (cur instanceof RuntimeArray array) {
+                for (RuntimeScalar value : array.elements) {
+                    followScalar(value, null, seen, todo);
+                }
+            }
+        }
+        return seen;
+    }
+
+    /**
      * Lightweight fallback for {@link WeakRefRegistry#weaken}: check whether a
      * target is still reachable from a JVM-live scalar even when that scalar is
      * not a counted owner. Test2::Tools::Refcount weakens a local probe copy

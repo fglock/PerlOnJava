@@ -280,6 +280,9 @@ public class LayeredIOHandle implements IOHandle {
                 bytesToRead = Math.min(128, charactersNeeded);
             }
             RuntimeScalar chunk = delegate.doRead(bytesToRead, charset);
+            if (!chunk.getDefinedBoolean()) {
+                return chunk;
+            }
             String chunkStr = chunk.toString();
 
             if (chunkStr.isEmpty()) {

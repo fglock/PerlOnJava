@@ -51,6 +51,7 @@ public class Subs extends PerlModuleBase {
                 code.isDeclared = true;
             }
             GlobalVariable.isSubs.put(fullName, true);
+            GlobalVariable.subsPragmaDeclarations.put(fullName, true);
         }
 
         return new RuntimeList();
