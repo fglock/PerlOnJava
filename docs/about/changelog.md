@@ -14,6 +14,12 @@ priorities and future plans.
   byte text during matching, and retain Unicode provenance when formatting
   compiled regex values.
 
+- Keep imported `try`/`catch` and declared `dump` calls free of false CORE
+  ambiguity warnings, restore filehandle `chdir` and invalid-descriptor errors,
+  preserve dynamic package variables and monotonic clocks needed by
+  AnyEvent::Tools, and reuse root reachability snapshots during weak-reference
+  cleanup.
+
 - Preserve selected filehandles across glob localization, named Unicode handle
   names, void tied-assignment tails, dynamic regex input encoding, syntax-error
   eval callers, and stdio layers; keep wide CLI diagnostics free of host print

@@ -478,6 +478,8 @@ public class RuntimeIO extends RuntimeScalar {
      * Mutually exclusive with ioHandle - a RuntimeIO is either a file or directory handle.
      */
     public DirectoryIO directoryIO;
+    /** Path captured when a regular file or directory is opened through Perl open. */
+    public Path openedPath;
     /**
      * The name of the glob that owns this IO handle (e.g., "main::STDOUT").
      * Used for stringification when the filehandle is used in string context.
@@ -561,6 +563,7 @@ public class RuntimeIO extends RuntimeScalar {
         this.slurpReadAttempted = other.slurpReadAttempted;
         this.ioHandle = other.ioHandle;
         this.directoryIO = other.directoryIO;
+        this.openedPath = other.openedPath;
         this.needFlush = other.needFlush;
         this.autoFlush = other.autoFlush;
         this.formatPageLength = other.formatPageLength;
@@ -968,6 +971,7 @@ public class RuntimeIO extends RuntimeScalar {
                 return null;
             }
             Set<StandardOpenOption> options = fh.convertMode(mode);
+            fh.openedPath = filePath;
 
             // Windows rejects FileChannel.open(directory) with access denied,
             // while Unix permits the open and reports EISDIR only when read.
@@ -1668,6 +1672,10 @@ public class RuntimeIO extends RuntimeScalar {
      * @param ioLayer the layer specification (e.g., ":utf8", ":crlf", ":raw")
      */
     public RuntimeScalar binmode(String ioLayer) {
+        if (ioHandle == null || ioHandle instanceof ClosedIOHandle) {
+            getGlobalVariable("main::!").set(9);
+            return scalarFalse;
+        }
         if (ioLayer.isEmpty()) {
             // No layers specified, check ${^OPEN} for default layers
             ioLayer = getGlobalVariable(GlobalContext.OPEN).toString();
@@ -1809,6 +1817,10 @@ public class RuntimeIO extends RuntimeScalar {
      * @return RuntimeScalar indicating success/failure
      */
     public RuntimeScalar close() {
+        if (ioHandle == null || ioHandle instanceof ClosedIOHandle) {
+            getGlobalVariable("main::!").set(9);
+            return scalarFalse;
+        }
         removeHandle(ioHandle);
         unregisterFileno();
         ioHandle.flush();

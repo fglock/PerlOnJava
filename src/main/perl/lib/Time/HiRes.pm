@@ -20,10 +20,15 @@ use warnings;
 use Exporter 'import';
 
 our $VERSION = '1.9764';
-our @EXPORT_OK = qw(usleep nanosleep ualarm gettimeofday tv_interval time sleep alarm);
+our @EXPORT_OK = qw(usleep nanosleep ualarm gettimeofday tv_interval time sleep alarm
+                    clock_gettime CLOCK_REALTIME CLOCK_MONOTONIC);
 
 require XSLoader;
 XSLoader::load('Time::HiRes');
+
+# POSIX clock identifiers used on Linux and Darwin.
+sub CLOCK_REALTIME () { 0 }
+sub CLOCK_MONOTONIC () { $^O eq 'darwin' ? 6 : 1 }
 
 sub tv_interval {
     my ($start, $end) = @_;

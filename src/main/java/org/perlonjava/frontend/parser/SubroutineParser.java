@@ -247,12 +247,30 @@ public class SubroutineParser {
                     // the live glob.  A later bare `time` in eval STRING is
                     // parsed against that slot and, unless the CV has the
                     // :method attribute, Perl warns that it resolved to the
-                    // CORE keyword.  Do not diagnose ordinary lazily-created
-                    // CORE placeholders: only a typeglob installation marks
-                    // the name in isSubs.
+                    // CORE keyword. A bare forward declaration has the same
+                    // ambiguity. Do not diagnose lazily-created placeholders.
                     if (!isMethod && CORE_PROTOTYPES.containsKey(subName)
-                            && GlobalVariable.isSubs.containsKey(fullName)
+                            && (GlobalVariable.isSubs.containsKey(fullName)
+                                    || (runtimeCode.isDeclared
+                                            && runtimeCode.subroutine == null
+                                            && runtimeCode.methodHandle == null
+                                            && runtimeCode.compilerSupplier == null))
                             && !runtimeCode.isBuiltin
+                            // Imported CVs keep the defining package. An
+                            // imported Time::HiRes::time, for example, is
+                            // deliberately selected over CORE::time.
+                            && (runtimeCode.packageName == null
+                                    || runtimeCode.packageName.equals(parser.ctx.symbolTable.getCurrentPackage()))
+                            // `use subs` is an explicit declaration of a Perl
+                            // subroutine with this name, so its later calls are
+                            // not ambiguous with the CORE spelling.
+                            && !GlobalVariable.subsPragmaDeclarations.containsKey(fullName)
+                            // Without feature 'try', these names are ordinary
+                            // imported subs (for example, Try::Tiny), not CORE
+                            // keywords competing with the call.
+                            && !((subName.equals("try") || subName.equals("catch")
+                                    || subName.equals("finally"))
+                                    && !parser.ctx.symbolTable.isFeatureCategoryEnabled("try"))
                             && (attributes == null || !attributes.contains("method"))) {
                         String location = parser.ctx.errorUtil == null
                                 ? ""
@@ -1644,9 +1662,17 @@ public class SubroutineParser {
         IdentifierNode identifier = body instanceof IdentifierNode id ? id
                 : body instanceof OperatorNode op && "$".equals(op.operator)
                         && op.operand instanceof IdentifierNode id ? id : null;
-        return identifier != null
-                && (parser.ctx.symbolTable.getVariableIndex(identifier.name) >= 0
-                    || parser.ctx.symbolTable.getVariableIndex("$" + identifier.name) >= 0);
+        return identifier != null && isLexicalVariable(parser, identifier.name);
+    }
+
+    private static boolean isLexicalVariable(Parser parser, String name) {
+        for (String candidate : List.of(name, "$" + name)) {
+            SymbolTable.SymbolEntry entry = parser.ctx.symbolTable.getSymbolEntry(candidate);
+            if (entry != null && ("my".equals(entry.decl()) || "state".equals(entry.decl()))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static ListNode handleNamedSubWithFilter(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, boolean filterLexicalMethods, String declaration) {

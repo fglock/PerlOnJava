@@ -170,7 +170,8 @@ public class StandardIO implements IOHandle {
         } catch (IOException e) {
             return handleIOException(e, "Read operation failed");
         }
-        return new RuntimeScalar("");  // Return empty string instead of undef
+        getGlobalVariable("main::!").set(9);
+        return new RuntimeScalar();
     }
 
     @Override
@@ -238,7 +239,8 @@ public class StandardIO implements IOHandle {
                 return new RuntimeScalar(); // undef
             }
         }
-        return RuntimeIO.handleIOError("sysread operation not supported on output stream");
+        getGlobalVariable("main::!").set(9);
+        return new RuntimeScalar();
     }
 
     @Override

@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.io.DirectoryIO;
+import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.File;
@@ -35,9 +36,8 @@ public class Directory {
         //            fails. It returns true on success, false otherwise. See the
         //            example under "die".
         //
-        //            On systems that support fchdir(2), you may pass a filehandle or
-        //            directory handle as the argument. On systems that don't support
-        //            fchdir(2), passing handles raises an exception.
+        //            On systems that support fchdir(2), you may pass a filehandle as
+        //            the argument. Directory handles additionally require dirfd(3).
 
         String dirName;
 
@@ -46,8 +46,37 @@ public class Directory {
             // Try to get RuntimeIO from the scalar
             RuntimeIO io = RuntimeIO.getRuntimeIO(runtimeScalar);
             if (io != null) {
-                // This is a filehandle or dirhandle - fchdir is not supported
-                throw new PerlCompilerException("The fchdir function is unimplemented");
+                if (io.directoryIO != null) {
+                    throw new PerlCompilerException("The dirfd function is unimplemented");
+                }
+                if (io.ioHandle == null || io.ioHandle instanceof org.perlonjava.runtime.io.ClosedIOHandle) {
+                    getGlobalVariable("main::!").set(9);
+                    if (IOOperator.unopenedWarningsEnabled()
+                            || Warnings.warningManager.isWarningEnabled("unopened")) {
+                        String state = io.openedPath != null
+                                || io.directoryIO != null
+                                ? "closed" : "unopened";
+                        WarnDie.warn(new RuntimeScalar("chdir() on " + state
+                                + " filehandle " + filehandleName(runtimeScalar)), new RuntimeScalar(""));
+                    }
+                    return scalarFalse;
+                }
+                Path opened = io.openedPath;
+                if (opened == null) {
+                    getGlobalVariable("main::!").set(9);
+                    return scalarFalse;
+                }
+                if (!Files.isDirectory(opened)) {
+                    getGlobalVariable("main::!").set(20); // ENOTDIR
+                    return scalarFalse;
+                }
+                try {
+                    RuntimeEnvironment.setCurrentDirectory(opened.toFile().getCanonicalPath());
+                    return scalarTrue;
+                } catch (IOException e) {
+                    handleIOException(e, "chdir failed");
+                    return scalarFalse;
+                }
             }
         }
 
@@ -186,6 +215,11 @@ public class Directory {
 
     public static RuntimeScalar closedir(RuntimeScalar runtimeScalar) {
         RuntimeIO dirIO = runtimeScalar.getRuntimeIO();
+        if (dirIO == null || dirIO.directoryIO == null) {
+            getGlobalVariable("main::!").set(9);
+            warnIfNotDirectoryHandle(runtimeScalar, "closedir");
+            return RuntimeScalarCache.scalarUndef;
+        }
         if (dirIO.directoryIO != null) {
             try {
                 if (dirIO.directoryIO.directoryStream != null) {
