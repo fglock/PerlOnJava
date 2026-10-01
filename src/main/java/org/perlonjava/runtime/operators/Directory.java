@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.io.DirectoryIO;
+import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.File;
@@ -50,7 +51,8 @@ public class Directory {
                 }
                 if (io.ioHandle == null || io.ioHandle instanceof org.perlonjava.runtime.io.ClosedIOHandle) {
                     getGlobalVariable("main::!").set(9);
-                    if (IOOperator.unopenedWarningsEnabled()) {
+                    if (IOOperator.unopenedWarningsEnabled()
+                            || Warnings.warningManager.isWarningEnabled("unopened")) {
                         String state = io.openedPath != null
                                 || io.directoryIO != null
                                 ? "closed" : "unopened";
