@@ -43,7 +43,7 @@ proven fix emerges from profiling.
 
 ## Progress tracking
 
-### Current status: implementation complete; PR #1598 needs the #1470 update
+### Current status: implementation complete; PR #1598 updated, CI/review pending
 
 ### Completed phases
 
@@ -102,12 +102,14 @@ proven fix emerges from profiling.
   - Revalidated the final source with `nice -n 19 make` (passed in 5m13s).
     The focused tests pass on system Perl and both backends. The full
     AnyEvent::Tools run is sensitive to its sub-millisecond timing assertion;
-    direct buffer and deterministic reader-order checks pass. The PR
-    description still needs the final #1470 update.
+    direct buffer and deterministic reader-order checks pass. Pushed the #1470
+    follow-up and updated the PR description.
+  - The earlier GitHub Actions run passed on the pre-#1470 head. GitHub has
+    not reported a status check for the updated head yet.
 
 ### Next steps
 
-1. Update PR #1598 with the #1470 fix, then monitor CI and address review.
+1. Monitor CI for the updated PR #1598 head and address review.
 2. Follow up on the full Math::Decimal pure-Perl suite under a dedicated test
    budget; the focused reported case and snapshot parity checks pass.
 
