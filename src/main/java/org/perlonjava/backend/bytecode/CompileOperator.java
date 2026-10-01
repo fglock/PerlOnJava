@@ -2260,9 +2260,14 @@ public class CompileOperator {
         boolean sourceFollowsTargetBlockStart = staticTarget != null
                 && staticTarget.owner != null
                 && staticTarget.owner.getIndex() <= node.getIndex();
+        boolean sourceAndTargetShareConditional = staticTarget != null
+                && staticTarget.conditionalContext >= 0
+                && staticTarget.conditionalContext == bc.gotoConditionalContextsByToken
+                        .getOrDefault(node.getIndex(), -1);
         if (staticTarget != null && staticTarget.constructEntry
                 && !bc.isInsideGotoLabelBlock(staticTarget.owner)
                 && !staticTarget.fieldInitializer
+                && !sourceAndTargetShareConditional
                 && !sourceFollowsTargetBlockStart) {
             labelStr = "\u0000invalid-goto-into-construct:" + labelStr;
             staticTarget = null;

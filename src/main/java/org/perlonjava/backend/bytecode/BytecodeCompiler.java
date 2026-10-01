@@ -72,11 +72,11 @@ public class BytecodeCompiler implements Visitor {
     }
 
     private static void collectConstructEntryLabels(Node node, Set<String> out, boolean expressionContext) {
-        collectConstructEntryLabels(node, out, expressionContext, false);
+        collectConstructEntryLabels(node, out, expressionContext, false, false);
     }
 
     private static void collectConstructEntryLabels(Node node, Set<String> out,
-            boolean expressionContext, boolean fieldInitializer) {
+            boolean expressionContext, boolean fieldInitializer, boolean insideEvalBlock) {
         if (node == null) return;
         if (node instanceof AbstractNode abstractNode) {
             fieldInitializer |= abstractNode.getBooleanAnnotation("fieldInitializer");
@@ -90,39 +90,40 @@ public class BytecodeCompiler implements Visitor {
                 out.addAll(block.labels);
             }
             for (Node child : block.elements) {
-                collectConstructEntryLabels(child, out, expressionContext, fieldInitializer);
+                collectConstructEntryLabels(child, out, expressionContext, fieldInitializer, insideEvalBlock);
             }
             return;
         }
         if (node instanceof SubroutineNode subroutine) {
-            collectConstructEntryLabels(subroutine.block, out, true, fieldInitializer);
+            collectConstructEntryLabels(subroutine.block, out, true, fieldInitializer,
+                    insideEvalBlock || subroutine.useTryCatch);
             return;
         }
         if (node instanceof IfNode ifNode) {
-            collectConstructEntryLabels(ifNode.condition, out, true, fieldInitializer);
-            collectConstructEntryLabels(ifNode.thenBranch, out, true, fieldInitializer);
-            collectConstructEntryLabels(ifNode.elseBranch, out, true, fieldInitializer);
+            collectConstructEntryLabels(ifNode.condition, out, true, fieldInitializer, insideEvalBlock);
+            collectConstructEntryLabels(ifNode.thenBranch, out, true, fieldInitializer, insideEvalBlock);
+            collectConstructEntryLabels(ifNode.elseBranch, out, true, fieldInitializer, insideEvalBlock);
             return;
         }
         if (node instanceof OperatorNode op) {
-            collectConstructEntryLabels(op.operand, out, true, fieldInitializer);
+            collectConstructEntryLabels(op.operand, out, true, fieldInitializer, insideEvalBlock);
             return;
         }
         if (node instanceof ListNode list) {
             for (Node child : list.elements) {
-                collectConstructEntryLabels(child, out, true, fieldInitializer);
+                collectConstructEntryLabels(child, out, true, fieldInitializer, insideEvalBlock);
             }
             return;
         }
         if (node instanceof BinaryOperatorNode binary) {
-            collectConstructEntryLabels(binary.left, out, true, fieldInitializer);
-            collectConstructEntryLabels(binary.right, out, true, fieldInitializer);
+            collectConstructEntryLabels(binary.left, out, true, fieldInitializer, insideEvalBlock);
+            collectConstructEntryLabels(binary.right, out, true, fieldInitializer, insideEvalBlock);
             return;
         }
         if (node instanceof TernaryOperatorNode ternary) {
-            collectConstructEntryLabels(ternary.condition, out, true, fieldInitializer);
-            collectConstructEntryLabels(ternary.trueExpr, out, true, fieldInitializer);
-            collectConstructEntryLabels(ternary.falseExpr, out, true, fieldInitializer);
+            collectConstructEntryLabels(ternary.condition, out, true, fieldInitializer, insideEvalBlock);
+            collectConstructEntryLabels(ternary.trueExpr, out, true, fieldInitializer, insideEvalBlock);
+            collectConstructEntryLabels(ternary.falseExpr, out, true, fieldInitializer, insideEvalBlock);
         }
     }
 
@@ -287,14 +288,17 @@ public class BytecodeCompiler implements Visitor {
         final int tokenIndex;
         final boolean constructEntry;
         final boolean loopBody;
+        final int conditionalContext;
         final BlockNode owner;
         final boolean fieldInitializer;
         Integer pc;
-        GotoLabelTarget(String name, int tokenIndex, boolean constructEntry, boolean loopBody, BlockNode owner) {
+        GotoLabelTarget(String name, int tokenIndex, boolean constructEntry, boolean loopBody,
+                int conditionalContext, BlockNode owner) {
             this.name = name;
             this.tokenIndex = tokenIndex;
             this.constructEntry = constructEntry;
             this.loopBody = loopBody;
+            this.conditionalContext = conditionalContext;
             this.owner = owner;
             this.fieldInitializer = owner != null && owner.getBooleanAnnotation("fieldInitializer");
         }
@@ -304,6 +308,7 @@ public class BytecodeCompiler implements Visitor {
     private final Deque<Map<String, GotoLabelTarget>> gotoLabelScopes = new ArrayDeque<>();
     private final Deque<BlockNode> gotoLabelBlockScopes = new ArrayDeque<>();
     private final Map<Integer, GotoLabelTarget> gotoLabelTargetsByToken = new HashMap<>();
+    final Map<Integer, Integer> gotoConditionalContextsByToken = new HashMap<>();
     private final Map<String, List<GotoLabelTarget>> gotoLabelTargetsByName = new HashMap<>();
     final List<Object[]> pendingGotos = new ArrayList<>();  // [patchPc(Integer), GotoLabelTarget]
 
@@ -322,7 +327,7 @@ public class BytecodeCompiler implements Visitor {
             }
         }
         for (String name : block.labels) {
-            scope.putIfAbsent(name, new GotoLabelTarget(name, -1, false, false, block));
+            scope.putIfAbsent(name, new GotoLabelTarget(name, -1, false, false, -1, block));
         }
         gotoLabelScopes.push(scope);
         gotoLabelBlockScopes.push(block);
@@ -368,14 +373,15 @@ public class BytecodeCompiler implements Visitor {
         return result;
     }
 
-    private void predeclareGotoLabels(Node node, boolean expressionContext, boolean insideLoopBody) {
+    private void predeclareGotoLabels(Node node, boolean expressionContext, boolean insideLoopBody,
+            boolean insideEvalBlock, int conditionalContext) {
         if (node == null) return;
         // Eval blocks are represented as SubroutineNode(useTryCatch=true), but
         // execute in this compiler frame and therefore share its goto labels.
         // Ordinary subroutines compile into independent frames and must remain
         // isolated from the enclosing label table.
         if (node instanceof SubroutineNode subroutine) {
-            if (subroutine.useTryCatch) predeclareGotoLabels(subroutine.block, false, insideLoopBody);
+            if (subroutine.useTryCatch) predeclareGotoLabels(subroutine.block, false, insideLoopBody, true, conditionalContext);
             return;
         }
         if (node instanceof LabelNode) return;
@@ -396,7 +402,7 @@ public class BytecodeCompiler implements Visitor {
             // "Can't find label".
             for (String name : block.labels) {
                 GotoLabelTarget created = new GotoLabelTarget(name, block.getIndex(),
-                        constructEntry, insideLoopBody, block);
+                        constructEntry, insideLoopBody, conditionalContext, block);
                 local.put(name, created);
                 gotoLabelTargetsByName.computeIfAbsent(name,
                         ignoredName -> new ArrayList<>()).add(created);
@@ -404,7 +410,8 @@ public class BytecodeCompiler implements Visitor {
             for (Node child : block.elements) {
                 if (!(child instanceof LabelNode label)) continue;
                 GotoLabelTarget target = local.computeIfAbsent(label.label, ignored -> {
-                    GotoLabelTarget created = new GotoLabelTarget(label.label, label.getIndex(), constructEntry, insideLoopBody, block);
+                    GotoLabelTarget created = new GotoLabelTarget(label.label, label.getIndex(), constructEntry,
+                            insideLoopBody, conditionalContext, block);
                     gotoLabelTargetsByName.computeIfAbsent(label.label, ignoredName -> new ArrayList<>()).add(created);
                     return created;
                 });
@@ -414,42 +421,52 @@ public class BytecodeCompiler implements Visitor {
             // may be wrapped by parser-introduced blocks (as in $#{; do {
             // LABEL: ... }}); resetting it here made its label look like an
             // ordinary jump target and allowed goto to enter the construct.
-            for (Node child : block.elements) predeclareGotoLabels(child, expressionContext, insideLoopBody);
+            for (Node child : block.elements) predeclareGotoLabels(child, expressionContext,
+                    insideLoopBody, insideEvalBlock, conditionalContext);
             return;
         }
         if (node instanceof For1Node loop) {
-            predeclareGotoLabels(loop.list, false, insideLoopBody);
-            predeclareGotoLabels(loop.body, false, true);
-            predeclareGotoLabels(loop.continueBlock, false, true);
+            predeclareGotoLabels(loop.list, false, insideLoopBody, insideEvalBlock, conditionalContext);
+            predeclareGotoLabels(loop.body, false, true, insideEvalBlock, conditionalContext);
+            predeclareGotoLabels(loop.continueBlock, false, true, insideEvalBlock, conditionalContext);
             return;
         }
         if (node instanceof For3Node loop) {
-            predeclareGotoLabels(loop.initialization, false, insideLoopBody);
-            predeclareGotoLabels(loop.condition, false, insideLoopBody);
-            predeclareGotoLabels(loop.increment, false, insideLoopBody);
+            predeclareGotoLabels(loop.initialization, false, insideLoopBody, insideEvalBlock, conditionalContext);
+            predeclareGotoLabels(loop.condition, false, insideLoopBody, insideEvalBlock, conditionalContext);
+            predeclareGotoLabels(loop.increment, false, insideLoopBody, insideEvalBlock, conditionalContext);
             // Only foreach has an iterator body that cannot be entered from
             // outside.  C-style for labels retain ordinary goto semantics.
-            predeclareGotoLabels(loop.body, false, insideLoopBody);
-            predeclareGotoLabels(loop.continueBlock, false, insideLoopBody);
+            predeclareGotoLabels(loop.body, false, insideLoopBody, insideEvalBlock, conditionalContext);
+            predeclareGotoLabels(loop.continueBlock, false, insideLoopBody, insideEvalBlock, conditionalContext);
             return;
         }
         if (node instanceof IfNode conditional) {
-            predeclareGotoLabels(conditional.condition, true, insideLoopBody);
+            predeclareGotoLabels(conditional.condition, true, insideLoopBody, insideEvalBlock, conditionalContext);
             // A label in `if (0) { ... }` is optimized away and must not
             // become a static goto target (op/goto.t GH #23810).
             boolean alwaysFalse = conditional.condition instanceof NumberNode number
                     && number.value.equals("0");
-            if (!alwaysFalse) predeclareGotoLabels(conditional.thenBranch, true, insideLoopBody);
-            predeclareGotoLabels(conditional.elseBranch, true, insideLoopBody);
+            int branchContext = conditional.getIndex();
+            if (!alwaysFalse) predeclareGotoLabels(conditional.thenBranch, true, insideLoopBody,
+                    insideEvalBlock, branchContext);
+            predeclareGotoLabels(conditional.elseBranch, true, insideLoopBody,
+                    insideEvalBlock, branchContext);
             return;
         }
-        if (node instanceof OperatorNode operator) { predeclareGotoLabels(operator.operand, true, insideLoopBody); return; }
-        if (node instanceof ListNode list) { for (Node child : list.elements) predeclareGotoLabels(child, true, insideLoopBody); return; }
+        if (node instanceof OperatorNode operator) {
+            if ("goto".equals(operator.operator)) {
+                gotoConditionalContextsByToken.put(operator.getIndex(), conditionalContext);
+            }
+            predeclareGotoLabels(operator.operand, true, insideLoopBody, insideEvalBlock, conditionalContext);
+            return;
+        }
+        if (node instanceof ListNode list) { for (Node child : list.elements) predeclareGotoLabels(child, true, insideLoopBody, insideEvalBlock, conditionalContext); return; }
         if (node instanceof BinaryOperatorNode binary) {
-            predeclareGotoLabels(binary.left, true, insideLoopBody); predeclareGotoLabels(binary.right, true, insideLoopBody); return;
+            predeclareGotoLabels(binary.left, true, insideLoopBody, insideEvalBlock, conditionalContext); predeclareGotoLabels(binary.right, true, insideLoopBody, insideEvalBlock, conditionalContext); return;
         }
         if (node instanceof TernaryOperatorNode ternary) {
-            predeclareGotoLabels(ternary.condition, true, insideLoopBody); predeclareGotoLabels(ternary.trueExpr, true, insideLoopBody); predeclareGotoLabels(ternary.falseExpr, true, insideLoopBody);
+            predeclareGotoLabels(ternary.condition, true, insideLoopBody, insideEvalBlock, conditionalContext); predeclareGotoLabels(ternary.trueExpr, true, insideLoopBody, insideEvalBlock, conditionalContext); predeclareGotoLabels(ternary.falseExpr, true, insideLoopBody, insideEvalBlock, conditionalContext);
         }
     }
 
@@ -1471,7 +1488,7 @@ public class BytecodeCompiler implements Visitor {
         collectDeferLabels(node, gotoLabelsInsideDefer, false);
         collectConstructEntryLabels(node, gotoLabelsInsideConstruct, false);
         collectGivenLabels(node, gotoLabelsInsideGiven, false);
-        predeclareGotoLabels(node, false, false);
+        predeclareGotoLabels(node, false, false, false, -1);
         markGotosInLoopConditions(node);
 
         if (node != null) {
@@ -9007,7 +9024,7 @@ public class BytecodeCompiler implements Visitor {
         GotoLabelTarget target = resolveStaticGotoTarget(node.label);
         if (target == null) target = gotoLabelTargetsByToken.get(node.getIndex());
         if (target == null) {
-            target = new GotoLabelTarget(node.label, node.getIndex(), false, false, null);
+            target = new GotoLabelTarget(node.label, node.getIndex(), false, false, -1, null);
         }
         // Perl binds repeated labels in one lexical block to the first
         // occurrence.  Do not let a later statement overwrite a forward

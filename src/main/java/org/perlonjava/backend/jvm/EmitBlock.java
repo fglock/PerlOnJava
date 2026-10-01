@@ -190,7 +190,7 @@ public class EmitBlock {
      * setup, which Perl rejects.
      */
     private static void collectConstructEntryLabels(Node node, Set<String> out, boolean expressionContext) {
-        collectConstructEntryLabels(node, out, expressionContext, false);
+        collectConstructEntryLabels(node, out, expressionContext, false, false);
     }
 
     /** Collect labels inside defer blocks so goto validation crosses their boundary. */
@@ -283,7 +283,8 @@ public class EmitBlock {
     }
 
     private static void collectConstructEntryLabels(
-            Node node, Set<String> out, boolean expressionContext, boolean fieldInitializer) {
+            Node node, Set<String> out, boolean expressionContext, boolean fieldInitializer,
+            boolean insideEvalBlock) {
         if (node == null) return;
         if (node instanceof AbstractNode abstractNode) {
             fieldInitializer |= abstractNode.getBooleanAnnotation("fieldInitializer");
@@ -294,36 +295,105 @@ public class EmitBlock {
         }
         if (node instanceof BlockNode block) {
             if (expressionContext && !fieldInitializer) out.addAll(block.labels);
-            for (Node child : block.elements) collectConstructEntryLabels(child, out, expressionContext, fieldInitializer);
+            for (Node child : block.elements) collectConstructEntryLabels(child, out,
+                    expressionContext, fieldInitializer, insideEvalBlock);
             return;
         }
         if (node instanceof SubroutineNode subroutine) {
-            collectConstructEntryLabels(subroutine.block, out, true, fieldInitializer);
+            collectConstructEntryLabels(subroutine.block, out, true, fieldInitializer,
+                    insideEvalBlock || subroutine.useTryCatch);
             return;
         }
         if (node instanceof OperatorNode op) {
-            collectConstructEntryLabels(op.operand, out, true, fieldInitializer);
+            collectConstructEntryLabels(op.operand, out, true, fieldInitializer, insideEvalBlock);
             return;
         }
         if (node instanceof ListNode list) {
-            for (Node child : list.elements) collectConstructEntryLabels(child, out, true, fieldInitializer);
+            for (Node child : list.elements) collectConstructEntryLabels(child, out, true, fieldInitializer, insideEvalBlock);
             return;
         }
         if (node instanceof BinaryOperatorNode binary) {
-            collectConstructEntryLabels(binary.left, out, true, fieldInitializer);
-            collectConstructEntryLabels(binary.right, out, true, fieldInitializer);
+            collectConstructEntryLabels(binary.left, out, true, fieldInitializer, insideEvalBlock);
+            collectConstructEntryLabels(binary.right, out, true, fieldInitializer, insideEvalBlock);
             return;
         }
         if (node instanceof TernaryOperatorNode ternary) {
-            collectConstructEntryLabels(ternary.condition, out, true, fieldInitializer);
-            collectConstructEntryLabels(ternary.trueExpr, out, true, fieldInitializer);
-            collectConstructEntryLabels(ternary.falseExpr, out, true, fieldInitializer);
+            collectConstructEntryLabels(ternary.condition, out, true, fieldInitializer, insideEvalBlock);
+            collectConstructEntryLabels(ternary.trueExpr, out, true, fieldInitializer, insideEvalBlock);
+            collectConstructEntryLabels(ternary.falseExpr, out, true, fieldInitializer, insideEvalBlock);
             return;
         }
         if (node instanceof IfNode ifNode) {
-            collectConstructEntryLabels(ifNode.condition, out, true, fieldInitializer);
-            collectConstructEntryLabels(ifNode.thenBranch, out, true, fieldInitializer);
-            collectConstructEntryLabels(ifNode.elseBranch, out, true, fieldInitializer);
+            collectConstructEntryLabels(ifNode.condition, out, true, fieldInitializer, insideEvalBlock);
+            collectConstructEntryLabels(ifNode.thenBranch, out, true, fieldInitializer, insideEvalBlock);
+            collectConstructEntryLabels(ifNode.elseBranch, out, true, fieldInitializer, insideEvalBlock);
+        }
+    }
+
+    private static void collectConditionalGotoContexts(Node node, Map<String, Integer> labelContexts,
+            Map<Integer, Integer> sourceContexts, int conditionalContext) {
+        if (node == null) return;
+        if (node instanceof LabelNode label) {
+            if (conditionalContext >= 0) labelContexts.putIfAbsent(label.label, conditionalContext);
+            return;
+        }
+        if (node instanceof BlockNode block) {
+            if (conditionalContext >= 0) {
+                for (String label : block.labels) labelContexts.putIfAbsent(label, conditionalContext);
+            }
+            for (Node child : block.elements) {
+                collectConditionalGotoContexts(child, labelContexts, sourceContexts, conditionalContext);
+            }
+            return;
+        }
+        if (node instanceof IfNode conditional) {
+            collectConditionalGotoContexts(conditional.condition, labelContexts, sourceContexts, conditionalContext);
+            collectConditionalGotoContexts(conditional.thenBranch, labelContexts, sourceContexts,
+                    conditional.getIndex());
+            collectConditionalGotoContexts(conditional.elseBranch, labelContexts, sourceContexts,
+                    conditional.getIndex());
+            return;
+        }
+        if (node instanceof OperatorNode operator) {
+            if ("goto".equals(operator.operator)) {
+                sourceContexts.putIfAbsent(operator.getIndex(), conditionalContext);
+            }
+            collectConditionalGotoContexts(operator.operand, labelContexts, sourceContexts, conditionalContext);
+            return;
+        }
+        if (node instanceof SubroutineNode subroutine) {
+            collectConditionalGotoContexts(subroutine.block, labelContexts, sourceContexts, conditionalContext);
+            return;
+        }
+        if (node instanceof For1Node loop) {
+            collectConditionalGotoContexts(loop.list, labelContexts, sourceContexts, conditionalContext);
+            collectConditionalGotoContexts(loop.body, labelContexts, sourceContexts, conditionalContext);
+            collectConditionalGotoContexts(loop.continueBlock, labelContexts, sourceContexts, conditionalContext);
+            return;
+        }
+        if (node instanceof For3Node loop) {
+            collectConditionalGotoContexts(loop.initialization, labelContexts, sourceContexts, conditionalContext);
+            collectConditionalGotoContexts(loop.condition, labelContexts, sourceContexts, conditionalContext);
+            collectConditionalGotoContexts(loop.increment, labelContexts, sourceContexts, conditionalContext);
+            collectConditionalGotoContexts(loop.body, labelContexts, sourceContexts, conditionalContext);
+            collectConditionalGotoContexts(loop.continueBlock, labelContexts, sourceContexts, conditionalContext);
+            return;
+        }
+        if (node instanceof ListNode list) {
+            for (Node child : list.elements) {
+                collectConditionalGotoContexts(child, labelContexts, sourceContexts, conditionalContext);
+            }
+            return;
+        }
+        if (node instanceof BinaryOperatorNode binary) {
+            collectConditionalGotoContexts(binary.left, labelContexts, sourceContexts, conditionalContext);
+            collectConditionalGotoContexts(binary.right, labelContexts, sourceContexts, conditionalContext);
+            return;
+        }
+        if (node instanceof TernaryOperatorNode ternary) {
+            collectConditionalGotoContexts(ternary.condition, labelContexts, sourceContexts, conditionalContext);
+            collectConditionalGotoContexts(ternary.trueExpr, labelContexts, sourceContexts, conditionalContext);
+            collectConditionalGotoContexts(ternary.falseExpr, labelContexts, sourceContexts, conditionalContext);
         }
     }
 
@@ -396,6 +466,9 @@ public class EmitBlock {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         collectLoopBodyLabels(node, emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideLoop,
                 emitterVisitor.ctx.javaClassInfo.gotoLoopLabelTokenIndices, false);
+        collectConditionalGotoContexts(node,
+                emitterVisitor.ctx.javaClassInfo.gotoConditionalLabelContexts,
+                emitterVisitor.ctx.javaClassInfo.gotoConditionalSourceContexts, -1);
         collectConstructEntryLabels(node, emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideConstruct, false);
         collectBinaryOrListExpressionLabels(node,
                 emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideBinaryOrListExpression);

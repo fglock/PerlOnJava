@@ -1024,7 +1024,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // `*dst = *src` leaves *dst{NAME} and *dst{PACKAGE} attached to dst,
         // but the scalar glob value stringifies as the source GV. Preserve an
         // already-propagated source identity through chains of assignments.
-        String sourceStringificationName = value.effectiveStringificationName();
+        String sourceStringificationName = value.stringificationName != null
+                ? value.stringificationName : value.globName;
         this.stringificationName = sourceStringificationName;
         // Some compiler paths obtain a lightweight glob wrapper for the
         // lvalue while scalar reads later reach the canonical IO entry. Keep

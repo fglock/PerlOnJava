@@ -959,8 +959,12 @@ public class EmitControlFlow {
                 && !node.getBooleanAnnotation("insideGivenBlock");
         boolean gotoIntoBinaryOrListExpression = ctx.javaClassInfo
                 .gotoLabelsInsideBinaryOrListExpression.contains(labelName);
+        Integer targetConditional = ctx.javaClassInfo.gotoConditionalLabelContexts.get(labelName);
+        Integer sourceConditional = ctx.javaClassInfo.gotoConditionalSourceContexts.get(node.tokenIndex);
+        boolean sameConditional = targetConditional != null
+                && targetConditional.equals(sourceConditional);
         if (gotoIntoGiven || gotoIntoBinaryOrListExpression
-                || ctx.javaClassInfo.gotoLabelsInsideConstruct.contains(labelName)) {
+                || (ctx.javaClassInfo.gotoLabelsInsideConstruct.contains(labelName) && !sameConditional)) {
             if (gotoIntoGiven) {
                 // Perl reports the destination label's location.  Raise at
                 // compile time so an eval preserves that source location,

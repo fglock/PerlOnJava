@@ -14,14 +14,17 @@ priorities and future plans.
   warnings and matching, and Joni backtracking across repeated whitespace.
 
 - Preserve debugger eval caller lines, expose overloaded callbacks through
-  `$DB::sub`, initialize `$^V` as a `version` object, and diagnose loop control
-  in unused subroutines.
+  `$DB::sub`, initialize `$^V` as a `version` object with canonical string
+  output, and diagnose loop control in unused subroutines.
 
 - Keep imported `try`/`catch` and declared `dump` calls free of false CORE
-  ambiguity warnings, restore filehandle `chdir` and invalid-descriptor errors,
-  preserve dynamic package variables and monotonic clocks needed by
-  AnyEvent::Tools, and reuse root reachability snapshots during weak-reference
-  cleanup.
+  ambiguity warnings, support `chdir` and `chmod` through open handles, restore
+  invalid-descriptor errors, preserve dynamic package variables and monotonic
+  clocks needed by AnyEvent::Tools, and reuse root reachability snapshots during
+  weak-reference cleanup.
+
+- Preserve ordinary `goto` jumps between conditional branches while rejecting
+  jumps into conditional blocks from outside.
 
 - Support anonymous temporary files for read/write opens with undefined paths,
   report non-numeric process IDs passed to `kill()`, and release each result of
