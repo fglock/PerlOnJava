@@ -10,6 +10,9 @@ priorities and future plans.
   fields, including the legacy `has` declaration, and preserve open process
   pipes across temporary filehandle aliases used by `IO::Select`.
 
+- Prevent stale CPAN archive-name entries and namespace-resolution errors from
+  being recorded as compatibility regressions.
+
 - Keep SQLite column metadata fetchable and quote reserved table names, support
   Perl-compatible SQLite `REGEXP`, clear successful DBI error strings, and
   delegate non-JDBC transaction methods to their drivers.
