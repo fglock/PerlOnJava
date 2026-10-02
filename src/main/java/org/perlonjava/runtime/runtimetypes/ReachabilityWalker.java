@@ -792,6 +792,11 @@ public class ReachabilityWalker {
      * query so its common single-target drains can short-circuit.
      */
     static Set<RuntimeBase> reachableFromRootsSnapshot() {
+        return reachableFromRootsSnapshot(null);
+    }
+
+    /** Test seam for asserting one cached graph walk serves multiple targets. */
+    static Set<RuntimeBase> reachableFromRootsSnapshot(int[] visitedNodes) {
         final int maxVisits = 50_000;
         Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
@@ -833,8 +838,10 @@ public class ReachabilityWalker {
         }
 
         int visits = 0;
-        while (!todo.isEmpty() && visits++ < maxVisits) {
+        while (!todo.isEmpty() && visits < maxVisits) {
             RuntimeBase cur = todo.removeFirst();
+            visits++;
+            if (visitedNodes != null) visitedNodes[0] = visits;
             if (cur instanceof RuntimeStash) continue;
             if (cur instanceof RuntimeHash hash) {
                 if (hash.elements instanceof TieHash tieHash) {
@@ -896,13 +903,50 @@ public class ReachabilityWalker {
     }
 
     public static boolean hasLiveStrongScalarReferent(RuntimeBase target) {
-        return hasLiveStrongScalarReferentOtherThan(target, null);
+        return hasLiveStrongScalarReferentOtherThan(target, null, null);
     }
 
     public static boolean hasLiveStrongScalarReferentOtherThan(
             RuntimeBase target, RuntimeScalar excluded) {
+        return hasLiveStrongScalarReferentOtherThan(target, excluded, null);
+    }
+
+    static boolean hasLiveStrongScalarReferent(RuntimeBase target, int[] inspectedScalars) {
+        return hasLiveStrongScalarReferentOtherThan(target, null, inspectedScalars);
+    }
+
+    /** Build the direct live-scalar referent set for one lifecycle drain. */
+    static Set<RuntimeBase> liveStrongScalarReferentsSnapshot(int[] inspectedScalars) {
+        Set<RuntimeBase> referents = Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<RuntimeScalar> inspected = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
+            if (!(liveVar instanceof RuntimeScalar scalar) || !inspected.add(scalar)) continue;
+            if (inspectedScalars != null) inspectedScalars[0]++;
+            addStrongScalarReferent(scalar, false, referents);
+        }
+        for (RuntimeScalar scalar : ScalarRefRegistry.snapshot()) {
+            if (scalar == null || !inspected.add(scalar)) continue;
+            if (inspectedScalars != null) inspectedScalars[0]++;
+            addStrongScalarReferent(scalar, true, referents);
+        }
+        return referents;
+    }
+
+    private static void addStrongScalarReferent(RuntimeScalar scalar,
+                                                boolean requireLive,
+                                                Set<RuntimeBase> referents) {
+        if (WeakRefRegistry.isweak(scalar) || scalar.scopeExited
+                || (requireLive && !MyVarCleanupStack.isLive(scalar))) return;
+        if (scalar.value instanceof RuntimeBase referent) referents.add(referent);
+    }
+
+    private static boolean hasLiveStrongScalarReferentOtherThan(
+            RuntimeBase target, RuntimeScalar excluded, int[] inspectedScalars) {
         if (target == null) return false;
         for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
+            if (inspectedScalars != null && liveVar instanceof RuntimeScalar) {
+                inspectedScalars[0]++;
+            }
             if (liveVar instanceof RuntimeScalar sc
                     && sc != excluded
                     && !WeakRefRegistry.isweak(sc)
@@ -912,6 +956,7 @@ public class ReachabilityWalker {
             }
         }
         for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
+            if (inspectedScalars != null) inspectedScalars[0]++;
             if (sc == null) continue;
             if (sc == excluded) continue;
             if (WeakRefRegistry.isweak(sc)) continue;
@@ -1517,11 +1562,15 @@ public class ReachabilityWalker {
                 Collections.newSetFromMap(new IdentityHashMap<>());
 
         public ExternalRootSnapshot() {
-            this(true);
+            this(true, null);
         }
 
         public ExternalRootSnapshot(boolean includeRescued) {
-            buildNonLexicalRoots(includeRescued);
+            this(includeRescued, null);
+        }
+
+        ExternalRootSnapshot(boolean includeRescued, int[] visitedNodes) {
+            buildNonLexicalRoots(includeRescued, visitedNodes);
         }
 
         public boolean isReachable(RuntimeBase target) {
@@ -1534,7 +1583,7 @@ public class ReachabilityWalker {
             return target != null && nonLexicalReachable.contains(target);
         }
 
-        private void buildNonLexicalRoots(boolean includeRescued) {
+        private void buildNonLexicalRoots(boolean includeRescued, int[] visitedNodes) {
             java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
 
             for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalCodeRefs.entrySet()) {
@@ -1560,6 +1609,7 @@ public class ReachabilityWalker {
             while (!todo.isEmpty() && visits < MAX_VISITS) {
                 RuntimeBase cur = todo.removeFirst();
                 visits++;
+                if (visitedNodes != null) visitedNodes[0] = visits;
                 walkSnapshotNode(cur, todo);
             }
         }
@@ -1647,7 +1697,11 @@ public class ReachabilityWalker {
                 new IdentityHashMap<>();
 
         public LiveRootSnapshot() {
-            build();
+            this(null);
+        }
+
+        LiveRootSnapshot(int[] visitedNodes) {
+            build(visitedNodes);
         }
 
         public boolean isReachable(RuntimeBase target) {
@@ -1658,7 +1712,7 @@ public class ReachabilityWalker {
             return origin != target;
         }
 
-        private void build() {
+        private void build(int[] visitedNodes) {
             java.util.ArrayDeque<DirectRootStep> todo = new java.util.ArrayDeque<>();
 
             for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
@@ -1675,6 +1729,7 @@ public class ReachabilityWalker {
             while (!todo.isEmpty() && visits < MAX_VISITS) {
                 DirectRootStep step = todo.removeFirst();
                 visits++;
+                if (visitedNodes != null) visitedNodes[0] = visits;
                 walkLiveNode(step.base, todo, step.origin);
             }
         }
@@ -1919,7 +1974,7 @@ public class ReachabilityWalker {
         Set<RuntimeBase> live = w.walk();
         ArrayList<RuntimeBase> toClear = new ArrayList<>();
         Set<RuntimeBase> strongCycleProtected = quiet
-                ? collectStrongCycleProtected()
+                ? collectStrongCycleProtected(live, null)
                 : Collections.emptySet();
         for (RuntimeBase referent : WeakRefRegistry.snapshotWeakRefReferents()) {
             boolean liveReferent = live.contains(referent);
@@ -2075,7 +2130,7 @@ public class ReachabilityWalker {
         // sweepWeakRefs(true). Preserve strong cycle islands here too: Perl's
         // reference counting intentionally keeps an unreachable strong cycle
         // alive, including weak diagnostic references into that cycle.
-        Set<RuntimeBase> strongCycleProtected = collectStrongCycleProtected();
+        Set<RuntimeBase> strongCycleProtected = collectStrongCycleProtected(live, null);
         int cleared = 0;
         boolean releasedObjectNeedsCascade = false;
         for (RuntimeBase referent : pending) {
@@ -2176,33 +2231,191 @@ public class ReachabilityWalker {
         return destroyed;
     }
 
-    private static Set<RuntimeBase> collectStrongCycleProtected() {
+    static final class StrongCycleQueryStats {
+        int weakReferentsExamined;
+        int liveReferentsSkipped;
+        int graphBuilds;
+        int strongGraphNodesExpanded;
+        int cyclicNodesFound;
+        boolean graphBuildIncomplete;
+        int protectedGraphNodesVisited;
+    }
+
+    static Set<RuntimeBase> collectStrongCycleProtected(Set<RuntimeBase> live,
+                                                        StrongCycleQueryStats stats) {
         java.util.List<RuntimeBase> referents = WeakRefRegistry.snapshotWeakRefReferents();
         if (referents.isEmpty()) return Collections.emptySet();
 
-        Set<RuntimeBase> protectedSet =
+        Set<RuntimeBase> cycleCandidates =
                 Collections.newSetFromMap(new IdentityHashMap<>());
         for (RuntimeBase referent : referents) {
-            if (referent == null || protectedSet.contains(referent)) continue;
-            if (hasStrongCycle(referent)) {
-                collectStrongReachable(referent, protectedSet);
+            if (stats != null) stats.weakReferentsExamined++;
+            if (referent == null || cycleCandidates.contains(referent)) continue;
+            // A live referent is retained by the ordinary root walk below;
+            // cycle analysis can only affect unreachable candidates.
+            if (live != null && live.contains(referent)) {
+                if (stats != null) stats.liveReferentsSkipped++;
+                continue;
+            }
+            cycleCandidates.add(referent);
+        }
+        if (cycleCandidates.isEmpty()) return Collections.emptySet();
+
+        StrongCycleGraph graph = buildStrongCycleGraph(cycleCandidates, stats);
+        if (!graph.complete) {
+            // The old per-target walker also had a hard visit cap. If the
+            // combined graph reaches its cap, keep uncertain weak referents
+            // for this quiet sweep rather than risk breaking a cycle.
+            if (stats != null) stats.graphBuildIncomplete = true;
+            Set<RuntimeBase> conservative =
+                    Collections.newSetFromMap(new IdentityHashMap<>());
+            conservative.addAll(referents);
+            return conservative;
+        }
+
+        Set<RuntimeBase> cyclicNodes = findStrongCycleNodes(graph);
+        if (stats != null) stats.cyclicNodesFound = cyclicNodes.size();
+        Set<RuntimeBase> cycleRoots =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<RuntimeBase> canReachCycle =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+        java.util.ArrayDeque<RuntimeBase> reverseTodo =
+                new java.util.ArrayDeque<>(cyclicNodes);
+        while (!reverseTodo.isEmpty()) {
+            RuntimeBase current = reverseTodo.removeFirst();
+            if (!canReachCycle.add(current)) continue;
+            if (cycleCandidates.contains(current)) cycleRoots.add(current);
+            for (RuntimeBase predecessor : graph.reverseEdges.get(current)) {
+                reverseTodo.addLast(predecessor);
             }
         }
-        return protectedSet;
+        return graph.strongReachableFrom(cycleRoots, stats);
     }
 
-    private static void collectStrongReachable(RuntimeBase root, Set<RuntimeBase> seen) {
+    private static StrongCycleGraph buildStrongCycleGraph(Set<RuntimeBase> roots,
+                                                           StrongCycleQueryStats stats) {
         final int MAX_VISITS = 50_000;
-        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
-        if (seen.add(root)) {
-            todo.addLast(root);
+        java.util.IdentityHashMap<RuntimeBase, java.util.List<RuntimeBase>> edges =
+                new java.util.IdentityHashMap<>();
+        java.util.IdentityHashMap<RuntimeBase, java.util.List<RuntimeBase>> reverseEdges =
+                new java.util.IdentityHashMap<>();
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>(roots);
+        boolean complete = true;
+        while (!todo.isEmpty()) {
+            RuntimeBase current = todo.removeFirst();
+            if (edges.containsKey(current)) continue;
+            if (edges.size() >= MAX_VISITS) {
+                complete = false;
+                break;
+            }
+
+            Set<RuntimeBase> directSeen =
+                    Collections.newSetFromMap(new IdentityHashMap<>());
+            java.util.ArrayDeque<RuntimeBase> directEdges = new java.util.ArrayDeque<>();
+            enqueueStrongEdges(current, null, directSeen, directEdges);
+            java.util.ArrayList<RuntimeBase> successors = new java.util.ArrayList<>(directEdges);
+            edges.put(current, successors);
+            reverseEdges.computeIfAbsent(current, ignored -> new java.util.ArrayList<>());
+            if (stats != null) stats.strongGraphNodesExpanded++;
+            for (RuntimeBase successor : successors) {
+                reverseEdges.computeIfAbsent(successor, ignored -> new java.util.ArrayList<>())
+                        .add(current);
+                if (!edges.containsKey(successor)) todo.addLast(successor);
+            }
+        }
+        if (stats != null) stats.graphBuilds++;
+        return new StrongCycleGraph(edges, reverseEdges, complete);
+    }
+
+    private static Set<RuntimeBase> findStrongCycleNodes(StrongCycleGraph graph) {
+        Set<RuntimeBase> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        java.util.ArrayList<RuntimeBase> finishOrder = new java.util.ArrayList<>(graph.edges.size());
+        java.util.ArrayDeque<StrongCycleDfsFrame> stack = new java.util.ArrayDeque<>();
+        for (RuntimeBase start : graph.edges.keySet()) {
+            if (!visited.add(start)) continue;
+            stack.push(new StrongCycleDfsFrame(start, graph.edges.get(start).iterator()));
+            while (!stack.isEmpty()) {
+                StrongCycleDfsFrame frame = stack.peek();
+                if (frame.successors.hasNext()) {
+                    RuntimeBase next = frame.successors.next();
+                    if (visited.add(next)) {
+                        stack.push(new StrongCycleDfsFrame(
+                                next, graph.edges.get(next).iterator()));
+                    }
+                } else {
+                    finishOrder.add(frame.node);
+                    stack.pop();
+                }
+            }
         }
 
-        int visits = 0;
-        while (!todo.isEmpty() && visits < MAX_VISITS) {
-            RuntimeBase cur = todo.removeFirst();
-            visits++;
-            enqueueStrongEdges(cur, null, seen, todo);
+        Set<RuntimeBase> assigned = Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<RuntimeBase> cyclic = Collections.newSetFromMap(new IdentityHashMap<>());
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+        for (int i = finishOrder.size() - 1; i >= 0; i--) {
+            RuntimeBase start = finishOrder.get(i);
+            if (!assigned.add(start)) continue;
+            java.util.ArrayList<RuntimeBase> component = new java.util.ArrayList<>();
+            todo.addLast(start);
+            while (!todo.isEmpty()) {
+                RuntimeBase current = todo.removeFirst();
+                component.add(current);
+                for (RuntimeBase predecessor : graph.reverseEdges.get(current)) {
+                    if (assigned.add(predecessor)) todo.addLast(predecessor);
+                }
+            }
+            boolean selfLoop = false;
+            if (component.size() == 1) {
+                for (RuntimeBase successor : graph.edges.get(start)) {
+                    if (successor == start) {
+                        selfLoop = true;
+                        break;
+                    }
+                }
+            }
+            if (component.size() > 1 || selfLoop) {
+                cyclic.addAll(component);
+            }
+        }
+        return cyclic;
+    }
+
+    private static final class StrongCycleGraph {
+        private final java.util.IdentityHashMap<RuntimeBase, java.util.List<RuntimeBase>> edges;
+        private final java.util.IdentityHashMap<RuntimeBase, java.util.List<RuntimeBase>> reverseEdges;
+        private final boolean complete;
+
+        private StrongCycleGraph(
+                java.util.IdentityHashMap<RuntimeBase, java.util.List<RuntimeBase>> edges,
+                java.util.IdentityHashMap<RuntimeBase, java.util.List<RuntimeBase>> reverseEdges,
+                boolean complete) {
+            this.edges = edges;
+            this.reverseEdges = reverseEdges;
+            this.complete = complete;
+        }
+
+        private Set<RuntimeBase> strongReachableFrom(Set<RuntimeBase> roots,
+                                                     StrongCycleQueryStats stats) {
+            Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+            java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>(roots);
+            while (!todo.isEmpty()) {
+                RuntimeBase current = todo.removeFirst();
+                if (!seen.add(current)) continue;
+                if (stats != null) stats.protectedGraphNodesVisited++;
+                for (RuntimeBase next : edges.get(current)) todo.addLast(next);
+            }
+            return seen;
+        }
+    }
+
+    private static final class StrongCycleDfsFrame {
+        private final RuntimeBase node;
+        private final java.util.Iterator<RuntimeBase> successors;
+
+        private StrongCycleDfsFrame(RuntimeBase node,
+                                    java.util.Iterator<RuntimeBase> successors) {
+            this.node = node;
+            this.successors = successors;
         }
     }
 

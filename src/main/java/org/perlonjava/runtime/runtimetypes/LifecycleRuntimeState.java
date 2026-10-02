@@ -47,6 +47,10 @@ final class LifecycleRuntimeState {
     Set<RuntimeBase> flushTiedReachableCache;
     ReachabilityWalker.ExternalRootSnapshot externalRootSnapshot;
     ReachabilityWalker.LiveRootSnapshot liveRootSnapshot;
+    Set<RuntimeBase> liveStrongScalarReferents;
+    boolean lifecycleRootQueryUsed;
+    Set<RuntimeBase> fullRootSnapshot;
+    boolean targetedLifecycleRootQueryUsed;
 
     final Set<RuntimeScalar> weakScalars = Collections.newSetFromMap(new IdentityHashMap<>());
     final IdentityHashMap<RuntimeBase, Set<RuntimeScalar>> referentToWeakRefs = new IdentityHashMap<>();
@@ -108,6 +112,10 @@ final class LifecycleRuntimeState {
         flushTiedReachableCache = null;
         externalRootSnapshot = null;
         liveRootSnapshot = null;
+        liveStrongScalarReferents = null;
+        lifecycleRootQueryUsed = false;
+        fullRootSnapshot = null;
+        targetedLifecycleRootQueryUsed = false;
         weakScalars.clear();
         referentToWeakRefs.clear();
         weakRefsExist = false;

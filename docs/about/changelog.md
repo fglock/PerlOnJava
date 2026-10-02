@@ -84,8 +84,9 @@ priorities and future plans.
   ambiguity warnings, support `chdir` and `chmod` through open filehandles,
   report directory `chdir` as unavailable without `dirfd`, restore
   invalid-descriptor errors, preserve dynamic package variables and monotonic
-  clocks needed by AnyEvent::Tools, and short-circuit lifecycle root walks when
-  checking one weak-reference cleanup target.
+  clocks needed by AnyEvent::Tools, and short-circuit lifecycle root queries,
+  reuse snapshots across cleanup targets, and batch strong-cycle checks during
+  weak-reference sweeps.
 
 - Preserve ordinary `goto` jumps between conditional branches while rejecting
   jumps into conditional blocks from outside.
