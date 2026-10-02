@@ -705,11 +705,10 @@ public class IOOperator {
         }
 
         if (fh != null && fh.directoryIO != null) {
-            // Java directory streams do not expose a native descriptor. Perl
-            // reports this as an undefined fileno and sets EBADF.
-            FFMPosix.get().setErrno(9);
-            GlobalVariable.getGlobalVariable("main::!").set(9);
-            return RuntimeScalarCache.scalarUndef;
+            // DirectoryStream does not expose a native descriptor. Keep the
+            // POSIX d_dirfd contract with a runtime-local descriptor, as we do
+            // for regular files and process pipes on the JVM backend.
+            return new RuntimeScalar(fh.assignFileno());
         }
 
         if (fh == null || fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) {

@@ -273,6 +273,7 @@ public class Directory {
                 handleIOException(e, "Directory operation failed");
             }
             dirIO.directoryIO = null;
+            dirIO.unregisterFileno();
             return scalarTrue;
         }
         warnIfNotDirectoryHandle(runtimeScalar, "closedir");
