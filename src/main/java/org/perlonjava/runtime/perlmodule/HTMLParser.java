@@ -74,6 +74,7 @@ public class HTMLParser extends PerlModuleBase {
             code = new RuntimeCode(mh, null, null);
             code.isStatic = true;
             GlobalVariable.getGlobalCodeRef("HTML::Entities::decode_entities").set(new RuntimeScalar(code));
+            GlobalVariable.getGlobalCodeRef("HTML::Entities::decode").set(new RuntimeScalar(code));
 
             mh = RuntimeCode.lookup.findStatic(HTMLParser.class, "_decode_entities", RuntimeCode.methodType);
             code = new RuntimeCode(mh, null, null);

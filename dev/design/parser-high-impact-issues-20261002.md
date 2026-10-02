@@ -29,16 +29,18 @@ retained in PR #1623, and the issues were closed with that evidence.
   ascending versions, prototype diagnostics, qualified constructor arguments,
   and incremental HTML entity/whitespace boundaries.
 - [x] Implement source changes for #1615, #1619, #1622, and #1166.
+- [x] Preserve the `HTML::Entities::decode` alias after `HTML::Parser` XS
+  initialization, covering the interpreter-only TreeBuilder lookup failure.
 - [x] Confirm #1470's code changes already landed in merged PR #1598; a current
   AnyEvent::Tools run still shows a sub-millisecond timer assertion failure, so
   leave the issue open pending a stable integration pass.
 
 ### Next steps
 
-1. Build once after the full implementation batch and run all focused tests on
-  both backends.
-2. Run HTML::Tree integration and recheck AnyEvent::Tools timing assertions.
-3. Run `nice -n 19 make`, push the final batch, and update PR #1623 with
+1. Run one final build gate for the interpreter alias correction, then run all
+   focused tests on both backends.
+2. Recheck HTML::Tree and AnyEvent::Tools integration results.
+3. Push the final batch and update PR #1623 with
    verified results.
 
 ### Open questions

@@ -4,6 +4,9 @@ use Test::More;
 use HTML::Parser;
 use HTML::TreeBuilder;
 
+is(HTML::Entities::decode('&amp;'), '&',
+    'HTML::Parser keeps the HTML::Entities decode alias available');
+
 my $source = 'left  &#101; &aring &amp; right';
 
 sub parsed_dtext {
