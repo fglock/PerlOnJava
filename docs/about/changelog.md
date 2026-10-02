@@ -17,6 +17,7 @@ priorities and future plans.
   UTF-8 flag.
 - Report disabled `evalbytes` as a syntax error.
 - Warn when inserting new keys into a hash during an active `each` traversal.
+- Return the final expression from parenthesized lists in scalar context.
 
 - Preserve objects with counted collection owners during weak-reference sweeps,
   and resolve deferred user-defined regex properties in the match caller's

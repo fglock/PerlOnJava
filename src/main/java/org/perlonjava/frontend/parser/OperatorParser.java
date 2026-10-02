@@ -1448,9 +1448,21 @@ public class OperatorParser {
 
     static OperatorNode parseDefined(Parser parser, LexerToken token, int currentIndex) {
         ListNode operand;
-        // Handle 'defined' operator with special parsing context
+        // A direct `defined &sub` probes the CODE slot rather than calling it.
+        // Do not let that context leak into nested expressions: in
+        // `defined scalar(42, &sub)`, the ampersand is an old-style call and
+        // the scalar expression's final value is what defined() checks.
         boolean parsingTakeReference = parser.parsingTakeReference;
-        parser.parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
+        int argumentIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+        boolean directCodeReference = argumentIndex < parser.tokens.size()
+                && parser.tokens.get(argumentIndex).text.equals("&");
+        if (!directCodeReference && argumentIndex < parser.tokens.size()
+                && parser.tokens.get(argumentIndex).text.equals("(")) {
+            int nestedIndex = Whitespace.skipWhitespace(parser, argumentIndex + 1, parser.tokens);
+            directCodeReference = nestedIndex < parser.tokens.size()
+                    && parser.tokens.get(nestedIndex).text.equals("&");
+        }
+        parser.parsingTakeReference = directCodeReference;
         operand = ListParser.parseZeroOrOneList(parser, 0, "defined");
         parser.parsingTakeReference = parsingTakeReference;
         if (operand.elements.isEmpty()) {

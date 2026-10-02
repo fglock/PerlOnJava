@@ -1217,7 +1217,11 @@ public class CompileOperator {
                             ? RuntimeContextType.LVALUE : RuntimeContextType.SCALAR;
                     bytecodeCompiler.compileNode(node.operand, -1, operandContext);
                     int operandReg = bytecodeCompiler.lastResultReg;
-                    if (operandContext == RuntimeContextType.LVALUE) {
+                    if (operandContext == RuntimeContextType.LVALUE
+                            || node.operand instanceof ListNode) {
+                        // A parenthesized expression list in scalar context
+                        // evaluates to its final value. ARRAY_SIZE is only
+                        // appropriate for aggregate operands such as @array.
                         bytecodeCompiler.lastResultReg = operandReg;
                     } else {
                         int rd = bytecodeCompiler.allocateOutputRegister();
