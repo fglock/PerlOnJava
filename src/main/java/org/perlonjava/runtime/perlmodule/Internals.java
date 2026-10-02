@@ -513,7 +513,14 @@ public class Internals extends PerlModuleBase {
             //   - inccode.t "no leaks" delta-checks
             //   - for-many.t "refcount inside/after loop"
             //   - test_pl/examples.t "only one reference"/"two references"
-            int extra = (base.localBindingExists ? 1 : 0) + base.foreachAliasCount;
+            // The compile-time %^H hash is a named global slot in this
+            // runtime, but Perl's core refcount helper does not expose that
+            // bookkeeping slot as a lexical pad owner. Its helper also
+            // compensates for the ampersand-call argument alias below.
+            boolean compileHintsHash = base == GlobalVariable.getGlobalHash(
+                    GlobalContext.encodeSpecialVar("H"));
+            int extra = (base.localBindingExists && !compileHintsHash ? 1 : 0)
+                    + base.foreachAliasCount;
             if (rc == 2
                     && args.size() > 1
                     && args.get(1).getBoolean()
@@ -546,7 +553,9 @@ public class Internals extends PerlModuleBase {
                     && !base.localBindingExists
                     && base.hashSlotOwnerCount > 0
                     && !ReachabilityWalker.hasLiveStrongScalarReferentOtherThan(base, arg);
-            int adjust = base.localBindingExists || fieldOwnedMethodResult ? 0 : -1;
+            int adjust = compileHintsHash
+                    ? -1
+                    : base.localBindingExists || fieldOwnedMethodResult ? 0 : -1;
             return new RuntimeScalar(rc + extra + adjust).getList();
         }
         return new RuntimeScalar(1).getList();

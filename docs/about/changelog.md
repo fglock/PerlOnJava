@@ -7,6 +7,7 @@ priorities and future plans.
 ## Work in progress
 
 - Prevent formats from reusing an unrelated active lexical when a captured lexical is unavailable.
+- Match Perl's reference count for the compile-time `%^H` hash.
 - Keep `close` and `fileno` probes from creating nonexistent symbolic filehandles.
 - Preserve typeglob values from scalar assignments and selected-handle lookups.
 - Return EOF as undef from scalar-backed `getc`, and let argumentless `system()` wait.
