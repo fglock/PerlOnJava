@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Prevent stale CPAN archive-name entries and namespace-resolution errors from
+  being recorded as compatibility regressions.
+
 - Keep SQLite column metadata fetchable and quote reserved table names, support
   Perl-compatible SQLite `REGEXP`, clear successful DBI error strings, and
   delegate non-JDBC transaction methods to their drivers.

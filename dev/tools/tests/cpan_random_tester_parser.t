@@ -26,6 +26,54 @@ ok(defined $canonical_source, 'extracted archive canonical-module normalization'
 eval $canonical_source;
 die "cannot load archive canonical-module normalization: $@" if $@;
 
+my %historical_pass = (
+    'EasyDB.0.5b2' => { status => 'PASS', date => '2026-09-12' },
+);
+normalize_report_module_aliases(
+    \%historical_pass,
+    { EasyDB => 'G/GA/GABY/EasyDB.0.5b2.tgz' },
+    { 'EasyDB.0.5b2' => 'EasyDB' },
+);
+is_deeply(
+    \%historical_pass,
+    { EasyDB => { status => 'PASS', date => '2026-09-12' } },
+    'historical archive-name report entries migrate to the indexed module name',
+);
+
+my $unresolved_text = <<'LOG';
+>(error): Could not expand [EasyDB.0.5b2]. Check the module name.
+>(error): Skipping EasyDB.0.5b2 because I couldn't find a matching namespace.
+LOG
+my ($unresolved_fh, $unresolved_path) = tempfile();
+print {$unresolved_fh} $unresolved_text;
+close $unresolved_fh or die "cannot close $unresolved_path: $!";
+is(
+    cpan_unresolved_selector_reason_from_file($unresolved_path, 'EasyDB.0.5b2'),
+    'CPAN could not resolve module selector',
+    'CPAN namespace expansion failure is recognized as not tested',
+);
+is(
+    cpan_unresolved_selector_reason_from_file($unresolved_path, 'EasyDB'),
+    '',
+    'namespace failure for a different selector is not attributed to this target',
+);
+
+my $easydb_success = <<'LOG';
+Running test for module 'EasyDB'
+Checksum for /tmp/cpan/sources/authors/id/G/GA/GABY/EasyDB.0.5b2.tgz ok
+Running make test for G/GA/GABY/EasyDB.0.5b2.tgz
+All tests successful.
+Files=1, Tests=3
+Result: PASS
+  /usr/bin/make test -- OK
+LOG
+my @easydb_result = parse_all_module_results(
+    $easydb_success,
+    { 'EasyDB.0.5b2' => 'EasyDB' },
+);
+is($easydb_result[0]{module}, 'EasyDB',
+    'CPAN index mapping beats archive-name heuristics for dotted release names');
+
 is(canonical_module_for_archive('FASTAid-v0.0.4'), 'FASTAid',
     'versioned archive names with a v-prefix retain the real module name');
 
