@@ -698,7 +698,7 @@ public class IOOperator {
             fileHandle = args[0].scalar();
         }
 
-        RuntimeIO fh = fileHandle.getRuntimeIO();
+        RuntimeIO fh = getExistingRuntimeIO(fileHandle);
 
         if (fh instanceof TieHandle tieHandle) {
             return TieHandle.tiedFileno(tieHandle);
@@ -1147,7 +1147,7 @@ public class IOOperator {
         ForkOpenState.clear();
         
         RuntimeScalar handle = args.length == 1 ? ((RuntimeScalar) args[0]) : select(new RuntimeList(), RuntimeContextType.SCALAR);
-        RuntimeIO fh = handle.getRuntimeIO();
+        RuntimeIO fh = getExistingRuntimeIO(handle);
 
         // Handle case where the filehandle is invalid/corrupted
         if (fh == null) {
@@ -1170,6 +1170,17 @@ public class IOOperator {
 
     static boolean unopenedWarningsEnabled() {
         return Warnings.isCategoryEnabledAtPerlXsCaller("unopened");
+    }
+
+    /** Resolve a handle for operations that must not create a symbolic glob. */
+    private static RuntimeIO getExistingRuntimeIO(RuntimeScalar handle) {
+        if (!handle.isString()) {
+            return handle.getRuntimeIO();
+        }
+        String name = NameNormalizer.normalizeVariableName(handle.toString(), "main");
+        RuntimeGlob glob = GlobalVariable.getExistingGlobalIO(name);
+        RuntimeScalar ioSlot = glob == null ? null : glob.getIO();
+        return ioSlot == null ? null : ioSlot.getRuntimeIO();
     }
 
     private static String filehandleShortName(RuntimeScalar handle) {
