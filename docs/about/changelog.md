@@ -63,6 +63,11 @@ priorities and future plans.
 - Resolve dynamic `require` package names as portable module paths before
   filesystem lookup, including on Windows.
 
+- Preserve file-operator precedence for `eof`, `tell`, and `readline`; flush
+  incomplete HTML tags at EOF; accept prototype block arguments; resolve
+  imported `break` subs; skip adjacent POD sections after executable code; and
+  bind concatenated filename expressions to `do`.
+
 - Parse `PERL5LIB` with the host platform's path separator.
 
 - Restore `re/recompile.t`, `class/accessor.t`, `op/smartkve.t`, `comp/utf.t`,

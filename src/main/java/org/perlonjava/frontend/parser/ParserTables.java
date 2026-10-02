@@ -28,7 +28,7 @@ public class ParserTables {
             "bless",
             "atan2",
             "caller", "chdir", "chmod", "close", "connect",
-            "die", "do", "dump",
+            "break", "die", "do", "dump",
             "exec", "exit",
             "fork",
             "getgrgid", "gethostbyname", "getlogin", "getpwuid", "glob",
