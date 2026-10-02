@@ -1423,6 +1423,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0);
     }
 
+    /**
+     * Eval-block locals are released by deferred cleanup after the generated
+     * body returns. Flush that cleanup before its successful $@ reset when the
+     * materialized result contains no references that the flush could release.
+     */
+    public static void flushEvalBlockCleanupForScalarResult(RuntimeBase result) {
+        boolean resultHasNoReferences;
+        if (result instanceof RuntimeList list) {
+            resultHasNoReferences = containsNoReference(list);
+        } else if (result instanceof RuntimeScalar scalar) {
+            resultHasNoReferences = (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0;
+        } else {
+            resultHasNoReferences = true;
+        }
+        if (resultHasNoReferences) {
+            MortalList.flushAboveMark();
+        }
+    }
+
     private static RuntimeList copyReturnedReferenceScalars(RuntimeList result, int originalContext,
                                                         boolean copyCapturedScalars,
                                                         boolean recyclableScalarResult) {
