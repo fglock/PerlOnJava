@@ -15,13 +15,16 @@ Fix five currently open high-impact issues outside the separately handled
    reviewable update workflow.
 4. [#1177](https://github.com/fglock/PerlOnJava/issues/1177) — extend
    Object::Pad compatibility to `:accessor` fields.
-5. [#1187](https://github.com/fglock/PerlOnJava/issues/1187) — complete
-   directory-handle `chdir` support after the recent regular-filehandle fixes.
+5. [#1187](https://github.com/fglock/PerlOnJava/issues/1187) — fix open-handle
+   and invalid-descriptor semantics, including directory `chdir`, `chmod`,
+   `read`, `binmode` and `closedir` behavior.
 
-Issue #1611 was initially considered because its CPAN failure has broad
-dependant reach. Its reproducer currently fails on the `eof ... || ...`
-expression that overlaps parser issue #1599, so it is left to the separate
-parser work. Issue #1470 also carries `area:parser` and is excluded. The
+Issue [#1611](https://github.com/fglock/PerlOnJava/issues/1611) was initially
+considered because its CPAN failure has broad dependant reach. Its reproducer
+currently fails on the `eof ... || ...` expression that overlaps parser issue
+[#1599](https://github.com/fglock/PerlOnJava/issues/1599), so it is left to the
+separate parser work. Issue [#1470](https://github.com/fglock/PerlOnJava/issues/1470)
+also carries `area:parser` and is excluded. The
 remaining open high-impact issues are not automatically in this batch; the
 five above are selected for confirmed compatibility failures and measurable
 downstream impact.
@@ -35,27 +38,31 @@ updater fixtures run without a JVM rebuild.
 
 | Issue | Current evidence | Remaining acceptance work |
 | --- | --- | --- |
-| #1597 | Project-owned pipe regression passes system Perl and both backends. MIME-tools 5.519 `t/Decoder.t` passes all 8 assertions on JVM; interpreter evidence exists from the same candidate family. Explicit close removes the registered descriptor. | Re-run the unchanged upstream decoder test on both final backends and confirm no child process remains. |
-| #1177 | Fourteen accessor assertions pass Perl 5.42 with an isolated Object::Pad 0.825 oracle and both PerlOnJava backends. The regression skips only when `Object/Pad.pm` itself is missing. Legacy `has` is limited to class-feature bodies. | Recheck the parser against ordinary Perl `has`, verify invalid combinations against upstream where supported, and obtain/run MooseX::LocalAttribute `t/objectpad.t` on both backends. |
-| #1187 | The new directory-handle test and existing conditional bareword test pass on both backends with runtime-local cwd. The implementation uses the absolute path captured by `opendir`; it does not preserve directory identity after rename/unlink. | Re-run both tests on the final candidate and keep rename/unlink semantics documented as a separate limitation. Never call process-global `fchdir`. |
-| #1336 | The selected Java unit shard passed with the direct-scalar ordering and target-walk counter test. It verifies a live scalar is checked before graph fallback and an early target visits one graph node. The earlier full `cmp_pp.t` attempt timed out at assertion 41,048; that is not a performance measurement. | Add deterministic work counts for scalar-root inspection and repeated/multi-target fallback queries. Retain only an algorithm with bounded work for both single-target and multi-target drains, then run the full upstream correctness suite on both backends. |
-| #1278 | `dev/import-cpan/registry.json`, `sync.pl` and `make update-bundled-modules` are implemented. Default report and `CHECK=1` pass. The fixture suite passes 25 tests, including drift in Perl/Java/backing-library contracts, Object::Pad 0.800/0.805, a newer Compress::Raw::Zlib requirement, dependency overlays, checksum failure, source staging and traversal rejection. | Run the final offline tests and real registry check. The online MetaCPAN endpoint remains unexercised; rewritten providers stay manual-port only. |
+| #1597 | The project-owned pipe regression passes system Perl and both backends. MIME-tools 5.519 `t/Decoder.t` completes on JVM and interpreter with the `x-gzip64` path exercised; the optional BinHex case is unavailable because `Convert::BinHex` is absent. Explicit close unregisters the descriptor. | None for the reported reproducer. |
+| #1177 | Fourteen accessor assertions pass the isolated Object::Pad 0.825 oracle and both PerlOnJava backends. The regression skips only when `Object/Pad.pm` itself is missing. Legacy `has` is limited to class-feature bodies. MooseX::LocalAttribute 0.05 `t/objectpad.t` passes on both backends. | None for scalar accessors and the reported consumer. The advertised compatibility level remains 0.66; broader Object::Pad MOP support is outside this fix. |
+| #1187 | The 16-assertion `filehandle_error_semantics_high_impact.t` passes system Perl, JVM and interpreter, covering handle `chdir`/`chmod`, closed-handle `binmode`/`chmod`, read from write-only `STDOUT`, and closed `closedir`. The separate directory-handle test and unchanged conditional bareword test pass on both backends with runtime-local cwd. A direct probe reports `Bad file descriptor` in both `$!` and `$^E` after closed `closedir`. Directory `chdir` uses the absolute path captured by `opendir`; it does not preserve directory identity after rename/unlink. | None for the reported cases. Rename/unlink identity and native `fchdir` semantics remain outside scope; never call process-global `fchdir`. |
+| #1336 | Seven tracked reachability tests assert direct-scalar ordering, scalar snapshot reuse, target short-circuiting, multi-target graph snapshot reuse and invalidation, shared-graph visit counts, cycle preservation for direct and descendant cycles, and skipping live weak referents. System Perl, JVM and interpreter each complete all 62,210 `cmp_pp.t` assertions. | None for the reported suite. A graph that exceeds the 50,000-node cap conservatively retains weak referents for that quiet sweep; this avoids clearing uncertain cycles but may defer cleanup. Timing was not used as evidence. |
+| #1278 | `dev/import-cpan/registry.json`, `sync.pl` and `make update-bundled-modules` are implemented. Default report, `CHECK=1`, and all 25 fixture tests pass; fixtures cover provider drift, Object::Pad 0.800/0.805, newer Compress::Raw::Zlib requirements, overlays, checksum errors, staging and traversal rejection. The bundled compression providers already advertise 2.224, and the `IO::Compress` 2.224 prerequisite test passes. | `jcpan -t IO::Compress` reaches the full 25,615-test suite, which has 211 failures in seven test programs on both this candidate and the PR base `a1e07480e`. Those existing compatibility failures are outside the provider updater changes. The live MetaCPAN endpoint was not exercised; rewritten providers remain manual-port only. |
 
-The last unfiltered `nice -n 19 make` predates the current Java regression test.
-The selected unit shard compiled the current Java candidate, but that is not the
-final integration gate. Do not use elapsed build or test time as a performance
-acceptance signal on this production host.
+The final unfiltered `timeout 3600 nice -n 19 make` passed after the reachability
+changes, including the descendant-cycle regression. The production host denied
+the requested niceness adjustment, but the command continued and passed. Do not
+use elapsed build or test time as a performance acceptance signal on this host.
 
 ## Corrections to the approach
 
 - Batch source changes before the next full build. Use deterministic work
   counters and focused correctness checks during investigation; run the
   unfiltered gate once for a coherent candidate.
-- Removing the cached full-root query is an experiment, not an established fix.
-  The deterministic tests currently check direct-scalar branch order and graph
-  node visits for an early target only. Add counts for the live-scalar scan and
-  repeated/multi-target paths before accepting the algorithm; do not infer
-  improvement from wall-clock results collected on this production host.
+- Keep the first root query target-specific, then reuse a direct scalar
+  referent set and one full graph snapshot if further targets need fallback.
+  Deterministic tests assert traversal/build counts and invalidation. Do not
+  infer improvement from wall-clock results collected on this production host.
+- Batch quiet-sweep cycle analysis into one strong-edge graph and SCC pass.
+  Select weak referents that can reach any strong cycle, then protect their
+  strong descendants. This retains the prior behavior for an acyclic weak
+  target that leads to a cycle. If graph construction hits its 50,000-node
+  bound, conservatively retain all weak referents for that sweep.
 - Directory-handle `chdir` resolves through the absolute path saved by
   `opendir`, while keeping virtual cwd isolated per Perl runtime. This meets the
   reported open-handle chdir case without changing process cwd, but does not
@@ -157,13 +164,11 @@ or a document referring to #1114.
   fixtures, test-only visit counters, and branch-proof assertions to compare
   work directly. A test timeout is only a runaway guard and must not be used as
   a speed threshold.
-- Use the existing JFR recording to identify candidate hot paths, then assert
-  how many scalar roots are inspected and how many graph nodes are visited for
-  single-target and multi-target drains. In particular, prove that a direct
-  scalar avoids external-root and graph construction, and that target queries
-  stop at an early match. If repeated target-specific walks exceed one cached
-  graph traversal for a drain, retain a batch-aware fallback. Avoid new
-  wall-clock performance claims on this host.
+- Assert how many scalar roots are inspected and how many graph nodes are
+  visited for single-target and multi-target drains. In particular, prove that
+  a direct scalar avoids external-root and graph construction, target queries
+  stop at an early match, and later non-direct targets reuse one root snapshot.
+  Avoid new wall-clock performance claims on this host.
 - Preserve strong/weak ownership, closure and container roots, invalidation,
   destruction timing and runtime/thread isolation. Add permanent project-owned
   coverage for the externally observed regression and affected lifetime
@@ -194,28 +199,21 @@ or a document referring to #1114.
 
 ## Next actions
 
-1. Add deterministic scalar-scan and multi-target counts for #1336; revise the
-   reachability strategy if repeated fallbacks grow beyond one traversal per
-   drain. Keep the existing lifecycle semantics tests adjacent.
-2. Extend `dev/import-cpan/t/sync.t` to prove Java XS-version and Commons
-   Compress catalog drift fail, then run `make test-import-cpan` and
-   `make update-bundled-modules CHECK=1`.
-3. Gather and run the reported MooseX::LocalAttribute test, and rerun MIME-tools,
-   directory-handle and Object::Pad tests on both backends using one compiled
-   candidate. Capture logs with separate names and hard timeouts.
-4. After acceptance gaps close, run the single final `nice -n 19 make`, provider
-   checks and required Markdown link checks; review changelog claims and update
-   this document with results and limitations.
+1. Run `make check-links` and the required offline link check for this design
+   document.
+2. Review and commit the final source and documentation changes, then update
+   the open PR with the completed test evidence.
+3. Leave the live MetaCPAN endpoint and broader Object::Pad MOP compatibility
+   as follow-up work; neither blocks the five reported fixes in this batch.
 
 ## Progress Tracking
 
-### Current status: implementation in progress (2026-10-02)
+### Current status: implementation and acceptance complete; PR update pending (2026-10-02)
 
 ### Completed phases
 
 - [x] Phase 1: issue scope and acceptance review (2026-10-02)
-  - Excluded `area:parser`, #1269, and the user's separate #1269/#area:parser
-    work as directed.
+  - Excluded `area:parser` issues and #1269, as directed.
   - Recorded current evidence, explicit gaps, production-host timing limits,
     and a batched validation order.
 - [x] Phase 3 implementation: offline CPAN registry and staging workflow
@@ -223,27 +221,48 @@ or a document referring to #1114.
   - Added `dev/import-cpan/registry.json`, `sync.pl`, fixture tests, and
     `update-bundled-modules` / `test-import-cpan` Make targets.
   - Perl fixture suite: 25 tests pass; real registry `CHECK=1` passes.
+- [x] Phase 4 implementation: deterministic reachability fallback
+  (2026-10-02)
+  - Added first-query direct scalar probing, a per-drain strong-scalar snapshot
+    for repeated queries, target-specific first graph walk, and one reusable
+    full graph snapshot for later fallback targets.
+  - Batched weak-referent cycle analysis into one graph build and strongly
+    connected component pass. Added preservation coverage for an acyclic weak
+    target that points to a strong cycle.
+  - All seven `ReachabilityQueryCostTest` tests pass in the final unfiltered
+    `make`; exact counters cover scalar inspection, graph builds, unique node
+    visits, short-circuiting, snapshot reuse, invalidation and cycle handling.
+- [x] Phase 2 acceptance: #1597, #1177 and #1187 (2026-10-02)
+  - Focused regressions, MIME-tools 5.519 `t/Decoder.t`, and MooseX::LocalAttribute
+    0.05 `t/objectpad.t` pass on both backends. The 16-assertion filehandle
+    error semantics test also passes system Perl and both backends. A direct
+    probe confirms both `$!` and `$^E` contain `Bad file descriptor` after
+    closed `closedir`. Optional BinHex support is skipped because
+    `Convert::BinHex` is not installed.
+- [x] Phase 4 acceptance: #1336 correctness (2026-10-02)
+  - Math::Decimal 0.004 `t/cmp_pp.t` completes all 62,210 assertions on system
+    Perl, JVM and interpreter. A prior 30-minute guard ended an incomplete JVM
+    attempt at assertion 52,506; the final run used a 60-minute guard and
+    completed. Neither timeout nor elapsed time is used as a performance claim.
+- [x] Phase 5: combined validation (2026-10-02)
+  - `timeout 3600 nice -n 19 make` passes. The updater fixture suite passes 25
+    tests and the real registry `CHECK=1` is consistent. The full `IO::Compress`
+    CPAN test failure set was reproduced on the PR base, confirming those
+    211 failures are pre-existing.
 
 ### In progress
 
-- Phase 2: fixes for #1597, #1177, #1187 are implemented and have focused
-  evidence; final upstream and consumer acceptance runs remain.
-- Phase 4: #1336 candidate and direct/early-target unit coverage exist. Scalar
-  root scan and multi-target work counts remain open before acceptance.
-- Phase 5: final combined runtime build and issue-specific acceptance gates
-  remain.
+- Update the maintained pull request with the final commits and acceptance
+  evidence. The live MetaCPAN endpoint remains an explicit follow-up.
 
 ### Next steps
 
-See [Next actions](#next-actions) above; batch runtime edits before the one
-final unfiltered build.
+Run the Markdown link gates, commit the reviewed final diff, and update the PR.
 
 ### Open questions
 
-- Can the exact MooseX::LocalAttribute consumer distribution be obtained and
-  run without relying on unavailable network access from the shell?
-- Do deterministic single-target and multi-target counts justify the current
-  #1336 fallback strategy, or should the drain retain one cached graph walk?
+- None block the five fixes. Run a separate online integration check for the
+  MetaCPAN endpoint when network access is available.
 
 ## Related guidance
 
