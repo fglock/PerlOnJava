@@ -66,7 +66,8 @@ priorities and future plans.
 - Preserve file-operator precedence for `eof`, `tell`, and `readline`; flush
   incomplete HTML tags at EOF; accept prototype block arguments; resolve
   imported `break` subs; skip adjacent POD sections after executable code; and
-  bind concatenated filename expressions to `do`.
+  bind concatenated filename expressions to `do` while preserving relative
+  file paths used by loaded scripts.
 
 - Parse `PERL5LIB` with the host platform's path separator.
 
