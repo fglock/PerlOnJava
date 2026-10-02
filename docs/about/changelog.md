@@ -15,6 +15,7 @@ priorities and future plans.
 - Reset array `each` iterators when replacing their contents.
 - Fetch tied scalars during `study` and return `crypt` results without the
   UTF-8 flag.
+- Report disabled `evalbytes` as a syntax error.
 
 - Preserve objects with counted collection owners during weak-reference sweeps,
   and resolve deferred user-defined regex properties in the match caller's

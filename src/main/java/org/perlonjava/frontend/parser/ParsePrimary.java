@@ -235,6 +235,12 @@ public class ParsePrimary {
             };
         }
 
+        if (operator.equals("evalbytes") && !operatorEnabled && !calledWithCore) {
+            var location = parser.ctx.errorUtil.getSourceLocationAccurate(startIndex);
+            throw new PerlParserException("syntax error at " + location.fileName()
+                    + " line " + location.lineNumber() + ", near \"evalbytes\"");
+        }
+
         // Check for overridable operators (unless explicitly called with CORE::)
         if (!calledWithCore && operatorEnabled && ParserTables.OVERRIDABLE_OP.contains(operator)) {
             // Core functions can be overridden in two ways:
