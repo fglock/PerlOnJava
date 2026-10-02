@@ -2,6 +2,7 @@ package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.analysis.LValueVisitor;
+import org.perlonjava.frontend.analysis.ListContextSideEffectDetector;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.SymbolTable;
@@ -2187,7 +2188,8 @@ public class CompileAssignment {
         if (outerContext == RuntimeContextType.VOID
                 && node.left instanceof ListNode emptyTargets
                 && emptyTargets.elements.isEmpty()) {
-            boolean preserveListContext = RegexUsageDetector.containsRegexOperation(node.right);
+            boolean preserveListContext = RegexUsageDetector.containsRegexOperation(node.right)
+                    || ListContextSideEffectDetector.containsReadline(node.right);
             if (!preserveListContext && node.right instanceof ListNode rhsList) {
                 rhsList.setAnnotation("emptyTargetAssignmentVoidRhs", true);
             }

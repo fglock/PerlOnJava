@@ -7,6 +7,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.LValueVisitor;
+import org.perlonjava.frontend.analysis.ListContextSideEffectDetector;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.SymbolTable;
@@ -892,6 +893,7 @@ public class EmitVariable {
             // matches (including callbacks) even when its result list is
             // discarded by the empty target.
             int rhsContext = RegexUsageDetector.containsRegexOperation(right)
+                    || ListContextSideEffectDetector.containsReadline(right)
                     ? RuntimeContextType.LIST : RuntimeContextType.VOID;
             right.accept(emitterVisitor.with(rhsContext));
             if (rhsContext == RuntimeContextType.LIST) {

@@ -35,6 +35,7 @@ priorities and future plans.
 - Reject scalar constants passed to hash-reference prototypes with the expected diagnostic.
 - Preserve malformed octets read through Perl's `:utf8` layer while decoding valid UTF-8.
 - Keep `$^X` unflagged for shell command construction and preserve encoded input octets.
+- Evaluate `readline` in list context when an empty-target assignment discards its results.
 
 - Preserve objects with counted collection owners during weak-reference sweeps,
   and resolve deferred user-defined regex properties in the match caller's
