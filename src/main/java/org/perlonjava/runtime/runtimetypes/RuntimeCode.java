@@ -5477,7 +5477,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (subName == null && currentFrameIsInterpreter) {
                     String interpreterSubName = interpreterFrameBeforeVirtualEval
                             ? frameSubName : previousFrameSubName;
-                    if (interpreterSubName != null && !interpreterSubName.startsWith("(eval")) {
+                    RuntimeCode deletedActiveCode = deletedStashCodeForCallerName(interpreterSubName);
+                    if (deletedActiveCode != null) {
+                        subName = callerSubNameForCode(deletedActiveCode);
+                    } else if (interpreterSubName != null && !interpreterSubName.startsWith("(eval")) {
                         subName = interpreterSubName;
                     }
                 }
@@ -5895,6 +5898,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         String pkg = normalizeCallerPackage(code.packageName);
         return pkg + "::" + code.subName;
+    }
+
+    private static RuntimeCode deletedStashCodeForCallerName(String callerName) {
+        if (callerName == null || callerName.startsWith("(")
+                || !callerName.contains("::")) {
+            return null;
+        }
+        for (RuntimeCode active : activeCodeStack()) {
+            String activeName = active.referenceOriginFqn;
+            if (activeName == null && active.packageName != null && active.subName != null) {
+                activeName = active.packageName + "::" + active.subName;
+            }
+            if (active.hadStashRef && !active.explicitlyRenamed
+                    && callerName.equals(activeName)
+                    && GlobalVariable.findGlobalCodeRefName(active) == null) {
+                return active;
+            }
+        }
+        return null;
     }
 
     /** Attach a lexical declaration's display name without installing a package CV. */
