@@ -197,9 +197,26 @@ public class RuntimeIO extends RuntimeScalar {
     public static RuntimeIO getSelectedHandle() { return PerlRuntime.current().ioSelectedHandle; }
     public static RuntimeScalar getSelectedHandleValue() {
         PerlRuntime runtime = PerlRuntime.current();
-        return runtime.ioSelectedHandleValue == null
+        RuntimeScalar selected = runtime.ioSelectedHandleValue == null
                 ? new RuntimeScalar(runtime.ioSelectedHandle)
                 : new RuntimeScalar(runtime.ioSelectedHandleValue);
+        if (selected.value instanceof RuntimeGlob glob && glob.globName != null) {
+            String name = glob.globName;
+            if (name.equals("main::STDIN") || name.equals("main::STDOUT")
+                    || name.equals("main::STDERR")) {
+                return new RuntimeScalar(name);
+            }
+            String resolvedName = GlobalVariable.resolveAliasedFqn(name);
+            RuntimeGlob currentGlob = GlobalVariable.getExistingGlobalIO(resolvedName);
+            RuntimeScalar currentIO = currentGlob == null ? null : currentGlob.getIO();
+            if (currentGlob == null || !resolvedName.equals(currentGlob.globName)
+                    || currentIO == null || currentIO.value != runtime.ioSelectedHandle
+                    || GlobalVariable.isIORefHiddenAfterStashDelete(resolvedName)) {
+                return selected;
+            }
+            return new RuntimeScalar(name);
+        }
+        return selected;
     }
     public static void setSelectedHandle(RuntimeIO io) {
         PerlRuntime runtime = PerlRuntime.current();

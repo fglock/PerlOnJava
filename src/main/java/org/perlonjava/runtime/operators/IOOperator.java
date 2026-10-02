@@ -152,7 +152,21 @@ public class IOOperator {
             newIO = anonIO;
         }
         RuntimeIO.setSelectedHandle(newIO);
-        RuntimeIO.setSelectedHandleValue(selectedHandleValue(fileHandleArg));
+        RuntimeScalar selectedValue = selectedHandleValue(fileHandleArg);
+        if (!(selectedValue.value instanceof RuntimeGlob)
+                && newIO != null && newIO.globName != null
+                && !newIO.globName.equals("main::STDIN")
+                && !newIO.globName.equals("main::STDOUT")
+                && !newIO.globName.equals("main::STDERR")) {
+            RuntimeGlob owner = newIO.getOwnerGlob();
+            if (owner == null) {
+                owner = GlobalVariable.getExistingGlobalIO(newIO.globName);
+            }
+            if (owner != null) {
+                selectedValue = owner.createReference();
+            }
+        }
+        RuntimeIO.setSelectedHandleValue(selectedValue);
         RuntimeIO.setLastAccessedHandle(newIO);
         return fh;
     }
@@ -172,7 +186,12 @@ public class IOOperator {
         if (argument.value instanceof RuntimeGlob glob) {
             String name = glob.globName;
             if (name != null) {
-                return new RuntimeScalar(name);
+                if (name.equals("main::STDIN") || name.equals("main::STDOUT")
+                        || name.equals("main::STDERR")) {
+                    return new RuntimeScalar(name);
+                }
+                return argument.type == RuntimeScalarType.GLOBREFERENCE
+                        ? new RuntimeScalar(argument) : glob.createReference();
             }
             return argument.type == RuntimeScalarType.GLOBREFERENCE
                     ? new RuntimeScalar(argument) : glob.createReference();

@@ -1310,7 +1310,18 @@ public class EmitVariable {
                 }
                 if (isGlob) {
                     mv.visitInsn(Opcodes.SWAP); // move the target first
-                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, leftDescriptor, "set", rightDescriptor, false);
+                    boolean scalarGlobAssignment = nodeLeft != null
+                            && nodeLeft.operator.equals("*")
+                            && ctx.contextType == RuntimeContextType.SCALAR;
+                    if (scalarGlobAssignment) {
+                        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/runtimetypes/RuntimeGlob",
+                                "scalarAssignmentResult",
+                                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeGlob;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                false);
+                    } else {
+                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, leftDescriptor, "set", rightDescriptor, false);
+                    }
                 } else {
                     boolean runtimeAssignment = ctx.contextType == RuntimeContextType.RUNTIME;
                     if (runtimeAssignment) emitterVisitor.pushCallContext();

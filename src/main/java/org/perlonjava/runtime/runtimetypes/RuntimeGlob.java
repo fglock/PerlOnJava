@@ -977,6 +977,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         throw new IllegalStateException("typeglob assignment not implemented for " + value.type);
     }
 
+    /** Return the value produced by Perl's scalar typeglob assignment. */
+    public static RuntimeScalar scalarAssignmentResult(RuntimeGlob glob, RuntimeScalar value) {
+        RuntimeScalar assigned = glob.set(value);
+        return value.type == RuntimeScalarType.CODE ? glob : assigned;
+    }
+
     /**
      * Sets the current RuntimeScalar object to the values associated with the given RuntimeGlob.
      * This method effectively implements the behavior of assigning one typeglob to another,

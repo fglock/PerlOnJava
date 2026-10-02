@@ -7,6 +7,7 @@ priorities and future plans.
 ## Work in progress
 
 - Keep `close` and `fileno` probes from creating nonexistent symbolic filehandles.
+- Preserve typeglob values from scalar assignments and selected-handle lookups.
 
 - Preserve objects with counted collection owners during weak-reference sweeps,
   and resolve deferred user-defined regex properties in the match caller's

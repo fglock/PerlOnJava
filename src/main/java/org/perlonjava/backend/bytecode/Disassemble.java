@@ -881,6 +881,14 @@ public class Disassemble {
                         rs = interpretedCode.bytecode[pc++];
                         sb.append("STORE_GLOB r").append(globReg).append(" = r").append(rs).append("\n");
                         break;
+                    case Opcodes.GLOB_ASSIGNMENT_RESULT:
+                        int globResultRd = interpretedCode.bytecode[pc++];
+                        int globResultGlob = interpretedCode.bytecode[pc++];
+                        int globResultValue = interpretedCode.bytecode[pc++];
+                        sb.append("GLOB_ASSIGNMENT_RESULT r").append(globResultRd)
+                                .append(" = r").append(globResultGlob)
+                                .append(" or r").append(globResultValue).append("\n");
+                        break;
                     case Opcodes.OPEN:
                         rd = interpretedCode.bytecode[pc++];
                         int openCtx = interpretedCode.bytecode[pc++];

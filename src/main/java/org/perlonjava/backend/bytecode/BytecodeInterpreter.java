@@ -2614,6 +2614,15 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeStoreGlob(bytecode, pc, registers);
                             }
 
+                            case Opcodes.GLOB_ASSIGNMENT_RESULT -> {
+                                int rd = bytecode[pc++];
+                                int globReg = bytecode[pc++];
+                                int valueReg = bytecode[pc++];
+                                registers[rd] = RuntimeGlob.scalarAssignmentResult(
+                                        (RuntimeGlob) registers[globReg],
+                                        (RuntimeScalar) registers[valueReg]);
+                            }
+
                             case Opcodes.OPEN -> {
                                 // Open file: rd = IOOperator.open(ctx, args...)
                                 // Format: OPEN rd ctx argsReg
