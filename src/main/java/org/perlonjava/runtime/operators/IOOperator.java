@@ -616,7 +616,11 @@ public class IOOperator {
         }
 
         if (fh.ioHandle != null) {
-            return fh.ioHandle.read(1);
+            RuntimeScalar character = fh.ioHandle.read(1);
+            if (character.type != RuntimeScalarType.UNDEF && character.toString().isEmpty()) {
+                return scalarUndef;
+            }
+            return character;
         }
         throw new PerlCompilerException("No input source available");
     }

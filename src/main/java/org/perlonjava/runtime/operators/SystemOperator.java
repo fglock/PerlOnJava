@@ -204,7 +204,11 @@ public class SystemOperator {
         // Flatten the arguments - arrays and lists should be expanded to individual elements
         List<String> flattenedArgs = flattenToStringList(args.elements);
         if (flattenedArgs.isEmpty()) {
-            throw new PerlCompilerException("system: no command specified");
+            RuntimeScalar waited = WaitpidOperator.waitForChild();
+            if (waited.getLong() < 0) {
+                return new RuntimeScalar(-1);
+            }
+            return new RuntimeScalar(getGlobalVariable("main::?"));
         }
 
         CommandResult result;
