@@ -2893,6 +2893,10 @@ public class IOOperator {
             if ((readHandle.type == RuntimeScalarType.GLOB || readHandle.type == RuntimeScalarType.GLOBREFERENCE) 
                     && readHandle.value instanceof RuntimeGlob glob) {
                 readGlob = glob;
+            } else if (readHandle.isString()) {
+                String name = NameNormalizer.normalizeVariableName(
+                        readHandle.toString(), RuntimeCode.getCurrentPackage());
+                readGlob = GlobalVariable.getGlobalIO(name);
             }
             if (readGlob != null) {
                 readGlob.setIO(readerIO);
@@ -2911,6 +2915,10 @@ public class IOOperator {
             if ((writeHandle.type == RuntimeScalarType.GLOB || writeHandle.type == RuntimeScalarType.GLOBREFERENCE) 
                     && writeHandle.value instanceof RuntimeGlob glob) {
                 writeGlob = glob;
+            } else if (writeHandle.isString()) {
+                String name = NameNormalizer.normalizeVariableName(
+                        writeHandle.toString(), RuntimeCode.getCurrentPackage());
+                writeGlob = GlobalVariable.getGlobalIO(name);
             }
             if (writeGlob != null) {
                 writeGlob.setIO(writerIO);

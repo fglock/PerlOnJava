@@ -324,6 +324,17 @@ public class RuntimeIO extends RuntimeScalar {
         if (existing != null) {
             return existing;
         }
+        // POSIX open() assigns the lowest available descriptor.  If STDIN was
+        // explicitly closed, the next regular handle receives descriptor 0.
+        // Keep that slot in the RuntimeIO registry so fileno() and later dup/
+        // require operations observe the same descriptor until it is closed.
+        RuntimeIO stdin = getStdin();
+        if (stdin != null && stdin.ioHandle instanceof ClosedIOHandle
+                && !registry.filenoToIO.containsKey(StandardIO.STDIN_FILENO)) {
+            registry.filenoToIO.put(StandardIO.STDIN_FILENO, this);
+            registry.ioToFileno.put(this, StandardIO.STDIN_FILENO);
+            return StandardIO.STDIN_FILENO;
+        }
         // First, process any GC'd globs to free their fds
         processAbandonedGlobs();
         // Try to reuse the lowest freed fd

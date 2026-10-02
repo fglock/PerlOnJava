@@ -9,6 +9,8 @@ priorities and future plans.
 - Keep `close` and `fileno` probes from creating nonexistent symbolic filehandles.
 - Preserve typeglob values from scalar assignments and selected-handle lookups.
 - Return EOF as undef from scalar-backed `getc`, and let argumentless `system()` wait.
+- Resolve scalar pipe names as symbolic handles and reuse descriptor 0 after
+  closing STDIN.
 
 - Preserve objects with counted collection owners during weak-reference sweeps,
   and resolve deferred user-defined regex properties in the match caller's
