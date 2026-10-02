@@ -23,6 +23,7 @@ priorities and future plans.
 - Avoid materializing values from empty list assignments in void context.
 - Preserve omitted optional underscore prototype arguments after required arguments.
 - Parse comma-delimited `q` and `qq` strings when disambiguating hashrefs from blocks.
+- Clear `pos()` after a failed second match of a global match-once pattern.
 
 - Preserve objects with counted collection owners during weak-reference sweeps,
   and resolve deferred user-defined regex properties in the match caller's
