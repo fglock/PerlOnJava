@@ -41,8 +41,8 @@ updater fixtures run without a JVM rebuild.
 | #1597 | The project-owned pipe regression passes system Perl and both backends. MIME-tools 5.519 `t/Decoder.t` completes on JVM and interpreter with the `x-gzip64` path exercised; the optional BinHex case is unavailable because `Convert::BinHex` is absent. Explicit close unregisters the descriptor. | None for the reported reproducer. |
 | #1177 | Fourteen accessor assertions pass the isolated Object::Pad 0.825 oracle and both PerlOnJava backends. The regression skips only when `Object/Pad.pm` itself is missing. Legacy `has` is limited to class-feature bodies. MooseX::LocalAttribute 0.05 `t/objectpad.t` passes on both backends. | None for scalar accessors and the reported consumer. The advertised compatibility level remains 0.66; broader Object::Pad MOP support is outside this fix. |
 | #1187 | The 16-assertion `filehandle_error_semantics_high_impact.t` passes system Perl, JVM and interpreter, covering handle `chdir`/`chmod`, closed-handle `binmode`/`chmod`, read from write-only `STDOUT`, and closed `closedir`. The separate directory-handle test and unchanged conditional bareword test pass on both backends with runtime-local cwd. A direct probe reports `Bad file descriptor` in both `$!` and `$^E` after closed `closedir`. Directory `chdir` uses the absolute path captured by `opendir`; it does not preserve directory identity after rename/unlink. | None for the reported cases. Rename/unlink identity and native `fchdir` semantics remain outside scope; never call process-global `fchdir`. |
-| #1336 | Seven tracked reachability tests assert direct-scalar ordering, scalar snapshot reuse, target short-circuiting, multi-target graph snapshot reuse and invalidation, shared-graph visit counts, cycle preservation for direct and descendant cycles, and skipping live weak referents. System Perl, JVM and interpreter each complete all 62,210 `cmp_pp.t` assertions. | None for the reported suite. A graph that exceeds the 50,000-node cap conservatively retains weak referents for that quiet sweep; this avoids clearing uncertain cycles but may defer cleanup. Timing was not used as evidence. |
-| #1278 | `dev/import-cpan/registry.json`, `sync.pl` and `make update-bundled-modules` are implemented. Default report, `CHECK=1`, and all 25 fixture tests pass; fixtures cover provider drift, Object::Pad 0.800/0.805, newer Compress::Raw::Zlib requirements, overlays, checksum errors, staging and traversal rejection. The bundled compression providers already advertise 2.224, and the `IO::Compress` 2.224 prerequisite test passes. | `jcpan -t IO::Compress` reaches the full 25,615-test suite, which has 211 failures in seven test programs on both this candidate and the PR base `a1e07480e`. Those existing compatibility failures are outside the provider updater changes. The live MetaCPAN endpoint was not exercised; rewritten providers remain manual-port only. |
+| #1336 | Seven tracked reachability tests assert direct-scalar ordering, scalar snapshot reuse, target short-circuiting, multi-target graph snapshot reuse and invalidation, shared-graph visit counts, cycle preservation for direct and descendant cycles, and skipping live weak referents. All ten Math::Decimal 0.004 `*_pp.t` files pass on system Perl, JVM and interpreter: 107,058 system-Perl assertions (with one optional pod-coverage skip) and 107,059 assertions on each PerlOnJava backend. `cmp_pp.t` contributes 62,210 passing assertions per backend. | None for the reported pure-Perl suite. A graph that exceeds the 50,000-node cap conservatively retains weak referents for that quiet sweep; this avoids clearing uncertain cycles but may defer cleanup. Timing was not used as evidence. |
+| #1278 | `dev/import-cpan/registry.json`, `sync.pl` and `make update-bundled-modules` are implemented. Default report, `CHECK=1`, and all 25 fixture tests pass; fixtures cover provider drift, Object::Pad 0.800/0.805, newer Compress::Raw::Zlib requirements, overlays, checksum errors, staging and traversal rejection. The bundled compression providers already advertise 2.224, and the `IO::Compress` 2.224 prerequisite test passes. | `jcpan -t IO::Compress` reaches the full 25,615-test suite, which has 211 failures in the same seven test programs on the candidate and its pre-merge base `a1e07480e`. Those existing compatibility failures are outside the provider updater changes. The live MetaCPAN endpoint was not exercised; rewritten providers remain manual-port only. |
 
 The final unfiltered `timeout 3600 nice -n 19 make` passed after the reachability
 changes, including the descendant-cycle regression. The production host denied
@@ -240,15 +240,21 @@ or a document referring to #1114.
     closed `closedir`. Optional BinHex support is skipped because
     `Convert::BinHex` is not installed.
 - [x] Phase 4 acceptance: #1336 correctness (2026-10-02)
-  - Math::Decimal 0.004 `t/cmp_pp.t` completes all 62,210 assertions on system
-    Perl, JVM and interpreter. A prior 30-minute guard ended an incomplete JVM
-    attempt at assertion 52,506; the final run used a 60-minute guard and
-    completed. Neither timeout nor elapsed time is used as a performance claim.
+  - All ten Math::Decimal 0.004 `*_pp.t` files complete on system Perl, JVM and
+    interpreter. The JVM and interpreter each pass 107,059 assertions; system
+    Perl passes 107,058 with its optional pod-coverage test skipped. This
+    includes all 62,210 `t/cmp_pp.t` assertions on both PerlOnJava backends.
+    A prior 30-minute guard ended an incomplete JVM attempt at assertion
+    52,506; the final merged-tree run completed under its configured per-file
+    and command guards. Neither timeout nor elapsed time is used as a
+    performance claim.
 - [x] Phase 5: combined validation (2026-10-02)
   - `timeout 3600 nice -n 19 make` passes. The updater fixture suite passes 25
     tests and the real registry `CHECK=1` is consistent. The full `IO::Compress`
-    CPAN test failure set was reproduced on the PR base, confirming those
-    211 failures are pre-existing.
+    CPAN test failure set was reproduced on the pre-merge base, confirming
+    those 211 failures are pre-existing. After merging current master, the
+    final `make` and all ten Math::Decimal pure-Perl files pass on both
+    PerlOnJava backends.
 
 ### In progress
 
