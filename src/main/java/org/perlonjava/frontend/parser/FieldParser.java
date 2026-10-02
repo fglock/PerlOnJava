@@ -40,20 +40,24 @@ public class FieldParser {
      * @return A comment node placeholder for the field
      */
     public static Node parseFieldDeclaration(Parser parser) {
+        return parseFieldDeclaration(parser, "field");
+    }
+
+    /** Parse a field declaration using the historical Object::Pad `has` keyword. */
+    public static Node parseFieldDeclaration(Parser parser, String keyword) {
         int index = parser.tokenIndex;
-        // Consume 'field' keyword
-        TokenUtils.consume(parser, LexerTokenType.IDENTIFIER, "field");
+        TokenUtils.consume(parser, LexerTokenType.IDENTIFIER, keyword);
 
         // Emit experimental warning for 'field' if warnings are enabled
         if (parser.ctx.symbolTable.isWarningCategoryEnabled("experimental::class")) {
             try {
                 WarnDie.warn(
-                        new RuntimeScalar("field is experimental"),
+                        new RuntimeScalar(keyword + " is experimental"),
                         new RuntimeScalar(parser.ctx.errorUtil.warningLocation(index))
                 );
             } catch (Exception e) {
                 // If warning system isn't initialized yet, fall back to System.err
-                System.err.println("field is experimental" + parser.ctx.errorUtil.warningLocation(index) + ".");
+                System.err.println(keyword + " is experimental" + parser.ctx.errorUtil.warningLocation(index) + ".");
             }
         }
 
@@ -68,11 +72,11 @@ public class FieldParser {
                 TokenUtils.consume(parser);
             } else {
                 throw new PerlCompilerException(parser.tokenIndex,
-                        "Expected field variable after 'field' keyword", parser.ctx.errorUtil);
+                        "Expected field variable after '" + keyword + "' keyword", parser.ctx.errorUtil);
             }
         } else {
             throw new PerlCompilerException(parser.tokenIndex,
-                    "Expected field variable after 'field' keyword", parser.ctx.errorUtil);
+                    "Expected field variable after '" + keyword + "' keyword", parser.ctx.errorUtil);
         }
 
         // Parse field name

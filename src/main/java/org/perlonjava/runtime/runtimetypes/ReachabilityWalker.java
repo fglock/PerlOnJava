@@ -787,9 +787,9 @@ public class ReachabilityWalker {
     }
 
     /**
-     * Collect the same bounded root graph as {@link #isReachableFromRoots},
-     * once for all weak referents in a mortal drain. The existing query's
-     * target-specific early returns become identity membership in this set.
+     * Collect the bounded root graph for diagnostics and tests that compare
+     * membership for many targets. Runtime cleanup uses the target-specific
+     * query so its common single-target drains can short-circuit.
      */
     static Set<RuntimeBase> reachableFromRootsSnapshot() {
         final int maxVisits = 50_000;
@@ -806,8 +806,9 @@ public class ReachabilityWalker {
             seedTarget(scalar, null, seen, todo);
         }
         for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrays.entrySet()) {
-            if (!isNonOwningDebugArgsArray(e.getKey()) && e.getValue() != null) {
-                if (seen.add(e.getValue())) todo.addLast(e.getValue());
+            if (!isNonOwningDebugArgsArray(e.getKey()) && e.getValue() != null
+                    && seen.add(e.getValue())) {
+                todo.addLast(e.getValue());
             }
         }
         for (RuntimeHash hash : GlobalVariable.globalHashes.values()) {
@@ -1177,6 +1178,12 @@ public class ReachabilityWalker {
      * diagnostic / debugging callers.
      */
     public static boolean isReachableFromRoots(RuntimeBase target, boolean globalOnly) {
+        return isReachableFromRoots(target, globalOnly, null);
+    }
+
+    /** Test seam for asserting that target-specific queries short-circuit. */
+    static boolean isReachableFromRoots(RuntimeBase target, boolean globalOnly,
+                                        int[] visitedNodes) {
         if (target == null) return false;
         // Hard cap to prevent pathological worst-case walks. Class::MOP
         // bootstrap touches ~thousands of nodes; pick a generous limit
@@ -1262,6 +1269,7 @@ public class ReachabilityWalker {
         while (!todo.isEmpty() && visits < MAX_VISITS) {
             RuntimeBase cur = todo.removeFirst();
             visits++;
+            if (visitedNodes != null) visitedNodes[0] = visits;
             if (cur == target) return true;
             // Phase D-W2 (perf): skip RuntimeStash — see bfs().
             if (cur instanceof RuntimeStash) continue;

@@ -1,4 +1,4 @@
-.PHONY: all clean test test-unit test-interpreter check-thread-test-sources check-thread-core-test-sources check-thread-ecosystem-test-sources check-thread-regex-test-sources test-thread-tooling test-threads test-threads-core test-threads-core-platform test-threads-core-mode test-threads-windows test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-cpan-release-acceptance test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links perl5-update perl5-sync perl5-sync-check
+.PHONY: all clean test test-unit test-interpreter check-thread-test-sources check-thread-core-test-sources check-thread-ecosystem-test-sources check-thread-regex-test-sources test-thread-tooling test-import-cpan update-bundled-modules test-threads test-threads-core test-threads-core-platform test-threads-core-mode test-threads-windows test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-cpan-release-acceptance test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links perl5-update perl5-sync perl5-sync-check
 
 PERL ?= perl
 GRADLE_ARGS ?=
@@ -116,6 +116,14 @@ perl5-sync:
 
 perl5-sync-check:
 	$(PERL) dev/import-perl5/update_perl5.pl --sync --verify-idempotent $(if $(FILTER),--filter "$(FILTER)",)
+
+# CPAN providers are rewritten ports. The default report is read-only; updates
+# stage verified upstream sources for review and never overwrite tracked files.
+update-bundled-modules:
+	$(PERL) dev/import-cpan/sync.pl $(if $(filter 1,$(CHECK)),--check,) $(if $(filter 1,$(UPDATE)),--update,) $(if $(MODULE),--module "$(MODULE)",)
+
+test-import-cpan:
+	timeout 120 prove dev/import-cpan/t/sync.t
 
 # CI build - optimized for CI/CD environments
 ci: check-java-gradle

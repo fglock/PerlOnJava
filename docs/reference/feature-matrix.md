@@ -797,9 +797,9 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Safe** module: permit-only and default sandbox behavior passes the focused audit batch.
 
 ### Non-core modules
-- 🟡 **Object::Pad**: core class, field, method, parameter, and inheritance
-  syntax is handled by PerlOnJava's native class compiler; Object::Pad-specific
-  MOP extensions are not implemented.
+- 🟡 **Object::Pad**: native `class`, `field`/legacy `has`, `method`, `:param`,
+  `:isa`, and scalar `:accessor` support; Object::Pad-specific MOP and other
+  extension APIs are not implemented.
 - ✅  **JSON::DWIW**: relaxed JSON conversion implemented over the bundled
   pure-Perl `JSON::PP` backend.
 - ✅  **Class::MethodMaker**: upstream 2.25 pure-Perl accessor generator with
