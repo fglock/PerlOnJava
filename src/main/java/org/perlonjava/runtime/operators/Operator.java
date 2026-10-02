@@ -912,6 +912,14 @@ public class Operator {
             }
         }
 
+        // Do not narrow Perl's unsigned bitwise results through intValue().
+        // For example, `~1` is a very large positive count on a 64-bit Perl;
+        // list repetition must fail with Perl's allocation error rather than
+        // wrap to -2 and silently return an empty list.
+        if (timesScalar.getBigint().compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
+            throw new PerlCompilerException("Out of memory");
+        }
+
         int times = timesScalar.getInt();
         if (ctx == SCALAR || value instanceof RuntimeScalar) {
             // In scalar context, convert value to scalar first

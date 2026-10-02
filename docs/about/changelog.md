@@ -27,6 +27,7 @@ priorities and future plans.
 - Validate typed hash dereferences against explicitly referenced `%FIELDS` tables.
 - Warn about anonymous subroutines in void context and undef dynamic code references in place.
 - Report deleted stash-backed subroutines as anonymous in `caller()`.
+- Detect oversized repetition counts before they wrap during conversion.
 
 - Preserve objects with counted collection owners during weak-reference sweeps,
   and resolve deferred user-defined regex properties in the match caller's
