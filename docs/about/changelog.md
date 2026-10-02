@@ -22,6 +22,7 @@ priorities and future plans.
 - Preserve the empty string yielded by a range with two undefined endpoints.
 - Avoid materializing values from empty list assignments in void context.
 - Preserve omitted optional underscore prototype arguments after required arguments.
+- Parse comma-delimited `q` and `qq` strings when disambiguating hashrefs from blocks.
 
 - Preserve objects with counted collection owners during weak-reference sweeps,
   and resolve deferred user-defined regex properties in the match caller's
