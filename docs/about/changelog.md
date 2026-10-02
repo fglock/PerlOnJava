@@ -24,6 +24,7 @@ priorities and future plans.
 - Preserve omitted optional underscore prototype arguments after required arguments.
 - Parse comma-delimited `q` and `qq` strings when disambiguating hashrefs from blocks.
 - Clear `pos()` after a failed second match of a global match-once pattern.
+- Validate typed hash dereferences against explicitly referenced `%FIELDS` tables.
 
 - Preserve objects with counted collection owners during weak-reference sweeps,
   and resolve deferred user-defined regex properties in the match caller's
