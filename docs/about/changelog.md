@@ -61,6 +61,9 @@ priorities and future plans.
 
 - Prevent stale CPAN archive-name entries and namespace-resolution errors from
   being recorded as compatibility regressions.
+- Support POSIX directory-handle `chdir` and Object::Pad scalar `:accessor`
+  fields, including the legacy `has` declaration, and preserve open process
+  pipes across temporary filehandle aliases used by `IO::Select`.
 
 - Keep SQLite column metadata fetchable and quote reserved table names, support
   Perl-compatible SQLite `REGEXP`, clear successful DBI error strings, and
@@ -81,8 +84,8 @@ priorities and future plans.
   ambiguity warnings, support `chdir` and `chmod` through open filehandles,
   report directory `chdir` as unavailable without `dirfd`, restore
   invalid-descriptor errors, preserve dynamic package variables and monotonic
-  clocks needed by AnyEvent::Tools, and reuse root reachability snapshots during
-  weak-reference cleanup.
+  clocks needed by AnyEvent::Tools, and short-circuit lifecycle root walks when
+  checking one weak-reference cleanup target.
 
 - Preserve ordinary `goto` jumps between conditional branches while rejecting
   jumps into conditional blocks from outside.

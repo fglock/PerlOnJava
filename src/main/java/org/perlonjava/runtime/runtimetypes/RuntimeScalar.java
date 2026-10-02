@@ -6,6 +6,8 @@ import org.perlonjava.runtime.io.ClosedIOHandle;
 import org.perlonjava.runtime.io.IOHandle;
 import org.perlonjava.runtime.io.LayeredIOHandle;
 import org.perlonjava.runtime.io.NativeSocketIOHandle;
+import org.perlonjava.runtime.io.ProcessInputHandle;
+import org.perlonjava.runtime.io.ProcessOutputHandle;
 import org.perlonjava.runtime.io.SocketIO;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.StringOperators;
@@ -4819,12 +4821,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (glob.ioHolderCount <= 0) {
                     // Closing is required for stream sockets: merely dropping
                     // the synthetic fileno does not send EOF to the peer.
-                    // Other anonymous handles still encounter transient
-                    // method-invocant cleanup paths that are not true Perl SV
-                    // destruction, so retain their established unregister-only
-                    // behavior until those aliases have dedicated ownership.
-                    if (isSocketIOHandle(io.ioHandle)) io.close();
-                    else io.unregisterFileno();
+                    // Process pipes also keep their synthetic fileno while
+                    // open; ready-handle loop variables can release a scalar
+                    // owner without ending the pipe's Perl-visible lifetime.
+                    // Other anonymous handles retain unregister-only cleanup
+                    // until their aliases have dedicated ownership tracking.
+                    if (isSocketIOHandle(io.ioHandle)) {
+                        io.close();
+                    } else if (!isProcessPipeIOHandle(io.ioHandle)) {
+                        io.unregisterFileno();
+                    }
                 }
             }
         }
@@ -4968,6 +4974,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             handle = layered.getDelegate();
         }
         return handle instanceof SocketIO || handle instanceof NativeSocketIOHandle;
+    }
+
+    private static boolean isProcessPipeIOHandle(IOHandle handle) {
+        while (handle instanceof LayeredIOHandle layered) {
+            handle = layered.getDelegate();
+        }
+        // Process pipe handles stay registered until an explicit close or the
+        // owning anonymous glob is collected. Temporary method arguments
+        // (such as IO::Select's ready-handle loop variable) can release their
+        // scalar owner without closing or hiding the still-open pipe.
+        return handle instanceof ProcessInputHandle || handle instanceof ProcessOutputHandle;
     }
 
     private static boolean isStreamSocketIOHandle(IOHandle handle) {

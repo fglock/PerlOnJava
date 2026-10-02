@@ -1246,7 +1246,6 @@ public class MortalList {
 
     static void invalidateExternalRootSnapshot() {
         state().externalRootSnapshot = null;
-        state().fullRootSnapshot = null;
     }
 
     static void invalidateAllRootSnapshots() {
@@ -1254,17 +1253,45 @@ public class MortalList {
         invalidateLiveRootSnapshot();
     }
 
-    private static boolean isReachableFromFullRootSnapshot(RuntimeBase base) {
-        LifecycleRuntimeState state = state();
-        if (state.fullRootSnapshot == null) {
-            state.fullRootSnapshot = ReachabilityWalker.reachableFromRootsSnapshot();
+    private static boolean isReachableFromRootTarget(RuntimeBase base) {
+        // Most statement drains check only one suspect object. Building the
+        // complete 50k-node root snapshot for that single query made tight
+        // pure-Perl loops pay for every live object even when the target is
+        // found near the start of the walk. Direct live scalar references are
+        // checked before this fallback in isReachableFromLifecycleRoot().
+        return ReachabilityWalker.isReachableFromRoots(base);
+    }
+
+    enum LifecycleRootProof {
+        DIRECT_SCALAR,
+        EXTERNAL_ROOT,
+        FULL_ROOT,
+        NONE
+    }
+
+    static LifecycleRootProof lifecycleRootProof(RuntimeBase base) {
+        // Repeated arithmetic workloads commonly keep their current referent
+        // directly in a live scalar. Check that inexpensive case before the
+        // cached package-root walk, which otherwise traverses the larger graph
+        // even though the target is already held by the caller.
+        if (ReachabilityWalker.hasLiveStrongScalarReferent(base)) {
+            return LifecycleRootProof.DIRECT_SCALAR;
         }
-        return state.fullRootSnapshot.contains(base);
+        if (isReachableFromExternalRootCached(base)) {
+            return LifecycleRootProof.EXTERNAL_ROOT;
+        }
+        if (isReachableFromRootTarget(base)) {
+            return LifecycleRootProof.FULL_ROOT;
+        }
+        return LifecycleRootProof.NONE;
+    }
+
+    private static boolean isReachableFromLifecycleRoot(RuntimeBase base) {
+        return lifecycleRootProof(base) != LifecycleRootProof.NONE;
     }
 
     static void invalidateLiveRootSnapshot() {
         state().liveRootSnapshot = null;
-        state().fullRootSnapshot = null;
     }
 
     private static void invalidateDrainReachabilityCaches() {
@@ -1395,8 +1422,7 @@ public class MortalList {
                 base.refCount = 1;
             } else if (base.blessId != 0
                     && hasWeakRefs
-                    && (isReachableFromExternalRootCached(base)
-                    || isReachableFromFullRootSnapshot(base))) {
+                    && isReachableFromLifecycleRoot(base)) {
                 // A nested request can temporarily consume the selective owner
                 // count of an object that is still retained below a package
                 // root. Mojolicious::Lite keeps its route tree in a package
@@ -1414,8 +1440,7 @@ public class MortalList {
             } else if (base.blessId != 0
                     && hasWeakRefs
                     && !blessedClassHasDestroy(base)
-                    && (isReachableFromExternalRootCached(base)
-                    || isReachableFromFullRootSnapshot(base))) {
+                    && isReachableFromLifecycleRoot(base)) {
                 // A weakened probe copy can make the selective count reach
                 // zero while an ordinary blessed object is still held by a
                 // live lexical. Test::Refcount exercises this shape; clearing
