@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Keep SQLite column metadata fetchable and quote reserved table names, support
+  Perl-compatible SQLite `REGEXP`, clear successful DBI error strings, and
+  delegate non-JDBC transaction methods to their drivers.
+
 - Preserve objects with counted collection owners during weak-reference sweeps,
   and resolve deferred user-defined regex properties in the match caller's
   package.

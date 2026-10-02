@@ -224,6 +224,10 @@ sub DBD::_::st::finish {
 
     *DBI::begin_work = sub {
         return $JDBC_BEGIN_WORK->(@_) if _is_jdbc_handle($_[0]);
+        my $impl = $_[0]->{ImplementorClass};
+        if ($impl && (my $code = $impl->can('begin_work'))) {
+            return $code->(@_);
+        }
         die "begin_work invalidates a transaction already in progress\n"
             unless $_[0]->{AutoCommit};
         $_[0]->{AutoCommit} = 0;
@@ -233,6 +237,10 @@ sub DBD::_::st::finish {
 
     *DBI::commit = sub {
         return $JDBC_COMMIT->(@_) if _is_jdbc_handle($_[0]);
+        my $impl = $_[0]->{ImplementorClass};
+        if ($impl && (my $code = $impl->can('commit'))) {
+            return $code->(@_);
+        }
         if (delete $_[0]->{BegunWork}) {
             $_[0]->{AutoCommit} = 1;
         }
@@ -241,6 +249,10 @@ sub DBD::_::st::finish {
 
     *DBI::rollback = sub {
         return $JDBC_ROLLBACK->(@_) if _is_jdbc_handle($_[0]);
+        my $impl = $_[0]->{ImplementorClass};
+        if ($impl && (my $code = $impl->can('rollback'))) {
+            return $code->(@_);
+        }
         if (delete $_[0]->{BegunWork}) {
             $_[0]->{AutoCommit} = 1;
         }
@@ -1037,7 +1049,7 @@ sub err {
 
 sub errstr {
     my ($handle) = @_;
-    return $handle->{errstr} || '';
+    return $handle->{errstr};
 }
 
 sub state {
