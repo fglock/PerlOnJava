@@ -1391,6 +1391,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         if (this.type == READONLY_ARRAY) {
             throw new PerlCompilerException("Modification of a read-only value attempted");
         }
+        this.eachIteratorIndex = null;
         notePackageRootMutation();
         MortalList.deferDestroyForContainerClear(this.elements);
         this.elements.clear();
@@ -1412,6 +1413,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public RuntimeArray setFromList(RuntimeList list) {
         return switch (type) {
             case PLAIN_ARRAY -> {
+                this.eachIteratorIndex = null;
                 notePackageRootMutation();
                 // Check if the list contains references to this array's elements
                 // If so, we need to save the values before clearing
@@ -1542,6 +1544,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             // refcount-inflation risk is lower there.
             return setFromList(list);
         }
+        this.eachIteratorIndex = null;
         notePackageRootMutation();
         MortalList.deferDestroyForContainerClear(this.elements);
         this.elements.clear();
@@ -1568,6 +1571,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         if (type != PLAIN_ARRAY) {
             throw new PerlCompilerException("Assignment to unsupported ref aliasing target");
         }
+        this.eachIteratorIndex = null;
         RuntimeArray references = new RuntimeArray();
         references.setFromList(list);
         notePackageRootMutation();

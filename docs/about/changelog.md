@@ -12,6 +12,7 @@ priorities and future plans.
 - Resolve scalar pipe names as symbolic handles and reuse descriptor 0 after
   closing STDIN.
 - Reject splice on read-only arrays and negative tied-array `FETCHSIZE` values.
+- Reset array `each` iterators when replacing their contents.
 
 - Preserve objects with counted collection owners during weak-reference sweeps,
   and resolve deferred user-defined regex properties in the match caller's
