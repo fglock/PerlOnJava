@@ -68,6 +68,7 @@ priorities and future plans.
 - Keep SQLite column metadata fetchable and quote reserved table names, support
   Perl-compatible SQLite `REGEXP`, clear successful DBI error strings, and
   delegate non-JDBC transaction methods to their drivers.
+- Keep `close` and `fileno` probes from creating nonexistent symbolic filehandles.
 
 - Preserve objects with counted collection owners during weak-reference sweeps,
   and resolve deferred user-defined regex properties in the match caller's
