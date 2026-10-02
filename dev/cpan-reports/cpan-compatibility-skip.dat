@@ -7,7 +7,7 @@ Data::Util	SKIP				2026-09-09	bundled
 Digest::MD5	SKIP				2026-09-19	bundled	
 HTTP::Tiny	SKIP				2026-09-29	bundled	
 IO	SKIP				2026-09-30	bundled	
-Object::Pad	SKIP				2026-09-29	bundled	
+Object::Pad	SKIP				2026-10-02	bundled	
 Proc::ProcessTable	SKIP				2026-09-29	bundled	
 Safe	SKIP				2026-09-29	bundled	
 Storable	SKIP				2026-09-28	bundled	
