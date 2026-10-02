@@ -1436,6 +1436,12 @@ public class PrototypeArgs {
         }
 
         Character actualSigil = sigilForBackslashPrototypeArg(referenceArg);
+        if (refType == '%' && actualSigil == null) {
+            String subName = parser.ctx.symbolTable.getCurrentSubroutine();
+            String subNamePart = (subName == null || subName.isEmpty()) ? "" : " to " + subName;
+            parser.throwError("Type of arg " + (args.elements.size() + 1) + subNamePart
+                    + " must be hash (not " + describeBackslashPrototypeArg(referenceArg) + ")");
+        }
         if (actualSigil == null || actualSigil == refType) {
             return;
         }
