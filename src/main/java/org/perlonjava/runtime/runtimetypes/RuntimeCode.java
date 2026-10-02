@@ -821,6 +821,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return result;
     }
 
+    /** Whether this exact lexical cell belongs to any currently active CV. */
+    public static boolean isActiveLexicalCell(RuntimeBase cell) {
+        if (cell == null) return false;
+        PerlRuntime runtime = PerlRuntime.current();
+        for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
+            for (RuntimeBase activeCell : frame.cells().values()) {
+                if (activeCell == cell) return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Select eval STRING captures for Perl's package-DB rule. An eval run by
      * a DB subroutine is evaluated in the lexical pad of the code being

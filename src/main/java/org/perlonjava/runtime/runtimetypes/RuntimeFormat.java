@@ -629,10 +629,14 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
             if (argLine.getAnnotation("unavailableLexicalVariableNames") instanceof List<?> names
                     && !names.isEmpty()) {
                 for (Object value : names) {
-                    if (!(value instanceof String name) || isPackageVariable(name)) continue;
-                    RuntimeBase active = activeLexicals.get(name);
-                    if (active != null) {
-                        lexicalVariables.put(name, active);
+                    if (!(value instanceof String name)) continue;
+                    // A lexical can be unavailable because its declaring
+                    // subroutine has returned. Do not replace that stale
+                    // capture with an unrelated active lexical that happens
+                    // to have the same name in the caller. Keep the captured
+                    // cell only while that exact cell is still active.
+                    RuntimeBase captured = lexicalVariables.get(name);
+                    if (RuntimeCode.isActiveLexicalCell(captured)) {
                         continue;
                     }
                     WarnDie.warn(new RuntimeScalar("Variable \"" + name
@@ -642,12 +646,30 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 }
             }
             for (String name : lexicalVariables.keySet()) {
+                if (argLine.getAnnotation("unavailableLexicalVariableNames") instanceof List<?> unavailable
+                        && unavailable.contains(name)) {
+                    // The fallback above has already kept a live captured
+                    // cell or installed a fresh undef cell. Do not resolve
+                    // this name again from an unrelated caller frame.
+                    continue;
+                }
+                RuntimeBase captured = lexicalVariables.get(name);
+                if (RuntimeCode.isActiveLexicalCell(captured)) {
+                    continue;
+                }
                 RuntimeBase active = activeLexicals.get(name);
                 if (active != null) {
-                    lexicalVariables.put(name, active);
-                } else if (!(argLine.getAnnotation("unavailableLexicalVariableNames") instanceof List<?> unavailable
-                                && unavailable.contains(name))
-                        && !isPackageVariable(name)
+                    if (captured == null) {
+                        lexicalVariables.put(name, active);
+                    } else if (!isPackageVariable(name)) {
+                        // Do not replace a stale declaration-scope cell with
+                        // an unrelated active cell of the same name.
+                        WarnDie.warn(new RuntimeScalar("Variable \"" + name
+                                        + "\" is not available at format " + formatName + "\n"),
+                                new RuntimeScalar(""));
+                        lexicalVariables.put(name, new RuntimeScalar());
+                    }
+                } else if (!isPackageVariable(name)
                         && argLine.content.matches("(?s).*\\Q" + name + "\\E(?:\\b|\\W).*")) {
                     // A FORMAT can outlive the CV whose lexical pad declared
                     // an argument.  Perl keeps the FORMAT callable, but
