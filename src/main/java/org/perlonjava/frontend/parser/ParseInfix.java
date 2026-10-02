@@ -639,6 +639,13 @@ public class ParseInfix {
                         && !ParserTables.INFIX_OP.contains(token.text)) {
                     NumberNode concatenatedNumber = rightmostConcatenatedNumber(left);
                     if (concatenatedNumber != null) {
+                        if (left instanceof NumberNode && token.text.matches("p[0-9]+")
+                                && !hasFractionalDotBefore(parser, operatorIndex)) {
+                            NumberParser.warnMissingOperatorBeforeBareword(parser, token.text,
+                                    concatenatedNumber.value + token.text, operatorIndex);
+                            throwSyntaxErrorAfterNumericBareword(parser, concatenatedNumber,
+                                    token, operatorIndex);
+                        }
                         throwMissingOperatorBeforeBareword(parser, concatenatedNumber, token, operatorIndex);
                     }
                 }
@@ -806,6 +813,32 @@ public class ParseInfix {
         String message = "Bareword found where operator expected (Missing operator before \""
                 + bareword.text + "\"?)" + at + "syntax error" + at;
         throw new PerlParserException(message);
+    }
+
+    private static void throwSyntaxErrorAfterNumericBareword(Parser parser, NumberNode left,
+                                                             LexerToken bareword, int barewordIndex) {
+        ErrorMessageUtil.SourceLocation location =
+                parser.ctx.errorUtil.getSourceLocationAccurate(barewordIndex);
+        String near = left.value + bareword.text;
+        String at = " at " + location.fileName() + " line " + location.lineNumber()
+                + ", near \"" + near + "\"\n";
+        throw new PerlParserException("syntax error" + at + "Execution of "
+                + location.fileName() + " aborted due to compilation errors.\n");
+    }
+
+    private static boolean hasFractionalDotBefore(Parser parser, int tokenIndex) {
+        int previous = tokenIndex - 1;
+        while (previous >= 0 && parser.tokens.get(previous).type == LexerTokenType.WHITESPACE) {
+            previous--;
+        }
+        if (previous < 0 || parser.tokens.get(previous).type != LexerTokenType.NUMBER) {
+            return false;
+        }
+        previous--;
+        while (previous >= 0 && parser.tokens.get(previous).type == LexerTokenType.WHITESPACE) {
+            previous--;
+        }
+        return previous >= 0 && parser.tokens.get(previous).text.equals(".");
     }
 
     /**
