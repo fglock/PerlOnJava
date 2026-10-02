@@ -105,7 +105,9 @@ public class Universal extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for can() method");
         }
         RuntimeScalar object = args.get(0);
-        String methodName = args.get(1).toString();
+        RuntimeScalar methodNameScalar = args.get(1);
+        String methodName = methodNameScalar.toString();
+        boolean methodNameHasUtf8Flag = methodNameScalar.type != RuntimeScalarType.BYTE_STRING;
 
         // Retrieve Perl class name
         String perlClassName;
@@ -224,7 +226,8 @@ public class Universal extends PerlModuleBase {
 
         // Fallback: if either the class name or method name was stored as UTF-8 octets
         // (common when source/strings are treated as raw bytes), retry using a decoded form.
-        String decodedMethodName = tryDecodeUtf8Octets(methodName);
+        String decodedMethodName = methodNameHasUtf8Flag
+                ? tryDecodeUtf8Octets(methodName) : null;
         String decodedClassName = tryDecodeUtf8Octets(perlClassName);
         if (decodedMethodName != null || decodedClassName != null) {
             String effectiveMethodName = decodedMethodName != null ? decodedMethodName : methodName;

@@ -31,6 +31,7 @@ priorities and future plans.
 - Run eval-block destructors before clearing `$@`, and report `ENOENT` from failed `rmdir` calls.
 - Preserve `sprintf` numeric overload counts and format-string UTF-8 flags.
 - Apply Unicode character classes to interpolated Unicode regex patterns.
+- Preserve combining-mark order in Unicode uppercase mappings and honor byte-string method names in `can`.
 
 - Preserve objects with counted collection owners during weak-reference sweeps,
   and resolve deferred user-defined regex properties in the match caller's
