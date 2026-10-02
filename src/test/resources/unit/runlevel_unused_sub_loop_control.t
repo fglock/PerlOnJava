@@ -4,12 +4,7 @@ use Test::More;
 use IPC::Open3 qw(open3);
 use Symbol qw(gensym);
 
-my $source = <<'PERL';
-sub TIEHANDLE { bless {} }
-sub PRINT { next }
-tie *STDERR, '';
-{ map ++$_, 1 }
-PERL
+my $source = q{sub TIEHANDLE { bless {} } sub PRINT { next } tie *STDERR, ''; { map ++$_, 1 }};
 my $sort_source = '@items = sort { last; } (1, 2);';
 
 sub run_child {
