@@ -1113,6 +1113,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar study() {
+        if (type == TIED_SCALAR) {
+            tiedFetch();
+        }
         return scalarUndef;
     }
 

@@ -1515,7 +1515,14 @@ public class CompileOperator {
                 bytecodeCompiler.lastResultReg = rd;
             }
             case "study" -> {
-                if (node.operand != null) node.operand.accept(bytecodeCompiler);
+                if (node.operand != null) {
+                    node.operand.accept(bytecodeCompiler);
+                    int operandReg = bytecodeCompiler.lastResultReg;
+                    int ignoredReg = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emit(Opcodes.DEFINED);
+                    bytecodeCompiler.emitReg(ignoredReg);
+                    bytecodeCompiler.emitReg(operandReg);
+                }
                 int rd = bytecodeCompiler.allocateOutputRegister();
                 bytecodeCompiler.emit(Opcodes.LOAD_INT);
                 bytecodeCompiler.emitReg(rd);

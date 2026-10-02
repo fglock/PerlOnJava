@@ -13,6 +13,8 @@ priorities and future plans.
   closing STDIN.
 - Reject splice on read-only arrays and negative tied-array `FETCHSIZE` values.
 - Reset array `each` iterators when replacing their contents.
+- Fetch tied scalars during `study` and return `crypt` results without the
+  UTF-8 flag.
 
 - Preserve objects with counted collection owners during weak-reference sweeps,
   and resolve deferred user-defined regex properties in the match caller's

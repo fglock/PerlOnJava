@@ -5,6 +5,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 import static org.perlonjava.frontend.parser.StringParser.assertNoWideCharacters;
@@ -50,7 +51,8 @@ public class Crypt {
         }
 
         String hashed = hashWithSalt(plaintext, salt);
-        return new RuntimeScalar(hashed).propagateTaint(plaintextScalar, saltScalar);
+        RuntimeScalar result = new RuntimeScalar(hashed.getBytes(StandardCharsets.ISO_8859_1));
+        return result.propagateTaint(plaintextScalar, saltScalar);
     }
 
     /**

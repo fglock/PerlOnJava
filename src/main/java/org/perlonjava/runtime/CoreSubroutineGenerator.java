@@ -458,7 +458,10 @@ public class CoreSubroutineGenerator {
             case "sleep" -> Time.sleep(arg).getList();
             case "sqrt" -> MathOperators.sqrt(arg).getList();
             case "srand" -> Random.srand(arg).getList();
-            case "study" -> new RuntimeScalar(1).getList(); // study is a no-op
+            case "study" -> {
+                arg.study();
+                yield new RuntimeScalar(1).getList();
+            }
             case "uc" -> StringOperators.uc(arg).getList();
             case "ucfirst" -> StringOperators.ucfirst(arg).getList();
             default ->
