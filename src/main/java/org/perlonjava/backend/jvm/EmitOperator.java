@@ -1415,14 +1415,34 @@ public class EmitOperator {
             return;
         }
 
-        // Special handling for `undef &$coderef`. The normal path would call
-        // the subroutine and undefine its return value, but Perl undefines the
-        // CV in place so saved coderefs observe a later redefinition.
+        // Special handling for `undef &$coderef` and `undef &{EXPR}`. The
+        // normal path would call the subroutine and undefine its return value,
+        // but Perl undefines the CV in place so saved coderefs observe a later
+        // redefinition.
         if (node.operand instanceof ListNode listNode && listNode.elements.size() == 1) {
             Node element = listNode.elements.getFirst();
             if (element instanceof OperatorNode ampNode && ampNode.operator.equals("&")) {
+                Node codeRefExpression = null;
+                boolean dereferenceDynamicCodeRef = false;
                 if (ampNode.operand instanceof OperatorNode dollarNode && dollarNode.operator.equals("$")) {
-                    dollarNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    codeRefExpression = dollarNode;
+                } else if (!(ampNode.operand instanceof IdentifierNode)) {
+                    codeRefExpression = ampNode.operand;
+                    dereferenceDynamicCodeRef = true;
+                }
+                if (codeRefExpression != null) {
+                    codeRefExpression.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    boolean assignmentReturnsCodeRef = codeRefExpression instanceof BinaryOperatorNode assignment
+                            && assignment.operator.equals("=")
+                            && assignment.right instanceof SubroutineNode;
+                    if (dereferenceDynamicCodeRef && !assignmentReturnsCodeRef) {
+                        emitterVisitor.pushCurrentPackage();
+                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                                "codeDerefNonStrict",
+                                "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                false);
+                    }
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                             "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                             "undefineCodeReference",

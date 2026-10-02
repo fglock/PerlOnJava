@@ -25,6 +25,7 @@ priorities and future plans.
 - Parse comma-delimited `q` and `qq` strings when disambiguating hashrefs from blocks.
 - Clear `pos()` after a failed second match of a global match-once pattern.
 - Validate typed hash dereferences against explicitly referenced `%FIELDS` tables.
+- Warn about anonymous subroutines in void context and undef dynamic code references in place.
 
 - Preserve objects with counted collection owners during weak-reference sweeps,
   and resolve deferred user-defined regex properties in the match caller's

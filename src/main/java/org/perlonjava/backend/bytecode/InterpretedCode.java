@@ -388,6 +388,9 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
      */
     @Override
     public RuntimeList apply(RuntimeArray args, int callContext) {
+        if (codeReferenceUndefined) {
+            throw RuntimeCode.undefinedCodeReferenceException(this, null);
+        }
         // Return cached constant value if this sub has been const-folded
         if (constantValue != null) {
             RuntimeCode.requireLvalueCallable(this, callContext, null);
@@ -477,6 +480,9 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
 
     @Override
     public RuntimeList apply(String subroutineName, RuntimeArray args, int callContext) {
+        if (codeReferenceUndefined) {
+            throw RuntimeCode.undefinedCodeReferenceException(this, subroutineName);
+        }
         // Return cached constant value if this sub has been const-folded
         if (constantValue != null) {
             RuntimeCode.requireLvalueCallable(this, callContext, subroutineName);

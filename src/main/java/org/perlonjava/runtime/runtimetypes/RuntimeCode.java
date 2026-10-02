@@ -1754,6 +1754,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // as opposed to auto-created by getGlobalCodeRef() for lookups.
     // In Perl 5, declared subs (even forward declarations) are visible via *{glob}{CODE}.
     public boolean isDeclared = false;
+    /** True when undef cleared this CV's body without replacing its identity. */
+    public boolean codeReferenceUndefined = false;
     /** True once this named CV has received an actual body, not just a declaration. */
     public boolean hasBodyDefinition = false;
     // Flag to indicate this is a closure prototype (the template CV before cloning).
@@ -2503,8 +2505,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static RuntimeList undefCodeRefResultOrThrow(RuntimeScalar runtimeScalar, String subroutineName, int callContext) {
         String fullSubName = knownUndefinedSubroutineName(runtimeScalar, subroutineName);
         if (fullSubName != null) {
-            throw new PerlCompilerException(gotoErrorPrefix(subroutineName)
-                    + "ndefined subroutine &" + fullSubName + " called");
+            throw new PerlCompilerException(undefinedSubroutineMessage(subroutineName, fullSubName));
         }
         if (RuntimeContextType.isListLike(callContext)) {
             return new RuntimeList();
@@ -3017,6 +3018,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static void copy(RuntimeCode code, RuntimeCode codeFrom) {
+        code.codeReferenceUndefined = codeFrom.codeReferenceUndefined;
         code.prototype = codeFrom.prototype;
         code.attributes = codeFrom.attributes;
         code.methodHandle = codeFrom.methodHandle;
@@ -3061,6 +3063,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.isSymbolicReference = codeFrom.isSymbolicReference;
         this.isBuiltin = codeFrom.isBuiltin;
         this.isDeclared = codeFrom.isDeclared;
+        this.codeReferenceUndefined = codeFrom.codeReferenceUndefined;
         this.isClosurePrototype = codeFrom.isClosurePrototype;
         this.definitionPending = codeFrom.definitionPending;
         this.attributesDispatchedAtCompileTime = codeFrom.attributesDispatchedAtCompileTime;
@@ -6272,8 +6275,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private static String undefinedSubroutineMessage(String subroutineName, String fullSubName) {
+        if ((fullSubName == null || fullSubName.isEmpty())
+                && !"tailcall".equals(subroutineName)) {
+            return "Undefined subroutine called";
+        }
         String message = gotoErrorPrefix(subroutineName) + "ndefined subroutine &" + fullSubName;
         return "tailcall".equals(subroutineName) ? message : message + " called";
+    }
+
+    /** Build Perl's undefined-subroutine diagnostic for a cleared CV. */
+    public static PerlCompilerException undefinedCodeReferenceException(
+            RuntimeCode code, String subroutineName) {
+        String fullSubName = code.referenceOriginFqn;
+        if ((fullSubName == null || fullSubName.isEmpty())
+                && code.packageName != null && code.subName != null) {
+            fullSubName = code.packageName + "::" + code.subName;
+        }
+        return new PerlCompilerException(undefinedSubroutineMessage(subroutineName, fullSubName));
     }
 
     /**
@@ -6528,6 +6546,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 String displayName = code.lexicalForwardGlobPlaceholder && code.subName != null
                         ? code.subName : code.referenceOriginFqn != null
                                 ? code.referenceOriginFqn : autoloadTargetName;
+                if (displayName == null || displayName.isEmpty()) {
+                    throw new PerlCompilerException("Undefined subroutine called");
+                }
                 throw new PerlCompilerException("Undefined subroutine &" + displayName + " called");
             }
             String resolvedSubroutineName = code.packageName != null && code.subName != null
@@ -7321,6 +7342,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                     + fullSubName + "() is no longer allowed");
                 }
                 throw new PerlCompilerException(undefinedSubroutineMessage(subroutineName, fullSubName));
+            } else {
+                throw new PerlCompilerException(undefinedSubroutineMessage(subroutineName, fullSubName));
             }
         }
 
@@ -7671,9 +7694,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             "Use of inherited AUTOLOAD for non-method "
                                     + fullSubName + "() is no longer allowed");
                 }
-                throw new PerlCompilerException(gotoErrorPrefix(subroutineName) + "ndefined subroutine &" + fullSubName + " called");
+                throw new PerlCompilerException(undefinedSubroutineMessage(subroutineName, fullSubName));
             }
-            throw new PerlCompilerException(gotoErrorPrefix(subroutineName) + "ndefined subroutine &" + fullSubName + " called");
+            throw new PerlCompilerException(undefinedSubroutineMessage(subroutineName, fullSubName));
         }
 
         // Handle GLOB type - extract CODE slot from the glob
@@ -8143,12 +8166,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (code.isConstantCv && code.lexicalSubDisplayName) {
             return codeRef.undefine();
         }
-        if (code.referenceOriginFqn == null && codeRef.globalCodeRefFqn != null) {
-            code.referenceOriginFqn = codeRef.globalCodeRefFqn;
+        if (!code.hadStashRef
+                && ("__ANON__".equals(code.subName)
+                || (code.referenceOriginFqn != null
+                && code.referenceOriginFqn.endsWith("::__ANON__")))) {
+            // Anonymous CVs are sometimes tagged with the conventional
+            // __ANON__ spelling even though they are not the stash's CV. Do
+            // not let an unrelated named __ANON__ sub capture later calls.
+            code.referenceOriginFqn = null;
+            code.packageName = null;
+            code.subName = null;
         }
         if (code.referenceOriginFqn == null) {
             code.referenceOriginFqn = GlobalVariable.findGlobalCodeRefName(code);
-            if (code.referenceOriginFqn == null) {
+            // A scalar can carry a stale global name that belongs to a
+            // different CV (notably main::__ANON__). Retain that name only
+            // for CVs which were actually installed in a stash.
+            if (code.referenceOriginFqn == null && code.hadStashRef
+                    && codeRef.globalCodeRefFqn != null) {
+                code.referenceOriginFqn = codeRef.globalCodeRefFqn;
+            }
+            if (code.referenceOriginFqn == null && code.hadStashRef) {
                 code.referenceOriginFqn = GlobalVariable.findPseudoConstantCodeRefName(code);
             }
         }
@@ -8158,10 +8196,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 code.packageName = code.referenceOriginFqn.substring(0, separator);
                 code.subName = code.referenceOriginFqn.substring(separator + 2);
             }
+        } else if (!code.hadStashRef) {
+            // An anonymous CV must stay anonymous after undef. Otherwise an
+            // unrelated named __ANON__ slot can be late-resolved on the next
+            // call through the saved code reference.
+            code.packageName = null;
+            code.subName = null;
         }
         // `undef &named_sub` retains a declared CODE slot even after its
         // callable body is cleared.
         code.isDeclared = true;
+        code.codeReferenceUndefined = true;
         code.clearPadConstantWeakRefs();
         code.methodHandle = null;
         code.subroutine = null;
@@ -8315,7 +8360,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     throw new PerlCompilerException("Undefined subroutine &" + fullSubName + " called");
                 }
-                throw new PerlCompilerException("Undefined subroutine called at ");
+                throw new PerlCompilerException("Undefined subroutine called");
             }
 
             requireLvalueCallable(this, callContext, null);
@@ -8476,9 +8521,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         getGlobalVariable(autoloadVarFor(autoload, lookupPkg)).set(fullSubName);
                         return apply(autoload, a, callContext);
                     }
-                    throw new PerlCompilerException(gotoErrorPrefix(subroutineName) + "ndefined subroutine &" + fullSubName + " called");
+                    throw new PerlCompilerException(undefinedSubroutineMessage(subroutineName, fullSubName));
                 }
-                throw new PerlCompilerException(gotoErrorPrefix(subroutineName) + "ndefined subroutine &" + (fullSubName != null ? fullSubName : "") + " called");
+            throw new PerlCompilerException(undefinedSubroutineMessage(subroutineName, fullSubName));
             }
 
             requireLvalueCallable(this, callContext, subroutineName);

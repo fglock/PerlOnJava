@@ -1064,6 +1064,28 @@ public class StatementResolver {
         int expressionStartIndex = parser.tokenIndex;
         Node expression = parser.parseExpression(0);
         token = peek(parser);
+        int followingTokenIndex = parser.tokenIndex;
+        while (followingTokenIndex < parser.tokens.size()
+                && (parser.tokens.get(followingTokenIndex).type == LexerTokenType.WHITESPACE
+                || parser.tokens.get(followingTokenIndex).type == LexerTokenType.NEWLINE
+                || parser.tokens.get(followingTokenIndex).text.equals(";"))) {
+            followingTokenIndex++;
+        }
+        boolean expressionIsDiscarded = followingTokenIndex < parser.tokens.size()
+                && parser.tokens.get(followingTokenIndex).type != LexerTokenType.EOF
+                && !parser.tokens.get(followingTokenIndex).text.equals("}");
+
+        if (expression instanceof SubroutineNode anonymousSubroutine
+                && anonymousSubroutine.name == null
+                && expressionIsDiscarded) {
+            String location = parser.ctx.errorUtil == null
+                    ? "" : parser.ctx.errorUtil.warningLocation(expressionStartIndex);
+            WarnDie.warnWithCategoryFromCode(
+                    new RuntimeScalar("Useless use of anonymous subroutine in void context"),
+                    new RuntimeScalar(location),
+                    "void",
+                    parser.ctx.symbolTable.getWarningBitsString());
+        }
 
         if (token.type == LexerTokenType.IDENTIFIER) {
             // Handle statement modifiers using switch expression

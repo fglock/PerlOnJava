@@ -6327,7 +6327,9 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rd);
                 emit(constIdx);
                 lastResultReg = rd;
-            } else if (node.operand instanceof BlockNode || node.operand instanceof OperatorNode) {
+            } else if (node.operand instanceof BlockNode
+                    || node.operand instanceof OperatorNode
+                    || node.operand instanceof BinaryOperatorNode) {
                 // Dynamic code reference: &{$name} or &$name
                 // Compile the expression to get the name/value, then dereference as code
                 compileNode(node.operand, -1, RuntimeContextType.SCALAR);

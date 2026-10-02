@@ -1685,6 +1685,23 @@ public class CompileOperator {
                                 idNode.name, bytecodeCompiler.getCurrentPackage());
                         bytecodeCompiler.emit(Opcodes.UNDEFINE_GLOBAL_CODE);
                         bytecodeCompiler.emit(bytecodeCompiler.addToStringPool(subName));
+                    } else if (undefTarget instanceof OperatorNode ampNode
+                            && ampNode.operator.equals("&")
+                            && !(ampNode.operand instanceof IdentifierNode)
+                            && !(ampNode.operand instanceof OperatorNode dollarNode
+                            && dollarNode.operator.equals("$"))) {
+                        // `undef &{EXPR}` first resolves the computed value as
+                        // a CODE reference, then clears that CV in place.
+                        Node codeRefExpression = ampNode.operand;
+                        boolean expressionReturnsCodeRef = codeRefExpression instanceof BinaryOperatorNode assignment
+                                && assignment.operator.equals("=")
+                                && assignment.right instanceof SubroutineNode;
+                        bytecodeCompiler.compileNode(
+                                expressionReturnsCodeRef ? codeRefExpression : ampNode,
+                                -1, RuntimeContextType.SCALAR);
+                        int codeRefReg = bytecodeCompiler.lastResultReg;
+                        bytecodeCompiler.emit(Opcodes.UNDEFINE_CODE_REF);
+                        bytecodeCompiler.emitReg(codeRefReg);
                     } else if (isScalarUndefTarget(undefTarget)) {
                         compileScalarUndefTarget(bytecodeCompiler, undefTarget);
                         int operandReg = bytecodeCompiler.lastResultReg;
