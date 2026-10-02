@@ -33,6 +33,8 @@ priorities and future plans.
 - Apply Unicode character classes to interpolated Unicode regex patterns.
 - Preserve combining-mark order in Unicode uppercase mappings and honor byte-string method names in `can`.
 - Reject scalar constants passed to hash-reference prototypes with the expected diagnostic.
+- Preserve malformed octets read through Perl's `:utf8` layer while decoding valid UTF-8.
+- Keep `$^X` unflagged for shell command construction and preserve encoded input octets.
 
 - Preserve objects with counted collection owners during weak-reference sweeps,
   and resolve deferred user-defined regex properties in the match caller's

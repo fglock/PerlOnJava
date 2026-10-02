@@ -116,6 +116,9 @@ public class EncodingLayer implements IOLayer {
     @Override
     public String processInput(String input) {
         validateUtf8Input(input, false);
+        if ("utf8".equalsIgnoreCase(layerName)) {
+            return processUncheckedUtf8(input);
+        }
         // Add new bytes to buffer
         for (int i = 0; i < input.length(); i++) {
             if (!inputBuffer.hasRemaining()) {
@@ -164,6 +167,9 @@ public class EncodingLayer implements IOLayer {
 
     /** Flush an incomplete encoded sequence at EOF, preserving Perl's replacement behavior. */
     public String flushInput() {
+        if ("utf8".equalsIgnoreCase(layerName)) {
+            return flushUncheckedUtf8();
+        }
         if (inputBuffer.position() == 0) {
             validateUtf8Input("", true);
             return "";
@@ -177,6 +183,120 @@ public class EncodingLayer implements IOLayer {
         validateUtf8Input("", true);
         output.flip();
         return output.toString();
+    }
+
+    /**
+     * Perl's :utf8 layer decodes valid UTF-8 but leaves malformed octets in
+     * their original byte form.  The stricter :encoding(UTF-8) layer uses the
+     * replacement behavior of CharsetDecoder instead.
+     */
+    private String processUncheckedUtf8(String input) {
+        appendInputBytes(input);
+        return decodeUncheckedUtf8(false);
+    }
+
+    private String flushUncheckedUtf8() {
+        String result = decodeUncheckedUtf8(true);
+        validateUtf8Input("", true);
+        decoder.reset();
+        return result;
+    }
+
+    private void appendInputBytes(String input) {
+        for (int i = 0; i < input.length(); i++) {
+            if (!inputBuffer.hasRemaining()) {
+                ByteBuffer expanded = ByteBuffer.allocate(inputBuffer.capacity() * 2);
+                inputBuffer.flip();
+                expanded.put(inputBuffer);
+                inputBuffer = expanded;
+            }
+            inputBuffer.put((byte) input.charAt(i));
+        }
+    }
+
+    private String decodeUncheckedUtf8(boolean endOfInput) {
+        inputBuffer.flip();
+        byte[] bytes = new byte[inputBuffer.remaining()];
+        inputBuffer.get(bytes);
+        inputBuffer.clear();
+
+        StringBuilder decoded = new StringBuilder(bytes.length);
+        int position = 0;
+        while (position < bytes.length) {
+            int first = bytes[position] & 0xff;
+            if (first <= 0x7f) {
+                decoded.append((char) first);
+                position++;
+                continue;
+            }
+
+            int sequenceLength = utf8SequenceLength(first);
+            if (sequenceLength == 0) {
+                decoded.append((char) first);
+                position++;
+                continue;
+            }
+
+            int available = bytes.length - position;
+            if (available < sequenceLength) {
+                if (!endOfInput && isUtf8Prefix(bytes, position, available, sequenceLength)) {
+                    inputBuffer.put(bytes, position, available);
+                    break;
+                }
+                decoded.append((char) first);
+                position++;
+                continue;
+            }
+
+            int codePoint = first & (0x7f >> sequenceLength);
+            boolean valid = true;
+            for (int offset = 1; offset < sequenceLength; offset++) {
+                int next = bytes[position + offset] & 0xff;
+                if ((next & 0xc0) != 0x80
+                        || (offset == 1 && !validUtf8SecondByte(first, next))) {
+                    valid = false;
+                    break;
+                }
+                codePoint = (codePoint << 6) | (next & 0x3f);
+            }
+
+            if (valid) {
+                decoded.appendCodePoint(codePoint);
+                position += sequenceLength;
+            } else {
+                // Preserve the malformed lead octet.  The following bytes are
+                // checked independently, as Perl's unchecked UTF-8 scalars do.
+                decoded.append((char) first);
+                position++;
+            }
+        }
+        return decoded.toString();
+    }
+
+    private static int utf8SequenceLength(int first) {
+        if (first >= 0xc2 && first <= 0xdf) return 2;
+        if (first >= 0xe0 && first <= 0xef) return 3;
+        if (first >= 0xf0 && first <= 0xf4) return 4;
+        return 0;
+    }
+
+    private static boolean isUtf8Prefix(byte[] bytes, int position, int available, int sequenceLength) {
+        int first = bytes[position] & 0xff;
+        for (int offset = 1; offset < available; offset++) {
+            int next = bytes[position + offset] & 0xff;
+            if ((next & 0xc0) != 0x80 || (offset == 1 && !validUtf8SecondByte(first, next))) {
+                return false;
+            }
+        }
+        return available < sequenceLength;
+    }
+
+    private static boolean validUtf8SecondByte(int first, int second) {
+        if (first == 0xe0) return second >= 0xa0;
+        if (first == 0xed) return second <= 0x9f;
+        if (first == 0xf0) return second >= 0x90;
+        if (first == 0xf4) return second <= 0x8f;
+        return true;
     }
 
     private void validateUtf8Input(String input, boolean endOfInput) {
