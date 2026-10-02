@@ -499,11 +499,9 @@ sub apply_standard_perl_oracle {
     for my $result (@$results) {
         next unless ($result->{status} // '') eq 'FAIL';
         my $archive = cpan_archive_for_module_in_log($source_log, $result->{module});
-        next unless $archive;
-
-        my ($oracle_status, $oracle_log) = run_standard_perl_oracle(
-            $archive, $result->{module}, $target_hard_cap,
-        );
+        my ($oracle_status, $oracle_log) = $archive
+            ? run_standard_perl_oracle($archive, $result->{module}, $target_hard_cap)
+            : run_standard_perl_module_probe($result->{module}, $target_hard_cap);
         $result->{perl_oracle_log} = $oracle_log if $oracle_log;
         next unless $oracle_status eq 'FAIL';
 
@@ -574,6 +572,45 @@ sub run_standard_perl_oracle {
     # CPAN.pm normally identifies the requested module in its output.  Do not
     # classify a partial/dependency-only log as a standard-Perl failure.
     return ('UNAVAILABLE', $log_path);
+}
+
+sub standard_perl_module_probe_command {
+    my ($module) = @_;
+    return unless defined $module && $module =~ /\A[A-Za-z_]\w*(?:::\w+)*\z/;
+
+    return [
+        $^X, "-M$module", '-e',
+        'print "PERLONJAVA_MODULE_LOAD_OK\n"',
+    ];
+}
+
+sub standard_perl_module_probe_succeeded {
+    my ($output) = @_;
+    return defined($output) && $output =~ /^PERLONJAVA_MODULE_LOAD_OK\r?$/m;
+}
+
+sub run_standard_perl_module_probe {
+    my ($module, $target_hard_cap) = @_;
+    my $command = standard_perl_module_probe_command($module);
+    return ('UNAVAILABLE', undef) unless $command;
+
+    my $log_path = File::Spec->catfile(
+        $perl_oracle_log_dir,
+        safe_log_name($module) . '.log',
+    );
+    $log_path = unique_archive_path($log_path) if -e $log_path;
+
+    my ($oracle_soft_timeout, $oracle_hard_cap) = effective_oracle_timeout_limits(
+        $perl_oracle_timeout, $target_hard_cap,
+    );
+    my ($output, $timed_out) = run_with_timeout(
+        $command, $oracle_soft_timeout, $log_path, $oracle_hard_cap,
+    );
+    return ('TIMEOUT', $log_path) if $timed_out;
+    return (
+        standard_perl_module_probe_succeeded($output) ? 'PASS' : 'FAIL',
+        $log_path,
+    );
 }
 
 
