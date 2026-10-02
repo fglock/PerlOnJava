@@ -200,7 +200,8 @@ public class VersionHelper {
                 if (perlClassName.equals("Perl")) {
                     String wantDisplay = normalizeVersionWithPadding(wantVersion);
                     String hint = getDidYouMeanHint(wantVersion, wantDisplay);
-                    throw new PerlCompilerException("Perl v" + wantDisplay + " required" + hint + "--this is only " + hasVersion.toString() + ", stopped");
+                    throw new PerlCompilerException("Perl v" + wantDisplay + " required" + hint
+                            + "--this is only " + displayVStringWithoutPadding(hasVersion) + ", stopped");
                 } else {
                     String wanted = wantVersion.toString();
                     String available = hasVersion.toString();
@@ -276,13 +277,15 @@ public class VersionHelper {
                 double want = Double.parseDouble(wantDecimal);
                 if (has >= want) {
                     String wantDisplay = normalizeVersionWithPadding(wantVersion);
-                    throw new PerlCompilerException("Perls since v" + wantDisplay + " too modern--this is " + hasVersion.toString() + ", stopped");
+                    throw new PerlCompilerException("Perls since v" + wantDisplay + " too modern--this is "
+                            + displayVStringWithoutPadding(hasVersion) + ", stopped");
                 }
             } catch (NumberFormatException e) {
                 // fallback to string comparison
                 if (hasDecimal.compareTo(wantDecimal) >= 0) {
                     String wantDisplay = normalizeVersionWithPadding(wantVersion);
-                    throw new PerlCompilerException("Perls since v" + wantDisplay + " too modern--this is " + hasVersion.toString() + ", stopped");
+                    throw new PerlCompilerException("Perls since v" + wantDisplay + " too modern--this is "
+                            + displayVStringWithoutPadding(hasVersion) + ", stopped");
                 }
             }
         }

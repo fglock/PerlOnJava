@@ -473,6 +473,8 @@ public class RuntimeIO extends RuntimeScalar {
      * Can be a file, socket, pipe, or custom I/O implementation.
      */
     public IOHandle ioHandle = new ClosedIOHandle(); // Initialize with ClosedIOHandle
+    /** Distinguishes an explicitly closed handle from a never-opened IO placeholder. */
+    public boolean explicitlyClosed;
     /**
      * Directory handle for directory operations (opendir, readdir, etc.).
      * Mutually exclusive with ioHandle - a RuntimeIO is either a file or directory handle.
@@ -562,6 +564,7 @@ public class RuntimeIO extends RuntimeScalar {
         this.currentChunkNumber = other.currentChunkNumber;
         this.slurpReadAttempted = other.slurpReadAttempted;
         this.ioHandle = other.ioHandle;
+        this.explicitlyClosed = other.explicitlyClosed;
         this.directoryIO = other.directoryIO;
         this.openedPath = other.openedPath;
         this.needFlush = other.needFlush;
@@ -1829,6 +1832,7 @@ public class RuntimeIO extends RuntimeScalar {
             return scalarFalse;
         }
         ioHandle = new ClosedIOHandle();
+        explicitlyClosed = true;
         // Reset line number to 0 on close, matching Perl 5 behavior.
         // This ensures $. becomes 0 and error messages don't include
         // stale filehandle context after close.

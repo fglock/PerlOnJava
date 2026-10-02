@@ -1024,7 +1024,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // `*dst = *src` leaves *dst{NAME} and *dst{PACKAGE} attached to dst,
         // but the scalar glob value stringifies as the source GV. Preserve an
         // already-propagated source identity through chains of assignments.
-        String sourceStringificationName = value.effectiveStringificationName();
+        String sourceStringificationName = value.stringificationName != null
+                ? value.stringificationName : value.globName;
         this.stringificationName = sourceStringificationName;
         // Some compiler paths obtain a lightweight glob wrapper for the
         // lvalue while scalar reads later reach the canonical IO entry. Keep
@@ -1660,7 +1661,21 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     private String effectiveStringificationName() {
-        return stringificationName != null ? stringificationName : globName;
+        String name = stringificationName != null ? stringificationName : globName;
+        if (name == null) return null;
+        int packageSeparator = name.lastIndexOf("::");
+        if (packageSeparator <= 0) return name;
+        String packageName = name.substring(0, packageSeparator);
+        if (GlobalVariable.isAnonymousStashPackage(packageName)) {
+            String sourceNamespace = name.substring(0, packageSeparator + 2);
+            for (Map.Entry<String, String> alias : GlobalVariable.stashAliases.entrySet()) {
+                if (sourceNamespace.equals(alias.getValue())) {
+                    return alias.getKey() + name.substring(packageSeparator);
+                }
+            }
+            return "__ANON__" + name.substring(packageSeparator);
+        }
+        return name;
     }
 
     /** Set a display-only GV name for a detached lexical or anonymous glob. */

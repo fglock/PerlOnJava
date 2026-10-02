@@ -706,15 +706,15 @@ public class EmitStatement {
             // use register spilling to capture the result: allocate a local variable,
             // tell the block to store its last element's value there, then load it after endLabel.
             // This ensures consistent stack state across all code paths (including last/next jumps).
-            // Apply for SCALAR/LIST/LVALUE contexts - bare blocks always return their value in Perl.
+            // Apply for SCALAR/LIST/LVALUE/RUNTIME contexts - bare blocks always return their value in Perl.
             // Note: Only apply to UNLABELED bare blocks. Labeled blocks like TODO: { ... } should
             // not return their value (this would break Test::More's TODO handling).
-            // RUNTIME context is NOT included because it causes issues with Test2 context handling.
             boolean needsReturnValue = node.isSimpleBlock
                     && node.labelName == null  // Only bare blocks, not labeled blocks
                     && (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
                         || emitterVisitor.ctx.contextType == RuntimeContextType.LIST
-                        || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE);
+                        || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE
+                        || emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME);
             int resultReg = -1;
 
             if (node.useNewScope) {
@@ -734,6 +734,7 @@ public class EmitStatement {
                         true,
                         true);
                 LoopLabels loopLabels = emitterVisitor.ctx.javaClassInfo.getInnermostLoopLabels();
+                loopLabels.regexStateRestoreLocal = regexStateLocal;
                 loopLabels.cleanupScopeIndex = scopeIndex + 1;
                 loopLabels.lastCleanupScopeIndex = scopeIndex + 1;
                 loopLabels.dynamicLocalLevelSlot = Local.saveLocalLevel(emitterVisitor.ctx, mv);
@@ -747,6 +748,8 @@ public class EmitStatement {
                 if (needsReturnValue) {
                     // Allocate a local variable for the result
                     resultReg = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                    loopLabels.resultRegisterSlot = resultReg;
+                    loopLabels.resultRegisterContext = emitterVisitor.ctx.contextType;
                     // Initialize it to undef (in case last/next is called before last statement)
                     EmitOperator.emitUndef(mv);
                     mv.visitVarInsn(Opcodes.ASTORE, resultReg);
@@ -871,6 +874,7 @@ public class EmitStatement {
                 endLabel,
                 RuntimeContextType.VOID,
                 false); // isTrueLoop = false (do-while is not a true loop)
+        emitterVisitor.ctx.javaClassInfo.getInnermostLoopLabels().regexStateRestoreLocal = regexStateLocal;
 
         // Start of the loop body
         mv.visitLabel(redoLabel);
@@ -891,6 +895,7 @@ public class EmitStatement {
                 endLabel,
                 RuntimeContextType.VOID,
                 false);
+        loopLabels.regexStateRestoreLocal = regexStateLocal;
         emitRegistryCheck(mv, loopLabels, redoLabel, continueLabel, endLabel);
 
         // Continue label (for next iteration)

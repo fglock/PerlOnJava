@@ -1579,6 +1579,9 @@ public class Opcodes {
     /** Reject localizing through an actual reference; symbolic names remain valid. */
     public static final short REJECT_LOCALIZE_REFERENCE = 565;
 
+    /** Unicode-aware quotemeta selected under the lexical unicode_strings feature. */
+    public static final short QUOTEMETA_UNICODE = 630;
+
     /**
      * Unpack binary data into a list of scalars.
      * Format: UNPACK rd argsReg ctx
@@ -2761,6 +2764,9 @@ public class Opcodes {
     public static final short FOREACH_ALIAS_RETAIN = 623;
     /** Release the active lexical foreach alias before replacing its slot or leaving the loop. */
     public static final short FOREACH_ALIAS_RELEASE = 624;
+
+    /** Restore a loop regex baseline and retain a fresh baseline for its next iteration. Format: register. */
+    public static final short RESTORE_LOOP_REGEX_STATE = 631;
 
     private Opcodes() {
     } // Utility class - no instantiation

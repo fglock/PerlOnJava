@@ -146,12 +146,21 @@ public class StringOperators {
      * utf8 flag.
      */
     public static RuntimeScalar quotemeta(RuntimeScalar runtimeScalar) {
+        return quotemeta(runtimeScalar, false);
+    }
+
+    /** Perl's quotemeta under the lexically enabled unicode_strings feature. */
+    public static RuntimeScalar quotemetaUnicode(RuntimeScalar runtimeScalar) {
+        return quotemeta(runtimeScalar, true);
+    }
+
+    private static RuntimeScalar quotemeta(RuntimeScalar runtimeScalar, boolean unicodeStrings) {
         StringBuilder quoted = new StringBuilder();
         String str = runtimeScalar.toString();
         int len = str.length();
         for (int i = 0; i < len; ) {
             int cp = str.codePointAt(i);
-            if (perlQuotemetaMustQuote(cp, runtimeScalar)) {
+            if (perlQuotemetaMustQuote(cp, runtimeScalar, unicodeStrings)) {
                 quoted.append('\\');
             }
             quoted.appendCodePoint(cp);
@@ -171,11 +180,12 @@ public class StringOperators {
     /**
      * Whether {@code quotemeta} must prefix this code point with backslash (Perl 5.38 rules).
      */
-    private static boolean perlQuotemetaMustQuote(int cp, RuntimeScalar runtimeScalar) {
+    private static boolean perlQuotemetaMustQuote(
+            int cp, RuntimeScalar runtimeScalar, boolean unicodeStrings) {
         if (cp <= 0x7F) {
             return !isPerlAsciiWord(cp);
         }
-        if (runtimeScalar.type == BYTE_STRING && cp <= 0xFF) {
+        if (!unicodeStrings && runtimeScalar.type == BYTE_STRING && cp <= 0xFF) {
             return true;
         }
         return UCharacter.hasBinaryProperty(cp, UProperty.PATTERN_SYNTAX)

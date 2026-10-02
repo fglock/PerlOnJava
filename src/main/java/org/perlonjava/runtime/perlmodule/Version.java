@@ -87,6 +87,11 @@ public class Version extends PerlModuleBase {
      * corresponding v-string while retaining the public {@code version} type.
      */
     public static RuntimeScalar packageDeclarationVersion(String source) {
+        return packageDeclarationVersion(new RuntimeScalar(source));
+    }
+
+    /** Create the built-in {@code $^V} object from Perl's encoded version scalar. */
+    public static RuntimeScalar packageDeclarationVersion(RuntimeScalar source) {
         RuntimeArray args = new RuntimeArray();
         args.push(new RuntimeScalar("version"));
         args.push(new RuntimeScalar(source));

@@ -229,6 +229,9 @@ public class FileHandle {
                 // Check if the next token is an infix operator
                 // If so, this is likely an expression, not a file handle
                 String nextText = peek(parser).text;
+                boolean adjacentUnterminatedSlashPattern = nextText.equals("/")
+                        && StringParser.isUnterminatedAdjacentSlashPattern(
+                                parser, parser.tokenIndex);
 
                 if ("<<".equals(nextText)) {
                     // `<<` is an infix, but it is also a heredoc
@@ -239,7 +242,9 @@ public class FileHandle {
                     // filehandle form followed by a parenthesized unary
                     // expression.  The parenthesis disambiguates it from
                     // `print $fh + EXPR`, where $fh is an output value.
-                } else if (ParserTables.INFIX_OP.contains(nextText) || "{[".contains(nextText) || "->".equals(nextText)) {
+                } else if ((ParserTables.INFIX_OP.contains(nextText)
+                        && !adjacentUnterminatedSlashPattern)
+                        || "{[".contains(nextText) || "->".equals(nextText)) {
                     // Examples that are NOT file handles:
                     // print $fh + 2;     # arithmetic
                     // print $fh{key};    # hash access

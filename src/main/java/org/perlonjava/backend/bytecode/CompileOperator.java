@@ -1076,7 +1076,9 @@ public class CompileOperator {
             case "chr" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, bytecodeCompiler.isBytesEnabled() ? Opcodes.CHR_BYTES : Opcodes.CHR);
             case "chrBytes" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.CHR_BYTES);
             case "lengthBytes" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.LENGTH_BYTES);
-            case "quotemeta" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.QUOTEMETA);
+            case "quotemeta" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node,
+                    bytecodeCompiler.symbolTable.isFeatureCategoryEnabled("unicode_strings")
+                            ? Opcodes.QUOTEMETA_UNICODE : Opcodes.QUOTEMETA);
             case "fc" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node,
                     selectCaseOpcode(bytecodeCompiler, Opcodes.FC, Opcodes.FC_BYTES, Opcodes.FC_UNICODE));
             case "lc" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node,
@@ -2258,9 +2260,14 @@ public class CompileOperator {
         boolean sourceFollowsTargetBlockStart = staticTarget != null
                 && staticTarget.owner != null
                 && staticTarget.owner.getIndex() <= node.getIndex();
+        boolean sourceAndTargetShareConditional = staticTarget != null
+                && staticTarget.conditionalContext >= 0
+                && staticTarget.conditionalContext == bc.gotoConditionalContextsByToken
+                        .getOrDefault(node.getIndex(), -1);
         if (staticTarget != null && staticTarget.constructEntry
                 && !bc.isInsideGotoLabelBlock(staticTarget.owner)
                 && !staticTarget.fieldInitializer
+                && !sourceAndTargetShareConditional
                 && !sourceFollowsTargetBlockStart) {
             labelStr = "\u0000invalid-goto-into-construct:" + labelStr;
             staticTarget = null;

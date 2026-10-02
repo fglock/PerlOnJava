@@ -185,10 +185,8 @@ public class EmitControlFlow {
         }
 
         if (loopLabels == null) {
-            // A CV is a control-flow boundary: last/next/redo in an ordinary
-            // sub cannot target its caller's loop. Eval blocks are the one
-            // exception, because their markers are caught by the enclosing
-            // eval machinery and may target its lexical caller.
+            // Ordinary subroutines may target dynamically enclosing loops.
+            // Smartmatch predicates retain their pseudo-block boundary.
             if (ctx.javaClassInfo.isSmartmatchPredicate) {
                 throw PerlCompilerException.withSourceLocation(node.tokenIndex,
                         "Can't \"" + operator + "\" outside a loop block", ctx.errorUtil);
@@ -269,7 +267,39 @@ public class EmitControlFlow {
         }
 
         // Handle return values based on context
-        if (loopLabels.context != RuntimeContextType.VOID) {
+        boolean storesLastResult = operator.equals("last")
+                && !implicitGivenLast && loopLabels.resultRegisterSlot >= 0;
+        if (storesLastResult) {
+            int resultContext = loopLabels.resultRegisterContext;
+            Label scalarLastResult = null;
+            if (resultContext == RuntimeContextType.RUNTIME) {
+                scalarLastResult = new Label();
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "currentRawCallContext", "()I", false);
+                ctx.mv.visitInsn(Opcodes.ICONST_2); // RuntimeContextType.LIST
+                ctx.mv.visitJumpInsn(Opcodes.IF_ICMPNE, scalarLastResult);
+            }
+            if (resultContext == RuntimeContextType.LIST || resultContext == RuntimeContextType.RUNTIME) {
+                ctx.mv.visitTypeInsn(Opcodes.NEW,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeList");
+                ctx.mv.visitInsn(Opcodes.DUP);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                        "<init>", "()V", false);
+            } else {
+                EmitOperator.emitUndef(ctx.mv);
+            }
+            ctx.mv.visitVarInsn(Opcodes.ASTORE, loopLabels.resultRegisterSlot);
+            if (scalarLastResult != null) {
+                Label resultStored = new Label();
+                ctx.mv.visitJumpInsn(Opcodes.GOTO, resultStored);
+                ctx.mv.visitLabel(scalarLastResult);
+                EmitOperator.emitUndef(ctx.mv);
+                ctx.mv.visitVarInsn(Opcodes.ASTORE, loopLabels.resultRegisterSlot);
+                ctx.mv.visitLabel(resultStored);
+            }
+        } else if (loopLabels.context != RuntimeContextType.VOID) {
             if ((operator.equals("next") || operator.equals("last")) && !implicitGivenLast) {
                 emitLoopControlExitValue(ctx, loopLabels);
             }
@@ -281,6 +311,7 @@ public class EmitControlFlow {
                 : loopLabels.redoLabel;
         emitLoopControlScopeCleanup(ctx, loopLabels, operator.equals("last"));
         emitMortalFlushAboveMark(ctx);
+        emitLoopRegexStateRestore(ctx, loopLabels);
         ctx.mv.visitJumpInsn(Opcodes.GOTO, label);
     }
 
@@ -300,6 +331,14 @@ public class EmitControlFlow {
         }
     }
 
+    private static void emitLoopRegexStateRestore(EmitterContext ctx, LoopLabels loopLabels) {
+        if (loopLabels.regexStateRestoreLocal >= 0) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, loopLabels.regexStateRestoreLocal);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RegexState", "restore", "()V", false);
+        }
+    }
+
     static void emitLoopControlScopeCleanupForDispatcher(
             EmitterContext ctx, LoopLabels loopLabels, boolean exitsLoop) {
         if (loopLabels.cleanupMarkSlot >= 0) {
@@ -314,6 +353,7 @@ public class EmitControlFlow {
                 "flush",
                 "()V",
                 false);
+        emitLoopRegexStateRestore(ctx, loopLabels);
     }
 
     /** Match the value expected at a value-producing block's next/last label. */
@@ -919,8 +959,12 @@ public class EmitControlFlow {
                 && !node.getBooleanAnnotation("insideGivenBlock");
         boolean gotoIntoBinaryOrListExpression = ctx.javaClassInfo
                 .gotoLabelsInsideBinaryOrListExpression.contains(labelName);
+        Integer targetConditional = ctx.javaClassInfo.gotoConditionalLabelContexts.get(labelName);
+        Integer sourceConditional = ctx.javaClassInfo.gotoConditionalSourceContexts.get(node.tokenIndex);
+        boolean sameConditional = targetConditional != null
+                && targetConditional.equals(sourceConditional);
         if (gotoIntoGiven || gotoIntoBinaryOrListExpression
-                || ctx.javaClassInfo.gotoLabelsInsideConstruct.contains(labelName)) {
+                || (ctx.javaClassInfo.gotoLabelsInsideConstruct.contains(labelName) && !sameConditional)) {
             if (gotoIntoGiven) {
                 // Perl reports the destination label's location.  Raise at
                 // compile time so an eval preserves that source location,

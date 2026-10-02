@@ -48,7 +48,40 @@ public class DebugHooks {
      */
     public static RuntimeList dispatchSubroutine(RuntimeScalar target, RuntimeArray args,
                                                   int context) {
+        return dispatchSubroutine(target, args, context, null);
+    }
+
+    /** Route a Perl overload method while exposing its overload slot name to DB::sub. */
+    public static RuntimeList dispatchOverloadedSubroutine(RuntimeScalar target, RuntimeArray args,
+                                                            int context, String debuggerName) {
+        return dispatchSubroutine(target, args, context, debuggerName);
+    }
+
+    private static RuntimeList dispatchSubroutine(RuntimeScalar target, RuntimeArray args,
+                                                   int context, String debuggerName) {
         DebugRuntimeState state = state();
+        RuntimeScalar selectedTarget = debuggerTargetCode(target);
+        if (selectedTarget == null
+                && isCurrentDebuggerTarget(target, state.debuggerTargetCode)) {
+            selectedTarget = state.debuggerTargetCode;
+        }
+        if (state.dispatchingDbSub && selectedTarget != null
+                && isCurrentDebuggerTarget(selectedTarget, state.debuggerTargetCode)) {
+            // DB::sub may invoke its selected target with an ordinary call
+            // (&$DB::sub), not only with goto. The target body is user code and
+            // its nested calls must be visible to DB::sub; suppress only the
+            // one dispatch that would re-enter the hook for the selected target.
+            boolean savedDispatchingDbSub = state.dispatchingDbSub;
+            boolean savedSkipNextDispatch = state.skipNextDbSubDispatch;
+            state.dispatchingDbSub = false;
+            state.skipNextDbSubDispatch = true;
+            try {
+                return RuntimeCode.apply(selectedTarget, args, context);
+            } finally {
+                state.skipNextDbSubDispatch = savedSkipNextDispatch;
+                state.dispatchingDbSub = savedDispatchingDbSub;
+            }
+        }
         if (!state.debugMode || state.dispatchingDbSub) {
             return null;
         }
@@ -79,7 +112,8 @@ public class DebugHooks {
         }
         state.dispatchingDbSub = true;
         RuntimeList result;
-        RuntimeScalar debuggerTarget = debuggerTarget(target);
+        RuntimeScalar debuggerTarget = debuggerName == null
+                ? debuggerTarget(target) : new RuntimeScalar(debuggerName);
         GlobalVariable.getGlobalVariable("DB::sub").set(debuggerTarget);
         state.debuggerTargetCode = target;
         try {
@@ -100,6 +134,32 @@ public class DebugHooks {
             state.skipNextDbSubDispatch = true;
         }
         return RuntimeCode.resolveTailCalls(result, context);
+    }
+
+    private static boolean isCurrentDebuggerTarget(RuntimeScalar target, RuntimeScalar selected) {
+        if (target == null || selected == null) return false;
+        if (target == selected) return true;
+        if (target.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE
+                && selected.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE) {
+            if (target.value == selected.value) return true;
+            if (target.value instanceof RuntimeCode targetCode
+                    && selected.value instanceof RuntimeCode selectedCode) {
+                String targetPackage = targetCode.packageName == null ? "main" : targetCode.packageName;
+                String selectedPackage = selectedCode.packageName == null ? "main" : selectedCode.packageName;
+                return targetPackage.equals(selectedPackage)
+                        && targetCode.subName != null
+                        && targetCode.subName.equals(selectedCode.subName);
+            }
+            return false;
+        }
+        if ((target.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.STRING
+                || target.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.BYTE_STRING)
+                && selected.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE
+                && selected.value instanceof RuntimeCode code
+                && code.subName != null && !code.subName.isEmpty()) {
+            return debuggerTarget(selected).toStringNoOverload().equals(target.toStringNoOverload());
+        }
+        return false;
     }
 
     /** Return the live target while DB::sub resolves its debugger-visible name. */

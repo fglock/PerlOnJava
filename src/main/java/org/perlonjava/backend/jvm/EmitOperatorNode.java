@@ -168,10 +168,32 @@ public class EmitOperatorNode {
             case "ucfirst" -> EmitOperator.handleUcfirstOperator(node, emitterVisitor);
             case "abs", "chdir", "closedir", "cos", "exit", "exp",
                  "hex", "log",
-                 "oct", "quotemeta", "rand", "ref",
+                 "oct", "rand", "ref",
                  "rewinddir", "rmdir", "sin", "sleep", "sqrt",
                  "srand", "study", "telldir" ->
                     EmitOperator.handleUnaryDefaultCase(node, node.operator, emitterVisitor);
+
+            case "quotemeta" -> {
+                if (emitterVisitor.ctx.symbolTable.isFeatureCategoryEnabled("unicode_strings")) {
+                    node.operand.accept(emitterVisitor.with(
+                            org.perlonjava.runtime.runtimetypes.RuntimeContextType.SCALAR));
+                    emitterVisitor.ctx.mv.visitMethodInsn(
+                            org.objectweb.asm.Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/operators/StringOperators",
+                            "quotemetaUnicode",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                            false);
+                    if (emitterVisitor.ctx.contextType
+                            == org.perlonjava.runtime.runtimetypes.RuntimeContextType.VOID) {
+                        EmitOperator.handleVoidContext(emitterVisitor);
+                    } else if (emitterVisitor.ctx.contextType
+                            == org.perlonjava.runtime.runtimetypes.RuntimeContextType.SCALAR) {
+                        EmitOperator.handleScalarContext(emitterVisitor, node);
+                    }
+                } else {
+                    EmitOperator.handleUnaryDefaultCase(node, node.operator, emitterVisitor);
+                }
+            }
 
             case "pos" -> {
                 String aggregate = posAggregateOperand(node.operand);

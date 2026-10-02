@@ -6,8 +6,31 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve objects with counted collection owners during weak-reference sweeps,
+  and resolve deferred user-defined regex properties in the match caller's
+  package.
+
 - Fix Unicode `IsPrint` aliases in character classes, `/x` literal-brace
   warnings and matching, and Joni backtracking across repeated whitespace.
+
+- Preserve debugger eval caller lines, expose overloaded callbacks through
+  `$DB::sub`, initialize `$^V` as a `version` object with canonical string
+  output, and diagnose loop control in unused subroutines.
+
+- Keep imported `try`/`catch` and declared `dump` calls free of false CORE
+  ambiguity warnings, support `chdir` and `chmod` through open filehandles,
+  report directory `chdir` as unavailable without `dirfd`, restore
+  invalid-descriptor errors, preserve dynamic package variables and monotonic
+  clocks needed by AnyEvent::Tools, and reuse root reachability snapshots during
+  weak-reference cleanup.
+
+- Preserve ordinary `goto` jumps between conditional branches while rejecting
+  jumps into conditional blocks from outside.
+
+- Support anonymous temporary files for read/write opens with undefined paths,
+  report non-numeric process IDs passed to `kill()`, and release each result of
+  a void-context `map` iteration before invoking the next block; diagnose the
+  missing comma in malformed `grep` predicate syntax.
 
 - Resolve Perl `IsWord` aliases without changing custom-property precedence;
   preserve default `/d` classes inside `(?^:...)`, recognize ordinary hex-like
@@ -25,6 +48,13 @@ priorities and future plans.
   eval callers, and stdio layers; keep wide CLI diagnostics free of host print
   warnings and give the complete Windows unit gate adequate bounded time.
 
+- Restore sparse tied-array reversal, typed declarations in `eval`, regex
+  capture restoration across loop control, and `PERL5OPT` include ordering;
+  match Perl's seeded random sequence and Unicode `quotemeta` rules.
+
+- Preserve missing slots when assigning reversed tied arrays and restore the
+  loop-entry regex captures when `next`, `redo`, or `last` exits nested scopes.
+
 - Restore core-test compatibility for regex-set diagnostics (including
   POSIX-looking text in extended-class comments), classes and MRO, op subs,
   filesystem metadata, `die` state, and scalar flip-flop warnings on both
@@ -32,6 +62,8 @@ priorities and future plans.
 
 - Resolve dynamic `require` package names as portable module paths before
   filesystem lookup, including on Windows.
+
+- Parse `PERL5LIB` with the host platform's path separator.
 
 - Restore `re/recompile.t`, `class/accessor.t`, `op/smartkve.t`, `comp/utf.t`,
   `op/gmagic.t`, and `uni/overload.t` compatibility.

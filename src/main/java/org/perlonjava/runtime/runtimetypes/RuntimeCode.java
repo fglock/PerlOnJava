@@ -580,6 +580,30 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return active == null ? null : active.packageName;
     }
 
+    /**
+     * Return the package of the active Perl caller around a deferred regex
+     * callback. The callback's synthetic CV retains the package where the
+     * regex was compiled, while runtime user-property lookup follows the
+     * package that invoked the match.
+     */
+    public static String getActiveRegexPropertyCallerPackage() {
+        RuntimeCode previous = null;
+        for (RuntimeCode active : activeCodeStack()) {
+            if (isCompilerWrapperPair(active, previous)) {
+                continue;
+            }
+            previous = active;
+            if (active.isRegexCallbackPseudoBlock || active.isTryExpressionWrapper
+                    || active.isBuiltin || active.subName == null || active.subName.isBlank()) {
+                continue;
+            }
+            if (active.packageName != null && !active.packageName.isBlank()) {
+                return active.packageName;
+            }
+        }
+        return null;
+    }
+
     public static void popActiveCode(RuntimeCode code) {
         PerlRuntime runtime = PerlRuntime.current();
         ExecutionRuntimeState executionState = runtime.executionState();
@@ -2958,6 +2982,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return PerlRuntime.current().runtimeCodeState().nextEvalFilename(sourceName);
     }
 
+    private static String getNextEvalFilenameForDebugger(String sourceName) {
+        String filename = getNextEvalFilename(sourceName);
+        if (!DebugState.isDebugMode()) {
+            return filename;
+        }
+        CallerStack.CallerInfo caller = CallerStack.peek(0);
+        if (caller == null || caller.filename() == null || caller.filename().isEmpty()
+                || caller.line() <= 0 || caller.filename().startsWith("(eval ")) {
+            return filename;
+        }
+        return filename + "[" + caller.filename() + ":" + caller.line() + "]";
+    }
+
     private static void warnSignatureArgsInEval(String source, String fileName) {
         if (source == null || !source.contains("@_")) return;
         // JVM-generated subroutine bodies do not always enter through a
@@ -3313,7 +3350,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             boolean isDebugging = debugFlags != 0;
 
             // Always generate a unique filename for each eval to prevent source location collisions
-            String actualFileName = getNextEvalFilename(ctx.compilerOptions.fileName);
+            String actualFileName = getNextEvalFilenameForDebugger(ctx.compilerOptions.fileName);
             evalCompilerOptions.fileName = actualFileName;
             warnSignatureArgsInEval(evalString, actualFileName);
 
@@ -3321,7 +3358,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Skip caching when $^P is set, so each eval gets a unique filename
             // Include package name in cache key to ensure source location info is correct per-package
             int featureFlags = ctx.symbolTable.featureFlagsStack.peek();
-            String currentPackage = ctx.symbolTable.getCurrentPackage();
+            String runtimePackage = InterpreterState.currentPackage.get().toString();
+            String callsiteSub = ctx.symbolTable.getCurrentSubroutine();
+            boolean topLevelMain = callsiteSub == null || callsiteSub.isEmpty()
+                    || "main".equals(callsiteSub);
+            String currentPackage = ClassRegistry.isClass(runtimePackage)
+                    ? runtimePackage
+                    : topLevelMain ? runtimePackage : ctx.symbolTable.getCurrentPackage();
             String cacheKey = evalString + '\0' + evalTag + '\0' + hasUnicode + '\0' + ctx.isEvalbytes + '\0' + evalbytesUtf8Source + '\0' + byteStringUtf8Source + '\0' + isByteStringSource + '\0' + featureFlags + '\0' + currentPackage;
             Class<?> cachedClass = null;
             if (!isDebugging) {
@@ -3377,6 +3420,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // IMPORTANT: The parseSymbolTable starts with the captured flags so that
             // the eval code is parsed with the correct feature/strict/warning context
             ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
+            parseSymbolTable.setCurrentPackage(currentPackage, ClassRegistry.isClass(currentPackage));
             // BEGIN blocks execute while eval STRING is parsed. Point the
             // special-variable pragma facade at this eval's private scope so
             // assignments to $^H/${^WARNING_BITS} affect the generated body,
@@ -3971,7 +4015,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // but retains the enclosing source in errorUtil. Allocate within
             // that enclosing source so distinct sites share its `(eval N)`
             // sequence without perturbing unrelated source files.
-            evalCompilerOptions.fileName = getNextEvalFilename(ctx.errorUtil.getFileName());
+            evalCompilerOptions.fileName = getNextEvalFilenameForDebugger(ctx.errorUtil.getFileName());
             evalFilename = evalCompilerOptions.fileName;
             warnSignatureArgsInEval(evalString, evalCompilerOptions.fileName);
 
@@ -4036,6 +4080,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
                 // Create parser context
                 ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
+                String runtimePackage = InterpreterState.currentPackage.get().toString();
+                String callsiteSub = capturedSymbolTable.getCurrentSubroutine();
+                boolean topLevelMain = callsiteSub == null || callsiteSub.isEmpty()
+                        || "main".equals(callsiteSub);
+                String evalCurrentPackage = ClassRegistry.isClass(runtimePackage)
+                        ? runtimePackage
+                        : topLevelMain ? runtimePackage : capturedSymbolTable.getCurrentPackage();
+                parseSymbolTable.setCurrentPackage(
+                        evalCurrentPackage, ClassRegistry.isClass(evalCurrentPackage));
                 String lexicalEvalWarningBits = parseSymbolTable.getWarningBitsString();
                 // Eval STRING inherits the caller's lexical warning bits. The
                 // interpreter does not have JVM call-site instructions to
@@ -4143,9 +4196,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 //   - evalCtx.errorUtil uses evalCompilerOptions.fileName (the outer script name),
                 //     not the eval string's tokens, so die/warn location baking is already
                 //     relative to the outer script and is unaffected by the package change.
-                //   - capturedSymbolTable.getCurrentPackage() gives the compile-time package
-                //     of the eval call site (e.g. "FOO3"), so bare names like *named are
-                //     correctly qualified to FOO3::named in the bytecode string pool.
+                //   - evalCurrentPackage is the package selected for this eval, so bare
+                //     names like *named are correctly qualified to the active namespace
+                //     in the bytecode string pool.
                 //   - Without this call, the BytecodeCompiler defaults to "main", causing
                 //     eval q[*named{CODE}] to look up main::named instead of FOO3::named.
                 BytecodeCompiler compiler = new BytecodeCompiler(
@@ -4155,7 +4208,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         adjustedRegistry,
                         adjustedDecls,
                         adjustedOurPackages);
-                compiler.setCompilePackage(capturedSymbolTable.getCurrentPackage());
+                compiler.setCompilePackage(evalCurrentPackage);
                 interpretedCode = compiler.compile(ast, evalCtx);
                 compiledSuccessfully = true;
                 evalTrace("evalStringWithInterpreter compiled tag=" + evalTag +
@@ -7853,7 +7906,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             runtimeCode.isDeclared = true;
             // A named coderef creates a forward CV whose CvSTASH and source
             // COP belong to the reference site, rather than the package in
-            // the referenced name.  Keep this here instead of the generic
+            // the referenced name. Keep this here instead of the generic
             // global-CV lookup path: Exporter performs ordinary lookups while
             // installing imported symbols and must not retag those slots.
             if (packageName != null && !packageName.isEmpty()) {

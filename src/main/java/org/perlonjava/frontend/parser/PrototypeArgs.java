@@ -278,11 +278,23 @@ public class PrototypeArgs {
                 return args;
             }
             // Parse one argument at named unary precedence (higher than comparison ops)
-            Node expr = parser.parseExpression(parser.getPrecedence("isa") + 1);
+            boolean wasParsingNamedUnaryPrototypeArgument =
+                    parser.parsingNamedUnaryPrototypeArgument;
+            parser.parsingNamedUnaryPrototypeArgument = true;
+            Node expr;
+            try {
+                expr = parser.parseExpression(parser.getPrecedence("isa") + 1);
+            } finally {
+                parser.parsingNamedUnaryPrototypeArgument =
+                        wasParsingNamedUnaryPrototypeArgument;
+            }
             if (expr != null) {
                 Node scalarArg = ParserNodeUtils.toScalarContext(expr);
                 scalarArg.setAnnotation("context", "SCALAR");
                 args.elements.add(scalarArg);
+            }
+            if (StringParser.isUnterminatedAdjacentSlashPattern(parser, parser.tokenIndex)) {
+                args.setAnnotation("prototypeUnarySlashFollows", true);
             }
             return args;
         }

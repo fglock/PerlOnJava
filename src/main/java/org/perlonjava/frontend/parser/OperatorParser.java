@@ -681,13 +681,21 @@ public class OperatorParser {
                 // architectural difference (entire file compiled before execution).
                 int currentIndex2 = parser.tokenIndex;
                 String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
+                String typeAlias = resolveTypedPackageConstant(
+                        packageName, parser.ctx.symbolTable.getCurrentPackage());
+                if (typeAlias != null) {
+                    packageName = typeAlias;
+                }
                 LexerToken afterType = peek(parser);
                 boolean followedBySigil = "$".equals(afterType.text) || "@".equals(afterType.text)
                         || "%".equals(afterType.text) || "\\".equals(afterType.text)
                         || "(".equals(afterType.text);
                 if (followedBySigil) {
                     // Unambiguously a type annotation (followed by a variable sigil or paren list)
-                    if (parser.parsingForLoopVariable && !GlobalVariable.isPackageLoaded(packageName)) {
+                    boolean evalSource = parser.ctx.compilerOptions.fileName != null
+                            && parser.ctx.compilerOptions.fileName.startsWith("(eval");
+                    if ((parser.parsingForLoopVariable || evalSource)
+                            && !GlobalVariable.isPackageLoaded(packageName)) {
                         parser.throwCleanError("No such class " + packageName);
                     }
                     varType = packageName;
@@ -953,6 +961,22 @@ public class OperatorParser {
     }
 
     /** Lexicals cannot declare a package-qualified variable target. */
+    /** Resolve a compile-time constant used as a typed lexical's class name. */
+    private static String resolveTypedPackageConstant(String candidate, String currentPackage) {
+        String constantName = NameNormalizer.normalizeVariableName(candidate, currentPackage);
+        RuntimeScalar constantRef = GlobalVariable.createPseudoConstantCodeRef(constantName);
+        if (constantRef == null || !(constantRef.value instanceof RuntimeCode code)
+                || code.constantValue == null || code.constantValue.elements.size() != 1) {
+            return null;
+        }
+        RuntimeBase value = code.constantValue.elements.getFirst();
+        if (value == null) {
+            return null;
+        }
+        String packageName = value.scalar().toString();
+        return GlobalVariable.isPackageLoaded(packageName) ? packageName : null;
+    }
+
     private static void validateQualifiedDeclarationTarget(Parser parser, String declaration, Node operand) {
         if (!(operand instanceof OperatorNode variable)
                 || !(variable.operand instanceof IdentifierNode identifier)) {
@@ -1099,6 +1123,16 @@ public class OperatorParser {
             }
         }
         operand = ListParser.parseZeroOrOneList(parser, 0, text);
+        if (text.equals("chdir") && operand instanceof ListNode list
+                && list.elements.size() == 1
+                && list.elements.getFirst() instanceof IdentifierNode identifier) {
+            String name = identifier.name;
+            GlobalVariable.vivifyGlobalIO(FileHandle.normalizeBarewordHandle(parser, name));
+            Node fileHandle = FileHandle.parseBarewordHandle(parser, name);
+            if (fileHandle != null) {
+                list.elements.set(0, fileHandle);
+            }
+        }
         if (((ListNode) operand).elements.isEmpty()) {
             switch (text) {
                 case "sleep":
@@ -1761,6 +1795,7 @@ public class OperatorParser {
             parser.tokenIndex = savedIndex;
 
             if (afterLabel.type == EOF || ListParser.isListTerminator(parser, afterLabel)) {
+                rejectNonAsciiByteSourceLabel(parser, next);
                 TokenUtils.consume(parser);
                 ListNode labels = new ListNode(currentIndex);
                 labels.elements.add(new IdentifierNode(next.text, labelIndex));
@@ -1772,6 +1807,20 @@ public class OperatorParser {
 
         Node operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
         return new OperatorNode(token.text, operand, currentIndex);
+    }
+
+    private static void rejectNonAsciiByteSourceLabel(Parser parser, LexerToken label) {
+        if (!parser.ctx.compilerOptions.isByteStringSource) {
+            return;
+        }
+        for (int i = 0; i < label.text.length();) {
+            int codePoint = label.text.codePointAt(i);
+            if (codePoint > 0x7f) {
+                parser.throwCleanError(String.format(
+                        "Unrecognized character \\x%02X;", codePoint));
+            }
+            i += Character.charCount(codePoint);
+        }
     }
 
     static OperatorNode parseReturn(Parser parser, int currentIndex) {
@@ -1872,6 +1921,7 @@ public class OperatorParser {
             LexerToken afterLabel = peek(parser);
             parser.tokenIndex = labelIndex;
             if (afterLabel.type == EOF || ListParser.isListTerminator(parser, afterLabel)) {
+                rejectNonAsciiByteSourceLabel(parser, target);
                 consume(parser);
                 operand = new ListNode(List.of(new IdentifierNode(target.text, labelIndex)), currentIndex);
             } else {

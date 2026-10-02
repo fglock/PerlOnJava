@@ -9,8 +9,10 @@ import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.perlmodule.*;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 
+import java.io.File;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeIO.initStdHandles;
 
@@ -296,7 +298,8 @@ public class GlobalContext {
         List<RuntimeScalar> inc = GlobalVariable.getGlobalArray("main::INC").elements;
 
         inc.addAll(compilerOptions.inc.elements);   // add from `-I`
-        String[] directories = env.getOrDefault("PERL5LIB", new RuntimeScalar("")).toString().split(":");
+        String[] directories = env.getOrDefault("PERL5LIB", new RuntimeScalar(""))
+                .toString().split(Pattern.quote(File.pathSeparator));
         for (String directory : directories) {
             if (!directory.isEmpty()) {
                 inc.add(new RuntimeScalar(directory)); // add from env PERL5LIB
@@ -380,6 +383,10 @@ public class GlobalContext {
         GlobalVariable.ensurePackageStash("IO::File");
         GlobalVariable.ensurePackageStash("IO::Seekable");
         Version.initialize();   // Initialize version module for version objects
+        GlobalVariable.getGlobalVariable(
+                "main::" + Character.toString('V' - 'A' + 1))
+                .set(Version.packageDeclarationVersion(
+                        "v" + Configuration.getPerlVersionNoV()));
         Attributes.initialize();  // attributes:: XS-equivalent functions (used by attributes.pm)
         Threads.initialize();  // unadvertised ithread API; Config flags remain disabled
         ThreadsShared.initialize();  // shared storage core; locking primitives are Phase 21

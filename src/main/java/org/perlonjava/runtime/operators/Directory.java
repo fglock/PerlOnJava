@@ -41,43 +41,54 @@ public class Directory {
 
         String dirName;
 
-        // Check if argument is a filehandle or dirhandle
-        if (runtimeScalar.value instanceof RuntimeIO || runtimeScalar.value instanceof RuntimeGlob) {
-            // Try to get RuntimeIO from the scalar
-            RuntimeIO io = RuntimeIO.getRuntimeIO(runtimeScalar);
-            if (io != null) {
-                if (io.directoryIO != null) {
-                    throw new PerlCompilerException("The dirfd function is unimplemented");
-                }
-                if (io.ioHandle == null || io.ioHandle instanceof org.perlonjava.runtime.io.ClosedIOHandle) {
-                    getGlobalVariable("main::!").set(9);
-                    if (IOOperator.unopenedWarningsEnabled()
-                            || Warnings.warningManager.isWarningEnabled("unopened")) {
-                        String state = io.openedPath != null
-                                || io.directoryIO != null
-                                ? "closed" : "unopened";
-                        WarnDie.warn(new RuntimeScalar("chdir() on " + state
-                                + " filehandle " + filehandleName(runtimeScalar)), new RuntimeScalar(""));
-                    }
-                    return scalarFalse;
-                }
-                Path opened = io.openedPath;
-                if (opened == null) {
-                    getGlobalVariable("main::!").set(9);
-                    return scalarFalse;
-                }
-                if (!Files.isDirectory(opened)) {
-                    getGlobalVariable("main::!").set(20); // ENOTDIR
-                    return scalarFalse;
-                }
-                try {
-                    RuntimeEnvironment.setCurrentDirectory(opened.toFile().getCanonicalPath());
-                    return scalarTrue;
-                } catch (IOException e) {
-                    handleIOException(e, "chdir failed");
-                    return scalarFalse;
-                }
+        // Resolve named as well as lexical filehandles. Bareword handles
+        // reach this operator as their string name, while lexical handles
+        // carry the RuntimeIO directly.
+        RuntimeIO io = RuntimeIO.getRuntimeIO(runtimeScalar);
+        boolean handleArgument = runtimeScalar.type == RuntimeScalarType.GLOB
+                || runtimeScalar.type == RuntimeScalarType.GLOBREFERENCE
+                || runtimeScalar.value instanceof RuntimeGlob;
+        if (io != null) {
+            String name = filehandleName(runtimeScalar, io);
+            if (io.directoryIO != null) {
+                throw new PerlCompilerException("The dirfd function is unimplemented");
             }
+            if (io.ioHandle instanceof org.perlonjava.runtime.io.ClosedIOHandle
+                    || io.ioHandle == null) {
+                getGlobalVariable("main::!").set(9);
+                if (IOOperator.unopenedWarningsEnabled()
+                        || Warnings.warningManager.isWarningEnabled("unopened")) {
+                    String state = io.explicitlyClosed ? "closed" : "unopened";
+                    WarnDie.warn(new RuntimeScalar("chdir() on " + state
+                            + " filehandle " + name), new RuntimeScalar(""));
+                }
+                return scalarFalse;
+            }
+            Path opened = io.openedPath;
+            if (opened == null) {
+                getGlobalVariable("main::!").set(9);
+                return scalarFalse;
+            }
+            if (!Files.isDirectory(opened)) {
+                getGlobalVariable("main::!").set(20); // ENOTDIR
+                return scalarFalse;
+            }
+            try {
+                RuntimeEnvironment.setCurrentDirectory(opened.toFile().getCanonicalPath());
+                return scalarTrue;
+            } catch (IOException e) {
+                handleIOException(e, "chdir failed");
+                return scalarFalse;
+            }
+        }
+        if (handleArgument) {
+            getGlobalVariable("main::!").set(9);
+            if (IOOperator.unopenedWarningsEnabled()
+                    || Warnings.warningManager.isWarningEnabled("unopened")) {
+                WarnDie.warn(new RuntimeScalar("chdir() on unopened filehandle "
+                        + filehandleName(runtimeScalar, null)), new RuntimeScalar(""));
+            }
+            return scalarFalse;
         }
 
         // Handle chdir() with no arguments - check environment variables
@@ -137,6 +148,15 @@ public class Directory {
             getGlobalVariable("main::!").set(2);  // ENOENT
             return scalarFalse;
         }
+    }
+
+    private static String filehandleName(RuntimeScalar handle, RuntimeIO io) {
+        String name = io != null ? io.globName : null;
+        if (name == null && handle.value instanceof RuntimeGlob glob) name = glob.globName;
+        if (name == null) name = handle.lexicalDisplayName;
+        if (name == null || name.isEmpty()) return "$fh";
+        int separator = name.lastIndexOf("::");
+        return separator >= 0 ? name.substring(separator + 2) : name;
     }
 
     public static RuntimeScalar rmdir(RuntimeScalar runtimeScalar) {

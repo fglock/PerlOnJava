@@ -265,6 +265,16 @@ public class ParseBlock {
 
         TokenUtils.consume(parser);
         if (peek(parser).text.equals(":")) {
+            if (parser.ctx.compilerOptions.isByteStringSource) {
+                for (int i = 0; i < id.length();) {
+                    int codePoint = id.codePointAt(i);
+                    if (codePoint > 0x7f) {
+                        parser.throwCleanError(String.format(
+                                "Unrecognized character \\x%02X;", codePoint));
+                    }
+                    i += Character.charCount(codePoint);
+                }
+            }
             statements.add(new LabelNode(id, currentIndexLabel));
             blockLabels.add(id); // Add each found label to our list
             TokenUtils.consume(parser); // Consume the colon

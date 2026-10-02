@@ -1,5 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.runtime.debugger.DebugHooks;
+
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 
@@ -580,7 +582,14 @@ public class OverloadContext {
         }
         
         // Execute found method with provided arguments
-        RuntimeList result = RuntimeCode.apply(perlMethod, perlMethodArgs, SCALAR);
+        // Perl's debugger observes overloaded method calls through DB::sub just
+        // like ordinary subroutine calls. Routing here also lets the debugger's
+        // recursion guard suppress overloads invoked from inside DB::sub itself.
+        RuntimeList result = DebugHooks.dispatchOverloadedSubroutine(
+                perlMethod, perlMethodArgs, SCALAR, perlClassName + "::" + methodName);
+        if (result == null) {
+            result = RuntimeCode.apply(perlMethod, perlMethodArgs, SCALAR);
+        }
         
         // Handle TAILCALL markers from `goto $coderef` with trampoline loop
         while (result instanceof RuntimeControlFlowList) {

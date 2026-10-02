@@ -1165,6 +1165,20 @@ public class BytecodeInterpreter {
                                 }
                             }
 
+                            case Opcodes.RESTORE_LOOP_REGEX_STATE -> {
+                                int rs = bytecode[pc++];
+                                int savedDepth = ((RuntimeScalar) registers[rs]).getInt();
+                                while (regexStateStack.size() > savedDepth + 1) {
+                                    regexStateStack.pop();
+                                }
+                                if (regexStateStack.size() > savedDepth) {
+                                    regexStateStack.pop().restore();
+                                }
+                                // Keep a fresh baseline at this loop depth so
+                                // eventual loop exit restores the same state.
+                                regexStateStack.push(new RegexState());
+                            }
+
                             case Opcodes.FOREACH_GLOBAL_NEXT_OR_EXIT -> {
                                 // Superinstruction: foreach loop step for a global loop variable (e.g. $_).
                                 // Combines: hasNext check, next() into varReg, aliasGlobalVariable, conditional jump.
@@ -3137,7 +3151,8 @@ public class BytecodeInterpreter {
                             case Opcodes.INT, Opcodes.LOG, Opcodes.SQRT, Opcodes.COS, Opcodes.SIN, Opcodes.EXP,
                                  Opcodes.ABS, Opcodes.BINARY_NOT, Opcodes.BITWISE_NOT, Opcodes.INTEGER_BITWISE_NOT, Opcodes.ORD,
                                  Opcodes.ORD_BYTES, Opcodes.OCT, Opcodes.HEX, Opcodes.SRAND, Opcodes.CHR,
-                                 Opcodes.CHR_BYTES, Opcodes.LENGTH_BYTES, Opcodes.QUOTEMETA, Opcodes.FC, Opcodes.LC,
+                                 Opcodes.CHR_BYTES, Opcodes.LENGTH_BYTES, Opcodes.QUOTEMETA,
+                                 Opcodes.QUOTEMETA_UNICODE, Opcodes.FC, Opcodes.LC,
                                  Opcodes.LCFIRST, Opcodes.UC, Opcodes.UCFIRST, Opcodes.FC_BYTES, Opcodes.LC_BYTES,
                                  Opcodes.LCFIRST_BYTES, Opcodes.UC_BYTES, Opcodes.UCFIRST_BYTES, Opcodes.FC_UNICODE,
                                  Opcodes.LC_UNICODE, Opcodes.LCFIRST_UNICODE, Opcodes.UC_UNICODE, Opcodes.UCFIRST_UNICODE,

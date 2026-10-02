@@ -2924,6 +2924,11 @@ public class Disassemble {
                         sb.append("RESTORE_REGEX_STATE r").append(rrsDummy).append("\n");
                         break;
                     }
+                    case Opcodes.RESTORE_LOOP_REGEX_STATE: {
+                        int loopRegexReg = interpretedCode.bytecode[pc++];
+                        sb.append("RESTORE_LOOP_REGEX_STATE r").append(loopRegexReg).append("\n");
+                        break;
+                    }
                     case Opcodes.SLOW_OP: {
                         // Deprecated: SLOW_OP was removed, all operations now use direct opcodes
                         // Format was: SLOW_OP slow_op_id rd argsReg ctx

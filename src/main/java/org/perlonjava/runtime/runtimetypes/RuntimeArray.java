@@ -717,6 +717,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         for (RuntimeScalar arrElem : sourceElements) {
             if (arrElem == null) {
                 targetElements.add(null);
+            } else if (arrElem instanceof RuntimeArrayReverseHoleProxy reverseHole
+                    && reverseHole.isUnmaterializedSourceHole()) {
+                targetElements.add(null);
             } else {
                 RuntimeScalar v = new RuntimeScalar();
                 arrElem.addToScalar(v);
@@ -1480,7 +1483,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 // increments on the temporary materialized list.
                 RuntimeArray materializedList = new RuntimeArray();
                 for (RuntimeScalar element : list) {
-                    materializedList.elements.add(new RuntimeScalar(element));
+                    materializedList.elements.add(element instanceof RuntimeTiedArrayHole
+                            ? null : new RuntimeScalar(element));
                 }
 
                 // Now clear and repopulate from the materialized list
@@ -1492,10 +1496,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 if (extendTo > 0) {
                     TieArray.tiedExtend(this, getScalarInt(extendTo));
                 }
-                int index = 0;
-                for (RuntimeScalar element : materializedList) {
-                    TieArray.tiedStore(this, getScalarInt(index), element);
-                    index++;
+                for (int index = 0; index < materializedList.elements.size(); index++) {
+                    RuntimeScalar element = materializedList.elements.get(index);
+                    if (element == null) {
+                        TieArray.tiedDelete(this, getScalarInt(index));
+                    } else {
+                        TieArray.tiedStore(this, getScalarInt(index), element);
+                    }
                 }
                 // Return the materialized list instead of `this` to avoid calling
                 // FETCHSIZE/FETCH on the tied array after assignment.
@@ -1726,6 +1733,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         // Otherwise, copy all elements to ensure independence from the original array
         // This is important for returning local arrays from functions
         RuntimeList result = new RuntimeList();
+        result.setReverseSourceArray(this);
         for (RuntimeScalar element : this.elements) {
             result.elements.add(element == null ? new RuntimeScalar() : new RuntimeScalar(element));
         }
@@ -2002,6 +2010,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             RuntimeScalar element = this.elements.get(i);
             if (element == null) {
                 arr.elements.add(new RuntimeArrayProxyEntry(this, i));
+            } else if (element instanceof RuntimeArrayReverseHoleProxy reverseHole
+                    && reverseHole.isUnmaterializedSourceHole()) {
+                // List-context reverse carries an explicit writable marker
+                // for a sparse slot. Copy the slot absence, not the marker.
+                arr.elements.add(null);
             } else {
                 arr.elements.add(element);
                 if (this.elementsAliased && this.ownsElement(element)) {

@@ -718,6 +718,13 @@ public class Operator {
         // Check for autovivification arrays that should throw errors (like sort does)
         argsList.validateNoAutovivification();
 
+        // An array evaluated in list context carries a value copy for most
+        // consumers, but reverse must retain its slot structure and cells.
+        if (args.length == 1 && args[0] instanceof RuntimeList list
+                && list.getReverseSourceArray() != null) {
+            return reversePlainArray(list.getReverseSourceArray());
+        }
+
         // Handle single PerlRange argument (e.g., from 1..5)
         if (args.length == 1 && args[0] instanceof PerlRange range) {
             RuntimeList list = range.getList();
@@ -777,14 +784,27 @@ public class Operator {
                 }
             } else if (arg instanceof RuntimeArray array) {
                 // Flatten RuntimeArray into individual elements
-                for (RuntimeBase element : array.elements) {
+                for (int i = 0; i < array.elements.size(); i++) {
+                    RuntimeBase element = array.elements.get(i);
                     // Handle null elements (deleted array elements)
                     if (element != null) {
-                        flattenedArgs.add(element);
+                        if (element instanceof RuntimeArrayProxyEntry proxy
+                                && proxy.isUnmaterializedHole()) {
+                            flattenedArgs.add(new RuntimeArrayReverseHoleProxy(
+                                    proxy.getParent(), proxy.getSourceIndex()));
+                        } else {
+                            flattenedArgs.add(element);
+                        }
                     } else {
-                        flattenedArgs.add(new RuntimeScalar());
+                        flattenedArgs.add(new RuntimeArrayReverseHoleProxy(array, i));
                     }
                 }
+            } else if (arg instanceof RuntimeArrayProxyEntry proxy
+                    && proxy.isUnmaterializedHole()) {
+                // The compiler may expand `reverse @array` into scalar
+                // arguments before this operator receives them.
+                flattenedArgs.add(new RuntimeArrayReverseHoleProxy(
+                        proxy.getParent(), proxy.getSourceIndex()));
             } else {
                 flattenedArgs.add(arg);
             }
@@ -803,8 +823,9 @@ public class Operator {
             if (TieArray.tiedExists(tiedArray, getScalarInt(i)).getBoolean()) {
                 reversedElements.set(targetIndex, TieArray.tiedFetch(tiedArray, getScalarInt(i)));
             } else {
-                // For deleted tied array elements, set an undef RuntimeScalar
-                reversedElements.set(targetIndex, new RuntimeScalar());
+                // Preserve deleted slots through list assignment so the tied
+                // destination receives DELETE instead of STORE(undef).
+                reversedElements.set(targetIndex, new RuntimeTiedArrayHole());
             }
             targetIndex--;
         }
@@ -822,9 +843,20 @@ public class Operator {
         // aliases $x to each original slot so mutations (e.g. substr four-arg
         // prepend on split whitespace chunks) update @a in place.
         RuntimeArray result = new RuntimeArray();
-        for (RuntimeScalar element : array.elements) {
+        for (int i = 0; i < array.elements.size(); i++) {
+            RuntimeScalar element = array.elements.get(i);
             // Plain-array slots are RuntimeScalar or null (sparse hole).
-            result.elements.add(element);
+            // A foreach over reverse aliases the list elements, so keep a
+            // lazy array-slot proxy for holes that can be assigned in place.
+            if (element == null) {
+                result.elements.add(new RuntimeArrayReverseHoleProxy(array, i));
+            } else if (element instanceof RuntimeArrayProxyEntry proxy
+                    && proxy.isUnmaterializedHole()) {
+                result.elements.add(new RuntimeArrayReverseHoleProxy(
+                        proxy.getParent(), proxy.getSourceIndex()));
+            } else {
+                result.elements.add(element);
+            }
         }
         Collections.reverse(result.elements);
         RuntimeList list = new RuntimeList();

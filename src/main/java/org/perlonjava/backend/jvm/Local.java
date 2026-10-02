@@ -3,7 +3,10 @@ package org.perlonjava.backend.jvm;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
+import org.perlonjava.frontend.astnode.BlockNode;
+import org.perlonjava.frontend.astnode.For3Node;
 import org.perlonjava.frontend.astnode.Node;
+import org.perlonjava.frontend.astnode.OperatorNode;
 
 public class Local {
 
@@ -32,13 +35,31 @@ public class Local {
     }
 
     static localRecord localSetup(EmitterContext ctx, Node ast, MethodVisitor mv, boolean blockLevel) {
-        // Check for both local operators and defer statements - both need scope cleanup
-        boolean needsCleanup = FindDeclarationVisitor.containsLocalOrDefer(ast);
+        // Check for local operators, defer statements, and package declarations - all
+        // register dynamically scoped state that must be restored when this scope exits.
+        boolean needsCleanup = FindDeclarationVisitor.containsLocalOrDefer(ast)
+                || containsPackageDeclarationInScope(ast);
         int dynamicIndex = -1;
         if (needsCleanup) {
             dynamicIndex = saveLocalLevel(ctx, mv);
         }
         return new localRecord(needsCleanup, dynamicIndex);
+    }
+
+    private static boolean containsPackageDeclarationInScope(Node ast) {
+        BlockNode block = ast instanceof BlockNode blockNode ? blockNode
+                : ast instanceof For3Node for3 && for3.body instanceof BlockNode body ? body
+                : null;
+        if (block == null || block.getBooleanAnnotation("unitClassDeclaration")) {
+            return false;
+        }
+        for (Node element : block.elements) {
+            if (element instanceof OperatorNode operator
+                    && (operator.operator.equals("package") || operator.operator.equals("class"))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     static void localTeardown(localRecord localRecord, MethodVisitor mv) {

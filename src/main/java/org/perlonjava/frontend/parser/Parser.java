@@ -212,6 +212,8 @@ public class Parser {
     // topicalizer; a deeper given declared inside the eval remains valid.
     public final java.util.ArrayDeque<Integer> evalGivenDepthBaselines = new java.util.ArrayDeque<>();
     public boolean parsingTakeReference = false;
+    /** Stop a named-unary prototype argument before an adjacent slash pattern. */
+    public boolean parsingNamedUnaryPrototypeArgument = false;
     // Format argument lines are parsed by a short-lived child parser.  Record
     // the lexical sub it resolved so the detached RuntimeFormat can retain
     // that semantic fact after the surrounding lexical pad has gone away.
@@ -264,6 +266,8 @@ public class Parser {
     // Fields declared after a unit-class declaration (`class Name;`).  Unlike
     // a braced class, those declarations arrive as subsequent statements.
     public final Map<String, List<OperatorNode>> unitClassFields = new LinkedHashMap<>();
+    /** ADJUST blocks following unit-class declarations, keyed by class name. */
+    public final Map<String, List<Node>> unitClassAdjustBlocks = new LinkedHashMap<>();
     /** Prototypes published by declaration headers while this source is parsed. */
     public final Map<String, String> declaredSubPrototypes = new LinkedHashMap<>();
     // List to store heredoc nodes encountered during parsing.
@@ -549,6 +553,17 @@ public class Parser {
         while (true) {
             // Peek at the next token to determine what to do next.
             LexerToken token = peek(this);
+
+            if (token.text.equals("/")
+                    && StringParser.isUnterminatedAdjacentSlashPattern(this, tokenIndex)) {
+                if (parsingNamedUnaryPrototypeArgument) {
+                    break;
+                }
+                if (Boolean.TRUE.equals(left.getAnnotation("prototypeUnarySlashFollows"))) {
+                    throw PerlCompilerException.withSourceLocation(
+                            tokenIndex, "Search pattern not terminated", ctx.errorUtil);
+                }
+            }
 
             // Perl permits infix operators to be explicitly qualified through
             // CORE, for example `$a CORE::eq $b`. Collapse the three-token

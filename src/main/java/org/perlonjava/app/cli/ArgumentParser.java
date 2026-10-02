@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -42,7 +43,19 @@ public class ArgumentParser {
         // Process PERL5OPT environment variable first
         processPerl5Opt(parsedArgs);
 
+        // Perl applies command-line -M modules before PERL5OPT modules. Since
+        // `use lib` prepends to @INC, the environment modules must execute
+        // after the command-line modules to appear first in the final list.
+        List<ModuleUseStatement> perl5OptModules = new ArrayList<>(parsedArgs.moduleUseStatements);
+        parsedArgs.moduleUseStatements.clear();
+
+        // PERL5OPT -I entries are prepended in order, so their final @INC
+        // order is the reverse of their textual order. Keep command-line -I
+        // entries in their existing order, as Perl does.
+        Collections.reverse(parsedArgs.inc.elements);
+
         processArgs(args, parsedArgs);
+        parsedArgs.moduleUseStatements.addAll(perl5OptModules);
 
         // A program supplied with -e can itself begin with a Perl shebang.
         // Its switches affect the implicit -n/-p wrapper, so they must be
