@@ -103,7 +103,17 @@ public class OperatorParser {
             }
         }
         // `do` file
-        Node operand = ListParser.parseZeroOrOneList(parser, 1);
+        ListNode operand;
+        if (token.type == OPERATOR && token.text.equals("(")) {
+            // For `do (expr) . suffix`, the parentheses group the start of the
+            // filename expression; they do not end the do-file operand.
+            // Parsing it as a regular parenthesized argument would leave the
+            // concatenated suffix outside `do`.
+            Node filename = parser.parseExpression(parser.getPrecedence("isa") + 1);
+            operand = ListNode.makeList(filename);
+        } else {
+            operand = ListParser.parseZeroOrOneList(parser, 1);
+        }
         return new OperatorNode("doFile", operand, parser.tokenIndex);
     }
 
@@ -1622,7 +1632,12 @@ public class OperatorParser {
                     new ListNode(new java.util.ArrayList<>(), currentIndex), currentIndex);
         }
         // Handle file-related operators with special handling for default handles
-        ListNode operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
+        // These operators take at most one handle expression. The zero-or-one
+        // parser keeps low-precedence operators outside a bare call while
+        // preserving full expression parsing inside parentheses: `!eof $fh
+        // || $error` is `(!eof($fh)) || $error` (and likewise for tell and
+        // readline).
+        ListNode operand = ListParser.parseZeroOrOneList(parser, 0);
         boolean hadReadlineArgument = !operand.elements.isEmpty();
         Node handle;
         boolean implicitArgvReadline = false;

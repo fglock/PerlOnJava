@@ -91,6 +91,16 @@ public class Whitespace {
                         while (tokenIndex < tokens.size() && tokens.get(tokenIndex).type != LexerTokenType.NEWLINE) {
                             tokenIndex++;
                         }
+                    } else if (token.text.equals("=")
+                            && tokenIndex > 0
+                            && tokens.get(tokenIndex - 1).type == LexerTokenType.NEWLINE
+                            && tokenIndex + 1 < tokens.size()
+                            && tokens.get(tokenIndex + 1).type == LexerTokenType.IDENTIFIER) {
+                        // A =cut can be followed immediately by another POD
+                        // directive.  Once the first section ends, recognize
+                        // that next line here instead of parsing its text as
+                        // Perl code.
+                        tokenIndex = skipPodSection(tokenIndex, tokens);
                     } else {
                         return tokenIndex; // Stop processing and return current index
                     }
@@ -117,6 +127,21 @@ public class Whitespace {
                 default:
                     return tokenIndex; // Stop processing when a non-whitespace/non-comment token is found
             }
+        }
+        return tokenIndex;
+    }
+
+    private static int skipPodSection(int tokenIndex, List<LexerToken> tokens) {
+        while (tokenIndex < tokens.size()) {
+            boolean isCut = tokenIndex + 1 < tokens.size()
+                    && tokens.get(tokenIndex).text.equals("=")
+                    && tokens.get(tokenIndex + 1).text.equals("cut");
+            while (tokenIndex < tokens.size()
+                    && tokens.get(tokenIndex).type != LexerTokenType.NEWLINE) {
+                tokenIndex++;
+            }
+            if (tokenIndex < tokens.size()) tokenIndex++;
+            if (isCut) return tokenIndex;
         }
         return tokenIndex;
     }
