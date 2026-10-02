@@ -28,6 +28,10 @@ priorities and future plans.
   clocks needed by AnyEvent::Tools, and reuse root reachability snapshots during
   weak-reference cleanup.
 
+- Support ascending Perl version declarations, accept valid optional-array
+  prototypes and fully qualified indirect constructors, and preserve text and
+  entity boundaries across incremental HTML parsing.
+
 - Preserve ordinary `goto` jumps between conditional branches while rejecting
   jumps into conditional blocks from outside.
 
