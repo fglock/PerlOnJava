@@ -8,6 +8,7 @@ priorities and future plans.
 
 - Prevent formats from reusing an unrelated active lexical when a captured lexical is unavailable.
 - Match Perl's reference count for the compile-time `%^H` hash.
+- Run deeply nested conditional core tests with an adequate JVM stack.
 - Keep `close` and `fileno` probes from creating nonexistent symbolic filehandles.
 - Preserve typeglob values from scalar assignments and selected-handle lookups.
 - Return EOF as undef from scalar-backed `getc`, and let argumentless `system()` wait.

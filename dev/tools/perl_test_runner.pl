@@ -477,7 +477,8 @@ sub run_single_test {
           re/pat.t
         | op/repeat.t
         | op/list.t
-        | op/recurse.t }x
+        | op/recurse.t
+        | op/cond.t }x
         ? "-Xss256m" : "";
 
     # Skip memory-intensive tests (e.g., Long Monsters in re/pat.t with 300KB strings)
