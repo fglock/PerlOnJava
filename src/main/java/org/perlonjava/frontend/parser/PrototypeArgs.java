@@ -815,9 +815,14 @@ public class PrototypeArgs {
     private static void handleUnderscoreArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
         Node arg = parseArgumentWithComma(parser, true, needComma, "scalar argument");
         if (arg == null) {
-            Node underscoreArg = scalarUnderscore(parser);
-            underscoreArg.setAnnotation("context", "SCALAR");
-            args.elements.add(underscoreArg);
+            // `_` aliases $_ when it is the only available argument.  In a
+            // prototype such as `$;_`, an omitted trailing `_` after the
+            // required scalar leaves @_ unchanged instead of adding $_.
+            if (args.elements.isEmpty() || !isOptional) {
+                Node underscoreArg = scalarUnderscore(parser);
+                underscoreArg.setAnnotation("context", "SCALAR");
+                args.elements.add(underscoreArg);
+            }
             return;
         }
         Node scalarArg = ParserNodeUtils.toScalarContext(arg);

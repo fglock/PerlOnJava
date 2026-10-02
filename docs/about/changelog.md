@@ -21,6 +21,7 @@ priorities and future plans.
 - Warn about bareword exponent suffixes following numeric literals.
 - Preserve the empty string yielded by a range with two undefined endpoints.
 - Avoid materializing values from empty list assignments in void context.
+- Preserve omitted optional underscore prototype arguments after required arguments.
 
 - Preserve objects with counted collection owners during weak-reference sweeps,
   and resolve deferred user-defined regex properties in the match caller's
