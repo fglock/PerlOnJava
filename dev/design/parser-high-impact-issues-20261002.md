@@ -2,7 +2,8 @@
 
 ## Goal
 
-Resolve the five remaining high impact reports labeled `area:parser`:
+Implement the confirmed fixes among the selected high impact reports labeled
+`area:parser`, and keep the unresolved AnyEvent timing report open:
 
 - [#1470](https://github.com/fglock/PerlOnJava/issues/1470) — AnyEvent::Tools compilation and timer behavior.
 - [#1619](https://github.com/fglock/PerlOnJava/issues/1619) — HTML::Tree incremental split parsing.
@@ -17,7 +18,7 @@ retained in PR #1623, and the issues were closed with that evidence.
 
 ## Progress tracking
 
-### Current status: implementation and validation in progress
+### Current status: four fixes are ready for review; #1470 remains open
 
 ### Completed
 
@@ -32,18 +33,20 @@ retained in PR #1623, and the issues were closed with that evidence.
 - [x] Preserve the `HTML::Entities::decode` alias after `HTML::Parser` XS
   initialization, covering the interpreter-only TreeBuilder lookup failure.
 - [x] Confirm #1470's code changes already landed in merged PR #1598; a current
-  AnyEvent::Tools run still shows a sub-millisecond timer assertion failure, so
-  leave the issue open pending a stable integration pass.
+  AnyEvent::Tools run still fails 5 of 103 timing and mutex assertions, so leave
+  the issue open and exclude it from this PR's fixes.
+- [x] Run `nice -n 19 make` successfully after the complete change set and
+  validate the new tests with system Perl and both PerlOnJava backends.
+- [x] Pass documentation link checks and retain the diagnostic evidence for
+  the remaining AnyEvent::Tools failure.
 
 ### Next steps
 
-1. Run one final build gate for the interpreter alias correction, then run all
-   focused tests on both backends.
-2. Recheck HTML::Tree and AnyEvent::Tools integration results.
-3. Push the final batch and update PR #1623 with
-   verified results.
+1. Push the reviewed commits and update PR #1623 with verified results.
+2. Investigate #1470 separately; do not close it until AnyEvent::Tools passes
+   consistently.
 
 ### Open questions
 
-- AnyEvent::Tools timing assertions have small margins and varied between
-  runs. Determine whether #1470 is stable before closing it.
+- AnyEvent::Tools' `t/01_mutex.t`, `t/02_rw_mutex.t`, and `t/03_repeat.t` still
+  fail timing-sensitive assertions on the current busy host.
