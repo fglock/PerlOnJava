@@ -19,6 +19,7 @@ priorities and future plans.
 - Warn when inserting new keys into a hash during an active `each` traversal.
 - Return the final expression from parenthesized lists in scalar context.
 - Warn about bareword exponent suffixes following numeric literals.
+- Preserve the empty string yielded by a range with two undefined endpoints.
 
 - Preserve objects with counted collection owners during weak-reference sweeps,
   and resolve deferred user-defined regex properties in the match caller's
