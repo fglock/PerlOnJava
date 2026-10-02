@@ -2,6 +2,7 @@ package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.analysis.LValueVisitor;
+import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
@@ -2179,6 +2180,22 @@ public class CompileAssignment {
 
         // Set the context for subroutine calls in RHS
         int outerContext = bytecodeCompiler.currentCallContext;
+
+        // An empty list assignment whose value is discarded still evaluates
+        // its RHS for side effects, but Perl does not materialize list values
+        // that have no targets (notably tied scalar repeats).
+        if (outerContext == RuntimeContextType.VOID
+                && node.left instanceof ListNode emptyTargets
+                && emptyTargets.elements.isEmpty()) {
+            boolean preserveListContext = RegexUsageDetector.containsRegexOperation(node.right);
+            if (!preserveListContext && node.right instanceof ListNode rhsList) {
+                rhsList.setAnnotation("emptyTargetAssignmentVoidRhs", true);
+            }
+            bytecodeCompiler.compileNode(node.right, -1, preserveListContext
+                    ? RuntimeContextType.LIST : RuntimeContextType.VOID);
+            bytecodeCompiler.lastResultReg = -1;
+            return;
+        }
 
         // Unary plus is normally transparent around an lvalue.  A parenthesized
         // list is the important exception: `+() = expr` is Perl's idiom for a

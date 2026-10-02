@@ -7,6 +7,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.LValueVisitor;
+import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.perlmodule.Strict;
@@ -881,6 +882,23 @@ public class EmitVariable {
 
         Node left = node.left;
         Node right = node.right;
+
+        // An empty list assignment in void context has no targets and its
+        // result is discarded. Preserve RHS side effects while avoiding list
+        // materialization (which can fetch tied values).
+        if (ctx.contextType == RuntimeContextType.VOID
+                && left instanceof ListNode targets && targets.elements.isEmpty()) {
+            // A list-context global match must keep running through all
+            // matches (including callbacks) even when its result list is
+            // discarded by the empty target.
+            int rhsContext = RegexUsageDetector.containsRegexOperation(right)
+                    ? RuntimeContextType.LIST : RuntimeContextType.VOID;
+            right.accept(emitterVisitor.with(rhsContext));
+            if (rhsContext == RuntimeContextType.LIST) {
+                mv.visitInsn(Opcodes.POP);
+            }
+            return;
+        }
 
         boolean isLocalAssignment = left instanceof OperatorNode operatorNode && operatorNode.operator.equals("local");
 

@@ -867,6 +867,10 @@ public class Operator {
     }
 
     public static RuntimeBase repeat(RuntimeBase value, RuntimeScalar timesScalar, int ctx) {
+        if (ctx == RuntimeContextType.VOID && value instanceof RuntimeScalar scalarValue
+                && scalarValue.type == RuntimeScalarType.TIED_SCALAR) {
+            return new RuntimeScalar();
+        }
         if (value instanceof RuntimeScalar scalarValue) {
             value = RuntimeScalar.fetchTiedOnce(scalarValue);
         }

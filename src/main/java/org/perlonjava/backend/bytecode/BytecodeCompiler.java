@@ -2078,7 +2078,12 @@ public class BytecodeCompiler implements Visitor {
             boolean isLastStatement = (i == lastMeaningfulIndex);
             int stmtTarget = (isLastStatement && outerResultReg >= 0) ? outerResultReg : -1;
             int stmtContext;
-            if (!isLastStatement && !(stmt instanceof BinaryOperatorNode && ((BinaryOperatorNode) stmt).operator.equals("="))) {
+            boolean emptyListAssignment = stmt instanceof BinaryOperatorNode assignment
+                    && assignment.operator.equals("=")
+                    && assignment.left instanceof ListNode targets
+                    && targets.elements.isEmpty();
+            if (!isLastStatement && (!(stmt instanceof BinaryOperatorNode assignment
+                    && assignment.operator.equals("=")) || emptyListAssignment)) {
                 stmtContext = RuntimeContextType.VOID;
             } else {
                 stmtContext = isLastStatement && node.getBooleanAnnotation("subroutineIsLvalue")
@@ -9178,6 +9183,17 @@ public class BytecodeCompiler implements Visitor {
             compileNode(node.elements.get(node.elements.size() - 1), -1,
                     RuntimeContextType.SCALAR);
             // lastResultReg already contains the last element's value
+            return;
+        }
+
+        if (currentCallContext == RuntimeContextType.VOID
+                && node.getBooleanAnnotation("emptyTargetAssignmentVoidRhs")) {
+            for (Node element : node.elements) {
+                int elementContext = RegexUsageDetector.containsRegexOperation(element)
+                        ? RuntimeContextType.LIST : RuntimeContextType.VOID;
+                compileNode(element, -1, elementContext);
+            }
+            lastResultReg = -1;
             return;
         }
 
