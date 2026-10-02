@@ -199,16 +199,14 @@ or a document referring to #1114.
 
 ## Next actions
 
-1. Run `make check-links` and the required offline link check for this design
-   document.
-2. Review and commit the final source and documentation changes, then update
-   the open PR with the completed test evidence.
-3. Leave the live MetaCPAN endpoint and broader Object::Pad MOP compatibility
+1. Keep PR [#1628](https://github.com/fglock/PerlOnJava/pull/1628) updated as
+   review or CI feedback arrives. GitHub reports no checks for the branch yet.
+2. Leave the live MetaCPAN endpoint and broader Object::Pad MOP compatibility
    as follow-up work; neither blocks the five reported fixes in this batch.
 
 ## Progress Tracking
 
-### Current status: implementation and acceptance complete; PR update pending (2026-10-02)
+### Current status: implementation and acceptance complete; PR #1628 open (2026-10-02)
 
 ### Completed phases
 
@@ -258,12 +256,12 @@ or a document referring to #1114.
 
 ### In progress
 
-- Update the maintained pull request with the final commits and acceptance
-  evidence. The live MetaCPAN endpoint remains an explicit follow-up.
+- Await review and any checks or feedback on PR #1628. The live MetaCPAN
+  endpoint remains an explicit follow-up.
 
 ### Next steps
 
-Run the Markdown link gates, commit the reviewed final diff, and update the PR.
+Maintain PR #1628 through review and address any requested changes.
 
 ### Open questions
 
