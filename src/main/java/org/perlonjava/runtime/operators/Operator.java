@@ -668,6 +668,8 @@ public class Operator {
                 yield splice(runtimeArray, list, ctx); // Recursive call after vivification
             }
             case TIED_ARRAY -> TieArray.tiedSplice(runtimeArray, list, ctx);
+            case READONLY_ARRAY -> throw new PerlCompilerException(
+                    "Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
         };
 

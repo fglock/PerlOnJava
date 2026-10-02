@@ -11,6 +11,7 @@ priorities and future plans.
 - Return EOF as undef from scalar-backed `getc`, and let argumentless `system()` wait.
 - Resolve scalar pipe names as symbolic handles and reuse descriptor 0 after
   closing STDIN.
+- Reject splice on read-only arrays and negative tied-array `FETCHSIZE` values.
 
 - Preserve objects with counted collection owners during weak-reference sweeps,
   and resolve deferred user-defined regex properties in the match caller's
