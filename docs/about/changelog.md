@@ -29,6 +29,8 @@ priorities and future plans.
 - Report deleted stash-backed subroutines as anonymous in `caller()`.
 - Detect oversized repetition counts before they wrap during conversion.
 - Run eval-block destructors before clearing `$@`, and report `ENOENT` from failed `rmdir` calls.
+- Preserve `sprintf` numeric overload counts and format-string UTF-8 flags.
+- Apply Unicode character classes to interpolated Unicode regex patterns.
 
 - Preserve objects with counted collection owners during weak-reference sweeps,
   and resolve deferred user-defined regex properties in the match caller's

@@ -992,7 +992,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 }
                 regex.recursivePattern = new JoniRegexPattern(compilePatternString,
                             regex.regexFlags, trustedCalloutCount,
-                            !regex.regexFlags.isUnicode(), false, false,
+                            !regex.regexFlags.isUnicode() && patternByteBacked,
+                            false, false,
                             regex.namedCharacterCache, namedCharacterSourceMode,
                             lexicalReStrict,
                             (lexicalDebugMode & LEXICAL_DEBUG_PARSE) != 0);

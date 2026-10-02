@@ -82,11 +82,14 @@ public class SprintfValueFormatter {
             value = RuntimeScalarCache.scalarZero;
         }
 
-        // Check for special floating-point values for numeric conversions
-        // This includes %c - sprintf "%c", Inf should error in Perl
-        double doubleValue = value.getDouble();
-        if (Double.isInfinite(doubleValue) || Double.isNaN(doubleValue)) {
-            return numericFormatter.formatSpecialValue(doubleValue, flags, width, conversion);
+        // Preserve special floating-point values without coercing overloaded
+        // references a second time. Other numeric conversions perform their
+        // one required coercion in the formatter below.
+        if (value.type == RuntimeScalarType.DOUBLE) {
+            double doubleValue = (double) value.value;
+            if (Double.isInfinite(doubleValue) || Double.isNaN(doubleValue)) {
+                return numericFormatter.formatSpecialValue(doubleValue, flags, width, conversion);
+            }
         }
 
         // Dispatch to appropriate formatter based on conversion type
