@@ -5880,6 +5880,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             return null;
         }
+        if (code.hadStashRef && !code.explicitlyRenamed
+                && GlobalVariable.findGlobalCodeRefName(code) == null) {
+            // A named CV reached through a saved glob can outlive its stash
+            // entry. Perl then reports the surviving CV as anonymous because
+            // its name depended on that glob.
+            return normalizeCallerPackage(code.packageName) + "::__ANON__";
+        }
         if (code.subName.contains("::")) {
             return code.subName;
         }
