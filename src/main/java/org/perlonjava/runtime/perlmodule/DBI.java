@@ -3,6 +3,8 @@ package org.perlonjava.runtime.perlmodule;
 import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
+import org.perlonjava.runtime.regex.RuntimeRegex;
+import org.sqlite.Function;
 
 import java.nio.charset.StandardCharsets;
 import java.sql.*;
@@ -174,6 +176,10 @@ public class DBI extends PerlModuleBase {
 
             // Establish database connection with properties
             Connection conn = DriverManager.getConnection(jdbcUrl, props);
+
+            if (jdbcUrl.toLowerCase().contains("sqlite")) {
+                registerSqliteRegexp(conn);
+            }
 
             // Remove password from dbh hash
             dbh.delete(new RuntimeScalar("Password"));
@@ -960,7 +966,7 @@ public class DBI extends PerlModuleBase {
         } else {
             // Clear error state
             handle.put("err", scalarUndef);
-            handle.put("errstr", new RuntimeScalar(""));
+            handle.put("errstr", scalarUndef);
             handle.put("state", new RuntimeScalar("00000"));
         }
         getGlobalVariable("DBI::err").set(handle.get("err"));
@@ -1205,7 +1211,7 @@ public class DBI extends PerlModuleBase {
      */
     private static RuntimeList columnInfoViaPragma(RuntimeHash dbh, Connection conn, String table) throws SQLException {
         Statement stmt = conn.createStatement();
-        ResultSet rs = stmt.executeQuery("PRAGMA table_info(" + table + ")");
+        ResultSet rs = stmt.executeQuery("PRAGMA table_info(" + quoteSqliteIdentifier(table) + ")");
 
         // Build arrays of rows matching DBI column_info format
         RuntimeArray rows = new RuntimeArray();
@@ -1248,6 +1254,7 @@ public class DBI extends PerlModuleBase {
         RuntimeHash sth = new RuntimeHash();
         sth.put("Database", dbh.createReference());
         sth.put("Type", new RuntimeScalar("st"));
+        sth.put("Active", new RuntimeScalar(true));
         sth.put("Executed", scalarTrue);
 
         // Inherit error handling and fetch settings from dbh
@@ -1283,6 +1290,34 @@ public class DBI extends PerlModuleBase {
 
         RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
         return sthRef.getList();
+    }
+
+    private static String quoteSqliteIdentifier(String identifier) {
+        return "\"" + identifier.replace("\"", "\"\"") + "\"";
+    }
+
+    /** Register SQLite's REGEXP operator using PerlOnJava's Perl regex engine. */
+    private static void registerSqliteRegexp(Connection conn) throws SQLException {
+        Function.create(conn, "regexp", new Function() {
+            @Override
+            protected void xFunc() throws SQLException {
+                // SQLite rewrites "value REGEXP pattern" to regexp(pattern, value).
+                String pattern = value_text(0);
+                String value = value_text(1);
+                if (pattern == null || value == null) {
+                    result();
+                    return;
+                }
+                try {
+                    RuntimeScalar regex = RuntimeRegex.compile(pattern, "").createReference();
+                    RuntimeBase matched = RuntimeRegex.matchRegex(
+                            regex, new RuntimeScalar(value), RuntimeContextType.SCALAR);
+                    result(matched.scalar().getBoolean() ? 1 : 0);
+                } catch (RuntimeException e) {
+                    error(e.getMessage() == null ? "Invalid regular expression" : e.getMessage());
+                }
+            }
+        }, 2);
     }
 
     public static RuntimeList primary_key_info(RuntimeArray args, int ctx) {
