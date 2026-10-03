@@ -257,11 +257,13 @@ public class ListOperators {
                     }
 
                     // Apply the Perl comparator subroutine with the arguments.
-                    // The thread-local depth tracks ordinary comparator
-                    // execution, while the runtime-state marker also covers
-                    // tail calls made by subroutines invoked from sort.
+                    // Record the comparator entry so tail-call checks can
+                    // distinguish replacing the comparator from tail-calling
+                    // within a helper invoked by that comparator.
                     try {
-                        RuntimeCode.enterSortComparator();
+                        RuntimeCode comparatorCode = finalComparator.value instanceof RuntimeCode code
+                                ? code : null;
+                        RuntimeCode.enterSortComparator(comparatorCode);
                         RuntimeCode.enterSortComparatorInvocation();
                         RuntimeList result;
                         try {
