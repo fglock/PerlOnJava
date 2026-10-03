@@ -348,6 +348,7 @@ sub getuid { POSIX::_getuid() }
 sub geteuid { POSIX::_geteuid() }
 sub getgid { POSIX::_getgid() }
 sub getegid { POSIX::_getegid() }
+sub getgroups { POSIX::_getgroups() }
 sub setuid { POSIX::_setuid(@_) }
 sub setgid { POSIX::_setgid(@_) }
 sub nice { return 1 }

@@ -6,6 +6,55 @@ priorities and future plans.
 
 ## Work in progress
 
+- Keep format captures bound to their active lexical cell and prevent reuse of unrelated active lexicals.
+- Match Perl's reference count for the compile-time `%^H` hash.
+- Run deeply nested conditional core tests with an adequate JVM stack.
+- Preserve captured lexical aliases in nested eval `BEGIN` blocks.
+- Preserve lexical sub references passed through the debugger's `DB::goto` hook.
+- Resolve POSIX group records and retain supplementary IDs in `$(` and `$)`.
+- Identify the runtime operating system in `Config::Config{myuname}`.
+- Default bare `-t` file tests to `STDIN`.
+- Inherit terminal `STDIN` in subprocesses launched by `system` and `qx`.
+- Preserve setuid and setgid permission bits after in-place file editing.
+- Provide a controlling pseudo-terminal for Perl core tests that require one.
+- Supply the PerlOnJava launcher for core tests that spawn `./perl`.
+- Keep `close` and `fileno` probes from creating nonexistent symbolic filehandles.
+- Preserve typeglob values from scalar assignments and selected-handle lookups.
+- Return EOF as undef from scalar-backed `getc`, and let argumentless `system()` wait.
+- Resolve scalar pipe names as symbolic handles and reuse descriptor 0 after
+  closing STDIN.
+- Reject splice on read-only arrays and negative tied-array `FETCHSIZE` values.
+- Reset array `each` iterators when replacing their contents.
+- Fetch tied scalars during `study` and return `crypt` results without the
+  UTF-8 flag.
+- Report disabled `evalbytes` as a syntax error.
+- Warn when inserting new keys into a hash during an active `each` traversal.
+- Return the final expression from parenthesized lists in scalar context.
+- Warn about bareword exponent suffixes following numeric literals.
+- Preserve the empty string yielded by a range with two undefined endpoints.
+- Avoid materializing values from empty list assignments in void context.
+- Preserve omitted optional underscore prototype arguments after required arguments.
+- Parse comma-delimited `q` and `qq` strings when disambiguating hashrefs from blocks.
+- Clear `pos()` after a failed second match of a global match-once pattern.
+- Validate typed hash dereferences against explicitly referenced `%FIELDS` tables.
+- Warn about anonymous subroutines in void context and undef dynamic code references in place.
+- Report explicitly referenced stash-backed subroutines as anonymous after deletion while preserving ordinary deleted CV names in `caller()`.
+- Detect oversized repetition counts before they wrap during conversion.
+- Run eval-block destructors before clearing `$@`, and report `ENOENT` from failed `rmdir` calls.
+- Preserve `sprintf` numeric overload counts and format-string UTF-8 flags.
+- Format infinities and NaNs with Perl's spelling across numeric `sprintf` conversions.
+- Preserve runtime list context through short-circuit and ternary branches in empty-list assignments.
+- Restore `EAGAIN` after alarm interrupts `sleep`, even when a signal handler changes `$!`.
+- Preserve Unicode `-s` arguments when a core test launches a nested interpreter through the shell.
+- Preserve non-ASCII byte arguments in unquoted shell commands and nested
+  PerlOnJava launches under C locales and through Windows command shells.
+- Apply Unicode character classes to interpolated Unicode regex patterns.
+- Preserve combining-mark order in Unicode uppercase mappings and honor byte-string method names in `can`.
+- Reject scalar constants passed to hash-reference prototypes with the expected diagnostic.
+- Preserve malformed octets read through Perl's `:utf8` layer while decoding valid UTF-8.
+- Keep `$^X` unflagged for shell command construction and preserve encoded input octets.
+- Evaluate `readline` in list context when an empty-target assignment discards its results.
+
 - Prevent stale CPAN archive-name entries and namespace-resolution errors from
   being recorded as compatibility regressions.
 

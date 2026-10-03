@@ -563,11 +563,9 @@ public class EvalStringHandler {
             String savedRegexWarningBits = RegexQuoteMeta.getParserWarningBits();
             RegexQuoteMeta.setParserWarningBits(siteWarningBits);
             try {
-                RuntimeCode.enterEvalBeginCompilation();
                 ast = parser.parse();
                 evalAst = ast;
             } finally {
-                RuntimeCode.exitEvalBeginCompilation();
                 RegexQuoteMeta.setParserWarningBits(savedRegexWarningBits);
                 BHooksEndOfScope.endFileLoad(evalFileName);
             }

@@ -119,4 +119,40 @@ if [ -n "$CLASSPATH" ]; then
 else
     CP="$PERLONJAVA_CP"
 fi
+
+# On POSIX systems a JVM started under the C locale cannot faithfully decode
+# non-ASCII process arguments. Perl still treats argv as bytes, so preserve
+# non-ASCII arguments as ASCII hex while crossing the native/JVM boundary;
+# Main restores their byte values before parsing the Perl command line.
+ARGV_LOCALE="${LC_ALL:-${LC_CTYPE:-${LANG:-}}}"
+case "$ARGV_LOCALE" in
+    C|POSIX)
+        ARGV_NEEDS_RESTORE=0
+        ARGV_REPLACED=()
+        for ARGV_ITEM in "$@"; do
+            ARGV_HEX=""
+            ARGV_HAS_HIGH_BYTE=0
+            for ((ARGV_INDEX = 0; ARGV_INDEX < ${#ARGV_ITEM}; ARGV_INDEX++)); do
+                ARGV_CHARACTER="${ARGV_ITEM:ARGV_INDEX:1}"
+                printf -v ARGV_BYTE_VALUE '%d' "'$ARGV_CHARACTER"
+                ARGV_BYTE_VALUE=$((ARGV_BYTE_VALUE & 255))
+                printf -v ARGV_BYTE_HEX '%02x' "$ARGV_BYTE_VALUE"
+                ARGV_HEX+="$ARGV_BYTE_HEX"
+                if (( 16#$ARGV_BYTE_HEX >= 128 )); then
+                    ARGV_HAS_HIGH_BYTE=1
+                fi
+            done
+            if [ "$ARGV_HAS_HIGH_BYTE" -eq 1 ]; then
+                ARGV_REPLACED+=("__PERLONJAVA_RAWARG_HEX__$ARGV_HEX")
+                ARGV_NEEDS_RESTORE=1
+            else
+                ARGV_REPLACED+=("$ARGV_ITEM")
+            fi
+        done
+        if [ "$ARGV_NEEDS_RESTORE" -eq 1 ]; then
+            set -- "${ARGV_REPLACED[@]}"
+            JVM_OPTS="$JVM_OPTS -Dperlonjava.rawargv.hex=true"
+        fi
+        ;;
+esac
 exec "$JAVA_BIN" $JVM_OPTS ${JPERL_OPTS} -cp "$CP" org.perlonjava.app.cli.Main "$@"

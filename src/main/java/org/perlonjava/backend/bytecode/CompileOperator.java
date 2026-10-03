@@ -1217,7 +1217,11 @@ public class CompileOperator {
                             ? RuntimeContextType.LVALUE : RuntimeContextType.SCALAR;
                     bytecodeCompiler.compileNode(node.operand, -1, operandContext);
                     int operandReg = bytecodeCompiler.lastResultReg;
-                    if (operandContext == RuntimeContextType.LVALUE) {
+                    if (operandContext == RuntimeContextType.LVALUE
+                            || node.operand instanceof ListNode) {
+                        // A parenthesized expression list in scalar context
+                        // evaluates to its final value. ARRAY_SIZE is only
+                        // appropriate for aggregate operands such as @array.
                         bytecodeCompiler.lastResultReg = operandReg;
                     } else {
                         int rd = bytecodeCompiler.allocateOutputRegister();
@@ -1515,7 +1519,14 @@ public class CompileOperator {
                 bytecodeCompiler.lastResultReg = rd;
             }
             case "study" -> {
-                if (node.operand != null) node.operand.accept(bytecodeCompiler);
+                if (node.operand != null) {
+                    node.operand.accept(bytecodeCompiler);
+                    int operandReg = bytecodeCompiler.lastResultReg;
+                    int ignoredReg = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emit(Opcodes.DEFINED);
+                    bytecodeCompiler.emitReg(ignoredReg);
+                    bytecodeCompiler.emitReg(operandReg);
+                }
                 int rd = bytecodeCompiler.allocateOutputRegister();
                 bytecodeCompiler.emit(Opcodes.LOAD_INT);
                 bytecodeCompiler.emitReg(rd);
@@ -1674,6 +1685,23 @@ public class CompileOperator {
                                 idNode.name, bytecodeCompiler.getCurrentPackage());
                         bytecodeCompiler.emit(Opcodes.UNDEFINE_GLOBAL_CODE);
                         bytecodeCompiler.emit(bytecodeCompiler.addToStringPool(subName));
+                    } else if (undefTarget instanceof OperatorNode ampNode
+                            && ampNode.operator.equals("&")
+                            && !(ampNode.operand instanceof IdentifierNode)
+                            && !(ampNode.operand instanceof OperatorNode dollarNode
+                            && dollarNode.operator.equals("$"))) {
+                        // `undef &{EXPR}` first resolves the computed value as
+                        // a CODE reference, then clears that CV in place.
+                        Node codeRefExpression = ampNode.operand;
+                        boolean expressionReturnsCodeRef = codeRefExpression instanceof BinaryOperatorNode assignment
+                                && assignment.operator.equals("=")
+                                && assignment.right instanceof SubroutineNode;
+                        bytecodeCompiler.compileNode(
+                                expressionReturnsCodeRef ? codeRefExpression : ampNode,
+                                -1, RuntimeContextType.SCALAR);
+                        int codeRefReg = bytecodeCompiler.lastResultReg;
+                        bytecodeCompiler.emit(Opcodes.UNDEFINE_CODE_REF);
+                        bytecodeCompiler.emitReg(codeRefReg);
                     } else if (isScalarUndefTarget(undefTarget)) {
                         compileScalarUndefTarget(bytecodeCompiler, undefTarget);
                         int operandReg = bytecodeCompiler.lastResultReg;

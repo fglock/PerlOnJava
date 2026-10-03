@@ -15,6 +15,7 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarEmpty
 public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
     private final RuntimeScalar start;
     private final RuntimeScalar end;
+    private final boolean bothEndpointsUndefined;
 
     /**
      * Constructs a PerlRange with the specified start and end values.
@@ -59,6 +60,9 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
         if (evalEnd.type == RuntimeScalarType.TIED_SCALAR) {
             evalEnd = evalEnd.tiedFetch();
         }
+
+        bothEndpointsUndefined = evalStart.type == RuntimeScalarType.UNDEF
+                && evalEnd.type == RuntimeScalarType.UNDEF;
 
         // Handle undef values: treat as 0 for numeric context or "" for string context
         // We'll determine context based on the other operand or default to numeric
@@ -106,6 +110,9 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
      */
     @Override
     public Iterator<RuntimeScalar> iterator() {
+        if (bothEndpointsUndefined) {
+            return scalarEmptyString.iterator();
+        }
         if (start.type == RuntimeScalarType.INTEGER) {
             // Use integer iterator for integer ranges
             return new PerlRangeIntegerIterator();

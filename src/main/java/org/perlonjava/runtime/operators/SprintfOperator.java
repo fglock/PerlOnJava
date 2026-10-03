@@ -57,21 +57,9 @@ public class SprintfOperator {
             }
         }
         String format = runtimeScalar.toString();
-        // Track if any input has UTF-8 flag — sprintf produces byte string unless
-        // the format or a %s argument has UTF-8 flag on
+        // sprintf's result UTF-8 flag follows the format string. UTF-8 flags on
+        // width, precision, and value arguments do not upgrade the result.
         boolean hasUtf8Input = runtimeScalar.type == RuntimeScalarType.STRING;
-        if (!hasUtf8Input) {
-            for (RuntimeBase elem : list.elements) {
-                if (elem instanceof RuntimeScalar rs
-                        && (rs.type == RuntimeScalarType.STRING
-                            || rs.type == RuntimeScalarType.REGEX
-                                && rs.value instanceof RuntimeRegex regex
-                                && !regex.isPatternByteBacked())) {
-                    hasUtf8Input = true;
-                    break;
-                }
-            }
-        }
 
         StringBuilder result = new StringBuilder();
         int argIndex = 0;  // Sequential argument index
@@ -194,6 +182,18 @@ public class SprintfOperator {
                     ProcessResult processResult = processFormatSpecifierTracked(spec, list, argIndex, formatter, bytesMode);
                     result.append(processResult.formatted);
                     charsWritten += processResult.formatted.length();
+                    if (!bytesMode && spec.conversionChar == 's' && !spec.vectorFlag) {
+                        int valueIndex = formattedValueIndex(spec, argIndex);
+                        if (valueIndex >= 0 && valueIndex < list.size()
+                                && list.elements.get(valueIndex) instanceof RuntimeScalar value
+                                && value.type == RuntimeScalarType.REGEX
+                                && value.value instanceof RuntimeRegex regex
+                                && !regex.isPatternByteBacked()) {
+                            // Stringifying a Unicode qr// contributes a UTF-8
+                            // string even when other %s arguments stay byte-backed.
+                            hasUtf8Input = true;
+                        }
+                    }
                     if (GlobalContext.isTaintModeActive()) {
                         hasTaintedArgument |= usedArgumentIsTainted(spec, list, argIndex);
                     }
@@ -283,6 +283,16 @@ public class SprintfOperator {
             }
         }
         return false;
+    }
+
+    private static int formattedValueIndex(FormatSpecifier spec, int argIndex) {
+        if (spec.parameterIndex != null) {
+            return spec.parameterIndex - 1;
+        }
+        int valueIndex = argIndex;
+        if (spec.widthFromArg && spec.widthArgIndex == null) valueIndex++;
+        if (spec.precisionFromArg && spec.precisionArgIndex == null) valueIndex++;
+        return valueIndex;
     }
 
     private static void handlePercentN(FormatSpecifier spec,

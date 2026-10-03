@@ -222,6 +222,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // compile-time pinned placeholder, whereas a copied typeglob must
         // capture the CV that is presently installed in its stash.
         RuntimeScalar visibleCode = GlobalVariable.globalCodeRefs.get(this.globName);
+        if (visibleCode != null && visibleCode.value instanceof RuntimeCode code) {
+            code.explicitlyMaterializedGlob = true;
+        }
         copy.codeSlot = new RuntimeScalar(visibleCode != null
                 ? visibleCode : GlobalVariable.getGlobalCodeRef(this.globName));
         copy.scalarSlot = GlobalVariable.globalVariables.get(this.globName);
@@ -975,6 +978,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 return value;
         }
         throw new IllegalStateException("typeglob assignment not implemented for " + value.type);
+    }
+
+    /** Return the value produced by Perl's scalar typeglob assignment. */
+    public static RuntimeScalar scalarAssignmentResult(RuntimeGlob glob, RuntimeScalar value) {
+        RuntimeScalar assigned = glob.set(value);
+        return value.type == RuntimeScalarType.CODE ? glob : assigned;
     }
 
     /**

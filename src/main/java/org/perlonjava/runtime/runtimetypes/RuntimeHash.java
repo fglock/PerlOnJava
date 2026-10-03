@@ -51,6 +51,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public String taintEnvironmentAliasDescription;
     // Iterator for traversing the hash elements
     Iterator<RuntimeScalar> hashIterator;
+    private boolean hashIteratorInsertionWarningIssued;
     // Track which keys were stored with BYTE_STRING type (vs STRING/UTF-8).
     // In Perl, hash keys preserve their byte/UTF-8 flag, which affects regex matching semantics.
     // Lazily initialized to avoid overhead when key type tracking is not needed.
@@ -594,6 +595,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 // slot container. This matters for pure-Perl deep-cloners
                 // which preserve referent identity while populating hashes.
                 RuntimeScalar existing = elements.get(key);
+                warnHashIteratorInsertion(existing);
                 if (isDestroyRescueAssignment(existing, value)) {
                     value.addToScalar(existing);
                 } else if (existing != null
@@ -609,6 +611,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             case AUTOVIVIFY_HASH -> {
                 AutovivificationHash.vivify(this);
                 RuntimeScalar existing = elements.get(key);
+                warnHashIteratorInsertion(existing);
                 if (isDestroyRescueAssignment(existing, value)) {
                     value.addToScalar(existing);
                 } else if (existing != null
@@ -629,6 +632,17 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             case READONLY_HASH -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + type);
         }
+    }
+
+    private void warnHashIteratorInsertion(RuntimeScalar existing) {
+        if (existing != null || hashIterator == null || hashIteratorInsertionWarningIssued) {
+            return;
+        }
+        hashIteratorInsertionWarningIssued = true;
+        WarnDie.warnWithCategoryByDefault(
+                new RuntimeScalar("Use of each() on hash after insertion without resetting hash iterator results in undefined behavior"),
+                new RuntimeScalar(""),
+                "internal");
     }
 
     private static RuntimeBase directReferent(RuntimeScalar scalar) {
@@ -1567,6 +1581,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
         if (hashIterator == null) {
             hashIterator = iterator();
+            hashIteratorInsertionWarningIssued = false;
         }
         if (hashIterator.hasNext()) {
             if (ctx == RuntimeContextType.SCALAR) {

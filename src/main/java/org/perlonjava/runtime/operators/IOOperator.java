@@ -152,7 +152,21 @@ public class IOOperator {
             newIO = anonIO;
         }
         RuntimeIO.setSelectedHandle(newIO);
-        RuntimeIO.setSelectedHandleValue(selectedHandleValue(fileHandleArg));
+        RuntimeScalar selectedValue = selectedHandleValue(fileHandleArg);
+        if (!(selectedValue.value instanceof RuntimeGlob)
+                && newIO != null && newIO.globName != null
+                && !newIO.globName.equals("main::STDIN")
+                && !newIO.globName.equals("main::STDOUT")
+                && !newIO.globName.equals("main::STDERR")) {
+            RuntimeGlob owner = newIO.getOwnerGlob();
+            if (owner == null) {
+                owner = GlobalVariable.getExistingGlobalIO(newIO.globName);
+            }
+            if (owner != null) {
+                selectedValue = owner.createReference();
+            }
+        }
+        RuntimeIO.setSelectedHandleValue(selectedValue);
         RuntimeIO.setLastAccessedHandle(newIO);
         return fh;
     }
@@ -172,7 +186,12 @@ public class IOOperator {
         if (argument.value instanceof RuntimeGlob glob) {
             String name = glob.globName;
             if (name != null) {
-                return new RuntimeScalar(name);
+                if (name.equals("main::STDIN") || name.equals("main::STDOUT")
+                        || name.equals("main::STDERR")) {
+                    return new RuntimeScalar(name);
+                }
+                return argument.type == RuntimeScalarType.GLOBREFERENCE
+                        ? new RuntimeScalar(argument) : glob.createReference();
             }
             return argument.type == RuntimeScalarType.GLOBREFERENCE
                     ? new RuntimeScalar(argument) : glob.createReference();
@@ -597,7 +616,11 @@ public class IOOperator {
         }
 
         if (fh.ioHandle != null) {
-            return fh.ioHandle.read(1);
+            RuntimeScalar character = fh.ioHandle.read(1);
+            if (character.type != RuntimeScalarType.UNDEF && character.toString().isEmpty()) {
+                return scalarUndef;
+            }
+            return character;
         }
         throw new PerlCompilerException("No input source available");
     }
@@ -698,7 +721,7 @@ public class IOOperator {
             fileHandle = args[0].scalar();
         }
 
-        RuntimeIO fh = fileHandle.getRuntimeIO();
+        RuntimeIO fh = getExistingRuntimeIO(fileHandle);
 
         if (fh instanceof TieHandle tieHandle) {
             return TieHandle.tiedFileno(tieHandle);
@@ -1147,7 +1170,7 @@ public class IOOperator {
         ForkOpenState.clear();
         
         RuntimeScalar handle = args.length == 1 ? ((RuntimeScalar) args[0]) : select(new RuntimeList(), RuntimeContextType.SCALAR);
-        RuntimeIO fh = handle.getRuntimeIO();
+        RuntimeIO fh = getExistingRuntimeIO(handle);
 
         // Handle case where the filehandle is invalid/corrupted
         if (fh == null) {
@@ -1170,6 +1193,17 @@ public class IOOperator {
 
     static boolean unopenedWarningsEnabled() {
         return Warnings.isCategoryEnabledAtPerlXsCaller("unopened");
+    }
+
+    /** Resolve a handle for operations that must not create a symbolic glob. */
+    private static RuntimeIO getExistingRuntimeIO(RuntimeScalar handle) {
+        if (!handle.isString()) {
+            return handle.getRuntimeIO();
+        }
+        String name = NameNormalizer.normalizeVariableName(handle.toString(), "main");
+        RuntimeGlob glob = GlobalVariable.getExistingGlobalIO(name);
+        RuntimeScalar ioSlot = glob == null ? null : glob.getIO();
+        return ioSlot == null ? null : ioSlot.getRuntimeIO();
     }
 
     private static String filehandleShortName(RuntimeScalar handle) {
@@ -2859,6 +2893,10 @@ public class IOOperator {
             if ((readHandle.type == RuntimeScalarType.GLOB || readHandle.type == RuntimeScalarType.GLOBREFERENCE) 
                     && readHandle.value instanceof RuntimeGlob glob) {
                 readGlob = glob;
+            } else if (readHandle.isString()) {
+                String name = NameNormalizer.normalizeVariableName(
+                        readHandle.toString(), RuntimeCode.getCurrentPackage());
+                readGlob = GlobalVariable.getGlobalIO(name);
             }
             if (readGlob != null) {
                 readGlob.setIO(readerIO);
@@ -2877,6 +2915,10 @@ public class IOOperator {
             if ((writeHandle.type == RuntimeScalarType.GLOB || writeHandle.type == RuntimeScalarType.GLOBREFERENCE) 
                     && writeHandle.value instanceof RuntimeGlob glob) {
                 writeGlob = glob;
+            } else if (writeHandle.isString()) {
+                String name = NameNormalizer.normalizeVariableName(
+                        writeHandle.toString(), RuntimeCode.getCurrentPackage());
+                writeGlob = GlobalVariable.getGlobalIO(name);
             }
             if (writeGlob != null) {
                 writeGlob.setIO(writerIO);

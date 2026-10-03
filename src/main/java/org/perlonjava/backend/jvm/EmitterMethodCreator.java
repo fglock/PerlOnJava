@@ -919,6 +919,22 @@ public class EmitterMethodCreator implements Opcodes {
                             "(Ljava/lang/String;Ljava/lang/String;)V",
                             false);
 
+                    // This marker path reports eval failure without throwing
+                    // into catchBlock. Preserve its $@ through the common
+                    // dynamic teardown epilogue as well.
+                    mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+                    mv.visitInsn(Opcodes.DUP);
+                    mv.visitLdcInsn("main::@");
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                            "getGlobalVariable",
+                            "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                    mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                            "<init>",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V", false);
+                    mv.visitVarInsn(Opcodes.ASTORE, evalErrorSlot);
+
                     // Replace marker with undef/empty list
                     mv.visitInsn(Opcodes.POP);
                     Label evalBlockList = new Label();
@@ -973,16 +989,6 @@ public class EmitterMethodCreator implements Opcodes {
 
                 // Track eval depth for $^S: RuntimeCode.evalDepth--
                 emitEvalDepthDecrement(mv);
-
-                // A successful eval must clear errors from nested evals. Operators
-                // that need eval to expose a failure must throw instead of only
-                // assigning $@ and returning undef.
-                mv.visitLdcInsn("main::@");
-                mv.visitLdcInsn("");
-                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/runtimetypes/GlobalVariable",
-                        "setGlobalVariable",
-                        "(Ljava/lang/String;Ljava/lang/String;)V", false);
 
                 // Jump over the catch block if no exception occurs
                 mv.visitJumpInsn(Opcodes.GOTO, endCatch);
@@ -1134,6 +1140,15 @@ public class EmitterMethodCreator implements Opcodes {
                 // (RegexState was pushed onto the DVM stack at sub entry).
                 Local.localTeardown(dynamicIndex, mv);
 
+                // Deferred lexical cleanup runs after the eval body method
+                // returns. Drain it here, before clearing $@, when doing so
+                // cannot invalidate a reference returned by the eval.
+                mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "flushEvalBlockCleanupForScalarResult",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V", false);
+
                 mv.visitLabel(teardownTryEnd);
 
                 // After DVM teardown, re-set $@ if we caught an eval error.
@@ -1223,6 +1238,20 @@ public class EmitterMethodCreator implements Opcodes {
 
                 // Both paths join here with empty stack
                 mv.visitLabel(teardownDone);
+
+                // A successful eval clears nested eval errors only after
+                // dynamic teardown and deferred DESTROY have completed. Failed
+                // evals have an error in evalErrorSlot and retain it.
+                Label preserveTeardownError = new Label();
+                mv.visitVarInsn(Opcodes.ALOAD, evalErrorSlot);
+                mv.visitJumpInsn(Opcodes.IFNONNULL, preserveTeardownError);
+                mv.visitLdcInsn("main::@");
+                mv.visitLdcInsn("");
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                        "setGlobalVariable",
+                        "(Ljava/lang/String;Ljava/lang/String;)V", false);
+                mv.visitLabel(preserveTeardownError);
 
                 // Load the return value for ARETURN
                 mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);

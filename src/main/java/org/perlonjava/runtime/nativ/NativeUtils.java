@@ -5,6 +5,7 @@ import org.perlonjava.runtime.nativ.ffm.FFMPosixInterface;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
+import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.io.IOException;
@@ -109,5 +110,11 @@ public class NativeUtils {
 
     public static RuntimeScalar getegid(int ctx, RuntimeBase... args) {
         return new RuntimeScalar(posix.getegid());
+    }
+
+    public static RuntimeList getgroups(int ctx, RuntimeBase... args) {
+        RuntimeList result = new RuntimeList();
+        for (int groupId : posix.getgroups()) result.elements.add(new RuntimeScalar(groupId));
+        return result;
     }
 }

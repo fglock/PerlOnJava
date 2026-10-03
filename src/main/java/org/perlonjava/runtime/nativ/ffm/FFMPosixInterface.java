@@ -60,6 +60,9 @@ public interface FFMPosixInterface {
      * @return Effective group ID
      */
     int getegid();
+
+    /** Get the supplementary group IDs for the current process. */
+    default int[] getgroups() { return new int[0]; }
     
     /**
      * Get password entry by username.
@@ -90,6 +93,21 @@ public interface FFMPosixInterface {
      * Close password database.
      */
     void endpwent();
+
+    /** Get a group entry by name, or null when it is not present. */
+    default GroupEntry getgrnam(String name) { return null; }
+
+    /** Get a group entry by numeric ID, or null when it is not present. */
+    default GroupEntry getgrgid(int gid) { return null; }
+
+    /** Get the next group entry in the system group database. */
+    default GroupEntry getgrent() { return null; }
+
+    /** Reset group database iteration. */
+    default void setgrent() { }
+
+    /** Close group database iteration. */
+    default void endgrent() { }
     
     // ==================== File Functions ====================
     
@@ -412,6 +430,9 @@ public interface FFMPosixInterface {
         long change,      // pw_change - password change time (BSD/macOS)
         long expire       // pw_expire - account expiration (BSD/macOS)
     ) {}
+
+    /** A POSIX group database record. */
+    record GroupEntry(String name, String passwd, int gid, String[] members) {}
     
     /**
      * File status result (struct stat equivalent).

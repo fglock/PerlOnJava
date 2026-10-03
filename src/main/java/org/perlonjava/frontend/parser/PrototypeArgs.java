@@ -815,9 +815,14 @@ public class PrototypeArgs {
     private static void handleUnderscoreArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
         Node arg = parseArgumentWithComma(parser, true, needComma, "scalar argument");
         if (arg == null) {
-            Node underscoreArg = scalarUnderscore(parser);
-            underscoreArg.setAnnotation("context", "SCALAR");
-            args.elements.add(underscoreArg);
+            // `_` aliases $_ when it is the only available argument.  In a
+            // prototype such as `$;_`, an omitted trailing `_` after the
+            // required scalar leaves @_ unchanged instead of adding $_.
+            if (args.elements.isEmpty() || !isOptional) {
+                Node underscoreArg = scalarUnderscore(parser);
+                underscoreArg.setAnnotation("context", "SCALAR");
+                args.elements.add(underscoreArg);
+            }
             return;
         }
         Node scalarArg = ParserNodeUtils.toScalarContext(arg);
@@ -1431,6 +1436,12 @@ public class PrototypeArgs {
         }
 
         Character actualSigil = sigilForBackslashPrototypeArg(referenceArg);
+        if (refType == '%' && actualSigil == null) {
+            String subName = parser.ctx.symbolTable.getCurrentSubroutine();
+            String subNamePart = (subName == null || subName.isEmpty()) ? "" : " to " + subName;
+            parser.throwError("Type of arg " + (args.elements.size() + 1) + subNamePart
+                    + " must be hash (not " + describeBackslashPrototypeArg(referenceArg) + ")");
+        }
         if (actualSigil == null || actualSigil == refType) {
             return;
         }

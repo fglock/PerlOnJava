@@ -195,6 +195,16 @@ public class Variable {
             }
             IdentifierParser.validateIdentifier(parser, varName, startIndex);
 
+            // An explicit reference to a package's legacy %FIELDS hash is
+            // enough to make it the field table for typed lexical checks.
+            // Parsing happens before the statement can vivify the hash at
+            // runtime, so retain that declaration for following dereferences.
+            if (sigil.equals("%") && varName.equals("FIELDS")) {
+                String fullName = NameNormalizer.normalizeVariableName(
+                        varName, parser.ctx.symbolTable.getCurrentPackage());
+                GlobalVariable.declareGlobalHash(fullName);
+            }
+
             // Variable name is valid.
             // Check for illegal characters after a variable
             if (!parser.parsingForLoopVariable && !parser.parsingIndirectObject

@@ -392,9 +392,36 @@ public class StringOperators {
     }
 
     private static RuntimeScalar ucUnicodeUnpropagated(RuntimeScalar runtimeScalar) {
-        // Convert the string to uppercase using ICU4J for proper Unicode handling
-        String str = UCharacter.toUpperCase(runtimeScalar.toString());
+        // U+0345 (COMBINING GREEK YPOGEGRAMMENI) becomes a spacing capital
+        // iota when uppercased. Move it after the rest of its combining
+        // sequence first, preserving canonical mark order (as Perl does).
+        String input = moveYpogegrammeniAfterCombiningMarks(runtimeScalar.toString());
+        String str = UCharacter.toUpperCase(input);
         return makeStringResult(str, runtimeScalar);
+    }
+
+    private static String moveYpogegrammeniAfterCombiningMarks(String input) {
+        StringBuilder reordered = new StringBuilder(input.length());
+        for (int offset = 0; offset < input.length();) {
+            int codePoint = input.codePointAt(offset);
+            int nextOffset = offset + Character.charCount(codePoint);
+            if (codePoint == 0x0345) {
+                int marksEnd = nextOffset;
+                while (marksEnd < input.length()) {
+                    int following = input.codePointAt(marksEnd);
+                    if (UCharacter.getCombiningClass(following) == 0) break;
+                    marksEnd += Character.charCount(following);
+                }
+                if (marksEnd > nextOffset) {
+                    reordered.append(input, nextOffset, marksEnd).appendCodePoint(codePoint);
+                    offset = marksEnd;
+                    continue;
+                }
+            }
+            reordered.appendCodePoint(codePoint);
+            offset = nextOffset;
+        }
+        return reordered.toString();
     }
 
     /**

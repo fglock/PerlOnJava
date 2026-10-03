@@ -2742,6 +2742,9 @@ public class Opcodes {
     /** Create a LAST marker retaining source spelling {@code break}. Format: rd labelIdx. */
     public static final short CREATE_SWITCH_BREAK = 619;
 
+    /** Select the scalar result of a typeglob assignment. Format: rd globReg valueReg. */
+    public static final short GLOB_ASSIGNMENT_RESULT = 632;
+
     /** Create a LAST marker retaining loop-topicalizer break diagnostics. Format: rd labelIdx. */
     public static final short CREATE_SWITCH_BREAK_LOOP_TOPICALIZER = 620;
 

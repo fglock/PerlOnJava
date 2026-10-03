@@ -2,6 +2,8 @@ package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.analysis.LValueVisitor;
+import org.perlonjava.frontend.analysis.ListContextSideEffectDetector;
+import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
@@ -2180,6 +2182,31 @@ public class CompileAssignment {
         // Set the context for subroutine calls in RHS
         int outerContext = bytecodeCompiler.currentCallContext;
 
+        // An empty list assignment whose value is discarded still evaluates
+        // its RHS for side effects, but Perl does not materialize list values
+        // that have no targets (notably tied scalar repeats).
+        if (outerContext == RuntimeContextType.VOID
+                && node.left instanceof ListNode emptyTargets
+                && emptyTargets.elements.isEmpty()) {
+            boolean contextSensitiveRhs = node.right instanceof TernaryOperatorNode
+                    || node.right instanceof BinaryOperatorNode binary
+                    && (binary.operator.equals("(")
+                    || binary.operator.equals("||") || binary.operator.equals("or")
+                    || binary.operator.equals("&&") || binary.operator.equals("and")
+                    || binary.operator.equals("//") || binary.operator.equals("xor")
+                    || binary.operator.equals("^^"));
+            boolean preserveListContext = contextSensitiveRhs
+                    || RegexUsageDetector.containsRegexOperation(node.right)
+                    || ListContextSideEffectDetector.containsReadline(node.right);
+            if (!preserveListContext && node.right instanceof ListNode rhsList) {
+                rhsList.setAnnotation("emptyTargetAssignmentVoidRhs", true);
+            }
+            bytecodeCompiler.compileNode(node.right, -1, preserveListContext
+                    ? RuntimeContextType.LIST : RuntimeContextType.VOID);
+            bytecodeCompiler.lastResultReg = -1;
+            return;
+        }
+
         // Unary plus is normally transparent around an lvalue.  A parenthesized
         // list is the important exception: `+() = expr` is Perl's idiom for a
         // list assignment with no targets, whose scalar result is the number of
@@ -3051,11 +3078,16 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(globReg);
                     bytecodeCompiler.emitReg(valueReg);
 
-                    // A typeglob assignment evaluates to its RHS, not the
-                    // target glob.  This matters for chained assignments:
-                    // *alias = *alias = \&source must feed the CODE ref into
-                    // the outer assignment, as the JVM backend does.
-                    bytecodeCompiler.lastResultReg = valueReg;
+                    if (outerContext == RuntimeContextType.SCALAR) {
+                        int resultReg = bytecodeCompiler.allocateRegister();
+                        bytecodeCompiler.emit(Opcodes.GLOB_ASSIGNMENT_RESULT);
+                        bytecodeCompiler.emitReg(resultReg);
+                        bytecodeCompiler.emitReg(globReg);
+                        bytecodeCompiler.emitReg(valueReg);
+                        bytecodeCompiler.lastResultReg = resultReg;
+                    } else {
+                        bytecodeCompiler.lastResultReg = valueReg;
+                    }
                 } else if (leftOp.operator.equals("*") && leftOp.operand instanceof BlockNode) {
                     // Dynamic typeglob assignment: *{EXPR} = value. EXPR can
                     // return a real glob reference (Role::Tiny's _getglob
@@ -3069,9 +3101,16 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(globReg);
                     bytecodeCompiler.emitReg(valueReg);
 
-                    // Preserve the RHS as the assignment result (see the
-                    // named typeglob case above).
-                    bytecodeCompiler.lastResultReg = valueReg;
+                    if (outerContext == RuntimeContextType.SCALAR) {
+                        int resultReg = bytecodeCompiler.allocateRegister();
+                        bytecodeCompiler.emit(Opcodes.GLOB_ASSIGNMENT_RESULT);
+                        bytecodeCompiler.emitReg(resultReg);
+                        bytecodeCompiler.emitReg(globReg);
+                        bytecodeCompiler.emitReg(valueReg);
+                        bytecodeCompiler.lastResultReg = resultReg;
+                    } else {
+                        bytecodeCompiler.lastResultReg = valueReg;
+                    }
                 } else if (leftOp.operator.equals("*")) {
                     // Glob assignment where the glob comes from an expression, e.g. $ref->** = ...
                     // or 'name'->** = ...
@@ -3083,9 +3122,16 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(globReg);
                     bytecodeCompiler.emitReg(valueReg);
 
-                    // Preserve the RHS as the assignment result (see the
-                    // named typeglob case above).
-                    bytecodeCompiler.lastResultReg = valueReg;
+                    if (outerContext == RuntimeContextType.SCALAR) {
+                        int resultReg = bytecodeCompiler.allocateRegister();
+                        bytecodeCompiler.emit(Opcodes.GLOB_ASSIGNMENT_RESULT);
+                        bytecodeCompiler.emitReg(resultReg);
+                        bytecodeCompiler.emitReg(globReg);
+                        bytecodeCompiler.emitReg(valueReg);
+                        bytecodeCompiler.lastResultReg = resultReg;
+                    } else {
+                        bytecodeCompiler.lastResultReg = valueReg;
+                    }
                 } else if (leftOp.operator.equals("+")) {
                     // Unary plus is transparent for lvalue assignment, matching LValueVisitor.
                     bytecodeCompiler.compileNode(leftOp.operand, -1, RuntimeContextType.LVALUE);

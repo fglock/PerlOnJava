@@ -8,6 +8,7 @@ import org.perlonjava.runtime.io.LayeredIOHandle;
 import org.perlonjava.runtime.io.ProcessInputHandle;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.nativ.NativeUtils;
+import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.BufferedReader;
@@ -166,27 +167,67 @@ public class SystemOperator {
     }
 
     /**
-     * Preserve octets embedded in a Perl byte-string command when the command
-     * is passed through a UTF-8 Java ProcessBuilder argument. Core tests build
-     * shell commands from utf8::encoded strings; octal escapes survive the
-     * shell's single-quoted command text and are decoded by the child Perl.
+     * Preserve octets embedded in quoted Perl source when a byte-string
+     * command passes through ProcessBuilder arguments. On Unix, emit unquoted
+     * octets through ASCII-only shell substitutions so a C-locale JVM does
+     * not replace them while encoding the shell command.
      */
     private static String encodeByteStringForShell(String command) {
         StringBuilder encoded = new StringBuilder(command.length());
+        boolean singleQuoted = false;
+        boolean doubleQuoted = false;
+        boolean windows = SystemUtils.osIsWindows();
+        boolean asciiShellLocale = !SystemUtils.osIsWindows() && usesAsciiShellLocale();
         for (int i = 0; i < command.length(); i++) {
             char ch = command.charAt(i);
-            if (ch >= 0x80 && ch <= 0xff) {
+            if (ch == '\\' && !singleQuoted && i + 1 < command.length()) {
+                encoded.append(ch).append(command.charAt(++i));
+                continue;
+            }
+            if (ch == '\'' && !doubleQuoted) {
+                singleQuoted = !singleQuoted;
+                encoded.append(ch);
+                continue;
+            }
+            if (ch == '"' && !singleQuoted) {
+                doubleQuoted = !doubleQuoted;
+                encoded.append(ch);
+                continue;
+            }
+            if (ch >= 0x80 && ch <= 0xff && (singleQuoted || doubleQuoted)) {
                 encoded.append('\\');
                 String octal = Integer.toOctalString(ch);
                 for (int pad = octal.length(); pad < 3; pad++) {
                     encoded.append('0');
                 }
                 encoded.append(octal);
+            } else if (ch >= 0x80 && ch <= 0xff && windows) {
+                encoded.append("__PERLONJAVA_RAWBYTE_HEX__");
+                encoded.append(Character.forDigit((ch >>> 4) & 0xf, 16));
+                encoded.append(Character.forDigit(ch & 0xf, 16));
+            } else if (ch >= 0x80 && ch <= 0xff && asciiShellLocale) {
+                encoded.append("$(printf '\\");
+                String octal = Integer.toOctalString(ch);
+                for (int pad = octal.length(); pad < 3; pad++) {
+                    encoded.append('0');
+                }
+                encoded.append(octal).append("')");
             } else {
                 encoded.append(ch);
             }
         }
         return encoded.toString();
+    }
+
+    private static boolean usesAsciiShellLocale() {
+        String locale = getPerlEnvValue("LC_ALL");
+        if (locale == null || locale.isEmpty()) {
+            locale = getPerlEnvValue("LC_CTYPE");
+        }
+        if (locale == null || locale.isEmpty()) {
+            locale = getPerlEnvValue("LANG");
+        }
+        return "C".equals(locale) || "POSIX".equals(locale);
     }
 
     /**
@@ -204,7 +245,11 @@ public class SystemOperator {
         // Flatten the arguments - arrays and lists should be expanded to individual elements
         List<String> flattenedArgs = flattenToStringList(args.elements);
         if (flattenedArgs.isEmpty()) {
-            throw new PerlCompilerException("system: no command specified");
+            RuntimeScalar waited = WaitpidOperator.waitForChild();
+            if (waited.getLong() < 0) {
+                return new RuntimeScalar(-1);
+            }
+            return new RuntimeScalar(getGlobalVariable("main::?"));
         }
 
         CommandResult result;
@@ -402,17 +447,17 @@ public class SystemOperator {
     static List<String> splitWindowsDirectCommandWords(String command) {
         List<String> words = new ArrayList<>();
         StringBuilder word = new StringBuilder();
-        boolean quoted = false;
+        char quote = 0;
         boolean started = false;
 
         for (int i = 0; i < command.length(); i++) {
             char ch = command.charAt(i);
-            if (ch == '"') {
-                quoted = !quoted;
+            if ((ch == '"' || ch == '\'') && (quote == 0 || quote == ch)) {
+                quote = quote == 0 ? ch : 0;
                 started = true;
                 continue;
             }
-            if (!quoted && Character.isWhitespace(ch)) {
+            if (quote == 0 && Character.isWhitespace(ch)) {
                 if (started) {
                     words.add(word.toString());
                     word.setLength(0);
@@ -420,14 +465,14 @@ public class SystemOperator {
                 }
                 continue;
             }
-            if (!quoted && "*?[]{}()<>|&;`'$%".indexOf(ch) >= 0) {
+            if (quote == 0 && "*?[]{}()<>|&;`$%".indexOf(ch) >= 0) {
                 return null;
             }
             word.append(ch);
             started = true;
         }
 
-        if (quoted) {
+        if (quote != 0) {
             return null;
         }
         if (started) {
@@ -854,14 +899,11 @@ public class SystemOperator {
             // For backticks: stdout will be captured (default behavior),
             // stderr goes through Perl STDERR handle
 
+            boolean inheritedTerminalStdin = inheritTerminalStdin(processBuilder);
             process = processBuilder.start();
-
-            // system() and qx// subprocesses are deliberately non-interactive in
-            // PerlOnJava.  Closing the ProcessBuilder pipe is the only portable
-            // way to guarantee EOF here.  Redirect.from("/dev/null") left nested
-            // jperl launchers waiting forever on macOS (for example an old CPAN
-            // Makefile.PL which reads configuration answers from STDIN).
-            closeChildStdin(process);
+            if (!inheritedTerminalStdin) {
+                closeChildStdin(process);
+            }
 
             final Process finalProcess = process;
             final StringBuilder finalOutput = output;
@@ -955,8 +997,11 @@ public class SystemOperator {
             // Copy %ENV to the subprocess environment
             copyPerlEnvToProcessBuilder(processBuilder);
 
+            boolean inheritedTerminalStdin = inheritTerminalStdin(processBuilder);
             process = processBuilder.start();
-            closeChildStdin(process);
+            if (!inheritedTerminalStdin) {
+                closeChildStdin(process);
+            }
 
             // Route stdout and stderr through Perl handles so that
             // Perl-level redirections are honored
@@ -1010,8 +1055,11 @@ public class SystemOperator {
 
             // Route stderr through Perl STDERR handle (not INHERIT which bypasses Perl redirections)
 
+            boolean inheritedTerminalStdin = inheritTerminalStdin(processBuilder);
             process = processBuilder.start();
-            closeChildStdin(process);
+            if (!inheritedTerminalStdin) {
+                closeChildStdin(process);
+            }
 
             final Process finalProcess = process;
             final StringBuilder finalOutput = output;
@@ -1111,6 +1159,18 @@ public class SystemOperator {
         } catch (IOException ignored) {
             // The child may have exited before its stdin was closed.
         }
+    }
+
+    private static boolean inheritTerminalStdin(ProcessBuilder processBuilder) {
+        try {
+            if (FFMPosix.get().isatty(0) != 0) {
+                processBuilder.redirectInput(ProcessBuilder.Redirect.INHERIT);
+                return true;
+            }
+        } catch (RuntimeException ignored) {
+            // Keep non-interactive pipe behavior if the platform cannot check fd 0.
+        }
+        return false;
     }
 
     /**

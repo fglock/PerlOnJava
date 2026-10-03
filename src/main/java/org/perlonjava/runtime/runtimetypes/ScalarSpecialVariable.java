@@ -309,12 +309,12 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     yield getScalarInt(0);
                 }
                 case REAL_GID -> {
-                    // $( - Real group ID (lazy evaluation to avoid JNA overhead at startup)
-                    yield new RuntimeScalar(NativeUtils.getgid(0));
+                    // $( - Real group ID and supplementary groups.
+                    yield groupIdList(NativeUtils.getgid(0).getInt());
                 }
                 case EFFECTIVE_GID -> {
-                    // $) - Effective group ID (lazy evaluation to avoid JNA overhead at startup)
-                    yield new RuntimeScalar(NativeUtils.getegid(0));
+                    // $) - Effective group ID and supplementary groups.
+                    yield groupIdList(NativeUtils.getegid(0).getInt());
                 }
                 case REAL_UID -> {
                     // $< - Real user ID (lazy evaluation to avoid JNA overhead at startup)
@@ -352,6 +352,18 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         } catch (IllegalStateException e) {
             return scalarUndef;
         }
+    }
+
+    private static RuntimeScalar groupIdList(int primaryGroup) {
+        StringBuilder result = new StringBuilder(Integer.toString(primaryGroup));
+        RuntimeList groups = NativeUtils.getgroups(0);
+        for (RuntimeBase group : groups.elements) {
+            result.append(' ').append(group.scalar().getInt());
+        }
+        RuntimeScalar scalar = new RuntimeScalar();
+        scalar.type = RuntimeScalarType.DUALVAR;
+        scalar.value = new DualVar(new RuntimeScalar(primaryGroup), new RuntimeScalar(result.toString()));
+        return scalar;
     }
 
     public RuntimeScalar getNumber() {
@@ -596,8 +608,8 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         LAST_SUCCESSFUL_PATTERN, // ${^LAST_SUCCESSFUL_PATTERN}
         LAST_REGEXP_CODE_RESULT, // $^R - Result of last (?{...}) code block in regex
         HINTS, // $^H - Compile-time hints (strict, etc.)
-        REAL_GID, // $( - Real group ID (lazy, JNA call only on access)
-        EFFECTIVE_GID, // $) - Effective group ID (lazy, JNA call only on access)
+        REAL_GID, // $( - real GID and supplementary groups
+        EFFECTIVE_GID, // $) - effective GID and supplementary groups
         REAL_UID, // $< - Real user ID (lazy, JNA call only on access)
         EFFECTIVE_UID, // $> - Effective user ID (lazy, JNA call only on access)
         WARNING_BITS, // ${^WARNING_BITS} - Compile-time warning bits

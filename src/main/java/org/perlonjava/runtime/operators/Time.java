@@ -333,6 +333,9 @@ public class Time {
             // Sleep was interrupted (likely by alarm())
             // Process any pending signals through the signal queue
             PerlSignalQueue.checkPendingSignals();
+            // A queued signal handler may itself change $!. Perl reports the
+            // interrupted sleep errno after dispatching that handler.
+            getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
             // If the signal handler threw an exception (die), it will propagate from checkPendingSignals()
         }
         long endTime = System.nanoTime();

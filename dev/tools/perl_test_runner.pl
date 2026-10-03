@@ -181,6 +181,12 @@ sub reject_duplicate_long_options {
     }
 }
 
+sub shell_quote {
+    my ($value) = @_;
+    $value =~ s/'/'"'"'/g;
+    return "'$value'";
+}
+
 sub find_test_files {
     my ($dir) = @_;
     my @files;
@@ -477,7 +483,8 @@ sub run_single_test {
           re/pat.t
         | op/repeat.t
         | op/list.t
-        | op/recurse.t }x
+        | op/recurse.t
+        | op/cond.t }x
         ? "-Xss256m" : "";
 
     # Skip memory-intensive tests (e.g., Long Monsters in re/pat.t with 300KB strings)
@@ -538,7 +545,7 @@ sub run_single_test {
     my $test_name;
     my $test_launcher = $abs_jperl;
     if ($^O ne 'MSWin32' && $^O ne 'cygwin' && $^O ne 'msys'
-            && $test_file =~ m{(?:^|/)perl5_t/t/(?:japh/abigail|op/magic|run/fresh_perl)\.t$}) {
+            && $test_file =~ m{(?:^|/)perl5_t/t/(?:japh/abigail|op/(?:magic|taint)|run/fresh_perl)\.t$}) {
         my $source_test_dir = File::Spec->rel2abs('perl5_t/t', $old_dir);
         my $source_lib_dir = File::Spec->rel2abs('perl5_t/lib', $old_dir);
         $private_test_root = tempdir('perlonjava-core-XXXXXX', TMPDIR => 1, CLEANUP => 1);
@@ -597,6 +604,7 @@ NATIVE_LAUNCHER
         }
         $local_test_dir = $private_test_dir;
         $test_name = $test_file =~ m{/op/magic\.t$} ? 'op/magic.t'
+                   : $test_file =~ m{/op/taint\.t$} ? 'op/taint.t'
                    : $test_file =~ m{/run/fresh_perl\.t$} ? 'run/fresh_perl.t'
                    : 'japh/abigail.t';
         # Run through the private ./perl name so Perl's $^X matches the
@@ -606,6 +614,24 @@ NATIVE_LAUNCHER
 
     chdir($local_test_dir) if $local_test_dir && -d $local_test_dir;
     $test_name //= File::Spec->abs2rel($test_file, $local_test_dir || '.');
+
+    # stat.t checks -t and opens /dev/tty. The isolated runner session has no
+    # controlling terminal, so run this test under script's pseudo-terminal.
+    my @test_command = ($test_launcher, $test_name);
+    if ($test_file =~ m{(?:^|/)perl5_t/t/op/stat\.t$}
+            && $^O ne 'MSWin32' && $^O ne 'cygwin' && $^O ne 'msys') {
+        my ($script) = grep { -x $_ }
+            map { File::Spec->catfile($_, 'script') } File::Spec->path;
+        if (defined $script) {
+            if ($^O eq 'darwin' || $^O eq 'freebsd'
+                    || $^O eq 'openbsd' || $^O eq 'netbsd') {
+                @test_command = ($script, '-q', File::Spec->devnull(), $abs_jperl, $test_name);
+            } else {
+                my $command = join ' ', map { shell_quote($_) } ($abs_jperl, $test_name);
+                @test_command = ($script, '-q', '-c', $command, File::Spec->devnull());
+            }
+        }
+    }
 
     # Try to use system timeout command if available.
     # Use --kill-after (-k) so a SIGTERM that the JVM ignores is followed
@@ -654,7 +680,7 @@ NATIVE_LAUNCHER
             exec {
                 $timeout_program
             } $timeout_program, '--foreground', '-k', "${kill_after}s",
-                "${test_timeout}s", $test_launcher, $test_name;
+                "${test_timeout}s", @test_command;
             die "Cannot execute $timeout_program: $!";
         }
 
@@ -682,7 +708,7 @@ NATIVE_LAUNCHER
         $output_captured = 1;
     } else {
         # Fallback to alarm-based timeout
-        my $cmd = join(' ', $test_launcher, $test_name)
+        my $cmd = join(' ', map { shell_quote($_) } @test_command)
             . " < $devnull 2>&1";
         eval {
             local $SIG{ALRM} = sub { die "timeout\n" };

@@ -190,10 +190,13 @@ public class DebugHooks {
                 || !(debuggerGoto.value instanceof RuntimeCode code) || !code.defined()) {
             return null;
         }
-        // DB::goto observes the same debugger-facing $DB::sub protocol as
-        // DB::sub: named CVs are exposed by their Perl name, not Java's
-        // implementation-specific CODE(...) stringification.
-        RuntimeScalar debuggerTarget = debuggerTarget(target);
+        // Named package CVs use their Perl name, while lexical CVs must remain
+        // references so DB::goto can pass them through $_ without stringifying.
+        RuntimeScalar debuggerTarget = target.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE
+                && target.value instanceof RuntimeCode targetCode
+                && targetCode.lexicalSubDisplayName
+                ? new RuntimeScalar(target)
+                : debuggerTarget(target);
         GlobalVariable.getGlobalVariable("DB::sub").set(debuggerTarget);
         RuntimeCode.apply(debuggerGoto, new RuntimeArray(), context);
         // $_ is a mutable global cell.  Tail-call markers retain a value, not

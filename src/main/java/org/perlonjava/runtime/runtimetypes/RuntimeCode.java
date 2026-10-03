@@ -56,6 +56,15 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.runUnitcheckBlock
  * It provides functionality to compile, store, and execute Perl subroutines and eval strings.
  */
 public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
+    private static final ThreadLocal<ArrayDeque<EvalRuntimeContext>> EVAL_RUNTIME_CONTEXTS =
+            ThreadLocal.withInitial(ArrayDeque::new);
+    private static final ThreadLocal<Map<EvalBeginLexicalKey, Integer>> EVAL_BEGIN_LEXICAL_IDS =
+            ThreadLocal.withInitial(HashMap::new);
+
+    /** Active eval STRING BEGIN bodies follow the Java thread across runtime bindings. */
+    private static final ThreadLocal<Integer> evalBeginExecutionDepth =
+            ThreadLocal.withInitial(() -> 0);
+
     /** Nesting of comparator invocations currently owned by sort(). */
     private static final ThreadLocal<Integer> sortComparatorDepth = ThreadLocal.withInitial(() -> 0);
 
@@ -254,6 +263,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return PerlRuntime.current().runtimeCodeState().evalBeginIds;
     }
 
+    /** Resolve the stable BEGIN package for a captured lexical, including AST-less pads. */
+    public static int evalBeginId(SymbolTable.SymbolEntry entry) {
+        OperatorNode ast = entry.ast();
+        if (ast != null) {
+            return evalBeginIds().computeIfAbsent(
+                    ast, ignored -> EmitterMethodCreator.classCounter.getAndIncrement());
+        }
+        EvalRuntimeContext context = getEvalRuntimeContext();
+        if (context == null) {
+            return EmitterMethodCreator.classCounter.getAndIncrement();
+        }
+        EvalBeginLexicalKey key = new EvalBeginLexicalKey(
+                context.evalTag(), entry.index(), entry.name());
+        return EVAL_BEGIN_LEXICAL_IDS.get().computeIfAbsent(
+                key, ignored -> EmitterMethodCreator.classCounter.getAndIncrement());
+    }
+
     /**
      * Flag to control whether eval STRING should use the interpreter backend.
      * Enabled by default. eval STRING compiles to InterpretedCode instead of generating JVM bytecode.
@@ -302,7 +328,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * compilation can re-enter eval STRING compilation via BEGIN/use/require.
      */
     private static ArrayDeque<EvalRuntimeContext> evalRuntimeContextStack() {
-        return PerlRuntime.current().executionState().evalRuntimeContexts;
+        return EVAL_RUNTIME_CONTEXTS.get();
     }
     private static ArrayDeque<ArrayList<String>> syntheticCallerFrames() {
         return PerlRuntime.current().executionState().syntheticCallerFrames;
@@ -389,24 +415,26 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         PerlRuntime.current().executionState().evalDepth += delta;
     }
 
-    /** Mark entry to an eval STRING parser, for nested parser-time BEGIN limits. */
-    public static void enterEvalBeginCompilation() {
-        PerlRuntime.current().executionState().evalBeginCompilationDepth++;
+    /** Mark execution of a BEGIN block found in an eval STRING. */
+    public static void enterEvalBeginExecution() {
+        int depth = evalBeginExecutionDepth.get() + 1;
+        evalBeginExecutionDepth.set(depth);
     }
 
-    /** Leave an eval STRING parser. */
-    public static void exitEvalBeginCompilation() {
-        ExecutionRuntimeState state = PerlRuntime.current().executionState();
-        if (state.evalBeginCompilationDepth > 0) state.evalBeginCompilationDepth--;
+    /** Leave a BEGIN block found in an eval STRING. */
+    public static void exitEvalBeginExecution() {
+        int depth = evalBeginExecutionDepth.get() - 1;
+        if (depth <= 0) evalBeginExecutionDepth.remove();
+        else evalBeginExecutionDepth.set(depth);
     }
 
     /** Enforce Perl's dynamically scoped ${^MAX_NESTED_EVAL_BEGIN_BLOCKS}. */
-    public static void checkNestedEvalBeginLimit() {
-        ExecutionRuntimeState state = PerlRuntime.current().executionState();
-        if (state.evalBeginCompilationDepth == 0) return;
+    public static void checkNestedEvalBeginLimit(boolean parsingEvalString) {
+        if (!parsingEvalString) return;
+        int depth = evalBeginExecutionDepth.get() + 1;
         int maximum = GlobalVariable.getGlobalVariable(
                 GlobalContext.encodeSpecialVar("MAX_NESTED_EVAL_BEGIN_BLOCKS")).getInt();
-        if (state.evalBeginCompilationDepth > maximum) {
+        if (depth > maximum) {
             throw new PerlCompilerException("Too many nested BEGIN blocks, maximum of "
                     + maximum + " allowed");
         }
@@ -818,7 +846,49 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 result.putIfAbsent(entry.getKey(), entry.getValue());
             }
         }
+        for (Map.Entry<String, RuntimeBase> entry
+                : runtime.executionState().topLevelLexicals.entrySet()) {
+            result.putIfAbsent(entry.getKey(), entry.getValue());
+        }
         return result;
+    }
+
+    /** Return live top-level lexical cells without consulting subroutine pads. */
+    public static Map<String, RuntimeBase> snapshotTopLevelLexicals() {
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        Map<String, RuntimeBase> result = new LinkedHashMap<>();
+        for (ActiveLexicalFrame frame : activeLexicalFrames(state)) {
+            if (frame.code() == null || frame.code().subName == null
+                    || frame.code().subName.isBlank()) {
+                result.putAll(frame.cells());
+            }
+        }
+        result.putAll(state.topLevelLexicals);
+        return result;
+    }
+
+    /** Whether this exact lexical cell belongs to any currently active CV. */
+    public static boolean isActiveLexicalCell(RuntimeBase cell) {
+        if (cell == null) return false;
+        PerlRuntime runtime = PerlRuntime.current();
+        if (runtime.executionState().topLevelLexicals.containsValue(cell)) return true;
+        for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
+            for (RuntimeBase activeCell : frame.cells().values()) {
+                if (activeCell == cell) return true;
+            }
+        }
+        return false;
+    }
+
+    /** Bind a format's captured lexical to the currently executing pad frame. */
+    public static void registerCurrentActiveLexical(String variableName, RuntimeBase cell) {
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        Deque<ActiveLexicalFrame> frames = activeLexicalFrames(state);
+        if (!frames.isEmpty() && variableName != null && cell != null) {
+            frames.peek().cells().put(variableName, cell);
+        } else if (variableName != null && cell != null) {
+            state.topLevelLexicals.put(variableName, cell);
+        }
     }
 
     /**
@@ -1423,6 +1493,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0);
     }
 
+    /**
+     * Eval-block locals are released by deferred cleanup after the generated
+     * body returns. Flush that cleanup before its successful $@ reset when the
+     * materialized result contains no references that the flush could release.
+     */
+    public static void flushEvalBlockCleanupForScalarResult(RuntimeBase result) {
+        boolean resultHasNoReferences;
+        if (result instanceof RuntimeList list) {
+            resultHasNoReferences = containsNoReference(list);
+        } else if (result instanceof RuntimeScalar scalar) {
+            resultHasNoReferences = (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0;
+        } else {
+            resultHasNoReferences = true;
+        }
+        if (resultHasNoReferences) {
+            MortalList.flushAboveMark();
+        }
+    }
+
     private static RuntimeList copyReturnedReferenceScalars(RuntimeList result, int originalContext,
                                                         boolean copyCapturedScalars,
                                                         boolean recyclableScalarResult) {
@@ -1754,6 +1843,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // as opposed to auto-created by getGlobalCodeRef() for lookups.
     // In Perl 5, declared subs (even forward declarations) are visible via *{glob}{CODE}.
     public boolean isDeclared = false;
+    /** True when undef cleared this CV's body without replacing its identity. */
+    public boolean codeReferenceUndefined = false;
     /** True once this named CV has received an actual body, not just a declaration. */
     public boolean hasBodyDefinition = false;
     // Flag to indicate this is a closure prototype (the template CV before cloning).
@@ -1835,6 +1926,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * kept alive by stale internal owner records.
      */
     public boolean hadStashRef = false;
+    /** True when Perl code explicitly materialized the CV's named typeglob. */
+    public boolean explicitlyMaterializedGlob;
     /**
      * True when this CV was last installed with {@code *Pkg::name = $anonymous_cr}
      * (stash slot recorded, but not {@code Sub::Name}/{@code set_subname}).
@@ -2102,6 +2195,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 frame.cells().remove(variableName);
                 return;
             }
+        }
+        if (runtime.executionState().topLevelLexicals.get(variableName) == cell) {
+            runtime.executionState().topLevelLexicals.remove(variableName);
         }
     }
 
@@ -2503,8 +2599,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static RuntimeList undefCodeRefResultOrThrow(RuntimeScalar runtimeScalar, String subroutineName, int callContext) {
         String fullSubName = knownUndefinedSubroutineName(runtimeScalar, subroutineName);
         if (fullSubName != null) {
-            throw new PerlCompilerException(gotoErrorPrefix(subroutineName)
-                    + "ndefined subroutine &" + fullSubName + " called");
+            throw new PerlCompilerException(undefinedSubroutineMessage(subroutineName, fullSubName));
         }
         if (RuntimeContextType.isListLike(callContext)) {
             return new RuntimeList();
@@ -2846,7 +2941,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /**
      * Restore a previously saved eval runtime context.
      *
-     * @param saved The context returned by {@link #saveAndClearEvalRuntimeContext}
+     * @param saved The context stack returned by {@link #saveAndClearEvalRuntimeContext}
      */
     public static void restoreEvalRuntimeContext(EvalRuntimeContext saved) {
         if (saved != null) {
@@ -3013,10 +3108,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static void clearCaches() {
         PerlRuntime runtime = PerlRuntime.current();
         runtime.runtimeCodeState().clearCaches();
-        runtime.executionState().evalRuntimeContexts.clear();
+        EVAL_RUNTIME_CONTEXTS.remove();
+        EVAL_BEGIN_LEXICAL_IDS.remove();
     }
 
     public static void copy(RuntimeCode code, RuntimeCode codeFrom) {
+        code.codeReferenceUndefined = codeFrom.codeReferenceUndefined;
         code.prototype = codeFrom.prototype;
         code.attributes = codeFrom.attributes;
         code.methodHandle = codeFrom.methodHandle;
@@ -3061,6 +3158,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.isSymbolicReference = codeFrom.isSymbolicReference;
         this.isBuiltin = codeFrom.isBuiltin;
         this.isDeclared = codeFrom.isDeclared;
+        this.codeReferenceUndefined = codeFrom.codeReferenceUndefined;
         this.isClosurePrototype = codeFrom.isClosurePrototype;
         this.definitionPending = codeFrom.definitionPending;
         this.attributesDispatchedAtCompileTime = codeFrom.attributesDispatchedAtCompileTime;
@@ -3092,6 +3190,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.stashInstallPackage = codeFrom.stashInstallPackage;
         this.stashInstallSub = codeFrom.stashInstallSub;
         this.hadStashRef = codeFrom.hadStashRef;
+        this.explicitlyMaterializedGlob = codeFrom.explicitlyMaterializedGlob;
         this.installedViaAnonGlobAssign = codeFrom.installedViaAnonGlobAssign;
         this.stateVariableInitialized = codeFrom.stateVariableInitialized;
         this.stateVariable = codeFrom.stateVariable;
@@ -3449,11 +3548,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             // IMPORTANT: Do NOT mutate the AST node (ast.id) — the AST is
                             // shared with the JVM compiler and mutation would corrupt `my`
                             // variable reinitialization in loops.
-                            OperatorNode ast = entry.ast();
-                            if (ast != null) {
-                                int beginId = evalBeginIds().computeIfAbsent(
-                                        ast,
-                                        k -> EmitterMethodCreator.classCounter.getAndIncrement());
+                            {
+                                int beginId = evalBeginId(entry);
                                 String packageName = PersistentVariable.beginPackage(beginId);
                                 String varNameWithoutSigil = entry.name().substring(1);
                                 String fullName = packageName + "::" + varNameWithoutSigil;
@@ -4031,11 +4127,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (!entry.decl().equals("our")) {
                         Object runtimeValue = runtimeCtx.getRuntimeValue(entry.name());
                         if (runtimeValue != null) {
-                            OperatorNode operatorAst = entry.ast();
-                            if (operatorAst != null) {
-                                int beginId = evalBeginIds().computeIfAbsent(
-                                        operatorAst,
-                                        k -> EmitterMethodCreator.classCounter.getAndIncrement());
+                            {
+                                int beginId = evalBeginId(entry);
                                 String packageName = PersistentVariable.beginPackage(beginId);
                                 String varNameWithoutSigil = entry.name().substring(1);
                                 String fullName = packageName + "::" + varNameWithoutSigil;
@@ -4131,10 +4224,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 String savedRegexWarningBits = RegexQuoteMeta.getParserWarningBits();
                 RegexQuoteMeta.setParserWarningBits(lexicalEvalWarningBits);
                 try {
-                    enterEvalBeginCompilation();
                     ast = parser.parse();
                 } finally {
-                    exitEvalBeginCompilation();
                     RegexQuoteMeta.setParserWarningBits(savedRegexWarningBits);
                     BHooksEndOfScope.endFileLoad(evalCompilerOptions.fileName);
                 }
@@ -5474,7 +5565,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (subName == null && currentFrameIsInterpreter) {
                     String interpreterSubName = interpreterFrameBeforeVirtualEval
                             ? frameSubName : previousFrameSubName;
-                    if (interpreterSubName != null && !interpreterSubName.startsWith("(eval")) {
+                    RuntimeCode deletedActiveCode = deletedStashCodeForCallerName(interpreterSubName);
+                    if (deletedActiveCode != null) {
+                        subName = callerSubNameForCode(deletedActiveCode);
+                    } else if (interpreterSubName != null && !interpreterSubName.startsWith("(eval")) {
                         subName = interpreterSubName;
                     }
                 }
@@ -5877,6 +5971,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             return null;
         }
+        if (code.hadStashRef && code.explicitlyMaterializedGlob && !code.explicitlyRenamed
+                && GlobalVariable.findGlobalCodeRefName(code) == null) {
+            // A CV whose name was captured from an explicitly materialized
+            // glob can outlive its stash entry. Ordinary named CVs retain
+            // their compiled sub name after deletion.
+            return normalizeCallerPackage(code.packageName) + "::__ANON__";
+        }
         if (code.subName.contains("::")) {
             return code.subName;
         }
@@ -5885,6 +5986,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         String pkg = normalizeCallerPackage(code.packageName);
         return pkg + "::" + code.subName;
+    }
+
+    private static RuntimeCode deletedStashCodeForCallerName(String callerName) {
+        if (callerName == null || callerName.startsWith("(")
+                || !callerName.contains("::")) {
+            return null;
+        }
+        for (RuntimeCode active : activeCodeStack()) {
+            String activeName = active.referenceOriginFqn;
+            if (activeName == null && active.packageName != null && active.subName != null) {
+                activeName = active.packageName + "::" + active.subName;
+            }
+            if (active.hadStashRef && active.explicitlyMaterializedGlob && !active.explicitlyRenamed
+                    && callerName.equals(activeName)
+                    && GlobalVariable.findGlobalCodeRefName(active) == null) {
+                return active;
+            }
+        }
+        return null;
     }
 
     /** Attach a lexical declaration's display name without installing a package CV. */
@@ -6272,8 +6392,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private static String undefinedSubroutineMessage(String subroutineName, String fullSubName) {
+        if ((fullSubName == null || fullSubName.isEmpty())
+                && !"tailcall".equals(subroutineName)) {
+            return "Undefined subroutine called";
+        }
         String message = gotoErrorPrefix(subroutineName) + "ndefined subroutine &" + fullSubName;
         return "tailcall".equals(subroutineName) ? message : message + " called";
+    }
+
+    /** Build Perl's undefined-subroutine diagnostic for a cleared CV. */
+    public static PerlCompilerException undefinedCodeReferenceException(
+            RuntimeCode code, String subroutineName) {
+        String fullSubName = code.referenceOriginFqn;
+        if ((fullSubName == null || fullSubName.isEmpty())
+                && code.packageName != null && code.subName != null) {
+            fullSubName = code.packageName + "::" + code.subName;
+        }
+        return new PerlCompilerException(undefinedSubroutineMessage(subroutineName, fullSubName));
     }
 
     /**
@@ -6528,6 +6663,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 String displayName = code.lexicalForwardGlobPlaceholder && code.subName != null
                         ? code.subName : code.referenceOriginFqn != null
                                 ? code.referenceOriginFqn : autoloadTargetName;
+                if (displayName == null || displayName.isEmpty()) {
+                    throw new PerlCompilerException("Undefined subroutine called");
+                }
                 throw new PerlCompilerException("Undefined subroutine &" + displayName + " called");
             }
             String resolvedSubroutineName = code.packageName != null && code.subName != null
@@ -7321,6 +7459,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                     + fullSubName + "() is no longer allowed");
                 }
                 throw new PerlCompilerException(undefinedSubroutineMessage(subroutineName, fullSubName));
+            } else {
+                throw new PerlCompilerException(undefinedSubroutineMessage(subroutineName, fullSubName));
             }
         }
 
@@ -7671,9 +7811,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             "Use of inherited AUTOLOAD for non-method "
                                     + fullSubName + "() is no longer allowed");
                 }
-                throw new PerlCompilerException(gotoErrorPrefix(subroutineName) + "ndefined subroutine &" + fullSubName + " called");
+                throw new PerlCompilerException(undefinedSubroutineMessage(subroutineName, fullSubName));
             }
-            throw new PerlCompilerException(gotoErrorPrefix(subroutineName) + "ndefined subroutine &" + fullSubName + " called");
+            throw new PerlCompilerException(undefinedSubroutineMessage(subroutineName, fullSubName));
         }
 
         // Handle GLOB type - extract CODE slot from the glob
@@ -8143,12 +8283,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (code.isConstantCv && code.lexicalSubDisplayName) {
             return codeRef.undefine();
         }
-        if (code.referenceOriginFqn == null && codeRef.globalCodeRefFqn != null) {
-            code.referenceOriginFqn = codeRef.globalCodeRefFqn;
+        if (!code.hadStashRef
+                && ("__ANON__".equals(code.subName)
+                || (code.referenceOriginFqn != null
+                && code.referenceOriginFqn.endsWith("::__ANON__")))) {
+            // Anonymous CVs are sometimes tagged with the conventional
+            // __ANON__ spelling even though they are not the stash's CV. Do
+            // not let an unrelated named __ANON__ sub capture later calls.
+            code.referenceOriginFqn = null;
+            code.packageName = null;
+            code.subName = null;
         }
         if (code.referenceOriginFqn == null) {
             code.referenceOriginFqn = GlobalVariable.findGlobalCodeRefName(code);
-            if (code.referenceOriginFqn == null) {
+            // A scalar can carry a stale global name that belongs to a
+            // different CV (notably main::__ANON__). Retain that name only
+            // for CVs which were actually installed in a stash.
+            if (code.referenceOriginFqn == null && code.hadStashRef
+                    && codeRef.globalCodeRefFqn != null) {
+                code.referenceOriginFqn = codeRef.globalCodeRefFqn;
+            }
+            if (code.referenceOriginFqn == null && code.hadStashRef) {
                 code.referenceOriginFqn = GlobalVariable.findPseudoConstantCodeRefName(code);
             }
         }
@@ -8158,10 +8313,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 code.packageName = code.referenceOriginFqn.substring(0, separator);
                 code.subName = code.referenceOriginFqn.substring(separator + 2);
             }
+        } else if (!code.hadStashRef) {
+            // An anonymous CV must stay anonymous after undef. Otherwise an
+            // unrelated named __ANON__ slot can be late-resolved on the next
+            // call through the saved code reference.
+            code.packageName = null;
+            code.subName = null;
         }
         // `undef &named_sub` retains a declared CODE slot even after its
         // callable body is cleared.
         code.isDeclared = true;
+        code.codeReferenceUndefined = true;
         code.clearPadConstantWeakRefs();
         code.methodHandle = null;
         code.subroutine = null;
@@ -8315,7 +8477,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     throw new PerlCompilerException("Undefined subroutine &" + fullSubName + " called");
                 }
-                throw new PerlCompilerException("Undefined subroutine called at ");
+                throw new PerlCompilerException("Undefined subroutine called");
             }
 
             requireLvalueCallable(this, callContext, null);
@@ -8476,9 +8638,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         getGlobalVariable(autoloadVarFor(autoload, lookupPkg)).set(fullSubName);
                         return apply(autoload, a, callContext);
                     }
-                    throw new PerlCompilerException(gotoErrorPrefix(subroutineName) + "ndefined subroutine &" + fullSubName + " called");
+                    throw new PerlCompilerException(undefinedSubroutineMessage(subroutineName, fullSubName));
                 }
-                throw new PerlCompilerException(gotoErrorPrefix(subroutineName) + "ndefined subroutine &" + (fullSubName != null ? fullSubName : "") + " called");
+            throw new PerlCompilerException(undefinedSubroutineMessage(subroutineName, fullSubName));
             }
 
             requireLvalueCallable(this, callContext, subroutineName);
@@ -8769,6 +8931,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             this.value = value;
         }
     }
+
+    private record EvalBeginLexicalKey(String evalTag, Integer index, String name) {}
 
     /**
      * Container for runtime context during eval STRING compilation.

@@ -992,7 +992,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 }
                 regex.recursivePattern = new JoniRegexPattern(compilePatternString,
                             regex.regexFlags, trustedCalloutCount,
-                            !regex.regexFlags.isUnicode(), false, false,
+                            !regex.regexFlags.isUnicode() && patternByteBacked,
+                            false, false,
                             regex.namedCharacterCache, namedCharacterSourceMode,
                             lexicalReStrict,
                             (lexicalDebugMode & LEXICAL_DEBUG_PARSE) != 0);
@@ -3772,6 +3773,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         if (originalFlags.isMatchExactlyOnce() && matchOnceState.matched) {
             // m?PAT? already matched once; now return false
+            // This is still a failed /g match for pos() semantics: clear the
+            // published position unless /c requested that it be retained.
+            if (originalFlags.isGlobalMatch() && !originalFlags.keepCurrentPosition()) {
+                RuntimePosLvalue.publishMatchPosition(string, scalarUndef);
+            }
             if (ctx == RuntimeContextType.LIST) {
                 return new RuntimeList();
             } else if (ctx == RuntimeContextType.SCALAR) {

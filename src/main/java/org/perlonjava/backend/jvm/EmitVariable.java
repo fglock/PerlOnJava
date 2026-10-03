@@ -7,6 +7,8 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.LValueVisitor;
+import org.perlonjava.frontend.analysis.ListContextSideEffectDetector;
+import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.perlmodule.Strict;
@@ -882,6 +884,33 @@ public class EmitVariable {
         Node left = node.left;
         Node right = node.right;
 
+        // An empty list assignment in void context has no targets and its
+        // result is discarded. Preserve RHS side effects while avoiding list
+        // materialization (which can fetch tied values).
+        if (ctx.contextType == RuntimeContextType.VOID
+                && left instanceof ListNode targets && targets.elements.isEmpty()) {
+            // `() = EXPR` still gives EXPR list context when its result is
+            // discarded. Preserve the optimization for a literal list whose
+            // individual values do not need list-context evaluation, along
+            // with the established regex and readline side-effect cases.
+            boolean contextSensitiveRhs = right instanceof TernaryOperatorNode
+                    || right instanceof BinaryOperatorNode binary
+                    && (binary.operator.equals("(")
+                    || binary.operator.equals("||") || binary.operator.equals("or")
+                    || binary.operator.equals("&&") || binary.operator.equals("and")
+                    || binary.operator.equals("//") || binary.operator.equals("xor")
+                    || binary.operator.equals("^^"));
+            int rhsContext = contextSensitiveRhs
+                    || RegexUsageDetector.containsRegexOperation(right)
+                    || ListContextSideEffectDetector.containsReadline(right)
+                    ? RuntimeContextType.LIST : RuntimeContextType.VOID;
+            right.accept(emitterVisitor.with(rhsContext));
+            if (rhsContext == RuntimeContextType.LIST) {
+                mv.visitInsn(Opcodes.POP);
+            }
+            return;
+        }
+
         boolean isLocalAssignment = left instanceof OperatorNode operatorNode && operatorNode.operator.equals("local");
 
         boolean localCaptureAssignment = isLocalAssignment && left instanceof OperatorNode local
@@ -1310,7 +1339,18 @@ public class EmitVariable {
                 }
                 if (isGlob) {
                     mv.visitInsn(Opcodes.SWAP); // move the target first
-                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, leftDescriptor, "set", rightDescriptor, false);
+                    boolean scalarGlobAssignment = nodeLeft != null
+                            && nodeLeft.operator.equals("*")
+                            && ctx.contextType == RuntimeContextType.SCALAR;
+                    if (scalarGlobAssignment) {
+                        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/runtimetypes/RuntimeGlob",
+                                "scalarAssignmentResult",
+                                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeGlob;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                false);
+                    } else {
+                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, leftDescriptor, "set", rightDescriptor, false);
+                    }
                 } else {
                     boolean runtimeAssignment = ctx.contextType == RuntimeContextType.RUNTIME;
                     if (runtimeAssignment) emitterVisitor.pushCallContext();
@@ -2821,6 +2861,20 @@ public class EmitVariable {
                     }
                     // Store the variable in a JVM local variable
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
+
+                    if (operator.equals("my") && sigil.equals("$")) {
+                        // Deferred formats evaluate their argument source while
+                        // the declaring CV is active. Keep scalar pad cells
+                        // visible to that evaluation, including a write that
+                        // precedes the format declaration in source order.
+                        emitterVisitor.ctx.mv.visitLdcInsn(var);
+                        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, varIndex);
+                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                                "registerCurrentActiveLexical",
+                                "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
+                                false);
+                    }
 
                     // Register my-variables on the cleanup stack so DESTROY fires
                     // if die propagates through this subroutine without eval.

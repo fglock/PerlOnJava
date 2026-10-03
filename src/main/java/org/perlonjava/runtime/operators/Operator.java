@@ -668,6 +668,8 @@ public class Operator {
                 yield splice(runtimeArray, list, ctx); // Recursive call after vivification
             }
             case TIED_ARRAY -> TieArray.tiedSplice(runtimeArray, list, ctx);
+            case READONLY_ARRAY -> throw new PerlCompilerException(
+                    "Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
         };
 
@@ -865,6 +867,10 @@ public class Operator {
     }
 
     public static RuntimeBase repeat(RuntimeBase value, RuntimeScalar timesScalar, int ctx) {
+        if (ctx == RuntimeContextType.VOID && value instanceof RuntimeScalar scalarValue
+                && scalarValue.type == RuntimeScalarType.TIED_SCALAR) {
+            return new RuntimeScalar();
+        }
         if (value instanceof RuntimeScalar scalarValue) {
             value = RuntimeScalar.fetchTiedOnce(scalarValue);
         }
@@ -904,6 +910,14 @@ public class Operator {
             } else {
                 return new RuntimeList();
             }
+        }
+
+        // Do not narrow Perl's unsigned bitwise results through intValue().
+        // For example, `~1` is a very large positive count on a 64-bit Perl;
+        // list repetition must fail with Perl's allocation error rather than
+        // wrap to -2 and silently return an empty list.
+        if (timesScalar.getBigint().compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
+            throw new PerlCompilerException("Out of memory");
         }
 
         int times = timesScalar.getInt();

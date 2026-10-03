@@ -248,6 +248,11 @@ public class NumberParser {
      * Unified parsing method for special number formats (binary, octal, hex)
      */
     private static Node parseSpecialNumber(Parser parser, String initialPart, NumberFormat format) {
+        if (format == HEX_FORMAT && initialPart.startsWith("p")
+                && initialPart.length() > 1) {
+            warnMissingOperatorBeforeBareword(parser, initialPart,
+                    "0x" + initialPart, Math.max(0, parser.tokenIndex - 1));
+        }
         if (!containsDigitForFormat(initialPart, format)
                 && !hasLeadingFractionalDigit(parser, format)) {
             PerlParserException adjacentNumberError =
@@ -502,6 +507,16 @@ public class NumberParser {
             }
             parser.tokenIndex++;
         }
+    }
+
+    static void warnMissingOperatorBeforeBareword(Parser parser, String bareword,
+                                                   String near, int tokenIndex) {
+        String message = "Bareword found where operator expected (Missing operator before \""
+                + bareword + "\"?)";
+        RuntimeScalar warning = new RuntimeScalar(message);
+        RuntimeScalar location = new RuntimeScalar(
+                parser.ctx.errorUtil.warningLocation(tokenIndex) + ", near \"" + near + "\"");
+        WarnDie.warnWithCategoryByDefault(warning, location, "syntax::bareword");
     }
 
     /**

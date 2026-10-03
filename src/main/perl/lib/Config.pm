@@ -195,6 +195,7 @@ my $startperl = $is_windows
 %Config = (
     archname => "java-$java_version-$os_arch",
     myarchname => "$os_arch-$os_name",
+    myuname => "$os_name $os_version $os_arch",
     osname => $os_name,
     osvers => $os_version,
 

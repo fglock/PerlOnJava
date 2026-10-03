@@ -942,11 +942,13 @@ public class BytecodeInterpreter {
                                 // RuntimeFormat object rather than replacing it.
                                 RuntimeFormat target = GlobalVariable.getGlobalFormatRef(format.formatName);
                                 target.replaceDefinition(format);
+                                target.setLexicalDeclaringCode(RuntimeCode.getActiveCodeAt(0));
                                 int captureCount = bytecode[pc++];
                                 for (int capture = 0; capture < captureCount; capture++) {
                                     String name = code.stringPool[bytecode[pc++]];
                                     RuntimeBase value = registers[bytecode[pc++]];
                                     target.bindLexicalVariable(name, value);
+                                    RuntimeCode.registerCurrentActiveLexical(name, value);
                                 }
                             }
 
@@ -2612,6 +2614,15 @@ public class BytecodeInterpreter {
 
                             case Opcodes.STORE_GLOB -> {
                                 pc = InlineOpcodeHandler.executeStoreGlob(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.GLOB_ASSIGNMENT_RESULT -> {
+                                int rd = bytecode[pc++];
+                                int globReg = bytecode[pc++];
+                                int valueReg = bytecode[pc++];
+                                registers[rd] = RuntimeGlob.scalarAssignmentResult(
+                                        (RuntimeGlob) registers[globReg],
+                                        (RuntimeScalar) registers[valueReg]);
                             }
 
                             case Opcodes.OPEN -> {

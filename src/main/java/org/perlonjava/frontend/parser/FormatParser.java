@@ -80,6 +80,9 @@ public class FormatParser {
         // the format's argument line).
         RuntimeFormat format = new RuntimeFormat(formatName);
         format.setCompiledLines(templateLines);
+        String declaringSubroutine = parser.ctx.symbolTable.getCurrentSubroutine();
+        format.setLexicalDeclaringSubroutine(declaringSubroutine);
+        formatNode.setAnnotation("formatDeclaringSubroutine", declaringSubroutine);
         GlobalVariable.setGlobalFormatRef(formatName, format);
 
         return formatNode;

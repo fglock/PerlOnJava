@@ -1458,9 +1458,21 @@ public class OperatorParser {
 
     static OperatorNode parseDefined(Parser parser, LexerToken token, int currentIndex) {
         ListNode operand;
-        // Handle 'defined' operator with special parsing context
+        // A direct `defined &sub` probes the CODE slot rather than calling it.
+        // Do not let that context leak into nested expressions: in
+        // `defined scalar(42, &sub)`, the ampersand is an old-style call and
+        // the scalar expression's final value is what defined() checks.
         boolean parsingTakeReference = parser.parsingTakeReference;
-        parser.parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
+        int argumentIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+        boolean directCodeReference = argumentIndex < parser.tokens.size()
+                && parser.tokens.get(argumentIndex).text.equals("&");
+        if (!directCodeReference && argumentIndex < parser.tokens.size()
+                && parser.tokens.get(argumentIndex).text.equals("(")) {
+            int nestedIndex = Whitespace.skipWhitespace(parser, argumentIndex + 1, parser.tokens);
+            directCodeReference = nestedIndex < parser.tokens.size()
+                    && parser.tokens.get(nestedIndex).text.equals("&");
+        }
+        parser.parsingTakeReference = directCodeReference;
         operand = ListParser.parseZeroOrOneList(parser, 0, "defined");
         parser.parsingTakeReference = parsingTakeReference;
         if (operand.elements.isEmpty()) {
@@ -1482,7 +1494,35 @@ public class OperatorParser {
         // Similar to 'defined', we need to prevent &subr from being auto-called
         boolean parsingTakeReference = parser.parsingTakeReference;
         parser.parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
-        operand = ListParser.parseZeroOrOneList(parser, 0, "undef");
+        int operandStart = parser.tokenIndex;
+        LexerToken firstOperandToken = TokenUtils.peek(parser);
+        if (firstOperandToken.text.equals("&")) {
+            TokenUtils.consume(parser, OPERATOR, "&");
+            if (TokenUtils.peek(parser).text.equals("{")) {
+                int codeRefIndex = parser.tokenIndex;
+                TokenUtils.consume(parser, OPERATOR, "{");
+                Node codeRefExpression = parser.parseExpression(0);
+                if (!TokenUtils.peek(parser).text.equals("}")) {
+                    parser.throwError("Missing closing brace in code reference");
+                }
+                TokenUtils.consume(parser, OPERATOR, "}");
+                // The opening brace is a delimiter for the dynamic code-ref
+                // expression, not a Perl block to execute. parseExpression
+                // represents the delimited form as a one-statement block, so
+                // unwrap that parser wrapper and preserve the actual value.
+                if (codeRefExpression instanceof BlockNode expressionBlock
+                        && expressionBlock.elements.size() == 1) {
+                    codeRefExpression = expressionBlock.elements.getFirst();
+                }
+                Node codeRef = new OperatorNode("&", codeRefExpression, codeRefIndex);
+                operand = new ListNode(List.of(codeRef), codeRefIndex);
+            } else {
+                parser.tokenIndex = operandStart;
+                operand = ListParser.parseZeroOrOneList(parser, 0, "undef");
+            }
+        } else {
+            operand = ListParser.parseZeroOrOneList(parser, 0, "undef");
+        }
         parser.parsingTakeReference = parsingTakeReference;
         if (operand.elements.isEmpty()) {
             // `undef` without arguments returns undef

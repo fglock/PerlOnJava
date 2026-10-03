@@ -12,6 +12,13 @@ my $code = sub { 1 };
 undef $code;
 ok !defined($code), 'undef clears coderef scalar lvalue';
 
+our $x;
+sub __ANON__ { print "unexpected call\n" }
+undef &{$x = sub { print "unexpected call\n" }};
+my $error = eval { $x->(); 1 };
+like($@, qr/^Undefined subroutine called at /,
+    'undef &{...} clears an anonymous CV in place');
+
 my $array = [ sub { 1 }, sub { 2 } ];
 undef $array->[1];
 ok !defined($array->[1]), 'undef clears array element lvalue';

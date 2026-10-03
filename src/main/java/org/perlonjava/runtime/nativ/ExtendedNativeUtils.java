@@ -179,13 +179,13 @@ public class ExtendedNativeUtils extends NativeUtils {
         return new RuntimeList();
     }
 
-    public static RuntimeArray getgrnam(int ctx, RuntimeBase... args) {
-        if (args.length < 1) return new RuntimeArray();
+    public static RuntimeList getgrnam(int ctx, RuntimeBase... args) {
+        if (args.length < 1) return new RuntimeList();
         String groupname = args[0].toString();
 
         String cacheKey = "group:" + groupname;
         if (state().groupInfoCache.containsKey(cacheKey)) {
-            return state().groupInfoCache.get(cacheKey);
+            return groupResult(state().groupInfoCache.get(cacheKey), ctx, 2);
         }
 
         RuntimeArray result = new RuntimeArray();
@@ -201,35 +201,55 @@ public class ExtendedNativeUtils extends NativeUtils {
                     RuntimeArray.push(result, members);
                 }
             } else {
-                if (groupname.equals("users") || groupname.equals(System.getProperty("user.name"))) {
-                    RuntimeArray.push(result, new RuntimeScalar(groupname));
-                    RuntimeArray.push(result, new RuntimeScalar("x"));
-                    RuntimeArray.push(result, getgid(SCALAR));
-                    RuntimeArray members = new RuntimeArray();
-                    RuntimeArray.push(members, new RuntimeScalar(System.getProperty("user.name")));
-                    RuntimeArray.push(result, members);
-                }
+                FFMPosixInterface.GroupEntry group = FFMPosix.get().getgrnam(groupname);
+                result = groupToArray(group);
             }
 
             state().groupInfoCache.put(cacheKey, result);
         } catch (Exception e) {
         }
 
-        return result;
+        return groupResult(result, ctx, 2);
     }
 
-    public static RuntimeArray getgrgid(int ctx, RuntimeBase... args) {
-        if (args.length < 1) return new RuntimeArray();
+    public static RuntimeList getgrgid(int ctx, RuntimeBase... args) {
+        if (args.length < 1) return new RuntimeList();
 
         int gid = args[0].scalar().getInt();
-        int currentGid = getgid(ctx).getInt();
-
-        if (gid == currentGid) {
-            String groupName = IS_WINDOWS ? "Users" : "users";
-            return getgrnam(ctx, new RuntimeScalar(groupName));
+        if (IS_WINDOWS) {
+            int currentGid = getgid(SCALAR).getInt();
+            if (gid == currentGid) {
+                RuntimeList record = getgrnam(RuntimeContextType.LIST, new RuntimeScalar("Users"));
+                if (ctx == SCALAR) {
+                    return record.elements.isEmpty()
+                            ? new RuntimeList() : record.elements.getFirst().getList();
+                }
+                return record;
+            }
+            return new RuntimeList();
         }
+        return groupResult(groupToArray(FFMPosix.get().getgrgid(gid)), ctx, 0);
+    }
 
-        return new RuntimeArray();
+    private static RuntimeList groupResult(RuntimeArray record, int ctx, int scalarIndex) {
+        if (ctx == SCALAR && record.size() > scalarIndex) {
+            return record.get(scalarIndex).getList();
+        }
+        return record.getList();
+    }
+
+    private static RuntimeArray groupToArray(FFMPosixInterface.GroupEntry group) {
+        RuntimeArray result = new RuntimeArray();
+        if (group == null) return result;
+        RuntimeArray.push(result, new RuntimeScalar(group.name()));
+        RuntimeArray.push(result, new RuntimeScalar(group.passwd()).taintFromExternalInput());
+        RuntimeArray.push(result, new RuntimeScalar(group.gid()));
+        RuntimeArray members = new RuntimeArray();
+        if (group.members() != null) {
+            for (String member : group.members()) RuntimeArray.push(members, new RuntimeScalar(member));
+        }
+        RuntimeArray.push(result, members);
+        return result;
     }
 
     public static RuntimeList getpwent(int ctx, RuntimeBase... args) {
@@ -246,19 +266,11 @@ public class ExtendedNativeUtils extends NativeUtils {
         }
     }
 
-    public static RuntimeArray getgrent(int ctx, RuntimeBase... args) {
-        Iterator<String> iterator = state().groupIterator;
-        if (iterator == null) {
-            List<String> groups = getSystemGroups();
-            iterator = groups.iterator();
-            state().groupIterator = iterator;
-        }
-
-        if (iterator.hasNext()) {
-            return getgrnam(ctx, new RuntimeScalar(iterator.next()));
-        }
-
-        return new RuntimeArray();
+    public static RuntimeList getgrent(int ctx, RuntimeBase... args) {
+        if (IS_WINDOWS) return new RuntimeList();
+        FFMPosixInterface.GroupEntry group = FFMPosix.get().getgrent();
+        RuntimeArray result = groupToArray(group);
+        return groupResult(result, ctx, 0);
     }
 
     public static RuntimeScalar setpwent(int ctx, RuntimeBase... args) {
@@ -274,6 +286,7 @@ public class ExtendedNativeUtils extends NativeUtils {
     }
 
     public static RuntimeScalar setgrent(int ctx, RuntimeBase... args) {
+        if (!IS_WINDOWS) FFMPosix.get().setgrent();
         state().groupIterator = null;
         state().groupInfoCache.clear();
         return new RuntimeScalar(1);
@@ -291,6 +304,7 @@ public class ExtendedNativeUtils extends NativeUtils {
     }
 
     public static RuntimeScalar endgrent(int ctx, RuntimeBase... args) {
+        if (!IS_WINDOWS) FFMPosix.get().endgrent();
         state().groupIterator = null;
         return new RuntimeScalar(1);
     }

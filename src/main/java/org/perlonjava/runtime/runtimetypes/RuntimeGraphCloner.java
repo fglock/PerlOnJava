@@ -379,6 +379,7 @@ public class RuntimeGraphCloner {
         target.stashInstallPackage = source.stashInstallPackage;
         target.stashInstallSub = source.stashInstallSub;
         target.hadStashRef = source.hadStashRef;
+        target.explicitlyMaterializedGlob = source.explicitlyMaterializedGlob;
         target.installedViaAnonGlobAssign = source.installedViaAnonGlobAssign;
         target.cvStartFile = source.cvStartFile;
         target.cvStartLine = source.cvStartLine;

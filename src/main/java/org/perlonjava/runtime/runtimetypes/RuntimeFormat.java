@@ -45,6 +45,17 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
 
     /** Live lexical cells captured where this format was declared. */
     private final Map<String, RuntimeBase> lexicalVariables = new HashMap<>();
+    /** CV whose active pad may refresh captures while the format executes. */
+    private RuntimeCode lexicalDeclaringCode;
+    private String lexicalDeclaringSubroutine;
+
+    public void setLexicalDeclaringCode(RuntimeCode code) {
+        lexicalDeclaringCode = code;
+    }
+
+    public void setLexicalDeclaringSubroutine(String name) {
+        lexicalDeclaringSubroutine = name == null ? "" : name;
+    }
 
     public void bindLexicalVariable(String name, RuntimeBase value) {
         lexicalVariables.put(name, value);
@@ -101,6 +112,7 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
         this.compiledLines = new ArrayList<>(source.compiledLines);
         this.isCompiled = source.isCompiled;
         this.isDefined = source.isDefined;
+        this.lexicalDeclaringSubroutine = source.lexicalDeclaringSubroutine;
         this.lexicalVariables.clear();
         return this;
     }
@@ -625,14 +637,45 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
             // A FORMAT slot can survive a fork while its declaring lexical pad
             // is recreated in the child. Refresh only names captured by the
             // emitter; never discover new names from arbitrary caller frames.
-            Map<String, RuntimeBase> activeLexicals = RuntimeCode.snapshotAllActiveLexicals();
+            Map<String, RuntimeBase> activeLexicals = Map.of();
+            if (lexicalDeclaringCode != null) {
+                activeLexicals = RuntimeCode.snapshotActiveLexicals(lexicalDeclaringCode);
+            } else if (lexicalDeclaringSubroutine != null
+                    && !lexicalDeclaringSubroutine.isBlank()) {
+                // A format can be written before its source-position
+                // registration. Refresh from the active invocation only when
+                // its logical CV owns this format declaration.
+                RuntimeCode activeCode = RuntimeCode.getActiveCodeAt(0);
+                String activeSubroutine = activeCode == null ? null : activeCode.subName;
+                if (activeCode != null && activeSubroutine != null
+                        && (lexicalDeclaringSubroutine.equals(activeSubroutine)
+                        || lexicalDeclaringSubroutine.endsWith("::" + activeSubroutine))) {
+                    activeLexicals = RuntimeCode.snapshotActiveLexicals(activeCode);
+                }
+            } else if (lexicalDeclaringSubroutine != null) {
+                activeLexicals = RuntimeCode.snapshotTopLevelLexicals();
+            }
             if (argLine.getAnnotation("unavailableLexicalVariableNames") instanceof List<?> names
                     && !names.isEmpty()) {
                 for (Object value : names) {
-                    if (!(value instanceof String name) || isPackageVariable(name)) continue;
+                    if (!(value instanceof String name)) continue;
+                    // A lexical can be unavailable because its declaring
+                    // subroutine has returned. Do not replace that stale
+                    // capture with an unrelated active lexical that happens
+                    // to have the same name in the caller. Keep the captured
+                    // cell only while that exact cell is still active.
+                    RuntimeBase captured = lexicalVariables.get(name);
                     RuntimeBase active = activeLexicals.get(name);
                     if (active != null) {
+                        // A format in a named subroutine is registered again
+                        // on each invocation. Refresh its captured cell from
+                        // that exact declaring CV's active pad; a caller's
+                        // same-named lexical is excluded by the scoped
+                        // snapshot above.
                         lexicalVariables.put(name, active);
+                        continue;
+                    }
+                    if (RuntimeCode.isActiveLexicalCell(captured)) {
                         continue;
                     }
                     WarnDie.warn(new RuntimeScalar("Variable \"" + name
@@ -642,12 +685,23 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 }
             }
             for (String name : lexicalVariables.keySet()) {
+                if (argLine.getAnnotation("unavailableLexicalVariableNames") instanceof List<?> unavailable
+                        && unavailable.contains(name)) {
+                    // The fallback above has already kept a live captured
+                    // cell or installed a fresh undef cell. Do not resolve
+                    // this name again from an unrelated caller frame.
+                    continue;
+                }
+                RuntimeBase captured = lexicalVariables.get(name);
+                if (RuntimeCode.isActiveLexicalCell(captured)) {
+                    continue;
+                }
                 RuntimeBase active = activeLexicals.get(name);
                 if (active != null) {
+                    // activeLexicals contains only the format's declaring CV,
+                    // so this is the current invocation's lexical pad.
                     lexicalVariables.put(name, active);
-                } else if (!(argLine.getAnnotation("unavailableLexicalVariableNames") instanceof List<?> unavailable
-                                && unavailable.contains(name))
-                        && !isPackageVariable(name)
+                } else if (!isPackageVariable(name)
                         && argLine.content.matches("(?s).*\\Q" + name + "\\E(?:\\b|\\W).*")) {
                     // A FORMAT can outlive the CV whose lexical pad declared
                     // an argument.  Perl keeps the FORMAT callable, but

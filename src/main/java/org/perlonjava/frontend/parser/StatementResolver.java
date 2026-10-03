@@ -1064,6 +1064,28 @@ public class StatementResolver {
         int expressionStartIndex = parser.tokenIndex;
         Node expression = parser.parseExpression(0);
         token = peek(parser);
+        int followingTokenIndex = parser.tokenIndex;
+        while (followingTokenIndex < parser.tokens.size()
+                && (parser.tokens.get(followingTokenIndex).type == LexerTokenType.WHITESPACE
+                || parser.tokens.get(followingTokenIndex).type == LexerTokenType.NEWLINE
+                || parser.tokens.get(followingTokenIndex).text.equals(";"))) {
+            followingTokenIndex++;
+        }
+        boolean expressionIsDiscarded = followingTokenIndex < parser.tokens.size()
+                && parser.tokens.get(followingTokenIndex).type != LexerTokenType.EOF
+                && !parser.tokens.get(followingTokenIndex).text.equals("}");
+
+        if (expression instanceof SubroutineNode anonymousSubroutine
+                && anonymousSubroutine.name == null
+                && expressionIsDiscarded) {
+            String location = parser.ctx.errorUtil == null
+                    ? "" : parser.ctx.errorUtil.warningLocation(expressionStartIndex);
+            WarnDie.warnWithCategoryFromCode(
+                    new RuntimeScalar("Useless use of anonymous subroutine in void context"),
+                    new RuntimeScalar(location),
+                    "void",
+                    parser.ctx.symbolTable.getWarningBitsString());
+        }
 
         if (token.type == LexerTokenType.IDENTIFIER) {
             // Handle statement modifiers using switch expression
@@ -1447,8 +1469,9 @@ public class StatementResolver {
             if (token.type == LexerTokenType.IDENTIFIER
                     && (token.text.equals("q") || token.text.equals("qq"))) {
                 // Only treat as quote-like operators when a real delimiter follows.
-                // Bareword `q` / `qq` before `,` / `=>` / `;` / closing paren is not q():
-                //   { q,'bar', }  { q   => 'bar' } first line is a block; second is a hash key.
+                // Comma is a valid q delimiter: `{q,a'b,,'foo'}` is a hashref
+                // whose first key is the string `a'b`. A single quoted q-string
+                // followed by a trailing comma still remains a block below.
                 int peekIdx = parser.tokenIndex;
                 while (peekIdx < parser.tokens.size()
                         && parser.tokens.get(peekIdx).type == LexerTokenType.WHITESPACE) {
@@ -1456,10 +1479,13 @@ public class StatementResolver {
                 }
                 if (peekIdx < parser.tokens.size()) {
                     String nextText = parser.tokens.get(peekIdx).text;
-                    if (nextText.equals(",") || nextText.equals("=>") || nextText.equals(";")
+                    if (nextText.equals("=>") || nextText.equals(";")
                             || nextText.equals(")") || nextText.equals("}")) {
                         // Fall through: process `q` / `qq` like any other identifier.
                     } else {
+                        if (token == firstToken) {
+                            firstTokenIsKeyLike = true;
+                        }
                         awaitingQuoteLikeDelimiter = true;
                         continue;
                     }

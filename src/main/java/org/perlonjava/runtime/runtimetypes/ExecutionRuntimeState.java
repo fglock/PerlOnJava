@@ -9,6 +9,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Stack;
 import java.util.Set;
 
@@ -55,7 +56,6 @@ public final class ExecutionRuntimeState {
     public final Deque<InterpreterState.InterpreterFrame> interpreterFrames = new ArrayDeque<>();
     public final ArrayList<int[]> interpreterPcs = new ArrayList<>();
 
-    public final ArrayDeque<RuntimeCode.EvalRuntimeContext> evalRuntimeContexts = new ArrayDeque<>();
     /** Source strings of eval STRING invocations currently executing on this runtime. */
     public final Deque<RuntimeCode.EvalSourceFrame> activeEvalSources = new ArrayDeque<>();
     public final ArrayDeque<ArrayList<String>> syntheticCallerFrames = new ArrayDeque<>();
@@ -72,6 +72,8 @@ public final class ExecutionRuntimeState {
     public final Deque<String> activeRegexCallbackLocations = new ArrayDeque<>();
     public final Deque<String> activeRegexCallbackPackages = new ArrayDeque<>();
     public final Deque<Object> activeLexicalFrames = new ArrayDeque<>();
+    /** Lexical cells owned by the top-level compilation unit. */
+    public final Map<String, RuntimeBase> topLevelLexicals = new LinkedHashMap<>();
     public final Deque<List<RuntimeScalar>> pristineArgsStack = new ArrayDeque<>();
     /** Reusable one-scalar return lists, populated only after scalar extraction. */
     final Deque<RuntimeList> availableScalarResultLists = new ArrayDeque<>();
@@ -83,8 +85,6 @@ public final class ExecutionRuntimeState {
     /** Compact stash entries materialized by an eval-held CODE assignment. */
     public final Deque<LinkedHashMap<String, RuntimeScalar>> evalPseudoConstantScopes =
             new ArrayDeque<>();
-    /** eval STRING / BEGIN nesting currently being parsed on this runtime. */
-    public int evalBeginCompilationDepth;
     public int tailCallTrampolineDepth;
     public final ArrayDeque<Runnable> futureResumeQueue = new ArrayDeque<>();
     public boolean futureResumeDraining;

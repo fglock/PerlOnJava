@@ -139,7 +139,11 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * Gets the size of a tied array (delegates to FETCHSIZE).
      */
     public static RuntimeScalar tiedFetchSize(RuntimeArray array) {
-        return tieCall(array, "FETCHSIZE").getFirst();
+        RuntimeScalar size = tieCall(array, "FETCHSIZE").getFirst();
+        if (size.getInt() < 0) {
+            throw new PerlCompilerException("FETCHSIZE returned a negative value");
+        }
+        return size;
     }
 
     /**

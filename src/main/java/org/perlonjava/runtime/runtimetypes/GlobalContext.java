@@ -115,6 +115,14 @@ public class GlobalContext {
             // Fallback to "jperl" if environment variable is not set
             executableVariable.set("jperl");
         }
+        // Perl's $^X comes from an OS executable path and is ordinarily an
+        // unflagged byte string. Mark ASCII paths accordingly so interpolating
+        // $^X into a shell command does not upgrade neighboring octets to
+        // Unicode before the command reaches ProcessBuilder. Keep non-ASCII
+        // Java paths as Unicode because ProcessBuilder must encode them.
+        if (executableVariable.toString().chars().allMatch(ch -> ch <= 0x7f)) {
+            executableVariable.type = RuntimeScalarType.BYTE_STRING;
+        }
         if (compilerOptions.taintMode || compilerOptions.taintWarnings) {
             executableVariable.tainted = true;
         }

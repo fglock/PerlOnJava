@@ -168,9 +168,9 @@ public class Directory {
             Files.delete(path);
             return scalarTrue;
         } catch (IOException e) {
-            // Set $! (errno) in case of failure
-            getGlobalVariable("main::!").set(e.getMessage());
-            return scalarFalse;
+            // Preserve errno identity (for example ENOENT) as well as the
+            // platform's localized message in $!.
+            return handleIOException(e, dirName, 2);
         }
     }
 

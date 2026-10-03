@@ -197,9 +197,26 @@ public class RuntimeIO extends RuntimeScalar {
     public static RuntimeIO getSelectedHandle() { return PerlRuntime.current().ioSelectedHandle; }
     public static RuntimeScalar getSelectedHandleValue() {
         PerlRuntime runtime = PerlRuntime.current();
-        return runtime.ioSelectedHandleValue == null
+        RuntimeScalar selected = runtime.ioSelectedHandleValue == null
                 ? new RuntimeScalar(runtime.ioSelectedHandle)
                 : new RuntimeScalar(runtime.ioSelectedHandleValue);
+        if (selected.value instanceof RuntimeGlob glob && glob.globName != null) {
+            String name = glob.globName;
+            if (name.equals("main::STDIN") || name.equals("main::STDOUT")
+                    || name.equals("main::STDERR")) {
+                return new RuntimeScalar(name);
+            }
+            String resolvedName = GlobalVariable.resolveAliasedFqn(name);
+            RuntimeGlob currentGlob = GlobalVariable.getExistingGlobalIO(resolvedName);
+            RuntimeScalar currentIO = currentGlob == null ? null : currentGlob.getIO();
+            if (currentGlob == null || !resolvedName.equals(currentGlob.globName)
+                    || currentIO == null || currentIO.value != runtime.ioSelectedHandle
+                    || GlobalVariable.isIORefHiddenAfterStashDelete(resolvedName)) {
+                return selected;
+            }
+            return new RuntimeScalar(name);
+        }
+        return selected;
     }
     public static void setSelectedHandle(RuntimeIO io) {
         PerlRuntime runtime = PerlRuntime.current();
@@ -306,6 +323,17 @@ public class RuntimeIO extends RuntimeScalar {
         Integer existing = registry.ioToFileno.get(this);
         if (existing != null) {
             return existing;
+        }
+        // POSIX open() assigns the lowest available descriptor.  If STDIN was
+        // explicitly closed, the next regular handle receives descriptor 0.
+        // Keep that slot in the RuntimeIO registry so fileno() and later dup/
+        // require operations observe the same descriptor until it is closed.
+        RuntimeIO stdin = getStdin();
+        if (stdin != null && stdin.ioHandle instanceof ClosedIOHandle
+                && !registry.filenoToIO.containsKey(StandardIO.STDIN_FILENO)) {
+            registry.filenoToIO.put(StandardIO.STDIN_FILENO, this);
+            registry.ioToFileno.put(this, StandardIO.STDIN_FILENO);
+            return StandardIO.STDIN_FILENO;
         }
         // First, process any GC'd globs to free their fds
         processAbandonedGlobs();

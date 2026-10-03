@@ -2078,7 +2078,12 @@ public class BytecodeCompiler implements Visitor {
             boolean isLastStatement = (i == lastMeaningfulIndex);
             int stmtTarget = (isLastStatement && outerResultReg >= 0) ? outerResultReg : -1;
             int stmtContext;
-            if (!isLastStatement && !(stmt instanceof BinaryOperatorNode && ((BinaryOperatorNode) stmt).operator.equals("="))) {
+            boolean emptyListAssignment = stmt instanceof BinaryOperatorNode assignment
+                    && assignment.operator.equals("=")
+                    && assignment.left instanceof ListNode targets
+                    && targets.elements.isEmpty();
+            if (!isLastStatement && (!(stmt instanceof BinaryOperatorNode assignment
+                    && assignment.operator.equals("=")) || emptyListAssignment)) {
                 stmtContext = RuntimeContextType.VOID;
             } else {
                 stmtContext = isLastStatement && node.getBooleanAnnotation("subroutineIsLvalue")
@@ -3906,6 +3911,13 @@ public class BytecodeCompiler implements Visitor {
                     }
                     emit(Opcodes.REGISTER_MY_VAR);
                     emitReg(reg);
+                    if (sigil.equals("$")) {
+                        // Keep the active CV pad visible to deferred format
+                        // argument evaluation. Format declarations can occur
+                        // after a write in the source while Perl still binds
+                        // the format to this invocation's lexical cell.
+                        emitActiveLexicalBinding(reg, varName);
+                    }
 
                     // Runtime attribute dispatch for my variables with attributes
                     emitVarAttrsIfNeeded(node, reg, sigil);
@@ -4325,6 +4337,9 @@ public class BytecodeCompiler implements Visitor {
 
                                 emit(Opcodes.REGISTER_MY_VAR);
                                 emitReg(reg);
+                                if (sigil.equals("$")) {
+                                    emitActiveLexicalBinding(reg, varName);
+                                }
 
                                 // Runtime attribute dispatch for list variable declarations.
                                 // Attributes are stored on the parent my/state node, propagate to each element.
@@ -6322,7 +6337,9 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rd);
                 emit(constIdx);
                 lastResultReg = rd;
-            } else if (node.operand instanceof BlockNode || node.operand instanceof OperatorNode) {
+            } else if (node.operand instanceof BlockNode
+                    || node.operand instanceof OperatorNode
+                    || node.operand instanceof BinaryOperatorNode) {
                 // Dynamic code reference: &{$name} or &$name
                 // Compile the expression to get the name/value, then dereference as code
                 compileNode(node.operand, -1, RuntimeContextType.SCALAR);
@@ -9093,6 +9110,9 @@ public class BytecodeCompiler implements Visitor {
         // executes, before a later write() can look it up.
         RuntimeFormat format = new RuntimeFormat(node.formatName);
         format.setCompiledLines(node.templateLines);
+        if (node.getAnnotation("formatDeclaringSubroutine") instanceof String subroutine) {
+            format.setLexicalDeclaringSubroutine(subroutine);
+        }
         emit(Opcodes.REGISTER_FORMAT);
         emit(addToConstantPool(format));
         Map<String, Integer> visible = symbolTable.getVisibleVariableRegistry();
@@ -9178,6 +9198,17 @@ public class BytecodeCompiler implements Visitor {
             compileNode(node.elements.get(node.elements.size() - 1), -1,
                     RuntimeContextType.SCALAR);
             // lastResultReg already contains the last element's value
+            return;
+        }
+
+        if (currentCallContext == RuntimeContextType.VOID
+                && node.getBooleanAnnotation("emptyTargetAssignmentVoidRhs")) {
+            for (Node element : node.elements) {
+                int elementContext = RegexUsageDetector.containsRegexOperation(element)
+                        ? RuntimeContextType.LIST : RuntimeContextType.VOID;
+                compileNode(element, -1, elementContext);
+            }
+            lastResultReg = -1;
             return;
         }
 

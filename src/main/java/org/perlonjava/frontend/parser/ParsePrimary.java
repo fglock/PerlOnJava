@@ -235,6 +235,12 @@ public class ParsePrimary {
             };
         }
 
+        if (operator.equals("evalbytes") && !operatorEnabled && !calledWithCore) {
+            var location = parser.ctx.errorUtil.getSourceLocationAccurate(startIndex);
+            throw new PerlParserException("syntax error at " + location.fileName()
+                    + " line " + location.lineNumber() + ", near \"evalbytes\"");
+        }
+
         // Check for overridable operators (unless explicitly called with CORE::)
         if (!calledWithCore && operatorEnabled && ParserTables.OVERRIDABLE_OP.contains(operator)) {
             // Core functions can be overridden in two ways:
@@ -761,21 +767,21 @@ public class ParsePrimary {
             // Inside parentheses, parse full expression (allows assignment like -f ($x = $path))
             // But first check for empty parens -f()
             if (nextToken.text.equals(")")) {
-                // Empty parentheses -f() uses $_ as default
-                operand = scalarUnderscore(parser);
+                // Empty parentheses use the file test's default operand.
+                operand = defaultFileTestOperand(parser, operator);
             } else {
                 operand = parser.parseExpression(0);
                 if (operand == null) {
-                    // No argument provided, use $_ as default
-                    operand = scalarUnderscore(parser);
+                    // No argument provided, use the file test's default operand.
+                    operand = defaultFileTestOperand(parser, operator);
                 }
             }
         } else {
             // Parse the filename/handle argument
             ListNode listNode = ListParser.parseZeroOrOneList(parser, 0);
             if (listNode.elements.isEmpty()) {
-                // No argument provided, use $_ as default
-                operand = scalarUnderscore(parser);
+                // No argument provided, use the file test's default operand.
+                operand = defaultFileTestOperand(parser, operator);
             } else if (listNode.elements.size() == 1) {
                 operand = listNode.elements.getFirst();
             } else {
@@ -800,6 +806,18 @@ public class ParsePrimary {
         }
 
         return new OperatorNode(operator, operand, parser.tokenIndex);
+    }
+
+    private static Node defaultFileTestOperand(Parser parser, String operator) {
+        // Perl defines -t without an operand as a test of STDIN. Other file
+        // tests default to $_, while _ itself refers to the previous stat.
+        if ("-t".equals(operator)) {
+            Node stdinHandle = FileHandle.parseBarewordHandle(parser, "STDIN");
+            if (stdinHandle != null) {
+                return stdinHandle;
+            }
+        }
+        return scalarUnderscore(parser);
     }
 
     /**
