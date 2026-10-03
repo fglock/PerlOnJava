@@ -1472,6 +1472,19 @@ public class MortalList {
                 // the selective count dip to zero, but the tied handler's
                 // array slot remains a strong owner.  Destroying here clears
                 // that weak parent and corrupts the context tree.
+            } else if (base.blessId == 0
+                    && (base instanceof RuntimeArray || base instanceof RuntimeHash)
+                    && ReachabilityWalker.isReachableFromRoots(base)) {
+                // Unblessed aggregate nodes can be assembled incrementally
+                // before their first weak edge is installed. A temporary
+                // parser reference may then make the selective count reach
+                // zero while the in-progress tree still owns the node through
+                // a live lexical root. Active-owner tracking cannot help yet
+                // because it is activated by weaken() on the parent edge, so
+                // consult the ordinary root walk before marking this node
+                // destroyed. The later weak sweep still reclaims the tree
+                // after its real root leaves scope.
+                base.refCount = 1;
             } else if (hasWeakRefs
                     && base.possiblyStoredInTiedHandler
                     && isReachableThroughTiedHashCached(base)) {

@@ -88,8 +88,9 @@ priorities and future plans.
   reuse snapshots across cleanup targets, and batch strong-cycle checks during
   weak-reference sweeps.
 
-- Preserve ordinary `goto` jumps between conditional branches while rejecting
-  jumps into conditional blocks from outside.
+- Preserve ordinary `goto` jumps between conditional branches, including
+  transfers out of nested conditions into an enclosing `if`/`elsif` arm, while
+  rejecting jumps into conditional blocks from outside.
 
 - Allow tail calls from helper subroutines invoked by sort comparators while
   preserving Perl's errors for tail calls written directly in comparators.
@@ -99,6 +100,9 @@ priorities and future plans.
 
 - Avoid false global-destruction resurrection warnings for package-rooted
   objects while preserving warnings for objects actually rescued by `DESTROY`.
+
+- Emit prototype mismatch warnings in the `prototype` category under `syntax`,
+  honoring lexical `no warnings 'syntax'` controls on both backends.
 
 - Support anonymous temporary files for read/write opens with undefined paths,
   report non-numeric process IDs passed to `kill()`, and release each result of
