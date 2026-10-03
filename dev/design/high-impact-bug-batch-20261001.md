@@ -143,20 +143,29 @@ proven fix emerges from profiling.
     and Mojolicious `t/mojo/file_download.t` pass; the focused follow-up is
     saved in `build/reports/cpan-release-acceptance-20261003/run-4/`.
   - The fix is committed as `8e818d763` and pushed to PR #1628. The first full
-    acceptance run still leaves Catalyst's two `http_exceptions` programs and
-    `undef-params.t` failing, plus the fork-dependent `live_fork.t` case. The
-    remaining non-parser/non-#1269 failures are not yet resolved.
+    acceptance run still leaves `undef-params.t` failing with two global
+    destruction warnings, plus the fork-dependent `live_fork.t` case. The
+    two Catalyst `http_exceptions` failures were traced to `Data::Dump` source
+    rejected by the Perl parser, so they fall under the agreed `area:parser`
+    exclusion. Catalyst Runtime itself ran its regular upstream test phase:
+    200 programs and 3,800 assertions, with 3,798 assertions passing.
+  - Removed the stale signed `Catalyst-Runtime.yml` preference from the
+    default CPAN home using the updated bootstrap. The retirement regression
+    passes 5/5 and confirms user-owned Catalyst preferences are preserved.
+    The separate `Test-Trap` skip applies to that dependency's fork-dependent
+    test phase and does not skip Catalyst Runtime tests.
   - Keep `area:parser` failures and issue #1269 outside this batch, as agreed.
-    These account for the Template/DBIx::Class parse failures and the remaining
-    DateTime `t/10subtract.t` failure. Image::ExifTool was not reached because
-    its `File::RandomAccess` prerequisite failed; triage its non-parser errors
-    separately after the parser exclusions are applied.
+    These account for the Template/DBIx::Class parse failures, Catalyst's two
+    `http_exceptions` programs, and the remaining DateTime `t/10subtract.t`
+    failure. Image::ExifTool was not reached because its `File::RandomAccess`
+    prerequisite failed; triage its non-parser errors separately after the
+    parser exclusions are applied.
 
 ### Next steps
 
-1. Diagnose and fix the two Catalyst HTTP exception failures and the
-   `undef-params.t` destruction warnings. Preserve upstream tests and add
-   focused project-owned regressions for confirmed runtime defects.
+1. Diagnose and fix the `undef-params.t` destruction warnings. Preserve
+   upstream tests and add focused project-owned regressions for confirmed
+   runtime defects.
 2. Run Image::ExifTool's remaining tests after separating parser-area failures
    from other `File::RandomAccess` failures; fix any in-scope runtime defect.
 3. Rerun `make test-cpan-release-acceptance` on the final immutable commit,
