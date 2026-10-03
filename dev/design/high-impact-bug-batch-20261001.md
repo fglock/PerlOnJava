@@ -43,7 +43,7 @@ proven fix emerges from profiling.
 
 ## Progress tracking
 
-### Current status: implementation and full local UAT complete; PR #1598 open; current-head CI pending
+### Current status: high-impact implementation is complete; CPAN release acceptance follow-up is in progress on PR #1628
 
 ### Completed phases
 
@@ -130,12 +130,38 @@ proven fix emerges from profiling.
     head is `d419e5ec23a6cee937de34bfeeb35b31f6cd969f`. Current-head CI jobs
     on Ubuntu and Windows are still running. Merge after both checks pass.
 
+- [ ] Phase 7: normal CPAN release acceptance follow-up (in progress, 2026-10-03)
+  - Removed Catalyst Runtime's broad `PERLONJAVA_SKIP` preference and retired
+    its stale PerlOnJava-owned copy from the default CPAN home. Catalyst now
+    runs its full upstream test phase (200 files, 3,800 assertions).
+  - The first complete `make test-cpan-release-acceptance` run is saved in
+    `build/reports/cpan-release-acceptance-20261003/run-2/`. It exposed a
+    Mojolicious resumed-download hang caused by accepted `IO::Socket` handles
+    on `Symbol::gensym` globs remaining visible in the package stash. The
+    accepted-socket path now keeps those globs hidden so final lexical scope
+    cleanup closes the stream. Full `make`, JVM and interpreter regressions,
+    and Mojolicious `t/mojo/file_download.t` pass; the focused follow-up is
+    saved in `build/reports/cpan-release-acceptance-20261003/run-4/`.
+  - The fix is committed as `8e818d763` and pushed to PR #1628. The first full
+    acceptance run still leaves Catalyst's two `http_exceptions` programs and
+    `undef-params.t` failing, plus the fork-dependent `live_fork.t` case. The
+    remaining non-parser/non-#1269 failures are not yet resolved.
+  - Keep `area:parser` failures and issue #1269 outside this batch, as agreed.
+    These account for the Template/DBIx::Class parse failures and the remaining
+    DateTime `t/10subtract.t` failure. Image::ExifTool was not reached because
+    its `File::RandomAccess` prerequisite failed; triage its non-parser errors
+    separately after the parser exclusions are applied.
+
 ### Next steps
 
-1. Run the documentation link checks after the rebase and verify PR #1598 is
-   open with the expected files.
-2. Update PR #1598 with the rebased full-UAT evidence, then wait for CI on the
-   resulting head and merge when green.
+1. Diagnose and fix the two Catalyst HTTP exception failures and the
+   `undef-params.t` destruction warnings. Preserve upstream tests and add
+   focused project-owned regressions for confirmed runtime defects.
+2. Run Image::ExifTool's remaining tests after separating parser-area failures
+   from other `File::RandomAccess` failures; fix any in-scope runtime defect.
+3. Rerun `make test-cpan-release-acceptance` on the final immutable commit,
+   retaining the full logs and report snapshots, then update PR #1628 and
+   verify its CI state.
 
 ### Open questions
 
