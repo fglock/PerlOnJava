@@ -39,9 +39,12 @@ The latest measured snapshots are:
   not establish complete Perl compatibility or full-suite success on both
   backends and every platform. See the
   [dated core-suite snapshot](../reference/testing.md#core-suite-snapshot-2026-10-03).
-- **CPAN sample:** 8,315 of 16,443 tested modules pass their complete test suites
-  (**50.6%**), as reported on 2026-09-02. Modules are selected randomly from the
-  CPAN index, and dependencies encountered during testing are also recorded.
+- **CPAN sample:** the report generated on **2026-10-02** records **9,576 modules**:
+  **4,851 pass**, **2,878 fail**, **19 are skipped**, and **1,828 are skipped
+  because standard Perl failed**. The reported **62.8%** pass rate uses the
+  **7,729 non-skipped pass/fail outcomes**, not all recorded modules. Modules
+  are selected randomly from the CPAN index, and dependencies encountered
+  during testing are also recorded.
 
 These figures are dated progress measurements, not guarantees that an
 individual script or distribution will work. Check the
