@@ -46,7 +46,8 @@ priorities and future plans.
 - Preserve runtime list context through short-circuit and ternary branches in empty-list assignments.
 - Restore `EAGAIN` after alarm interrupts `sleep`, even when a signal handler changes `$!`.
 - Preserve Unicode `-s` arguments when a core test launches a nested interpreter through the shell.
-- Preserve non-ASCII byte arguments in unquoted shell commands.
+- Preserve non-ASCII byte arguments in unquoted shell commands and nested
+  PerlOnJava launches under the C locale.
 - Apply Unicode character classes to interpolated Unicode regex patterns.
 - Preserve combining-mark order in Unicode uppercase mappings and honor byte-string method names in `can`.
 - Reject scalar constants passed to hash-reference prototypes with the expected diagnostic.

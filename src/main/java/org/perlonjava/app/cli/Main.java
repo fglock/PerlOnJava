@@ -21,6 +21,8 @@ import java.util.Locale;
  */
 public class Main {
 
+    private static final String RAW_ARG_HEX_PREFIX = "__PERLONJAVA_RAWARG_HEX__";
+
     static {
         // Set default locale to US (uses dot as decimal separator)
         Locale.setDefault(Locale.US);
@@ -91,10 +93,24 @@ public class Main {
      * @param args Command-line arguments.
      */
     public static void main(String[] args) {
+        restoreRawByteArguments(args);
         PerlRuntime runtime = new PerlRuntime();
         installThreadExitDiagnostic(runtime);
         try (PerlRuntime.Binding runtimeBinding = runtime.bind()) {
             run(args);
+        }
+    }
+
+    private static void restoreRawByteArguments(String[] args) {
+        if (!Boolean.getBoolean("perlonjava.rawargv.hex")) {
+            return;
+        }
+        for (int i = 0; i < args.length; i++) {
+            if (args[i].startsWith(RAW_ARG_HEX_PREFIX)) {
+                String encoded = args[i].substring(RAW_ARG_HEX_PREFIX.length());
+                byte[] bytes = java.util.HexFormat.of().parseHex(encoded);
+                args[i] = new String(bytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+            }
         }
     }
 

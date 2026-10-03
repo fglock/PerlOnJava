@@ -168,8 +168,9 @@ public class SystemOperator {
 
     /**
      * Preserve octets embedded in quoted Perl source when a byte-string
-     * command passes through UTF-8 ProcessBuilder arguments. Leave unquoted
-     * command arguments as characters so the shell forwards them intact.
+     * command passes through ProcessBuilder arguments. On Unix, emit unquoted
+     * octets through ASCII-only shell substitutions so a C-locale JVM does
+     * not replace them while encoding the shell command.
      */
     private static String encodeByteStringForShell(String command) {
         StringBuilder encoded = new StringBuilder(command.length());
@@ -198,6 +199,13 @@ public class SystemOperator {
                     encoded.append('0');
                 }
                 encoded.append(octal);
+            } else if (ch >= 0x80 && ch <= 0xff && !SystemUtils.osIsWindows()) {
+                encoded.append("$(printf '\\");
+                String octal = Integer.toOctalString(ch);
+                for (int pad = octal.length(); pad < 3; pad++) {
+                    encoded.append('0');
+                }
+                encoded.append(octal).append("')");
             } else {
                 encoded.append(ch);
             }
