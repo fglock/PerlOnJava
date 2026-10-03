@@ -217,8 +217,15 @@ public class ExtendedNativeUtils extends NativeUtils {
 
         int gid = args[0].scalar().getInt();
         if (IS_WINDOWS) {
-            int currentGid = getgid(ctx).getInt();
-            if (gid == currentGid) return getgrnam(ctx, new RuntimeScalar("Users"));
+            int currentGid = getgid(SCALAR).getInt();
+            if (gid == currentGid) {
+                RuntimeList record = getgrnam(RuntimeContextType.LIST, new RuntimeScalar("Users"));
+                if (ctx == SCALAR) {
+                    return record.elements.isEmpty()
+                            ? new RuntimeList() : record.elements.getFirst().getList();
+                }
+                return record;
+            }
             return new RuntimeList();
         }
         return groupResult(groupToArray(FFMPosix.get().getgrgid(gid)), ctx, 0);

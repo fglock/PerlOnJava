@@ -173,6 +173,13 @@ public class SystemOperator {
      * not replace them while encoding the shell command.
      */
     private static String encodeByteStringForShell(String command) {
+        // Windows child processes receive argv through CreateProcess's UTF-16
+        // command line. Keep byte-valued characters intact so the direct
+        // jperl launcher path can recover them; cmd.exe octal escapes are not
+        // interpreted like POSIX shell escapes.
+        if (SystemUtils.osIsWindows()) {
+            return command;
+        }
         StringBuilder encoded = new StringBuilder(command.length());
         boolean singleQuoted = false;
         boolean doubleQuoted = false;
@@ -442,17 +449,17 @@ public class SystemOperator {
     static List<String> splitWindowsDirectCommandWords(String command) {
         List<String> words = new ArrayList<>();
         StringBuilder word = new StringBuilder();
-        boolean quoted = false;
+        char quote = 0;
         boolean started = false;
 
         for (int i = 0; i < command.length(); i++) {
             char ch = command.charAt(i);
-            if (ch == '"') {
-                quoted = !quoted;
+            if ((ch == '"' || ch == '\'') && (quote == 0 || quote == ch)) {
+                quote = quote == 0 ? ch : 0;
                 started = true;
                 continue;
             }
-            if (!quoted && Character.isWhitespace(ch)) {
+            if (quote == 0 && Character.isWhitespace(ch)) {
                 if (started) {
                     words.add(word.toString());
                     word.setLength(0);
@@ -460,14 +467,14 @@ public class SystemOperator {
                 }
                 continue;
             }
-            if (!quoted && "*?[]{}()<>|&;`'$%".indexOf(ch) >= 0) {
+            if (quote == 0 && "*?[]{}()<>|&;`$%".indexOf(ch) >= 0) {
                 return null;
             }
             word.append(ch);
             started = true;
         }
 
-        if (quoted) {
+        if (quote != 0) {
             return null;
         }
         if (started) {

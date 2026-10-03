@@ -128,11 +128,28 @@ public class ForkOpenState {
                 ? "java.exe" : "java";
         List<String> invocation = new ArrayList<>();
         invocation.add(new File(new File(System.getProperty("java.home"), "bin"), javaName).getPath());
+        invocation.add("-Xss16m");
+        String perlJvmOptions = perlEnvironmentValue("JPERL_OPTS");
+        if (perlJvmOptions != null && !perlJvmOptions.isBlank()) {
+            invocation.addAll(Arrays.asList(perlJvmOptions.trim().split("\\s+")));
+        }
         invocation.add("--enable-native-access=ALL-UNNAMED");
         invocation.add("-cp");
         invocation.add(embeddedRuntimeClasspath());
         invocation.add("org.perlonjava.app.cli.Main");
         return invocation;
+    }
+
+    private static String perlEnvironmentValue(String key) {
+        try {
+            RuntimeScalar value = GlobalVariable.getGlobalHash("main::ENV").get(key);
+            if (value != null && value.defined().getBoolean()) {
+                return value.toString();
+            }
+        } catch (RuntimeException ignored) {
+            // Child launch may happen outside an active Perl runtime.
+        }
+        return System.getenv(key);
     }
 
     /**
