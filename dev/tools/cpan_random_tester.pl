@@ -84,6 +84,7 @@ my $MAX_CAPTURE_BYTES   = 1_000_000; # keep only this much child output in memor
 # cap is extended when necessary so every exception gets its full soft timeout
 # plus the configured idle grace period.
 my %MODULE_TIMEOUT_SECONDS = (
+    'Catalyst'           => 14400,
     'DBIx::Class'        => 3600,
     'Excel::Writer::XLSX' => 7200,
     'Image::ExifTool'    => 3600,
