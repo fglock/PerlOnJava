@@ -55,7 +55,6 @@ public final class ExecutionRuntimeState {
     public final Deque<InterpreterState.InterpreterFrame> interpreterFrames = new ArrayDeque<>();
     public final ArrayList<int[]> interpreterPcs = new ArrayList<>();
 
-    public final ArrayDeque<RuntimeCode.EvalRuntimeContext> evalRuntimeContexts = new ArrayDeque<>();
     /** Source strings of eval STRING invocations currently executing on this runtime. */
     public final Deque<RuntimeCode.EvalSourceFrame> activeEvalSources = new ArrayDeque<>();
     public final ArrayDeque<ArrayList<String>> syntheticCallerFrames = new ArrayDeque<>();
@@ -83,8 +82,6 @@ public final class ExecutionRuntimeState {
     /** Compact stash entries materialized by an eval-held CODE assignment. */
     public final Deque<LinkedHashMap<String, RuntimeScalar>> evalPseudoConstantScopes =
             new ArrayDeque<>();
-    /** eval STRING / BEGIN nesting currently being parsed on this runtime. */
-    public int evalBeginCompilationDepth;
     public int tailCallTrampolineDepth;
     public final ArrayDeque<Runnable> futureResumeQueue = new ArrayDeque<>();
     public boolean futureResumeDraining;

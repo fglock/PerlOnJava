@@ -56,6 +56,15 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.runUnitcheckBlock
  * It provides functionality to compile, store, and execute Perl subroutines and eval strings.
  */
 public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
+    private static final ThreadLocal<ArrayDeque<EvalRuntimeContext>> EVAL_RUNTIME_CONTEXTS =
+            ThreadLocal.withInitial(ArrayDeque::new);
+    private static final ThreadLocal<Map<EvalBeginLexicalKey, Integer>> EVAL_BEGIN_LEXICAL_IDS =
+            ThreadLocal.withInitial(HashMap::new);
+
+    /** Active eval STRING BEGIN bodies follow the Java thread across runtime bindings. */
+    private static final ThreadLocal<Integer> evalBeginExecutionDepth =
+            ThreadLocal.withInitial(() -> 0);
+
     /** Nesting of comparator invocations currently owned by sort(). */
     private static final ThreadLocal<Integer> sortComparatorDepth = ThreadLocal.withInitial(() -> 0);
 
@@ -254,6 +263,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return PerlRuntime.current().runtimeCodeState().evalBeginIds;
     }
 
+    /** Resolve the stable BEGIN package for a captured lexical, including AST-less pads. */
+    public static int evalBeginId(SymbolTable.SymbolEntry entry) {
+        OperatorNode ast = entry.ast();
+        if (ast != null) {
+            return evalBeginIds().computeIfAbsent(
+                    ast, ignored -> EmitterMethodCreator.classCounter.getAndIncrement());
+        }
+        EvalRuntimeContext context = getEvalRuntimeContext();
+        if (context == null) {
+            return EmitterMethodCreator.classCounter.getAndIncrement();
+        }
+        EvalBeginLexicalKey key = new EvalBeginLexicalKey(
+                context.evalTag(), entry.index(), entry.name());
+        return EVAL_BEGIN_LEXICAL_IDS.get().computeIfAbsent(
+                key, ignored -> EmitterMethodCreator.classCounter.getAndIncrement());
+    }
+
     /**
      * Flag to control whether eval STRING should use the interpreter backend.
      * Enabled by default. eval STRING compiles to InterpretedCode instead of generating JVM bytecode.
@@ -302,7 +328,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * compilation can re-enter eval STRING compilation via BEGIN/use/require.
      */
     private static ArrayDeque<EvalRuntimeContext> evalRuntimeContextStack() {
-        return PerlRuntime.current().executionState().evalRuntimeContexts;
+        return EVAL_RUNTIME_CONTEXTS.get();
     }
     private static ArrayDeque<ArrayList<String>> syntheticCallerFrames() {
         return PerlRuntime.current().executionState().syntheticCallerFrames;
@@ -389,24 +415,26 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         PerlRuntime.current().executionState().evalDepth += delta;
     }
 
-    /** Mark entry to an eval STRING parser, for nested parser-time BEGIN limits. */
-    public static void enterEvalBeginCompilation() {
-        PerlRuntime.current().executionState().evalBeginCompilationDepth++;
+    /** Mark execution of a BEGIN block found in an eval STRING. */
+    public static void enterEvalBeginExecution() {
+        int depth = evalBeginExecutionDepth.get() + 1;
+        evalBeginExecutionDepth.set(depth);
     }
 
-    /** Leave an eval STRING parser. */
-    public static void exitEvalBeginCompilation() {
-        ExecutionRuntimeState state = PerlRuntime.current().executionState();
-        if (state.evalBeginCompilationDepth > 0) state.evalBeginCompilationDepth--;
+    /** Leave a BEGIN block found in an eval STRING. */
+    public static void exitEvalBeginExecution() {
+        int depth = evalBeginExecutionDepth.get() - 1;
+        if (depth <= 0) evalBeginExecutionDepth.remove();
+        else evalBeginExecutionDepth.set(depth);
     }
 
     /** Enforce Perl's dynamically scoped ${^MAX_NESTED_EVAL_BEGIN_BLOCKS}. */
-    public static void checkNestedEvalBeginLimit() {
-        ExecutionRuntimeState state = PerlRuntime.current().executionState();
-        if (state.evalBeginCompilationDepth == 0) return;
+    public static void checkNestedEvalBeginLimit(boolean parsingEvalString) {
+        if (!parsingEvalString) return;
+        int depth = evalBeginExecutionDepth.get() + 1;
         int maximum = GlobalVariable.getGlobalVariable(
                 GlobalContext.encodeSpecialVar("MAX_NESTED_EVAL_BEGIN_BLOCKS")).getInt();
-        if (state.evalBeginCompilationDepth > maximum) {
+        if (depth > maximum) {
             throw new PerlCompilerException("Too many nested BEGIN blocks, maximum of "
                     + maximum + " allowed");
         }
@@ -2878,7 +2906,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /**
      * Restore a previously saved eval runtime context.
      *
-     * @param saved The context returned by {@link #saveAndClearEvalRuntimeContext}
+     * @param saved The context stack returned by {@link #saveAndClearEvalRuntimeContext}
      */
     public static void restoreEvalRuntimeContext(EvalRuntimeContext saved) {
         if (saved != null) {
@@ -3045,7 +3073,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static void clearCaches() {
         PerlRuntime runtime = PerlRuntime.current();
         runtime.runtimeCodeState().clearCaches();
-        runtime.executionState().evalRuntimeContexts.clear();
+        EVAL_RUNTIME_CONTEXTS.remove();
+        EVAL_BEGIN_LEXICAL_IDS.remove();
     }
 
     public static void copy(RuntimeCode code, RuntimeCode codeFrom) {
@@ -3483,11 +3512,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             // IMPORTANT: Do NOT mutate the AST node (ast.id) — the AST is
                             // shared with the JVM compiler and mutation would corrupt `my`
                             // variable reinitialization in loops.
-                            OperatorNode ast = entry.ast();
-                            if (ast != null) {
-                                int beginId = evalBeginIds().computeIfAbsent(
-                                        ast,
-                                        k -> EmitterMethodCreator.classCounter.getAndIncrement());
+                            {
+                                int beginId = evalBeginId(entry);
                                 String packageName = PersistentVariable.beginPackage(beginId);
                                 String varNameWithoutSigil = entry.name().substring(1);
                                 String fullName = packageName + "::" + varNameWithoutSigil;
@@ -4065,11 +4091,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (!entry.decl().equals("our")) {
                         Object runtimeValue = runtimeCtx.getRuntimeValue(entry.name());
                         if (runtimeValue != null) {
-                            OperatorNode operatorAst = entry.ast();
-                            if (operatorAst != null) {
-                                int beginId = evalBeginIds().computeIfAbsent(
-                                        operatorAst,
-                                        k -> EmitterMethodCreator.classCounter.getAndIncrement());
+                            {
+                                int beginId = evalBeginId(entry);
                                 String packageName = PersistentVariable.beginPackage(beginId);
                                 String varNameWithoutSigil = entry.name().substring(1);
                                 String fullName = packageName + "::" + varNameWithoutSigil;
@@ -4165,10 +4188,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 String savedRegexWarningBits = RegexQuoteMeta.getParserWarningBits();
                 RegexQuoteMeta.setParserWarningBits(lexicalEvalWarningBits);
                 try {
-                    enterEvalBeginCompilation();
                     ast = parser.parse();
                 } finally {
-                    exitEvalBeginCompilation();
                     RegexQuoteMeta.setParserWarningBits(savedRegexWarningBits);
                     BHooksEndOfScope.endFileLoad(evalCompilerOptions.fileName);
                 }
@@ -8874,6 +8895,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             this.value = value;
         }
     }
+
+    private record EvalBeginLexicalKey(String evalTag, Integer index, String name) {}
 
     /**
      * Container for runtime context during eval STRING compilation.

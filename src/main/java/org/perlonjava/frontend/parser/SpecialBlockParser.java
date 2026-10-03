@@ -212,23 +212,29 @@ public class SpecialBlockParser {
             return adjustSub;
         }
 
+        boolean evalBeginBlock = "BEGIN".equals(blockName) && parser.parsingEvalString;
         if ("BEGIN".equals(blockName)) {
-            RuntimeCode.checkNestedEvalBeginLimit();
+            RuntimeCode.checkNestedEvalBeginLimit(parser.parsingEvalString);
         }
 
         // Module::Install::DSL historically creates INIT from an eval inside
         // BEGIN.  Perl treats that one phaser as BEGIN so old installers can
         // bootstrap before runtime starts.
-        if ("INIT".equals(blockName) && parser.parsingEvalString
-                && "START".equals(GlobalVariable.getGlobalVariable(GLOBAL_PHASE).toString())
-                && "Module::Install::DSL".equals(parser.ctx.symbolTable.getCurrentPackage())) {
-            WarnDie.warn(
-                    new RuntimeScalar("Treating Module::Install::DSL::INIT block as BEGIN block as workaround"),
-                    new RuntimeScalar(parser.ctx.errorUtil.warningLocation(parser.tokenIndex)));
-            runSpecialBlock(parser, "BEGIN", block);
-        } else {
-            // Execute other special blocks normally
-            runSpecialBlock(parser, blockName, block);
+        if (evalBeginBlock) RuntimeCode.enterEvalBeginExecution();
+        try {
+            if ("INIT".equals(blockName) && parser.parsingEvalString
+                    && "START".equals(GlobalVariable.getGlobalVariable(GLOBAL_PHASE).toString())
+                    && "Module::Install::DSL".equals(parser.ctx.symbolTable.getCurrentPackage())) {
+                WarnDie.warn(
+                        new RuntimeScalar("Treating Module::Install::DSL::INIT block as BEGIN block as workaround"),
+                        new RuntimeScalar(parser.ctx.errorUtil.warningLocation(parser.tokenIndex)));
+                runSpecialBlock(parser, "BEGIN", block);
+            } else {
+                // Execute other special blocks normally
+                runSpecialBlock(parser, blockName, block);
+            }
+        } finally {
+            if (evalBeginBlock) RuntimeCode.exitEvalBeginExecution();
         }
         } finally {
             HintHashRegistry.exitSpecialBlockScope();
@@ -355,10 +361,8 @@ public class SpecialBlockParser {
                                     new IdentifierNode(packageName, tokenIndex), tokenIndex));
                 } else {
                     OperatorNode ast = entry.ast();
-                    isFromOuterScope = RuntimeCode.evalBeginIds().containsKey(ast);
-                    int beginId = RuntimeCode.evalBeginIds().computeIfAbsent(
-                            ast,
-                            k -> EmitterMethodCreator.classCounter.getAndIncrement());
+                    isFromOuterScope = ast == null || RuntimeCode.evalBeginIds().containsKey(ast);
+                    int beginId = RuntimeCode.evalBeginId(entry);
                     packageName = PersistentVariable.beginPackage(beginId);
                     // Emit: package BEGIN_PKG
                     nodes.add(
