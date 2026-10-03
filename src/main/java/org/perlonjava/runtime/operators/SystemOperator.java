@@ -176,6 +176,7 @@ public class SystemOperator {
         StringBuilder encoded = new StringBuilder(command.length());
         boolean singleQuoted = false;
         boolean doubleQuoted = false;
+        boolean asciiShellLocale = !SystemUtils.osIsWindows() && usesAsciiShellLocale();
         for (int i = 0; i < command.length(); i++) {
             char ch = command.charAt(i);
             if (ch == '\\' && !singleQuoted && i + 1 < command.length()) {
@@ -199,7 +200,7 @@ public class SystemOperator {
                     encoded.append('0');
                 }
                 encoded.append(octal);
-            } else if (ch >= 0x80 && ch <= 0xff && !SystemUtils.osIsWindows()) {
+            } else if (ch >= 0x80 && ch <= 0xff && asciiShellLocale) {
                 encoded.append("$(printf '\\");
                 String octal = Integer.toOctalString(ch);
                 for (int pad = octal.length(); pad < 3; pad++) {
@@ -211,6 +212,17 @@ public class SystemOperator {
             }
         }
         return encoded.toString();
+    }
+
+    private static boolean usesAsciiShellLocale() {
+        String locale = getPerlEnvValue("LC_ALL");
+        if (locale == null || locale.isEmpty()) {
+            locale = getPerlEnvValue("LC_CTYPE");
+        }
+        if (locale == null || locale.isEmpty()) {
+            locale = getPerlEnvValue("LANG");
+        }
+        return "C".equals(locale) || "POSIX".equals(locale);
     }
 
     /**
