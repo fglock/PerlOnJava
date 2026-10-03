@@ -40,6 +40,7 @@ public class POSIX extends PerlModuleBase {
             module.registerMethod("_geteuid", "geteuid", null);
             module.registerMethod("_getgid", "getgid", null);
             module.registerMethod("_getegid", "getegid", null);
+            module.registerMethod("_getgroups", "getgroups", null);
             module.registerMethod("_getcwd", "getcwd", null);
             module.registerMethod("_strerror", "strerror", null);
             module.registerMethod("_access", "access", null);
@@ -501,6 +502,10 @@ public class POSIX extends PerlModuleBase {
 
     public static RuntimeList getegid(RuntimeArray args, int ctx) {
         return NativeUtils.getegid(ctx).getList();
+    }
+
+    public static RuntimeList getgroups(RuntimeArray args, int ctx) {
+        return NativeUtils.getgroups(ctx);
     }
 
     public static RuntimeList getcwd(RuntimeArray args, int ctx) {

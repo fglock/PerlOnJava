@@ -36,6 +36,7 @@ public class FFMPosixLinux implements FFMPosixInterface {
     private static MethodHandle geteuidHandle;
     private static MethodHandle getgidHandle;
     private static MethodHandle getegidHandle;
+    private static MethodHandle getgroupsHandle;
     private static MethodHandle getppidHandle;
     private static MethodHandle isattyHandle;
     private static MethodHandle pollHandle;
@@ -57,6 +58,11 @@ public class FFMPosixLinux implements FFMPosixInterface {
     private static MethodHandle getpwentHandle;
     private static MethodHandle setpwentHandle;
     private static MethodHandle endpwentHandle;
+    private static MethodHandle getgrnamHandle;
+    private static MethodHandle getgrgidHandle;
+    private static MethodHandle getgrentHandle;
+    private static MethodHandle setgrentHandle;
+    private static MethodHandle endgrentHandle;
     
     // Method handles for PTY/terminal functions
     private static MethodHandle posixOpenptHandle;
@@ -142,6 +148,10 @@ public class FFMPosixLinux implements FFMPosixInterface {
     private static long PW_DIR_OFFSET;
     private static long PW_SHELL_OFFSET;
     private static long PW_EXPIRE_OFFSET;   // macOS only
+    private static long GR_NAME_OFFSET;
+    private static long GR_PASSWD_OFFSET;
+    private static long GR_GID_OFFSET;
+    private static long GR_MEMBERS_OFFSET;
     
     /**
      * Initialize FFM components lazily.
@@ -180,6 +190,11 @@ public class FFMPosixLinux implements FFMPosixInterface {
             getegidHandle = linker.downcallHandle(
                 stdlib.find("getegid").orElseThrow(),
                 FunctionDescriptor.of(ValueLayout.JAVA_INT)
+            );
+
+            getgroupsHandle = linker.downcallHandle(
+                stdlib.find("getgroups").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS)
             );
             
             getppidHandle = linker.downcallHandle(
@@ -272,9 +287,32 @@ public class FFMPosixLinux implements FFMPosixInterface {
                 stdlib.find("endpwent").orElseThrow(),
                 FunctionDescriptor.ofVoid()
             );
+
+            // Group database functions return pointers to libc-owned records.
+            getgrnamHandle = linker.downcallHandle(
+                stdlib.find("getgrnam").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
+            );
+            getgrgidHandle = linker.downcallHandle(
+                stdlib.find("getgrgid").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.JAVA_INT)
+            );
+            getgrentHandle = linker.downcallHandle(
+                stdlib.find("getgrent").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.ADDRESS)
+            );
+            setgrentHandle = linker.downcallHandle(
+                stdlib.find("setgrent").orElseThrow(),
+                FunctionDescriptor.ofVoid()
+            );
+            endgrentHandle = linker.downcallHandle(
+                stdlib.find("endgrent").orElseThrow(),
+                FunctionDescriptor.ofVoid()
+            );
             
             // Initialize passwd struct offsets
             initPasswdOffsets();
+            initGroupOffsets();
             
             // PTY/Terminal functions (all need errno capture)
             posixOpenptHandle = linker.downcallHandle(
@@ -610,6 +648,25 @@ public class FFMPosixLinux implements FFMPosixInterface {
             return -1;
         }
     }
+
+    @Override
+    public int[] getgroups() {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            int count = (int) getgroupsHandle.invokeExact(0, MemorySegment.NULL);
+            if (count <= 0) return new int[0];
+            MemorySegment groups = arena.allocate(ValueLayout.JAVA_INT, count);
+            int actual = (int) getgroupsHandle.invokeExact(count, groups);
+            if (actual < 0) return new int[0];
+            int[] result = new int[actual];
+            for (int i = 0; i < actual; i++) {
+                result[i] = groups.get(ValueLayout.JAVA_INT, (long) i * ValueLayout.JAVA_INT.byteSize());
+            }
+            return result;
+        } catch (Throwable e) {
+            return new int[0];
+        }
+    }
     
     @Override
     public PasswdEntry getpwnam(String name) {
@@ -672,6 +729,79 @@ public class FFMPosixLinux implements FFMPosixInterface {
         } catch (Throwable e) {
             // Ignore errors
         }
+    }
+
+    @Override
+    public GroupEntry getgrnam(String name) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment nameSegment = arena.allocateFrom(name);
+            MemorySegment result = (MemorySegment) getgrnamHandle.invokeExact(nameSegment);
+            return result.address() == 0 ? null : readGroupEntry(result);
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    @Override
+    public GroupEntry getgrgid(int gid) {
+        ensureInitialized();
+        try {
+            MemorySegment result = (MemorySegment) getgrgidHandle.invokeExact(gid);
+            return result.address() == 0 ? null : readGroupEntry(result);
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    @Override
+    public GroupEntry getgrent() {
+        ensureInitialized();
+        try {
+            MemorySegment result = (MemorySegment) getgrentHandle.invokeExact();
+            return result.address() == 0 ? null : readGroupEntry(result);
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    @Override
+    public void setgrent() {
+        ensureInitialized();
+        try { setgrentHandle.invokeExact(); } catch (Throwable ignored) { }
+    }
+
+    @Override
+    public void endgrent() {
+        ensureInitialized();
+        try { endgrentHandle.invokeExact(); } catch (Throwable ignored) { }
+    }
+
+    private static void initGroupOffsets() {
+        // Linux and Darwin both place name, password, gid, and member vector
+        // at these offsets on supported 64-bit targets.
+        GR_NAME_OFFSET = 0;
+        GR_PASSWD_OFFSET = 8;
+        GR_GID_OFFSET = 16;
+        GR_MEMBERS_OFFSET = 24;
+    }
+
+    private GroupEntry readGroupEntry(MemorySegment groupPtr) {
+        MemorySegment group = groupPtr.reinterpret(32);
+        String name = readCString(group.get(ValueLayout.ADDRESS, GR_NAME_OFFSET));
+        String passwd = readCString(group.get(ValueLayout.ADDRESS, GR_PASSWD_OFFSET));
+        int gid = group.get(ValueLayout.JAVA_INT, GR_GID_OFFSET);
+        MemorySegment membersPtr = group.get(ValueLayout.ADDRESS, GR_MEMBERS_OFFSET);
+        java.util.List<String> memberNames = new java.util.ArrayList<>();
+        if (membersPtr.address() != 0) {
+            MemorySegment memberVector = membersPtr.reinterpret(8L * 4096);
+            for (long i = 0; i < 4096; i++) {
+                MemorySegment member = memberVector.get(ValueLayout.ADDRESS, i * 8);
+                if (member.address() == 0) break;
+                memberNames.add(readCString(member));
+            }
+        }
+        return new GroupEntry(name, passwd, gid, memberNames.toArray(String[]::new));
     }
     
     /**

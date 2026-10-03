@@ -11,6 +11,7 @@ priorities and future plans.
 - Run deeply nested conditional core tests with an adequate JVM stack.
 - Preserve captured lexical aliases in nested eval `BEGIN` blocks.
 - Preserve lexical sub references passed through the debugger's `DB::goto` hook.
+- Resolve POSIX group records and retain supplementary IDs in `$(` and `$)`.
 - Keep `close` and `fileno` probes from creating nonexistent symbolic filehandles.
 - Preserve typeglob values from scalar assignments and selected-handle lookups.
 - Return EOF as undef from scalar-backed `getc`, and let argumentless `system()` wait.
