@@ -2188,7 +2188,15 @@ public class CompileAssignment {
         if (outerContext == RuntimeContextType.VOID
                 && node.left instanceof ListNode emptyTargets
                 && emptyTargets.elements.isEmpty()) {
-            boolean preserveListContext = RegexUsageDetector.containsRegexOperation(node.right)
+            boolean contextSensitiveRhs = node.right instanceof TernaryOperatorNode
+                    || node.right instanceof BinaryOperatorNode binary
+                    && (binary.operator.equals("(")
+                    || binary.operator.equals("||") || binary.operator.equals("or")
+                    || binary.operator.equals("&&") || binary.operator.equals("and")
+                    || binary.operator.equals("//") || binary.operator.equals("xor")
+                    || binary.operator.equals("^^"));
+            boolean preserveListContext = contextSensitiveRhs
+                    || RegexUsageDetector.containsRegexOperation(node.right)
                     || ListContextSideEffectDetector.containsReadline(node.right);
             if (!preserveListContext && node.right instanceof ListNode rhsList) {
                 rhsList.setAnnotation("emptyTargetAssignmentVoidRhs", true);

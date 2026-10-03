@@ -6,7 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
-- Prevent formats from reusing an unrelated active lexical when a captured lexical is unavailable.
+- Keep format captures bound to their active lexical cell and prevent reuse of unrelated active lexicals.
 - Match Perl's reference count for the compile-time `%^H` hash.
 - Run deeply nested conditional core tests with an adequate JVM stack.
 - Preserve captured lexical aliases in nested eval `BEGIN` blocks.
@@ -38,10 +38,15 @@ priorities and future plans.
 - Clear `pos()` after a failed second match of a global match-once pattern.
 - Validate typed hash dereferences against explicitly referenced `%FIELDS` tables.
 - Warn about anonymous subroutines in void context and undef dynamic code references in place.
-- Report deleted stash-backed subroutines as anonymous in `caller()`.
+- Report explicitly referenced stash-backed subroutines as anonymous after deletion while preserving ordinary deleted CV names in `caller()`.
 - Detect oversized repetition counts before they wrap during conversion.
 - Run eval-block destructors before clearing `$@`, and report `ENOENT` from failed `rmdir` calls.
 - Preserve `sprintf` numeric overload counts and format-string UTF-8 flags.
+- Format infinities and NaNs with Perl's spelling across numeric `sprintf` conversions.
+- Preserve runtime list context through short-circuit and ternary branches in empty-list assignments.
+- Restore `EAGAIN` after alarm interrupts `sleep`, even when a signal handler changes `$!`.
+- Preserve Unicode `-s` arguments when a core test launches a nested interpreter through the shell.
+- Preserve non-ASCII byte arguments in unquoted shell commands.
 - Apply Unicode character classes to interpolated Unicode regex patterns.
 - Preserve combining-mark order in Unicode uppercase mappings and honor byte-string method names in `can`.
 - Reject scalar constants passed to hash-reference prototypes with the expected diagnostic.

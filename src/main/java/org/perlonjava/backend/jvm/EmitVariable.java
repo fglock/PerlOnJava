@@ -889,10 +889,19 @@ public class EmitVariable {
         // materialization (which can fetch tied values).
         if (ctx.contextType == RuntimeContextType.VOID
                 && left instanceof ListNode targets && targets.elements.isEmpty()) {
-            // A list-context global match must keep running through all
-            // matches (including callbacks) even when its result list is
-            // discarded by the empty target.
-            int rhsContext = RegexUsageDetector.containsRegexOperation(right)
+            // `() = EXPR` still gives EXPR list context when its result is
+            // discarded. Preserve the optimization for a literal list whose
+            // individual values do not need list-context evaluation, along
+            // with the established regex and readline side-effect cases.
+            boolean contextSensitiveRhs = right instanceof TernaryOperatorNode
+                    || right instanceof BinaryOperatorNode binary
+                    && (binary.operator.equals("(")
+                    || binary.operator.equals("||") || binary.operator.equals("or")
+                    || binary.operator.equals("&&") || binary.operator.equals("and")
+                    || binary.operator.equals("//") || binary.operator.equals("xor")
+                    || binary.operator.equals("^^"));
+            int rhsContext = contextSensitiveRhs
+                    || RegexUsageDetector.containsRegexOperation(right)
                     || ListContextSideEffectDetector.containsReadline(right)
                     ? RuntimeContextType.LIST : RuntimeContextType.VOID;
             right.accept(emitterVisitor.with(rhsContext));
@@ -2852,6 +2861,20 @@ public class EmitVariable {
                     }
                     // Store the variable in a JVM local variable
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
+
+                    if (operator.equals("my") && sigil.equals("$")) {
+                        // Deferred formats evaluate their argument source while
+                        // the declaring CV is active. Keep scalar pad cells
+                        // visible to that evaluation, including a write that
+                        // precedes the format declaration in source order.
+                        emitterVisitor.ctx.mv.visitLdcInsn(var);
+                        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, varIndex);
+                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                                "registerCurrentActiveLexical",
+                                "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
+                                false);
+                    }
 
                     // Register my-variables on the cleanup stack so DESTROY fires
                     // if die propagates through this subroutine without eval.

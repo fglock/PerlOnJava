@@ -9,6 +9,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Stack;
 import java.util.Set;
 
@@ -71,6 +72,8 @@ public final class ExecutionRuntimeState {
     public final Deque<String> activeRegexCallbackLocations = new ArrayDeque<>();
     public final Deque<String> activeRegexCallbackPackages = new ArrayDeque<>();
     public final Deque<Object> activeLexicalFrames = new ArrayDeque<>();
+    /** Lexical cells owned by the top-level compilation unit. */
+    public final Map<String, RuntimeBase> topLevelLexicals = new LinkedHashMap<>();
     public final Deque<List<RuntimeScalar>> pristineArgsStack = new ArrayDeque<>();
     /** Reusable one-scalar return lists, populated only after scalar extraction. */
     final Deque<RuntimeList> availableScalarResultLists = new ArrayDeque<>();

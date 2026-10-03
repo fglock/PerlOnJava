@@ -846,6 +846,24 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 result.putIfAbsent(entry.getKey(), entry.getValue());
             }
         }
+        for (Map.Entry<String, RuntimeBase> entry
+                : runtime.executionState().topLevelLexicals.entrySet()) {
+            result.putIfAbsent(entry.getKey(), entry.getValue());
+        }
+        return result;
+    }
+
+    /** Return live top-level lexical cells without consulting subroutine pads. */
+    public static Map<String, RuntimeBase> snapshotTopLevelLexicals() {
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        Map<String, RuntimeBase> result = new LinkedHashMap<>();
+        for (ActiveLexicalFrame frame : activeLexicalFrames(state)) {
+            if (frame.code() == null || frame.code().subName == null
+                    || frame.code().subName.isBlank()) {
+                result.putAll(frame.cells());
+            }
+        }
+        result.putAll(state.topLevelLexicals);
         return result;
     }
 
@@ -853,12 +871,24 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static boolean isActiveLexicalCell(RuntimeBase cell) {
         if (cell == null) return false;
         PerlRuntime runtime = PerlRuntime.current();
+        if (runtime.executionState().topLevelLexicals.containsValue(cell)) return true;
         for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
             for (RuntimeBase activeCell : frame.cells().values()) {
                 if (activeCell == cell) return true;
             }
         }
         return false;
+    }
+
+    /** Bind a format's captured lexical to the currently executing pad frame. */
+    public static void registerCurrentActiveLexical(String variableName, RuntimeBase cell) {
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        Deque<ActiveLexicalFrame> frames = activeLexicalFrames(state);
+        if (!frames.isEmpty() && variableName != null && cell != null) {
+            frames.peek().cells().put(variableName, cell);
+        } else if (variableName != null && cell != null) {
+            state.topLevelLexicals.put(variableName, cell);
+        }
     }
 
     /**
@@ -1896,6 +1926,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * kept alive by stale internal owner records.
      */
     public boolean hadStashRef = false;
+    /** True when Perl code explicitly materialized the CV's named typeglob. */
+    public boolean explicitlyMaterializedGlob;
     /**
      * True when this CV was last installed with {@code *Pkg::name = $anonymous_cr}
      * (stash slot recorded, but not {@code Sub::Name}/{@code set_subname}).
@@ -2163,6 +2195,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 frame.cells().remove(variableName);
                 return;
             }
+        }
+        if (runtime.executionState().topLevelLexicals.get(variableName) == cell) {
+            runtime.executionState().topLevelLexicals.remove(variableName);
         }
     }
 
@@ -3155,6 +3190,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.stashInstallPackage = codeFrom.stashInstallPackage;
         this.stashInstallSub = codeFrom.stashInstallSub;
         this.hadStashRef = codeFrom.hadStashRef;
+        this.explicitlyMaterializedGlob = codeFrom.explicitlyMaterializedGlob;
         this.installedViaAnonGlobAssign = codeFrom.installedViaAnonGlobAssign;
         this.stateVariableInitialized = codeFrom.stateVariableInitialized;
         this.stateVariable = codeFrom.stateVariable;
@@ -5935,11 +5971,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             return null;
         }
-        if (code.hadStashRef && !code.explicitlyRenamed
+        if (code.hadStashRef && code.explicitlyMaterializedGlob && !code.explicitlyRenamed
                 && GlobalVariable.findGlobalCodeRefName(code) == null) {
-            // A named CV reached through a saved glob can outlive its stash
-            // entry. Perl then reports the surviving CV as anonymous because
-            // its name depended on that glob.
+            // A CV whose name was captured from an explicitly materialized
+            // glob can outlive its stash entry. Ordinary named CVs retain
+            // their compiled sub name after deletion.
             return normalizeCallerPackage(code.packageName) + "::__ANON__";
         }
         if (code.subName.contains("::")) {
@@ -5962,7 +5998,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (activeName == null && active.packageName != null && active.subName != null) {
                 activeName = active.packageName + "::" + active.subName;
             }
-            if (active.hadStashRef && !active.explicitlyRenamed
+            if (active.hadStashRef && active.explicitlyMaterializedGlob && !active.explicitlyRenamed
                     && callerName.equals(activeName)
                     && GlobalVariable.findGlobalCodeRefName(active) == null) {
                 return active;

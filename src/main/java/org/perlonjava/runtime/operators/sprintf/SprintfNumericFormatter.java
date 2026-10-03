@@ -327,7 +327,7 @@ public class SprintfNumericFormatter {
         // 2.5 as 3), which changes real calculations at exact half-way values.
         // Format %f/%F from the exact binary double so both ordinary rounding
         // and exact ties agree with Perl.
-        if (conversion == 'f' || conversion == 'F') {
+        if ((conversion == 'f' || conversion == 'F') && Double.isFinite(value)) {
             return formatFixedPoint(value, cleanFlags, width, precision);
         }
 
@@ -352,7 +352,9 @@ public class SprintfNumericFormatter {
 
         String result = String.format(format.toString(), value);
         // Perl uses 'Inf' instead of Java's 'Infinity'
-        result = result.replace("Infinity", "Inf");
+        result = result.replace("INFINITY", "Inf").replace("Infinity", "Inf");
+        // Perl's %F conversion does not uppercase the NaN spelling.
+        result = result.replace("NAN", "NaN");
         return result;
     }
 

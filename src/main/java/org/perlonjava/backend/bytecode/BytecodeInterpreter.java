@@ -942,11 +942,13 @@ public class BytecodeInterpreter {
                                 // RuntimeFormat object rather than replacing it.
                                 RuntimeFormat target = GlobalVariable.getGlobalFormatRef(format.formatName);
                                 target.replaceDefinition(format);
+                                target.setLexicalDeclaringCode(RuntimeCode.getActiveCodeAt(0));
                                 int captureCount = bytecode[pc++];
                                 for (int capture = 0; capture < captureCount; capture++) {
                                     String name = code.stringPool[bytecode[pc++]];
                                     RuntimeBase value = registers[bytecode[pc++]];
                                     target.bindLexicalVariable(name, value);
+                                    RuntimeCode.registerCurrentActiveLexical(name, value);
                                 }
                             }
 

@@ -2724,6 +2724,10 @@ public class GlobalVariable {
             glob = new RuntimeGlob(resolvedKey);
             globalIORefs.put(resolvedKey, glob);
         }
+        RuntimeScalar visibleCode = globalCodeRefs.get(resolvedKey);
+        if (visibleCode != null && visibleCode.value instanceof RuntimeCode code) {
+            code.explicitlyMaterializedGlob = true;
+        }
         return glob;
     }
 

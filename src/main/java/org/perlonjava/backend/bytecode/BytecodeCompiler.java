@@ -3911,6 +3911,13 @@ public class BytecodeCompiler implements Visitor {
                     }
                     emit(Opcodes.REGISTER_MY_VAR);
                     emitReg(reg);
+                    if (sigil.equals("$")) {
+                        // Keep the active CV pad visible to deferred format
+                        // argument evaluation. Format declarations can occur
+                        // after a write in the source while Perl still binds
+                        // the format to this invocation's lexical cell.
+                        emitActiveLexicalBinding(reg, varName);
+                    }
 
                     // Runtime attribute dispatch for my variables with attributes
                     emitVarAttrsIfNeeded(node, reg, sigil);
@@ -4330,6 +4337,9 @@ public class BytecodeCompiler implements Visitor {
 
                                 emit(Opcodes.REGISTER_MY_VAR);
                                 emitReg(reg);
+                                if (sigil.equals("$")) {
+                                    emitActiveLexicalBinding(reg, varName);
+                                }
 
                                 // Runtime attribute dispatch for list variable declarations.
                                 // Attributes are stored on the parent my/state node, propagate to each element.
@@ -9100,6 +9110,9 @@ public class BytecodeCompiler implements Visitor {
         // executes, before a later write() can look it up.
         RuntimeFormat format = new RuntimeFormat(node.formatName);
         format.setCompiledLines(node.templateLines);
+        if (node.getAnnotation("formatDeclaringSubroutine") instanceof String subroutine) {
+            format.setLexicalDeclaringSubroutine(subroutine);
+        }
         emit(Opcodes.REGISTER_FORMAT);
         emit(addToConstantPool(format));
         Map<String, Integer> visible = symbolTable.getVisibleVariableRegistry();

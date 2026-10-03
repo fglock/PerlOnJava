@@ -167,16 +167,31 @@ public class SystemOperator {
     }
 
     /**
-     * Preserve octets embedded in a Perl byte-string command when the command
-     * is passed through a UTF-8 Java ProcessBuilder argument. Core tests build
-     * shell commands from utf8::encoded strings; octal escapes survive the
-     * shell's single-quoted command text and are decoded by the child Perl.
+     * Preserve octets embedded in quoted Perl source when a byte-string
+     * command passes through UTF-8 ProcessBuilder arguments. Leave unquoted
+     * command arguments as characters so the shell forwards them intact.
      */
     private static String encodeByteStringForShell(String command) {
         StringBuilder encoded = new StringBuilder(command.length());
+        boolean singleQuoted = false;
+        boolean doubleQuoted = false;
         for (int i = 0; i < command.length(); i++) {
             char ch = command.charAt(i);
-            if (ch >= 0x80 && ch <= 0xff) {
+            if (ch == '\\' && !singleQuoted && i + 1 < command.length()) {
+                encoded.append(ch).append(command.charAt(++i));
+                continue;
+            }
+            if (ch == '\'' && !doubleQuoted) {
+                singleQuoted = !singleQuoted;
+                encoded.append(ch);
+                continue;
+            }
+            if (ch == '"' && !singleQuoted) {
+                doubleQuoted = !doubleQuoted;
+                encoded.append(ch);
+                continue;
+            }
+            if (ch >= 0x80 && ch <= 0xff && (singleQuoted || doubleQuoted)) {
                 encoded.append('\\');
                 String octal = Integer.toOctalString(ch);
                 for (int pad = octal.length(); pad < 3; pad++) {

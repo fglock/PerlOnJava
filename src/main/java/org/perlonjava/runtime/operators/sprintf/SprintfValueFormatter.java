@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.operators.sprintf;
 
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.DualVar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
@@ -85,10 +86,31 @@ public class SprintfValueFormatter {
         // Preserve special floating-point values without coercing overloaded
         // references a second time. Other numeric conversions perform their
         // one required coercion in the formatter below.
-        if (value.type == RuntimeScalarType.DOUBLE) {
-            double doubleValue = (double) value.value;
+        RuntimeScalar numericValue = value.type == RuntimeScalarType.DUALVAR
+                ? ((DualVar) value.value).numericValue() : value;
+        if (numericValue.type == RuntimeScalarType.DOUBLE) {
+            double doubleValue = (double) numericValue.value;
             if (Double.isInfinite(doubleValue) || Double.isNaN(doubleValue)) {
                 return numericFormatter.formatSpecialValue(doubleValue, flags, width, conversion);
+            }
+        } else if (numericValue.type == RuntimeScalarType.STRING
+                || numericValue.type == RuntimeScalarType.BYTE_STRING) {
+            // The Perl oracle keeps Inf/NaN as string-backed numeric values
+            // in some sprintf paths. Recognize only these exact spellings so
+            // ordinary nonnumeric strings retain their existing warning and
+            // coercion behavior.
+            String text = numericValue.toString().trim();
+            double special = switch (text.toLowerCase(java.util.Locale.ROOT)) {
+                case "inf", "+inf", "infinity", "+infinity" -> Double.POSITIVE_INFINITY;
+                case "-inf", "-infinity" -> Double.NEGATIVE_INFINITY;
+                case "nan", "+nan", "-nan" -> Double.NaN;
+                default -> Double.NaN;
+            };
+            if (Double.isInfinite(special)
+                    || text.equalsIgnoreCase("nan")
+                    || text.equalsIgnoreCase("+nan")
+                    || text.equalsIgnoreCase("-nan")) {
+                return numericFormatter.formatSpecialValue(special, flags, width, conversion);
             }
         }
 
