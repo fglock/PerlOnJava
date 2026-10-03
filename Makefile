@@ -398,7 +398,8 @@ test-cpan-release-acceptance: build
 	echo "CPAN release acceptance log: $$log"; \
 	echo "Selected modules: $$modules" > "$$log"; \
 	echo "Commit: $$(git rev-parse --short HEAD)" >> "$$log"; \
-	timeout 28800 perl dev/tools/cpan_random_tester.pl \
+	PERLONJAVA_JAR="$(CURDIR)/target/perlonjava-5.44.1.jar" \
+		timeout 28800 perl dev/tools/cpan_random_tester.pl \
 		--modules "$$modules" --jobs 8 --strict-exit \
 		--timeout 2400 --activity-grace 600 --max-runtime 5400 \
 		--perl-oracle never >> "$$log" 2>&1; \
