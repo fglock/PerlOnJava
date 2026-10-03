@@ -22,6 +22,7 @@ import java.util.Locale;
 public class Main {
 
     private static final String RAW_ARG_HEX_PREFIX = "__PERLONJAVA_RAWARG_HEX__";
+    private static final String RAW_BYTE_HEX_PREFIX = "__PERLONJAVA_RAWBYTE_HEX__";
 
     static {
         // Set default locale to US (uses dot as decimal separator)
@@ -110,8 +111,38 @@ public class Main {
                 String encoded = args[i].substring(RAW_ARG_HEX_PREFIX.length());
                 byte[] bytes = java.util.HexFormat.of().parseHex(encoded);
                 args[i] = new String(bytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+            } else if (args[i].contains(RAW_BYTE_HEX_PREFIX)) {
+                args[i] = restoreEmbeddedRawBytes(args[i]);
             }
         }
+    }
+
+    private static String restoreEmbeddedRawBytes(String argument) {
+        StringBuilder restored = new StringBuilder(argument.length());
+        for (int index = 0; index < argument.length();) {
+            int marker = argument.indexOf(RAW_BYTE_HEX_PREFIX, index);
+            if (marker < 0) {
+                restored.append(argument, index, argument.length());
+                break;
+            }
+            restored.append(argument, index, marker);
+            int hexStart = marker + RAW_BYTE_HEX_PREFIX.length();
+            if (hexStart + 2 > argument.length()) {
+                restored.append(RAW_BYTE_HEX_PREFIX);
+                index = hexStart;
+                continue;
+            }
+            int high = Character.digit(argument.charAt(hexStart), 16);
+            int low = Character.digit(argument.charAt(hexStart + 1), 16);
+            if (high < 0 || low < 0) {
+                restored.append(RAW_BYTE_HEX_PREFIX);
+                index = hexStart;
+                continue;
+            }
+            restored.append((char) ((high << 4) | low));
+            index = hexStart + 2;
+        }
+        return restored.toString();
     }
 
     private static void installThreadExitDiagnostic(PerlRuntime runtime) {

@@ -124,10 +124,13 @@ public class ForkOpenState {
         // Unit tests and other embedders run PerlOnJava inside their own JVM.
         // Reconstruct a CLI invocation from the active Perl program instead of
         // accidentally re-executing the host (for example, a Gradle worker).
-        String javaName = System.getProperty("os.name", "").toLowerCase().contains("win")
-                ? "java.exe" : "java";
+        boolean windows = System.getProperty("os.name", "").toLowerCase().contains("win");
+        String javaName = windows ? "java.exe" : "java";
         List<String> invocation = new ArrayList<>();
         invocation.add(new File(new File(System.getProperty("java.home"), "bin"), javaName).getPath());
+        if (windows) {
+            invocation.add("-Dperlonjava.rawargv.hex=true");
+        }
         invocation.add("-Xss16m");
         String perlJvmOptions = perlEnvironmentValue("JPERL_OPTS");
         if (perlJvmOptions != null && !perlJvmOptions.isBlank()) {

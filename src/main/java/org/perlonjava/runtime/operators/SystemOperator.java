@@ -173,16 +173,10 @@ public class SystemOperator {
      * not replace them while encoding the shell command.
      */
     private static String encodeByteStringForShell(String command) {
-        // Windows child processes receive argv through CreateProcess's UTF-16
-        // command line. Keep byte-valued characters intact so the direct
-        // jperl launcher path can recover them; cmd.exe octal escapes are not
-        // interpreted like POSIX shell escapes.
-        if (SystemUtils.osIsWindows()) {
-            return command;
-        }
         StringBuilder encoded = new StringBuilder(command.length());
         boolean singleQuoted = false;
         boolean doubleQuoted = false;
+        boolean windows = SystemUtils.osIsWindows();
         boolean asciiShellLocale = !SystemUtils.osIsWindows() && usesAsciiShellLocale();
         for (int i = 0; i < command.length(); i++) {
             char ch = command.charAt(i);
@@ -207,6 +201,10 @@ public class SystemOperator {
                     encoded.append('0');
                 }
                 encoded.append(octal);
+            } else if (ch >= 0x80 && ch <= 0xff && windows) {
+                encoded.append("__PERLONJAVA_RAWBYTE_HEX__");
+                encoded.append(Character.forDigit((ch >>> 4) & 0xf, 16));
+                encoded.append(Character.forDigit(ch & 0xf, 16));
             } else if (ch >= 0x80 && ch <= 0xff && asciiShellLocale) {
                 encoded.append("$(printf '\\");
                 String octal = Integer.toOctalString(ch);
