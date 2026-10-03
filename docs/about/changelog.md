@@ -45,6 +45,9 @@ priorities and future plans.
 - Close accepted `IO::Socket` connections when their final lexical handle leaves
   scope, including handles created through `Symbol::gensym`.
 
+- Avoid false global-destruction resurrection warnings for package-rooted
+  objects while preserving warnings for objects actually rescued by `DESTROY`.
+
 - Support anonymous temporary files for read/write opens with undefined paths,
   report non-numeric process IDs passed to `kill()`, and release each result of
   a void-context `map` iteration before invoking the next block; diagnose the

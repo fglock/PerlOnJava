@@ -142,13 +142,25 @@ proven fix emerges from profiling.
     cleanup closes the stream. Full `make`, JVM and interpreter regressions,
     and Mojolicious `t/mojo/file_download.t` pass; the focused follow-up is
     saved in `build/reports/cpan-release-acceptance-20261003/run-4/`.
-  - The fix is committed as `8e818d763` and pushed to PR #1628. The first full
-    acceptance run still leaves `undef-params.t` failing with two global
-    destruction warnings, plus the fork-dependent `live_fork.t` case. The
-    two Catalyst `http_exceptions` failures were traced to `Data::Dump` source
-    rejected by the Perl parser, so they fall under the agreed `area:parser`
-    exclusion. Catalyst Runtime itself ran its regular upstream test phase:
-    200 programs and 3,800 assertions, with 3,798 assertions passing.
+  - The Mojolicious fix is committed as `8e818d763` and pushed to PR #1628.
+    The first full acceptance run found `undef-params.t` failing with two
+    global-destruction warnings, plus the fork-dependent `live_fork.t` case. A
+    project-owned regression now covers weak-owner teardown and is verified
+    with system Perl, JVM, and interpreter. The runtime fix tracks package
+    roots selected during `DESTRUCT`, distinguishes transient method-call
+    aliases from objects actually rescued by `DESTROY`, and clears only the
+    former. `undef-params.t` now passes all five assertions without the extra
+    warnings; existing global-resurrection coverage still passes 27/27.
+    Full `nice -n 19 make` passed after the fix. Focused logs are in
+    `/tmp/global-destroy-weak-owner-final-jvm.txt`,
+    `/tmp/global-destroy-weak-owner-final-interpreter.txt`,
+    `/tmp/destroy-edge-cases-final-jvm.txt`, and
+    `/tmp/catalyst-undef-params-final.txt`.
+  - The two Catalyst `http_exceptions` failures were traced to `Data::Dump`
+    source rejected by the Perl parser, so they fall under the agreed
+    `area:parser` exclusion. Catalyst Runtime itself ran its regular upstream
+    test phase: 200 programs and 3,798 of 3,800 assertions passed; the other
+    two are those parser-dependent cases.
   - Removed the stale signed `Catalyst-Runtime.yml` preference from the
     default CPAN home using the updated bootstrap. The retirement regression
     passes 5/5 and confirms user-owned Catalyst preferences are preserved.
@@ -157,20 +169,26 @@ proven fix emerges from profiling.
   - Keep `area:parser` failures and issue #1269 outside this batch, as agreed.
     These account for the Template/DBIx::Class parse failures, Catalyst's two
     `http_exceptions` programs, and the remaining DateTime `t/10subtract.t`
-    failure. Image::ExifTool was not reached because its `File::RandomAccess`
-    prerequisite failed; triage its non-parser errors separately after the
-    parser exclusions are applied.
+    failure.
+  - Image::ExifTool was reached in the saved tester run. Its `File::RandomAccess`
+    dependency produced transliteration range diagnostics, and additional
+    `WriteExif.pl` failures report `goto` jumping into a construct. These are
+    front-end/compiler diagnostics, but their GitHub issue mapping has not yet
+    been verified, so do not silently count them as excluded. Inspect the
+    current parser-labeled issue set or reproduce/classify each diagnostic
+    before the final acceptance rerun. Do not add a broad Image::ExifTool
+    distro preference.
 
 ### Next steps
 
-1. Diagnose and fix the `undef-params.t` destruction warnings. Preserve
-   upstream tests and add focused project-owned regressions for confirmed
-   runtime defects.
-2. Run Image::ExifTool's remaining tests after separating parser-area failures
-   from other `File::RandomAccess` failures; fix any in-scope runtime defect.
+1. Confirm whether Image::ExifTool's transliteration and `goto` diagnostics map
+   to the agreed `area:parser` exclusion; investigate any remaining in-scope
+   `File::RandomAccess` failure without changing upstream tests.
+2. Commit the verified global-destruction fix and update PR #1628.
 3. Rerun `make test-cpan-release-acceptance` on the final immutable commit,
-   retaining the full logs and report snapshots, then update PR #1628 and
-   verify its CI state.
+   retaining full logs and report snapshots, then update PR #1628 and verify
+   its CI state. Keep the acceptance goal open until all outcomes are accounted
+   for, including the explicit fork and #1269 exclusions.
 
 ### Open questions
 
