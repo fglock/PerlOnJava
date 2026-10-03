@@ -32,9 +32,13 @@ real-world CPAN support, and runtime efficiency.
 
 The latest measured snapshots are:
 
-- **Imported upstream Perl tests:** 669,688 of 673,847 checks pass across 585
-  imported test files (**99.4%**), measured on 2026-09-03. This is the imported
-  compatibility corpus, not every test distributed with upstream Perl.
+- **Imported upstream Perl tests:** all **575 selected test files** completed
+  without unexpected failures on 2026-10-03, on macOS in the default execution
+  mode. The run reported **10,335 skipped assertions** and **322 TODO assertions**.
+  File exclusions and disabled large-memory cases limit this result; it does
+  not establish complete Perl compatibility or full-suite success on both
+  backends and every platform. See the
+  [dated core-suite snapshot](../reference/testing.md#core-suite-snapshot-2026-10-03).
 - **CPAN sample:** 8,315 of 16,443 tested modules pass their complete test suites
   (**50.6%**), as reported on 2026-09-02. Modules are selected randomly from the
   CPAN index, and dependencies encountered during testing are also recorded.
@@ -117,9 +121,10 @@ These capabilities are implemented and available in the current release:
 Work currently in progress is organized around the compatibility and
 performance goals above:
 
-- **Perl compatibility** — Close incomplete and failing cases in the imported
-  upstream suite, including diagnostic, compiler, runtime, and standard-library
-  differences, while keeping the JVM and interpreter backends aligned. The
+- **Perl compatibility** — Preserve the selected core-suite milestone, audit
+  skipped, TODO, and excluded cases, and extend verification across execution
+  backends and platforms. Continue closing diagnostic, compiler, runtime, and
+  standard-library differences. The
   [Feature Matrix](../reference/feature-matrix.md) records known boundaries.
 - **CPAN compatibility** — Use sampled distribution results to find reusable
   blockers, expand Java replacements for XS dependencies, and validate
@@ -140,7 +145,8 @@ performance goals above:
 - ~~**Taint Mode (`-T`)**~~ — Implemented on both backends. External input is
   marked tainted, taint propagates through supported operations, capture-based
   untainting works, and security-sensitive operations reject tainted values.
-  Warning-mode `-t` semantics remain incomplete. See `dev/design/TAINT_MODE.md`.
+  Warning-mode `-t` uses the same propagation and reports unsafe uses as
+  warnings. See `dev/design/TAINT_MODE.md`.
 ### Regular Expressions
 
 The maintained Joni fork is the sole production matcher. Current supported
@@ -152,14 +158,18 @@ implementation and delivery record is preserved in the
 
 ### Missing Pragmas and Features
 
-- **`no strict refs`** — Extend to work with lexical (`my`) variables, not just globals.
+- **Symbolic references** — Supported with `no strict 'refs'` for package
+  variables. Lexical (`my`) variables are not accessible by symbolic name in
+  standard Perl either; this is not a compatibility gap.
 - **`bignum`/`bigint`** — Complete transparent arbitrary-precision arithmetic
   on both backends. `bigrat` is implemented.
 - **`locale`** — Locale-aware string operations.
 - **`attributes`** — Variable and subroutine attributes beyond `:lvalue` and `prototype`.
-- **`overloading`** — Fine-grained overload control pragma.
-- **`CORE` Operator References** — `\&CORE::push` and similar.
-- **Smartmatch / `given`/`when`** — Evaluate community demand before implementing.
+- ~~**`overloading`**~~ — Lexical enable/disable behavior is implemented.
+- **`CORE` Operator References** — Audit callable builtins and retain the
+  restrictions that standard Perl itself imposes.
+- ~~**Smartmatch / `given`/`when`**~~ — Implemented on both backends; see the
+  [feature matrix](../reference/feature-matrix.md#statements-and-special-operators).
 
 ### Compiler Flags and Special Variables
 
@@ -214,7 +224,8 @@ PerlOnJava requires Java 24+. Remaining work:
 ### CPAN Module Expansion
 
 - **File::stat** — Needed for DateTime::Locale installation.
-- **Safe.pm** — Move beyond stub; evaluate feasibility of compartment restrictions on JVM.
+- **Safe.pm** — Extend the implemented permit-only and default compartment
+  behavior; see the [feature matrix](../reference/feature-matrix.md#core-modules).
 - **Module::Build** — Improve support beyond current stub for modules that don't use MakeMaker.
 - **Test::Harness** — Fix UTF-8 handling for test output parsing.
 - **Exporter** — Support `*glob` exports.

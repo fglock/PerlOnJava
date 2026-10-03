@@ -13,6 +13,14 @@ PerlOnJava compiles Perl to JVM bytecode, so many existing Perl scripts can run 
 > CPAN coverage, and improves CPU and memory performance. See the
 > [current status and priorities](docs/about/roadmap.md#current-project-status).
 
+**Compatibility milestone (2026-10-03):** all **575 selected imported Perl core
+test files** completed without unexpected failures on macOS in the default
+execution mode. The run reported 10,335 skipped assertions and 322 TODO
+assertions; some files are excluded and large-memory cases are disabled.
+This is a scoped test result, not a claim that the entire standard Perl suite
+passes on every backend or platform. See the
+[results, exclusions, and verification scope](docs/reference/testing.md#core-suite-snapshot-2026-10-03).
+
 ## Features
 
 - **Single jar distribution** — no installation, no dependencies beyond Java
