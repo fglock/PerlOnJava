@@ -8,6 +8,7 @@ import org.perlonjava.runtime.io.LayeredIOHandle;
 import org.perlonjava.runtime.io.ProcessInputHandle;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.nativ.NativeUtils;
+import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.BufferedReader;
@@ -858,14 +859,11 @@ public class SystemOperator {
             // For backticks: stdout will be captured (default behavior),
             // stderr goes through Perl STDERR handle
 
+            boolean inheritedTerminalStdin = inheritTerminalStdin(processBuilder);
             process = processBuilder.start();
-
-            // system() and qx// subprocesses are deliberately non-interactive in
-            // PerlOnJava.  Closing the ProcessBuilder pipe is the only portable
-            // way to guarantee EOF here.  Redirect.from("/dev/null") left nested
-            // jperl launchers waiting forever on macOS (for example an old CPAN
-            // Makefile.PL which reads configuration answers from STDIN).
-            closeChildStdin(process);
+            if (!inheritedTerminalStdin) {
+                closeChildStdin(process);
+            }
 
             final Process finalProcess = process;
             final StringBuilder finalOutput = output;
@@ -959,8 +957,11 @@ public class SystemOperator {
             // Copy %ENV to the subprocess environment
             copyPerlEnvToProcessBuilder(processBuilder);
 
+            boolean inheritedTerminalStdin = inheritTerminalStdin(processBuilder);
             process = processBuilder.start();
-            closeChildStdin(process);
+            if (!inheritedTerminalStdin) {
+                closeChildStdin(process);
+            }
 
             // Route stdout and stderr through Perl handles so that
             // Perl-level redirections are honored
@@ -1014,8 +1015,11 @@ public class SystemOperator {
 
             // Route stderr through Perl STDERR handle (not INHERIT which bypasses Perl redirections)
 
+            boolean inheritedTerminalStdin = inheritTerminalStdin(processBuilder);
             process = processBuilder.start();
-            closeChildStdin(process);
+            if (!inheritedTerminalStdin) {
+                closeChildStdin(process);
+            }
 
             final Process finalProcess = process;
             final StringBuilder finalOutput = output;
@@ -1115,6 +1119,18 @@ public class SystemOperator {
         } catch (IOException ignored) {
             // The child may have exited before its stdin was closed.
         }
+    }
+
+    private static boolean inheritTerminalStdin(ProcessBuilder processBuilder) {
+        try {
+            if (FFMPosix.get().isatty(0) != 0) {
+                processBuilder.redirectInput(ProcessBuilder.Redirect.INHERIT);
+                return true;
+            }
+        } catch (RuntimeException ignored) {
+            // Keep non-interactive pipe behavior if the platform cannot check fd 0.
+        }
+        return false;
     }
 
     /**

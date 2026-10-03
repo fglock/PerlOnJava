@@ -526,11 +526,16 @@ public class DiamondIO {
             WarnDie.die(new RuntimeScalar(message),
                     new RuntimeScalar(WarnDie.getPerlLocationFromStack()));
         }
+        // Writing to a setuid/setgid file clears those permission bits on
+        // Unix. Perl's in-place editing preserves the source file mode, so
+        // restore it after closing the output handle at the file boundary.
+        restoreUnixMode(state.inPlaceOriginalPath, state.inPlaceFileMode);
         state.inPlaceOriginalPath = null;
         state.inPlaceBackupPath = null;
         state.inPlaceSourceName = null;
         state.inPlaceSourceDirectory = null;
         state.inPlaceSourceWasRelative = false;
+        state.inPlaceFileMode = -1;
     }
 
     private static boolean isForkLikeOpen(String fileName) {

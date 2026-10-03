@@ -13,6 +13,11 @@ priorities and future plans.
 - Preserve lexical sub references passed through the debugger's `DB::goto` hook.
 - Resolve POSIX group records and retain supplementary IDs in `$(` and `$)`.
 - Identify the runtime operating system in `Config::Config{myuname}`.
+- Default bare `-t` file tests to `STDIN`.
+- Inherit terminal `STDIN` in subprocesses launched by `system` and `qx`.
+- Preserve setuid and setgid permission bits after in-place file editing.
+- Provide a controlling pseudo-terminal for Perl core tests that require one.
+- Supply the PerlOnJava launcher for core tests that spawn `./perl`.
 - Keep `close` and `fileno` probes from creating nonexistent symbolic filehandles.
 - Preserve typeglob values from scalar assignments and selected-handle lookups.
 - Return EOF as undef from scalar-backed `getc`, and let argumentless `system()` wait.
