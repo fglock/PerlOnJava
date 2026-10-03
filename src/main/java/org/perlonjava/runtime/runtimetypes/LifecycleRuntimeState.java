@@ -65,6 +65,8 @@ final class LifecycleRuntimeState {
             Collections.synchronizedSet(Collections.newSetFromMap(new IdentityHashMap<>()));
     RuntimeBase currentDestroyTarget;
     boolean destroyTargetRescued;
+    final Set<RuntimeBase> globalDestructionRootTargets =
+            Collections.newSetFromMap(new IdentityHashMap<>());
     boolean sweepPendingAfterOuterDestroy;
     final List<RuntimeBase> rescuedObjects = Collections.synchronizedList(new ArrayList<>());
     final BitSet walkerGateClasses = new BitSet();
@@ -126,6 +128,7 @@ final class LifecycleRuntimeState {
         statementBoundaryDestroyableObjects.clear();
         currentDestroyTarget = null;
         destroyTargetRescued = false;
+        globalDestructionRootTargets.clear();
         sweepPendingAfterOuterDestroy = false;
         rescuedObjects.clear();
         walkerGateClasses.clear();
