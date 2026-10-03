@@ -94,6 +94,9 @@ priorities and future plans.
 - Allow tail calls from helper subroutines invoked by sort comparators while
   preserving Perl's errors for tail calls written directly in comparators.
 
+- Close accepted `IO::Socket` connections when their final lexical handle leaves
+  scope, including handles created through `Symbol::gensym`.
+
 - Support anonymous temporary files for read/write opens with undefined paths,
   report non-numeric process IDs passed to `kill()`, and release each result of
   a void-context `map` iteration before invoking the next block; diagnose the
