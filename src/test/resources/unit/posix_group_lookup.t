@@ -1,9 +1,12 @@
 use strict;
 use warnings;
+use Config ();
 use POSIX ();
 use Test::More;
 
 my $gid = POSIX::getgid();
+like($Config::Config{myuname}, qr/^\Q$^O\E/i,
+    'Config myuname identifies the runtime operating system');
 my @by_gid = getgrgid($gid);
 if (!@by_gid) {
     plan skip_all => 'group lookup is unavailable on this platform';
