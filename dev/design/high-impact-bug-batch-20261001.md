@@ -166,29 +166,54 @@ proven fix emerges from profiling.
     passes 5/5 and confirms user-owned Catalyst preferences are preserved.
     The separate `Test-Trap` skip applies to that dependency's fork-dependent
     test phase and does not skip Catalyst Runtime tests.
-  - Keep `area:parser` failures and issue #1269 outside this batch, as agreed.
-    These account for the Template/DBIx::Class parse failures, Catalyst's two
-    `http_exceptions` programs, and the remaining DateTime `t/10subtract.t`
-    failure.
-  - Image::ExifTool was reached in the saved tester run. Its `File::RandomAccess`
-    dependency produced transliteration range diagnostics, and additional
-    `WriteExif.pl` failures report `goto` jumping into a construct. These are
-    front-end/compiler diagnostics, but their GitHub issue mapping has not yet
-    been verified, so do not silently count them as excluded. Inspect the
-    current parser-labeled issue set or reproduce/classify each diagnostic
-    before the final acceptance rerun. Do not add a broad Image::ExifTool
-    distro preference.
+  - The latest complete acceptance run is saved in
+    `build/reports/cpan-release-acceptance-20261003/run-5/` (commit
+    `db9fea12d`). Excel::Writer::XLSX and PPR reported no strict failures.
+    Catalyst ran normally: 3/200 programs failed with zero failed assertions;
+    the two HTTP-exception programs are parser-dependent and `live_fork.t` is
+    the agreed fork exclusion. DateTime's remaining `t/10subtract.t` failure
+    is issue #1269. DBIx::Class's large failure count is primarily its
+    `DBICTest::RunMode` heredoc conflict-marker diagnostic (parser exclusion);
+    its fork test is separately excluded. Template has one in-scope warning
+    mismatch in `t/math_rand.t`, where bundled `Math::Complex` emits prototype
+    mismatch warnings during `rand`/`srand` calls.
+  - Image::ExifTool's in-scope `WriteExif.pl` rejection came from conditional
+    context tracking that retained only the nearest `if`. It rejected a valid
+    jump from a nested condition into a sibling arm of its enclosing
+    `if`/`elsif` chain. Conditional paths are now tracked by both backends and
+    a project-owned regression reproduces the transfer. The test passes on
+    system Perl, JVM, and interpreter; the directly affected ExifTool
+    `t/Casio.t` passes on system Perl and JVM. A 10-minute direct `t/Writer.t`
+    probe did not finish because of repeated existing invalid-transliteration
+    diagnostics (parser issue #1476); the full acceptance gate remains the
+    authoritative module result. No broad Image::ExifTool preference was added.
+  - Mojolicious's `Test::Builder.pm` line 368 warning flood came from weak
+    parent edges being cleared during incremental `Mojo::DOM::HTML` tree
+    construction. `MortalList` now retains reachable unblessed array/hash
+    ancestors before owner tracking activates. The project-owned tree
+    regression passes system Perl, JVM, and interpreter (7 assertions each).
+    The full `make` gate passed after this fix; keep Mojolicious enabled and
+    verify it in the next release acceptance run.
+  - Template's `t/math_rand.t` warning mismatch is fixed by emitting prototype
+    mismatch warnings in the `prototype` category under `syntax`, and checking
+    the active lexical warning category during interpreter compilation. The
+    project-owned regression passes system Perl, JVM, and interpreter. The
+    full `make` gate passed after this fix.
+  - The latest full `nice -n 19 make` after batching the reachability,
+    prototype-warning, and conditional-goto fixes passed in 11m55s. Focused
+    goto-chain and construct-entry tests also pass on both backends. The next
+    full release acceptance run is still required; keep this phase in progress.
 
 ### Next steps
 
-1. Confirm whether Image::ExifTool's transliteration and `goto` diagnostics map
-   to the agreed `area:parser` exclusion; investigate any remaining in-scope
-   `File::RandomAccess` failure without changing upstream tests.
-2. Commit the verified global-destruction fix and update PR #1628.
-3. Rerun `make test-cpan-release-acceptance` on the final immutable commit,
-   retaining full logs and report snapshots, then update PR #1628 and verify
-   its CI state. Keep the acceptance goal open until all outcomes are accounted
-   for, including the explicit fork and #1269 exclusions.
+1. Commit the batched fixes and focused regressions to the existing feature
+   branch, then push the updated PR #1628.
+2. Run `make test-cpan-release-acceptance` on the immutable commit and retain
+   the full run archive and report snapshots. Keep the normal Catalyst suite
+   enabled; its stale owned skip preference is retired during CPAN bootstrap.
+3. Fix each remaining in-scope failure and repeat the release acceptance gate.
+   Only the agreed `fork`, `area:parser`, and #1269 cases are excluded. Continue
+   until all other modules pass.
 
 ### Open questions
 

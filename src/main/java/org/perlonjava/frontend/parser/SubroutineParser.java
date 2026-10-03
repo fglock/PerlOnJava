@@ -1219,8 +1219,7 @@ public class SubroutineParser {
                             location = " at " + parser.ctx.compilerOptions.fileName + " line " + line + ".\n";
                         }
                         String msg = "Prototype mismatch: sub " + fullName + oldDisplay + " vs " + newDisplay + location;
-                        org.perlonjava.runtime.operators.WarnDie.warn(
-                                new RuntimeScalar(msg), new RuntimeScalar(""));
+                        warnPrototypeMismatch(parser, msg);
                     }
                 }
             }
@@ -1920,8 +1919,7 @@ public class SubroutineParser {
                 String newDisplay = prototype == null ? "none" : "(" + prototype + ")";
                 if (!prototypesMatch(oldPrototype, prototype)) {
                     String msg = "Prototype mismatch: sub " + fullName + oldDisplay + " vs " + newDisplay + location;
-                    org.perlonjava.runtime.operators.WarnDie.warn(
-                            new RuntimeScalar(msg), new RuntimeScalar(""));
+                    warnPrototypeMismatch(parser, msg);
                 }
             }
 
@@ -3026,6 +3024,20 @@ public class SubroutineParser {
         }
         return oldPrototype.replaceAll("\\s+", "")
                 .equals(newPrototype.replaceAll("\\s+", ""));
+    }
+
+    private static void warnPrototypeMismatch(Parser parser, String message) {
+        // Interpreter eval compilation can serialize stale warning bits for
+        // a category disabled by a surrounding `no warnings 'syntax'`. The
+        // parser's disabled-category stack is authoritative for this lexical
+        // compile-time diagnostic; -W still forces it on as Perl does.
+        if (parser.ctx.symbolTable.isWarningCategoryDisabled("syntax::prototype")
+                && !org.perlonjava.runtime.runtimetypes.WarningFlags.areWarningsForcedOn()) {
+            return;
+        }
+        org.perlonjava.runtime.operators.WarnDie.warnWithCategoryFromCode(
+                new RuntimeScalar(message), new RuntimeScalar(""), "prototype",
+                parser.ctx.symbolTable.getWarningBitsString());
     }
 
     private static boolean hasMalformedUnderscorePrototype(String prototype) {
