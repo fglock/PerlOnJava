@@ -91,6 +91,9 @@ priorities and future plans.
 - Preserve ordinary `goto` jumps between conditional branches while rejecting
   jumps into conditional blocks from outside.
 
+- Allow tail calls from helper subroutines invoked by sort comparators while
+  preserving Perl's errors for tail calls written directly in comparators.
+
 - Support anonymous temporary files for read/write opens with undefined paths,
   report non-numeric process IDs passed to `kill()`, and release each result of
   a void-context `map` iteration before invoking the next block; diagnose the
