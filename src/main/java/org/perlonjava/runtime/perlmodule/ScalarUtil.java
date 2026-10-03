@@ -45,7 +45,9 @@ public class ScalarUtil extends PerlModuleBase {
             scalarUtil.registerMethod("looks_like_number", "$");
             scalarUtil.registerMethod("openhandle", "$");
             scalarUtil.registerMethod("readonly", "$");
-            scalarUtil.registerMethod("set_prototype", "$$");
+            // The code reference argument uses Perl's & prototype, which
+            // accepts the `set_prototype { ... } $proto` block form.
+            scalarUtil.registerMethod("set_prototype", "&$");
             scalarUtil.registerMethod("tainted", "$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Scalar::Util method: " + e.getMessage());

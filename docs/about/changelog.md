@@ -54,6 +54,13 @@ priorities and future plans.
 - Keep `$^X` unflagged for shell command construction and preserve encoded input octets.
 - Evaluate `readline` in list context when an empty-target assignment discards its results.
 
+- Prevent stale CPAN archive-name entries and namespace-resolution errors from
+  being recorded as compatibility regressions.
+
+- Keep SQLite column metadata fetchable and quote reserved table names, support
+  Perl-compatible SQLite `REGEXP`, clear successful DBI error strings, and
+  delegate non-JDBC transaction methods to their drivers.
+
 - Preserve objects with counted collection owners during weak-reference sweeps,
   and resolve deferred user-defined regex properties in the match caller's
   package.
@@ -110,6 +117,12 @@ priorities and future plans.
 
 - Resolve dynamic `require` package names as portable module paths before
   filesystem lookup, including on Windows.
+
+- Preserve file-operator precedence for `eof`, `tell`, and `readline`; flush
+  incomplete HTML tags at EOF; accept prototype block arguments; resolve
+  imported `break` subs; skip adjacent POD sections after executable code; and
+  bind concatenated filename expressions to `do` while preserving relative
+  file paths used by loaded scripts.
 
 - Parse `PERL5LIB` with the host platform's path separator.
 

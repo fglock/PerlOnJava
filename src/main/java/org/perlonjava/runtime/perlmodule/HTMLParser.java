@@ -1228,6 +1228,15 @@ public class HTMLParser extends PerlModuleBase {
                     return;
                 }
                 parseHtml(self, selfHash, pstate, remaining);
+                // Incomplete markup at EOF can be buffered unchanged by
+                // parseHtml(). Perl HTML::Parser reports an unterminated
+                // start tag as a comment; retrying that identical buffer
+                // would otherwise make this EOF flush loop forever.
+                if (pstate.get("_buf").toString().equals(remaining)
+                        && pstate.get("_literal_mode").toString().isEmpty()) {
+                    pstate.put("_buf", parsedScalar(pstate, ""));
+                    fireEvent(self, selfHash, pstate, "comment", parsedScalar(pstate, remaining));
+                }
             } else if (literalMode.equals("script") || literalMode.equals("style")) {
                 fireEvent(self, selfHash, pstate, "end",
                         new RuntimeScalar(literalMode), new RuntimeScalar(""));

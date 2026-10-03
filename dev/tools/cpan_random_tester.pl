@@ -237,7 +237,10 @@ while (<$gz>) {
 
     $module_to_dist{$module} = $dist;
     $dist_to_module{$dist} //= $module;
-    $dist_to_canonical_module{$archive} //= canonical_module_for_archive($archive);
+    # The package index is authoritative. Deriving a module name from the
+    # archive fails for distributions whose version is separated by a dot
+    # instead of a hyphen (for example EasyDB.0.5b2.tgz).
+    $dist_to_canonical_module{$archive} //= $dist_to_module{$dist};
 }
 close $gz;
 
@@ -259,6 +262,13 @@ if ($modules_arg) {
     # contains dependency modules, not just the distribution-root modules chosen
     # from the CPAN index.
     my $cutoff_date = cutoff_date_for_days_ago($retest_age);
+    # Historical reports may contain an archive basename instead of the
+    # module name (for example EasyDB.0.5b2). Resolve those names using the
+    # current package index before selecting a retest, and migrate the saved
+    # result key so a later failure is compared with the previous PASS.
+    for my $records (\%pass_modules, \%fail_modules, \%skip_modules, \%perl_fail_modules) {
+        normalize_report_module_aliases($records, \%module_to_dist, \%dist_to_canonical_module);
+    }
     my %seen;
     for my $mod (sort (keys %pass_modules, keys %fail_modules, keys %perl_fail_modules)) {
         next if $seen{$mod}++;
@@ -392,7 +402,13 @@ for my $module (@selected) {
     }
 
     # If nothing parsed, check for special cases before recording failure
-        if (!@all_results) {
+    if (!@all_results) {
+        my $unresolved_reason = cpan_unresolved_selector_reason_from_file($log_path, $module);
+        if ($unresolved_reason) {
+            printf "  (not tested: %s)\n\n", $unresolved_reason;
+            push @strict_failures, "$module: $unresolved_reason" if $strict_exit;
+            next;
+        }
         if (output_file_contains($log_path, qr/\Q$module\E is up to date/)
             || $output_tail =~ /\Q$module\E is up to date/) {
             # Already installed, jcpan skipped it — not a failure
@@ -499,11 +515,9 @@ sub apply_standard_perl_oracle {
     for my $result (@$results) {
         next unless ($result->{status} // '') eq 'FAIL';
         my $archive = cpan_archive_for_module_in_log($source_log, $result->{module});
-        next unless $archive;
-
-        my ($oracle_status, $oracle_log) = run_standard_perl_oracle(
-            $archive, $result->{module}, $target_hard_cap,
-        );
+        my ($oracle_status, $oracle_log) = $archive
+            ? run_standard_perl_oracle($archive, $result->{module}, $target_hard_cap)
+            : run_standard_perl_module_probe($result->{module}, $target_hard_cap);
         $result->{perl_oracle_log} = $oracle_log if $oracle_log;
         next unless $oracle_status eq 'FAIL';
 
@@ -574,6 +588,45 @@ sub run_standard_perl_oracle {
     # CPAN.pm normally identifies the requested module in its output.  Do not
     # classify a partial/dependency-only log as a standard-Perl failure.
     return ('UNAVAILABLE', $log_path);
+}
+
+sub standard_perl_module_probe_command {
+    my ($module) = @_;
+    return unless defined $module && $module =~ /\A[A-Za-z_]\w*(?:::\w+)*\z/;
+
+    return [
+        $^X, "-M$module", '-e',
+        'print "PERLONJAVA_MODULE_LOAD_OK\n"',
+    ];
+}
+
+sub standard_perl_module_probe_succeeded {
+    my ($output) = @_;
+    return defined($output) && $output =~ /^PERLONJAVA_MODULE_LOAD_OK\r?$/m;
+}
+
+sub run_standard_perl_module_probe {
+    my ($module, $target_hard_cap) = @_;
+    my $command = standard_perl_module_probe_command($module);
+    return ('UNAVAILABLE', undef) unless $command;
+
+    my $log_path = File::Spec->catfile(
+        $perl_oracle_log_dir,
+        safe_log_name($module) . '.log',
+    );
+    $log_path = unique_archive_path($log_path) if -e $log_path;
+
+    my ($oracle_soft_timeout, $oracle_hard_cap) = effective_oracle_timeout_limits(
+        $perl_oracle_timeout, $target_hard_cap,
+    );
+    my ($output, $timed_out) = run_with_timeout(
+        $command, $oracle_soft_timeout, $log_path, $oracle_hard_cap,
+    );
+    return ('TIMEOUT', $log_path) if $timed_out;
+    return (
+        standard_perl_module_probe_succeeded($output) ? 'PASS' : 'FAIL',
+        $log_path,
+    );
 }
 
 
@@ -1209,6 +1262,42 @@ sub canonical_module_for_archive {
     return $canonical;
 }
 
+# Resolve a historical result key that is actually a CPAN archive basename.
+# Keep real module names untouched; only migrate names that the live index
+# positively maps to an archive.
+sub normalize_report_module_aliases {
+    my ($records, $module_to_dist, $archive_to_canonical_module) = @_;
+    for my $module (keys %$records) {
+        next if exists $module_to_dist->{$module};
+        my $canonical = $archive_to_canonical_module->{$module};
+        next unless defined $canonical && length $canonical;
+
+        if (!exists $records->{$canonical}
+            || (($records->{$module}{date} // '') gt ($records->{$canonical}{date} // ''))) {
+            $records->{$canonical} = $records->{$module};
+        }
+        delete $records->{$module};
+    }
+}
+
+# CPAN namespace resolution errors happen before any build or tests. Treat a
+# selected module that CPAN cannot expand as not tested, so it cannot become a
+# synthetic FAIL/REGRESS when there is no parseable test block.
+sub cpan_unresolved_selector_reason_from_file {
+    my ($path, $module) = @_;
+    return '' unless defined $path && -f $path && defined $module;
+    open my $fh, '<', $path or return '';
+    while (my $line = <$fh>) {
+        if ($line =~ /Could not expand \[\Q$module\E\]/i
+            || $line =~ /Skipping \Q$module\E because I couldn't find a matching namespace/i) {
+            close $fh;
+            return 'CPAN could not resolve module selector';
+        }
+    }
+    close $fh;
+    return '';
+}
+
 # Parse --modules argument: either comma-separated list or file path
 sub parse_module_list {
     my ($arg) = @_;
@@ -1744,6 +1833,11 @@ sub persist_module_results {
 
     with_report_lock(sub {
         reload_report_state();
+        # reload_report_state() re-reads the on-disk keys inside the lock, so
+        # apply the same archive-alias migration before comparing outcomes.
+        for my $records (\%pass_modules, \%fail_modules, \%skip_modules, \%perl_fail_modules) {
+            normalize_report_module_aliases($records, \%module_to_dist, \%dist_to_canonical_module);
+        }
 
         for my $raw (@$results) {
             my $mod = $raw->{module};
@@ -1953,6 +2047,11 @@ sub should_skip_selected_module {
     my $reason = '';
     with_report_lock(sub {
         reload_report_state();
+        if ($retest_age > 0) {
+            for my $records (\%pass_modules, \%fail_modules, \%skip_modules, \%perl_fail_modules) {
+                normalize_report_module_aliases($records, \%module_to_dist, \%dist_to_canonical_module);
+            }
+        }
 
         if ($retest_age > 0) {
             if (my $r = $skip_modules{$module}) {
