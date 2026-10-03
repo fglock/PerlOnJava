@@ -348,6 +348,7 @@ public class SubroutineParser {
                     && token.text.equals("-")
                     && parser.tokenIndex + 1 < parser.tokens.size()
                     && parser.tokens.get(parser.tokenIndex + 1).type == LexerTokenType.IDENTIFIER;
+            boolean qualifiedConstantArgument = isQualifiedConstantArgument(parser);
             String fullName1 = NameNormalizer.normalizeVariableName(packageName, parser.ctx.symbolTable.getCurrentPackage());
             boolean isLexicalSub = parser.ctx.symbolTable.getSymbolEntry("&" + packageName) != null;
             boolean isKnownSub = false;
@@ -418,7 +419,7 @@ public class SubroutineParser {
                 if (!isKnownSub && !isLexicalSub && isValidIndirectMethod(packageName)) {
                     if (!(token.text.equals("->") || token.text.equals("=>")
                             || (INFIX_OP.contains(token.text) && !qualifiedNamedArgument
-                                && !hashDereferenceArgument))) {
+                                && !hashDereferenceArgument && !qualifiedConstantArgument))) {
                         // System.out.println("  package loaded: " + packageName + "->" + subName);
 
                         ListNode arguments;
@@ -3071,7 +3072,7 @@ public class SubroutineParser {
         // warning for the malformed prototype shapes below.
         int at = proto.indexOf('@');
         if (at >= 0 && at + 1 < proto.length() && proto.charAt(at + 1) != '%'
-                && proto.charAt(at + 1) != ']') {
+                && proto.charAt(at + 1) != ']' && proto.charAt(at + 1) != ';') {
             Warnings.emitCategoryWarning("illegalproto",
                     "Prototype after '@' for " + name + " : " + proto);
         }
@@ -3131,5 +3132,39 @@ public class SubroutineParser {
                 || token.text.equals("}")
                 || token.text.equals("]")
                 || token.type == LexerTokenType.EOF;
+    }
+
+    /**
+     * A prefix ampersand followed by a qualified sub name starts an ordinary
+     * indirect-constructor argument, even though {@code &} is also an infix
+     * operator.  Preserve this form for source such as
+     * {@code new HTTP::Response &HTTP::Status::RC_BAD_REQUEST, ...}.
+     */
+    private static boolean isQualifiedConstantArgument(Parser parser) {
+        int index = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+        if (index >= parser.tokens.size() || !"&".equals(parser.tokens.get(index).text)) {
+            return false;
+        }
+        index = Whitespace.skipWhitespace(parser, index + 1, parser.tokens);
+        if (index >= parser.tokens.size()
+                || parser.tokens.get(index).type != LexerTokenType.IDENTIFIER) {
+            return false;
+        }
+        boolean qualified = false;
+        index++;
+        while (index < parser.tokens.size()) {
+            index = Whitespace.skipWhitespace(parser, index, parser.tokens);
+            if (index >= parser.tokens.size() || !"::".equals(parser.tokens.get(index).text)) {
+                break;
+            }
+            qualified = true;
+            index = Whitespace.skipWhitespace(parser, index + 1, parser.tokens);
+            if (index >= parser.tokens.size()
+                    || parser.tokens.get(index).type != LexerTokenType.IDENTIFIER) {
+                return false;
+            }
+            index++;
+        }
+        return qualified;
     }
 }
