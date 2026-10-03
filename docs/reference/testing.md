@@ -8,11 +8,13 @@ Project-wide compatibility percentages are dated snapshots, not support
 guarantees. A published figure must identify its corpus, measurement date,
 passing count, and total count.
 
-- The upstream Perl percentage is calculated by
-  `dev/tools/perl_test_runner.pl` as passing TAP checks divided by the checks in
-  the imported `perl5_t` compatibility corpus. It describes that imported
-  corpus, not every test distributed with upstream Perl. Skips, TODOs,
-  incomplete files, and errors are reported separately.
+- The imported Perl core runner, `dev/tools/perl_test_runner.pl`, reports file
+  outcomes and TAP counters for its selected `perl5_t` corpus. Its `OK` counter
+  includes skipped checks and expected TODO failures; these are also reported
+  separately. Reported TAP can exceed planned totals, so an `OK/total`
+  percentage is not a count of independently executed successful assertions.
+  File failures, incompleteness, execution errors, and timeouts must also be
+  inspected. This corpus is not every test distributed with upstream Perl.
 - The CPAN percentage comes from the generated
   [CPAN compatibility report](../../dev/cpan-reports/cpan-compatibility.md).
   Modules are randomly selected from the CPAN index and run with `jcpan -t`;
@@ -23,6 +25,70 @@ See the [current project status](../about/roadmap.md#current-project-status) for
 the latest published snapshots. For adoption decisions, consult the
 [Feature Matrix](feature-matrix.md) and test the exact CPAN distributions and
 versions required by the application.
+
+## Core Suite Snapshot: 2026-10-03
+
+All **575 selected imported core test files** completed without unexpected
+failures in the final local UAT run for
+[PR #1606](https://github.com/fglock/PerlOnJava/pull/1606).
+The tested source commit was
+`b80480f74f66fcdf979e201f4b6fdb820a7c8d22`, subsequently merged as
+`92ee340d8a6915095de7a97b4145eff945dbd5b3`. The run used macOS and the default
+execution mode (JVM compilation with interpreter fallback available).
+
+| Runner result | Count |
+|---|---:|
+| Selected files / passed files | 575 / 575 |
+| Failed files / execution errors / timeouts / incomplete files | 0 / 0 / 0 / 0 |
+| Planned TAP checks (`Total tests`) | 680,762 |
+| Reported `OK` checks (including skips and expected TODO failures) | 680,768 |
+| Unexpected `Not OK` checks | 0 |
+| Skipped checks | 10,335 |
+| TODO checks | 322 |
+
+The six-check difference between the planned total and reported `OK` count is
+retained here as a harness reporting discrepancy, not converted into a
+compatibility percentage. Skipped and TODO checks do not establish implemented
+behavior.
+
+The passed-file count also includes files that skip all their checks (reported
+as `0/0` by the runner). It counts accepted file outcomes, not 575 files in
+which every assertion executed.
+
+The recorded invocation was:
+
+```bash
+nice -n 18 perl dev/tools/perl_test_runner.pl --jobs 5 --timeout 300 --output out.json perl5_t/t
+```
+
+Full output was captured in `test_20261003_080000_mixed.log`; the runner also
+produced `out.json`. These are local run artifacts, not bundled documentation
+or downloadable CI artifacts.
+
+### Exclusions and Limits
+
+- The run selected 575 files from the 589 `.t` files under the imported
+  `perl5_t/t` tree. The imported tree itself is a compatibility corpus rather
+  than the entire upstream Perl distribution.
+- The runner excludes native `win32/` tests; `bigmem/stack.t` and
+  `bigmem/stack_over.t` (native XS/C-stack behavior and impractical allocations);
+  `benchmark/gh7094-speed-up-keys-on-empty-hash.t` (host-relative throughput);
+  and `perf/opcount.t` and `perf/optree.t` (native Perl optree introspection).
+  See the exclusion policy in [the runner](../../dev/tools/perl_test_runner.pl).
+- The runner sets `PERL_SKIP_BIG_MEM_TESTS=1`. Other platform, optional-module,
+  and capability skips and TODOs remain part of the reported counts.
+- This was not a complete forced-interpreter run. Focused forced-interpreter
+  diagnostics for `op/hash.t` and `op/caller.t` each reported one assertion
+  failure during PR #1606; the default-mode result does not resolve those
+  diagnostics.
+- The [Ubuntu and Windows CI run](https://github.com/fglock/PerlOnJava/actions/runs/37133185864)
+  passed its configured gates. Those gates are distinct from this complete
+  local selected-corpus UAT run and do not establish the same full-corpus result
+  on those platforms.
+
+The supported claim is **“all selected imported core test files completed
+without unexpected failures in this run.”** An unqualified claim that
+PerlOnJava passes the entire standard Perl test suite would omit these limits.
 
 ## Quick Start
 

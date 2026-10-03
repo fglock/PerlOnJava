@@ -8,12 +8,18 @@ an individual script may depend on one of the remaining gaps.
 
 ## Status Legend
 
-- ✅ Fully implemented
+- ✅ Implemented for the behavior described in the entry
 - 🚧 Partially implemented
 - 🟡 Implemented with limitations
 - ❌ Not implemented
 - N/A Intentionally not applicable to the JVM runtime
 - `documented-divergence` Current Perl's executable rejects a form its POD describes
+
+Implementation status is distinct from validation scope. A check mark does not
+guarantee every edge case, execution backend, platform, or dependent CPAN module.
+The [2026-10-03 core-suite snapshot](testing.md#core-suite-snapshot-2026-10-03)
+records 575 selected files with no unexpected failures, together with the
+skips, TODOs, exclusions, and backend limits.
 
 ---
 
@@ -46,28 +52,46 @@ an individual script may depend on one of the remaining gaps.
 
 PerlOnJava implements most core Perl features with some key differences:
 
-✅ Fully Supported:
+✅ Implemented capability families (see individual entries for scope):
 - Core language features (variables, loops, conditionals, subroutines)
 - Most operators and built-in functions
 - Basic OOP with packages, inheritance, and method calls
-- Regular expressions (most features)
+- Regular expressions: the native Joni implementation is complete across the
+  documented capability families; diagnostic and representation limits are
+  listed in [Regular Expressions](#regular-expressions)
 - DBI with JDBC integration
 - Subroutine prototypes
 - Tied variables
 - Taint mode (`-T`)
 - Method Resolution Order
 - Perl ithreads, `threads::shared`, `Thread::Queue`, and `Thread::Semaphore`
+- Lexical strictness, warnings, UTF-8 source policy, and byte semantics
+- Formats with executable argument lines and active lexical captures
+- Native async/await through the bundled `Future::AsyncAwait`
 
 🚧 Partially Supported:
-- Warnings and strict pragma
 - Some core modules and pragmas
-- File operations and I/O
-- Overload
+- Platform-dependent native file operations and interpreter handle cleanup
+- Overload coverage beyond the specifically implemented operators below
 - Source filters: closure filters work; method filters and true streaming remain incomplete
 
 ❌ Not Supported:
 - Native C/XS binaries (documented Java replacements and pure-Perl fallbacks are supported)
 - `fork`
+
+### Advertised Runtime Configuration
+
+The bundled [Config.pm](../../src/main/perl/lib/Config.pm) describes PerlOnJava's
+runtime model rather than a native C Perl build. Capability flags help callers
+select behavior; they are not evidence that every dependent test passes.
+
+| Capability | Advertised configuration | Scope |
+|---|---|---|
+| 64-bit integers | `use64bitint`, `d_quad`, `d_longlong` are `define`; `ivsize` and `uvsize` are 8 | Integer storage is 64 bits. |
+| Floating point | `nvtype` is `double`; `nvsize` is 8 | IEEE-754 double precision; `nv_preserves_uv_bits` is 53 and `d_nv_preserves_uv` is undefined. Converting integers to floating point can lose precision. |
+| Threads and multiplicity | `useithreads`, `usethreads`, `usemultiplicity` are `define` | Isolated runtimes and explicitly shared values; see [threads](threads.md). |
+| Process forking | `d_fork` and `d_pseudofork` are undefined | Neither native fork nor Perl pseudo-fork is implemented. |
+| Host identity | `osname`, `osvers`, `myuname` reflect the host | Native facilities and symlink support depend on the platform. |
 
 ---
 
@@ -78,7 +102,10 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **Perl-like runtime error messages**: Runtime errors are formatted similarly to Perl's.
 - ✅  **Comments**: Support for comments and POD (documentation) in code is implemented.
 - ✅  **Environment**: Support for `PERL5LIB`, `PERL5OPT` environment variables.
-- 🚧  **Perl-like warnings**: Lexical warnings with FATAL support. Block-scoped warnings pending.
+- ✅  **Perl-like warnings**: Lexical and nested block scopes, category masks,
+  `FATAL`/`NONFATAL`, and call-site restoration are implemented. Focused coverage
+  includes `warnings_nested_scope_restore.t` and
+  `warnings_block_callsite_restore.t` in `src/test/resources/unit`.
 
 ---
 
@@ -132,10 +159,16 @@ The built-in Perl debugger (`perl -d`) provides interactive debugging. See [Debu
 | `@DB::args` | ✅ | Current subroutine arguments |
 
 ### Not Implemented
-- ❌  `-d:Module` - Custom debugger modules (e.g., `-d:NYTProf`)
 - ❌  `perl5db.pl` compatibility
 - ❌  `R` - Restart program
 - ❌  History and command editing
+
+### Custom Debugger Modules
+
+- ✅ `-d:Module[=args]` loads `Devel::Module` through the debugger hooks;
+  `-d:-Module` requests its unimport form. This enables compatible Perl debugger
+  modules, but does not make arbitrary native XS profilers such as NYTProf
+  available on the JVM.
 
 ---
 
@@ -150,17 +183,22 @@ The built-in Perl debugger (`perl -d`) provides interactive debugging. See [Debu
 
 - ✅  Accept command line switches from the shebang line.
 - ✅  Accept command line switches: `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-d`, `-f`, `-F`, `-m`, `-M`, `-g`, `-l`, `-h`, `-s`, `-S`, `-T`, `-x`, `-v`, `-V`, `-?`, `-w`, `-W`, `-X` are implemented.
+- ✅ `-C[number/list]` controls supported Unicode I/O and argument policies.
+- ✅ `-t` enables taint warnings; `-U` enables the unsafe-operation policy.
+- 🟡 `-D[number/list]` is accepted with the release-Perl warning that native
+  `DEBUGGING` instrumentation is unavailable. Use PerlOnJava's `--debug` for
+  its own compiler diagnostics.
 - ❌  Missing command line switches include:
   - `-u`: Dumps core after compiling.
-  - `-U`: Allows unsafe operations.
-  - `-D[number/list]`: Sets debugging flags.
-  - `-C [number/list]`: Controls Unicode features.
 
 ---
 
 ## Testing
 - ✅  **TAP tests**: Running standard Perl testing protocol.
 - ✅  **CI/CD**: Github testing pipeline in Ubuntu and Windows.
+- ✅ **Selected imported core corpus**: 575/575 files completed without
+  unexpected failures on 2026-10-03. See the [testing guide](testing.md#core-suite-snapshot-2026-10-03)
+  for counters, exclusions, and verification scope.
 
 ---
 
@@ -227,7 +265,10 @@ my @copy = @{$z};         # ERROR
   and rejects tainted values at security-sensitive operations. Supported by
   both JVM and interpreter backends. `-t` uses the same taint propagation but
   reports unsafe uses as warnings instead of rejecting them.
-- ❌  **`local` special cases**: `local *HANDLE = *HANDLE` doesn't create a new typeglob.
+- ✅ **Localized typeglob identity**: Whole-glob localization installs a
+  temporary glob and restores the outer binding and selected-handle lookup.
+  Focused coverage includes `local_glob_filehandle.t` and
+  `selected_glob_localization_restores_io.t` in `src/test/resources/unit`.
 - 🚧  **Variable attributes**: `my $x : attr` supported via `MODIFY_SCALAR_ATTRIBUTES` etc.
 
 ---
@@ -256,7 +297,9 @@ my @copy = @{$z};         # ERROR
 - ✅  **Field defaults**: Default values for fields work.
 - ✅  **Field inheritance**: Parent class fields are inherited.
 - 🟡  **`__CLASS__`**: Compile-time evaluation only, not runtime.
-- 🟡  **Argument validation**: Limited by operator implementation issues.
+- ✅ **Constructor parameter validation**: Generated class constructors reject
+  unknown parameters; focused coverage includes
+  `src/test/resources/unit/class_unknown_constructor_parameter.t`.
 - ✅  **Moose / Class::MOP**: Moose 2.4000 is bundled.
   Upstream Moose tests pass ~99%; DBIx::Class (installed via `jcpan`)
   passes 100%. See
@@ -333,7 +376,8 @@ my @copy = @{$z};         # ERROR
 - ✅  **Array delete**: `delete` for array indexes is implemented.
 - ✅  **Tied Arrays**: Tied arrays are implemented. See also [Tied Scalars](#scalars), [Tied Hashes](#arrays-hashes-and-lists), [Tied Handles](#io-operations).
 - ✅  **Tied Hashes**: Tied hashes are implemented. See also [Tied Scalars](#scalars), [Tied Arrays](#arrays-hashes-and-lists), [Tied Handles](#io-operations).
-- ❌  **Restricted hashes**: `Hash::Util` lock/unlock functions (`lock_keys`, `lock_hash`, etc.) are not implemented.
+- 🟡 **Restricted hashes**: `Hash::Util` supplies compatibility entry points,
+  but lock/unlock helpers do not enforce native Perl hash restrictions.
 
 ---
 
@@ -361,6 +405,13 @@ my @copy = @{$z};         # ERROR
 ---
 
 ## Regular Expressions
+
+The native regex implementation is complete across the capability families
+listed below. All selected direct and threaded regex files in the
+[2026-10-03 default-mode core run](testing.md#core-suite-snapshot-2026-10-03)
+completed without unexpected failures. That result retains skips and TODOs
+and does not imply unlimited recursion or identical diagnostics for every
+malformed pattern.
 
 All production matching uses the vendored Joni fork through `RuntimeRegex` and
 `JoniRegexPattern`. Status below means the named behavior is demonstrated by
@@ -450,7 +501,8 @@ in this capability matrix.
 - ✅  **`die` with object**: `PROPAGATE` method is supported.
 - ✅  **`exit`**: `exit` is supported.
 - ✅  **`kill`**: `kill` is supported.
-- ✅  **`waitpid`**: `waitpid` is partially supported.
+- 🟡 **`waitpid`**: Supported for managed child processes; this is not a
+  general replacement for native process waiting.
 - ✅  **`utime`**: `utime` is supported.
 - ✅  **`umask`**: `umask` is supported.
 - ✅  **`chown`**: `chown` is supported.
@@ -480,9 +532,11 @@ in this capability matrix.
 - ❌  **Startup processing**: processing `$sitelib/sitecustomize.pl` at startup is not enabled.
 - ✅  **Smartmatch operator**: `~~` and `given`/`when` behavior is supported on both backends. See the rerunnable [audit probe](../../dev/tools/feature-audit/remaining_semantics.t).
 - ✅  **File test operators**: `-R`, `-W`, `-X`, `-O` (for real uid/gid), this implementation assumes that the real user ID corresponds to the current user running the Java application.
-- ✅  **File test operators**: `-t` (tty check), this implementation assumes that the -t check is intended to determine if the program is running in a TTY-compatible environment.
-- ✅  **File test operators**: `-p`, `-S`, `-b`, and `-c` are approximated using file names or paths, as Java doesn't provide direct equivalents.
-- ✅  **File test operators**: `-k` (sticky bit) is approximated using the "others execute" permission, as Java doesn't have a direct equivalent.
+- ✅ **File test operators**: `-t` checks terminal handles; an omitted argument
+  defaults to `STDIN`.
+- 🟡 **File test operators**: `-p`, `-S`, `-b`, `-c`, `-u`, `-g`, and `-k`
+  use native stat mode bits where available. Fallbacks without native stat
+  remain approximations based on paths or Java permissions.
 - ✅  **File test operators**: `-T` and `-B` (text/binary check) are implemented using a heuristic similar to Perl's approach.
 - ✅  **File test operators**: Time-based operators (`-M`, `-A`, `-C`) return the difference in days as a floating-point number.
 - ✅  **File test operators**: Using `_` as the argument reuses the last stat result.
@@ -503,8 +557,17 @@ in this capability matrix.
 - ✅  **`exec` operator**: `exec` is implemented.
 - ✅  **User/Group operators, Network info operators**: `getlogin`, `getpwnam`, `getpwuid`, `getgrnam`, `getgrgid`, `getpwent`, `getgrent`, `setpwent`, `setgrent`, `endpwent`, `endgrent`, `gethostbyname`, `gethostbyaddr`, `getservbyname`, `getservbyport`, `getprotobyname`, `getprotobynumber`.
 - ✅  **Network enumeration operators**: `endhostent`, `endnetent`, `endprotoent`, `endservent`, `gethostent`, `getnetbyaddr`, `getnetbyname`, `getnetent`, `getprotoent`, `getservent`, `sethostent`, `setnetent`, `setprotoent`, `setservent`.
-- ✅  **System V IPC operators**: `msgctl`, `msgget`, `msgrcv`, `msgsnd`, `semctl`, `semget`, `semop`, `shmctl`, `shmget`, `shmread`, `shmwrite`.
-- 🚧  **`format` operator**: Format declarations, basic `write`, and per-filehandle active-format (`$~`) selection work. Format argument lines do not yet execute general Perl expressions: lexical captures, blocks, anonymous data structures, operators, method calls, tied/overloaded values, evaluation-order side effects, and normal expression diagnostics are incomplete. `^` field consumption and `~~` continuation semantics remain incomplete. See [#1234](https://github.com/fglock/PerlOnJava/issues/1234).
+- 🟡 **System V IPC operators**: `msgctl`, `msgget`, `msgrcv`, `msgsnd`,
+  `semctl`, `semget`, `semop`, `shmctl`, `shmget`, `shmread`, and `shmwrite`
+  use runtime-local Java storage. They do not expose operating-system System V
+  IPC objects shared with external processes.
+- ✅ **`format`/`write`**: Argument lines execute Perl expressions, including
+  side effects, tied values, and active lexical captures. Active-format (`$~`)
+  selection, pagination, `^` consumption, and continuation pictures are
+  implemented. Focused coverage includes `format_argument_line_execution.t`,
+  `format_active_lexical.t`, `format_unavailable_lexical_shadow.t`, and
+  `format_continuation_ellipsis.t` in `src/test/resources/unit`; the selected
+  core run also completes `comp/form_scope.t`.
 - ✅  **`formline` operator**: `formline` and `$^A` accumulator variable are implemented.
 
 ---
@@ -548,8 +611,10 @@ in this capability matrix.
 - ✅  **`DATA`**: `DATA` file handle is implemented.
 - ✅  **`truncate`**: File truncation
 - ✅  **`flock`**: File locking with LOCK_SH, LOCK_EX, LOCK_UN, LOCK_NB
-- ✅  **`fcntl`**: File control operations (stub + native via jnr-posix)
-- ✅  **`ioctl`**: Device control operations (stub + native via jnr-posix)
+- 🟡 **`fcntl`**: Native descriptor operations through Java's Foreign Function
+  & Memory API, with a limited fallback when native access is unavailable.
+- 🟡 **`ioctl`**: Native device operations through the Foreign Function & Memory
+  API, including integer and packed-buffer arguments on supported handles.
 - ✅  **`syscall`**: System calls (SYS_gethostname)
 
 ### Socket Operations
@@ -568,8 +633,6 @@ in this capability matrix.
 - ✅  **`socketpair`**: Connected socket pair creation
 
 - ✅  **`pipe`**: Internal pipe creation for inter-process communication
-
-### Unimplemented I/O Operators
 
 ### I/O Layers
 - ✅  **Layer support**: `open` and `binmode` support these I/O layers:
@@ -646,11 +709,12 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 
 ### Pragmas
 
-- 🚧  **strict** pragma:.
+- ✅ **strict** pragma:
   - ✅ all `use strict` modes are implemented.
   - ✅ `no strict vars`, `no strict subs` are implemented.
-  - 🚧 `no strict refs` is partially implemented: scalar, glob references.
-  - ❌ `no strict refs` works with global variables only. `my` variables can not be accessed by name.
+  - ✅ `no strict 'refs'` permits symbolic references to package variables.
+    Lexical (`my`) variables cannot be accessed by symbolic name in standard
+    Perl either; this is not a missing feature.
 - ✅  **parent** pragma
 - ✅  **base** pragma
 - ✅  **constant** pragma
@@ -661,12 +725,17 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **vars** pragma
 - ✅  **version** pragma
 - ✅  **subs** pragma
-- 🚧  **utf8** pragma: utf8 is always on. Disabling utf8 might work in a future version.
-- 🚧  **bytes** pragma
+- ✅ **utf8** pragma: `use utf8` and `no utf8` control lexical source decoding,
+  including nested scopes and eval compilation; see `utf8_pragma.t` and
+  `interpreter_begin_eval_utf8_scope.t` in `src/test/resources/unit`.
+- ✅ **bytes** pragma: lexical octet semantics and scope restoration are
+  implemented; focused coverage includes `bytes_scope_interpreter.t` and
+  `bytes_regex_substitution.t` in `src/test/resources/unit`.
 - 🚧  **feature** pragma
   - ✅ Features implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `defer`, `bitwise`, `postderef`, `postderef_qq`, `evalbytes`, `unicode_eval`, `refaliasing`, `module_true`, `signatures`, `class`, `keyword_all`, `keyword_any`.
   - ✅ `unicode_strings` (see the [audit probe](../../dev/tools/feature-audit/unicode_strings.t)).
-- 🚧  **warnings** pragma
+- ✅ **warnings** pragma: lexical categories, fatality policy, warning masks,
+  and scope restoration; see [Compiler Usability](#compiler-usability).
 - 🚧  **attributes** pragma: `MODIFY_*_ATTRIBUTES`/`FETCH_*_ATTRIBUTES` callbacks for subroutines and variables.
 - 🚧  **bignum** and **bigint** pragmas: basic checks pass on the JVM backend; the interpreter loses `bigint` precision and does not complete the basic `bignum` probe within the audit timeout. See the [bignum](../../dev/tools/feature-audit/numeric_bignum.t) and [bigint](../../dev/tools/feature-audit/numeric_bigint.t) probes.
 - ✅  **bigrat** pragma: isolated rational-arithmetic probe passes on all backends; see the [audit probe](../../dev/tools/feature-audit/numeric_bigrat.t).
@@ -694,9 +763,12 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
   - ✅ Implemented: `+=`, `-=`, `*=`, `/=`, `%=`.
   - ✅ Implemented: `<>`.
   - ✅ `++`, `.`, and `=` copy-constructor behavior pass focused audit tests.
-  - ❌ Missing: `--`, `&`, `|`, `^`, `~`, `<<`, `>>`, `&.`, `|.`, `^.`, `~.`, `x`.
-  - ❌ Missing: `**=`, `<<=`, `>>=`, `x=`, `.=`, `&=`, `|=`, `^=`, `&.=`, `|.=`, `^.=`.
-  - ❌ Missing: `-X`.
+  - ✅ Implemented: `&`, `|`, `^`, `~`, `<<`, `>>`, and `.=` dispatch.
+  - ✅ `-X` file-test overloading, including stacked tests; focused coverage
+    includes `filetest_overload.t` in `src/test/resources/unit`.
+  - 🚧 Full overload coverage remains subject to operator-specific validation;
+    the entries above do not establish every mutator, string-bitwise, or
+    compound-assignment form.
 - ✅  **overloading** pragma: lexical enable/disable behavior passes the focused audit batch.
 
 
@@ -705,7 +777,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 
 - ✅  **Benchmark** use the same version as Perl.
 - ✅  **Carp**: `carp`, `cluck`, `croak`, `confess`, `longmess`, `shortmess` are implemented.
-- ✅  **Config** module.
+- ✅ **Config** module: advertises the JVM runtime's numeric, thread, process,
+  and host capabilities; see [Advertised Runtime Configuration](#advertised-runtime-configuration).
 - ✅  **threads** module: isolated create/join, identity, listing, detach,
   state inspection, child exit, errors, `async`, `yield`, and supported import
   options. See the [Perl threads reference](threads.md).
@@ -759,7 +832,12 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Perl::OSType** module.
 - ✅  **Scalar::Util**: `blessed`, `reftype`, `set_prototype`, `dualvar` are implemented.
 - ✅  **SelectSaver**: module.
-- ✅  **Storable**: module. Reads and writes the native Perl Storable binary format (`pst0` magic), interoperable with system perl in both directions. `STORABLE_freeze`/`STORABLE_thaw` hooks support extra references, and nested tied arrays, hashes, and scalars retain the correct reference depth. `$Storable::canonical` is not yet implemented (see `dev/modules/storable_binary_format.md`).
+- ✅ **Storable**: Reads and writes the native Perl Storable binary format
+  (`pst0` magic), interoperable with system Perl in both directions.
+  `STORABLE_freeze`/`STORABLE_thaw` hooks support extra references, and nested
+  tied arrays, hashes, and scalars retain the correct reference depth.
+  `$Storable::canonical` enables deterministic hash-key serialization; see
+  [the binary-format design](../../dev/modules/storable_binary_format.md).
 - ✅  **Sys::Hostname** module.
 - ✅  **Symbol**: `gensym`, `qualify` and `qualify_to_ref` are implemented.
 - ✅  **Term::ANSIColor** module.
@@ -783,7 +861,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
   predicates needed by JSONP; full lvalue/op-tree introspection remains planned.
 - ✅  **Email::Address::XS** compatibility subset used by Email::Sender.
 - ✅  **Unicode::UCD** module.
-- ✅  **XSLoader** module.
+- 🟡 **XSLoader** module: loads supported Java replacements and pure-Perl
+  fallbacks; it does not load arbitrary native C/XS binaries.
 - 🚧  **DynaLoader** placeholder module.
 - 🚧  **HTTP::Tiny** some features untested: proxy settings.
 - 🚧  **POSIX** module.
@@ -797,6 +876,9 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Safe** module: permit-only and default sandbox behavior passes the focused audit batch.
 
 ### Non-core modules
+- ✅ **Future::AsyncAwait**: native suspension, resumption, cancellation,
+  signatures, `defer`, and `CANCEL` blocks. The documented upstream gate covers
+  52 files and 221 assertions; see [Recently Completed](../about/roadmap.md#recently-completed).
 - 🟡 **Object::Pad**: core class, field, method, parameter, and inheritance
   syntax is handled by PerlOnJava's native class compiler; Object::Pad-specific
   MOP extensions are not implemented.
