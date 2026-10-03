@@ -134,6 +134,11 @@ public class GlobalDestruction {
                 // object untracked (or at MIN_VALUE), but a later method
                 // definition must still be observed at global destruction.
                 && (base.refCount >= 0 || (base.blessId != 0 && !base.destroyFired))) {
+            // This object was already live through a package global when
+            // teardown selected it. A residual selective count after its
+            // destructor is not by itself evidence that DESTROY resurrected
+            // it; preserve that distinction for the post-call warning check.
+            DestroyDispatch.noteGlobalDestructionRoot(base);
             destroyBaseIfTracked(base, visited);
         }
     }

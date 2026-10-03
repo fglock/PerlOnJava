@@ -705,11 +705,10 @@ public class IOOperator {
         }
 
         if (fh != null && fh.directoryIO != null) {
-            // Java directory streams do not expose a native descriptor. Perl
-            // reports this as an undefined fileno and sets EBADF.
-            FFMPosix.get().setErrno(9);
-            GlobalVariable.getGlobalVariable("main::!").set(9);
-            return RuntimeScalarCache.scalarUndef;
+            // DirectoryStream does not expose a native descriptor. Keep the
+            // POSIX d_dirfd contract with a runtime-local descriptor, as we do
+            // for regular files and process pipes on the JVM backend.
+            return new RuntimeScalar(fh.assignFileno());
         }
 
         if (fh == null || fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) {
@@ -2771,7 +2770,17 @@ public class IOOperator {
             }
 
             if (targetGlob != null) {
-                targetGlob.setIO(clientRuntimeIO);
+                // Symbol::gensym removes its newly-created glob from the
+                // stash. Keep that status when attaching the accepted
+                // socket, so its lexical owner can close it at scope exit.
+                boolean symbolGensym = targetGlob.globName != null
+                        && targetGlob.globName.matches("Symbol::GEN\\d+");
+                if (symbolGensym || (targetGlob.globName != null
+                        && GlobalVariable.isIORefHiddenAfterStashDelete(targetGlob.globName))) {
+                    targetGlob.setIOKeepingStashHidden(clientRuntimeIO);
+                } else {
+                    targetGlob.setIO(clientRuntimeIO);
+                }
                 targetGlob.acceptedSocket = true;
                 MyVarCleanupStack.retainLiveIoGlobOwners(targetGlob);
                 RuntimeScalar.retainUnstashedIoForDurableSlot(newSocketHandle);

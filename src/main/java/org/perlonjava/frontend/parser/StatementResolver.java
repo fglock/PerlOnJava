@@ -246,6 +246,17 @@ public class StatementResolver {
                     yield null;
                 }
 
+                case "has" -> {
+                    // Object::Pad 0.66 used `has` for the same declaration
+                    // later standardized as `field`. Keep it scoped to braced
+                    // class bodies so ordinary Perl code retains its parsing.
+                    if (parser.isInClassBlock
+                            && parser.ctx.symbolTable.isFeatureCategoryEnabled("class")) {
+                        yield FieldParser.parseFieldDeclaration(parser, "has");
+                    }
+                    yield null;
+                }
+
                 case "method" -> {
                     // With the class feature enabled, `method` is still ambiguous with
                     // Perl's long-standing indirect method-call syntax:

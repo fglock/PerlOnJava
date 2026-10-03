@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Support POSIX directory-handle `chdir` and Object::Pad scalar `:accessor`
+  fields, including the legacy `has` declaration, and preserve open process
+  pipes across temporary filehandle aliases used by `IO::Select`.
+
 - Prevent stale CPAN archive-name entries and namespace-resolution errors from
   being recorded as compatibility regressions.
 
@@ -28,11 +32,25 @@ priorities and future plans.
   ambiguity warnings, support `chdir` and `chmod` through open filehandles,
   report directory `chdir` as unavailable without `dirfd`, restore
   invalid-descriptor errors, preserve dynamic package variables and monotonic
-  clocks needed by AnyEvent::Tools, and reuse root reachability snapshots during
-  weak-reference cleanup.
+  clocks needed by AnyEvent::Tools, and short-circuit lifecycle root queries,
+  reuse snapshots across cleanup targets, and batch strong-cycle checks during
+  weak-reference sweeps.
 
-- Preserve ordinary `goto` jumps between conditional branches while rejecting
-  jumps into conditional blocks from outside.
+- Preserve ordinary `goto` jumps between conditional branches, including
+  transfers out of nested conditions into an enclosing `if`/`elsif` arm, while
+  rejecting jumps into conditional blocks from outside.
+
+- Allow tail calls from helper subroutines invoked by sort comparators while
+  preserving Perl's errors for tail calls written directly in comparators.
+
+- Close accepted `IO::Socket` connections when their final lexical handle leaves
+  scope, including handles created through `Symbol::gensym`.
+
+- Avoid false global-destruction resurrection warnings for package-rooted
+  objects while preserving warnings for objects actually rescued by `DESTROY`.
+
+- Emit prototype mismatch warnings in the `prototype` category under `syntax`,
+  honoring lexical `no warnings 'syntax'` controls on both backends.
 
 - Support anonymous temporary files for read/write opens with undefined paths,
   report non-numeric process IDs passed to `kill()`, and release each result of

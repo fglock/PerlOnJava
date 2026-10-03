@@ -56,21 +56,53 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.runUnitcheckBlock
  * It provides functionality to compile, store, and execute Perl subroutines and eval strings.
  */
 public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
-    /** Nesting of comparator invocations currently owned by sort(). */
-    private static final ThreadLocal<Integer> sortComparatorDepth = ThreadLocal.withInitial(() -> 0);
+    private record SortComparatorFrame(RuntimeCode comparator,
+            int activeCodeDepth, int activeJvmMethodDepth) {}
 
-    public static void enterSortComparator() {
-        sortComparatorDepth.set(sortComparatorDepth.get() + 1);
+    /** Active sort comparator roots, outermost to innermost. */
+    private static final ThreadLocal<Deque<SortComparatorFrame>> sortComparatorFrames =
+            ThreadLocal.withInitial(ArrayDeque::new);
+
+    public static void enterSortComparator(RuntimeCode comparator) {
+        int activeJvmMethodDepth = PerlRuntime.current().executionState()
+                .activeJvmSortComparators.size();
+        sortComparatorFrames.get().push(new SortComparatorFrame(comparator,
+                activeCodeStack().size(), activeJvmMethodDepth));
     }
 
     public static void leaveSortComparator() {
-        int depth = sortComparatorDepth.get() - 1;
-        if (depth <= 0) sortComparatorDepth.remove();
-        else sortComparatorDepth.set(depth);
+        Deque<SortComparatorFrame> frames = sortComparatorFrames.get();
+        if (!frames.isEmpty()) frames.pop();
+        if (frames.isEmpty()) sortComparatorFrames.remove();
     }
 
-    public static boolean isInSortComparator() {
-        return sortComparatorDepth.get() > 0;
+    /** True only while executing the comparator itself, not a helper it called. */
+    public static boolean isCurrentSortComparatorSubroutine() {
+        Deque<SortComparatorFrame> frames = sortComparatorFrames.get();
+        if (frames.isEmpty()) return false;
+        SortComparatorFrame frame = frames.peek();
+        RuntimeCode active = getActiveCodeAt(0);
+        if (frame.comparator() != null && active != null) {
+            if (active == frame.comparator()) return true;
+            String comparatorName = frame.comparator().subName;
+            if (comparatorName != null && !comparatorName.isBlank()
+                    && comparatorName.equals(active.subName)) return true;
+        }
+        if (active != null && active.isSortComparator) return true;
+        Deque<Boolean> jvmSortFrames = PerlRuntime.current().executionState()
+                .activeJvmSortComparators;
+        if (!jvmSortFrames.isEmpty() && jvmSortFrames.peek()) return true;
+
+        int activeJvmMethodDepth = jvmSortFrames.size();
+        int currentDepth = activeCodeStack().size() + activeJvmMethodDepth;
+        int comparatorEntryDepth = frame.activeCodeDepth() + frame.activeJvmMethodDepth() + 1;
+        return currentDepth == comparatorEntryDepth;
+    }
+
+    /** True while a sort comparator (or one of its helper calls) is running. */
+    public static boolean isSortComparatorInvocationActive() {
+        return !sortComparatorFrames.get().isEmpty()
+                || PerlRuntime.current().executionState().activeSortComparatorInvocations > 0;
     }
 
     public static boolean isCurrentSortComparatorBlock() {
@@ -640,17 +672,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return null;
     }
 
-    /** True when the current Perl call chain is executing a sort BLOCK comparator. */
-    public static boolean hasActiveSortComparator() {
-        for (RuntimeCode active : activeCodeStack()) {
-            if (active.isSortComparator) return true;
-        }
-        for (boolean active : PerlRuntime.current().executionState().activeJvmSortComparators) {
-            if (active) return true;
-        }
-        return PerlRuntime.current().executionState().activeSortComparatorInvocations > 0;
-    }
-
     /**
      * Perl distinguishes a tail call written directly in a sort BLOCK from a
      * tail call made by a named subroutine invoked by that comparator.
@@ -672,9 +693,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return new PerlCompilerException("Can't goto subroutine outside a subroutine");
     }
 
-    /** Reject a tail call that would cross an active sort pseudo-block. */
+    /** Reject a tail call that would replace the active sort comparator. */
     public static void checkSortTailCall() {
-        if (hasActiveSortComparator()) {
+        if (isCurrentSortComparatorSubroutine()) {
             throw sortTailCallError();
         }
     }
@@ -6586,7 +6607,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Cast the value to RuntimeCode and call apply()
                 RuntimeList result = code.apply(argsForCall, callContext);
                 if (code.isSortComparator && result instanceof RuntimeControlFlowList flow) {
-                    if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
+                    if (flow.getControlFlowType() == ControlFlowType.TAILCALL
+                            && !flow.isSortHelperTailCall()) {
                         throw sortTailCallError();
                     }
                     String message = flow.getControlFlowType() == ControlFlowType.GOTO
@@ -7406,7 +7428,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             }
             try {
-                if (hasActiveSortComparator()) {
+                if (isCurrentSortComparatorSubroutine() && !cfList.isSortHelperTailCall()) {
                     throw sortTailCallError();
                 }
                 if (cfList.marker.evalScope != null) {

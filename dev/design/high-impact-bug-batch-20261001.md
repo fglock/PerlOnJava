@@ -43,7 +43,7 @@ proven fix emerges from profiling.
 
 ## Progress tracking
 
-### Current status: implementation and full local UAT complete; PR #1598 open; current-head CI pending
+### Current status: high-impact implementation is complete; CPAN release acceptance follow-up is in progress on PR #1628
 
 ### Completed phases
 
@@ -130,12 +130,90 @@ proven fix emerges from profiling.
     head is `d419e5ec23a6cee937de34bfeeb35b31f6cd969f`. Current-head CI jobs
     on Ubuntu and Windows are still running. Merge after both checks pass.
 
+- [ ] Phase 7: normal CPAN release acceptance follow-up (in progress, 2026-10-03)
+  - Removed Catalyst Runtime's broad `PERLONJAVA_SKIP` preference and retired
+    its stale PerlOnJava-owned copy from the default CPAN home. Catalyst now
+    runs its full upstream test phase (200 files, 3,800 assertions).
+  - The first complete `make test-cpan-release-acceptance` run is saved in
+    `build/reports/cpan-release-acceptance-20261003/run-2/`. It exposed a
+    Mojolicious resumed-download hang caused by accepted `IO::Socket` handles
+    on `Symbol::gensym` globs remaining visible in the package stash. The
+    accepted-socket path now keeps those globs hidden so final lexical scope
+    cleanup closes the stream. Full `make`, JVM and interpreter regressions,
+    and Mojolicious `t/mojo/file_download.t` pass; the focused follow-up is
+    saved in `build/reports/cpan-release-acceptance-20261003/run-4/`.
+  - The Mojolicious fix is committed as `8e818d763` and pushed to PR #1628.
+    The first full acceptance run found `undef-params.t` failing with two
+    global-destruction warnings, plus the fork-dependent `live_fork.t` case. A
+    project-owned regression now covers weak-owner teardown and is verified
+    with system Perl, JVM, and interpreter. The runtime fix tracks package
+    roots selected during `DESTRUCT`, distinguishes transient method-call
+    aliases from objects actually rescued by `DESTROY`, and clears only the
+    former. `undef-params.t` now passes all five assertions without the extra
+    warnings; existing global-resurrection coverage still passes 27/27.
+    Full `nice -n 19 make` passed after the fix. Focused logs are in
+    `/tmp/global-destroy-weak-owner-final-jvm.txt`,
+    `/tmp/global-destroy-weak-owner-final-interpreter.txt`,
+    `/tmp/destroy-edge-cases-final-jvm.txt`, and
+    `/tmp/catalyst-undef-params-final.txt`.
+  - The two Catalyst `http_exceptions` failures were traced to `Data::Dump`
+    source rejected by the Perl parser, so they fall under the agreed
+    `area:parser` exclusion. Catalyst Runtime itself ran its regular upstream
+    test phase: 200 programs and 3,798 of 3,800 assertions passed; the other
+    two are those parser-dependent cases.
+  - Removed the stale signed `Catalyst-Runtime.yml` preference from the
+    default CPAN home using the updated bootstrap. The retirement regression
+    passes 5/5 and confirms user-owned Catalyst preferences are preserved.
+    The separate `Test-Trap` skip applies to that dependency's fork-dependent
+    test phase and does not skip Catalyst Runtime tests.
+  - The latest complete acceptance run is saved in
+    `build/reports/cpan-release-acceptance-20261003/run-5/` (commit
+    `db9fea12d`). Excel::Writer::XLSX and PPR reported no strict failures.
+    Catalyst ran normally: 3/200 programs failed with zero failed assertions;
+    the two HTTP-exception programs are parser-dependent and `live_fork.t` is
+    the agreed fork exclusion. DateTime's remaining `t/10subtract.t` failure
+    is issue #1269. DBIx::Class's large failure count is primarily its
+    `DBICTest::RunMode` heredoc conflict-marker diagnostic (parser exclusion);
+    its fork test is separately excluded. Template has one in-scope warning
+    mismatch in `t/math_rand.t`, where bundled `Math::Complex` emits prototype
+    mismatch warnings during `rand`/`srand` calls.
+  - Image::ExifTool's in-scope `WriteExif.pl` rejection came from conditional
+    context tracking that retained only the nearest `if`. It rejected a valid
+    jump from a nested condition into a sibling arm of its enclosing
+    `if`/`elsif` chain. Conditional paths are now tracked by both backends and
+    a project-owned regression reproduces the transfer. The test passes on
+    system Perl, JVM, and interpreter; the directly affected ExifTool
+    `t/Casio.t` passes on system Perl and JVM. A 10-minute direct `t/Writer.t`
+    probe did not finish because of repeated existing invalid-transliteration
+    diagnostics (parser issue #1476); the full acceptance gate remains the
+    authoritative module result. No broad Image::ExifTool preference was added.
+  - Mojolicious's `Test::Builder.pm` line 368 warning flood came from weak
+    parent edges being cleared during incremental `Mojo::DOM::HTML` tree
+    construction. `MortalList` now retains reachable unblessed array/hash
+    ancestors before owner tracking activates. The project-owned tree
+    regression passes system Perl, JVM, and interpreter (7 assertions each).
+    The full `make` gate passed after this fix; keep Mojolicious enabled and
+    verify it in the next release acceptance run.
+  - Template's `t/math_rand.t` warning mismatch is fixed by emitting prototype
+    mismatch warnings in the `prototype` category under `syntax`, and checking
+    the active lexical warning category during interpreter compilation. The
+    project-owned regression passes system Perl, JVM, and interpreter. The
+    full `make` gate passed after this fix.
+  - The latest full `nice -n 19 make` after batching the reachability,
+    prototype-warning, and conditional-goto fixes passed in 11m55s. Focused
+    goto-chain and construct-entry tests also pass on both backends. The next
+    full release acceptance run is still required; keep this phase in progress.
+
 ### Next steps
 
-1. Run the documentation link checks after the rebase and verify PR #1598 is
-   open with the expected files.
-2. Update PR #1598 with the rebased full-UAT evidence, then wait for CI on the
-   resulting head and merge when green.
+1. Commit the batched fixes and focused regressions to the existing feature
+   branch, then push the updated PR #1628.
+2. Run `make test-cpan-release-acceptance` on the immutable commit and retain
+   the full run archive and report snapshots. Keep the normal Catalyst suite
+   enabled; its stale owned skip preference is retired during CPAN bootstrap.
+3. Fix each remaining in-scope failure and repeat the release acceptance gate.
+   Only the agreed `fork`, `area:parser`, and #1269 cases are excluded. Continue
+   until all other modules pass.
 
 ### Open questions
 

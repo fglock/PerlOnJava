@@ -12,6 +12,7 @@ import org.perlonjava.runtime.perlmodule.Version;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class CompileOperator {
     private static String posAggregateOperand(Node operand) {
@@ -2260,10 +2261,11 @@ public class CompileOperator {
         boolean sourceFollowsTargetBlockStart = staticTarget != null
                 && staticTarget.owner != null
                 && staticTarget.owner.getIndex() <= node.getIndex();
+        Set<Integer> sourceConditionalContexts = bc.gotoConditionalContextsByToken
+                .getOrDefault(node.getIndex(), Set.of());
         boolean sourceAndTargetShareConditional = staticTarget != null
-                && staticTarget.conditionalContext >= 0
-                && staticTarget.conditionalContext == bc.gotoConditionalContextsByToken
-                        .getOrDefault(node.getIndex(), -1);
+                && !staticTarget.conditionalContexts.isEmpty()
+                && sourceConditionalContexts.containsAll(staticTarget.conditionalContexts);
         if (staticTarget != null && staticTarget.constructEntry
                 && !bc.isInsideGotoLabelBlock(staticTarget.owner)
                 && !staticTarget.fieldInitializer

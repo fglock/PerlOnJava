@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "modules": [
+    {
+      "distribution": "Compress-Raw-Bzip2",
+      "source": "https://metacpan.org/dist/Compress-Raw-Bzip2",
+      "port_mode": "rewritten",
+      "upstream_distribution_version": "2.224",
+      "providers": [
+        {
+          "kind": "perl_version",
+          "module": "Compress::Raw::Bzip2",
+          "path": "src/main/perl/lib/Compress/Raw/Bzip2.pm",
+          "version": "2.224",
+          "same_version_as_upstream": true,
+          "contract": "upstream package API"
+        },
+        {
+          "kind": "java_static_string",
+          "provider": "org.perlonjava.runtime.perlmodule.CompressRawBzip2",
+          "path": "src/main/java/org/perlonjava/runtime/perlmodule/CompressRawBzip2.java",
+          "symbol": "XS_VERSION",
+          "version": "2.224",
+          "same_version_as_upstream": true,
+          "contract": "CPAN XS API compatibility"
+        },
+        {
+          "kind": "gradle_catalog",
+          "provider": "org.apache.commons:commons-compress",
+          "path": "gradle/libs.versions.toml",
+          "symbol": "commons-compress",
+          "version": "1.28.0",
+          "contract": "Java backing library; independent version line"
+        }
+      ],
+      "update_policy": "stage-and-manual-port",
+      "tests": [
+        "src/test/resources/unit/compress_raw_bzip2.t",
+        "src/test/resources/unit/compress_bzip2_streaming_inflater.t",
+        "src/test/resources/unit/compress_bzip2_streaming_writer.t"
+      ]
+    },
+    {
+      "distribution": "Compress-Raw-Zlib",
+      "source": "https://metacpan.org/dist/Compress-Raw-Zlib",
+      "port_mode": "rewritten",
+      "upstream_distribution_version": "2.224",
+      "providers": [
+        {
+          "kind": "perl_version",
+          "module": "Compress::Raw::Zlib",
+          "path": "src/main/perl/lib/Compress/Raw/Zlib.pm",
+          "version": "2.224",
+          "same_version_as_upstream": true,
+          "contract": "upstream package API"
+        },
+        {
+          "kind": "java_perl_global",
+          "provider": "Compress::Raw::Zlib XS_VERSION",
+          "path": "src/main/java/org/perlonjava/runtime/perlmodule/CompressRawZlib.java",
+          "symbol": "Compress::Raw::Zlib::XS_VERSION",
+          "version": "2.224",
+          "same_version_as_upstream": true,
+          "contract": "CPAN XS API compatibility"
+        }
+      ],
+      "update_policy": "stage-and-manual-port",
+      "tests": [
+        "src/test/resources/unit/compress_raw_zlib_autodetect_regression.t",
+        "src/test/resources/unit/compress_raw_zlib_gzip_wrapper.t",
+        "src/test/resources/unit/compress_zlib_gzerror_eof.t"
+      ]
+    },
+    {
+      "distribution": "Object-Pad",
+      "source": "https://metacpan.org/dist/Object-Pad",
+      "port_mode": "rewritten",
+      "upstream_distribution_version": "0.66",
+      "providers": [
+        {
+          "kind": "perl_version",
+          "module": "Object::Pad",
+          "path": "src/main/perl/lib/Object/Pad.pm",
+          "version": "0.66",
+          "contract": "advertised compatibility level; not upstream implementation version"
+        }
+      ],
+      "update_policy": "stage-and-manual-port",
+      "tests": ["src/test/resources/unit/object_pad_accessor.t"]
+    }
+  ]
+}

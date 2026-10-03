@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.io.DirectoryIO;
+import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -51,7 +52,29 @@ public class Directory {
         if (io != null) {
             String name = filehandleName(runtimeScalar, io);
             if (io.directoryIO != null) {
-                throw new PerlCompilerException("The dirfd function is unimplemented");
+                if (NativeUtils.IS_WINDOWS) {
+                    getGlobalVariable("main::!").set(9);
+                    return scalarFalse;
+                }
+                // DirectoryStream does not expose its native dirfd through the
+                // Java API.  PerlOnJava resolves filesystem operations against
+                // RuntimeEnvironment's current directory, so use the stable
+                // absolute path captured when opendir() opened this handle.
+                // This gives directory handles the same chdir behavior for
+                // ordinary path operations without reaching into JDK internals.
+                Path openedDirectory = io.directoryIO.getAbsoluteDirectoryPath();
+                if (openedDirectory == null || !Files.isDirectory(openedDirectory)) {
+                    getGlobalVariable("main::!").set(9);
+                    return scalarFalse;
+                }
+                try {
+                    RuntimeEnvironment.setCurrentDirectory(
+                            openedDirectory.toFile().getCanonicalPath());
+                    return scalarTrue;
+                } catch (IOException e) {
+                    handleIOException(e, "chdir failed");
+                    return scalarFalse;
+                }
             }
             if (io.ioHandle instanceof org.perlonjava.runtime.io.ClosedIOHandle
                     || io.ioHandle == null) {
@@ -250,6 +273,7 @@ public class Directory {
                 handleIOException(e, "Directory operation failed");
             }
             dirIO.directoryIO = null;
+            dirIO.unregisterFileno();
             return scalarTrue;
         }
         warnIfNotDirectoryHandle(runtimeScalar, "closedir");

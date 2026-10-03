@@ -144,7 +144,7 @@ therefore exercises `jperl` on Unix and `jperl.bat` on Windows CI.
 | HTTP-Body 1.23 | runtime | 13/13 files, 250/250 assertions pass; installs normally | cleared | retain regression coverage |
 | Moose 2.4000 | runtime | bundled; broad upstream/DBIx::Class coverage already exists | monitor | investigate only Catalyst-relevant failures |
 | MooseX-MethodAttributes 0.32 | runtime | 22/22 files, 144/144 tests pass unchanged | cleared | retain package-generation regression coverage |
-| Catalyst-Runtime 5.90132 | runtime | installs unchanged and unforced under a narrow test-phase policy; module load and the 23-assertion application suite pass | cleared | keep the single-process Netty fixture as the runtime gate |
+| Catalyst-Runtime 5.90132 | runtime | normal upstream test phase runs; 196/200 test programs pass, with 4 failing programs and 2 failed subtests; module load and the 23-assertion application suite pass | partial | triage the individual suite failures without restoring a distribution-wide test skip |
 | Plack 1.0054 | runtime | unchanged suite passes 150 files and 957 assertions; installs normally | cleared | retain Netty acceptance coverage |
 | Socket `NI_NAMEREQD` | core API | constant/export added; system Perl, JVM, interpreter, and full `make` pass; `Catalyst::Request` now advances to `Stream::Buffered` | cleared | retain regression coverage |
 | Stream-Buffered 0.03 | Catalyst and Plack runtime | unchanged `t/print.t` and `t/subclass.t` pass 18/18 on both backends | cleared | retain anonymous-filehandle regression |
@@ -585,6 +585,11 @@ deferred work. Avoid duplicating a chronological work diary in this document.
   upstream 5.90132 sources, no force install; the rebuilt post-fix command
   exits 0 and the informational-output regression is covered directly.
 - `jperl -MCatalyst`: reports 5.90132, exit 0.
+- Normal upstream `jcpan --jobs 8 -t Catalyst`: 200 files and 3,800
+  assertions run; 4 test programs fail (`http_exceptions_backcompat.t`,
+  `http_exceptions.t`, `live_fork.t`, and `undef-params.t`), with 2 failed
+  subtests. The blanket Catalyst distropref skip has been retired; the full
+  result is saved under `build/reports/cpan-release-acceptance-20261002/run-2/`.
 - Standard Perl application dispatcher: 23/23 assertions, exit 0.
 - PerlOnJava application dispatcher: 23/23 assertions, exit 0.
 - Live Netty HTTP script: all route, request, response, UTF-8, error, logging,
