@@ -10,6 +10,7 @@ priorities and future plans.
 - Allow the Catalyst::Runtime release-acceptance suite up to four hours to finish its upstream tests.
 - Refresh the installed launcher distribution before CPAN acceptance so nested launchers use the current bundled preferences.
 - Preserve live unblessed arrays and hashes with weak back-references while nested calls replace temporary aliases.
+- Preserve Perl's UTF-8 flag behavior across transliteration, version strings, and `dualvar` string channels.
 
 - Document the 2026-10-03 imported core-suite milestone: 575 selected files
   completed without unexpected failures, with skips, TODOs, exclusions, and

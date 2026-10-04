@@ -14,8 +14,11 @@ import java.nio.charset.StandardCharsets;
 
 import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.BYTE_STRING;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.DUALVAR;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.READONLY_SCALAR;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.STRING;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.TIED_SCALAR;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.VSTRING;
 
 /**
  * The Utf8 class provides functionalities similar to the Perl utf8 pragma.
@@ -385,9 +388,12 @@ public class Utf8 extends PerlModuleBase {
         if (scalar instanceof ScalarSpecialVariable sv) {
             scalar = sv.getValueAsScalar();
         }
-        // Only STRING type has the UTF-8 flag set.
-        // INTEGER, DOUBLE, UNDEF, REFERENCE etc. don't have the UTF-8 flag in Perl.
-        return scalar.type == STRING;
+        return switch (scalar.type) {
+            case STRING, VSTRING -> true;
+            case DUALVAR -> isUtf8(((DualVar) scalar.value).stringValue());
+            case READONLY_SCALAR -> isUtf8((RuntimeScalar) scalar.value);
+            default -> false;
+        };
     }
 
     /**

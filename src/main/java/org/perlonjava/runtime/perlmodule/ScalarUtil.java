@@ -329,7 +329,19 @@ public class ScalarUtil extends PerlModuleBase {
         // such as $!: its RuntimeScalar payload is dual-valued, but the
         // authoritative errno lives in the ErrnoVariable accessors.
         RuntimeScalar numeric = new RuntimeScalar(args.get(0).getNumber());
-        RuntimeScalar string = new RuntimeScalar(args.get(1).toString());
+        RuntimeScalar stringSource = args.get(1);
+        String stringValue = stringSource.toString();
+        RuntimeScalar string = new RuntimeScalar(stringValue);
+        boolean utf8String = Utf8.isUtf8(stringSource);
+        if (!utf8String) {
+            for (int i = 0; i < stringValue.length(); i++) {
+                if (stringValue.charAt(i) > 0xff) {
+                    utf8String = true;
+                    break;
+                }
+            }
+        }
+        string.type = utf8String ? STRING : BYTE_STRING;
         scalar.value = new DualVar(numeric, string);
         return scalar.getList();
     }

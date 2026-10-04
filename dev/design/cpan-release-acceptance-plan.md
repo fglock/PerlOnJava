@@ -31,7 +31,7 @@ with status 2 and remains incomplete.
 | Excel::Writer::XLSX | Pass: 1,247 files, 5,138 tests | Retain this baseline; rerun in final integration. |
 | Catalyst | Run 11 executed Catalyst-Runtime normally in an isolated CPAN home: 200 programs, 3,798 tests; two failures are the documented `area:parser` cases in `http_exceptions*.t`, and `live_fork.t` is the agreed fork exception | No in-scope failure remains. The shared default CPAN home was being rewritten by a separate tester in a sibling checkout, so acceptance runs must use a unique `PERLONJAVA_HOME`. |
 | Mojolicious | Run 10 timed out after 5,400 seconds with repeated warnings at `t/mojo/dom.t` line 1489. After the runtime fix, unchanged upstream `t/mojo/dom.t` passed 132 top-level subtests and 1,418 assertions with no warning or OOM matches. | Run the full Mojolicious acceptance target in the final coherent gate. |
-| Image::ExifTool | Run 10 reported `NOT TESTED`, 3/113 failed programs, and 2/595 failed subtests. Focused `t/XMP.t` reproduces test 3's write-and-reparse mismatch. A reduced sequence identifies numeric-scalar transliteration as the first runtime divergence. Focused `t/Writer.t` reproduces test 38's Sony metadata-copy mismatch, then reaches its 30-minute guard at test 54. System Perl passes both upstream files. | Fix transliteration's byte/UTF8 flag preservation and add a focused regression. The Sony transliteration range error is the documented `area:parser` failure; Writer tests 37-38 copy Sony EXIF data and fail downstream of that module-load error. |
+| Image::ExifTool | Run 10 reported `NOT TESTED`, 3/113 failed programs, and 2/595 failed subtests. Focused upstream `t/XMP.t` test 3 originally reproduced a write-and-reparse mismatch; the reduced test sequence now passes on system Perl, JVM, and interpreter. Focused `t/Writer.t` reproduces test 38's Sony metadata-copy mismatch, then reaches its 30-minute guard at test 54. | The in-scope XMP root cause is fixed and focused coverage passes. Retest the complete target in the final gate. The Sony transliteration range error and dependent Writer failures are the documented `area:parser` exclusion. |
 | DateTime | 1/51 failed programs, 0/3,518 failed subtests; `t/10subtract.t` exited without a TAP plan | Confirm the relationship to excluded issue #1269. |
 | DBIx::Class | 309/325 failed programs, 2/1,722 failed subtests | Classify the compilation error in `t/lib/DBICTest/RunMode.pm` that cascades through most files, then classify the remaining failed assertions. |
 
@@ -112,23 +112,31 @@ and use distinct paths for later candidates.
   after unknown 36-byte header` when reparsing the image produced in memory.
   A standalone read of the saved image scalar parses its image tags, so the
   reproducer preserves the write-and-reparse sequence and binary-string state.
-- The reduction identifies the first divergence in ExifTool's inverse
+- The reduction identified the first divergence in ExifTool's inverse
   `ExifVersion` conversion: numeric `232` passes through the no-op
   `$val =~ tr/.//d` and becomes `0232`. System Perl leaves this result
   unflagged; PerlOnJava marks it UTF8. The resulting IFD0 output buffer is
-  upgraded, causing the later TIFF-like header error. A focused unit test
-  passes on system Perl and fails on the unfixed JVM parent only at the UTF8
-  flag assertion. JVM and interpreter reproduce the same parent failure.
-- Fix `RuntimeTransliterate` so a transliterated value retains an existing
-  upgraded-string state, while numeric and other non-upgraded scalar inputs
-  produce an unflagged byte string. Apply the same rule to in-place and `/r`
-  forms, checking scalar-type edge cases. Keep existing tests unchanged; use
-  the new project-owned regression, validate it with system Perl, and retain
-  the parent-failure output before rebuilding.
-- Confirm DateTime's `t/10subtract.t` exclusion against issue #1269 and saved
-  run logs. Inspect DBIx::Class's two remaining failed assertions independently
-  from the documented `area:parser` compilation cascade, then resolve any
-  in-scope root cause.
+  upgraded, causing the later TIFF-like header error. The project regression
+  passed on system Perl and failed on the unfixed JVM parent at the numeric
+  UTF8-flag assertion. The fix now gives mutating and `/r` transliteration a
+  byte string for non-upgraded numeric inputs, preserves an existing UTF8
+  string channel, and retains UTF8 for results containing wide characters.
+- A nearby dual-valued scalar probe exposed the same flag distinction in
+  `dualvar`: plain string channels must stay byte strings, while upgraded
+  channels and version strings retain UTF8. `Scalar::Util::dualvar` and
+  `utf8::is_utf8` now preserve/observe those channels. The 21-assertion project
+  regression passes on system Perl and both PerlOnJava backends; adjacent
+  transliteration suites pass on both backends.
+- Unchanged upstream ExifTool `t/XMP.t` tests 1-3 now pass on system Perl, JVM,
+  and interpreter, including the former test 3 write-and-reparse failure.
+  Focused logs and the full `make` output are saved under
+  `build/reports/cpan-release-acceptance-20261004/transliteration-fix/`.
+- DateTime's only failed program, `t/10subtract.t`, has all 37 assertions pass
+  but exits before its TAP plan due to the issue #1269 failure already tracked
+  in the core-suite reduction plan. DBIx::Class's two failed subtests are both
+  `use DBICTest` failures cascading from the literal conflict marker in
+  `t/lib/DBICTest/RunMode.pm`; its other failed programs share that
+  `area:parser` cause. No independent DBIx::Class assertion failure remains.
 - Use narrow fork-specific exceptions when required. Upgrade bundled modules
   when a validated compatibility fix needs them.
 
@@ -170,7 +178,7 @@ and use distinct paths for later candidates.
 
 ## Progress tracking
 
-### Current status: Catalyst and Mojolicious DOM resolved; XMP root cause isolated, runtime fix next (2026-10-04)
+### Current status: Catalyst and Mojolicious DOM resolved; focused ExifTool transliteration fix validated; final acceptance pending (2026-10-04)
 
 - [x] Preserve run 10's full logs and report snapshots (2026-10-04).
 - [x] Validate the bounded-output fix through the full unit gate and an OOM-free
@@ -182,32 +190,29 @@ and use distinct paths for later candidates.
   parser/fork exclusions.
 - [x] Fix premature clearing of live weak-parent arrays; validate system Perl,
   both PerlOnJava backends, full `make`, and unchanged upstream `dom.t`.
-- [x] Reduce the Image::ExifTool XMP write/reparse mismatch to numeric scalar
-  transliteration changing an unflagged byte string to UTF8; validate the new
-  regression on system Perl and capture its failure on the unfixed JVM parent.
-- [ ] Fix transliteration string-flag preservation; validate the regression on
-  both backends and focused upstream XMP coverage.
-- [ ] Classify remaining DBIx::Class subtests and confirm DateTime #1269.
+- [x] Reduce and fix the Image::ExifTool XMP mismatch to transliteration,
+  `dualvar`, and UTF8-flag handling; validate the 21-assertion regression on
+  system Perl and both PerlOnJava backends, adjacent suites on both backends,
+  and upstream XMP tests 1-3 on all three runtimes.
+- [x] Classify DateTime `t/10subtract.t` under #1269 and DBIx::Class's two
+  assertion failures under the documented parser conflict-marker cascade.
 - [ ] Complete final acceptance and update PR #1628.
 
 ### Next steps
 
-1. Fix `RuntimeTransliterate` byte/UTF8 flag preservation for numeric scalar
-   inputs, including both in-place and `/r` transliteration; batch related
-   scalar-type cases before the next build.
-2. Re-run the new regression on system Perl, then build once and check both
-   PerlOnJava backends plus the focused ExifTool `t/XMP.t` path. Keep the
-   unchanged upstream tests and complete logs as evidence.
-3. Classify DBIx::Class's two remaining subtests and verify DateTime #1269
-   against issue history and saved logs; fix any other in-scope root cause.
-4. Rebase PR #1628 at the next stable candidate boundary, then run one final
-   immutable full build and CPAN acceptance gate in an isolated CPAN home.
+1. Run `nice -n 19 make` for the complete transliteration, dualvar, and UTF8
+   flag batch; then verify the regression and adjacent suites on both backends.
+2. Rebase PR #1628 onto its current remote branch, preserving the local fixes,
+   and rerun focused checks on the rebased source.
+3. Run `nice -n 19 make test-cpan-release-acceptance` on one immutable
+   candidate with a unique `PERLONJAVA_HOME`; retain complete logs and reports.
+4. Fix any newly observed in-scope failures in a coherent batch and repeat the
+   required gates until all targets pass or map to the agreed `fork`,
+   `area:parser`, or #1269 exceptions.
 
 ### Open questions
 
-- Which DBIx::Class assertions remain after the excluded parser failure?
-- Does `RuntimeTransliterate` need distinct handling for any scalar types beyond
-  upgraded `STRING` versus non-upgraded inputs, especially `VSTRING` and `/r`?
+- Does the final acceptance run reveal any additional in-scope target failures?
 
 ## Related documents
 
