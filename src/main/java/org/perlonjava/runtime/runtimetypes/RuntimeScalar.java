@@ -2662,6 +2662,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // slot holds a strong reference not counted in refCount.
                     // Don't call callDestroy — the container is still alive.
                     // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
+                } else if (oldBase.blessId == 0
+                        && (oldBase instanceof RuntimeArray || oldBase instanceof RuntimeHash)
+                        && WeakRefRegistry.hasWeakRefsTo(oldBase)
+                        && RuntimeCode.argsStackDepth() > 1
+                        && !oldBase.clearedOwnedAggregateElement) {
+                    // A nested Perl call can overwrite a temporary alias to an
+                    // unblessed aggregate while a strong owning array/hash edge
+                    // still keeps it in a live tree. DOM parsers use this shape
+                    // for weak parent links. Defer clearing until the statement
+                    // boundary so the reachability walk can distinguish a live
+                    // ancestor from an aggregate whose last owner really left.
+                    MortalList.requestTargetedWeakSweep(oldBase);
                 } else if (oldBase.blessId != 0
                         && WeakRefRegistry.hasWeakRefsTo(oldBase)
                         && !blessedClassHasDestroy(oldBase)

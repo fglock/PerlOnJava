@@ -1,0 +1,174 @@
+# CPAN Release Acceptance Plan
+
+## Goal and scope
+
+Pass all in-scope tests selected by `make test-cpan-release-acceptance`, fixing
+reusable runtime, bundled-module, and tooling behavior. Keep PR
+[#1628](https://github.com/fglock/PerlOnJava/pull/1628) updated with validated
+commits and accurate acceptance evidence.
+
+The agreed exclusions are issues labeled `area:parser`, issue
+[#1269](https://github.com/fglock/PerlOnJava/issues/1269), and tests that require
+unsupported `fork`. Confirm each exclusion against its root cause. Catalyst
+must run its normal upstream suite; a distribution-wide skip is unacceptable.
+The Mojolicious `t/mojo/dom.t` OOM and runaway behavior remain in scope.
+
+This is a production host. Use deterministic allocation, retained-byte, and
+traversal counts when evaluating performance changes. Elapsed time is not
+performance acceptance evidence; timeouts remain runaway guards.
+
+## Current evidence (2026-10-04)
+
+Acceptance run 10 used source commit `92742e438`. The full build and unit gate
+passed, the installed launcher distribution was refreshed, and its JAR passed
+the check for absence of `Catalyst-Runtime.yml`. The acceptance target exited
+with status 2 and remains incomplete.
+
+| Target | Recorded result | Remaining work |
+| --- | --- | --- |
+| PPR | Pass | Retain this baseline; rerun in final integration. |
+| Template | Pass | Retain this baseline; rerun in final integration. |
+| Excel::Writer::XLSX | Pass: 1,247 files, 5,138 tests | Retain this baseline; rerun in final integration. |
+| Catalyst | Run 11 executed Catalyst-Runtime normally in an isolated CPAN home: 200 programs, 3,798 tests; two failures are the documented `area:parser` cases in `http_exceptions*.t`, and `live_fork.t` is the agreed fork exception | No in-scope failure remains. The shared default CPAN home was being rewritten by a separate tester in a sibling checkout, so acceptance runs must use a unique `PERLONJAVA_HOME`. |
+| Mojolicious | Run 10 timed out after 5,400 seconds with repeated warnings at `t/mojo/dom.t` line 1489. After the runtime fix, unchanged upstream `t/mojo/dom.t` passed 132 top-level subtests and 1,418 assertions with no warning or OOM matches. | Run the full Mojolicious acceptance target in the final coherent gate. |
+| Image::ExifTool | Target reported `NOT TESTED`; its suite reported 3/113 failed programs and 2/595 failed subtests | Classify the earliest Sony module-loading failure and distinguish parser exclusions from in-scope failures. |
+| DateTime | 1/51 failed programs, 0/3,518 failed subtests; `t/10subtract.t` exited without a TAP plan | Confirm the relationship to excluded issue #1269. |
+| DBIx::Class | 309/325 failed programs, 2/1,722 failed subtests | Classify the compilation error in `t/lib/DBICTest/RunMode.pm` that cascades through most files, then classify the remaining failed assertions. |
+
+The reports, gate transcript, recreated Catalyst preference, and full tester
+logs are saved under:
+
+```text
+build/reports/cpan-release-acceptance-20261004/run-10/
+```
+
+The compressed tester archive is approximately 478 MB; archive creation exited
+successfully. The raw tester directory is
+`/tmp/cpan_random_logs/20261004-033003-95136/`. Preserve these baseline artifacts
+and use distinct paths for later candidates.
+
+## Execution plan
+
+### 1. Resolve Catalyst's active preference source — complete (2026-10-04)
+
+- Run 10's preference was recreated by a concurrent CPAN tester in the sibling
+  checkout `/Users/fglock/projects/PerlOnJava`; it shares the default CPAN home.
+  The external process was left untouched. Subsequent CPAN work is isolated in
+  a unique `PERLONJAVA_HOME`, with cached CPAN sources shared read-only by
+  symlink.
+- The refreshed launcher JAR contains no owned `Catalyst-Runtime.yml`; the
+  existing configuration bootstrap removes the stale signed preference while
+  preserving user-owned preferences. A fresh isolated home also starts with
+  no Catalyst preference or cached skip state.
+- Isolated normal Catalyst execution completed all 200 programs and 3,798
+  assertions. The two `http_exceptions*.t` failures reproduce a Data::Dump
+  regex syntax error already documented as `area:parser`; `live_fork.t` is the
+  agreed fork-dependent exception. No distribution-wide skip was used.
+
+### 2. Reduce and fix the Mojolicious loop — complete (2026-10-04)
+
+- Use the saved warning location to isolate the smallest failing DOM operation.
+  Compare the result with system Perl and identify the first state divergence.
+- Initial reduction: `<ul><li><ol><li>F<li>G</ol><li>A</li></ul>`. System Perl
+  parses it with no warnings. The PerlOnJava JVM backend emits repeated
+  undefined-parent warnings in `Mojo::DOM::HTML::_start`; the interpreter
+  backend parses this reduced case without warnings. Keeping parser nodes alive
+  for the duration of parsing also prevents the JVM failure, so reachability is
+  handling was implicated. A bounded `PJ_WEAKCLEAR_TRACE` run then confirmed
+  that a live `RuntimeArray` was cleared from `RuntimeScalar.setLargeRefCounted`
+  through `DestroyDispatch.callDestroy` before the warning loop began.
+- When a nested call overwrites a temporary alias to an unblessed array/hash
+  that still has weak back-references, defer cleanup to the statement-boundary
+  targeted reachability sweep. Add a self-contained project regression for the
+  nested optional-list-item parent chain.
+- System Perl passes the regression 4/4. The unfixed JVM candidate failed 3/4;
+  the interpreter passed 4/4. After the fix, both JVM and interpreter pass 4/4.
+  The full `nice -n 19 make` gate passed.
+- The unchanged upstream Mojolicious `t/mojo/dom.t` passes 132 top-level
+  subtests and 1,418 assertions with exit 0. Its compressed full output is
+  saved at
+  `build/reports/cpan-release-acceptance-20261004/dom-focused-after-fix/dom-jvm.log.gz`;
+  TAP integrity and the absence of warning/OOM matches were checked. This
+  output count is deterministic evidence for the runaway-diagnostics fix; no
+  elapsed-time performance claim is used.
+
+### 3. Group other failures by root cause
+
+- Build a failure matrix from the saved logs, recording the earliest cause,
+  affected targets, focused reproducer, and applicable exclusion.
+- Investigate DBIx::Class's shared compilation failure once before running its
+  many dependent test programs. Independently classify its two failed subtests.
+- Confirm DateTime's #1269 relationship and classify Image::ExifTool's earliest
+  failure. Record excluded causes explicitly instead of treating their target
+  failures as unexplained acceptance gaps.
+- Use narrow fork-specific exceptions when required. Upgrade bundled modules
+  when a validated compatibility fix needs them.
+
+### 4. Batch implementation and focused validation
+
+- Group related source fixes before rebuilding. Run host-Perl oracle and
+  tooling checks first, then use one built artifact for focused JVM and
+  interpreter regressions and affected upstream files.
+- Every externally observed in-scope failure needs permanent tracked
+  regression coverage, including evidence of failure on the unfixed parent.
+  Preserve existing upstream tests unchanged.
+- Keep checkout source immutable while any build or test gate runs. Serialize
+  JAR writers with readers, use `nice -n 19 make`, wrap investigative runtime
+  commands in `timeout`, and capture complete output to distinct files.
+- Repeat expensive passing gates only when a source change or unresolved
+  concern warrants them. Poll long runs at wider intervals and report material
+  milestones.
+
+### 5. Validate one final coherent candidate
+
+- Once focused blockers pass, bring the PR branch up to date before establishing
+  the final immutable source barrier.
+- Run the full build, required documentation checks, and one complete CPAN
+  release acceptance gate. Verify Catalyst actually ran its tests and that
+  Mojolicious completed without the loop or OOM.
+- Save the final reports and logs under a new run directory. Check process
+  cleanup and record each target's outcome and any agreed exclusion.
+- A passing build alone does not complete release acceptance.
+
+### 6. Maintain the PR and completion record
+
+- Push validated commits to PR #1628, verify that it remains open and contains
+  the expected changes after any rebase, and update its description with the
+  final implementation and validation evidence.
+- Keep significant behavior changes in the changelog's work-in-progress
+  section. Update this document after each completed phase.
+- Mark the goal complete only when every in-scope acceptance requirement has
+  evidence and remaining failures map to agreed exclusions.
+
+## Progress tracking
+
+### Current status: Catalyst and Mojolicious DOM resolved; residual failure classification next (2026-10-04)
+
+- [x] Preserve run 10's full logs and report snapshots (2026-10-04).
+- [x] Validate the bounded-output fix through the full unit gate and an OOM-free
+  Mojolicious timeout run (2026-10-04).
+- [x] Refresh and check the installed launcher JAR (2026-10-04); Catalyst's
+  remaining preference source is unresolved.
+- [x] Resolve the shared-home Catalyst skip and validate normal execution in
+  an isolated CPAN home; classify its three failed programs by the agreed
+  parser/fork exclusions.
+- [x] Fix premature clearing of live weak-parent arrays; validate system Perl,
+  both PerlOnJava backends, full `make`, and unchanged upstream `dom.t`.
+- [ ] Classify and resolve remaining in-scope root causes.
+- [ ] Complete final acceptance and update PR #1628.
+
+### Next steps
+
+1. Build the failure matrix from saved run 10 and run focused checks for the
+   first cause in each remaining target.
+2. Confirm #1269 and `area:parser` exclusions; resolve every other failure.
+3. Rebase the PR branch before the next coherent integration candidate.
+
+### Open questions
+
+- Which remaining DBIx::Class and Image::ExifTool failures fall within scope?
+
+## Related documents
+
+- [High-impact issue batch](high-impact-issues-20261002.md)
+- [CPAN preferences and patch layout](patch-and-cpan-prefs-layout.md)
