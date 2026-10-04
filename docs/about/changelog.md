@@ -8,6 +8,7 @@ priorities and future plans.
 
 - Bound captured subprocess output while continuing to drain child streams, preventing runaway diagnostics from exhausting the JVM heap.
 - Allow the Catalyst::Runtime release-acceptance suite up to four hours to finish its upstream tests.
+- Refresh the installed launcher distribution before CPAN acceptance so nested launchers use the current bundled preferences.
 
 - Document the 2026-10-03 imported core-suite milestone: 575 selected files
   completed without unexpected failures, with skips, TODOs, exclusions, and

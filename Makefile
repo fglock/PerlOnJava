@@ -1,4 +1,4 @@
-.PHONY: all clean test test-unit test-cpan-tester test-interpreter check-thread-test-sources check-thread-core-test-sources check-thread-ecosystem-test-sources check-thread-regex-test-sources test-thread-tooling test-threads test-threads-core test-threads-core-platform test-threads-core-mode test-threads-windows test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-cpan-release-acceptance test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links perl5-update perl5-sync perl5-sync-check test-import-cpan update-bundled-modules
+.PHONY: all clean test test-unit test-cpan-tester test-interpreter check-thread-test-sources check-thread-core-test-sources check-thread-ecosystem-test-sources check-thread-regex-test-sources test-thread-tooling test-threads test-threads-core test-threads-core-platform test-threads-core-mode test-threads-windows test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-cpan-release-acceptance test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links perl5-update perl5-sync perl5-sync-check test-import-cpan update-bundled-modules build-cpan-acceptance-runtime
 
 PERL ?= perl
 GRADLE_ARGS ?=
@@ -171,6 +171,19 @@ ifeq ($(OS),Windows_NT)
 else
 	./gradlew $(GRADLE_LAUNCH_ARGS) classes testUnitParallel --parallel shadowJar
 endif
+
+# Refresh the installed launcher distribution after the tested JAR is built.
+# CPAN tests can launch nested interpreters through build/install, so it must
+# not retain bundled preferences from an older ignored install tree.
+build-cpan-acceptance-runtime: build
+ifeq ($(OS),Windows_NT)
+	gradlew.bat $(GRADLE_LAUNCH_ARGS) installDist
+	jar tf build/install/perlonjava/lib/perlonjava-5.44.1.jar > build/reports/cpan-acceptance-installed-jar.txt
+else
+	./gradlew $(GRADLE_LAUNCH_ARGS) installDist
+	jar tf build/install/perlonjava/lib/perlonjava-5.44.1.jar > build/reports/cpan-acceptance-installed-jar.txt
+endif
+	@perl -e 'open my $$fh, q{<}, $$ARGV[0] or die $$!; while (<$$fh>) { die "retired Catalyst distropref remains in installed JAR\n" if m{(?:^|/)Catalyst-Runtime\.yml$$}; }' build/reports/cpan-acceptance-installed-jar.txt
 
 # Focused vendored-Joni unit gate for parser/matcher iteration. A full `make`
 # remains required before pushing or updating a PR.
@@ -391,7 +404,7 @@ endif
 # jcpan, then keep the CPAN run sequential so no test process shares a JAR
 # while it is being written. The tester writes per-target diagnostics under
 # /tmp/cpan_random_logs and this target retains the complete gate transcript.
-test-cpan-release-acceptance: build
+test-cpan-release-acceptance: build-cpan-acceptance-runtime
 	@mkdir -p build/reports
 	@log="build/reports/cpan-release-acceptance.log"; \
 	modules='PPR,Catalyst,Mojolicious,Image::ExifTool,DateTime,Template,DBIx::Class,Excel::Writer::XLSX'; \
