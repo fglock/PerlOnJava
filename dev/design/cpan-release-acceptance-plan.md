@@ -178,7 +178,7 @@ and use distinct paths for later candidates.
 
 ## Progress tracking
 
-### Current status: Catalyst and Mojolicious DOM resolved; focused ExifTool transliteration fix validated; final acceptance pending (2026-10-04)
+### Current status: Rebase complete; post-rebase validation and final acceptance pending (2026-10-04)
 
 - [x] Preserve run 10's full logs and report snapshots (2026-10-04).
 - [x] Validate the bounded-output fix through the full unit gate and an OOM-free
@@ -196,19 +196,26 @@ and use distinct paths for later candidates.
   and upstream XMP tests 1-3 on all three runtimes.
 - [x] Classify DateTime `t/10subtract.t` under #1269 and DBIx::Class's two
   assertion failures under the documented parser conflict-marker cascade.
+- [x] Rebase the 51-commit feature branch onto its current remote branch and
+  preserve the newer reachability implementation, deterministic coverage, and
+  unique compatibility changelog entries.
+- [x] Validate the rebased candidate with `nice -n 19 make` (exit 0) and rerun
+  the transliteration, Unicode, dual-channel, and Mojolicious weak-parent
+  regressions on JVM and interpreter (all pass). Logs are under
+  `/tmp/cpan-acceptance-rebased-focused/`; the build log is
+  `/tmp/cpan-acceptance-rebase-make.log`.
 - [ ] Complete final acceptance and update PR #1628.
 
 ### Next steps
 
-1. Run `nice -n 19 make` for the complete transliteration, dualvar, and UTF8
-   flag batch; then verify the regression and adjacent suites on both backends.
-2. Rebase PR #1628 onto its current remote branch, preserving the local fixes,
-   and rerun focused checks on the rebased source.
-3. Run `nice -n 19 make test-cpan-release-acceptance` on one immutable
+1. Run `nice -n 19 make check-links` for this progress update.
+2. Run `nice -n 19 make test-cpan-release-acceptance` on one immutable
    candidate with a unique `PERLONJAVA_HOME`; retain complete logs and reports.
-4. Fix any newly observed in-scope failures in a coherent batch and repeat the
-   required gates until all targets pass or map to the agreed `fork`,
-   `area:parser`, or #1269 exceptions.
+3. Fix any newly observed in-scope failures in a coherent batch, update this
+   plan, and repeat the required gates until all targets pass or map to the
+   agreed `fork`, `area:parser`, or #1269 exceptions.
+4. Push validated commits to PR #1628, verify it remains open with the expected
+   files, and update the PR description with final acceptance evidence.
 
 ### Open questions
 
