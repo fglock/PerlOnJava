@@ -35,6 +35,16 @@ public class CompressBzip2 extends PerlModuleBase {
         }
     }
 
+    static final class LimitedDecompressResult {
+        final byte[] output;
+        final boolean outputLimitReached;
+
+        LimitedDecompressResult(byte[] output, boolean outputLimitReached) {
+            this.output = output;
+            this.outputLimitReached = outputLimitReached;
+        }
+    }
+
     public CompressBzip2() {
         super("Compress::Bzip2", false);
     }
@@ -150,6 +160,40 @@ public class CompressBzip2 extends PerlModuleBase {
             }
         }
         return new DecompressResult(output, low);
+    }
+
+    /**
+     * Decompress no more than {@code maxOutput} bytes plus one sentinel byte.
+     * The sentinel distinguishes a complete stream that fits from one that
+     * exceeds the caller's output buffer without materializing the full body.
+     */
+    static LimitedDecompressResult decompressFirstStream(byte[] input, int maxOutput)
+            throws IOException {
+        int limit = Math.max(0, maxOutput);
+        ByteArrayOutputStream output = new ByteArrayOutputStream(Math.min(limit, 16 * 1024));
+        byte[] buffer = new byte[Math.min(Math.max(1, limit + 1), 16 * 1024)];
+        int remaining = limit + 1;
+        try (BZip2CompressorInputStream in = new BZip2CompressorInputStream(
+                new ByteArrayInputStream(input), false)) {
+            while (remaining > 0) {
+                int count = in.read(buffer, 0, Math.min(buffer.length, remaining));
+                if (count < 0) break;
+                output.write(buffer, 0, count);
+                remaining -= count;
+            }
+        }
+        byte[] bytes = output.toByteArray();
+        boolean reached = bytes.length > limit;
+        return new LimitedDecompressResult(
+                reached ? slice(bytes, 0, limit) : bytes, reached);
+    }
+
+    private static byte[] slice(byte[] bytes, int start, int end) {
+        int safeStart = Math.max(0, Math.min(start, bytes.length));
+        int safeEnd = Math.max(safeStart, Math.min(end, bytes.length));
+        byte[] result = new byte[safeEnd - safeStart];
+        System.arraycopy(bytes, safeStart, result, 0, result.length);
+        return result;
     }
 
     private static byte[] decompressPrefix(byte[] input, int length) throws IOException {

@@ -140,6 +140,20 @@ or do {
     bootstrap Compress::Raw::Zlib $XS_VERSION ;
 };
 
+# XS installs these as constant subs before Exporter sees them.  The Java
+# implementation resolves them lazily through AUTOLOAD, which means imports
+# are invisible to strict-subs compilation on the interpreter backend.  Seed
+# the exported constants after the native constant() function is available.
+{
+    no strict 'refs';
+    for my $constname (@EXPORT) {
+        next unless $constname =~ /^(?:Z_|ZLIB|MAX_|DEF_|OS_CODE|WANT_)/;
+        next if defined &{$constname};
+        my ($error, $value) = constant($constname);
+        next if $error;
+        *{$constname} = sub () { $value };
+    }
+}
 
 use constant Parse_any      => 0x01;
 use constant Parse_unsigned => 0x02;

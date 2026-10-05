@@ -5157,7 +5157,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             
             // Check if this string is a bareword filehandle (like IN, OUT, etc.)
             // If so, look up the glob and call the method on it
-            String normalizedGlobName = NameNormalizer.normalizeVariableName(perlClassName, "main");
+            String currentPackage = currentSub != null
+                    && currentSub.type == RuntimeScalarType.CODE
+                    && currentSub.value instanceof RuntimeCode callerCode
+                    ? callerCode.packageName : getActivePackageName();
+            String normalizedGlobName = NameNormalizer.normalizeVariableName(
+                    perlClassName, currentPackage == null ? "main" : currentPackage);
             normalizedGlobName = GlobalVariable.resolveAliasedFqn(normalizedGlobName);
             if (GlobalVariable.isGlobalIODefined(normalizedGlobName)) {
                 // This is a filehandle - get the glob reference and recurse
