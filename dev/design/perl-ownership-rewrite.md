@@ -163,6 +163,10 @@ and first path establish implementation cost.
   the callback threw; `DestroyDispatch` now drains callback-created pending
   cleanup and balances that owner in `finally`. The full `nice -n 19 make`
   gate passes on `4137ad8cd`.
+- [x] Guard the closure bridge against integer overflow before changing the
+  referent or owner slot, and verify an unowned release is an underflow no-op.
+  All three `PerlOwnerSlotLegacyBridgeTest` cases and the full
+  `nice -n 19 make` gate pass on `f164ca168`.
 
 ### Next steps
 
