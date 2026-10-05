@@ -21,9 +21,9 @@ PerlOnJava backends.
 
 The 13:00 candidate UAT exposed label, stash, closure weak-reference, and
 symbolic glob regressions. The latest batched source is on
-`wip/parser-uat-regressions-20261005-141631`, based on PR candidate
-`c7349c917`. It adds permanent project-owned coverage without changing any
-existing tests:
+`wip/parser-uat-regressions-20261005-141631`, rebased onto master
+`3893a1903`; implementation commit `5f88a41ac` has the runtime fixes. It adds
+permanent project-owned coverage without changing any existing tests:
 
 - `goto_conditional_label_shadowing.t` covers a legal later Unicode label;
   the fix clears stale construct-entry metadata when an unconditional target
@@ -41,18 +41,16 @@ existing tests:
   exit again requests the reachability check even when selective owner records
   still show a semantic closure capture.
 
-Validation on this candidate: `nice -n 19 timeout 1800 make` passes (531 unit
+Validation after the rebase: `nice -n 19 timeout 1800 make` passes (531 unit
 tests); all five new unit tests pass on the interpreter; the four affected
 core files pass on the JVM (550 tests, including two TODOs); and all five new
-tests pass system Perl 5.42. This supersedes the earlier paragraph's failing
-label gate and stale 13:00 UAT status. The four core files are focused evidence;
-the requested full candidate UAT and baseline comparison still need to run.
+tests pass system Perl 5.42. The complete UAT and baseline comparison still
+need to run.
 
-Next, commit the reviewed batch on this branch, update PR #1623, and run the
-full five-directory Perl core UAT against the same Oct 3 baseline. Use a new
-log name so the 13:00 evidence remains available. If that gate and fresh Linux
-and Windows CI pass, continue UAT/review; close only tickets confirmed fixed
-after merge.
+Next, update PR #1623 from this rebased branch and run the full five-directory
+Perl core UAT against the same Oct 3 baseline. Use a new log name so the 13:00
+evidence remains available. If that gate and fresh Linux and Windows CI pass,
+continue UAT/review; close only tickets confirmed fixed after merge.
 
 This handoff and Immediate next steps supersede older candidate status below.
 The final-batch record below also supersedes the earlier three-failure and
