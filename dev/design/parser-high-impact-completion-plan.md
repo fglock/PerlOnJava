@@ -63,12 +63,17 @@ The user's acceptance rule is zero UAT failures, including nonzero test-process
 exits, test errors, timeouts, incomplete files, or failed TAP assertions.
 
 The current fix batch adds project-owned coverage for lexical class method
-calls and callable `CORE::bless`, and lowers `->&` to call a package CV directly
-with the invocant when there is no lexical method. This preserves Perl's
-no-inheritance-dispatch behavior. The lexical-method test passes the standard
-Perl oracle. A focused run on the old built JAR reached this package-method
-case and exited 2; that JAR predates the current parser source. Exact-head
-`make`, focused UAT cases, and full UAT remain required.
+calls, callable `CORE::bless`/`CORE::break`, and local `goto` within `finally`.
+It lowers `->&` to call a package CV directly with the invocant when there is
+no lexical method, preserving Perl's no-inheritance-dispatch behavior. All new
+unit cases pass the standard Perl oracle. The previous exact-head `make`
+passed before these latest emitter/runtime edits. Focused UAT results show
+`class/method.t` exits 0; `coreamp.t` passes the `bless`
+cases and reaches the next unsupported wrapper, `CORE::break`; and
+`op/try.t` still fails in its JVM path while the interpreter passes. The
+`CORE::break` wrapper and JVM emitter changes for local-finally gotos are in
+progress and have not yet been rebuilt. No UAT result is accepted until the
+full suite and strict subprocess-exit comparison report zero failures.
 
 The Oct 3 comparison also reports ten fewer planned assertions in each of ten
 regex fixtures after refreshing the blead corpus. Preserve the comparison

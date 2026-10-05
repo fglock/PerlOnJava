@@ -7366,6 +7366,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 && type != ControlFlowType.REDO) {
             return result;
         }
+        // `break` is a switch-only control marker. Its subroutine form is
+        // intentionally non-local, like the `CORE::break` code reference;
+        // it must reach the enclosing given/when dispatcher without the
+        // ordinary loop-control escape warning or constructor boundary.
+        if (flow.isSwitchControl()) {
+            return result;
+        }
         if (classAdjust) {
             flow.markClassAdjustOrigin();
         }

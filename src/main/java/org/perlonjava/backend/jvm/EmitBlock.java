@@ -104,6 +104,46 @@ public class EmitBlock {
         }
     }
 
+    /** Collect labels that a goto may target without leaving a finally body. */
+    static Set<String> collectLabels(Node node) {
+        Set<String> labels = new LinkedHashSet<>();
+        collectLabels(node, labels);
+        return labels;
+    }
+
+    private static void collectLabels(Node node, Set<String> labels) {
+        if (node == null || node instanceof SubroutineNode) return;
+        if (node instanceof LabelNode label) {
+            labels.add(label.label);
+        } else if (node instanceof BlockNode block) {
+            labels.addAll(block.labels);
+            for (Node child : block.elements) collectLabels(child, labels);
+        } else if (node instanceof IfNode conditional) {
+            collectLabels(conditional.thenBranch, labels);
+            collectLabels(conditional.elseBranch, labels);
+        } else if (node instanceof For1Node loop) {
+            collectLabels(loop.body, labels);
+            collectLabels(loop.continueBlock, labels);
+        } else if (node instanceof For3Node loop) {
+            collectLabels(loop.body, labels);
+            collectLabels(loop.continueBlock, labels);
+        } else if (node instanceof OperatorNode operator) {
+            collectLabels(operator.operand, labels);
+        } else if (node instanceof ListNode list) {
+            for (Node child : list.elements) collectLabels(child, labels);
+        } else if (node instanceof BinaryOperatorNode binary) {
+            collectLabels(binary.left, labels);
+            collectLabels(binary.right, labels);
+        } else if (node instanceof TernaryOperatorNode ternary) {
+            collectLabels(ternary.trueExpr, labels);
+            collectLabels(ternary.falseExpr, labels);
+        } else if (node instanceof TryNode attempt) {
+            collectLabels(attempt.tryBlock, labels);
+            collectLabels(attempt.catchBlock, labels);
+            collectLabels(attempt.finallyBlock, labels);
+        }
+    }
+
     /**
      * Record labels that are only reachable after a loop has initialized its
      * iterator and control state.  An eval may not jump into such a body.

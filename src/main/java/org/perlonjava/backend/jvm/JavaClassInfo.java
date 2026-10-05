@@ -153,6 +153,8 @@ public class JavaClassInfo {
      * This is a counter rather than a boolean to handle nested finally blocks.
      */
     public int finallyBlockDepth;
+    /** Label names scoped to each active finally body, innermost first. */
+    public final Deque<Set<String>> finallyLabelScopes = new ArrayDeque<>();
 
     public int[] spillSlots;
     public int spillTop;

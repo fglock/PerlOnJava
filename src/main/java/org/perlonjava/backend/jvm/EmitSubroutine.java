@@ -1134,6 +1134,10 @@ public class EmitSubroutine {
 
             // Registry-based non-local control flow check (for next/last/redo LABEL from closures)
             emitControlFlowCheck(emitterVisitor.ctx);
+            // Direct code-reference calls can return a RuntimeControlFlowList
+            // (for example \\&CORE::break). Dispatch the returned marker in
+            // the caller after folding any registry action into the result.
+            emitTaggedControlFlowHandling(emitterVisitor);
 
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
                     || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE) {

@@ -801,9 +801,20 @@ public class EmitControlFlow {
     static void handleGotoLabel(EmitterVisitor emitterVisitor, OperatorNode node) {
         EmitterContext ctx = emitterVisitor.ctx;
 
-        // Check if we're inside a finally block - goto out of finally is prohibited
+        // A static goto may branch within its own finally body. Computed
+        // targets and labels outside the active finally still leave the body
+        // and are prohibited.
         if (ctx.javaClassInfo.finallyBlockDepth > 0) {
-            throwControlFlowBlockError(ctx, node, "goto", "finally");
+            String localTarget = null;
+            if (node.operand instanceof ListNode args && !args.elements.isEmpty()
+                    && args.elements.getFirst() instanceof IdentifierNode target) {
+                localTarget = target.name;
+            }
+            Set<String> activeFinallyLabels = ctx.javaClassInfo.finallyLabelScopes.peek();
+            if (localTarget == null || activeFinallyLabels == null
+                    || !activeFinallyLabels.contains(localTarget)) {
+                throwControlFlowBlockError(ctx, node, "goto", "finally");
+            }
         }
 
         // Parse the goto argument

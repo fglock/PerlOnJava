@@ -1060,12 +1060,16 @@ public class EmitStatement {
         // Finally block
         mv.visitLabel(finallyStart);
         if (node.finallyBlock != null) {
-            // Track that we're inside a finally block for control flow checks
-            emitterVisitor.ctx.javaClassInfo.finallyBlockDepth++;
+            // Track the current finally body so local goto targets are allowed
+            // while transfers out of finally remain compile-time errors.
+            JavaClassInfo javaClassInfo = emitterVisitor.ctx.javaClassInfo;
+            javaClassInfo.finallyBlockDepth++;
+            javaClassInfo.finallyLabelScopes.push(EmitBlock.collectLabels(node.finallyBlock));
             try {
                 node.finallyBlock.accept(emitterVisitor.with(RuntimeContextType.VOID));
             } finally {
-                emitterVisitor.ctx.javaClassInfo.finallyBlockDepth--;
+                javaClassInfo.finallyLabelScopes.pop();
+                javaClassInfo.finallyBlockDepth--;
             }
         }
         Local.localTeardown(errorLocalLevel, mv);

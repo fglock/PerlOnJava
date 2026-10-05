@@ -269,6 +269,13 @@ public class CoreSubroutineGenerator {
                     WaitpidOperator.waitForChild().getList();
             case "wantarray" -> (args, ctx) ->
                     Operator.wantarray(ctx).getList();
+            case "break" -> (args, ctx) -> {
+                CallerStack.CallerInfo callSite = CallerStack.peek(0);
+                String file = callSite == null ? "(eval)" : callSite.filename();
+                int line = callSite == null ? 0 : callSite.line();
+                return new RuntimeControlFlowList(
+                        ControlFlowType.LAST, null, file, line, null, "break");
+            };
             case "__SUB__" -> (args, ctx) -> {
                 // A CORE::__SUB__ wrapper is itself a RuntimeCode frame, so
                 // the Perl subroutine whose identity is requested is its
