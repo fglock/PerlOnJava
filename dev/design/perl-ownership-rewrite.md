@@ -66,16 +66,20 @@ pads. The closure owner lists are now authoritative for this path. The new
 dependency-free regression reproduces the lifecycle, passes on Perl 5.44 and
 both PerlOnJava backends, and fails on the parent interpreter backend.
 
-This fixes the demonstrated path but does not yet implement the new owner-slot
-count/lifecycle model. A typed `PerlOwnerSlot` identity is now wired into
+This fixes the demonstrated path and wires typed `PerlOwnerSlot` identity into
 closure-pad semantic ownership, including transfer when a captured pad changes
-referents and idempotent release. The selective `refCount` increment and
-deferred decrement still form the legacy lifecycle bridge; scalar stores,
-aggregate slots, weak-reference transitions, and `DESTROY` are not yet migrated.
-Phase 1 is complete only after the owner-slot identity/count/lifecycle contract,
-runtime-scoped cycle retention, and bridge cover one selected path end to end on
-both backends. Phase 2 extends that path across scalar proxies and array/hash
-ownership, with HTML::Tree as the integration exit criterion.
+referents and idempotent release. Runtime-scoped retention now follows active
+slots, and legacy increments/deferred decrements carry slot provenance. The
+selected closure path also covers weak/unweaken transitions, callback
+reentrancy, resurrection, and exception cleanup on both backends. The selective
+`refCount` bridge still decides whether a referent reaches destruction; the
+independent lifecycle state records that transition but does not yet replace
+sentinel interpretation across legacy boundaries. Scalar stores and
+array/hash-element ownership remain outside this path. Phase 1 is complete only
+after the slot identity/count/lifecycle contract, positive-count cycle
+retention, and bridge cover the selected path end to end on both backends.
+Phase 2 extends that path across scalar proxies and array/hash ownership, with
+HTML::Tree as the integration exit criterion.
 
 ## Phases
 
