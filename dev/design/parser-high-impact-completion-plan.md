@@ -41,36 +41,37 @@ permanent project-owned coverage without changing any existing tests:
   exit again requests the reachability check even when selective owner records
   still show a semantic closure capture.
 
-Validation after the rebase: `nice -n 19 timeout 1800 make` passes (531 unit
-tests); all five new unit tests pass on the interpreter; the four affected
-core files pass on the JVM (550 tests, including two TODOs); and all five new
-tests pass system Perl 5.42. The full UAT against the Oct 3 baseline completed
-with 574/575 files passing and one assertion failure: `perl5_t/t/lib/croak.t`
-assertion 98 (`use warnings; use v5.12; use v5.20;`) expects a fatal diagnostic.
-The baseline had 344/344 assertions in this file; the current head has 343/344.
-No files timed out or were incomplete. Full output is in
-`/Users/fglock/projects/PerlOnJava/logs/test_20261005_162900_parser_uat_fix.log`,
-with comparator output in `/private/tmp/parser-uat-finalbatch-compare.log`.
+The Oct 5 full UAT against the Oct 3 baseline initially completed with 574/575
+files passing and one assertion failure in `perl5_t/t/lib/croak.t`; no files
+timed out or were incomplete. Its comparator shows one changed assertion in
+`lib/croak.t` (344/344 to 343/344). The source suite is from the `perl5`
+checkout at Perl 5.45.4 development, while PerlOnJava targets 5.44.1.
 
-This exposed a compatibility conflict that needs a decision before the PR can
-be called UAT clean. PerlOnJava targets Perl 5.44.1, and its bundled
-`Pod/perldiag.pod` says differing in-scope `use VERSION` declarations are not
-permitted. The local system Perl is 5.42.2: it emits a deprecation warning for
-the UAT program but accepts it. The project-owned
-`use_version_ascending_scope.t` also expects an older-to-newer pair to succeed
-and passes system Perl 5.42. Making all differing versions fatal would satisfy
-the Perl 5.44 core test but fail that unit test on PerlOnJava; preserving the
-unit-test behavior retains the UAT failure. Existing tests must not be changed.
+The user selected Perl 5.44 semantics. To establish the oracle, I built
+standard Perl 5.44.0 from the local `perl5` tag in `/private/tmp` without
+changing that source checkout or system Perl. On standard 5.44.0:
+`use v5.12; use v5.20` emits the `deprecated::subsequent_use_version` warning
+and succeeds; `use warnings FATAL => 'deprecated::subsequent_use_version'`
+makes it fatal; and the existing legacy decimal sequence `use 5.006; use
+v5.10.0` succeeds without a warning. The newer 5.45 test fixture expects the
+warning to be fatal, which is scheduled for Perl 5.46. Running that fixture
+under standard 5.44.0 reproduces the version-mismatch failures.
 
-Fresh CI was last observed still running on both Ubuntu and Windows for PR head
-`80d8cea3250e139514f7b412e22ea40cb8d533d3`; the most recent GitHub API request
-failed to connect, so refresh status before resuming.
+The parser now tracks legacy decimal syntax separately, preserves its 5.44
+warning-free upgrade behavior, emits the 5.44 deprecation warning for other
+eligible version changes, respects disabled and fatal warning categories, and
+retains the fatal rules for versions >=5.39 and downgrades below v5.11. The
+new `use_version_subsequent_warning.t` passes all eight assertions on standard
+Perl 5.44.0 and fails three assertions on the unfixed PerlOnJava JVM and
+interpreter. After the fix, `nice -n 19 timeout 1800 make` passes; the focused
+`use_version_*` tests pass on both PerlOnJava backends. The full UAT and fresh
+PR CI still need to rerun for this source.
 
-Next, resolve whether PR #1623 must enforce the target Perl 5.44 fatal behavior
-or retain the local Perl 5.42 behavior required by the unchanged project-owned
-unit test. Then add permanent coverage consistent with that decision, rerun
-the unit and full UAT gates, refresh CI, and close only confirmed-fixed tickets
-after merge.
+The last CI run for old PR head `3a5804a54` passed on Ubuntu and Windows. Push
+the validated 5.44 behavior, rerun the requested full UAT and compare with the
+Oct 3 log, and refresh CI. Classify any remaining `croak.t` difference against
+the verified 5.44 oracle; do not adopt the 5.46 fatal behavior in this
+PerlOnJava 5.44 release. Close only tickets confirmed fixed after merge.
 
 This handoff and Immediate next steps supersede older candidate status below.
 The final-batch record below also supersedes the earlier three-failure and

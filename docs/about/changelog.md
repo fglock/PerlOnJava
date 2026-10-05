@@ -25,6 +25,8 @@ priorities and future plans.
 - Preserve binary HTTP response bytes so CPAN downloads remain extractable.
 - Preserve Unix executable permissions when extracting ZIP archive entries.
 - Accept Perl's valid `\@;@` prototype without an `illegalproto` warning.
+- Match Perl 5.44's deprecated warning for differing in-scope `use VERSION`
+  declarations while retaining its warning-free legacy decimal upgrade.
 
 - Keep format captures bound to their active lexical cell and prevent reuse of unrelated active lexicals.
 - Match Perl's reference count for the compile-time `%^H` hash.

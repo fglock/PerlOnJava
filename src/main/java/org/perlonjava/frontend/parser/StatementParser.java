@@ -1336,7 +1336,8 @@ public class StatementParser {
                                 Configuration.getPerlVersionVString(),
                                 versionScalar,
                                 "Perl");
-                        rejectRepeatedUseVersion(parser, versionScalar);
+                        rejectRepeatedUseVersion(parser, versionScalar,
+                                versionNode instanceof NumberNode);
                     }
 
                     if (!isNoDeclaration) {
@@ -1688,25 +1689,15 @@ public class StatementParser {
         return result;
     }
 
-    private static void rejectRepeatedUseVersion(Parser parser, RuntimeScalar version) {
+    private static void rejectRepeatedUseVersion(Parser parser, RuntimeScalar version,
+                                                 boolean requestedLegacyDecimal) {
         String requested = normalizeVersion(version);
-        String previous = parser.ctx.symbolTable.getUseVersion();
+        ScopedSymbolTable symbolTable = parser.ctx.symbolTable;
+        String previous = symbolTable.getUseVersion();
         if (previous != null) {
             // Repeating the same lexical version is valid.  CPAN modules
             // commonly do this after changing packages within one file.
             if (previous.equals(requested)) {
-                return;
-            }
-            // A higher minimum version only adds language features and is
-            // accepted by Perl for the historical declarations used by
-            // modules that support a range of Perl releases (for example,
-            // `use 5.006; use v5.10.0`).  Track the latest minimum so a later
-            // declaration is checked against the actual active requirement.
-            if (!versionAtLeast(previous, 5, 39)
-                    && !versionAtLeast(requested, 5, 39)
-                    && org.perlonjava.runtime.operators.VersionHelper.compareVersions(
-                            requested, previous) > 0) {
-                parser.ctx.symbolTable.setUseVersion(requested);
                 return;
             }
             String message;
@@ -1716,13 +1707,38 @@ public class StatementParser {
                 message = "use VERSION is not permitted while another use VERSION of 5.39 or above is in scope";
             } else if (versionAtLeast(previous, 5, 11) && !versionAtLeast(requested, 5, 11)) {
                 message = "Downgrading a use VERSION declaration to below v5.11 is not permitted";
+            } else if (symbolTable.isUseVersionLegacyDecimal()
+                    && org.perlonjava.runtime.operators.VersionHelper.compareVersions(
+                            requested, previous) > 0) {
+                // Perl 5.44 preserves warning-free upgrades from the old
+                // decimal minimum syntax used by compatibility modules.
+                symbolTable.setUseVersion(requested);
+                symbolTable.setUseVersionLegacyDecimal(requestedLegacyDecimal);
+                return;
             } else {
-                message = "Changing use VERSION while another use VERSION is in scope is not permitted";
+                message = "Changing use VERSION while another use VERSION is in scope is deprecated, "
+                        + "and will become fatal in Perl 5.46";
+                String category = "deprecated::subsequent_use_version";
+                if (!symbolTable.isWarningCategoryDisabled(category)
+                        && symbolTable.isWarningCategoryEnabled(category)) {
+                    RuntimeScalar warning = new RuntimeScalar(message);
+                    RuntimeScalar location = new RuntimeScalar(
+                            parser.ctx.errorUtil.warningLocation(parser.tokenIndex));
+                    if (symbolTable.isFatalWarningCategory(category)) {
+                        WarnDie.die(warning, location);
+                    } else {
+                        WarnDie.warn(warning, location);
+                    }
+                }
+                symbolTable.setUseVersion(requested);
+                symbolTable.setUseVersionLegacyDecimal(requestedLegacyDecimal);
+                return;
             }
             var loc = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
             throw new PerlParserException(message + " at " + loc.fileName() + " line " + loc.lineNumber() + ".");
         }
-        parser.ctx.symbolTable.setUseVersion(requested);
+        symbolTable.setUseVersion(requested);
+        symbolTable.setUseVersionLegacyDecimal(requestedLegacyDecimal);
     }
 
     private static boolean versionAtLeast(String version, int major, int minor) {
