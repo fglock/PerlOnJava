@@ -873,6 +873,17 @@ sub _create_install_makefile {
     } else {
         $test_cmd = qq{$perl -e "print qq{PerlOnJava: No tests found (no t/ directory)\\n}"};
     }
+
+    # A distribution may override MY::test to provide its own harness command
+    # or add test-only include paths (for example, generated Thrift modules).
+    # Treat a non-empty override as the complete test target, as MakeMaker
+    # does, and pass the configured test selection to the hook.
+    my $my_test = '';
+    if (defined &MY::test) {
+        $my_test = MY::test($mm, TESTS => $test_glob);
+        $my_test = '' unless defined $my_test;
+    }
+    my $test_target = $my_test || "test::\n\t$test_cmd\n";
     
     # Convert module name to dist name (My::Module -> My-Module)
     my $distname = $args->{DISTNAME} || $name;
@@ -886,6 +897,10 @@ sub _create_install_makefile {
     my $siteprefix = $args->{SITEPREFIX} || $args->{PREFIX};
     my $install_dirs = defined $args->{INSTALLDIRS} ? $args->{INSTALLDIRS} : 'site';
     my $inc = defined $args->{INC} ? $args->{INC} : '';
+    my $install_vendor_arch = $Config{installvendorarch}
+        || $Config{installsitearch}
+        || $Config{installsitelib}
+        || '';
     
     # If INSTALLSITELIB is not set, compute it from PREFIX/SITEPREFIX (standard MakeMaker behavior)
     unless ($installsitelib) {
@@ -989,11 +1004,11 @@ sub _create_install_makefile {
     my $blib_script_cmds_str = join("\n", @blib_script_cmds) || "\t\@true";
     my $file_count = scalar(keys %$pm) + scalar(keys %$scripts);
 
-    # Build PL_FILES commands (prefixed with - so failures are non-fatal;
-    # many .PL scripts generate optional CLI tools that aren't needed for
-    # the module's core functionality). Track generated targets so missing
-    # generated PM files do not become hard pm_to_blib prerequisites before
-    # pl_files has had a chance to create them.
+    # Build PL_FILES commands. Optional generators such as CLI wrappers may
+    # fail without affecting module use, but a generator that produces a .pm
+    # file must fail the build rather than leave an incomplete distribution.
+    # Generated targets are excluded from pm_to_blib so staging can complete
+    # before the generators run.
     _default_pl_files($args);
 
     my @pl_cmds;
@@ -1003,31 +1018,56 @@ sub _create_install_makefile {
     if ($args->{PL_FILES} && %{$args->{PL_FILES}}) {
         for my $pl (sort keys %{$args->{PL_FILES}}) {
             my $target = $args->{PL_FILES}{$pl};
+            my %generator_mkdirs = _pl_files_created_dirs($pl);
             if (ref $target eq 'ARRAY') {
                 for my $t (@$target) {
                     $pl_targets{$t} = 1;
+                    my $ignore = _pl_files_generates_pm($pl, $t) ? '' : '-';
                     my $dir = dirname($t);
+                    my $literal_dir = _expand_install_dir_macros(
+                        $dir, $inst_lib, $inst_archlib);
                     push @pl_cmds, _shell_mkdir($dir)
-                        if $dir ne '.' && !$pl_target_dirs{$dir}++;
-                    push @pl_cmds, "\t-$perl $pl $t";
-                    my $mkdir = $dir ne '.' ? _shell_mkdir($dir) . "\n" : '';
-                    push @pl_rules, "$t :: $pl pm_to_blib\n$mkdir\t-$perl $pl $t\n";
+                        if $dir ne '.' && !$generator_mkdirs{$literal_dir}
+                            && !$pl_target_dirs{$dir}++;
+                    if ($generator_mkdirs{$literal_dir}) {
+                        my $parent = dirname($dir);
+                        push @pl_cmds, _shell_mkdir($parent)
+                            if $parent ne '.' && !$pl_target_dirs{$parent}++;
+                    }
+                    push @pl_cmds, "\t$ignore$perl $pl $t";
+                    my $mkdir = $dir ne '.' && !$generator_mkdirs{$literal_dir}
+                        ? _shell_mkdir($dir) . "\n" : '';
+                    $mkdir = _shell_mkdir(dirname($dir)) . "\n"
+                        if $generator_mkdirs{$literal_dir} && dirname($dir) ne '.';
+                    push @pl_rules, "$t :: $pl pm_to_blib\n$mkdir\t$ignore$perl $pl $t\n";
                 }
             } else {
                 $pl_targets{$target} = 1;
+                my $ignore = _pl_files_generates_pm($pl, $target) ? '' : '-';
                 my $dir = dirname($target);
+                my $literal_dir = _expand_install_dir_macros(
+                    $dir, $inst_lib, $inst_archlib);
                 push @pl_cmds, _shell_mkdir($dir)
-                    if $dir ne '.' && !$pl_target_dirs{$dir}++;
-                push @pl_cmds, "\t-$perl $pl $target";
-                my $mkdir = $dir ne '.' ? _shell_mkdir($dir) . "\n" : '';
-                push @pl_rules, "$target :: $pl pm_to_blib\n$mkdir\t-$perl $pl $target\n";
+                    if $dir ne '.' && !$generator_mkdirs{$literal_dir}
+                        && !$pl_target_dirs{$dir}++;
+                if ($generator_mkdirs{$literal_dir}) {
+                    my $parent = dirname($dir);
+                    push @pl_cmds, _shell_mkdir($parent)
+                        if $parent ne '.' && !$pl_target_dirs{$parent}++;
+                }
+                push @pl_cmds, "\t$ignore$perl $pl $target";
+                my $mkdir = $dir ne '.' && !$generator_mkdirs{$literal_dir}
+                    ? _shell_mkdir($dir) . "\n" : '';
+                $mkdir = _shell_mkdir(dirname($dir)) . "\n"
+                    if $generator_mkdirs{$literal_dir} && dirname($dir) ne '.';
+                push @pl_rules, "$target :: $pl pm_to_blib\n$mkdir\t$ignore$perl $pl $target\n";
             }
         }
     }
     my $pl_cmds_str = join("\n", @pl_cmds) || "\t\@true";
     my $pl_rules_str = join("\n", @pl_rules);
 
-    my $pm_deps_str = join(' ', sort grep { $_ !~ m{^blib/lib/} && !($pl_targets{$_} && !-e $_) } keys %blib_pm);
+    my $pm_deps_str = join(' ', sort grep { $_ !~ m{^blib/lib/} && !$pl_targets{$_} } keys %blib_pm);
     $pm_deps_str = " $pm_deps_str" if length $pm_deps_str;
     
     # Make pm_to_blib target conditional - if no .pm files, make it a no-op
@@ -1076,6 +1116,9 @@ INST_LIBDIR = \$(INST_LIB)
 INST_ARCHLIBDIR = \$(INST_ARCHLIB)
 PERLONJAVA_CPAN_PERL5LIB = \$(shell if test -f blib/.perlonjava-cpan-perl5lib; then cat blib/.perlonjava-cpan-perl5lib; elif test -f .perlonjava-cpan-perl5lib; then cat .perlonjava-cpan-perl5lib; fi)
 PERLONJAVA_TEST_PERL5LIB = inc:\$(INST_LIB):\$(INST_ARCHLIB):\$(PERLONJAVA_CPAN_PERL5LIB):\$\$PERL5LIB
+INSTALLARCHLIB = $Config{installarchlib}
+INSTALLSITEARCH = $Config{installsitearch}
+INSTALLVENDORARCH = $install_vendor_arch
 $siteprefix_var
 INSTALLSITELIB = $installsitelib
 INSTALLDIRS = $install_dirs
@@ -1101,7 +1144,7 @@ MOD_INSTALL = \$(NOECHO) \$(PERLRUN) -e "1"
 UNINSTALL = \$(NOECHO) \$(PERLRUN) -e "1"
 $extra_macros_str
 
-all:: pl_files pm_to_blib pure_all blib_scripts config
+all:: pm_to_blib pl_files pure_all blib_scripts config
 \t\@echo "PerlOnJava: $name v$version built ($file_count files in ./blib)"
 
 $depend_rules_str
@@ -1116,6 +1159,7 @@ $pm_to_blib_target
 \t\@mkdir -p \$(INST_ARCHLIB)
 \t\@mkdir -p \$(INST_LIB)/auto
 $blib_cmds_str
+\t\@touch pm_to_blib
 
     # pure_all is an alias target some postambles (File::ShareDir::Install,
     # Alien::Build) hook to add extra blib-staging steps. Depends on pm_to_blib
@@ -1128,7 +1172,7 @@ blib_scripts::
 $blib_script_cmds_str
 
 # Process PL_FILES
-pl_files::
+pl_files:: pm_to_blib
 $pl_cmds_str
 
 $pl_rules_str
@@ -1142,8 +1186,7 @@ $script_cmds_str
 # make error, and real ExtUtils::MakeMaker uses :: for these targets.
 config:: pm_to_blib
 
-test::
-\t$test_cmd
+$test_target
 
 # Keep the stock MakeMaker install/uninstall target topology. Distributions
 # generated by Dist::Zilla commonly edit these exact dependency lines after
@@ -1308,6 +1351,45 @@ sub _default_pl_files {
     closedir($dh);
 
     $args->{PL_FILES} = \%pl_files if %pl_files;
+}
+
+# Find simple literal directories that a .PL generator creates itself.  A
+# generator such as Parse::Yapp::KeyValue's calls mkdir on the output file's
+# parent, so MakeMaker must create that directory's parent without making the
+# generator's mkdir fail with EEXIST.
+sub _pl_files_created_dirs {
+    my ($pl) = @_;
+    open my $fh, '<', $pl or return;
+    my $source = do { local $/; <$fh> };
+    close $fh;
+
+    my %literal;
+    while ($source =~ /\$([A-Za-z_]\w*)\s*=\s*(['"])(.*?)\2/sg) {
+        $literal{$1} = $3;
+    }
+
+    my %dirs;
+    while ($source =~ /\bmkdir\s+(?:\$([A-Za-z_]\w*)|(['"])(.*?)\2)/sg) {
+        my $dir = defined $1 ? $literal{$1} : $3;
+        $dirs{$dir} = 1 if defined $dir && length $dir;
+    }
+    return %dirs;
+}
+
+sub _expand_install_dir_macros {
+    my ($path, $inst_lib, $inst_archlib) = @_;
+    $path =~ s/\$\(INST_LIB\)/$inst_lib/g;
+    $path =~ s/\$\(INST_ARCHLIB\)/$inst_archlib/g;
+    return $path;
+}
+
+sub _pl_files_generates_pm {
+    my ($pl, $target) = @_;
+    return 1 if defined $target && $target =~ /\.pm\z/i;
+    open my $fh, '<', $pl or return 0;
+    my $source = do { local $/; <$fh> };
+    close $fh;
+    return $source =~ m{\bblib/lib/[^'"\s]*\.pm\b}i ? 1 : 0;
 }
 
 sub _configure_subdirs {
