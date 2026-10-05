@@ -143,12 +143,17 @@ and first path establish implementation cost.
   controlled `B::svref_2object(...)->REFCNT` checkpoints. Perl 5.45.4, JVM,
   and interpreter agree on all five weak-lifecycle assertions and all four
   owner-count assertions.
+- [x] Added a referent lifecycle state independent of the selective count
+  sentinel, wired final dispatch and resurrection transitions through it, and
+  made completed destruction idempotent. `PerlReferentLifecycleStateTest`, the
+  full `nice -n 19 make` gate, and all four Perl ownership regressions pass on
+  Perl 5.45.4 and both PerlOnJava backends.
 
 ### Next steps
 
-1. Separate closure-path lifecycle state from `RuntimeBase.refCount` sentinels
-   and integrate DESTROY, weak clearing, resurrection, and deferred release
-   through that state without changing the Perl 5.45.4 count checkpoints.
+1. Exercise real blessed DESTROY entry/reentry, exception cleanup, and
+   resurrection against the separate lifecycle state; preserve Perl 5.45.4
+   weak and exact count checkpoints.
 2. Reproduce #1642's repeated deferred-cleanup root queries with deterministic
    counters on this baseline.
 3. Extend the complete ownership path through scalar proxies and array/hash
@@ -170,8 +175,9 @@ and first path establish implementation cost.
   content and incremental parser cases still retain two and three elements at
   the immediate release assertion on both PerlOnJava backends; Perl 5.44 passes
   all cases. The new parser lifecycle reproducer records this open failure.
-- `RuntimeBase.refCount` still combines selective counts with lifecycle
-  sentinels and remains the DESTROY authority for mixed-owner referents. The
-  closure path still needs an explicit lifecycle state that accounts for its
-  owner slots and legacy bridge. Scalar/proxy and array/hash migration belongs
-  to Phase 2 under issue #1649's current plan.
+- `RuntimeBase.refCount` still combines selective counts with legacy lifecycle
+  sentinels and triggers cleanup for mixed-owner referents. The new explicit
+  lifecycle prevents repeat dispatch and records destruction/resurrection, but
+  it does not yet replace sentinel checks at every legacy boundary. Scalar/
+  proxy and array/hash migration belongs to Phase 2 under issue #1649's current
+  plan.
