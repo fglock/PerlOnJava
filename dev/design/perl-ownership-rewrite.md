@@ -107,6 +107,10 @@ and first path establish implementation cost.
 - [x] Built an isolated Perl 5.44.0 oracle from the local source tag and
   reproduced unchanged HTML-Tree 5.07 `t/refloop.t`: Perl passes 8/8 while the
   parent JVM fails 4/8 with retained weak references.
+- [x] Switched current unit-test oracle validation to the user's target Perl
+  build at `/Users/fglock/projects/perl5/perl` (Perl 5.45.4, non-threaded).
+  The recursive-pad and captured-pad-transfer regressions pass on that build
+  and on both PerlOnJava backends; 5.44 remains historical baseline evidence.
 - [x] Reduced the failure to recursive `new_from_lol` closure release and
   recorded an oracle-validated baseline reproducer at
   [`dev/repros/issue-1649-html-tree-lifecycle.t`](../repros/issue-1649-html-tree-lifecycle.t).
@@ -123,6 +127,9 @@ and first path establish implementation cost.
 - [x] Added typed owner-slot identity for closure pads, with acquire/transfer/
   release operations and a primitive identity regression. Existing selective
   refcount and deferred-release transitions remain the compatibility bridge.
+- [x] Added a standalone oracle regression for captured-pad referent transfer,
+  shared closure visibility, and exact final release. Perl 5.45.4 and both
+  PerlOnJava backends pass 6/6.
 
 ### Next steps
 
@@ -142,9 +149,12 @@ and first path establish implementation cost.
 ### Open questions and blockers
 
 - #1642's performance baseline is still outstanding.
-- The local `perl5` checkout is dirty blead 5.45.4 with an existing untracked
-  `.local-perl`; it remains untouched. Perl 5.44.0 was built from its local git
-  tag in an isolated temporary copy with default macOS Configure options.
+- The current standard Perl oracle is
+  `/Users/fglock/projects/perl5/perl`, version 5.45.4 with `useithreads=undef`.
+  It needs the checkout's `lib`, `cpan/Test-Simple/lib`, and
+  `cpan/Scalar-List-Utils/lib` added to `@INC`; the checkout remains untouched.
+  The prior Perl 5.44.0 build remains the oracle for historical HTML-Tree
+  integration results.
 - The focused `new_from_lol` regression now passes, but HTML-Tree 5.07's
   content and incremental parser cases still retain two and three elements at
   the immediate release assertion on both PerlOnJava backends; Perl 5.44 passes
