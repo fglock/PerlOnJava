@@ -11,6 +11,32 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  * and interfaces for these entities.
  */
 public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScalar> {
+    /** Lifecycle is independent of the selective-count compatibility bridge. */
+    public enum PerlLifecycleState {
+        LIVE,
+        DESTROYING,
+        RESURRECTED,
+        DESTROYED
+    }
+
+    private volatile PerlLifecycleState perlLifecycleState = PerlLifecycleState.LIVE;
+
+    public PerlLifecycleState perlLifecycleState() {
+        return perlLifecycleState;
+    }
+
+    void beginPerlDestruction() {
+        perlLifecycleState = PerlLifecycleState.DESTROYING;
+    }
+
+    void markPerlResurrected() {
+        perlLifecycleState = PerlLifecycleState.RESURRECTED;
+    }
+
+    void markPerlDestroyed() {
+        perlLifecycleState = PerlLifecycleState.DESTROYED;
+    }
+
     /** Storage identity retained across ithread graph clones. */
     public volatile boolean threadShared;
     /**

@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 in progress; recursive closure pad release is the first verified lifecycle path
+**Status:** Phase 1 in progress; closure-pad release, capture transfer, weak transitions, and runtime cycle retention are covered
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
@@ -135,19 +135,26 @@ and first path establish implementation cost.
   Java regression for bridge acquisition and drain. `nice -n 19 make` passes;
   both Perl regressions pass on Perl 5.45.4 and on the JVM and interpreter
   backends.
+- [x] Added runtime-scoped strong retention for referents with positive
+  closure-pad owner-slot counts. Slot transfer/release and runtime lifecycle
+  clear update the registry; a Java regression covers multiple slots and
+  referent transfer. `nice -n 19 make` and `make check-links` pass.
+- [x] Added permanent closure-pad tests for weak/unweaken transitions and
+  controlled `B::svref_2object(...)->REFCNT` checkpoints. Perl 5.45.4, JVM,
+  and interpreter agree on all five weak-lifecycle assertions and all four
+  owner-count assertions.
 
 ### Next steps
 
-1. Add a runtime-scoped strong registry for positive owner slots so retained
-   closure referents survive as Perl cycles independently of JVM reachability.
-2. Complete the closure path's lifecycle API and boundary evidence, including
-   DESTROY, weak clearing, resurrection, and exact count checkpoints.
-3. Reproduce #1642's repeated deferred-cleanup root queries with deterministic
+1. Separate closure-path lifecycle state from `RuntimeBase.refCount` sentinels
+   and integrate DESTROY, weak clearing, resurrection, and deferred release
+   through that state without changing the Perl 5.45.4 count checkpoints.
+2. Reproduce #1642's repeated deferred-cleanup root queries with deterministic
    counters on this baseline.
-4. Extend the complete ownership path through scalar proxies and array/hash
+3. Extend the complete ownership path through scalar proxies and array/hash
    slots in Phase 2, then resolve the HTML::Tree teardown failures and verify
    unchanged `t/refloop.t`.
-5. Run each repository gate from an immutable commit and record before/after
+4. Run each repository gate from an immutable commit and record before/after
    evidence for the enabled ownership path.
 
 ### Open questions and blockers
@@ -163,6 +170,8 @@ and first path establish implementation cost.
   content and incremental parser cases still retain two and three elements at
   the immediate release assertion on both PerlOnJava backends; Perl 5.44 passes
   all cases. The new parser lifecycle reproducer records this open failure.
-- The new owner-slot ledger, identity model, scalar/aggregate migration, and
-  explicit deferred-release bridge remain unimplemented. These fixes are
-  evidence for the Phase 1 boundary, not completion of the ownership rewrite.
+- `RuntimeBase.refCount` still combines selective counts with lifecycle
+  sentinels and remains the DESTROY authority for mixed-owner referents. The
+  closure path still needs an explicit lifecycle state that accounts for its
+  owner slots and legacy bridge. Scalar/proxy and array/hash migration belongs
+  to Phase 2 under issue #1649's current plan.

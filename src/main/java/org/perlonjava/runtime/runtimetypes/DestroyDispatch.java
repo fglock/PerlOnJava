@@ -34,7 +34,11 @@ public class DestroyDispatch {
     }
 
     static void markDestroyTargetRescued() {
-        state().destroyTargetRescued = true;
+        LifecycleRuntimeState state = state();
+        state.destroyTargetRescued = true;
+        if (state.currentDestroyTarget != null) {
+            state.currentDestroyTarget.markPerlResurrected();
+        }
     }
 
     static void requestSweepAfterOuterDestroy() {
@@ -214,6 +218,12 @@ public class DestroyDispatch {
         // releases the last view performs the one Perl DESTROY callback.
         if (referent.deferSharedDestroy()) return;
 
+        // The explicit lifecycle is authoritative once final cleanup has
+        // completed. Keep refCount's sentinel interpretation at the legacy
+        // bridge, while preventing a repeated count transition from entering
+        // the destruction path a second time.
+        if (referent.perlLifecycleState() == RuntimeBase.PerlLifecycleState.DESTROYED) return;
+
         // Phase 3 (refcount_alignment_plan.md): Re-entry guard.
         // If this object is already inside its own DESTROY body, a transient
         // decrement-to-0 (local temp release, deferred MortalList flush,
@@ -261,8 +271,10 @@ public class DestroyDispatch {
             // (or other code) may still access the object through its weak refs.
             // Proper cleanup happens at END time via clearRescuedWeakRefs.
             if (state().rescuedObjects.contains(referent)) {
+                referent.markPerlResurrected();
                 return;
             }
+            referent.beginPerlDestruction();
             WeakRefRegistry.clearWeakRefsTo(referent);
             if (referent instanceof RuntimeHash hash) {
                 MortalList.scopeExitCleanupHash(hash);
@@ -278,6 +290,7 @@ public class DestroyDispatch {
                     && MortalList.requestWeakSweepsForDestroyedContainer(referent)) {
                 MortalList.requestImmediateWeakSweep();
             }
+            referent.markPerlDestroyed();
             return;
         }
 
@@ -315,6 +328,7 @@ public class DestroyDispatch {
         if (className == null || className.isEmpty()) {
             // Unblessed object — clear weak refs immediately and cascade into elements
             // to decrement refCounts of any tracked references they hold.
+            referent.beginPerlDestruction();
             WeakRefRegistry.clearWeakRefsTo(referent);
             if (referent instanceof RuntimeHash hash) {
                 MortalList.scopeExitCleanupHash(hash);
@@ -324,6 +338,7 @@ public class DestroyDispatch {
                 RuntimeScalar.scopeExitCleanup(scalar);
             }
             MortalList.requestWeakSweepsForDestroyedContainer(referent);
+            referent.markPerlDestroyed();
             return;
         }
 
@@ -341,6 +356,7 @@ public class DestroyDispatch {
      */
     private static void doCallDestroy(RuntimeBase referent, String className) {
         LifecycleRuntimeState state = state();
+        referent.beginPerlDestruction();
         int destroyBlessId = referent.blessId;
         // Use cached method if available
         RuntimeScalar destroyMethod = state.destroyMethodCache.get(referent.blessId);
@@ -372,6 +388,7 @@ public class DestroyDispatch {
                     && MortalList.requestWeakSweepsForDestroyedContainer(referent)) {
                 MortalList.requestImmediateWeakSweep();
             }
+            referent.markPerlDestroyed();
             return;
         }
 
@@ -599,6 +616,12 @@ public class DestroyDispatch {
                         new RuntimeScalar(""), "misc", warningBits);
             }
         } finally {
+            if (referent.needsReDestroy || state.destroyTargetRescued
+                    || state.rescuedObjects.contains(referent)) {
+                referent.markPerlResurrected();
+            } else {
+                referent.markPerlDestroyed();
+            }
             // Restore the DESTROY target and rescue flag for nested DESTROY calls
             state.currentDestroyTarget = savedTarget;
             state.destroyTargetRescued = savedRescued;
