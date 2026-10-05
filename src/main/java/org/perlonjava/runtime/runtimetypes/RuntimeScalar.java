@@ -2693,6 +2693,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // and for scalars that didn't own a refCount increment).
         if (oldBase != null && !thisWasWeak
                 && (this.refCountOwned || oldOwnedByScalarReference)) {
+            if (oldBase instanceof RuntimeCode code
+                    && code.capturedScalars != null
+                    && value.type == UNDEF
+                    && System.getenv("PJ_CLOSURE_CAPTURE_TRACE") != null) {
+                System.err.println("[CV-SCALAR-UNDEF] code="
+                        + System.identityHashCode(code)
+                        + " refCount=" + code.refCount
+                        + " scalar=" + System.identityHashCode(this)
+                        + " scalarOwns=" + this.refCountOwned
+                        + " captures=" + code.capturedScalars.length);
+            }
             if (oldBase.refCount > 0) {
                 oldBase.traceRefCount(-1, "RuntimeScalar.setLargeRefCounted (decrement on overwrite)");
                 oldBase.releaseOwner(this, "setLargeRefCounted overwrite");
@@ -4444,6 +4455,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar undefine() {
+        if (type == RuntimeScalarType.CODE
+                && value instanceof RuntimeCode code
+                && code.capturedScalars != null
+                && System.getenv("PJ_CLOSURE_CAPTURE_TRACE") != null) {
+            System.err.println("[CV-SCALAR-UNDEFINE] code="
+                    + System.identityHashCode(code)
+                    + " scalar=" + System.identityHashCode(this)
+                    + " refCount=" + code.refCount
+                    + " capturedScalars=" + code.capturedScalars.length);
+        }
         if (isPackageGlobalRoot) {
             MortalList.invalidateExternalRootSnapshot();
         }

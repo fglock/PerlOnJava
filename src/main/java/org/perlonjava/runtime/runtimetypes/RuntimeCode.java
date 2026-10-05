@@ -2596,6 +2596,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * captures, those are released recursively.
      */
     public void releaseCaptures() {
+        if (System.getenv("PJ_CLOSURE_CAPTURE_TRACE") != null) {
+            System.err.println("[CV-RELEASE-CAPTURES] code="
+                    + System.identityHashCode(this)
+                    + " refCount=" + refCount
+                    + " capturedScalars="
+                    + (capturedScalars == null ? 0 : capturedScalars.length)
+                    + " capturedAggregates="
+                    + (capturedAggregates == null ? 0 : capturedAggregates.length));
+        }
         if (capturedScalars != null) {
             RuntimeScalar[] scalars = capturedScalars;
             capturedScalars = null;  // null out first to prevent re-entry
@@ -5071,6 +5080,30 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // blessed objects run DESTROY.
             code.refCount = 0;
             registerJvmClosure(code);
+        }
+
+        if (System.getenv("PJ_CLOSURE_CAPTURE_TRACE") != null
+                && (!captured.isEmpty() || !capturedAggregates.isEmpty())) {
+            StringBuilder trace = new StringBuilder("[CV-CREATE] code=")
+                    .append(System.identityHashCode(code))
+                    .append(" name=").append(code.subName)
+                    .append(" file=").append(code.cvStartFile)
+                    .append(" refCount=").append(code.refCount)
+                    .append(" scalarPads=[");
+            for (int i = 0; i < captured.size(); i++) {
+                if (i != 0) trace.append(", ");
+                RuntimeScalar pad = captured.get(i);
+                String padName = code.closedOverVariables == null ? null
+                        : code.closedOverVariables.entrySet().stream()
+                                .filter(entry -> entry.getValue() == pad)
+                                .map(java.util.Map.Entry::getKey)
+                                .findFirst().orElse(null);
+                trace.append(padName).append('#').append(System.identityHashCode(pad))
+                        .append(":type=").append(pad.type)
+                        .append(":captures=").append(pad.captureCount);
+            }
+            trace.append("] aggregatePads=").append(capturedAggregates.size());
+            System.err.println(trace);
         }
 
         RuntimeScalar codeRef = new RuntimeScalar(code);
@@ -8709,6 +8742,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (codeRef == null || codeRef.type != RuntimeScalarType.CODE
                 || !(codeRef.value instanceof RuntimeCode code)) {
             return codeRef != null ? codeRef.undefine() : new RuntimeScalar();
+        }
+        if (System.getenv("PJ_CLOSURE_CAPTURE_TRACE") != null
+                && code.capturedScalars != null) {
+            System.err.println("[CV-UNDEFINE-BODY] code="
+                    + System.identityHashCode(code)
+                    + " scalar=" + System.identityHashCode(codeRef)
+                    + " refCount=" + code.refCount
+                    + " capturedScalars=" + code.capturedScalars.length);
         }
         if (isActiveCode(code)) {
             throw new PerlCompilerException("Can't undef active subroutine");

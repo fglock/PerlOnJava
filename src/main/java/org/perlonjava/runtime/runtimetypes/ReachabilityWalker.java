@@ -800,15 +800,30 @@ public class ReachabilityWalker {
         Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
 
-        if (enqueueStrongEdges(target, target, seen, todo)) return true;
+        if (enqueueStrongEdges(target, target, seen, todo)) {
+            traceStrongCycleEdge(target, target);
+            return true;
+        }
 
         int visits = 0;
         while (!todo.isEmpty() && visits < MAX_VISITS) {
             RuntimeBase cur = todo.removeFirst();
             visits++;
-            if (enqueueStrongEdges(cur, target, seen, todo)) return true;
+            if (enqueueStrongEdges(cur, target, seen, todo)) {
+                traceStrongCycleEdge(cur, target);
+                return true;
+            }
         }
         return false;
+    }
+
+    private static void traceStrongCycleEdge(RuntimeBase source, RuntimeBase target) {
+        if (System.getenv("PJ_CLOSURE_CAPTURE_TRACE") == null) return;
+        System.err.println("[STRONG-CYCLE-EDGE] source="
+                + source.getClass().getSimpleName() + '#'
+                + System.identityHashCode(source)
+                + " target=" + target.getClass().getSimpleName() + '#'
+                + System.identityHashCode(target));
     }
 
     /**
@@ -1088,7 +1103,17 @@ public class ReachabilityWalker {
         if (s == null || WeakRefRegistry.isweak(s)) return false;
         if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && s.value instanceof RuntimeBase b) {
-            if (b == target) return true;
+            if (b == target) {
+                if (System.getenv("PJ_CLOSURE_CAPTURE_TRACE") != null) {
+                    System.err.println("[STRONG-CYCLE-SCALAR] scalar="
+                            + System.identityHashCode(s)
+                            + " type=" + s.type
+                            + " weak=" + WeakRefRegistry.isweak(s)
+                            + " target=" + target.getClass().getSimpleName() + '#'
+                            + System.identityHashCode(target));
+                }
+                return true;
+            }
             if (seen.add(b)) todo.addLast(b);
         }
         return false;

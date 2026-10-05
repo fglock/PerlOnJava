@@ -607,6 +607,33 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             }
             result.append(']');
         }
+        result.append(" capturePads=");
+        if (semanticCaptureOwners == null || semanticCaptureOwners.isEmpty()) {
+            result.append("[]");
+        } else {
+            result.append('[');
+            boolean first = true;
+            for (RuntimeScalar pad : semanticCaptureOwners) {
+                if (!first) result.append(", ");
+                first = false;
+                result.append("scalar=").append(System.identityHashCode(pad))
+                        .append(" type=").append(pad.type)
+                        .append(" captureCount=").append(pad.captureCount)
+                        .append(" captureRefCountOwned=").append(pad.captureRefCountOwned)
+                        .append(" scopeExited=").append(pad.scopeExited)
+                        .append(" slotOwnsReferent=").append(pad.refCountOwned)
+                        .append(" value=");
+                if (pad.value instanceof RuntimeBase valueBase) {
+                    result.append(valueBase.getClass().getSimpleName())
+                            .append('#').append(System.identityHashCode(valueBase));
+                } else if (pad.value == null) {
+                    result.append("null");
+                } else {
+                    result.append(pad.value.getClass().getSimpleName());
+                }
+            }
+            result.append(']');
+        }
         result.append(" pending=");
         java.util.ArrayList<PendingOwnerRelease> pending = pendingTraceOwnerReleases.get(this);
         if (pending == null || pending.isEmpty()) {
