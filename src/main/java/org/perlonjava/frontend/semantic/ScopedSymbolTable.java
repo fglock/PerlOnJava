@@ -267,6 +267,17 @@ public class ScopedSymbolTable {
         return symbolTableStack.size() - 1;
     }
 
+    /** Adds a lexical binding to an enclosing scope without changing the active scope. */
+    public int addVariableInScope(int scopeIndex, String name, String variableDeclType, OperatorNode ast) {
+        if (scopeIndex < 0 || scopeIndex >= symbolTableStack.size()) {
+            throw new IllegalArgumentException("Invalid lexical scope index: " + scopeIndex);
+        }
+        clearVisibleVariablesCache();
+        SymbolTable scope = symbolTableStack.get(scopeIndex);
+        return scope.addVariable(name, variableDeclType,
+                packageStack.get(scopeIndex).packageName(), ast);
+    }
+
     /**
      * Exits the current scope by popping the top SymbolTable from the stack.
      * Also removes the top state of warnings, features, and strict options.

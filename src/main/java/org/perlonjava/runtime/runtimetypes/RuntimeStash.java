@@ -282,6 +282,8 @@ public class RuntimeStash extends RuntimeHash {
         // For other stashes: symbols are stored as "Outer::Inner::bar",
         //   so the prefix is namespace + k (e.g., "Outer::" + "Inner::" = "Outer::Inner::")
         String childPrefix = "main::".equals(namespace) ? k : namespace + k;
+        String mainQualifiedChildPrefix = childPrefix.startsWith("main::")
+                ? childPrefix : "main::" + childPrefix;
 
         Map<String, RuntimeScalar> movedScalars = snapshotNamespace(GlobalVariable.globalVariables, childPrefix);
         Map<String, RuntimeArray> movedArrays = snapshotNamespace(GlobalVariable.globalArrays, childPrefix);
@@ -290,12 +292,19 @@ public class RuntimeStash extends RuntimeHash {
 
         // Remove all symbols with this prefix from all global maps (prefix-based removal)
         GlobalVariable.globalCodeRefs.keySet().removeIf(key -> key.startsWith(childPrefix));
+        GlobalVariable.globalCodeRefs.keySet().removeIf(key -> key.startsWith(mainQualifiedChildPrefix));
         GlobalVariable.clearGlobalPseudoConstantsForNamespace(childPrefix);
+        GlobalVariable.clearGlobalPseudoConstantsForNamespace(mainQualifiedChildPrefix);
         GlobalVariable.globalVariables.keySet().removeIf(key -> key.startsWith(childPrefix));
+        GlobalVariable.globalVariables.keySet().removeIf(key -> key.startsWith(mainQualifiedChildPrefix));
         GlobalVariable.globalArrays.keySet().removeIf(key -> key.startsWith(childPrefix));
+        GlobalVariable.globalArrays.keySet().removeIf(key -> key.startsWith(mainQualifiedChildPrefix));
         GlobalVariable.globalHashes.keySet().removeIf(key -> key.startsWith(childPrefix));
+        GlobalVariable.globalHashes.keySet().removeIf(key -> key.startsWith(mainQualifiedChildPrefix));
         GlobalVariable.removeGlobalIORefsForNamespace(childPrefix);
+        GlobalVariable.removeGlobalIORefsForNamespace(mainQualifiedChildPrefix);
         GlobalVariable.globalFormatRefs.keySet().removeIf(key -> key.startsWith(childPrefix));
+        GlobalVariable.globalFormatRefs.keySet().removeIf(key -> key.startsWith(mainQualifiedChildPrefix));
         GlobalVariable.invalidateStashEnumerationCache();
         GlobalVariable.clearHiddenIORefsForNamespace(childPrefix);
         GlobalVariable.invalidatePackageRootSnapshot();
@@ -316,6 +325,7 @@ public class RuntimeStash extends RuntimeHash {
         // Clear pinned code refs so deleted subs don't get resurrected
         // by getGlobalCodeRef() lookups (e.g., in SubroutineParser redefinition check)
         GlobalVariable.clearPinnedCodeRefsForNamespace(childPrefix);
+        GlobalVariable.clearPinnedCodeRefsForNamespace(mainQualifiedChildPrefix);
 
         // Clear stash alias if any
         GlobalVariable.clearStashAlias(childPrefix);

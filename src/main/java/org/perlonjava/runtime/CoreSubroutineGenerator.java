@@ -545,6 +545,22 @@ public class CoreSubroutineGenerator {
             case "waitpid" -> WaitpidOperator.waitpid(ctx, args).getList();
 
             // Misc operators
+            case "bless" -> {
+                if (args.length == 0) {
+                    throw new PerlCompilerException("Not enough arguments for bless");
+                }
+                RuntimeScalar className;
+                if (args.length > 1) {
+                    className = (RuntimeScalar) args[1];
+                } else {
+                    RuntimeCode caller = RuntimeCode.getActiveCodeAt(1);
+                    String packageName = caller == null || caller.packageName == null
+                            ? "main" : caller.packageName;
+                    className = new RuntimeScalar(
+                            ReferenceOperators.IMPLICIT_PACKAGE_PREFIX + packageName);
+                }
+                yield ReferenceOperators.bless((RuntimeScalar) args[0], className).getList();
+            }
             case "substr" -> Operator.substr(ctx, args).getList();
             case "rename" -> Operator.rename(ctx, args).getList();
             case "readlink" -> Operator.readlink(ctx, args).getList();

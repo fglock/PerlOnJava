@@ -30,6 +30,8 @@ priorities and future plans.
   representation for case-folded negated singleton regex classes.
 - Remove deleted package stashes from their parent namespace in
   `Symbol::delete_package`.
+- Keep lexical class methods visible across method declarations without
+  installing them in the package stash, and support callable `CORE::bless`.
 
 - Keep format captures bound to their active lexical cell and prevent reuse of unrelated active lexicals.
 - Match Perl's reference count for the compile-time `%^H` hash.

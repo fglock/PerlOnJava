@@ -1070,8 +1070,7 @@ public class Dereference {
             int callsiteId = nextMethodCallsiteId.getAndIncrement();
             // Perl attaches one COP per statement, so a method call at the end of a
             // multi-line chained expression reports the statement's first line, not
-            // the closing `)->method` line. Literal anon sub/block arguments still
-            // report the block line (handled below).
+            // the closing `)->method` line.
             Object annotatedCallerLine = node.getAnnotation("callerLineTokenOverride");
             int statementTokenIndex = emitterVisitor.ctx.javaClassInfo.statementTokenIndex;
             int callSiteIndex = annotatedCallerLine instanceof Integer token && token > 0
@@ -1079,13 +1078,6 @@ public class Dereference {
                     : (emitterVisitor.ctx.javaClassInfo.callerLineTokenOverride > 0
                             ? emitterVisitor.ctx.javaClassInfo.callerLineTokenOverride
                             : (statementTokenIndex > 0 ? statementTokenIndex : node.left.getIndex()));
-            if (node.right instanceof BinaryOperatorNode callNode
-                    && "(".equals(callNode.operator)
-                    && firstMethodArgumentIsLiteralSub(callNode)
-                    && callNode.right != null
-                    && callNode.right.getIndex() > 0) {
-                callSiteIndex = callNode.right.getIndex();
-            }
             if (callSiteIndex <= 0 && node.getIndex() > 0) {
                 callSiteIndex = node.getIndex();
             }
@@ -1295,14 +1287,6 @@ public class Dereference {
                 emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
             }
         }
-    }
-
-    private static boolean firstMethodArgumentIsLiteralSub(BinaryOperatorNode callNode) {
-        if (!(callNode.right instanceof ListNode list) || list.elements == null || list.elements.isEmpty()) {
-            return false;
-        }
-
-        return list.elements.get(0) instanceof SubroutineNode;
     }
 
     public static void handleArrowArrayDeref(EmitterVisitor emitterVisitor, BinaryOperatorNode node, String arrayOperation) {

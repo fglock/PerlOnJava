@@ -30,7 +30,7 @@ compiled-node assertion. The October 3 comparator also reports assertion-count
 changes across regex test files; its three actual failed files are the release
 gate failures to fix, not expected semantic differences.
 
-The unvalidated follow-up batch now:
+The follow-up batch now:
 
 - Rejects differing in-scope `use VERSION` declarations with the blead
   diagnostics, while retaining blead's exception for a preceding version
@@ -47,12 +47,24 @@ The unvalidated follow-up batch now:
   passes the project regression for it.
 
 The full no-options `dev/import-perl5/sync.pl` completed with 218 sources and
-zero errors; its tracked imports are committed in `179e91ac1`. The first full
-`make` after the code batch completed its Joni tests but exposed stale
-pre-blead caller-line unit expectations and the missing parent-stash removal.
-The tests now match the native oracle, the stash deletion is fixed, and the
-entire batch still needs a passing full `make`, a rebase on current
-`origin/master`, a fresh full UAT, the Oct 3 comparison, and green PR #1623 CI.
+zero errors; its tracked imports are committed in `179e91ac1`. The candidate
+`2f840f179` passes full `make`. A follow-up fixed JVM method-call line metadata
+and purges both bare and `main::`-qualified stash entries;
+`symbol_delete_package.t` passes on the JVM and interpreter.
+
+The full refreshed blead UAT on the follow-up passed **575/575 files**, with
+**0 failures, 0 errors, 0 timeouts, and 0 incomplete files** (680,708 passing
+assertions; 0 not-ok). This includes `lib/croak.t` (344/344), `op/caller.t`
+(126/126), and `re/anyof.t` (1187/1187). The captured log and JSON are
+`/Users/fglock/projects/PerlOnJava/logs/test_20261005_followup_2f840f179.log`
+and `/private/tmp/parser-uat-20261005-followup-2f840f179.json`.
+
+The Oct 3 comparison shows no failed candidate files, but is not an exact test
+identity match after refreshing blead: ten regex fixtures each have ten fewer
+planned assertions, and three passing subprocess tests carry execution
+metadata warnings. The candidate runner's strict summary is clean. Preserve
+the comparison report and classify these count/metadata differences during
+the final exact-head audit rather than treating them as failed assertions.
 
 This section supersedes the earlier Perl 5.44 target and expected-failure
 notes below. Those notes remain as historical evidence only.
@@ -852,28 +864,24 @@ implementation or acceptance work.
 ### Immediate next steps
 
 The current worktree contains the blead follow-up fixes and native-oracle-aligned
-unit expectations. The last full `make` exited 2 after 10m30s; Joni tests
-passed, while four project unit tests failed. Three failures were old caller
-line expectations that standard blead also rejects; the fourth exposed that
-namespace deletion left its parent stash key present. All four corrections
-are in the current unvalidated source batch.
+unit expectations. Full `make` and the full refreshed blead UAT passed on this
+source tree. The Oct 3 comparator differences are documented above; final
+acceptance still requires rerunning the gates after the final rebase and
+classifying the comparator metadata/count differences.
 
-1. Commit the complete fix, test, changelog, and handoff batch, then fetch and
-   rebase it onto the latest `origin/master` before the final validation gates.
-2. Run one `nice -n 19 timeout 3600 make` on that exact rebased commit. Require
-   all unit and Joni tests to pass.
-3. Run the focused changed Perl-level unit tests on both PerlOnJava backends
-   with timeouts. The standard blead 5.45.4 oracle already passes the updated
-   Perl-level tests.
-4. Run the complete refreshed core corpus with five jobs and a 300-second
-   per-test timeout, capture the JSON and full log, and compare it with
-   `/Users/fglock/projects/PerlOnJava/logs/test_20261003_080000_mixed.log`.
-   The acceptance threshold is zero failing UAT files and zero failed
-   assertions.
-5. Push the validated candidate to PR #1623, check every required CI job, and
+1. Commit the caller-line and namespace cleanup follow-up with this handoff
+   update, then fetch and rebase onto the latest `origin/master`.
+2. On the exact rebased commit, rerun `nice -n 19 timeout 3600 make` and the
+   full refreshed core corpus with five jobs and a 300-second per-test
+   timeout. Require zero failed UAT files and zero failed assertions.
+3. Recompare the final corpus against
+   `/Users/fglock/projects/PerlOnJava/logs/test_20261003_080000_mixed.log` and
+   retain the normalized report with the assertion-count and subprocess
+   metadata classification.
+4. Push the validated candidate to PR #1623, check every required CI job, and
    fix and retest any failure. Close only tickets confirmed fixed by the
    merged PR and full acceptance evidence.
-6. Keep the UAT logs and JSON as evidence, remove only task-created temporary
+5. Keep the UAT logs and JSON as evidence, remove only task-created temporary
    artifacts that are no longer needed, and poll long-running gates
    infrequently.
 
@@ -894,10 +902,10 @@ are in the current unvalidated source batch.
 - Does #1482 share a concrete cause, or require independent non-local LAST
   target and lexical warning-state fixes? Its report and a passing GOTO
   compilation regression do not establish that relationship.
-- The most recent core UAT and current local code batch have not passed all
-  acceptance gates. The end-state still requires a clean full `make`, zero
-  failing files in the refreshed full UAT, no comparator regressions against
-  the designated baseline, and green PR CI after rebasing and pushing.
+- The current local code batch passes full `make` and refreshed blead UAT.
+  Final acceptance still requires repeating both on the latest rebased commit,
+  classifying the Oct 3 comparator's corpus/count and subprocess metadata
+  differences, and green PR CI after pushing.
 
 ## Related documents and skills
 
