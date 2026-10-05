@@ -4,6 +4,7 @@ use Test::More;
 use Scalar::Util qw(weaken);
 
 our @destroyed;
+our $captured_destroyed = 0;
 
 {
     package Issue1649::DyingDestroy;
@@ -11,6 +12,15 @@ our @destroyed;
     sub DESTROY {
         push @main::destroyed, $_[0]{id};
         die "broken destructor\n";
+    }
+}
+
+{
+    package Issue1649::CapturedDyingDestroy;
+
+    sub DESTROY {
+        ++$main::captured_destroyed;
+        die "captured destructor failed\n";
     }
 }
 
@@ -38,5 +48,28 @@ is($warnings,
     'each suppressed DESTROY exception emits the cleanup warning');
 is($observed_at, $expected_at,
     '$@ is preserved across DESTROY exceptions');
+
+my ($captured_weak, $captured_warnings, $captured_at);
+my $expected_captured_at = 'captured caller exception';
+{
+    local $SIG{__WARN__} = sub { $captured_warnings .= $_[0] };
+    my $object = bless {}, 'Issue1649::CapturedDyingDestroy';
+    $captured_weak = $object;
+    weaken($captured_weak);
+    my $reader = sub { $object };
+    ok(defined($captured_weak), 'closure capture owns its referent before release');
+    is(ref($reader->()), 'Issue1649::CapturedDyingDestroy',
+        'closure reads the captured referent before scope exit');
+    $@ = $expected_captured_at;
+}
+$captured_at = $@;
+is($captured_at, $expected_captured_at,
+    '$@ is preserved when closure release invokes a dying DESTROY');
+is($captured_destroyed, 1,
+    'releasing the last closure capture invokes DESTROY once');
+ok(!defined($captured_weak),
+    'closure release clears the weak reference after DESTROY throws');
+is($captured_warnings, "\t(in cleanup) captured destructor failed\n",
+    'closure release reports the suppressed DESTROY exception');
 
 done_testing();

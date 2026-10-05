@@ -160,8 +160,9 @@ and first path establish implementation cost.
 - [x] Added standard-Perl-validated exception cleanup coverage: failing
   destructors still allow subsequent destructors to run, clear weak references,
   emit the cleanup warnings, and preserve `$@`. The Perl 5.45.4 oracle and both
-  PerlOnJava backends pass all four assertions; Java coverage checks that a
-  throwing callback exits `DESTROYING`, resets its reentry guard, and reaches
+  PerlOnJava backends pass all ten assertions, including `DESTROY` triggered
+  when a captured pad leaves scope. Java coverage checks that a throwing
+  callback exits `DESTROYING`, resets its reentry guard, and reaches
   `DESTROYED` with the legacy terminal sentinel restored. The new Java
   assertion first exposed a leaked synthetic `$_[0]` owner (refcount 1) when
   the callback threw; `DestroyDispatch` now drains callback-created pending
