@@ -148,12 +148,16 @@ and first path establish implementation cost.
   made completed destruction idempotent. `PerlReferentLifecycleStateTest`, the
   full `nice -n 19 make` gate, and all four Perl ownership regressions pass on
   Perl 5.45.4 and both PerlOnJava backends.
+- [x] Added real blessed `DESTROY` callback coverage for recursive dispatch
+  and rescue followed by final destruction. The two focused Java tests passed
+  in the `nice -n 19 make` run recorded for commit `99ee09a6c`; the rescued
+  referent fixture preserves the destructor argument's owner while adding a
+  distinct resurrection owner.
 
 ### Next steps
 
-1. Exercise real blessed DESTROY entry/reentry, exception cleanup, and
-   resurrection against the separate lifecycle state; preserve Perl 5.45.4
-   weak and exact count checkpoints.
+1. Add exception-path cleanup coverage for real blessed DESTROY callbacks and
+   preserve Perl 5.45.4 weak and exact count checkpoints.
 2. Reproduce #1642's repeated deferred-cleanup root queries with deterministic
    counters on this baseline.
 3. Extend the complete ownership path through scalar proxies and array/hash

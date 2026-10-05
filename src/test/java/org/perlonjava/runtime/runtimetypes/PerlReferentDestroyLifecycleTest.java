@@ -43,7 +43,7 @@ class PerlReferentDestroyLifecycleTest {
             referent.blessId = NameNormalizer.getBlessId(className);
             referent.refCount = Integer.MIN_VALUE;
             installDestroy(className, (args, context) -> {
-                referent.refCount = 1;
+                referent.refCount++;
                 DestroyDispatch.markDestroyTargetRescued();
                 return new RuntimeScalar().getList();
             });
