@@ -634,3 +634,7 @@ assertions on each PerlOnJava backend; cmp_pp.t contributed 62,210 per backend.
 This was not rerun on the independent split and is not claimed as its acceptance.
 
 - [Remaining release qualification #1646](https://github.com/fglock/PerlOnJava/issues/1646)
+
+Independent delivery: [draft PR #1647](https://github.com/fglock/PerlOnJava/pull/1647).
+Resume through [tracking issue #1642](https://github.com/fglock/PerlOnJava/issues/1642);
+keep PR #1628 separate until an explicitly validated integration barrier.
