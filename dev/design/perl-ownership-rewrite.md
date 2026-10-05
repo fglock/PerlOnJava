@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 0 oracle established; Phase 1 boundary still under audit
+**Status:** Phase 1 in progress; recursive closure pad release is the first verified lifecycle path
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
@@ -58,15 +58,22 @@ failing `HTML::Element->new_from_lol` lifecycle creates a recursive closure,
 stores its node references in aggregate slots, and undefines the closure before
 returning. Perl 5.44 releases the closure's pad owners there; PerlOnJava retained
 the tree. `undef $sub` is a scalar slot overwrite, not the separate `undef &sub`
-CV-body operation. A direct self-pad release hypothesis did not fix the
-reproducer and regressed an interpreter control test, so that change was
-discarded. Traces show one captured pad replacing its referent as nodes are
-constructed and the root remaining in `semanticCaptureOwners`; they have not
-identified the exact owner release PerlOnJava misses. Closure pad ownership,
-aggregate child slots, and weak parent lifecycle are all in the failing path,
-but the complete Phase 1 boundary is not selected until the missing release is
-understood. Calls and mortal release on that path must either use the new slot
-API or an explicit legacy bridge.
+CV-body operation.
+
+The first verified fix is at the reachability boundary. The interpreter's
+`capturedVars` array is execution metadata and can still contain a pad after
+that pad has been removed from the closure's semantic capture-owner list. The
+reachability walker treated this retired metadata as a live strong edge, found
+a self-cycle, and stopped `releaseCaptures()` from releasing the remaining
+pads. The closure owner lists are now authoritative for this path. The new
+dependency-free regression reproduces the lifecycle, passes on Perl 5.44 and
+both PerlOnJava backends, and fails on the parent interpreter backend.
+
+This fixes the demonstrated path but does not yet implement the new owner-slot
+identity/count/lifecycle model. Existing scalar, aggregate, deferred-release,
+weak-reference, and DESTROY accounting remains behind the legacy bridge. Phase
+1 is complete only after the owner-slot API and bridge cover the selected
+closure, scalar, aggregate, and deferred-release path on both backends.
 
 ## Phases
 
@@ -84,7 +91,7 @@ and first path establish implementation cost.
 
 ## Progress tracking
 
-### Current status: Phase 0 evidence established; Phase 1 boundary under audit
+### Current status: Phase 1 in progress; closure-pad release regression fixed
 
 ### Completed
 
@@ -100,28 +107,26 @@ and first path establish implementation cost.
 - [x] Reduced the failure to recursive `new_from_lol` closure release and
   recorded an oracle-validated baseline reproducer at
   [`dev/repros/issue-1649-html-tree-lifecycle.t`](../repros/issue-1649-html-tree-lifecycle.t).
-- [x] Determined that scalar-only and scalar-plus-aggregate boundaries cannot
-  cover the reduced #1618 failure. Closure pad ownership and weak-parent
-  lifecycle are involved, but the exact release edge remains unidentified.
-- [x] Kept the minimal strong-tree analogue at
-  [`dev/repros/issue-1649-strong-tree-control.t`](../repros/issue-1649-strong-tree-control.t)
-  outside the unit gate after confirming it also fails under the current
-  interpreter backend. These reproducers are not acceptance tests yet.
+- [x] Added the permanent dependency-free regression at
+  [`src/test/resources/unit/refcount/issue_1649_recursive_builder_pad_release.t`](../../src/test/resources/unit/refcount/issue_1649_recursive_builder_pad_release.t).
+  Perl 5.44 and both PerlOnJava backends pass; the parent interpreter fails
+  the release assertions.
+- [x] Removed retired `InterpretedCode.capturedVars` entries from reachability
+  ownership walks. The explicit capture-owner lists now determine whether
+  closure pads are live Perl edges.
 
 ### Next steps
 
-1. Map each closure pad created by `new_from_lol` to its owning CV, slot value,
-   and all release paths; retain the parent failure and Perl 5.44 oracle logs.
-2. Select a complete first path only after this mapping identifies the missing
-   edge and backend cleanup behavior.
+1. Define and implement the owner-slot identity/count/lifecycle API for the
+   verified closure-pad path, with an explicit bridge to the existing scalar,
+   aggregate, weak-reference, DESTROY, and deferred-release machinery.
+2. Migrate the closure capture stores and pad release points on both backends;
+   add primitive owner acquire/transfer/release tests and bridge tests.
 3. Reproduce #1642's repeated deferred-cleanup root queries with deterministic
    counters on this baseline; separate that cost regression from Phase 1
    correctness unless the selected ownership path demonstrates the connection.
-4. Implement explicit owner identity, count/lifecycle separation, and the
-   legacy bridge across the selected path.
-5. Add permanent oracle-validated primitive, lifecycle, bridge, and external
-   regression coverage; validate both backends and run the required immutable
-   source gates before requesting review.
+4. Run unchanged HTML-Tree `t/refloop.t` against Perl 5.44 and both backends,
+   then run the repository gate from an immutable source commit.
 
 ### Open questions and blockers
 
@@ -129,8 +134,6 @@ and first path establish implementation cost.
 - The local `perl5` checkout is dirty blead 5.45.4 with an existing untracked
   `.local-perl`; it remains untouched. Perl 5.44.0 was built from its local git
   tag in an isolated temporary copy with default macOS Configure options.
-- No runtime ownership change has passed the reduced regression. The attempted
-  CV-body and self-pad changes were discarded after the test remained red; the
-  owner ledger, identity model, cycle retention, and explicit legacy bridge
-  remain unimplemented. Do not treat the regression as fixed until the exact
-  Perl 5.44 lifecycle passes on both backends.
+- The new owner-slot ledger, identity model, scalar/aggregate migration, and
+  explicit deferred-release bridge remain unimplemented. The regression fix is
+  evidence for the Phase 1 boundary, not completion of the ownership rewrite.

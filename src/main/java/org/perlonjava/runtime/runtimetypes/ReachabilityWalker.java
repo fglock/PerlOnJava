@@ -514,6 +514,9 @@ public class ReachabilityWalker {
                 visitScalar(cap, todo);
             }
         }
+        if (code.capturedAggregates != null) {
+            for (RuntimeBase cap : code.capturedAggregates) addReachable(cap, todo);
+        }
         visitReflectiveCodeScalars(code, cap -> {
             addReachable(cap, todo);
             visitScalar(cap, todo);
@@ -528,17 +531,10 @@ public class ReachabilityWalker {
             }
             addReachable(base, todo);
         });
-        if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
-                && interpreted.capturedVars != null) {
-            for (RuntimeBase cap : interpreted.capturedVars) {
-                if (cap instanceof RuntimeScalar scalar) {
-                    addReachable(scalar, todo);
-                    visitScalar(scalar, todo);
-                } else if (cap != null) {
-                    addReachable(cap, todo);
-                }
-            }
-        }
+        // InterpretedCode.capturedVars is immutable execution-frame metadata.
+        // Captured entries can remain there after their lexical lifetime has
+        // ended and releaseCaptures has removed them from the semantic owner
+        // lists. Only capturedScalars/capturedAggregates describe live owners.
     }
 
     private void recordWeakArraySlotWitness(RuntimeArray array, RuntimeScalar ownerScalar) {
@@ -725,25 +721,19 @@ public class ReachabilityWalker {
                         visitScalarPath(cap, curPath + "<closure " + name + "::" + sub + " cap#" + (i++) + ">", howReached, todo);
                     }
                 }
+                if (code.capturedAggregates != null) {
+                    int i = 0;
+                    for (RuntimeBase cap : code.capturedAggregates) {
+                        String path = curPath + "<closure aggregate cap#" + (i++) + ">";
+                        if (howReached.putIfAbsent(cap, path) == null) todo.add(cap);
+                    }
+                }
                 String name = code.packageName == null ? "?" : code.packageName;
                 String sub = code.subName == null ? "(anon)" : code.subName;
                 final int[] reflectiveIdx = {0};
                 visitReflectiveCodeScalars(code, cap ->
                         visitScalarPath(cap, curPath + "<closure " + name + "::" + sub
                                 + " field-cap#" + (reflectiveIdx[0]++) + ">", howReached, todo));
-                if (cur instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
-                        && interpreted.capturedVars != null) {
-                    int i = 0;
-                    for (RuntimeBase cap : interpreted.capturedVars) {
-                        String path = curPath + "<interpreted closure " + name + "::" + sub
-                                + " cap#" + (i++) + ">";
-                        if (cap instanceof RuntimeScalar scalar) {
-                            visitScalarPath(scalar, path, howReached, todo);
-                        } else if (cap != null && howReached.putIfAbsent(cap, path) == null) {
-                            todo.add(cap);
-                        }
-                    }
-                }
             }
         }
         return null;
@@ -801,7 +791,6 @@ public class ReachabilityWalker {
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
 
         if (enqueueStrongEdges(target, target, seen, todo)) {
-            traceStrongCycleEdge(target, target);
             return true;
         }
 
@@ -810,20 +799,10 @@ public class ReachabilityWalker {
             RuntimeBase cur = todo.removeFirst();
             visits++;
             if (enqueueStrongEdges(cur, target, seen, todo)) {
-                traceStrongCycleEdge(cur, target);
                 return true;
             }
         }
         return false;
-    }
-
-    private static void traceStrongCycleEdge(RuntimeBase source, RuntimeBase target) {
-        if (System.getenv("PJ_CLOSURE_CAPTURE_TRACE") == null) return;
-        System.err.println("[STRONG-CYCLE-EDGE] source="
-                + source.getClass().getSimpleName() + '#'
-                + System.identityHashCode(source)
-                + " target=" + target.getClass().getSimpleName() + '#'
-                + System.identityHashCode(target));
     }
 
     /**
@@ -909,17 +888,9 @@ public class ReachabilityWalker {
                     if (seen.add(cap)) todo.addLast(cap);
                 }
             }
-            if (cur instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
-                    && interpreted.capturedVars != null) {
-                for (RuntimeBase cap : interpreted.capturedVars) {
-                    if (cap instanceof RuntimeScalar scalar) {
-                        if (enqueueStrongScalar(scalar, target, seen, todo)) return true;
-                    } else if (cap != null) {
-                        if (cap == target) return true;
-                        if (seen.add(cap)) todo.addLast(cap);
-                    }
-                }
-            }
+            // Do not traverse InterpretedCode.capturedVars here. It is retained
+            // for execution after capture owners have been retired; walking it
+            // would turn dead pad metadata into a strong Perl reference.
             Object closureObject = code.codeObject != null ? code.codeObject : code.subroutine;
             if (closureObject != null) {
                 try {
@@ -1103,17 +1074,7 @@ public class ReachabilityWalker {
         if (s == null || WeakRefRegistry.isweak(s)) return false;
         if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && s.value instanceof RuntimeBase b) {
-            if (b == target) {
-                if (System.getenv("PJ_CLOSURE_CAPTURE_TRACE") != null) {
-                    System.err.println("[STRONG-CYCLE-SCALAR] scalar="
-                            + System.identityHashCode(s)
-                            + " type=" + s.type
-                            + " weak=" + WeakRefRegistry.isweak(s)
-                            + " target=" + target.getClass().getSimpleName() + '#'
-                            + System.identityHashCode(target));
-                }
-                return true;
-            }
+            if (b == target) return true;
             if (seen.add(b)) todo.addLast(b);
         }
         return false;
@@ -1490,6 +1451,12 @@ public class ReachabilityWalker {
                         if (seen.add(cap)) todo.addLast(cap);
                     }
                 }
+                if (code.capturedAggregates != null) {
+                    for (RuntimeBase cap : code.capturedAggregates) {
+                        if (cap == target) return true;
+                        if (seen.add(cap)) todo.addLast(cap);
+                    }
+                }
                 final boolean[] foundReflectiveCapture = {false};
                 visitReflectiveCodeScalars(code, cap -> {
                     if (foundReflectiveCapture[0]) return;
@@ -1506,18 +1473,6 @@ public class ReachabilityWalker {
                         todo.addLast(base);
                     }
                 });
-                if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
-                        && interpreted.capturedVars != null) {
-                    for (RuntimeBase captured : interpreted.capturedVars) {
-                        if (captured == null) continue;
-                        if (captured instanceof RuntimeScalar scalar
-                                && WeakRefRegistry.isweak(scalar)) {
-                            continue;
-                        }
-                        if (captured == target) return true;
-                        if (seen.add(captured)) todo.addLast(captured);
-                    }
-                }
             }
         }
         return false;
@@ -1966,17 +1921,10 @@ public class ReachabilityWalker {
                     seedNonLexicalScalar(cap, todo);
                 }
             }
-            visitReflectiveCodeScalars(code, cap -> seedNonLexicalScalar(cap, todo));
-            if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
-                    && interpreted.capturedVars != null) {
-                for (RuntimeBase cap : interpreted.capturedVars) {
-                    if (cap instanceof RuntimeScalar scalar) {
-                        seedNonLexicalScalar(scalar, todo);
-                    } else {
-                        addNonLexical(cap, todo);
-                    }
-                }
+            if (code.capturedAggregates != null) {
+                for (RuntimeBase cap : code.capturedAggregates) addNonLexical(cap, todo);
             }
+            visitReflectiveCodeScalars(code, cap -> seedNonLexicalScalar(cap, todo));
         }
 
         private void addNonLexical(RuntimeBase b,
@@ -2158,6 +2106,12 @@ public class ReachabilityWalker {
                 if (followScalar(cap, target, seen, todo)) return true;
             }
         }
+        if (code.capturedAggregates != null) {
+            for (RuntimeBase cap : code.capturedAggregates) {
+                if (cap == target) return true;
+                if (seen.add(cap)) todo.addLast(cap);
+            }
+        }
         final boolean[] foundReflectiveCapture = {false};
         visitReflectiveCodeScalars(code, cap -> {
             if (!foundReflectiveCapture[0] && followScalar(cap, target, seen, todo)) {
@@ -2175,17 +2129,6 @@ public class ReachabilityWalker {
             }
         });
         if (foundReflectiveBase[0]) return true;
-        if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
-                && interpreted.capturedVars != null) {
-            for (RuntimeBase cap : interpreted.capturedVars) {
-                if (cap instanceof RuntimeScalar scalar) {
-                    if (followScalar(scalar, target, seen, todo)) return true;
-                } else if (cap != null) {
-                    if (cap == target) return true;
-                    if (seen.add(cap)) todo.addLast(cap);
-                }
-            }
-        }
         return false;
     }
 

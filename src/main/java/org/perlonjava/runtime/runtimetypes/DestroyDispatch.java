@@ -291,29 +291,6 @@ public class DestroyDispatch {
         // prematurely would cascade to clear weak references (e.g., in Sub::Defer's
         // %DEFERRED hash), causing infinite recursion in Moo/DBIx::Class.
         if (referent instanceof RuntimeCode code) {
-            if (System.getenv("PJ_CLOSURE_CAPTURE_TRACE") != null
-                    && code.capturedScalars != null) {
-                System.err.println("[CV-CALL-DESTROY] code="
-                        + System.identityHashCode(code)
-                        + " refCount=" + code.refCount
-                        + " stashRefCount=" + code.stashRefCount
-                        + " capturedScalars=" + code.capturedScalars.length);
-                for (RuntimeScalar pad : code.capturedScalars) {
-                    Object value = pad.value;
-                    String valueState = value instanceof RuntimeBase base
-                            ? base.getClass().getSimpleName() + '#'
-                                    + System.identityHashCode(base)
-                            : value == null ? "null" : value.getClass().getSimpleName();
-                    System.err.println("[CV-PAD-AT-DESTROY] code="
-                            + System.identityHashCode(code)
-                            + " scalar=" + System.identityHashCode(pad)
-                            + " type=" + pad.type
-                            + " captureCount=" + pad.captureCount
-                            + " scopeExited=" + pad.scopeExited
-                            + " owns=" + pad.refCountOwned
-                            + " value=" + valueState);
-                }
-            }
             if (code.stashRefCount <= 0) {
                 if (ReachabilityWalker.strongCycleRetainsWeakReferent(code)) {
                     code.refCount = 1;

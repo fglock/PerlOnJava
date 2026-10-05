@@ -1123,25 +1123,6 @@ public class OpcodeHandlerExtended {
             closureCode.refCount = 0;
         }
 
-        if (System.getenv("PJ_CLOSURE_CAPTURE_TRACE") != null
-                && (!capturedScalars.isEmpty() || !capturedAggregates.isEmpty())) {
-            StringBuilder trace = new StringBuilder("[CV-CREATE] code=")
-                    .append(System.identityHashCode(closureCode))
-                    .append(" name=").append(closureCode.subName)
-                    .append(" file=").append(closureCode.cvStartFile)
-                    .append(" refCount=").append(closureCode.refCount)
-                    .append(" scalarPads=[");
-            for (int i = 0; i < capturedScalars.size(); i++) {
-                if (i != 0) trace.append(", ");
-                RuntimeScalar pad = capturedScalars.get(i);
-                trace.append(System.identityHashCode(pad))
-                        .append(":type=").append(pad.type)
-                        .append(":captures=").append(pad.captureCount);
-            }
-            trace.append("] aggregatePads=").append(capturedAggregates.size());
-            System.err.println(trace);
-        }
-
         // Wrap in RuntimeScalar and set __SUB__ for self-reference
         RuntimeScalar codeRef = new RuntimeScalar(closureCode);
         closureCode.__SUB__ = template.inheritsSelfReference ? code.__SUB__ : codeRef;
