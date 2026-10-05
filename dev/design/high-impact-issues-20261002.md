@@ -206,7 +206,7 @@ or a document referring to #1114.
 
 ## Progress Tracking
 
-### Current status: implementation and acceptance complete; PR #1628 open (2026-10-02)
+### Current status: UAT/lifecycle delivery split (2026-10-05)
 
 ### Completed phases
 
@@ -274,3 +274,13 @@ Maintain PR #1628 through review and address any requested changes.
 - [PerlOnJava debugging workflow](../../.agents/skills/debug-perlonjava/SKILL.md)
 - [Batching and validation](../../.agents/skills/debug-perlonjava/references/testing-cadence.md)
 - [Runtime profiling workflow](../../.agents/skills/profile-perlonjava/SKILL.md)
+
+## Delivery handoff (2026-10-05)
+
+The phase results above describe the combined historical candidate. All new
+reachability/lifecycle code and tests, including #1597 and #1336-related work,
+moved to the independent WIP tracked by [#1642](https://github.com/fglock/PerlOnJava/issues/1642).
+The remaining UAT source passed full make after rebase and split. See the
+[UAT handoff](cpan-uat-handoff-20261005.md) for scope and incomplete release
+acceptance outcomes. Resume lifecycle work from its committed handoff, rather
+than assuming the combined candidate results validate the independent branch.

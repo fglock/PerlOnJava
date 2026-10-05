@@ -80,3 +80,9 @@ failures still need reductions with default upstream settings.
 - [Reachability/lifecycle #1642](https://github.com/fglock/PerlOnJava/issues/1642)
 - [Mixed arithmetic UTF-8 flags #1643](https://github.com/fglock/PerlOnJava/issues/1643)
 - [Interpreter Test::Mojo application #1644](https://github.com/fglock/PerlOnJava/issues/1644)
+
+## Independent UAT validation
+
+Commit `1acfa1f80` passed full `nice -n 19 make` on 2026-10-05 (exit 0);
+all unit shards and Joni packaging checks completed. `nice -n 19 make check-links`
+also passed. This validates the split UAT code, not full release acceptance.
