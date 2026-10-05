@@ -187,6 +187,11 @@ and first path establish implementation cost.
   the repeated deferred-cleanup fallback separately from aggregate
   scope-unregister queries. The full `nice -n 19 make` gate passes on the
   rebased tree.
+- [x] Preserve END-block captures across assertion and callback cleanup.
+  END CVs now retain their capture edges while queued and during invocation;
+  a rescued selective count is released after the active phaser returns. The
+  permanent regression matches Perl 5.45.4 and passes on both PerlOnJava
+  backends. The full `nice -n 19 make` gate passes on 2026-10-06.
 
 ### Next steps
 
@@ -208,6 +213,8 @@ and first path establish implementation cost.
   test observes one external-root snapshot per flush. Reproduction of the
   Catalyst workload from #1642 remains open so its object and flush pattern can
   be matched to these paths.
+- END block CVs have explicit queued and active lifetime protection. Other
+  phaser queues and nested exit paths still need the same ownership audit.
 - The current standard Perl oracle is
   `/Users/fglock/projects/perl5/perl`, version 5.45.4 with `useithreads=undef`.
   It needs the checkout's `lib`, `cpan/Test-Simple/lib`, and

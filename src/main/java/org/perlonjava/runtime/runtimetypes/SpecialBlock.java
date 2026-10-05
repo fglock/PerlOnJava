@@ -54,6 +54,15 @@ public class SpecialBlock {
         RuntimeArray.unshift(getEndBlocks(), codeRef);
     }
 
+    /** Return whether {@code code} still has an owning slot in the END queue. */
+    static boolean hasPendingEndBlock(RuntimeCode code) {
+        if (code == null) return false;
+        for (RuntimeScalar block : getEndBlocks().elements) {
+            if (block != null && block.value == code) return true;
+        }
+        return false;
+    }
+
     /**
      * Saves a code reference to the initBlocks array.
      * Blocks are added using `unshift`, meaning they will be executed in FIFO order.
@@ -91,7 +100,13 @@ public class SpecialBlock {
         while (!endBlocks.isEmpty()) {
             RuntimeScalar block = RuntimeArray.shift(endBlocks);
             if (block.getDefinedBoolean()) {
-                RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
+                RuntimeCode code = block.value instanceof RuntimeCode runtimeCode ? runtimeCode : null;
+                if (code != null) code.beginEndBlockExecution();
+                try {
+                    RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
+                } finally {
+                    if (code != null) code.endEndBlockExecution();
+                }
             }
         }
     }

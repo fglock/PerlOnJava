@@ -2537,6 +2537,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public int stashRefCount = 0;
 
+    /** Number of queued phaser executions currently invoking this CV. */
+    int activeEndBlockExecutions;
+    /** The queue's last selective owner was rescued while this CV was running. */
+    boolean rescuedActiveEndBlockOwner;
+
+    void beginEndBlockExecution() {
+        activeEndBlockExecutions++;
+    }
+
+    void endEndBlockExecution() {
+        if (activeEndBlockExecutions > 0) activeEndBlockExecutions--;
+        if (activeEndBlockExecutions == 0 && rescuedActiveEndBlockOwner) {
+            rescuedActiveEndBlockOwner = false;
+            MortalList.deferDecrement(this);
+        }
+    }
+
     /**
      * Cached constants referenced via backslash (e.g., \"yay") inside this subroutine.
      * When the CODE slot of a glob is replaced, weak references to these constants
