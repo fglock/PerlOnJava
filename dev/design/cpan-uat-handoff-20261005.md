@@ -97,3 +97,57 @@ The independent lifecycle source `63b9463d5` passed full make, seven determinist
 Java tests and 22 Perl assertions on each of system Perl/JVM/interpreter. This
 establishes split regression coverage; unresolved Catalyst cost and full release
 acceptance remain open in #1642/#1646. The draft is not ready for merge.
+
+## PR #1628 handoff update (2026-10-05)
+
+The latest full Perl core run on PR #1628 is **not accepted**. Its complete log
+was copied to the user-authorized sibling location
+`../PerlOnJava/logs/test_20261005_140000_1628.log`; the baseline comparison is
+saved at `build/reports/uat-20261005/compare_20261005_140000_1628.txt` in the
+working checkout. It completed 575 files, but has three failed files and one
+incomplete file. The report's 680,763 passing assertions do not make this run
+green.
+
+| File | Evidence | Handoff status |
+| --- | --- | --- |
+| `io/socket.t` | Full run failed bind test 4 and `setsockopt` test 25 while running in the restricted environment. A focused rerun with extended access passed 25/25. | Environment-dependent evidence; rerun in the authorized extended environment during final UAT. |
+| `comp/proto.t` | Full and focused runs both emit tests 1–215, omit test 216 and the TAP plan, then exit 0. | Unresolved incomplete run. Find why the final test/plan is not reached and add a project regression if runtime behavior is responsible. |
+| `comp/redef.t` | Assertion 18 fails: under `-w`, a prototype warning remains after `local $^W = 0`; the next constant-redefinition warning is expected. | Unresolved warning precedence bug. Keep `$^W` localization authoritative for `-w` while preserving explicitly lexical `use warnings`; cover both cases with project-owned tests. |
+| `op/stat.t` | Assertion 94 fails for chained `-d -r _` after `stat(DIR)`. It is not one of the TTY-dependent assertions described by the comparison tool's known-flake note. | Unresolved file-test/stat-buffer behavior. Trace `_` state across the chained operators; do not classify this as a flake. |
+
+The focused checks used to verify the first diagnosis are saved under
+`/tmp/{warning-jvm,warning-interpreter,redef,proto,stat}-20261005.log`.
+The trial edits to `IOOperator.fileno` and `WarnDie` did not fix the focused
+core failures, and the proposed warning unit case contradicted `comp/redef.t`'s
+`-w` oracle. Those trial edits were removed; do not cherry-pick them as fixes.
+
+### Fix list for the next owner
+
+1. **Prototype warning precedence:** reduce the difference between `-w` plus
+   `local $^W = 0` and explicit lexical `use warnings` on system Perl and both
+   PerlOnJava backends. Add a permanent project unit test for each behavior,
+   validate both tests with system Perl first, then confirm failure on the
+   unfixed parent and success on JVM/interpreter.
+2. **Prototype test completion:** run `comp/proto.t` under system Perl and
+   PerlOnJava with full captured output; identify why PerlOnJava exits before
+   assertion 216/TAP plan. Add a minimal tracked regression if an implementation
+   defect is confirmed. Keep the imported core test unchanged.
+3. **Chained file tests on directory handles:** reduce `stat(DIR); -d -r _` and
+   compare `$!`, the cached stat result, and each operator step against system
+   Perl. Fix the owning file-test/stat-state code and add JVM/interpreter unit
+   coverage; keep `op/stat.t` unchanged.
+4. **Sockets:** retain the passing 25/25 extended-access focused run, then rerun
+   the complete candidate's core suite with extended access so bind and socket
+   options are meaningfully qualified.
+5. Batch the confirmed code fixes, run the full build and focused JVM/interpreter
+   gates once, then rerun the complete Perl core UAT and save a new log and
+   baseline comparison. Update this handoff and PR #1628 with the resulting
+   exact evidence. Until then, PR #1628 is not UAT accepted.
+
+The PR's in-scope implementation list remains the one under Candidate scope
+above: Object::Pad accessors, directory/handle errors, bundled provider
+fixtures, transliteration/dualvar/version UTF-8 flags, sort comparator tail
+calls, bounded captured subprocess diagnostics, launcher refresh, bundled JAR
+pinning and the Catalyst preference fix. Reachability/lifecycle fixes remain
+in independent draft #1647. These are delivered changes, not evidence that the
+four rows above are resolved.
