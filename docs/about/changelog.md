@@ -9,6 +9,9 @@ priorities and future plans.
 - Document the 2026-10-03 imported core-suite milestone: 575 selected files
   completed without unexpected failures, with skips, TODOs, exclusions, and
   verification scope recorded in the testing guide.
+- Stage MakeMaker inputs before `PL_FILES`, preserve generated nested modules,
+  honor custom test targets, create the `pm_to_blib` marker, and expose install
+  directory macros used by CPAN build tooling.
 
 - Keep format captures bound to their active lexical cell and prevent reuse of unrelated active lexicals.
 - Match Perl's reference count for the compile-time `%^H` hash.

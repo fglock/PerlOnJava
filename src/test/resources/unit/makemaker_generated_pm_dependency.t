@@ -21,15 +21,43 @@ close $makefile_pl or die "close Makefile.PL marker: $!";
 
 open my $pl, '>', 'ReadKey.pm.PL'
     or die "create generated pm template: $!";
-print {$pl} "open my \$out, '>', \$ARGV[0] or die \$!; print {\$out} qq{package Term::ReadKey; 1;\\n}; close \$out;\n";
+print {$pl} "open my \$input, '<', 'blib/lib/Term/Source.pm' or die \$!; local \$/; my \$source = <\$input>; close \$input; open my \$out, '>', \$ARGV[0] or die \$!; print {\$out} \$source; close \$out;\n";
 close $pl or die "close generated pm template: $!";
+
+mkdir 'lib' or die "mkdir lib: $!";
+mkdir 'lib/Term' or die "mkdir lib/Term: $!";
+open my $source, '>', 'lib/Term/Source.pm' or die "create source module: $!";
+print {$source} "package Term::ReadKey; 1;\n";
+close $source or die "close source module: $!";
+
+mkdir 'lib/Parse' or die "mkdir lib/Parse: $!";
+mkdir 'lib/Parse/Yapp' or die "mkdir lib/Parse/Yapp: $!";
+open my $parent_module, '>', 'lib/Parse/Yapp/KeyValue.pm'
+    or die "create staged parent module: $!";
+print {$parent_module} "package Parse::Yapp::KeyValue; 1;\n";
+close $parent_module or die "close staged parent module: $!";
+
+open my $parser, '>', 'MakeParser.PL'
+    or die "create nested-output generator: $!";
+print {$parser} <<'PARSER';
+my $path = 'blib/lib/Parse/Yapp/KeyValue';
+my $file = "$path/Parser.pm";
+mkdir $path or die "could not create directory $path: $!";
+open my $out, '>', $file or die "unable to open $file: $!";
+print {$out} "package Parse::Yapp::KeyValue::Parser; 1;\n";
+close $out or die $!;
+PARSER
+close $parser or die "close nested-output generator: $!";
 
 use ExtUtils::MakeMaker;
 
 WriteMakefile(
     NAME     => 'Term::ReadKey',
     VERSION  => '0.001',
-    PL_FILES => { 'ReadKey.pm.PL' => '$(INST_LIB)/Term/ReadKey.pm' },
+    PL_FILES => {
+        'ReadKey.pm.PL' => '$(INST_LIB)/Term/ReadKey.pm',
+        'MakeParser.PL' => '$(INST_LIB)/Parse/Yapp/KeyValue/Parser.pm',
+    },
 );
 
 open my $mf, '<', 'Makefile' or die "open generated Makefile: $!";
@@ -62,6 +90,9 @@ ok(
     -f 'blib/lib/Term/ReadKey.pm',
     'PL_FILES creates its nested module target',
 );
+ok(-f 'blib/lib/Parse/Yapp/KeyValue/Parser.pm',
+    'PL_FILES prepares nested parents before a generator creates its directory');
+ok(-f 'pm_to_blib', 'pm_to_blib target creates its build marker');
 
 subtest 'nested configuration stages generated output, not its Makefile.PL' => sub {
     plan skip_all => 'exercises PerlOnJava synthetic MakeMaker'
