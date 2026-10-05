@@ -177,6 +177,14 @@ public class RuntimeStashEntry extends RuntimeGlob {
         if (value.type == REFERENCE) {
             if (value.value instanceof RuntimeScalar) {
                 RuntimeScalar targetScalar = (RuntimeScalar) value.value;
+                if (targetScalar instanceof RuntimeScalarReadOnly readOnly) {
+                    // Cached literal SVs are shared for expression efficiency,
+                    // but each stash assignment creates a distinct scalar
+                    // constant. Keep old aliases from making a later
+                    // redefinition look like a second export of the same SV.
+                    targetScalar = readOnly.copyForPseudoConstantReference();
+                    value.value = targetScalar;
+                }
                 // Internals::SvREADONLY marks a mutable container as Perl's
                 // pseudo-constant form (used by constant.pm). A compile-time
                 // literal is represented by RuntimeScalarReadOnly too, but a

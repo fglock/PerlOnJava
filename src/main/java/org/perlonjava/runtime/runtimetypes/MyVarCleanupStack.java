@@ -217,12 +217,10 @@ public class MyVarCleanupStack {
 
     private static void requestWeakCleanupAfterScopeExit(RuntimeBase base) {
         MortalList.finalizeClearedAggregateOwnerAfterScopeExit(base);
-        // A live counted slot or semantic closure capture proves this weakly
-        // observed referent survived the scope exit. Avoid a complete registry
-        // walk whose only trigger was reconsidering this still-owned object.
-        // Referents without an authoritative surviving owner keep the complete
-        // immediate sweep path below.
-        if (base.hasSemanticCaptureOwner() || base.activeOwnerCount() > 0) return;
+        // Selective owner records can outlive the Perl lexical that created
+        // them when a closure graph is being torn down. Recheck weak refs at
+        // the scope boundary so the reachability walker can reconcile those
+        // records with the remaining Perl-visible roots.
         MortalList.requestImmediateWeakSweep();
     }
 

@@ -286,11 +286,22 @@ public class EmitBlock {
             fieldInitializer |= abstractNode.getBooleanAnnotation("fieldInitializer");
         }
         if (node instanceof LabelNode labelNode) {
-            if (expressionContext && !fieldInitializer) out.add(labelNode.label);
+            if (expressionContext && !fieldInitializer) {
+                out.add(labelNode.label);
+            } else {
+                // A later unconditional definition of the same Perl label is
+                // the reachable destination. Do not let an earlier
+                // expression-only occurrence poison it by name.
+                out.remove(labelNode.label);
+            }
             return;
         }
         if (node instanceof BlockNode block) {
-            if (expressionContext && !fieldInitializer) out.addAll(block.labels);
+            if (expressionContext && !fieldInitializer) {
+                out.addAll(block.labels);
+            } else {
+                out.removeAll(block.labels);
+            }
             for (Node child : block.elements) collectConstructEntryLabels(child, out,
                     expressionContext, fieldInitializer, insideEvalBlock, currentPackage);
             return;
@@ -341,16 +352,22 @@ public class EmitBlock {
         if (node == null) return;
         if (node instanceof LabelNode label) {
             if (!conditionalContexts.isEmpty()) {
-                labelContexts.putIfAbsent(label.label, Set.copyOf(conditionalContexts));
+                labelContexts.put(label.label, Set.copyOf(conditionalContexts));
                 if (simpleConditionalBranch) simpleConditionalBranchLabels.add(label.label);
+            } else {
+                labelContexts.remove(label.label);
+                simpleConditionalBranchLabels.remove(label.label);
             }
             return;
         }
         if (node instanceof BlockNode block) {
-            if (!conditionalContexts.isEmpty()) {
-                for (String label : block.labels) {
-                    labelContexts.putIfAbsent(label, Set.copyOf(conditionalContexts));
+            for (String label : block.labels) {
+                if (!conditionalContexts.isEmpty()) {
+                    labelContexts.put(label, Set.copyOf(conditionalContexts));
                     if (simpleConditionalBranch) simpleConditionalBranchLabels.add(label);
+                } else {
+                    labelContexts.remove(label);
+                    simpleConditionalBranchLabels.remove(label);
                 }
             }
             for (Node child : block.elements) {

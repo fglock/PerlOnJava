@@ -234,6 +234,14 @@ public class EmitOperatorDeleteExists {
                         handleDefinedGlob(emitterVisitor, operatorNode);
                         return;
                     }
+                    // `defined ${$name}` probes the symbolic scalar slot.  Emit
+                    // the non-vivifying lookup used by the interpreter instead
+                    // of scalarDerefNonStrict(), which creates an absent slot.
+                    if (operator.equals("defined") && operatorNode.operator.equals("$")
+                            && operatorNode.operand instanceof BlockNode) {
+                        handleDefinedScalarDeref(emitterVisitor, operatorNode);
+                        return;
+                    }
                 }
             }
         }
@@ -393,6 +401,20 @@ public class EmitOperatorDeleteExists {
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                 false);
         
+        EmitOperator.handleVoidContext(emitterVisitor);
+    }
+
+    /** Handles `defined ${$name}` without creating a symbolic scalar slot. */
+    private static void handleDefinedScalarDeref(
+            EmitterVisitor emitterVisitor, OperatorNode operatorNode) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        operatorNode.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        emitterVisitor.pushCurrentPackage();
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                "definedGlobalScalarDeref",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
         EmitOperator.handleVoidContext(emitterVisitor);
     }
 

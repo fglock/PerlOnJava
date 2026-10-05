@@ -74,6 +74,7 @@ priorities and future plans.
 - Preserve malformed octets read through Perl's `:utf8` layer while decoding valid UTF-8.
 - Keep `$^X` unflagged for shell command construction and preserve encoded input octets.
 - Evaluate `readline` in list context when an empty-target assignment discards its results.
+- Preserve valid Unicode goto targets after conditional labels, non-vivifying symbolic glob checks, compact pseudo-constant aliases after redefinition, and weak-reference cleanup when closure captures leave scope.
 
 - Prevent stale CPAN archive-name entries and namespace-resolution errors from
   being recorded as compatibility regressions.

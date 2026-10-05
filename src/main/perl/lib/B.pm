@@ -201,7 +201,10 @@ package B::CV {
                 $self->{_pkg_anonymous} = 1;
             }
             my $forward_pkg = eval { Internals::jperl_cv_forward_reference_package($self->{ref}) };
-            if (defined $forward_pkg && length $forward_pkg) {
+            # Once the compile-time stash has been anonymized, its former
+            # package name is no longer a valid CvSTASH.  Forward-reference
+            # metadata must not restore that detached package name.
+            if (defined $forward_pkg && length $forward_pkg && !$self->{_pkg_anonymous}) {
                 $self->{_pkg_name} = $forward_pkg;
             }
         }

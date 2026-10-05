@@ -17,6 +17,43 @@ PerlOnJava backends.
 
 ### Resume handoff — 2026-10-05
 
+#### UAT regression follow-up — 2026-10-05
+
+The 13:00 candidate UAT exposed label, stash, closure weak-reference, and
+symbolic glob regressions. The latest batched source is on
+`wip/parser-uat-regressions-20261005-141631`, based on PR candidate
+`c7349c917`. It adds permanent project-owned coverage without changing any
+existing tests:
+
+- `goto_conditional_label_shadowing.t` covers a legal later Unicode label;
+  the fix clears stale construct-entry metadata when an unconditional target
+  supersedes an earlier same-named conditional label. The unchanged construct-
+  entry and nested-target unit tests pass.
+- `anonymous_stash_unicode_undef.t` covers anonymous stash names after undef;
+  `B.pm` no longer replaces an anonymous package label with a forward-reference
+  package name.
+- `symbolic_unicode_glob_lookup.t` covers non-vivifying symbolic `defined`
+  and a basic pseudo-constant export. `pseudo_constant_export_after_glob_promotion.t`
+  preserves the full promotion history from `uni/gv.t`; distinct stash
+  assignments now copy cached read-only literal identities before recording
+  pseudo-constant aliases.
+- `weak_closure_capture_cycle.t` covers RT #22547's weak subscriber; scope
+  exit again requests the reachability check even when selective owner records
+  still show a semantic closure capture.
+
+Validation on this candidate: `nice -n 19 timeout 1800 make` passes (531 unit
+tests); all five new unit tests pass on the interpreter; the four affected
+core files pass on the JVM (550 tests, including two TODOs); and all five new
+tests pass system Perl 5.42. This supersedes the earlier paragraph's failing
+label gate and stale 13:00 UAT status. The four core files are focused evidence;
+the requested full candidate UAT and baseline comparison still need to run.
+
+Next, commit the reviewed batch on this branch, update PR #1623, and run the
+full five-directory Perl core UAT against the same Oct 3 baseline. Use a new
+log name so the 13:00 evidence remains available. If that gate and fresh Linux
+and Windows CI pass, continue UAT/review; close only tickets confirmed fixed
+after merge.
+
 This handoff and Immediate next steps supersede older candidate status below.
 The final-batch record below also supersedes the earlier three-failure and
 AnyEvent assertion-4 status: the batched source passes the default unit gate,
