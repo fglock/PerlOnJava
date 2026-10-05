@@ -6,9 +6,34 @@ import org.junit.jupiter.api.Test;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 @Tag("unit")
 class PerlReferentDestroyLifecycleTest {
+    @Test
+    void blessedDestroyExceptionStillCompletesLifecycle() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            String className = "Issue1649::ThrowingDestroy";
+            RuntimeHash referent = new RuntimeHash();
+            referent.blessId = NameNormalizer.getBlessId(className);
+            referent.refCount = Integer.MIN_VALUE;
+            installDestroy(className, (args, context) -> {
+                throw new PerlDieException(new RuntimeScalar("destructor failed\n"));
+            });
+
+            try {
+                DestroyDispatch.callDestroy(referent);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED,
+                        referent.perlLifecycleState());
+                assertFalse(referent.currentlyDestroying);
+                assertEquals(Integer.MIN_VALUE, referent.refCount);
+            } finally {
+                GlobalVariable.removeGlobalCodeRefForStashDelete(className + "::DESTROY");
+            }
+        }
+    }
+
     @Test
     void blessedDestroyCanReenterDispatchWithoutRepeatingTheLifecycle() {
         PerlRuntime runtime = new PerlRuntime();

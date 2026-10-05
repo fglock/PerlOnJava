@@ -153,13 +153,19 @@ and first path establish implementation cost.
   in the `nice -n 19 make` run recorded for commit `99ee09a6c`; the rescued
   referent fixture preserves the destructor argument's owner while adding a
   distinct resurrection owner.
+- [x] Added standard-Perl-validated exception cleanup coverage: failing
+  destructors still allow subsequent destructors to run, clear weak references,
+  emit the cleanup warnings, and preserve `$@`. The Perl 5.45.4 oracle and both
+  PerlOnJava backends pass all four assertions; Java coverage checks that a
+  throwing callback exits `DESTROYING`, resets its reentry guard, and reaches
+  `DESTROYED` with the legacy terminal sentinel restored.
 
 ### Next steps
 
-1. Add exception-path cleanup coverage for real blessed DESTROY callbacks and
-   preserve Perl 5.45.4 weak and exact count checkpoints.
-2. Reproduce #1642's repeated deferred-cleanup root queries with deterministic
+1. Reproduce #1642's repeated deferred-cleanup root queries with deterministic
    counters on this baseline.
+2. Qualify the closure owner's remaining lifecycle boundaries while preserving
+   Perl 5.45.4 weak and exact count checkpoints.
 3. Extend the complete ownership path through scalar proxies and array/hash
    slots in Phase 2, then resolve the HTML::Tree teardown failures and verify
    unchanged `t/refloop.t`.
