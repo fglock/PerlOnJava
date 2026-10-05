@@ -7191,8 +7191,10 @@ C<HAS_SETLOCALE> X<HAS_SETLOCALE>, C<HAS_SETLOCALE_R> X<HAS_SETLOCALE_R>,
 C<HAS_USELOCALE> X<HAS_USELOCALE>, C<I_LANGINFO> X<I_LANGINFO>, C<I_LOCALE>
 X<I_LOCALE>, C<I_XLOCALE> X<I_XLOCALE>, C<IN_LOCALE> X<IN_LOCALE>,
 C<IN_LOCALE_COMPILETIME> X<IN_LOCALE_COMPILETIME>, C<IN_LOCALE_RUNTIME>
-X<IN_LOCALE_RUNTIME>, C<NEED_XLOCALE_H> X<NEED_XLOCALE_H>,
-C<Perl_langinfo*>, C<Perl_langinfo8*>,
+X<IN_LOCALE_RUNTIME>, C<IN_UTF8_CTYPE_LOCALE>, C<IN_UTF8_TURKIC_LOCALE>
+X<IN_UTF8_CTYPE_LOCALE>X<IN_UTF8_TURKIC_LOCALE>, ı  U+131  LATIN SMALL
+LETTER DOTLESS I, İ  U+130  LATIN CAPITAL LETTER I WITH DOT ABOVE,
+C<NEED_XLOCALE_H> X<NEED_XLOCALE_H>, C<Perl_langinfo*>, C<Perl_langinfo8*>,
 C<PERL_LC_ALL_CATEGORY_POSITIONS_INIT>
 X<PERL_LC_ALL_CATEGORY_POSITIONS_INIT>, C<PERL_LC_ALL_SEPARATOR>
 X<PERL_LC_ALL_SEPARATOR>, C<PERL_LC_ALL_USES_NAME_VALUE_PAIRS>
@@ -7549,18 +7551,18 @@ C<USE_BSD_SETPGRP> X<USE_BSD_SETPGRP>, C<USE_C_BACKTRACE>
 X<USE_C_BACKTRACE>, C<USE_CPLUSPLUS> X<USE_CPLUSPLUS>, C<USE_CROSS_COMPILE>
 X<USE_CROSS_COMPILE>, C<USE_DTRACE> X<USE_DTRACE>, C<USE_DYNAMIC_LOADING>
 X<USE_DYNAMIC_LOADING>, C<USE_FAST_STDIO> X<USE_FAST_STDIO>,
-C<USE_ITHREADS> X<USE_ITHREADS>, C<USE_KERN_PROC_PATHNAME>
-X<USE_KERN_PROC_PATHNAME>, C<USE_LARGE_FILES> X<USE_LARGE_FILES>,
-C<USE_LONG_DOUBLE> X<USE_LONG_DOUBLE>, C<USE_MORE_BITS> X<USE_MORE_BITS>,
-C<USE_NSGETEXECUTABLEPATH> X<USE_NSGETEXECUTABLEPATH>, C<USE_PERLIO>
-X<USE_PERLIO>, C<USE_QUADMATH> X<USE_QUADMATH>, C<USE_REENTRANT_API>
-X<USE_REENTRANT_API>, C<USE_SEMCTL_SEMID_DS> X<USE_SEMCTL_SEMID_DS>,
-C<USE_SEMCTL_SEMUN> X<USE_SEMCTL_SEMUN>, C<USE_SITECUSTOMIZE>
-X<USE_SITECUSTOMIZE>, C<USE_SOCKS> X<USE_SOCKS>, C<USE_STAT_BLOCKS>
-X<USE_STAT_BLOCKS>, C<USE_STDIO_BASE> X<USE_STDIO_BASE>, C<USE_STDIO_PTR>
-X<USE_STDIO_PTR>, C<USE_STRICT_BY_DEFAULT> X<USE_STRICT_BY_DEFAULT>,
-C<USE_THREADS> X<USE_THREADS>, C<USE_64_BIT_ALL> X<USE_64_BIT_ALL>,
-C<USE_64_BIT_INT> X<USE_64_BIT_INT>
+C<USE_GETEXECPATH> X<USE_GETEXECPATH>, C<USE_ITHREADS> X<USE_ITHREADS>,
+C<USE_KERN_PROC_PATHNAME> X<USE_KERN_PROC_PATHNAME>, C<USE_LARGE_FILES>
+X<USE_LARGE_FILES>, C<USE_LONG_DOUBLE> X<USE_LONG_DOUBLE>, C<USE_MORE_BITS>
+X<USE_MORE_BITS>, C<USE_NSGETEXECUTABLEPATH> X<USE_NSGETEXECUTABLEPATH>,
+C<USE_PERLIO> X<USE_PERLIO>, C<USE_QUADMATH> X<USE_QUADMATH>,
+C<USE_REENTRANT_API> X<USE_REENTRANT_API>, C<USE_SEMCTL_SEMID_DS>
+X<USE_SEMCTL_SEMID_DS>, C<USE_SEMCTL_SEMUN> X<USE_SEMCTL_SEMUN>,
+C<USE_SITECUSTOMIZE> X<USE_SITECUSTOMIZE>, C<USE_SOCKS> X<USE_SOCKS>,
+C<USE_STAT_BLOCKS> X<USE_STAT_BLOCKS>, C<USE_STDIO_BASE> X<USE_STDIO_BASE>,
+C<USE_STDIO_PTR> X<USE_STDIO_PTR>, C<USE_STRICT_BY_DEFAULT>
+X<USE_STRICT_BY_DEFAULT>, C<USE_THREADS> X<USE_THREADS>, C<USE_64_BIT_ALL>
+X<USE_64_BIT_ALL>, C<USE_64_BIT_INT> X<USE_64_BIT_INT>
 
 =item Sockets configuration values
 
@@ -7668,17 +7670,17 @@ X<MUTABLE_AV>X<MUTABLE_CV>X<MUTABLE_GV>X<MUTABLE_HV>X<MUTABLE_IO>
 X<MUTABLE_PTR>X<MUTABLE_SV>, C<newRV>, C<newRV_inc> X<newRV>X<newRV_inc>,
 C<newRV_noinc> X<newRV_noinc>, C<newSV> X<newSV>, C<newSV_false>
 X<newSV_false>, C<newSV_true> X<newSV_true>, C<newSV_type> X<newSV_type>,
-C<newSV_type_mortal> X<newSV_type_mortal>, C<newSVbool> X<newSVbool>,
-C<newSVhek> X<newSVhek>, C<newSVhek_mortal> X<newSVhek_mortal>, C<newSViv>
-X<newSViv>, C<newSVnv> X<newSVnv>, C<newSVpadname> X<newSVpadname>,
-C<newSVpv> X<newSVpv>, C<newSVpv_share> X<newSVpv_share>, C<newSVpvf>,
-C<newSVpvf_nocontext>, C<vnewSVpvf>
-X<newSVpvf>X<newSVpvf_nocontext>X<vnewSVpvf>, C<newSVpvn> X<newSVpvn>,
-C<newSVpvn_flags> X<newSVpvn_flags>, C<newSVpvn_share> X<newSVpvn_share>,
-C<newSVpvn_utf8> X<newSVpvn_utf8>, C<newSVpvs> X<newSVpvs>,
-C<newSVpvs_flags> X<newSVpvs_flags>, C<newSVpvs_share> X<newSVpvs_share>,
-C<newSVpvz> X<newSVpvz>, C<newSVrv> X<newSVrv>, C<newSVsv>,
-C<newSVsv_flags>, C<newSVsv_nomg>
+C<newSV_type_generic> X<newSV_type_generic>, C<newSV_type_mortal>
+X<newSV_type_mortal>, C<newSVbool> X<newSVbool>, C<newSVhek> X<newSVhek>,
+C<newSVhek_mortal> X<newSVhek_mortal>, C<newSViv> X<newSViv>, C<newSVnv>
+X<newSVnv>, C<newSVpadname> X<newSVpadname>, C<newSVpv> X<newSVpv>,
+C<newSVpv_share> X<newSVpv_share>, C<newSVpvf>, C<newSVpvf_nocontext>,
+C<vnewSVpvf> X<newSVpvf>X<newSVpvf_nocontext>X<vnewSVpvf>, C<newSVpvn>
+X<newSVpvn>, C<newSVpvn_flags> X<newSVpvn_flags>, C<newSVpvn_share>
+X<newSVpvn_share>, C<newSVpvn_utf8> X<newSVpvn_utf8>, C<newSVpvs>
+X<newSVpvs>, C<newSVpvs_flags> X<newSVpvs_flags>, C<newSVpvs_share>
+X<newSVpvs_share>, C<newSVpvz> X<newSVpvz>, C<newSVrv> X<newSVrv>,
+C<newSVsv>, C<newSVsv_flags>, C<newSVsv_nomg>
 X<newSVsv>X<newSVsv_flags>X<newSVsv_nomg>, C<newSVsv_flags_NN>
 X<newSVsv_flags_NN>, C<newSVsv_nomg*>, C<newSVuv> X<newSVuv>, C<Nullsv>
 X<Nullsv>, C<PL_sv_no> X<PL_sv_no>, C<PL_sv_undef> X<PL_sv_undef>,
@@ -24244,7 +24246,7 @@ C<u32type>, C<u32uformat>, C<u32xformat>, C<u64size>, C<u64type>,
 C<u8size>, C<u8type>, C<uidformat>, C<uidsign>, C<uidsize>, C<uidtype>,
 C<uname>, C<uniq>, C<uquadtype>, C<use64bitall>, C<use64bitint>,
 C<usecbacktrace>, C<usecrosscompile>, C<usedefaultstrict>, C<usedevel>,
-C<usedl>, C<usedtrace>, C<usefaststdio>, C<useithreads>,
+C<usedl>, C<usedtrace>, C<usefaststdio>, C<usegetexecpath>, C<useithreads>,
 C<usekernprocpathname>, C<uselanginfo>, C<uselargefiles>, C<uselongdouble>,
 C<usemallocwrap>, C<usemorebits>, C<usemultiplicity>, C<usemymalloc>,
 C<usenm>, C<usensgetexecutablepath>, C<useopcode>, C<useperlio>,

@@ -89,7 +89,11 @@ There may well be none in a stable release.
 
 =item *
 
-XXX
+Changes have been made to the "super-linear cache", which is used to avoid
+excessive backtracking in some regexes which include quantifiers on
+variable-length sub-patterns, such as C<(a|bc)*> and C<(ab+){2,}>. This
+change may reduce the amount of backtracking that takes place, and may
+reduce the amount of temporary memory used for the cache.
 
 =back
 
@@ -348,6 +352,55 @@ well.
 
 =item *
 
+During regex compilation, C<S_reg> will attempt to flatten nested BRANCH
+structures, in an attempt to give the TRIE optimizer more alternations
+to consider. The intent is that patterns that were previously compiled
+into two or more adjacent TRIE nodes might now get compiled into a single
+(or at least, fewer) TRIE node(s).
+
+=item *
+
+Locale thread-safety is now enabled by default for the next few v5.45
+development releases.
+
+This feature, introduced with default-off in v5.45.3, is never turned on
+for builds that don't have threads, and on platforms where perl believes
+that the locale handling is natively thread-safe.
+
+Otherwise, the feature is on by default during a portion of the
+remaining 5.45 development cycle, so as to test it in the field, but the
+intention is to make it opt-in for the official 5.46 release.  To turn
+it off, pass this to F<Configure>:
+
+ -Accflags=-DNO_EMULATE_THREAD_SAFE_LOCALES
+
+See L<perllocale/Multi-threaded operation>.
+
+
+=item *
+
+The inline function C<Perl_newSV_type> now only handles the SV types most
+commonly seen at runtime. C<Perl_newSV_type_generic> has been added as
+a non-inline function that can handle all SV types. This change reduces
+binary bloating and increases the chances of C<Perl_newSV_type> being
+succesfully inlined.
+
+=item *
+
+When a shifted array is unshifted, C<Perl_av_extend_guts> used to perform
+a C<(key > *maxp - 10)> check and always reallocate. That check dates from
+Perl 3.0 and the rationale for it seems to have been lost to time. (It may
+have been to encourage array growth, but the general levers for doing so
+have changed significantly over time.)
+
+Always reallocating when it is not strictly necessary could cause Perl
+applications that repeatedly perform a mixture of C<shift>/C<push> operations
+(or similar) to suffer from unnecessary allocator thrashing.
+C<Perl_av_extend_guts> will now only reallocate if the array really is out
+of space and must be extended.
+
+=item *
+
 XXX
 
 =back
@@ -366,7 +419,29 @@ manager will later use a regex to expand these into links.
 
 =item *
 
+Line number information is stored rather than discarded when an anonymous
+subroutine is encountered during compilation. This should improve the
+accuracy of line numbers emitted by diagnostic messages and `caller()`
+for code following an anonymous subroutine declaration.
+
+Note that (i) this change could break any tests that hardcode the
+less-accurate line numbers (ii) further improvements to line number
+accuracy may follow within this development cycle.
+
+[GH #24396]
+
+=item *
+
 XXX
+
+=item *
+
+Builds with C<PERL_NO_COW> could crash when modifying or freeing boolean
+values. This has been fixed. [GH #19987]
+
+=item *
+
+C<goto> within a defer block should now work more consistently. [GH #19240]
 
 =back
 
