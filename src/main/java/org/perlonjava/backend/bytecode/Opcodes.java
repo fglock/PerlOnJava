@@ -2744,6 +2744,8 @@ public class Opcodes {
 
     /** Select the scalar result of a typeglob assignment. Format: rd globReg valueReg. */
     public static final short GLOB_ASSIGNMENT_RESULT = 632;
+    /** Dynamic symbolic subroutine existence probe: rd = exists(&{rname}) in package. */
+    public static final short EXISTS_CODE_DYNAMIC = 633;
 
     /** Create a LAST marker retaining loop-topicalizer break diagnostics. Format: rd labelIdx. */
     public static final short CREATE_SWITCH_BREAK_LOOP_TOPICALIZER = 620;

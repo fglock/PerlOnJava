@@ -23,6 +23,7 @@ public final class PerlThreadControlBlock {
     private final long id;
     private final long parentId;
     private final PerlThreadRegistry registry;
+    private final PerlRuntime parentRuntime;
     private volatile PerlRuntime childRuntime;
     private volatile EntryPoint entryPoint;
     private volatile Runnable entryCleanup;
@@ -40,6 +41,7 @@ public final class PerlThreadControlBlock {
 
     private PerlThreadControlBlock(PerlRuntime parent, EntryPoint entryPoint) {
         Objects.requireNonNull(parent, "parent");
+        this.parentRuntime = parent;
         this.registry = parent.threadRegistry();
         this.id = registry.allocateId();
         this.parentId = parent.perlThreadId();
@@ -58,6 +60,7 @@ public final class PerlThreadControlBlock {
     private PerlThreadControlBlock(PerlRuntime parent, RuntimeScalar code, RuntimeArray args,
                                    int context, long stackSize, boolean exitOnly) {
         Objects.requireNonNull(parent, "parent");
+        this.parentRuntime = parent;
         this.registry = parent.threadRegistry();
         this.id = registry.allocateId();
         this.parentId = parent.perlThreadId();
@@ -357,7 +360,9 @@ public final class PerlThreadControlBlock {
         if (failure == null || !abnormalTerminationReported.compareAndSet(false, true)) return;
         String message = failure.getMessage();
         if (message == null || message.isEmpty()) message = failure.toString();
-        parentErrorOutput.write("Thread " + id + " terminated abnormally: " + message + "\n");
+        try (PerlRuntime.Binding ignored = parentRuntime.bind()) {
+            parentErrorOutput.write("Thread " + id + " terminated abnormally: " + message + "\n");
+        }
     }
 
     private record Outcome(RuntimeBase value, Throwable error) {}

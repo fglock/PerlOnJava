@@ -25,6 +25,23 @@ public class CompileExistsDelete {
             return;
         }
         Node arg = unwrapUnaryPlus(list.elements.get(0));
+        // exists &$name is a symbolic CODE-slot probe, not a CODE-reference
+        // dereference.  In particular it remains legal under strict refs and
+        // must not evaluate a string name as a subroutine reference first.
+        if (arg instanceof OperatorNode ampersand
+                && ampersand.operator.equals("&")
+                && !(ampersand.operand instanceof IdentifierNode)) {
+            bc.compileNode(ampersand.operand, -1, RuntimeContextType.SCALAR);
+            int nameReg = bc.lastResultReg;
+            int packageIdx = bc.addToStringPool(bc.getCurrentPackage());
+            int rd = bc.allocateOutputRegister();
+            bc.emit(Opcodes.EXISTS_CODE_DYNAMIC);
+            bc.emitReg(rd);
+            bc.emitReg(nameReg);
+            bc.emit(packageIdx);
+            bc.lastResultReg = rd;
+            return;
+        }
         if (arg instanceof BinaryOperatorNode binOp) {
             switch (binOp.operator) {
                 case "{" -> visitExistsHash(bc, node, binOp);

@@ -706,6 +706,11 @@ priorities and future plans.
 - Fix IO-handle type checks and uninitialized-value warning locations.
 - Fix numeric-zero results from failed `s///` substitutions.
 - Preserve references in `utf8::downgrade`.
+- Bound `Compress::Raw::Bunzip2` output when callers enable `LimitOutput`.
+- Resolve bare named filehandle methods in the filehandle’s current package.
+- Treat undef-like overloaded regex subjects as the empty string.
+- Preserve strict-subs imports for `Compress::Raw::Zlib` constants.
+- Evaluate `ref` operands in scalar context on the interpreter backend.
 - Fix RFC 2047 header decoding for Email::MIME.
 - Fix XML::Parser streaming from native filehandles before `IO::Handle` has
   been explicitly loaded.

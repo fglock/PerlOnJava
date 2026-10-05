@@ -3793,6 +3793,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RuntimeScalar inputValue = RuntimeScalarType.blessedId(string) != 0
                 ? Overload.stringify(string) : string;
         String inputStr = inputValue.toString();
+        // Overloaded stringification may return Java null for a Perl undef-like
+        // value. Regex matching on undef uses the empty string, just as ordinary
+        // scalar stringification does.
+        if (inputStr == null) inputStr = "";
         if (DEBUG_REGEX) {
             String description = regex.recursivePattern.patternDescription();
             System.err.println("matchRegexDirect: pattern=" + description

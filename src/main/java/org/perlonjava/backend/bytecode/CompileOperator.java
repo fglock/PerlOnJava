@@ -1273,9 +1273,11 @@ public class CompileOperator {
                 }
                 if (node.operand instanceof ListNode list) {
                     if (list.elements.isEmpty()) bytecodeCompiler.throwCompilerException("ref requires an argument");
-                    list.elements.get(0).accept(bytecodeCompiler);
+                    bytecodeCompiler.compileNode(list.elements.get(0), -1,
+                            RuntimeContextType.SCALAR);
                 } else {
-                    node.operand.accept(bytecodeCompiler);
+                    bytecodeCompiler.compileNode(node.operand, -1,
+                            RuntimeContextType.SCALAR);
                 }
                 int argReg = bytecodeCompiler.lastResultReg;
                 int rd = bytecodeCompiler.allocateOutputRegister();

@@ -283,6 +283,29 @@ public class CompressRawBzip2 extends PerlModuleBase {
 
         byte[] allInput = accumulated.toByteArray();
         try {
+            if ((flags & FLAG_LIMIT_OUTPUT) != 0) {
+                int emitted = self.get("_emitted").getInt();
+                int requestedBufferSize = self.get("_bufsize").getInt();
+                RuntimeScalar existingOutput = output == null ? null : actualScalar(output);
+                int callerBufferSize = existingOutput == null
+                        ? 0 : toBytes(existingOutput).length;
+                int bufferSize = Math.max(requestedBufferSize, callerBufferSize);
+                CompressBzip2.LimitedDecompressResult limited =
+                        CompressBzip2.decompressFirstStream(allInput, emitted + bufferSize);
+                byte[] delta = slice(limited.output, emitted, limited.output.length);
+                self.put("_emitted", new RuntimeScalar(emitted + delta.length));
+                self.put("_inflate_count", new RuntimeScalar(delta.length));
+                self.put("_compressed_bytes", new RuntimeScalar(allInput.length));
+                self.put("_uncompressed_bytes", new RuntimeScalar(emitted + delta.length));
+                self.put("_finished", new RuntimeScalar(limited.outputLimitReached ? 0 : 1));
+                self.put("_last_error", new RuntimeScalar(
+                        limited.outputLimitReached ? BZ_OUTBUFF_FULL : BZ_STREAM_END));
+                if (consumeInput) setBytes(actualInput, new byte[0]);
+                if (output != null) setBytes(existingOutput, delta);
+                return new RuntimeScalar(
+                        limited.outputLimitReached ? BZ_OUTBUFF_FULL : BZ_STREAM_END).getList();
+            }
+
             CompressBzip2.DecompressResult decompressed = CompressBzip2.decompressFirstStream(allInput);
             int emitted = self.get("_emitted").getInt();
             byte[] delta = slice(decompressed.output, emitted, decompressed.output.length);
@@ -445,7 +468,14 @@ public class CompressRawBzip2 extends PerlModuleBase {
                 if (!options.applyHash(args.get(offset), false)) {
                     options.appendOutput = args.get(offset).getBoolean();
                     if (args.size() > offset + 1) options.consumeInput = args.get(offset + 1).getBoolean();
-                    if (args.size() > offset + 4) options.limitOutput = args.get(offset + 4).getBoolean();
+                    if (args.size() > offset + 4) {
+                        options.limitOutput = args.get(offset + 4).getBoolean();
+                    } else if (args.size() == offset + 4) {
+                        // Older Compress::Raw callers place LimitOutput in the
+                        // fourth positional slot; current versions reserve the
+                        // fifth slot for it and leave verbosity as the fourth.
+                        options.limitOutput = args.get(offset + 3).getBoolean();
+                    }
                 }
             }
             return options;
