@@ -794,43 +794,55 @@ implementation or acceptance work.
   acceptance. Earlier frame-elision-only candidates failed assertion 4.
 - [x] Phase 4: the unchanged issue acceptance gates pass on candidate
   `d753a616e`; the interpreter inventory still has 49 matching-parent gaps.
-- [ ] Phase 5: PR #1623 now points at `c7349c917`, whose only change after the
-  accepted source `d753a616e` is documentation. Required CI and review are still
-  pending; complete the five-issue closure audit after merge.
+- [ ] Phase 5: PR #1623 is at `6651eb12b`, rebased onto the current
+  `origin/master` tip `3893a190` (the rebase was a no-op because that tip is
+  already the candidate's merge base). The exact commit passes `nice -n 19
+  make` in 5m31s. Full core UAT completed 574/575 files; the only two failed
+  assertions are in `lib/croak.t` at lines 318 and 324, whose fixture expects
+  the Perl 5.46 fatal behavior. The selected Perl 5.44 semantics emit the
+  deprecation warning and continue; the locally built Perl 5.44.0 oracle
+  confirms this. Perl 5.44.0's own `t/lib/croak.t` produces the same two `not
+  ok` assertions for those fixtures. Comparison with the Oct 3 baseline
+  reports only those two assertions as changed (680,762 tests in both runs).
+  Keep the imported tests unchanged. GitHub Linux and Windows CI are still running;
+  finish the CI and acceptance audit before closing tickets.
 
 ### Immediate next steps
 
-Rebased source commit `d753a616e` passes the full unit gate in 6m26s, all four
-parser issue gates, the label/pad regressions, and the unchanged seven-file
-AnyEvent suite on the required runtimes. PR #1623 is updated to `c7349c917`;
-that follow-up only records the final acceptance evidence, so the tested source
-is unchanged. GitHub Linux and Windows CI are still running their `make ci`
-steps. Temporary dispatch/reachability instrumentation is removed. HTML::Tree
-has one existing TODO assertion and skips its optional LeakTrace file under
-system Perl; License::SPDX system-Perl execution is unavailable because its
-declared CPAN prerequisites are absent there. The project-owned
-ascending-version test passes standard Perl. Exact-window counts above are
-deterministic operation counts, not hardware instructions. An earlier
-instrumented test run failed an assertion and is not acceptance evidence.
+The current PR candidate is `6651eb12b`, seven commits ahead of
+`origin/master` at `3893a190`. The required rebase completed without replaying
+commits because the candidate already contains that master tip. The exact
+candidate passed `nice -n 19 make` in 5m31s. Full UAT ran against all 575
+checked-out core test files in 24m12s. It reported 574 passing files and one
+file with two failed assertions: `lib/croak.t` expects changing a modern
+`use VERSION` declaration to be fatal. Those expectations describe Perl 5.46,
+while PerlOnJava is intentionally following Perl 5.44 here. The standard
+Perl 5.44.0 oracle emits the documented deprecation warning and exits zero for
+the same ascending-version case; its own `t/lib/croak.t` reports both
+assertions as `not ok`. The Oct 3 comparator shows no other changed files or
+assertions. Tests remain unchanged. The full UAT log is
+`/Users/fglock/projects/PerlOnJava/logs/test_20261005_161700_perl544_fix.log`;
+its JSON is `/private/tmp/parser-uat-20261005-161700-perl544.json`.
 
-1. Start user acceptance testing against PR #1623 at `c7349c917` (source
-   equivalent to `d753a616e`). Exercise the five reported workflows on the
-   realistic host; record semantic outcomes and deterministic work counts for
-   dispatch, with wall time as context because host load varies. Report any
-   failure before changing source so fixes can be batched and retested once.
-2. Wait for the active Linux and Windows CI jobs and PR review. The CI jobs
-   validate the unchanged runtime source; do not start duplicate local builds.
-3. If a failure appears during UAT or PR integration, compare it to the matching
-   unfixed parent before
-   attributing it. Add permanent project-owned coverage for every externally
-   observed failure. Do not infer that #1482 shares this GOTO/ASM cause; its
-   non-local `last SKIP` warning behavior needs its own evidence.
+The new project-owned VERSION warning regression test passes on standard Perl
+5.44.0 and both PerlOnJava backends. The complete unit gate passes. GitHub CI
+for PR #1623 is still running on head `6651eb12b`.
+
+1. Wait for both PR CI jobs to finish. Fix any genuine CI failure, batch the
+   source and regression changes, then rerun the required gates.
+2. Keep Perl 5.44 VERSION warning semantics. Do not change imported
+   `perl5_t/t/lib/croak.t` assertions that require Perl 5.46 behavior.
+3. Treat the two `croak.t` assertions as expected Perl 5.44 fixture
+   mismatches: standard Perl 5.44.0's own core test reports the same failures.
+   Preserve the test and record this evidence; do not add a compatibility
+   workaround for Perl 5.46 behavior.
 4. Complete the interpreter regression audit and review the changelog entry.
+   Do not infer that #1482 shares the GOTO/ASM cause; its non-local `last SKIP`
+   warning behavior needs independent evidence.
 5. After review and merge, close only tickets confirmed fixed by the merged
-   five-issue PR and its complete acceptance audit.
-6. Record concise tracked evidence and remove task-created large logs,
-   profiles, and unused build worktrees. Preserve WIP backups and unrelated
-   host workloads. Poll confirmed running gates infrequently.
+   PR and its complete acceptance audit.
+6. Preserve the UAT evidence, remove task-created large temporary files when
+   no longer needed, and poll confirmed running gates infrequently.
 
 ### Open questions and blockers
 
@@ -849,9 +861,10 @@ instrumented test run failed an assertion and is not acceptance evidence.
 - Does #1482 share a concrete cause, or require independent non-local LAST
   target and lexical warning-state fixes? Its report and a passing GOTO
   compilation regression do not establish that relationship.
-- The source candidate `d753a616e` passes the local gates; PR head
-  `c7349c917` changes documentation only. Remote CI, review, user acceptance,
-  merge, and final issue closure remain outstanding.
+- PR #1623 head `6651eb12b` passes `make` and is current with master. Full UAT
+  has two Perl 5.46 fixture expectations that differ from the selected Perl
+  5.44 oracle behavior. Linux and Windows CI, review, acceptance of those two
+  expected differences, merge, and final issue closure remain outstanding.
 
 ## Related documents and skills
 
