@@ -23,13 +23,12 @@ class ReachabilityQueryCostTest {
                          MortalList.measureReachabilityQueries()) {
                 for (int i = 0; i < 3; i++) {
                     RuntimeHash target = new RuntimeHash();
+                    MyVarCleanupStack.register(target);
                     RuntimeScalar weak = target.createReference();
                     WeakRefRegistry.weaken(weak);
                     target.refCount = 0;
                     target.clearedOwnedAggregateElement = true;
 
-                    MyVarCleanupStack.register(target);
-                    MyVarCleanupStack.snapshotStackToLiveCounts();
                     MyVarCleanupStack.unregister(target);
 
                     assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED,
