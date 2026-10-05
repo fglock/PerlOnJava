@@ -11,7 +11,9 @@ comment: |
   install the module while skipping the upstream test phase. Downstream modules
   that depend on AnyEvent remain their own compatibility gates.
 match:
-  distribution: "^MLEHMANN/AnyEvent-"
+  distribution: "^MLEHMANN/AnyEvent-7\\.17(?:\\.tar\\.gz)?$"
+patches:
+  - "AnyEvent/UpdateClockBeforeTimer.patch"
 pl:
   commandline: 'jperl -MPerlOnJava::Distroprefs::AnyEvent -e "PerlOnJava::Distroprefs::AnyEvent::pl_phase()"'
 test:

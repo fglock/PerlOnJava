@@ -57,6 +57,15 @@ public class JavaClassInfo {
     public String javaClassName;
 
     /**
+     * Whether executing this generated Perl body can create a JVM CODE object
+     * whose captures need the invocation-scoped cleanup frame.
+     */
+    public boolean jvmClosureFrameRequired;
+
+    /** Whether this generated Perl body needs copied pristine {@code @_} slots. */
+    public boolean pristineArgsSnapshotRequired = true;
+
+    /**
      * The label to return to after method execution.
      */
     public Label returnLabel;

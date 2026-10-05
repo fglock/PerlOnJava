@@ -1219,6 +1219,15 @@ public class EmitVariable {
                                         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                                                 "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "set",
                                                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                                        // The scalar cell stored for a state
+                                        // variable is persistent, but Perl's
+                                        // assignment expression still yields
+                                        // the reference supplied on the RHS.
+                                        // Keep that expression result instead
+                                        // of returning the state's current
+                                        // value (which may be undef).
+                                        mv.visitInsn(Opcodes.POP);
+                                        mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
                                     }
                                     case "@" -> {
                                         mv.visitLdcInsn(varName);

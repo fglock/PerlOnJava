@@ -1,0 +1,11 @@
+--- lib/AnyEvent/Loop.pm.orig
++++ lib/AnyEvent/Loop.pm
+@@ -312,6 +312,8 @@
+ sub timer($$$) {
+    my ($after, $interval, $cb) = @_;
+    
++   _update_clock;
++
+    my $self;
+ 
+    if ($interval) {

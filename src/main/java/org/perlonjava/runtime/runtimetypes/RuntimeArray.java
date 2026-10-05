@@ -501,12 +501,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                             && base.refCount > 0) {
                         result.refCountOwned = false;
                         runtimeArray.forgetOwnedAliasElement(result);
-                        if (base.refCountTrace) {
-                            base.releaseOwner(result, "RuntimeArray.pop");
-                        }
                         base.releaseActiveOwner(result);
                         MortalList.requestWeakSweepsForDestroyedContainer(base);
-                        MortalList.deferDecrement(base);
+                        MortalList.deferDecrementFromArraySlot(
+                                base, result, "RuntimeArray.pop");
                     }
                     yield result;
                 }
@@ -546,12 +544,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                             && base.refCount > 0) {
                         result.refCountOwned = false;
                         runtimeArray.forgetOwnedAliasElement(result);
-                        if (base.refCountTrace) {
-                            base.releaseOwner(result, "RuntimeArray.shift");
-                        }
                         base.releaseActiveOwner(result);
                         MortalList.requestWeakSweepsForDestroyedContainer(base);
-                        MortalList.deferDecrement(base);
+                        MortalList.deferDecrementFromArraySlot(
+                                base, result, "RuntimeArray.shift");
                     }
                     yield result;
                 }

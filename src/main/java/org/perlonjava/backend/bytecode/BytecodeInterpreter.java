@@ -1421,7 +1421,12 @@ public class BytecodeInterpreter {
                                 RuntimeBase target = registers[rd];
                                 RuntimeScalar targetScalar;
                                 RuntimeScalar sourceScalar = registers[rs].scalar();
-                                if (lexicalAssignmentMustPreserveSlot(target)
+                                // Undef assignment must release the value through
+                                // the existing scalar cell. Replacing the cell
+                                // defers weakly observed aggregate cleanup until
+                                // a later sweep, after Perl code can observe it.
+                                if (sourceScalar.type == RuntimeScalarType.UNDEF
+                                        || lexicalAssignmentMustPreserveSlot(target)
                                         || (sourceScalar.type == RuntimeScalarType.GLOBREFERENCE
                                             && target instanceof RuntimeScalar)) {
                                     targetScalar = (RuntimeScalar) target;

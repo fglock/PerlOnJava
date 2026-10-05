@@ -36,7 +36,7 @@ public class ScalarUtil extends PerlModuleBase {
             scalarUtil.registerMethod("blessed", "$");
             scalarUtil.registerMethod("refaddr", "$");
             scalarUtil.registerMethod("reftype", "$");
-            scalarUtil.registerMethod("weaken", "$");
+            scalarUtil.registerMethodWithReadOnlyArgsWithoutJvmClosureFrame("weaken", "$");
             scalarUtil.registerMethod("unweaken", "$");
             scalarUtil.registerMethod("isweak", "$");
             scalarUtil.registerMethod("dualvar", "$$");

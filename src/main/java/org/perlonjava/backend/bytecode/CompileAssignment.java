@@ -2467,6 +2467,8 @@ public class CompileAssignment {
                             bytecodeCompiler.emit(Opcodes.NEW_ARRAY);
                             bytecodeCompiler.emitReg(arrayReg);
                             bytecodeCompiler.emitLexicalAlias(arrayReg, varName);
+                            bytecodeCompiler.emit(Opcodes.REGISTER_MY_VAR);
+                            bytecodeCompiler.emitReg(arrayReg);
 
                             bytecodeCompiler.emit(Opcodes.ARRAY_SET_FROM_LIST);
                             bytecodeCompiler.emitReg(arrayReg);

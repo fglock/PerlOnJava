@@ -1,10 +1,15 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import java.util.ArrayList;
+import java.util.AbstractSet;
 import java.util.Collections;
 import java.util.IdentityHashMap;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
+import java.lang.ref.WeakReference;
 
 /**
  * Phase 4 (refcount_alignment_plan.md): On-demand reachability walker.
@@ -34,9 +39,51 @@ import java.util.Set;
  */
 public class ReachabilityWalker {
 
+    private Set<RuntimeBase> weakWitnessTargets;
+    private final IdentityHashMap<RuntimeBase, RuntimeCode> weakWitnessCaptureRoots =
+            new IdentityHashMap<>();
+    private final IdentityHashMap<RuntimeBase, WeakRootWitness> discoveredWeakRootWitnesses =
+            new IdentityHashMap<>();
+    private int discoveredLexicalCodeWitnesses;
+
+    record WeakRootWitness(WeakReference<RuntimeCode> rootCode,
+                           WeakReference<RuntimeBase> capturedAggregate,
+                           WeakReference<RuntimeScalar> ownerScalar,
+                           WeakReference<RuntimeBase> referent,
+                           boolean liveLexicalScalar) {}
+
+    private record ReflectiveCaptureFields(
+            java.lang.reflect.Field[] scalars,
+            java.lang.reflect.Field[] bases) {}
+
+    // Generated closure implementations have a stable class layout. Cache
+    // the captured scalar/base fields per class so repeated weak-reference
+    // sweeps do not redo reflective discovery on the callback path.
+    private static final ClassValue<ReflectiveCaptureFields> REFLECTIVE_CAPTURE_FIELDS =
+            new ClassValue<>() {
+                @Override
+                protected ReflectiveCaptureFields computeValue(Class<?> type) {
+                    java.util.ArrayList<java.lang.reflect.Field> scalars = new java.util.ArrayList<>();
+                    java.util.ArrayList<java.lang.reflect.Field> bases = new java.util.ArrayList<>();
+                    for (java.lang.reflect.Field field : type.getDeclaredFields()) {
+                        Class<?> fieldType = field.getType();
+                        if (fieldType == RuntimeScalar.class
+                                && !"__SUB__".equals(field.getName())) {
+                            scalars.add(field);
+                        } else if (fieldType != RuntimeScalar.class
+                                && RuntimeBase.class.isAssignableFrom(fieldType)) {
+                            bases.add(field);
+                        }
+                    }
+                    return new ReflectiveCaptureFields(
+                            scalars.toArray(java.lang.reflect.Field[]::new),
+                            bases.toArray(java.lang.reflect.Field[]::new));
+                }
+            };
+
     // Re-use the weak-ref registry's internal map (we add a getter)
     private final Set<RuntimeBase> reachable =
-            java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+            java.util.Collections.newSetFromMap(new IdentityHashMap<>(512));
 
     // Whether to follow RuntimeCode.capturedScalars edges. Off by default
     // because Sub::Quote/Moo-generated accessors over-capture instances,
@@ -45,10 +92,9 @@ public class ReachabilityWalker {
     // because its refcount already tracks the captures accurately.
     private boolean walkCodeCaptures = false;
 
-    // Phase B1: whether to seed the walk from ScalarRefRegistry — the
-    // set of ref-holding RuntimeScalars that survived the last JVM GC
-    // cycle. ON by default for sweepWeakRefs (safe because the
-    // WeakHashMap has already been GC-pruned to live lexicals only).
+    // Whether to seed active Perl lexicals. The live-variable table supplies
+    // these roots directly; scanning ScalarRefRegistry as well would duplicate
+    // the same live scalar slots.
     private boolean useLexicalSeeds = true;
 
     // Ordinary sweeps must retain values that are still in expression
@@ -63,7 +109,7 @@ public class ReachabilityWalker {
         return this;
     }
 
-    /** Disable the ScalarRefRegistry root seed (globals-only walk). */
+    /** Disable live-lexical roots (globals-only walk). */
     public ReachabilityWalker withLexicalSeeds(boolean v) {
         this.useLexicalSeeds = v;
         return this;
@@ -71,6 +117,11 @@ public class ReachabilityWalker {
 
     public ReachabilityWalker withTemporaryRoots(boolean v) {
         this.useTemporaryRoots = v;
+        return this;
+    }
+
+    ReachabilityWalker withWeakWitnessTargets(Set<RuntimeBase> targets) {
+        this.weakWitnessTargets = targets;
         return this;
     }
 
@@ -108,8 +159,8 @@ public class ReachabilityWalker {
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
 
         // Phase 1: seed globalCodeRefs, walk WITH captures.
-        for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalCodeRefs.entrySet()) {
-            visitScalar(e.getValue(), todo);
+        for (RuntimeScalar codeRef : GlobalVariable.globalCodeRefEdgeRootsView()) {
+            addGlobalCodeRoot(codeRef, todo);
         }
         // An executing anonymous closure is a live Perl root even when no
         // package/global slot refers to its CODE value. Statement-boundary
@@ -135,15 +186,15 @@ public class ReachabilityWalker {
         bfs(todo, /*walkCaptures=*/ true);
 
         // Phase 2: seed remaining roots.
-        for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalVariables.entrySet()) {
-            visitScalar(e.getValue(), todo);
+        for (RuntimeScalar scalar : GlobalVariable.globalVariableValuesView()) {
+            visitScalar(scalar, todo);
         }
-        for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrays.entrySet()) {
+        for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrayEntriesView()) {
             if (isNonOwningDebugArgsArray(e.getKey())) continue;
             addReachable(e.getValue(), todo);
         }
-        for (Map.Entry<String, RuntimeHash> e : GlobalVariable.globalHashes.entrySet()) {
-            addReachable(e.getValue(), todo);
+        for (RuntimeHash hash : GlobalVariable.globalHashValuesView()) {
+            addReachable(hash, todo);
         }
         for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
             addReachable(rescued, todo);
@@ -152,25 +203,6 @@ public class ReachabilityWalker {
             addReachable(suspended, todo);
         }
         if (useLexicalSeeds) {
-            for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
-                if (sc.captureCount > 0) continue;
-                // Phase I: skip weak scalars — they don't count as
-                // strong reachability edges.
-                if (WeakRefRegistry.isweak(sc)) continue;
-                // Phase I: a scalar is only a valid "live lexical" seed if
-                // its declaration scope is still registered in
-                // MyVarCleanupStack. Scalars whose scopes have exited may
-                // still be Java-alive (via MortalList.deferredCaptures,
-                // MortalList.pending, or transient container elements)
-                // but they are NOT live Perl lexicals — using them as
-                // walker roots falsely pins their referents and breaks
-                // DBIC's leak tracer.
-                if (MortalList.isDeferredCapture(sc)) continue;
-                if (!MyVarCleanupStack.isLive(sc)) continue;
-                addReachable(sc, todo);
-                visitScalar(sc, todo);
-            }
-
             // Phase D-W1 (walker_gate_dbic_minimal.t): seed from live
             // my-vars themselves (RuntimeArray / RuntimeHash that the
             // user declared with `my @arr` / `my %hash`). Without this,
@@ -182,10 +214,15 @@ public class ReachabilityWalker {
             // Order matters: RuntimeScalar IS-A RuntimeBase, so the
             // RuntimeScalar branch must come first to walk through its
             // reference bit. Otherwise the BFS only steps into hashes
-            // and arrays, missing the scalar's referent.
+            // and arrays, missing the scalar's referent. The previous
+            // ScalarRefRegistry seed was redundant: every scalar accepted
+            // by its MyVarCleanupStack.isLive check is present in this list.
+            // Use this one live-slot snapshot to avoid copying and rescanning
+            // the ref-scalar registry during every complete weak sweep.
             for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
                 if (liveVar instanceof RuntimeScalar sc) {
                     if (WeakRefRegistry.isweak(sc)) continue;
+                    recordWeakLiveLexicalScalarWitness(sc);
                     addReachable(sc, todo);
                     visitScalar(sc, todo);
                 } else if (liveVar instanceof RuntimeBase rb) {
@@ -204,7 +241,7 @@ public class ReachabilityWalker {
 
         bfs(todo, walkCodeCaptures);
 
-        return reachable;
+        return withInstalledGlobalCodeRoots();
     }
 
     /**
@@ -219,8 +256,7 @@ public class ReachabilityWalker {
         ReachabilityWalker walker = new ReachabilityWalker();
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
 
-        for (Map.Entry<String, RuntimeScalar> entry : GlobalVariable.globalCodeRefs.entrySet()) {
-            RuntimeScalar codeRef = entry.getValue();
+        for (RuntimeScalar codeRef : GlobalVariable.globalCodeRefValuesView()) {
             if (codeRef == null || !(codeRef.value instanceof RuntimeCode code)) continue;
 
             // The registry also contains anonymous/eval compilation artifacts.
@@ -291,9 +327,13 @@ public class ReachabilityWalker {
             // Stash entries (the per-package code/var/array/hash) are
             // already directly seeded from GlobalVariable.global*Refs,
             // so iterating them here is redundant work.
-            if (cur instanceof RuntimeStash) continue;
+            if (cur instanceof RuntimeStash) {
+                continue;
+            }
             if (cur instanceof RuntimeHash h) {
-                if (h.elements instanceof HashSpecialVariable) continue;
+                if (h.elements instanceof HashSpecialVariable) {
+                    continue;
+                }
                 if (h.elements instanceof TieHash tieHash) {
                     visitScalar(tieHash.getSelf(), todo);
                 }
@@ -306,10 +346,14 @@ public class ReachabilityWalker {
                     visitScalar(tieArray.getSelf(), todo);
                 }
                 for (RuntimeScalar v : a.elements) {
+                    recordWeakArraySlotWitness(a, v);
                     addReachable(v, todo);
                     visitScalar(v, todo);
                 }
             } else if (cur instanceof RuntimeCode code) {
+                if (!hasWalkableCodeEdges(code, walkCaptures)) {
+                    continue;
+                }
                 visitCodePadConstants(code, todo);
                 visitCodeStateVariables(code, todo);
                 // Phase 2 normally keeps closure captures opaque to avoid
@@ -334,6 +378,109 @@ public class ReachabilityWalker {
         for (RuntimeBase constant : code.padConstants) {
             addReachable(constant, todo);
         }
+    }
+
+    /**
+     * Global CODE slots themselves are roots, but most named subs have no
+     * object-valued pad, state, or capture edges. Keep those CODE refs in the
+     * returned reachable set without sending them through the BFS queue.
+     */
+    private void addGlobalCodeRoot(RuntimeScalar slot, java.util.ArrayDeque<RuntimeBase> todo) {
+        if (slot != null
+                && (slot.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && slot.value instanceof RuntimeCode code) {
+            if (hasWalkableCodeEdges(code, /*walkCaptures=*/ true) && reachable.add(code)) {
+                todo.addLast(code);
+            }
+            return;
+        }
+        visitScalar(slot, todo);
+    }
+
+    static boolean hasWalkableCodeEdges(RuntimeCode code, boolean walkCaptures) {
+        if ((code.padConstants != null && code.padConstants.length != 0)
+                || !code.stateVariable.isEmpty()
+                || !code.stateArray.isEmpty()
+                || !code.stateHash.isEmpty()) {
+            return true;
+        }
+        if (!walkCaptures && !WeakRefRegistry.hasWeakRefsTo(code)) return false;
+        if ((code.capturedScalars != null && code.capturedScalars.length != 0)
+                || (code.capturedAggregates != null && code.capturedAggregates.length != 0)
+                || (code.closedOverVariables != null && !code.closedOverVariables.isEmpty())) {
+            return true;
+        }
+        if (!code.captureFieldsRecorded) {
+            Object closureObject = code.codeObject != null ? code.codeObject : code.subroutine;
+            if (closureObject != null) {
+                ReflectiveCaptureFields fields = REFLECTIVE_CAPTURE_FIELDS.get(closureObject.getClass());
+                if (fields.scalars().length != 0 || fields.bases().length != 0) return true;
+            }
+        }
+        return code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
+                && interpreted.capturedVars != null
+                && interpreted.capturedVars.length != 0;
+    }
+
+    /**
+     * Terminal installed CODE refs remain roots, but storing each one in the
+     * per-sweep identity set is redundant. Expose them through a union view so
+     * ordinary reachability checks still see the exact complete root set.
+     */
+    private Set<RuntimeBase> withInstalledGlobalCodeRoots() {
+        Set<RuntimeCode> installedCodes = GlobalVariable.installedGlobalCodeRefsView();
+        if (installedCodes.isEmpty()) return reachable;
+        return new AbstractSet<>() {
+            @Override
+            public boolean contains(Object value) {
+                return reachable.contains(value)
+                        || (value instanceof RuntimeCode code && installedCodes.contains(code));
+            }
+
+            @Override
+            public int size() {
+                int size = reachable.size();
+                for (RuntimeCode code : installedCodes) {
+                    if (!reachable.contains(code)) size++;
+                }
+                return size;
+            }
+
+            @Override
+            public Iterator<RuntimeBase> iterator() {
+                Iterator<RuntimeBase> reached = reachable.iterator();
+                Iterator<RuntimeCode> installed = installedCodes.iterator();
+                return new Iterator<>() {
+                    private RuntimeBase next;
+                    private boolean hasNext;
+
+                    @Override
+                    public boolean hasNext() {
+                        if (hasNext) return true;
+                        if (reached.hasNext()) return true;
+                        while (installed.hasNext()) {
+                            RuntimeCode candidate = installed.next();
+                            if (!reachable.contains(candidate)) {
+                                next = candidate;
+                                hasNext = true;
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
+
+                    @Override
+                    public RuntimeBase next() {
+                        if (reached.hasNext()) return reached.next();
+                        if (!hasNext()) throw new NoSuchElementException();
+                        RuntimeBase result = next;
+                        next = null;
+                        hasNext = false;
+                        return result;
+                    }
+                };
+            }
+        };
     }
 
     /**
@@ -371,7 +518,16 @@ public class ReachabilityWalker {
             addReachable(cap, todo);
             visitScalar(cap, todo);
         });
-        visitReflectiveCodeBases(code, base -> addReachable(base, todo));
+        visitReflectiveCodeBases(code, base -> {
+            if (weakWitnessTargets != null
+                    && code.captureFieldsRecorded
+                    && GlobalVariable.installedGlobalCodeRefsView().contains(code)
+                    && base instanceof RuntimeArray array
+                    && isSupportedWitnessArray(array)) {
+                weakWitnessCaptureRoots.putIfAbsent(array, code);
+            }
+            addReachable(base, todo);
+        });
         if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
                 && interpreted.capturedVars != null) {
             for (RuntimeBase cap : interpreted.capturedVars) {
@@ -383,6 +539,54 @@ public class ReachabilityWalker {
                 }
             }
         }
+    }
+
+    private void recordWeakArraySlotWitness(RuntimeArray array, RuntimeScalar ownerScalar) {
+        if (weakWitnessTargets == null || ownerScalar == null
+                || !isSupportedWitnessArray(array)
+                || WeakRefRegistry.isweak(ownerScalar)
+                || (ownerScalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                || !(ownerScalar.value instanceof RuntimeBase referent)
+                || !weakWitnessTargets.contains(referent)) {
+            return;
+        }
+        RuntimeCode rootCode = weakWitnessCaptureRoots.get(array);
+        if (rootCode != null) {
+            discoveredWeakRootWitnesses.putIfAbsent(referent,
+                    new WeakRootWitness(new WeakReference<>(rootCode),
+                            new WeakReference<>(array), new WeakReference<>(ownerScalar),
+                            new WeakReference<>(referent), false));
+        }
+    }
+
+    private void recordWeakLiveLexicalScalarWitness(RuntimeScalar ownerScalar) {
+        if (weakWitnessTargets == null || ownerScalar.scopeExited
+                || (ownerScalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                || !(ownerScalar.value instanceof RuntimeBase referent)
+                || (!weakWitnessTargets.contains(referent)
+                && !(referent instanceof RuntimeCode))) {
+            return;
+        }
+        if (!weakWitnessTargets.contains(referent)
+                && !discoveredWeakRootWitnesses.containsKey(referent)
+                && discoveredLexicalCodeWitnesses >= 128) {
+            return;
+        }
+        if (discoveredWeakRootWitnesses.putIfAbsent(referent,
+                new WeakRootWitness(new WeakReference<>(null),
+                        new WeakReference<>(null), new WeakReference<>(ownerScalar),
+                        new WeakReference<>(referent), true)) == null
+                && referent instanceof RuntimeCode
+                && !weakWitnessTargets.contains(referent)) {
+            discoveredLexicalCodeWitnesses++;
+        }
+    }
+
+    private static boolean isSupportedWitnessArray(RuntimeArray array) {
+        return array != null
+                && !array.threadShared
+                && array.type != RuntimeArray.TIED_ARRAY
+                && !(array.elements instanceof TieArray);
     }
 
     /**
@@ -596,17 +800,13 @@ public class ReachabilityWalker {
         Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
 
-        if (enqueueStrongEdges(target, target, seen, todo)) {
-            return true;
-        }
+        if (enqueueStrongEdges(target, target, seen, todo)) return true;
 
         int visits = 0;
         while (!todo.isEmpty() && visits < MAX_VISITS) {
             RuntimeBase cur = todo.removeFirst();
             visits++;
-            if (enqueueStrongEdges(cur, target, seen, todo)) {
-                return true;
-            }
+            if (enqueueStrongEdges(cur, target, seen, todo)) return true;
         }
         return false;
     }
@@ -726,6 +926,140 @@ public class ReachabilityWalker {
         return false;
     }
 
+    private record BoundedArrayCycleResult(boolean cycle, boolean complete, int edges) {}
+
+    /**
+     * Cheap cycle proof for the witness fast path. Unsupported edge forms and
+     * budget exhaustion are inconclusive and require the ordinary full walk.
+     */
+    private static BoundedArrayCycleResult hasBoundedStrongArrayCycle(
+            RuntimeBase target, int maxEdges) {
+        if (!isSupportedCycleContainer(target)) {
+            return new BoundedArrayCycleResult(false, false, 0);
+        }
+        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+        seen.add(target);
+        todo.add(target);
+        int edges = 0;
+        while (!todo.isEmpty()) {
+            RuntimeBase current = todo.removeFirst();
+            if (current instanceof RuntimeScalar scalar) {
+                if (++edges > maxEdges) {
+                    return new BoundedArrayCycleResult(false, false, edges);
+                }
+                if (followBoundedCycleScalar(scalar, target, seen, todo)) {
+                    return new BoundedArrayCycleResult(true, true, edges);
+                }
+                continue;
+            }
+            if (current instanceof RuntimeCode code) {
+                for (RuntimeScalar state : code.stateVariable.values()) {
+                    if (++edges > maxEdges) return new BoundedArrayCycleResult(false, false, edges);
+                    if (followBoundedCycleScalar(state, target, seen, todo)) {
+                        return new BoundedArrayCycleResult(true, true, edges);
+                    }
+                }
+                for (RuntimeArray state : code.stateArray.values()) {
+                    if (++edges > maxEdges) return new BoundedArrayCycleResult(false, false, edges);
+                    if (followBoundedCycleBase(state, target, seen, todo)) {
+                        return new BoundedArrayCycleResult(true, true, edges);
+                    }
+                }
+                for (RuntimeHash state : code.stateHash.values()) {
+                    if (++edges > maxEdges) return new BoundedArrayCycleResult(false, false, edges);
+                    if (followBoundedCycleBase(state, target, seen, todo)) {
+                        return new BoundedArrayCycleResult(true, true, edges);
+                    }
+                }
+                if (code.capturedScalars != null) {
+                    for (RuntimeScalar capture : code.capturedScalars) {
+                        if (++edges > maxEdges) return new BoundedArrayCycleResult(false, false, edges);
+                        if (followBoundedCycleScalar(capture, target, seen, todo)) {
+                            return new BoundedArrayCycleResult(true, true, edges);
+                        }
+                    }
+                }
+                if (code.captureFieldsRecorded && code.capturedAggregates != null) {
+                    for (RuntimeBase capture : code.capturedAggregates) {
+                        if (++edges > maxEdges) return new BoundedArrayCycleResult(false, false, edges);
+                        if (followBoundedCycleBase(capture, target, seen, todo)) {
+                            return new BoundedArrayCycleResult(true, true, edges);
+                        }
+                    }
+                }
+                if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
+                        && interpreted.capturedVars != null) {
+                    for (RuntimeBase capture : interpreted.capturedVars) {
+                        if (++edges > maxEdges) return new BoundedArrayCycleResult(false, false, edges);
+                        boolean found = capture instanceof RuntimeScalar scalar
+                                ? followBoundedCycleScalar(scalar, target, seen, todo)
+                                : followBoundedCycleBase(capture, target, seen, todo);
+                        if (found) return new BoundedArrayCycleResult(true, true, edges);
+                    }
+                }
+                continue;
+            }
+            Iterable<RuntimeScalar> slots;
+            if (current instanceof RuntimeArray array) {
+                if (!isSupportedWitnessArray(array)) {
+                    return new BoundedArrayCycleResult(false, false, edges);
+                }
+                slots = array.elements;
+            } else if (current instanceof RuntimeHash hash) {
+                if (!isSupportedCycleContainer(hash)) {
+                    return new BoundedArrayCycleResult(false, false, edges);
+                }
+                slots = hash.elements.values();
+            } else {
+                return new BoundedArrayCycleResult(false, false, edges);
+            }
+            for (RuntimeScalar slot : slots) {
+                if (++edges > maxEdges) {
+                    return new BoundedArrayCycleResult(false, false, edges);
+                }
+                if (followBoundedCycleScalar(slot, target, seen, todo)) {
+                    return new BoundedArrayCycleResult(true, true, edges);
+                }
+            }
+        }
+        return new BoundedArrayCycleResult(false, true, edges);
+    }
+
+    private static boolean followBoundedCycleScalar(
+            RuntimeScalar scalar, RuntimeBase target, Set<RuntimeBase> seen,
+            java.util.ArrayDeque<RuntimeBase> todo) {
+        if (scalar == null || WeakRefRegistry.isweak(scalar)
+                || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                || !(scalar.value instanceof RuntimeBase child)) return false;
+        return followBoundedCycleBase(child, target, seen, todo);
+    }
+
+    private static boolean followBoundedCycleBase(
+            RuntimeBase child, RuntimeBase target, Set<RuntimeBase> seen,
+            java.util.ArrayDeque<RuntimeBase> todo) {
+        if (child == null) return false;
+        if (child == target) return true;
+        if (isSupportedCycleNode(child) && seen.add(child)) todo.addLast(child);
+        return false;
+    }
+
+    private static boolean isSupportedCycleContainer(RuntimeBase value) {
+        if (value instanceof RuntimeArray array) return isSupportedWitnessArray(array);
+        if (value instanceof RuntimeHash hash) {
+            return !hash.threadShared
+                    && hash.type != RuntimeHash.TIED_HASH
+                    && !(hash.elements instanceof TieHash)
+                    && !(hash.elements instanceof HashSpecialVariable);
+        }
+        return false;
+    }
+
+    private static boolean isSupportedCycleNode(RuntimeBase value) {
+        if (value instanceof RuntimeScalar scalar) return !WeakRefRegistry.isweak(scalar);
+        return value instanceof RuntimeCode || isSupportedCycleContainer(value);
+    }
+
     /**
      * True when a CODE cycle strongly retains an object that has an external
      * weak reference. Perl refcounting keeps this graph alive; AnyEvent uses
@@ -791,26 +1125,37 @@ public class ReachabilityWalker {
      * once for all weak referents in a mortal drain. The existing query's
      * target-specific early returns become identity membership in this set.
      */
+    record RootReachabilitySnapshot(Set<RuntimeBase> reachable, boolean complete) {
+        boolean isReachable(RuntimeBase target) {
+            // A visit-cap hit cannot prove an unresolved target dead.
+            return !complete || reachable.contains(target);
+        }
+    }
+
     static Set<RuntimeBase> reachableFromRootsSnapshot() {
+        return reachableFromRootsSnapshotWithStatus().reachable();
+    }
+
+    static RootReachabilitySnapshot reachableFromRootsSnapshotWithStatus() {
         final int maxVisits = 50_000;
-        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>(512));
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
 
-        for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalCodeRefs.entrySet()) {
-            seedTarget(e.getValue(), null, seen, todo);
-            if (e.getValue() != null && e.getValue().value instanceof RuntimeCode code) {
+        for (RuntimeScalar codeRef : GlobalVariable.globalCodeRefValuesView()) {
+            seedTarget(codeRef, null, seen, todo);
+            if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
                 followGlobalCodeCaptures(code, null, seen, todo);
             }
         }
-        for (RuntimeScalar scalar : GlobalVariable.globalVariables.values()) {
+        for (RuntimeScalar scalar : GlobalVariable.globalVariableValuesView()) {
             seedTarget(scalar, null, seen, todo);
         }
-        for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrays.entrySet()) {
+        for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrayEntriesView()) {
             if (!isNonOwningDebugArgsArray(e.getKey()) && e.getValue() != null) {
                 if (seen.add(e.getValue())) todo.addLast(e.getValue());
             }
         }
-        for (RuntimeHash hash : GlobalVariable.globalHashes.values()) {
+        for (RuntimeHash hash : GlobalVariable.globalHashValuesView()) {
             if (hash != null && seen.add(hash)) todo.addLast(hash);
         }
         for (RuntimeScalar scalar : ScalarRefRegistry.snapshot()) {
@@ -832,7 +1177,8 @@ public class ReachabilityWalker {
         }
 
         int visits = 0;
-        while (!todo.isEmpty() && visits++ < maxVisits) {
+        while (!todo.isEmpty() && visits < maxVisits) {
+            visits++;
             RuntimeBase cur = todo.removeFirst();
             if (cur instanceof RuntimeStash) continue;
             if (cur instanceof RuntimeHash hash) {
@@ -848,7 +1194,7 @@ public class ReachabilityWalker {
                 }
             }
         }
-        return seen;
+        return new RootReachabilitySnapshot(seen, todo.isEmpty());
     }
 
     /**
@@ -875,9 +1221,7 @@ public class ReachabilityWalker {
             if (!(liveVar instanceof RuntimeScalar sc)) continue;
             if (WeakRefRegistry.isweak(sc)) continue;
             if (sc.value instanceof RuntimeCode code
-                    && followGlobalCodeCaptures(code, target, seen, todo)) {
-                return true;
-            }
+                    && followGlobalCodeCaptures(code, target, seen, todo)) return true;
         }
         // A closure CODE scalar can outlive the lexical register that created
         // it while the caller is suspended.  ScalarRefRegistry retains a weak
@@ -887,9 +1231,7 @@ public class ReachabilityWalker {
         for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
             if (sc == null || sc.scopeExited || WeakRefRegistry.isweak(sc)) continue;
             if (sc.value instanceof RuntimeCode code
-                    && followGlobalCodeCaptures(code, target, seen, todo)) {
-                return true;
-            }
+                    && followGlobalCodeCaptures(code, target, seen, todo)) return true;
         }
         return false;
     }
@@ -901,6 +1243,11 @@ public class ReachabilityWalker {
     public static boolean hasLiveStrongScalarReferentOtherThan(
             RuntimeBase target, RuntimeScalar excluded) {
         if (target == null) return false;
+        // snapshotLiveVars() is the authoritative set for any later scalar
+        // registry entry that passes MyVarCleanupStack.isLive(). Scanning
+        // ScalarRefRegistry.snapshot() below used to revisit the same live
+        // lexical slots and repeatedly copy the weak-key registry while a
+        // callback-boundary weak sweep was clearing CODE refs.
         for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
             if (liveVar instanceof RuntimeScalar sc
                     && sc != excluded
@@ -910,26 +1257,18 @@ public class ReachabilityWalker {
                 return true;
             }
         }
-        for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
-            if (sc == null) continue;
-            if (sc == excluded) continue;
-            if (WeakRefRegistry.isweak(sc)) continue;
-            if (sc.scopeExited) continue;
-            if (!MyVarCleanupStack.isLive(sc)) continue;
-            if (sc.value == target) return true;
-        }
         return false;
     }
 
     public static boolean isReachableFromGlobalCodeCaptures(RuntimeBase target) {
         if (target == null) return false;
         Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<RuntimeCode> followed = Collections.newSetFromMap(new IdentityHashMap<>());
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
-        for (RuntimeScalar sc : GlobalVariable.globalCodeRefs.values()) {
+        for (RuntimeScalar sc : GlobalVariable.globalCodeRefEdgeRootsView()) {
             if (sc != null && sc.value instanceof RuntimeCode code
-                    && followGlobalCodeCaptures(code, target, seen, todo)) {
-                return true;
-            }
+                    && followed.add(code)
+                    && followGlobalCodeCaptures(code, target, seen, todo)) return true;
         }
         return false;
     }
@@ -1035,20 +1374,20 @@ public class ReachabilityWalker {
         // `our %METAS`, accessible through globalHashes. DBIC's per-row
         // cycles aren't reachable via package globals → not rescued
         // → DESTROY fires correctly.
-        for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalCodeRefs.entrySet()) {
-            if (e.getValue() == target) return true;
-            if (e.getValue() != null && seen.add(e.getValue())) todo.addLast(e.getValue());
+        for (RuntimeScalar codeRef : GlobalVariable.globalCodeRefValuesView()) {
+            if (codeRef == target) return true;
+            if (codeRef != null && seen.add(codeRef)) todo.addLast(codeRef);
         }
-        for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalVariables.entrySet()) {
-            if (e.getValue() == target) return true;
-            if (e.getValue() != null && seen.add(e.getValue())) todo.addLast(e.getValue());
+        for (RuntimeScalar scalar : GlobalVariable.globalVariableValuesView()) {
+            if (scalar == target) return true;
+            if (scalar != null && seen.add(scalar)) todo.addLast(scalar);
         }
-        for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrays.entrySet()) {
+        for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrayEntriesView()) {
             if (isNonOwningDebugArgsArray(e.getKey())) continue;
             if (e.getValue() != null && seen.add(e.getValue())) todo.addLast(e.getValue());
         }
-        for (Map.Entry<String, RuntimeHash> e : GlobalVariable.globalHashes.entrySet()) {
-            if (e.getValue() != null && seen.add(e.getValue())) todo.addLast(e.getValue());
+        for (RuntimeHash hash : GlobalVariable.globalHashValuesView()) {
+            if (hash != null && seen.add(hash)) todo.addLast(hash);
         }
 
         // D-W6.16: live my-vars (currently-active lexical scopes).
@@ -1187,27 +1526,27 @@ public class ReachabilityWalker {
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
 
         // Seed: package globals (scalars, arrays, hashes, code refs).
-        for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalCodeRefs.entrySet()) {
-            seedTarget(e.getValue(), target, seen, todo);
+        for (RuntimeScalar codeRef : GlobalVariable.globalCodeRefValuesView()) {
+            seedTarget(codeRef, target, seen, todo);
             if (seen.contains(target)) return true;
             if (!globalOnly
-                    && e.getValue() != null
-                    && e.getValue().value instanceof RuntimeCode code) {
+                    && codeRef != null
+                    && codeRef.value instanceof RuntimeCode code) {
                 if (followGlobalCodeCaptures(code, target, seen, todo)) return true;
             }
         }
-        for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalVariables.entrySet()) {
-            seedTarget(e.getValue(), target, seen, todo);
+        for (RuntimeScalar scalar : GlobalVariable.globalVariableValuesView()) {
+            seedTarget(scalar, target, seen, todo);
             if (seen.contains(target)) return true;
         }
-        for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrays.entrySet()) {
+        for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrayEntriesView()) {
             if (isNonOwningDebugArgsArray(e.getKey())) continue;
             if (e.getValue() == target) return true;
             if (e.getValue() != null && seen.add(e.getValue())) todo.addLast(e.getValue());
         }
-        for (Map.Entry<String, RuntimeHash> e : GlobalVariable.globalHashes.entrySet()) {
-            if (e.getValue() == target) return true;
-            if (e.getValue() != null && seen.add(e.getValue())) todo.addLast(e.getValue());
+        for (RuntimeHash hash : GlobalVariable.globalHashValuesView()) {
+            if (hash == target) return true;
+            if (hash != null && seen.add(hash)) todo.addLast(hash);
         }
         // Seed: ScalarRefRegistry-tracked scalars whose declaration
         // scope is still live (per MyVarCleanupStack). This is what
@@ -1342,16 +1681,16 @@ public class ReachabilityWalker {
         Set<RuntimeBase> reachableTied = Collections.newSetFromMap(new IdentityHashMap<>());
         java.util.ArrayDeque<TiedPathStep> todo = new java.util.ArrayDeque<>();
 
-        for (RuntimeScalar scalar : GlobalVariable.globalCodeRefs.values()) {
+        for (RuntimeScalar scalar : GlobalVariable.globalCodeRefValuesView()) {
             addTiedPathScalar(scalar, false, seenPlain, seenTied, todo);
         }
-        for (RuntimeScalar scalar : GlobalVariable.globalVariables.values()) {
+        for (RuntimeScalar scalar : GlobalVariable.globalVariableValuesView()) {
             addTiedPathScalar(scalar, false, seenPlain, seenTied, todo);
         }
-        for (RuntimeArray array : GlobalVariable.globalArrays.values()) {
+        for (RuntimeArray array : GlobalVariable.globalArrayValuesView()) {
             addTiedPath(array, false, seenPlain, seenTied, todo);
         }
-        for (RuntimeHash hash : GlobalVariable.globalHashes.values()) {
+        for (RuntimeHash hash : GlobalVariable.globalHashValuesView()) {
             addTiedPath(hash, false, seenPlain, seenTied, todo);
         }
         for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
@@ -1427,7 +1766,7 @@ public class ReachabilityWalker {
         Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
 
-        for (RuntimeScalar sc : GlobalVariable.globalCodeRefs.values()) {
+        for (RuntimeScalar sc : GlobalVariable.globalCodeRefValuesView()) {
             seedTarget(sc, target, seen, todo);
             if (seen.contains(target)) return true;
             if (sc != null && sc.value instanceof RuntimeCode code
@@ -1435,15 +1774,15 @@ public class ReachabilityWalker {
                 return true;
             }
         }
-        for (RuntimeScalar sc : GlobalVariable.globalVariables.values()) {
+        for (RuntimeScalar sc : GlobalVariable.globalVariableValuesView()) {
             seedTarget(sc, target, seen, todo);
             if (seen.contains(target)) return true;
         }
-        for (RuntimeArray array : GlobalVariable.globalArrays.values()) {
+        for (RuntimeArray array : GlobalVariable.globalArrayValuesView()) {
             if (array == target) return true;
             if (seen.add(array)) todo.addLast(array);
         }
-        for (RuntimeHash hash : GlobalVariable.globalHashes.values()) {
+        for (RuntimeHash hash : GlobalVariable.globalHashValuesView()) {
             if (hash == target) return true;
             if (seen.add(hash)) todo.addLast(hash);
         }
@@ -1506,7 +1845,7 @@ public class ReachabilityWalker {
         private static final int MAX_VISITS = 50_000;
 
         private final Set<RuntimeBase> nonLexicalReachable =
-                Collections.newSetFromMap(new IdentityHashMap<>());
+                Collections.newSetFromMap(new IdentityHashMap<>(512));
 
         public ExternalRootSnapshot() {
             this(true);
@@ -1529,18 +1868,27 @@ public class ReachabilityWalker {
         private void buildNonLexicalRoots(boolean includeRescued) {
             java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
 
-            for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalCodeRefs.entrySet()) {
-                seedGlobalCodeScalar(e.getValue(), todo);
+            // Every installed CODE slot is itself a root, but only the
+            // cached subset with capture/state edges needs reflective capture
+            // traversal. Named subs with empty pads otherwise force this
+            // sweep to inspect every generated implementation object.
+            for (RuntimeScalar codeRef : GlobalVariable.globalCodeRefValuesView()) {
+                seedNonLexicalScalar(codeRef, todo);
             }
-            for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalVariables.entrySet()) {
-                seedNonLexicalScalar(e.getValue(), todo);
+            for (RuntimeScalar codeRef : GlobalVariable.globalCodeRefEdgeRootsView()) {
+                if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
+                    seedGlobalCodeCaptures(code, todo);
+                }
             }
-            for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrays.entrySet()) {
+            for (RuntimeScalar scalar : GlobalVariable.globalVariableValuesView()) {
+                seedNonLexicalScalar(scalar, todo);
+            }
+            for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrayEntriesView()) {
                 if (isNonOwningDebugArgsArray(e.getKey())) continue;
                 addNonLexical(e.getValue(), todo);
             }
-            for (Map.Entry<String, RuntimeHash> e : GlobalVariable.globalHashes.entrySet()) {
-                addNonLexical(e.getValue(), todo);
+            for (RuntimeHash hash : GlobalVariable.globalHashValuesView()) {
+                addNonLexical(hash, todo);
             }
             if (includeRescued) {
                 for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
@@ -1586,14 +1934,6 @@ public class ReachabilityWalker {
             }
         }
 
-        private void seedGlobalCodeScalar(RuntimeScalar s,
-                                          java.util.ArrayDeque<RuntimeBase> todo) {
-            seedNonLexicalScalar(s, todo);
-            if (s != null && s.value instanceof RuntimeCode code) {
-                seedGlobalCodeCaptures(code, todo);
-            }
-        }
-
         private void seedGlobalCodeCaptures(RuntimeCode code,
                                             java.util.ArrayDeque<RuntimeBase> todo) {
             if (code.capturedScalars != null) {
@@ -1634,9 +1974,9 @@ public class ReachabilityWalker {
         private static final Object MIXED_DIRECT_LEXICAL_ORIGIN = new Object();
 
         private final Set<RuntimeBase> directLexicalRoots =
-                Collections.newSetFromMap(new IdentityHashMap<>());
+                Collections.newSetFromMap(new IdentityHashMap<>(512));
         private final IdentityHashMap<RuntimeBase, Object> directLexicalOrigins =
-                new IdentityHashMap<>();
+                new IdentityHashMap<>(512);
 
         public LiveRootSnapshot() {
             build();
@@ -1826,15 +2166,15 @@ public class ReachabilityWalker {
 
     private static void visitReflectiveCodeScalars(RuntimeCode code,
                                                    java.util.function.Consumer<RuntimeScalar> visitor) {
+        if (code.captureFieldsRecorded) return;
         Object closureObject = code.codeObject != null ? code.codeObject : code.subroutine;
         if (closureObject == null) return;
         try {
-            for (java.lang.reflect.Field field : closureObject.getClass().getDeclaredFields()) {
-                if (field.getType() == RuntimeScalar.class && !"__SUB__".equals(field.getName())) {
-                    RuntimeScalar cap = (RuntimeScalar) field.get(closureObject);
-                    if (cap != null) {
-                        visitor.accept(cap);
-                    }
+            for (java.lang.reflect.Field field :
+                    REFLECTIVE_CAPTURE_FIELDS.get(closureObject.getClass()).scalars()) {
+                RuntimeScalar cap = (RuntimeScalar) field.get(closureObject);
+                if (cap != null) {
+                    visitor.accept(cap);
                 }
             }
         } catch (IllegalAccessException ignored) {
@@ -1846,17 +2186,22 @@ public class ReachabilityWalker {
 
     private static void visitReflectiveCodeBases(RuntimeCode code,
                                                  java.util.function.Consumer<RuntimeBase> visitor) {
+        if (code.captureFieldsRecorded) {
+            if (code.capturedAggregates != null) {
+                for (RuntimeBase captured : code.capturedAggregates) {
+                    if (captured != null) visitor.accept(captured);
+                }
+            }
+            return;
+        }
         Object closureObject = code.codeObject != null ? code.codeObject : code.subroutine;
         if (closureObject == null) return;
         try {
-            for (java.lang.reflect.Field field : closureObject.getClass().getDeclaredFields()) {
-                Class<?> fieldType = field.getType();
-                if (fieldType != RuntimeScalar.class
-                        && RuntimeBase.class.isAssignableFrom(fieldType)) {
-                    RuntimeBase cap = (RuntimeBase) field.get(closureObject);
-                    if (cap != null) {
-                        visitor.accept(cap);
-                    }
+            for (java.lang.reflect.Field field :
+                    REFLECTIVE_CAPTURE_FIELDS.get(closureObject.getClass()).bases()) {
+                RuntimeBase cap = (RuntimeBase) field.get(closureObject);
+                if (cap != null) {
+                    visitor.accept(cap);
                 }
             }
         } catch (IllegalAccessException ignored) {
@@ -1897,7 +2242,167 @@ public class ReachabilityWalker {
      * @return number of weak-ref entries cleared
      */
     public static int sweepWeakRefs(boolean quiet, boolean forceJvmGc) {
-        if (!WeakRefRegistry.weakRefsExist()) return 0;
+        return sweepWeakRefs(quiet, forceJvmGc, Collections.emptySet(), null);
+    }
+
+    static int sweepWeakRefs(boolean quiet, boolean forceJvmGc,
+                             Set<RuntimeBase> releasedTargets,
+                             ReleasedWeakSweepResult releasedSweepResult) {
+        return sweepWeakRefsPass(quiet, forceJvmGc, releasedTargets,
+                releasedSweepResult).cleared();
+    }
+
+    private record WeakSweepPass(int cleared, boolean graphChanged) {}
+
+    private static final int MAX_WITNESS_SWEEP_TARGETS = 64;
+    private static final int MAX_WITNESS_CYCLE_EDGES = 256;
+
+    private static boolean tryWitnessQuietSweep(
+            boolean quiet, boolean forceJvmGc,
+            Set<RuntimeBase> releasedTargets,
+            ReleasedWeakSweepResult releasedSweepResult,
+            List<RuntimeBase> weakCandidates,
+            List<RuntimeBase> destroyableCandidates,
+            LifecycleRuntimeState runtimeState) {
+        if (!quiet || forceJvmGc || releasedSweepResult != null || !releasedTargets.isEmpty()) {
+            return false;
+        }
+        if (DestroyDispatch.hasRescuedObjects()
+                || runtimeState.currentDestroyTarget != null
+                || runtimeState.sweepPendingAfterOuterDestroy) {
+            return false;
+        }
+        Set<RuntimeBase> targets = Collections.newSetFromMap(new IdentityHashMap<>());
+        targets.addAll(weakCandidates);
+        targets.addAll(destroyableCandidates);
+        if (targets.size() > MAX_WITNESS_SWEEP_TARGETS) return false;
+
+        for (RuntimeBase referent : weakCandidates) {
+            if (referent == null) continue;
+            if (hasDirectCodeRootWitness(referent)) {
+                continue;
+            }
+            ReachabilityWalker.WeakRootWitness witness =
+                    runtimeState.weakSweepRootWitnesses.get(referent);
+            if (witness != null) {
+                if (isCurrentWeakRootWitness(witness)) continue;
+            }
+            if (hasExistingWeakRetentionRule(referent)) continue;
+            BoundedArrayCycleResult cycle = hasBoundedStrongArrayCycle(
+                    referent, MAX_WITNESS_CYCLE_EDGES);
+            if (!cycle.cycle()) return false;
+        }
+        for (RuntimeBase referent : destroyableCandidates) {
+            if (referent == null || referent.destroyFired || referent.currentlyDestroying
+                    || referent.refCount == Integer.MIN_VALUE
+                    || hasExistingDestroyRetentionRule(referent)) {
+                continue;
+            }
+            if (hasDirectCodeRootWitness(referent)) {
+                continue;
+            }
+            ReachabilityWalker.WeakRootWitness witness =
+                    runtimeState.weakSweepRootWitnesses.get(referent);
+            if (witness == null || !isCurrentWeakRootWitness(witness)) return false;
+        }
+        if (!sameIdentityContents(weakCandidates,
+                    WeakRefRegistry.snapshotWeakRefReferents())
+                || !sameIdentityContents(destroyableCandidates,
+                    DestroyDispatch.snapshotDestroyableObjects())) {
+            return false;
+        }
+        runtimeState.weakSweepRootWitnesses.entrySet().removeIf(entry ->
+                !targets.contains(entry.getKey())
+                        && !(entry.getKey() instanceof RuntimeCode
+                        && entry.getValue().liveLexicalScalar()
+                        && isCurrentWeakRootWitness(entry.getValue())));
+        return true;
+    }
+
+    private static boolean sameIdentityContents(
+            List<RuntimeBase> first, List<RuntimeBase> second) {
+        if (first.size() != second.size()) return false;
+        Set<RuntimeBase> identities = Collections.newSetFromMap(new IdentityHashMap<>());
+        identities.addAll(first);
+        for (RuntimeBase value : second) {
+            if (!identities.remove(value)) return false;
+        }
+        return identities.isEmpty();
+    }
+
+    private static boolean hasExistingWeakRetentionRule(RuntimeBase referent) {
+        if (referent.hasSemanticCaptureOwner()) return true;
+        if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
+                && referent.localBindingExists) return true;
+        if (referent instanceof RuntimeScalar scalar) {
+            return scalar.type == RuntimeScalarType.UNDEF
+                    || ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    && scalar.value instanceof RuntimeCode);
+        }
+        return false;
+    }
+
+    private static boolean hasExistingDestroyRetentionRule(RuntimeBase referent) {
+        return referent.hasSemanticCaptureOwner()
+                || ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
+                && referent.localBindingExists);
+    }
+
+    private static boolean hasDirectCodeRootWitness(RuntimeBase referent) {
+        if (!(referent instanceof RuntimeCode code)) return false;
+        if (GlobalVariable.installedGlobalCodeRefsView().contains(code)) return true;
+        for (RuntimeCode active : PerlRuntime.current().executionState().activeCodeStack) {
+            if (active == code) return true;
+        }
+        return false;
+    }
+
+    private static boolean isCurrentWeakRootWitness(WeakRootWitness witness) {
+        RuntimeCode rootCode = witness == null ? null : witness.rootCode().get();
+        RuntimeBase capturedAggregate = witness == null ? null : witness.capturedAggregate().get();
+        RuntimeScalar ownerScalar = witness == null ? null : witness.ownerScalar().get();
+        RuntimeBase referent = witness == null ? null : witness.referent().get();
+        if (witness != null && witness.liveLexicalScalar()) {
+            return ownerScalar != null && referent != null
+                    && MyVarCleanupStack.isLive(ownerScalar)
+                    && !ownerScalar.scopeExited
+                    && !WeakRefRegistry.isweak(ownerScalar)
+                    && (ownerScalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    && ownerScalar.value == referent;
+        }
+        if (witness == null
+                || rootCode == null || capturedAggregate == null || ownerScalar == null
+                || referent == null
+                || !GlobalVariable.installedGlobalCodeRefsView().contains(rootCode)
+                || !rootCode.captureFieldsRecorded
+                || !(capturedAggregate instanceof RuntimeArray array)
+                || !isSupportedWitnessArray(array)
+                || WeakRefRegistry.isweak(ownerScalar)
+                || (ownerScalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                || ownerScalar.value != referent) {
+            return false;
+        }
+        boolean captureStillInstalled = false;
+        if (rootCode.capturedAggregates != null) {
+            for (RuntimeBase captured : rootCode.capturedAggregates) {
+                if (captured == array) {
+                    captureStillInstalled = true;
+                    break;
+                }
+            }
+        }
+        if (!captureStillInstalled) return false;
+        for (RuntimeScalar slot : array.elements) {
+            if (slot == ownerScalar) return true;
+        }
+        return false;
+    }
+
+    private static WeakSweepPass sweepWeakRefsPass(
+            boolean quiet, boolean forceJvmGc,
+            Set<RuntimeBase> releasedTargets,
+            ReleasedWeakSweepResult releasedSweepResult) {
+        if (!WeakRefRegistry.weakRefsExist()) return new WeakSweepPass(0, false);
         if (forceJvmGc) {
             ScalarRefRegistry.forceGcAndSnapshot();
         }
@@ -1907,12 +2412,50 @@ public class ReachabilityWalker {
             // links while later chained calls still rely on them.
             DestroyDispatch.clearRescuedWeakRefs();
         }
-        ReachabilityWalker w = new ReachabilityWalker();
-        Set<RuntimeBase> live = w.walk();
+        LifecycleRuntimeState runtimeState = PerlRuntime.current().lifecycleState;
+        ArrayList<RuntimeBase> weakWitnessCandidates = null;
+        ArrayList<RuntimeBase> destroyableWitnessCandidates = null;
+        if (quiet) {
+            weakWitnessCandidates =
+                    new ArrayList<>(WeakRefRegistry.snapshotWeakRefReferents());
+            destroyableWitnessCandidates = DestroyDispatch.snapshotDestroyableObjects();
+            if (tryWitnessQuietSweep(quiet, forceJvmGc, releasedTargets,
+                    releasedSweepResult, weakWitnessCandidates,
+                    destroyableWitnessCandidates, runtimeState)) {
+                return new WeakSweepPass(0, false);
+            }
+        }
+        boolean reuseReleasedSweep = !forceJvmGc
+                && releasedSweepResult != null
+                && releasedSweepResult.live() != null;
+        ReachabilityWalker fullWalker = null;
+        Set<RuntimeBase> live;
+        if (reuseReleasedSweep) {
+            live = releasedSweepResult.live();
+            runtimeState.weakSweepRootWitnesses.clear();
+        } else if (quiet) {
+            Set<RuntimeBase> witnessTargets =
+                    Collections.newSetFromMap(new IdentityHashMap<>());
+            witnessTargets.addAll(weakWitnessCandidates);
+            witnessTargets.addAll(destroyableWitnessCandidates);
+            fullWalker = new ReachabilityWalker().withWeakWitnessTargets(witnessTargets);
+            live = fullWalker.walk();
+            runtimeState.weakSweepRootWitnesses.clear();
+            runtimeState.weakSweepRootWitnesses.putAll(fullWalker.discoveredWeakRootWitnesses);
+        } else {
+            runtimeState.weakSweepRootWitnesses.clear();
+            fullWalker = new ReachabilityWalker();
+            live = fullWalker.walk();
+        }
         ArrayList<RuntimeBase> toClear = new ArrayList<>();
         Set<RuntimeBase> strongCycleProtected = quiet
-                ? collectStrongCycleProtected()
+                ? (reuseReleasedSweep
+                    ? releasedSweepResult.strongCycleProtected()
+                    : collectStrongCycleProtected(live))
                 : Collections.emptySet();
+        Set<RuntimeBase> countedStrongOwners = releasedSweepResult == null
+                ? Collections.emptySet()
+                : releasedSweepResult.countedStrongOwners();
         for (RuntimeBase referent : WeakRefRegistry.snapshotWeakRefReferents()) {
             boolean liveReferent = live.contains(referent);
             // Semantic closure ownership is an explicit Perl edge.  It is not
@@ -1980,6 +2523,15 @@ public class ReachabilityWalker {
                 if (cycleProtected) {
                     continue;
                 }
+                // The released-referent pass has a narrower guard for strong
+                // counted owners which the lexical/root walk cannot see. When
+                // that pass and the periodic global sweep share a snapshot,
+                // preserve the same guard for those requested targets.
+                if (releasedTargets.contains(referent)
+                        && referent.refCount > 0
+                        && countedStrongOwners.contains(referent)) {
+                    continue;
+                }
                 toClear.add(referent);
             }
         }
@@ -2005,30 +2557,38 @@ public class ReachabilityWalker {
             }
         }
         int cleared = 0;
-        for (RuntimeBase referent : toClear) {
-            // Phase I: auto-sweep (quiet) now fires DESTROY on blessed
-            // unreachable objects and sets refCount=MIN_VALUE — matching
-            // non-quiet jperl_gc behaviour. Previously quiet mode was
-            // more conservative to avoid mid-module-init DESTROY cascades,
-            // but Phase B2a's ModuleInitGuard already protects against
-            // that, and Phase I's walker seed filters ensure we only
-            // DESTROY genuinely unreachable objects. Without this,
-            // DBICTest::Artist and similar rows held only by
-            // Sub::Quote-generated internal caches never clear their
-            // weak refs between auto-sweeps.
-            if (referent.blessId != 0 && !referent.destroyFired
-                    && referent.refCount != Integer.MIN_VALUE) {
-                referent.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(referent);
-            } else {
-                WeakRefRegistry.clearWeakRefsTo(referent);
-                if (referent.refCount != Integer.MIN_VALUE) {
+        boolean graphChanged = false;
+        Set<RuntimeBase> previousSweepLiveReferents = runtimeState.weakSweepLiveReferents;
+        runtimeState.weakSweepLiveReferents = live;
+        try {
+            for (RuntimeBase referent : toClear) {
+                // Phase I: auto-sweep (quiet) now fires DESTROY on blessed
+                // unreachable objects and sets refCount=MIN_VALUE — matching
+                // non-quiet jperl_gc behaviour. Previously quiet mode was
+                // more conservative to avoid mid-module-init DESTROY cascades,
+                // but Phase B2a's ModuleInitGuard already protects against
+                // that, and Phase I's walker seed filters ensure we only
+                // DESTROY genuinely unreachable objects. Without this,
+                // DBICTest::Artist and similar rows held only by
+                // Sub::Quote-generated internal caches never clear their
+                // weak refs between auto-sweeps.
+                if (referent.blessId != 0 && !referent.destroyFired
+                        && referent.refCount != Integer.MIN_VALUE) {
                     referent.refCount = Integer.MIN_VALUE;
+                    DestroyDispatch.callDestroy(referent);
+                    graphChanged = true;
+                } else {
+                    WeakRefRegistry.clearWeakRefsTo(referent);
+                    if (referent.refCount != Integer.MIN_VALUE) {
+                        referent.refCount = Integer.MIN_VALUE;
+                    }
                 }
+                cleared++;
             }
-            cleared++;
+        } finally {
+            runtimeState.weakSweepLiveReferents = previousSweepLiveReferents;
         }
-        return cleared;
+        return new WeakSweepPass(cleared, graphChanged);
     }
 
     /**
@@ -2036,8 +2596,18 @@ public class ReachabilityWalker {
      * safe to run at a nested statement boundary because it cannot clear weak
      * references belonging to unrelated in-flight return values.
      */
-    public static int sweepReleasedWeakReferents(Set<RuntimeBase> referents) {
-        if (referents == null || referents.isEmpty()) return 0;
+    record ReleasedWeakSweepResult(
+            Set<RuntimeBase> live,
+            Set<RuntimeBase> strongCycleProtected,
+            Set<RuntimeBase> countedStrongOwners,
+            int cleared) {}
+
+    public static ReleasedWeakSweepResult sweepReleasedWeakReferents(
+            Set<RuntimeBase> referents) {
+        if (referents == null || referents.isEmpty()) {
+            return new ReleasedWeakSweepResult(null, Collections.emptySet(),
+                    Collections.emptySet(), 0);
+        }
         Set<RuntimeBase> pending = Collections.newSetFromMap(new IdentityHashMap<>());
         for (RuntimeBase referent : referents) {
             if (referent == null || referent.currentlyDestroying) continue;
@@ -2050,8 +2620,47 @@ public class ReachabilityWalker {
             if (referent.destroyFired || referent.refCount == Integer.MIN_VALUE) continue;
             pending.add(referent);
         }
-        if (pending.isEmpty()) return 0;
+        if (pending.isEmpty()) {
+            return new ReleasedWeakSweepResult(null, Collections.emptySet(),
+                    Collections.emptySet(), 0);
+        }
 
+        // A registered, live, nonweak scalar with an owned direct reference is
+        // itself a root in walk(). If every released target has such an owner,
+        // no graph traversal is needed to preserve those targets. This is a
+        // deliberately narrow proof: nested container slots, exited captures,
+        // and uncounted references still use the full reachability walk below.
+        Set<RuntimeBase> directlyOwned =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+        for (RuntimeScalar owner : ScalarRefRegistry.snapshot()) {
+            if (owner == null || !owner.refCountOwned || owner.scopeExited
+                    || !MyVarCleanupStack.isLive(owner) || WeakRefRegistry.isweak(owner)
+                    || (owner.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                    || !(owner.value instanceof RuntimeBase target)) {
+                continue;
+            }
+            if (pending.contains(target)) directlyOwned.add(target);
+        }
+        if (directlyOwned.containsAll(pending)) {
+            return new ReleasedWeakSweepResult(null, Collections.emptySet(),
+                    directlyOwned, 0);
+        }
+
+        // A single released target that forms its own strong cycle is known
+        // alive by Perl's refcount semantics. The full weak sweep would keep
+        // this referent through collectStrongCycleProtected() after traversing
+        // every runtime root. Resolve this exact target directly and leave
+        // unrelated registry entries for their normal sweep cadence.
+        if (pending.size() == 1) {
+            RuntimeBase only = pending.iterator().next();
+            if (only.blessId == 0 && hasStrongCycle(only)) {
+                Set<RuntimeBase> cycleProtected =
+                        Collections.newSetFromMap(new IdentityHashMap<>());
+                collectStrongReachable(only, cycleProtected);
+                return new ReleasedWeakSweepResult(null, cycleProtected,
+                        Collections.emptySet(), 0);
+            }
+        }
         Set<RuntimeBase> live = new ReachabilityWalker()
                 .withTemporaryRoots(false)
                 .walk();
@@ -2059,6 +2668,15 @@ public class ReachabilityWalker {
                 Collections.newSetFromMap(new IdentityHashMap<>());
         for (RuntimeScalar owner : ScalarRefRegistry.snapshot()) {
             if (owner == null || !owner.refCountOwned || WeakRefRegistry.isweak(owner)) continue;
+            // Hash/array slots in a discarded aggregate are internal owners of
+            // that graph, not independent roots. Keep their referents only when
+            // the containing aggregate is still reachable or was not part of
+            // this explicitly released graph.
+            if (owner.containerOwner != null
+                    && referents.contains(owner.containerOwner)
+                    && !live.contains(owner.containerOwner)) {
+                continue;
+            }
             if (owner.value instanceof RuntimeBase referent && referents.contains(referent)) {
                 countedStrongOwners.add(referent);
             }
@@ -2067,9 +2685,10 @@ public class ReachabilityWalker {
         // sweepWeakRefs(true). Preserve strong cycle islands here too: Perl's
         // reference counting intentionally keeps an unreachable strong cycle
         // alive, including weak diagnostic references into that cycle.
-        Set<RuntimeBase> strongCycleProtected = collectStrongCycleProtected();
+        Set<RuntimeBase> strongCycleProtected = collectStrongCycleProtected(live);
         int cleared = 0;
         boolean releasedObjectNeedsCascade = false;
+        boolean releasedGraphChanged = false;
         for (RuntimeBase referent : pending) {
             if (referent == null || referent.currentlyDestroying) {
                 continue;
@@ -2089,6 +2708,7 @@ public class ReachabilityWalker {
             if (referent.blessId != 0) {
                 referent.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(referent);
+                releasedGraphChanged = true;
             } else {
                 WeakRefRegistry.clearWeakRefsTo(referent);
                 referent.refCount = Integer.MIN_VALUE;
@@ -2106,12 +2726,28 @@ public class ReachabilityWalker {
                 // This is still an automatic, statement-boundary sweep. Keep
                 // DESTROY-rescued objects pinned; the targeted release above
                 // must not drain unrelated (or newly rescued) object graphs.
-                int passCleared = sweepWeakRefs(true, false);
-                cleared += passCleared;
-                if (passCleared == 0) break;
+                // Clearing only unblessed weak aliases cannot change the
+                // strong root graph, so reuse the targeted pass's snapshot.
+                // A DESTROY call can mutate that graph; only then rebuild it.
+                ReleasedWeakSweepResult reusableSnapshot = releasedGraphChanged
+                        ? null
+                        : new ReleasedWeakSweepResult(live, strongCycleProtected,
+                                countedStrongOwners, cleared);
+                WeakSweepPass passResult = sweepWeakRefsPass(
+                        true, false, referents, reusableSnapshot);
+                cleared += passResult.cleared();
+                releasedGraphChanged |= passResult.graphChanged();
+                if (passResult.cleared() == 0 || !passResult.graphChanged()) break;
             }
         }
-        return cleared;
+        // A clear or DESTROY can change the root graph. Only share these
+        // snapshots with a same-boundary global sweep when the targeted pass
+        // made no such change.
+        return new ReleasedWeakSweepResult(
+                releasedGraphChanged ? null : live,
+                releasedGraphChanged ? null : strongCycleProtected,
+                countedStrongOwners,
+                cleared);
     }
 
     /**
@@ -2168,14 +2804,20 @@ public class ReachabilityWalker {
         return destroyed;
     }
 
-    private static Set<RuntimeBase> collectStrongCycleProtected() {
+    private static Set<RuntimeBase> collectStrongCycleProtected(Set<RuntimeBase> live) {
         java.util.List<RuntimeBase> referents = WeakRefRegistry.snapshotWeakRefReferents();
         if (referents.isEmpty()) return Collections.emptySet();
 
         Set<RuntimeBase> protectedSet =
                 Collections.newSetFromMap(new IdentityHashMap<>());
         for (RuntimeBase referent : referents) {
-            if (referent == null || protectedSet.contains(referent)) continue;
+            // A root-reachable referent and its strong descendants are already
+            // represented by the main sweep walk. Cycle checks are only needed
+            // for weak targets that would otherwise be mistaken for dead
+            // cycle islands.
+            if (referent == null || live.contains(referent) || protectedSet.contains(referent)) {
+                continue;
+            }
             if (hasStrongCycle(referent)) {
                 collectStrongReachable(referent, protectedSet);
             }

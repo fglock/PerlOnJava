@@ -1697,6 +1697,18 @@ public class StatementParser {
             if (previous.equals(requested)) {
                 return;
             }
+            // A higher minimum version only adds language features and is
+            // accepted by Perl for the historical declarations used by
+            // modules that support a range of Perl releases (for example,
+            // `use 5.006; use v5.10.0`).  Track the latest minimum so a later
+            // declaration is checked against the actual active requirement.
+            if (!versionAtLeast(previous, 5, 39)
+                    && !versionAtLeast(requested, 5, 39)
+                    && org.perlonjava.runtime.operators.VersionHelper.compareVersions(
+                            requested, previous) > 0) {
+                parser.ctx.symbolTable.setUseVersion(requested);
+                return;
+            }
             String message;
             if (versionAtLeast(requested, 5, 39)) {
                 message = "use VERSION of 5.39 or above is not permitted while another use VERSION is in scope";

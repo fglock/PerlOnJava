@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.AbstractSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -147,6 +148,15 @@ public class GlobalVariable {
 
     private static void invalidateCodeRefNames() {
         globalState().invalidateCodeRefs();
+    }
+
+    private static void noteCodeRefMutation(RuntimeScalar previous, RuntimeScalar replacement) {
+        globalState().noteCodeRefMutation(previous, replacement);
+    }
+
+    /** Invalidate CODE-root caches after a stash CODE slot changes in place. */
+    static void noteGlobalCodeRefSlotMutation(RuntimeScalar slot) {
+        globalState().noteCodeRefMutation(slot, slot);
     }
 
     private static GlobalRuntimeState globalState() {
@@ -378,7 +388,7 @@ public class GlobalVariable {
             markPackageGlobalRoot(value);
             RuntimeScalar old = delegate().put(key, value);
             if (old != value) {
-                invalidateCodeRefNames();
+                noteCodeRefMutation(old, value);
             }
             if (newKey) {
                 invalidateStashEnumerationCache();
@@ -389,6 +399,9 @@ public class GlobalVariable {
             }
             if (value != null) {
                 value.globalCodeRefFqn = key;
+                if (value.value instanceof RuntimeCode code) {
+                    code.hadStashRef = true;
+                }
             }
             maybeInvalidateMethodCacheForCodeRefPut(key, old, value);
             return old;
@@ -408,7 +421,7 @@ public class GlobalVariable {
         public RuntimeScalar remove(Object key) {
             RuntimeScalar prev = delegate().remove(key);
             if (prev != null) {
-                invalidateCodeRefNames();
+                noteCodeRefMutation(prev, null);
                 invalidateStashEnumerationCache();
                 invalidatePackageRootSnapshot();
                 prev.globalCodeRefFqn = null;
@@ -474,7 +487,7 @@ public class GlobalVariable {
                             String key = current.getKey();
                             RuntimeScalar value = current.getValue();
                             iterator.remove();
-                            invalidateCodeRefNames();
+                            noteCodeRefMutation(value, null);
                             canRemove = false;
                             if (value != null) value.globalCodeRefFqn = null;
                             invalidateStashEnumerationCache();
@@ -488,6 +501,49 @@ public class GlobalVariable {
                 @Override public void clear() { GlobalCodeRefMap.this.clear(); }
             };
         }
+    }
+
+    /** Read-only, allocation-free view for hot reachability traversals. */
+    static Collection<RuntimeScalar> globalCodeRefValuesView() {
+        return globalState().codeRefs().values();
+    }
+
+    static Set<RuntimeCode> installedGlobalCodeRefsView() {
+        return globalState().installedCodeRefs();
+    }
+
+    static List<RuntimeScalar> globalCodeRefEdgeRootsView() {
+        return globalState().codeRefRootsWithEdges();
+    }
+
+    /** Invalidate the cached CODE-root edge list after capture/state metadata changes. */
+    public static void invalidateGlobalCodeRefGraphRoots() {
+        globalState().invalidateCodeRefGraphRoots();
+    }
+
+    /** Read-only backing-map views for reachability walks; bypass map facade entries. */
+    static Collection<RuntimeScalar> globalVariableValuesView() {
+        return globalState().scalarValues().values();
+    }
+
+    static Collection<RuntimeArray> globalArrayValuesView() {
+        return globalState().arrayValues().values();
+    }
+
+    static Collection<RuntimeHash> globalHashValuesView() {
+        return globalState().hashValues().values();
+    }
+
+    static Set<Map.Entry<String, RuntimeScalar>> globalVariableEntriesView() {
+        return globalState().scalarValues().entrySet();
+    }
+
+    static Set<Map.Entry<String, RuntimeArray>> globalArrayEntriesView() {
+        return globalState().arrayValues().entrySet();
+    }
+
+    static Set<Map.Entry<String, RuntimeHash>> globalHashEntriesView() {
+        return globalState().hashValues().entrySet();
     }
 
     /** Runtime-selecting facade for named IO and FORMAT stash slots. */

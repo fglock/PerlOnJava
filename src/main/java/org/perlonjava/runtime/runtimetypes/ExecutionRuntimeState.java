@@ -73,6 +73,8 @@ public final class ExecutionRuntimeState {
     public final Deque<String> activeRegexCallbackLocations = new ArrayDeque<>();
     public final Deque<String> activeRegexCallbackPackages = new ArrayDeque<>();
     public final Deque<Object> activeLexicalFrames = new ArrayDeque<>();
+    /** Small per-runtime pool for active lexical frame wrappers. */
+    public final Deque<Object> reusableActiveLexicalFrames = new ArrayDeque<>();
     /** Lexical cells owned by the top-level compilation unit. */
     public final Map<String, RuntimeBase> topLevelLexicals = new LinkedHashMap<>();
     public final Deque<List<RuntimeScalar>> pristineArgsStack = new ArrayDeque<>();

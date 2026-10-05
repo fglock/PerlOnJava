@@ -288,6 +288,8 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/OpenAI-API-0.37/EventLoop.patch' ],
         [ 'OpenAI-API/NoNetworkTests.patch',
           'PerlOnJava/CpanPatches/OpenAI-API-0.37/NoNetworkTests.patch' ],
+        [ 'AnyEvent/UpdateClockBeforeTimer.patch',
+          'PerlOnJava/CpanPatches/AnyEvent-7.17/UpdateClockBeforeTimer.patch' ],
         [ 'Image-BMP/BMP.pm.patch',
           'PerlOnJava/CpanPatches/Image-BMP-1.26/BMP.pm.patch' ],
         [ 'Javascript-Menu-Full/NoCGIDependency.patch',

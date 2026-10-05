@@ -2330,6 +2330,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * Separated to keep setLarge() small enough for JIT inlining of set().
      */
     private RuntimeScalar setLargeRefCounted(RuntimeScalar value) {
+        String packageCodeRefName = isPackageGlobalRoot ? globalCodeRefFqn : null;
         if (isPackageGlobalRoot) {
             MortalList.invalidateExternalRootSnapshot();
         }
@@ -2340,9 +2341,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // tracking, WeakRefRegistry checks, and MortalList flush.
         boolean scalarRefContentTrackingNeeded =
                 this.ownsScalarReferenceContents || scalarReferenceContentsNeedRetain(value);
+        boolean droppingAggregateWithWeakRefs = value.type == UNDEF
+                && WeakRefRegistry.weakRefsExist()
+                && this.value instanceof RuntimeBase oldReferent
+                && (oldReferent instanceof RuntimeHash || oldReferent instanceof RuntimeArray);
         if (!scalarRefContentTrackingNeeded
                 && !this.refCountOwned && this.captureCount == 0 && this.captureRefCountOwned == 0
                 && !WeakRefRegistry.isweak(this)
+                && !droppingAggregateWithWeakRefs
                 && this.type != GLOBREFERENCE && value.type != GLOBREFERENCE) {
             // Both old and new are non-GLOB references. Check if referents are untracked.
             boolean oldUntracked = (this.type & REFERENCE_BIT) == 0
@@ -2368,6 +2374,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     this.tainted = value.tainted;
                     this.numericLiteralText = value.numericLiteralText;
                     this.numericContextSeen = value.numericContextSeen;
+                    if (packageCodeRefName != null) {
+                        GlobalVariable.noteGlobalCodeRefSlotMutation(this);
+                    }
                     return this;
                 }
             }
@@ -2484,6 +2493,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         boolean oldOwnedScalarReferenceContents = this.ownsScalarReferenceContents;
         RuntimeScalar oldScalarReferenceContents = scalarReferenceContentsReferent(this);
         boolean shouldReleaseUnrootedRescuedGraph = false;
+        boolean requestedDiscardedAggregateSweep = false;
 
         // If this scalar was a weak ref, remove from weak tracking before overwriting.
         // Weak refs don't count toward refCount, so skip refCount decrement later.
@@ -2530,6 +2540,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Do the assignment
         this.type = value.type;
         this.value = value.value;
+        // An explicitly discarded closure can have an inflated CODE refcount,
+        // so waiting for callDestroy() leaves its captures alive indefinitely.
+        // Release them only after this slot is gone, the code is inactive, and
+        // a complete Perl root walk finds no other strong owner (including
+        // owners stored inside nested containers).
+        if (value.type == UNDEF
+                && oldBase instanceof RuntimeCode oldCode
+                && oldCode.capturedScalars != null
+                && !RuntimeCode.isActiveCode(oldCode)
+                && !ReachabilityWalker.isReachableFromRoots(oldCode)) {
+            oldCode.releaseCaptures();
+        }
         // Hash-element slots remain durable owners when their existing
         // scalar wrapper is assigned a new referent (the normal class-field
         // ADJUST path). RuntimeHash's map hook covers slot replacement; this
@@ -2556,7 +2578,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
        this.firstClassRegexReferent = value.firstClassRegexReferent;
        this.firstClassRegexValue = value.firstClassRegexValue;
         this.formatPictureTainted = value.formatPictureTainted;
-        this.globalCodeRefFqn = value.globalCodeRefFqn;
+        this.globalCodeRefFqn = packageCodeRefName != null
+                ? packageCodeRefName : value.globalCodeRefFqn;
         if (transferDetachedIoOwner) {
             value.ioOwner = false;
             this.ioOwner = true;
@@ -2575,6 +2598,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         propagateTiedHandlerMarkerToReferent();
         if (this.globalCodeRefFqn != null && this.value instanceof RuntimeCode code) {
             code.hadStashRef = true;
+        }
+        if (packageCodeRefName != null
+                && (preAssignType != this.type || preAssignValue != this.value)) {
+            GlobalVariable.noteGlobalCodeRefSlotMutation(this);
         }
 
         // DESTROY rescue detection for reference types.
@@ -2728,10 +2755,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && WeakRefRegistry.hasWeakRefsTo(oldBase)
                 && (RuntimeCode.argsStackDepth() <= 1
                     || oldBase.clearedOwnedAggregateElement)
-                && oldBase.reachableOwnerCount() == 0
                 && !ReachabilityWalker.isReachableFromExternalRoot(oldBase)
                 && !ReachabilityWalker.isReachableFromLiveCodeCaptures(oldBase)) {
-            WeakRefRegistry.clearWeakRefsTo(oldBase);
+            // The root is already proven unreachable. Use the regular
+            // no-DESTROY disposal path for blessed aggregates so owned child
+            // slots are released with the root; clearing only the root's weak
+            // aliases leaves descendants alive through stale selective counts.
+            if (oldBase.blessId != 0) {
+                oldBase.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(oldBase);
+            } else {
+                WeakRefRegistry.clearWeakRefsTo(oldBase);
+            }
         }
 
         if (oldOwnedScalarReferenceContents) {
@@ -2768,6 +2803,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             MortalList.requestTargetedWeakSweep(oldBase);
         }
 
+        // An explicitly discarded aggregate can own a tree of blessed values
+        // whose selective counts have drifted above zero. Schedule only its
+        // weakly observed descendants; a complete root walk is unnecessary.
+        if (value.type == UNDEF
+                && WeakRefRegistry.weakRefsExist()
+                && (oldBase instanceof RuntimeHash || oldBase instanceof RuntimeArray)) {
+            if (MortalList.requestWeakSweepsForDestroyedContainer(oldBase)) {
+                requestedDiscardedAggregateSweep = true;
+            }
+        }
+
         // Update ownership: this scalar now owns a refCount iff we incremented.
         this.refCountOwned = newOwned;
         retainScalarReferenceContents(value);
@@ -2783,6 +2829,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         } finally {
             MortalList.popTemporaryRoot(value);
             MortalList.popTemporaryRoot(this);
+        }
+        if (requestedDiscardedAggregateSweep) {
+            MortalList.flushReleasedWeakSweepsIfSafe();
         }
 
         // An explicit undef can run DESTROY and let the object self-rescue.

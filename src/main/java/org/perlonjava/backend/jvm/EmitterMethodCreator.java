@@ -429,11 +429,43 @@ public class EmitterMethodCreator implements Opcodes {
             InterpretedCode interpretedCode = compileToInterpreter(ast, ctx, useTryCatch);
             String[] envNames = ctx.capturedEnv != null ? ctx.capturedEnv : ctx.symbolTable.getVariableNames();
             throw new InterpreterFallbackException(interpretedCode, envNames);
+        } catch (PerlCompilerException compileError) {
+            if (asmDebug && causedByAsmFrameMerge(compileError)) {
+                compileError.printStackTrace();
+                try {
+                    if (ctx != null && ctx.javaClassInfo != null) {
+                        String previousName = ctx.javaClassInfo.javaClassName;
+                        ctx.javaClassInfo = new JavaClassInfo();
+                        ctx.javaClassInfo.javaClassName = previousName;
+                        ctx.clearContextCache();
+                    }
+                    getBytecodeInternal(ctx, ast, useTryCatch, true);
+                } catch (Throwable diagErr) {
+                    diagErr.printStackTrace();
+                }
+            }
+            throw compileError;
         }
+    }
+
+    private static boolean causedByAsmFrameMerge(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            for (StackTraceElement frame : cause.getStackTrace()) {
+                if (frame.getClassName().equals("org.objectweb.asm.Frame")
+                        && frame.getMethodName().equals("merge")) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static byte[] getBytecodeInternal(EmitterContext ctx, Node ast, boolean useTryCatch, boolean disableFrames) {
         String className = ctx.javaClassInfo.javaClassName;
+        ctx.javaClassInfo.pristineArgsSnapshotRequired =
+                org.perlonjava.frontend.analysis.PristineArgsSnapshotAnalysis
+                        .requiresSnapshot(ast,
+                                (String) ast.getAnnotation("compiledSubroutineName"));
         String methodName = "apply";
         byte[] classData = null;
         boolean asmDebug = System.getenv("JPERL_ASM_DEBUG") != null;
@@ -1928,6 +1960,7 @@ public class EmitterMethodCreator implements Opcodes {
         ctx.isLvalueSubroutine = Boolean.TRUE.equals(ast.getAnnotation("subroutineIsLvalue"));
         if (Boolean.TRUE.equals(ast.getAnnotation("futureAsyncAwaitSub"))) {
             InterpretedCode code = compileToInterpreter(ast, ctx, useTryCatch);
+            preservePristineArgsSnapshotMetadata(code, ctx);
             code.applySignatureMetadata(ast);
             code.futureAsyncAwaitSub = true;
             code.futureAsyncAwaitFutureClass =
@@ -1940,7 +1973,12 @@ public class EmitterMethodCreator implements Opcodes {
             return code;
         }
         if (ctx.compilerOptions.useInterpreter || RuntimeCode.FORCE_INTERPRETER) {
+            ctx.javaClassInfo.pristineArgsSnapshotRequired =
+                    org.perlonjava.frontend.analysis.PristineArgsSnapshotAnalysis
+                            .requiresSnapshot(ast,
+                                    (String) ast.getAnnotation("compiledSubroutineName"));
             RuntimeCode code = compileToInterpreter(ast, ctx, useTryCatch);
+            preservePristineArgsSnapshotMetadata(code, ctx);
             code.applySignatureMetadata(ast);
             return code;
         }
@@ -1951,6 +1989,9 @@ public class EmitterMethodCreator implements Opcodes {
                 System.err.println("Note: JVM compilation succeeded.");
             }
             RuntimeCode code = wrapAsCompiledCode(generatedClass, ctx, ast);
+            code.setJvmClosureFrameRequired(ctx.javaClassInfo.jvmClosureFrameRequired);
+            code.setPristineArgsSnapshotRequired(
+                    ctx.javaClassInfo.pristineArgsSnapshotRequired);
             code.applySignatureMetadata(ast);
             return code;
 
@@ -1960,6 +2001,7 @@ public class EmitterMethodCreator implements Opcodes {
                     System.err.println("Note: Method too large, using interpreter backend.");
                 }
                 RuntimeCode code = compileToInterpreter(ast, ctx, useTryCatch);
+                preservePristineArgsSnapshotMetadata(code, ctx);
                 code.applySignatureMetadata(ast);
                 return code;
             }
@@ -1970,6 +2012,7 @@ public class EmitterMethodCreator implements Opcodes {
                     System.err.println("Note: JVM " + e.getClass().getSimpleName() + " (" + e.getMessage().split("\n")[0] + "), using interpreter backend.");
                 }
                 RuntimeCode code = compileToInterpreter(ast, ctx, useTryCatch);
+                preservePristineArgsSnapshotMetadata(code, ctx);
                 code.applySignatureMetadata(ast);
                 return code;
             }
@@ -1978,8 +2021,10 @@ public class EmitterMethodCreator implements Opcodes {
             if (USE_INTERPRETER_FALLBACK && needsInterpreterFallback(e)) {
                 if (SHOW_FALLBACK) {
                     System.err.println("Note: JVM compilation needs interpreter fallback (" + e.getMessage().split("\n")[0] + ").");
+                    e.printStackTrace(System.err);
                 }
-                return compileToInterpreter(ast, ctx, useTryCatch);
+                return preservePristineArgsSnapshotMetadata(
+                        compileToInterpreter(ast, ctx, useTryCatch), ctx);
             }
             throw e;
         } catch (InterpreterFallbackException e) {
@@ -1987,16 +2032,25 @@ public class EmitterMethodCreator implements Opcodes {
             if (SHOW_FALLBACK) {
                 System.err.println("Note: Using interpreter fallback (ASM frame compute crash).");
             }
-            return e.interpretedCode;
+            return preservePristineArgsSnapshotMetadata(e.interpretedCode, ctx);
         } catch (RuntimeException e) {
             if (USE_INTERPRETER_FALLBACK && needsInterpreterFallback(e)) {
                 if (SHOW_FALLBACK) {
                     System.err.println("Note: JVM compilation needs interpreter fallback (" + getRootMessage(e) + ").");
+                    e.printStackTrace(System.err);
                 }
-                return compileToInterpreter(ast, ctx, useTryCatch);
+                return preservePristineArgsSnapshotMetadata(
+                        compileToInterpreter(ast, ctx, useTryCatch), ctx);
             }
             throw e;
         }
+    }
+
+    private static <T extends RuntimeCode> T preservePristineArgsSnapshotMetadata(
+            T code, EmitterContext ctx) {
+        code.setPristineArgsSnapshotRequired(
+                ctx.javaClassInfo.pristineArgsSnapshotRequired);
+        return code;
     }
 
     /**

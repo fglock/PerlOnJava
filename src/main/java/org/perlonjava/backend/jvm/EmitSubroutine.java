@@ -107,6 +107,12 @@ public class EmitSubroutine {
         if (ctx.contextType == RuntimeContextType.VOID) {
             return;
         }
+        // This generated body will instantiate a nested CODE object at runtime.
+        // Its invocation frame owns capture cleanup until the object is stored,
+        // returned, or discarded.
+        if (ctx.javaClassInfo != null) {
+            ctx.javaClassInfo.jvmClosureFrameRequired = true;
+        }
         MethodVisitor mv = ctx.mv;
 
         Set<String> declaredLexicalNames = new LinkedHashSet<>();
@@ -254,7 +260,9 @@ public class EmitSubroutine {
         // Carry the loop-body set so it can reject an illegal entry before the
         // loop's iterator/control state has been initialized.
         if (ctx.javaClassInfo != null) {
-            newJavaClassInfo.gotoLabelsInsideLoop.addAll(ctx.javaClassInfo.gotoLabelsInsideLoop);
+            if (node.useTryCatch) {
+                newJavaClassInfo.gotoLabelsInsideLoop.addAll(ctx.javaClassInfo.gotoLabelsInsideLoop);
+            }
             newJavaClassInfo.gotoLabelsInsideDefer.addAll(ctx.javaClassInfo.gotoLabelsInsideDefer);
         }
         // A subroutine body is emitted into a separate JavaClassInfo from the
@@ -323,6 +331,16 @@ public class EmitSubroutine {
                     EmitterMethodCreator.createClassWithMethod(
                             subCtx, node.block, node.useTryCatch
                     );
+            String deparseSourceText = ctx.compilerOptions == null
+                    ? null
+                    : (ctx.compilerOptions.deparseSourceCode != null
+                            ? ctx.compilerOptions.deparseSourceCode
+                            : ctx.compilerOptions.code);
+            boolean deparseSourceNeedsRegistry = exceedsModifiedUtf8ConstantLimit(deparseSourceText);
+            if (deparseSourceNeedsRegistry) {
+                RuntimeCode.registerDeparseSourceText(
+                        subCtx.javaClassInfo.javaClassName, deparseSourceText);
+            }
             try {
                 // HotSpot can defer verification of a generated lazy sub until
                 // it is first invoked. If that happens after the enclosing file
@@ -374,12 +392,6 @@ public class EmitSubroutine {
                 if (node.sourceEndTokenIndex >= 0) {
                     deparseSourceEnd = ctx.errorUtil.getSourceOffset(node.sourceEndTokenIndex);
                 }
-            }
-            String deparseSourceText = null;
-            if (ctx.compilerOptions != null) {
-                deparseSourceText = ctx.compilerOptions.deparseSourceCode != null
-                        ? ctx.compilerOptions.deparseSourceCode
-                        : ctx.compilerOptions.code;
             }
             int deparseFlags = 0;
             if (node.getBooleanAnnotation("simpleLexicalConstantCandidate")) {
@@ -447,7 +459,15 @@ public class EmitSubroutine {
             mv.visitLdcInsn(callbackPackage);
             mv.visitLdcInsn(cvStartFile);
             mv.visitLdcInsn(cvStartLine);
-            if (deparseSourceText != null) {
+            if (deparseSourceNeedsRegistry) {
+                mv.visitLdcInsn(subCtx.javaClassInfo.javaClassName);
+                mv.visitMethodInsn(
+                        Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "getDeparseSourceText",
+                        "(Ljava/lang/String;)Ljava/lang/String;",
+                        false);
+            } else if (deparseSourceText != null) {
                 mv.visitLdcInsn(deparseSourceText);
             } else {
                 mv.visitInsn(Opcodes.ACONST_NULL);
@@ -461,6 +481,22 @@ public class EmitSubroutine {
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "makeCodeObject",
                     "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;IIII)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            mv.visitInsn(subCtx.javaClassInfo.jvmClosureFrameRequired
+                    ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "setJvmClosureFrameRequired",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Z)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            mv.visitInsn(subCtx.javaClassInfo.pristineArgsSnapshotRequired
+                    ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "setPristineArgsSnapshotRequired",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Z)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
             if (node.getBooleanAnnotation("simpleLexicalConstantCandidate")
                     || node.getBooleanAnnotation("lexicalLiteralConstantCv")) {
@@ -849,6 +885,21 @@ public class EmitSubroutine {
         // If the context is not VOID, the stack should contain [RuntimeScalar] (the CODE variable)
         // If the context is VOID, the stack should be empty
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("SUB end");
+    }
+
+    private static boolean exceedsModifiedUtf8ConstantLimit(String value) {
+        if (value == null) {
+            return false;
+        }
+        int encodedLength = 0;
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            encodedLength += c == 0 ? 2 : c <= 0x7f ? 1 : c <= 0x7ff ? 2 : 3;
+            if (encodedLength > 65_535) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

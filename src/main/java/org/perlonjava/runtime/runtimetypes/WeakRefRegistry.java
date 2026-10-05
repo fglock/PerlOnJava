@@ -135,6 +135,10 @@ public class WeakRefRegistry {
             MortalList.noteBoundaryWork();
             state.weakRefsExist = true;
             MyVarCleanupStack.snapshotStackToLiveCounts();
+            // Prepare the installed-CODE capture root index on the first
+            // weaken(), during setup, so the first callback-boundary sweep
+            // does not have to build it synchronously while dispatching work.
+            GlobalVariable.globalCodeRefEdgeRootsView();
         }
 
         boolean weakenedLiveLexical = MyVarCleanupStack.isLive(ref);
@@ -371,18 +375,28 @@ public class WeakRefRegistry {
     }
 
     private static boolean isInstalledGlobalCodeRef(RuntimeCode code) {
-        for (RuntimeScalar scalar : GlobalVariable.globalCodeRefs.values()) {
-            if (scalar != null && scalar.value == code) {
-                return true;
-            }
-        }
-        return false;
+        // Anonymous CODE refs have never occupied a package slot, so their
+        // common weak-clear path can avoid consulting the package-root index.
+        // Formerly installed refs remain in the index while any alias occupies
+        // a package slot, independent of their current stash reference count.
+        if (!code.hadStashRef) return false;
+        return GlobalVariable.installedGlobalCodeRefsView().contains(code);
     }
 
     private static boolean shouldKeepCodeWeakRefs(RuntimeCode code) {
         if (code.stashRefCount > 0 || isInstalledGlobalCodeRef(code)) return true;
+        // The active frame is already a definitive strong owner. Check it
+        // before scanning the live scalar registries, which can be large and
+        // sits on the callback dispatch path when a quiet sweep runs.
+        if (RuntimeCode.isActiveCode(code)) return true;
+        LifecycleRuntimeState lifecycleState = state();
+        Set<RuntimeBase> sweepLiveReferents = lifecycleState.weakSweepLiveReferents;
+        if (sweepLiveReferents != null && sweepLiveReferents.contains(code)) return true;
+        ReachabilityWalker.RootReachabilitySnapshot fullRootSnapshot =
+                lifecycleState.fullRootSnapshot;
+        if (fullRootSnapshot != null && fullRootSnapshot.isReachable(code)) return true;
         if (ReachabilityWalker.hasLiveStrongScalarReferent(code)) return true;
-        return RuntimeCode.isActiveCode(code);
+        return false;
     }
 
     /**

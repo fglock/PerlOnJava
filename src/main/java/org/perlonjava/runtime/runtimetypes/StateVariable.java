@@ -131,6 +131,7 @@ public class StateVariable {
             }
             variable = new RuntimeScalar();
             code.stateVariable.put(beginVar, variable);
+            GlobalVariable.invalidateGlobalCodeRefGraphRoots();
             return tagGeneratedLexicalSub(variable, var);
         }
     }
@@ -185,6 +186,7 @@ public class StateVariable {
             }
             variable = new RuntimeArray();
             code.stateArray.put(beginVar, variable);
+            GlobalVariable.invalidateGlobalCodeRefGraphRoots();
             return variable;
         }
     }
@@ -196,6 +198,7 @@ public class StateVariable {
             GlobalVariable.aliasGlobalArray(beginVar, array);
         } else {
             ((RuntimeCode) codeRef.value).stateArray.put(beginVar, array);
+            GlobalVariable.invalidateGlobalCodeRefGraphRoots();
         }
         markInitializedStateVariable(codeRef, var, id);
     }
@@ -220,6 +223,7 @@ public class StateVariable {
             GlobalVariable.aliasGlobalHash(beginVar, hash);
         } else {
             ((RuntimeCode) codeRef.value).stateHash.put(beginVar, hash);
+            GlobalVariable.invalidateGlobalCodeRefGraphRoots();
         }
         markInitializedStateVariable(codeRef, var, id);
     }
@@ -286,6 +290,7 @@ public class StateVariable {
             }
             variable = new RuntimeHash();
             code.stateHash.put(beginVar, variable);
+            GlobalVariable.invalidateGlobalCodeRefGraphRoots();
             return variable;
         }
     }
