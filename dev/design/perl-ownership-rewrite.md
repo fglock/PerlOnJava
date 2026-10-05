@@ -149,16 +149,20 @@ and first path establish implementation cost.
   full `nice -n 19 make` gate, and all four Perl ownership regressions pass on
   Perl 5.45.4 and both PerlOnJava backends.
 - [x] Added real blessed `DESTROY` callback coverage for recursive dispatch
-  and rescue followed by final destruction. The two focused Java tests passed
-  in the `nice -n 19 make` run recorded for commit `99ee09a6c`; the rescued
-  referent fixture preserves the destructor argument's owner while adding a
-  distinct resurrection owner.
+  and rescue followed by final destruction. The three focused lifecycle Java
+  tests pass in the full gate for commit `4137ad8cd`; the rescued referent
+  fixture preserves the destructor argument's owner while adding a distinct
+  resurrection owner.
 - [x] Added standard-Perl-validated exception cleanup coverage: failing
   destructors still allow subsequent destructors to run, clear weak references,
   emit the cleanup warnings, and preserve `$@`. The Perl 5.45.4 oracle and both
   PerlOnJava backends pass all four assertions; Java coverage checks that a
   throwing callback exits `DESTROYING`, resets its reentry guard, and reaches
-  `DESTROYED` with the legacy terminal sentinel restored.
+  `DESTROYED` with the legacy terminal sentinel restored. The new Java
+  assertion first exposed a leaked synthetic `$_[0]` owner (refcount 1) when
+  the callback threw; `DestroyDispatch` now drains callback-created pending
+  cleanup and balances that owner in `finally`. The full `nice -n 19 make`
+  gate passes on `4137ad8cd`.
 
 ### Next steps
 

@@ -20,8 +20,8 @@ priorities and future plans.
   transliteration ranges and numeric string flags, and allowing valid nested
   conditional `goto` targets.
 - Retain positive closure-pad owner cycles per Perl runtime, record destruction
-  separately from count sentinels, and track deferred releases by owner-slot
-  identity.
+  separately from count sentinels, track deferred releases by owner-slot
+  identity, and balance DESTROY callback ownership on exceptional exits.
 - Release closure captures when retired interpreter pad metadata is no longer a Perl owner.
 - Document the 2026-10-03 imported core-suite milestone: 575 selected files
   completed without unexpected failures, with skips, TODOs, exclusions, and
