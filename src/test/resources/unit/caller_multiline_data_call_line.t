@@ -33,17 +33,17 @@ sub literal_sub_arg_caller_line {
     return (caller(0))[2];
 }
 
-my $expected_literal_sub_line = __LINE__ + 3;
+my $expected_literal_sub_line = __LINE__ + 1;
 my $literal_sub_line = literal_sub_arg_caller_line(
     sub { 1 }
 );
-is($literal_sub_line, $expected_literal_sub_line, 'literal anon sub argument still reports block line');
+is($literal_sub_line, $expected_literal_sub_line, 'literal anon sub argument reports statement line');
 
-my $expected_method_literal_sub_line = __LINE__ + 3;
+my $expected_method_literal_sub_line = __LINE__ + 1;
 my $method_literal_sub_line = CallerMultilineDataCallLine::Obj->new->method_caller_line(
     sub { 1 }
 );
-is($method_literal_sub_line, $expected_method_literal_sub_line, 'method literal anon sub argument still reports block line');
+is($method_literal_sub_line, $expected_method_literal_sub_line, 'method literal anon sub argument reports statement line');
 
 my $coderef = sub { return (caller(0))[2] };
 my $expected_coderef_line = __LINE__ + 1;

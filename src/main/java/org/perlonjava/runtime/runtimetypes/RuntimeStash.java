@@ -325,6 +325,11 @@ public class RuntimeStash extends RuntimeHash {
             org.perlonjava.runtime.perlmodule.Mro.removePackageGeneration(packageName);
         }
 
+        // The parent stash owns the child namespace glob as an element as
+        // well as the package's symbols in the global maps. Remove that key
+        // so exists $parent_stash->{"Child::"} reflects the deletion.
+        elements.remove(k);
+
         // Method resolution and package existence caches are now stale
         InheritanceResolver.invalidateCache();
         String className = childPrefix.endsWith("::")

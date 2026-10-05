@@ -9,7 +9,7 @@ sub reported_call_line {
 my $line = reported_call_line
 sub {};
 
-is($line, __LINE__ - 2,
-    'a bare multi-line call with an anonymous-sub argument reports the argument line');
+is($line, __LINE__ - 3,
+    'a bare multi-line call with an anonymous-sub argument reports the call line');
 
 done_testing;

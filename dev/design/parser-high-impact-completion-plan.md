@@ -15,6 +15,48 @@ PerlOnJava backends.
 
 ## Current evidence — reviewed 2026-10-05
 
+### Current blead UAT follow-up — 2026-10-05
+
+PerlOnJava follows current blead semantics, including when the project is
+advertised as the latest stable Perl. The latest source pull is blead
+`c4d03d9396` (native Perl v5.45.4); its `t/lib/croak.t`, `t/op/caller.t`, and
+`t/re/anyof.t` all pass on the standard Perl oracle. Keep imported core tests
+unchanged.
+
+The current full PerlOnJava UAT candidate before this follow-up completed 572
+of 575 files with three real failures: two `croak.t` assertions for repeated
+`use VERSION`, one `caller.t` line-number assertion, and one `re/anyof.t`
+compiled-node assertion. The October 3 comparator also reports assertion-count
+changes across regex test files; its three actual failed files are the release
+gate failures to fix, not expected semantic differences.
+
+The unvalidated follow-up batch now:
+
+- Rejects differing in-scope `use VERSION` declarations with the blead
+  diagnostics, while retaining blead's exception for a preceding version
+  below 5.10 and repeated declarations of the same version.
+- Reports the call statement's source line when an anonymous subroutine is a
+  multiline argument, in both compiler paths. Project-owned caller-line tests
+  whose old expectations fail on standard blead were updated; native 5.45.4
+  passes those tests.
+- Renders caseless negated singleton character classes with Perl's
+  `NEXACTb` description, while preserving the expanded fold set for folded
+  characters such as `a`.
+- Removes the child stash entry when `RuntimeStash` deletes a namespace.
+  The refreshed blead `Symbol.pm` provides `delete_package`; standard Perl
+  passes the project regression for it.
+
+The full no-options `dev/import-perl5/sync.pl` completed with 218 sources and
+zero errors; its tracked imports are committed in `179e91ac1`. The first full
+`make` after the code batch completed its Joni tests but exposed stale
+pre-blead caller-line unit expectations and the missing parent-stash removal.
+The tests now match the native oracle, the stash deletion is fixed, and the
+entire batch still needs a passing full `make`, a rebase on current
+`origin/master`, a fresh full UAT, the Oct 3 comparison, and green PR #1623 CI.
+
+This section supersedes the earlier Perl 5.44 target and expected-failure
+notes below. Those notes remain as historical evidence only.
+
 ### Resume handoff — 2026-10-05
 
 #### UAT regression follow-up — 2026-10-05
@@ -809,40 +851,31 @@ implementation or acceptance work.
 
 ### Immediate next steps
 
-The current PR candidate is `6651eb12b`, seven commits ahead of
-`origin/master` at `3893a190`. The required rebase completed without replaying
-commits because the candidate already contains that master tip. The exact
-candidate passed `nice -n 19 make` in 5m31s. Full UAT ran against all 575
-checked-out core test files in 24m12s. It reported 574 passing files and one
-file with two failed assertions: `lib/croak.t` expects changing a modern
-`use VERSION` declaration to be fatal. Those expectations describe Perl 5.46,
-while PerlOnJava is intentionally following Perl 5.44 here. The standard
-Perl 5.44.0 oracle emits the documented deprecation warning and exits zero for
-the same ascending-version case; its own `t/lib/croak.t` reports both
-assertions as `not ok`. The Oct 3 comparator shows no other changed files or
-assertions. Tests remain unchanged. The full UAT log is
-`/Users/fglock/projects/PerlOnJava/logs/test_20261005_161700_perl544_fix.log`;
-its JSON is `/private/tmp/parser-uat-20261005-161700-perl544.json`.
+The current worktree contains the blead follow-up fixes and native-oracle-aligned
+unit expectations. The last full `make` exited 2 after 10m30s; Joni tests
+passed, while four project unit tests failed. Three failures were old caller
+line expectations that standard blead also rejects; the fourth exposed that
+namespace deletion left its parent stash key present. All four corrections
+are in the current unvalidated source batch.
 
-The new project-owned VERSION warning regression test passes on standard Perl
-5.44.0 and both PerlOnJava backends. The complete unit gate passes. GitHub CI
-for PR #1623 is still running on head `6651eb12b`.
-
-1. Wait for both PR CI jobs to finish. Fix any genuine CI failure, batch the
-   source and regression changes, then rerun the required gates.
-2. Keep Perl 5.44 VERSION warning semantics. Do not change imported
-   `perl5_t/t/lib/croak.t` assertions that require Perl 5.46 behavior.
-3. Treat the two `croak.t` assertions as expected Perl 5.44 fixture
-   mismatches: standard Perl 5.44.0's own core test reports the same failures.
-   Preserve the test and record this evidence; do not add a compatibility
-   workaround for Perl 5.46 behavior.
-4. Complete the interpreter regression audit and review the changelog entry.
-   Do not infer that #1482 shares the GOTO/ASM cause; its non-local `last SKIP`
-   warning behavior needs independent evidence.
-5. After review and merge, close only tickets confirmed fixed by the merged
-   PR and its complete acceptance audit.
-6. Preserve the UAT evidence, remove task-created large temporary files when
-   no longer needed, and poll confirmed running gates infrequently.
+1. Commit the complete fix, test, changelog, and handoff batch, then fetch and
+   rebase it onto the latest `origin/master` before the final validation gates.
+2. Run one `nice -n 19 timeout 3600 make` on that exact rebased commit. Require
+   all unit and Joni tests to pass.
+3. Run the focused changed Perl-level unit tests on both PerlOnJava backends
+   with timeouts. The standard blead 5.45.4 oracle already passes the updated
+   Perl-level tests.
+4. Run the complete refreshed core corpus with five jobs and a 300-second
+   per-test timeout, capture the JSON and full log, and compare it with
+   `/Users/fglock/projects/PerlOnJava/logs/test_20261003_080000_mixed.log`.
+   The acceptance threshold is zero failing UAT files and zero failed
+   assertions.
+5. Push the validated candidate to PR #1623, check every required CI job, and
+   fix and retest any failure. Close only tickets confirmed fixed by the
+   merged PR and full acceptance evidence.
+6. Keep the UAT logs and JSON as evidence, remove only task-created temporary
+   artifacts that are no longer needed, and poll long-running gates
+   infrequently.
 
 ### Open questions and blockers
 
@@ -861,10 +894,10 @@ for PR #1623 is still running on head `6651eb12b`.
 - Does #1482 share a concrete cause, or require independent non-local LAST
   target and lexical warning-state fixes? Its report and a passing GOTO
   compilation regression do not establish that relationship.
-- PR #1623 head `6651eb12b` passes `make` and is current with master. Full UAT
-  has two Perl 5.46 fixture expectations that differ from the selected Perl
-  5.44 oracle behavior. Linux and Windows CI, review, acceptance of those two
-  expected differences, merge, and final issue closure remain outstanding.
+- The most recent core UAT and current local code batch have not passed all
+  acceptance gates. The end-state still requires a clean full `make`, zero
+  failing files in the refreshed full UAT, no comparator regressions against
+  the designated baseline, and green PR CI after rebasing and pushing.
 
 ## Related documents and skills
 

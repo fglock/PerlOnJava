@@ -2,9 +2,8 @@ use strict;
 use warnings;
 use Test::More;
 
-my (@warnings, $ok);
+my $ok;
 {
-    local $SIG{__WARN__} = sub { push @warnings, @_ };
     $ok = eval q{
         use warnings;
         use v5.12;
@@ -12,13 +11,11 @@ my (@warnings, $ok);
         1;
     };
 }
-ok($ok, 'different in-scope versions remain allowed before Perl 5.46');
-like(join('', @warnings), qr/Changing use VERSION while another use VERSION is in scope is deprecated/,
-    'modern version changes issue the deprecated warning');
+ok(!$ok, 'a different in-scope version is rejected');
+like($@, qr/Changing use VERSION while another use VERSION is in scope is not permitted/,
+    'modern version changes use the blead fatal diagnostic');
 
-@warnings = ();
 {
-    local $SIG{__WARN__} = sub { push @warnings, @_ };
     $ok = eval q{
         no warnings 'deprecated::subsequent_use_version';
         use v5.12;
@@ -26,26 +23,20 @@ like(join('', @warnings), qr/Changing use VERSION while another use VERSION is i
         1;
     };
 }
-ok($ok, 'disabling the warning leaves the version change allowed');
-is(scalar @warnings, 0, 'the warning category can be disabled');
+ok(!$ok, 'disabling warnings does not permit a different in-scope version');
+like($@, qr/Changing use VERSION while another use VERSION is in scope is not permitted/,
+    'the fatal version diagnostic is independent of warning settings');
 
-@warnings = ();
 {
-    local $SIG{__WARN__} = sub { push @warnings, @_ };
     $ok = eval q{
-        use warnings FATAL => 'deprecated::subsequent_use_version';
-        use v5.12;
+        use v5.20;
         use v5.20;
         1;
     };
 }
-ok(!$ok, 'making the deprecation fatal rejects a different version');
-like($@, qr/Changing use VERSION while another use VERSION is in scope is deprecated/,
-    'fatal warning preserves the Perl diagnostic');
+ok($ok, 'repeating the same in-scope version is allowed');
 
-@warnings = ();
 {
-    local $SIG{__WARN__} = sub { push @warnings, @_ };
     $ok = eval q{
         use 5.006;
         use v5.20;
@@ -53,6 +44,17 @@ like($@, qr/Changing use VERSION while another use VERSION is in scope is deprec
     };
 }
 ok($ok, 'legacy decimal use VERSION can advance to a later feature bundle');
-is(scalar @warnings, 0, 'legacy decimal version advancement does not warn');
+
+{
+    $ok = eval q{
+        use 5.006;
+        use v5.20;
+        use v5.22;
+        1;
+    };
+}
+ok(!$ok, 'a legacy minimum does not permit a second modern version change');
+like($@, qr/Changing use VERSION while another use VERSION is in scope is not permitted/,
+    'the modern version becomes the prevailing in-scope declaration');
 
 done_testing;

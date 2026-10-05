@@ -123,9 +123,6 @@ public class ScopedSymbolTable {
     // `use VERSION` is lexical: declaration and warning state resets for an
     // inner block and is restored when that block exits.
     private final Stack<String> useVersionStack = new Stack<>();
-    // Perl 5.44 retains a warning-free compatibility path when an old decimal
-    // minimum (for example, `use 5.006`) is followed by a higher minimum.
-    private final Stack<Boolean> useVersionLegacyDecimalStack = new Stack<>();
     // A stack to manage nested scopes of symbol tables.
     private final Stack<SymbolTable> symbolTableStack = new Stack<>();
     private final Stack<PackageInfo> packageStack = new Stack<>();
@@ -178,7 +175,6 @@ public class ScopedSymbolTable {
         regexModifierStack.push("");
         regexDebugFlagsStack.push(0);
         useVersionStack.push(null);
-        useVersionLegacyDecimalStack.push(false);
         // Initialize the package name
         packageStack.push(new PackageInfo("main", false, null));
         // Initialize the subroutine stack with empty string (no subroutine)
@@ -259,7 +255,6 @@ public class ScopedSymbolTable {
         regexModifierStack.push(regexModifierStack.peek());
         regexDebugFlagsStack.push(regexDebugFlagsStack.peek());
         useVersionStack.push(null);
-        useVersionLegacyDecimalStack.push(false);
 
         // Return the current size of the symbol table stack as the scope index
         return symbolTableStack.size() - 1;
@@ -305,7 +300,6 @@ public class ScopedSymbolTable {
             regexModifierStack.pop();
             regexDebugFlagsStack.pop();
             useVersionStack.pop();
-            useVersionLegacyDecimalStack.pop();
         }
         // Propagate the child scope's index to the parent to prevent slot reuse.
         // This ensures that local variable slots allocated inside conditional branches
@@ -322,14 +316,6 @@ public class ScopedSymbolTable {
 
     public void setUseVersion(String version) {
         useVersionStack.set(useVersionStack.size() - 1, version);
-    }
-
-    public boolean isUseVersionLegacyDecimal() {
-        return useVersionLegacyDecimalStack.peek();
-    }
-
-    public void setUseVersionLegacyDecimal(boolean legacyDecimal) {
-        useVersionLegacyDecimalStack.set(useVersionLegacyDecimalStack.size() - 1, legacyDecimal);
     }
 
     /**

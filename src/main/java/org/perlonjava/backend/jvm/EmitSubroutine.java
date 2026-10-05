@@ -1465,16 +1465,9 @@ public class EmitSubroutine {
     }
 
     private static int callerLineCallSiteIndex(BinaryOperatorNode node, int statementTokenIndex) {
-        if (!usesBlockArgumentLine(node)) {
-            // Perl's per-statement COP: a call anywhere inside a multi-line
-            // statement reports the statement's first line.
-            return statementTokenIndex > 0 ? statementTokenIndex : expressionStartIndex(node);
-        }
-
-        if (node.right != null && node.right.getIndex() > 0) {
-            return node.right.getIndex();
-        }
-        return expressionStartIndex(node);
+        // Perl's COP records the start of the call statement. An anonymous
+        // subroutine argument must not move caller() to the argument's line.
+        return statementTokenIndex > 0 ? statementTokenIndex : expressionStartIndex(node);
     }
 
     private static int expressionStartIndex(BinaryOperatorNode node) {
@@ -1482,31 +1475,6 @@ public class EmitSubroutine {
             return node.left.getIndex();
         }
         return node.getIndex() > 0 ? node.getIndex() : -1;
-    }
-
-    private static boolean usesBlockArgumentLine(BinaryOperatorNode node) {
-        String prototype = directCallPrototype(node);
-        if (prototype != null) {
-            for (int i = 0; i < prototype.length(); i++) {
-                char c = prototype.charAt(i);
-                if (Character.isWhitespace(c) || c == ';' || c == ',') {
-                    continue;
-                }
-                return c == '&';
-            }
-
-            return false;
-        }
-
-        return firstArgumentIsLiteralSub(node);
-    }
-
-    private static boolean firstArgumentIsLiteralSub(BinaryOperatorNode node) {
-        if (!(node.right instanceof ListNode list) || list.elements == null || list.elements.isEmpty()) {
-            return false;
-        }
-
-        return list.elements.get(0) instanceof SubroutineNode;
     }
 
     /**
@@ -1540,16 +1508,6 @@ public class EmitSubroutine {
     private static int sourceArgumentStart(AbstractNode node) {
         Object annotated = node.getAnnotation("argumentStartIndex");
         return annotated instanceof Integer token && token > 0 ? token : node.getIndex();
-    }
-
-    private static String directCallPrototype(BinaryOperatorNode node) {
-        if (!(node.left instanceof OperatorNode operatorNode)
-                || !operatorNode.operator.equals("&")
-                || !(operatorNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef)
-                || !(codeRef.value instanceof RuntimeCode code)) {
-            return null;
-        }
-        return code.prototype;
     }
 
     /**
