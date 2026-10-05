@@ -16,6 +16,7 @@ class PerlOwnerSlotLegacyBridgeTest {
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash referent = new RuntimeHash();
             referent.refCount = 0;
+            referent.localBindingExists = true;
             PerlOwnerSlot slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
 
             slot.acquireLegacyCapture(referent);
