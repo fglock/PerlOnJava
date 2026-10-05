@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Share lifecycle root proofs and strong-cycle checks while preserving weak DOM parent links and global-destruction resurrection semantics.
+- Preserve process-pipe aliases and close accepted sockets when their final lexical handle leaves scope.
+
 - Document the 2026-10-03 imported core-suite milestone: 575 selected files
   completed without unexpected failures, with skips, TODOs, exclusions, and
   verification scope recorded in the testing guide.

@@ -1228,25 +1228,46 @@ public class MortalList {
     }
 
     private static boolean isReachableFromExternalRootCached(RuntimeBase base) {
+        return isReachableFromExternalRootCached(base, null);
+    }
+
+    private static boolean isReachableFromExternalRootCached(
+            RuntimeBase base, LifecycleRootQueryStats stats) {
+        if (stats != null) stats.temporaryRootQueries++;
         if (ReachabilityWalker.isReachableFromTemporaryRoots(base)) {
             return true;
         }
         LifecycleRuntimeState state = state();
         if (state.externalRootSnapshot == null) {
-            state.externalRootSnapshot = new ReachabilityWalker.ExternalRootSnapshot();
+            int[] visitedNodes = stats == null ? null : new int[1];
+            state.externalRootSnapshot = new ReachabilityWalker.ExternalRootSnapshot(
+                    true, visitedNodes);
+            if (stats != null) {
+                stats.externalRootSnapshotBuilds++;
+                stats.externalRootGraphNodesVisited += visitedNodes[0];
+            }
         }
         if (state.externalRootSnapshot.isReachableFromNonLexicalRoot(base)) {
             return true;
         }
         if (state.liveRootSnapshot == null) {
-            state.liveRootSnapshot = new ReachabilityWalker.LiveRootSnapshot();
+            int[] visitedNodes = stats == null ? null : new int[1];
+            state.liveRootSnapshot = new ReachabilityWalker.LiveRootSnapshot(visitedNodes);
+            if (stats != null) {
+                stats.liveRootSnapshotBuilds++;
+                stats.liveRootGraphNodesVisited += visitedNodes[0];
+            }
         }
         return state.liveRootSnapshot.isReachable(base);
     }
 
     static void invalidateExternalRootSnapshot() {
-        state().externalRootSnapshot = null;
-        state().fullRootSnapshot = null;
+        LifecycleRuntimeState state = state();
+        state.externalRootSnapshot = null;
+        state.liveStrongScalarReferents = null;
+        state.lifecycleRootQueryUsed = false;
+        state.fullRootSnapshot = null;
+        state.targetedLifecycleRootQueryUsed = false;
     }
 
     static void invalidateAllRootSnapshots() {
@@ -1254,17 +1275,113 @@ public class MortalList {
         invalidateLiveRootSnapshot();
     }
 
-    private static boolean isReachableFromFullRootSnapshot(RuntimeBase base) {
+    enum LifecycleRootProof {
+        DIRECT_SCALAR,
+        EXTERNAL_ROOT,
+        FULL_ROOT,
+        NONE
+    }
+
+    static final class LifecycleRootQueryStats {
+        int liveScalarsInspected;
+        int directScalarSnapshotBuilds;
+        int directScalarSnapshotInspected;
+        int directScalarSnapshotLookups;
+        int temporaryRootQueries;
+        int externalRootQueries;
+        int externalRootSnapshotBuilds;
+        int externalRootGraphNodesVisited;
+        int liveRootSnapshotBuilds;
+        int liveRootGraphNodesVisited;
+        int targetedWalkQueries;
+        int targetedGraphNodesVisited;
+        int fullSnapshotBuilds;
+        int fullSnapshotGraphNodesVisited;
+    }
+
+    static LifecycleRootProof lifecycleRootProof(RuntimeBase base) {
+        return lifecycleRootProof(base, null);
+    }
+
+    static LifecycleRootProof lifecycleRootProof(RuntimeBase base,
+                                                   LifecycleRootQueryStats stats) {
+        // Repeated arithmetic workloads commonly keep their current referent
+        // directly in a live scalar. Check that inexpensive case before the
+        // cached package-root walk, which otherwise traverses the larger graph
+        // even though the target is already held by the caller.
         LifecycleRuntimeState state = state();
-        if (state.fullRootSnapshot == null) {
-            state.fullRootSnapshot = ReachabilityWalker.reachableFromRootsSnapshot();
+        boolean useDirectScalarSnapshot = state.lifecycleRootQueryUsed;
+        state.lifecycleRootQueryUsed = true;
+        boolean directlyRooted;
+        if (useDirectScalarSnapshot) {
+            if (state.liveStrongScalarReferents == null) {
+                int[] inspectedScalars = stats == null ? null : new int[1];
+                state.liveStrongScalarReferents =
+                        ReachabilityWalker.liveStrongScalarReferentsSnapshot(inspectedScalars);
+                if (stats != null) {
+                    stats.directScalarSnapshotBuilds++;
+                    stats.directScalarSnapshotInspected += inspectedScalars[0];
+                }
+            }
+            if (stats != null) stats.directScalarSnapshotLookups++;
+            directlyRooted = state.liveStrongScalarReferents.contains(base);
+        } else {
+            int[] inspectedScalars = stats == null ? null : new int[1];
+            directlyRooted = ReachabilityWalker.hasLiveStrongScalarReferent(
+                    base, inspectedScalars);
+            if (stats != null) stats.liveScalarsInspected += inspectedScalars[0];
+        }
+        if (directlyRooted) {
+            return LifecycleRootProof.DIRECT_SCALAR;
+        }
+        if (stats != null) stats.externalRootQueries++;
+        if (isReachableFromExternalRootCached(base, stats)) {
+            return LifecycleRootProof.EXTERNAL_ROOT;
+        }
+        if (isReachableFromRootSnapshot(base, stats)) {
+            return LifecycleRootProof.FULL_ROOT;
+        }
+        return LifecycleRootProof.NONE;
+    }
+
+    static boolean isReachableFromRootSnapshot(RuntimeBase base,
+                                                LifecycleRootQueryStats stats) {
+        LifecycleRuntimeState state = state();
+        if (state.fullRootSnapshot != null) {
+            return state.fullRootSnapshot.contains(base);
+        }
+        if (!state.targetedLifecycleRootQueryUsed) {
+            state.targetedLifecycleRootQueryUsed = true;
+            int[] visitedNodes = stats == null ? null : new int[1];
+            boolean reachable = ReachabilityWalker.isReachableFromRoots(base,
+                    false, visitedNodes);
+            if (stats != null) {
+                stats.targetedWalkQueries++;
+                stats.targetedGraphNodesVisited += visitedNodes[0];
+            }
+            return reachable;
+        }
+
+        int[] visitedNodes = stats == null ? null : new int[1];
+        state.fullRootSnapshot = ReachabilityWalker.reachableFromRootsSnapshot(visitedNodes);
+        if (stats != null) {
+            stats.fullSnapshotBuilds++;
+            stats.fullSnapshotGraphNodesVisited += visitedNodes[0];
         }
         return state.fullRootSnapshot.contains(base);
     }
 
+    private static boolean isReachableFromLifecycleRoot(RuntimeBase base) {
+        return lifecycleRootProof(base) != LifecycleRootProof.NONE;
+    }
+
     static void invalidateLiveRootSnapshot() {
-        state().liveRootSnapshot = null;
-        state().fullRootSnapshot = null;
+        LifecycleRuntimeState state = state();
+        state.liveRootSnapshot = null;
+        state.liveStrongScalarReferents = null;
+        state.lifecycleRootQueryUsed = false;
+        state.fullRootSnapshot = null;
+        state.targetedLifecycleRootQueryUsed = false;
     }
 
     private static void invalidateDrainReachabilityCaches() {
@@ -1355,6 +1472,19 @@ public class MortalList {
                 // the selective count dip to zero, but the tied handler's
                 // array slot remains a strong owner.  Destroying here clears
                 // that weak parent and corrupts the context tree.
+            } else if (base.blessId == 0
+                    && (base instanceof RuntimeArray || base instanceof RuntimeHash)
+                    && ReachabilityWalker.isReachableFromRoots(base)) {
+                // Unblessed aggregate nodes can be assembled incrementally
+                // before their first weak edge is installed. A temporary
+                // parser reference may then make the selective count reach
+                // zero while the in-progress tree still owns the node through
+                // a live lexical root. Active-owner tracking cannot help yet
+                // because it is activated by weaken() on the parent edge, so
+                // consult the ordinary root walk before marking this node
+                // destroyed. The later weak sweep still reclaims the tree
+                // after its real root leaves scope.
+                base.refCount = 1;
             } else if (hasWeakRefs
                     && base.possiblyStoredInTiedHandler
                     && isReachableThroughTiedHashCached(base)) {
@@ -1395,8 +1525,7 @@ public class MortalList {
                 base.refCount = 1;
             } else if (base.blessId != 0
                     && hasWeakRefs
-                    && (isReachableFromExternalRootCached(base)
-                    || isReachableFromFullRootSnapshot(base))) {
+                    && isReachableFromLifecycleRoot(base)) {
                 // A nested request can temporarily consume the selective owner
                 // count of an object that is still retained below a package
                 // root. Mojolicious::Lite keeps its route tree in a package
@@ -1414,8 +1543,7 @@ public class MortalList {
             } else if (base.blessId != 0
                     && hasWeakRefs
                     && !blessedClassHasDestroy(base)
-                    && (isReachableFromExternalRootCached(base)
-                    || isReachableFromFullRootSnapshot(base))) {
+                    && isReachableFromLifecycleRoot(base)) {
                 // A weakened probe copy can make the selective count reach
                 // zero while an ordinary blessed object is still held by a
                 // live lexical. Test::Refcount exercises this shape; clearing
