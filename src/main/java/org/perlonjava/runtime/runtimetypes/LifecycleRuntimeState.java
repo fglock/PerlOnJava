@@ -62,6 +62,7 @@ final class LifecycleRuntimeState {
     ReachabilityWalker.RootReachabilitySnapshot fullRootSnapshot;
     final IdentityHashMap<RuntimeBase, ReachabilityWalker.WeakRootWitness>
             weakSweepRootWitnesses = new IdentityHashMap<>();
+    ReachabilityQueryStats activeReachabilityQueryStats;
 
     final Set<RuntimeScalar> weakScalars = Collections.newSetFromMap(new IdentityHashMap<>());
     final IdentityHashMap<RuntimeBase, Set<RuntimeScalar>> referentToWeakRefs = new IdentityHashMap<>();
@@ -122,6 +123,7 @@ final class LifecycleRuntimeState {
         inAutoSweep = false;
         fullRootSnapshot = null;
         weakSweepRootWitnesses.clear();
+        activeReachabilityQueryStats = null;
         immediateWeakSweepRequested = false;
         deferCaptureReachabilityToBoundarySweep = false;
         deferredCaptureSweepCandidates.clear();

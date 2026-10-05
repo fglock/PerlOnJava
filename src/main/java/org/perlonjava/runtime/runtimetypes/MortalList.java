@@ -21,6 +21,43 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class MortalList {
     private static final AtomicInteger runtimesWithBoundaryWork = new AtomicInteger();
 
+    static final class ReachabilityQueryMeasurement implements AutoCloseable {
+        private final LifecycleRuntimeState state;
+        private final ReachabilityQueryStats stats;
+        private final ReachabilityQueryStats previous;
+
+        private ReachabilityQueryMeasurement(LifecycleRuntimeState state,
+                                             ReachabilityQueryStats stats,
+                                             ReachabilityQueryStats previous) {
+            this.state = state;
+            this.stats = stats;
+            this.previous = previous;
+        }
+
+        ReachabilityQueryStats stats() {
+            return stats;
+        }
+
+        @Override
+        public void close() {
+            if (state.activeReachabilityQueryStats == stats) {
+                state.activeReachabilityQueryStats = previous;
+            }
+        }
+    }
+
+    static ReachabilityQueryMeasurement measureReachabilityQueries() {
+        LifecycleRuntimeState state = state();
+        ReachabilityQueryStats previous = state.activeReachabilityQueryStats;
+        ReachabilityQueryStats stats = new ReachabilityQueryStats();
+        state.activeReachabilityQueryStats = stats;
+        return new ReachabilityQueryMeasurement(state, stats, previous);
+    }
+
+    static ReachabilityQueryStats activeReachabilityQueryStats() {
+        return state().activeReachabilityQueryStats;
+    }
+
     // Always-on: refCount tracking for birth-tracked objects (anonymous hashes,
     // arrays, closures with captures) requires balanced increment/decrement.
     // The increment side fires unconditionally in setLarge() when refCount >= 0,
