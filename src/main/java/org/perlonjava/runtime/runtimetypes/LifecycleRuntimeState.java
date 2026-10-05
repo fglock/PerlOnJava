@@ -47,10 +47,7 @@ final class LifecycleRuntimeState {
     Set<RuntimeBase> flushTiedReachableCache;
     ReachabilityWalker.ExternalRootSnapshot externalRootSnapshot;
     ReachabilityWalker.LiveRootSnapshot liveRootSnapshot;
-    Set<RuntimeBase> liveStrongScalarReferents;
-    boolean lifecycleRootQueryUsed;
     Set<RuntimeBase> fullRootSnapshot;
-    boolean targetedLifecycleRootQueryUsed;
 
     final Set<RuntimeScalar> weakScalars = Collections.newSetFromMap(new IdentityHashMap<>());
     final IdentityHashMap<RuntimeBase, Set<RuntimeScalar>> referentToWeakRefs = new IdentityHashMap<>();
@@ -65,8 +62,6 @@ final class LifecycleRuntimeState {
             Collections.synchronizedSet(Collections.newSetFromMap(new IdentityHashMap<>()));
     RuntimeBase currentDestroyTarget;
     boolean destroyTargetRescued;
-    final Set<RuntimeBase> globalDestructionRootTargets =
-            Collections.newSetFromMap(new IdentityHashMap<>());
     boolean sweepPendingAfterOuterDestroy;
     final List<RuntimeBase> rescuedObjects = Collections.synchronizedList(new ArrayList<>());
     final BitSet walkerGateClasses = new BitSet();
@@ -108,16 +103,13 @@ final class LifecycleRuntimeState {
         topLevelFlushDepth = 0;
         lastAutoSweepNanos = 0;
         inAutoSweep = false;
+        fullRootSnapshot = null;
         immediateWeakSweepRequested = false;
         targetedWeakSweepReferents.clear();
         flushReachableCache = null;
         flushTiedReachableCache = null;
         externalRootSnapshot = null;
         liveRootSnapshot = null;
-        liveStrongScalarReferents = null;
-        lifecycleRootQueryUsed = false;
-        fullRootSnapshot = null;
-        targetedLifecycleRootQueryUsed = false;
         weakScalars.clear();
         referentToWeakRefs.clear();
         weakRefsExist = false;
@@ -128,7 +120,6 @@ final class LifecycleRuntimeState {
         statementBoundaryDestroyableObjects.clear();
         currentDestroyTarget = null;
         destroyTargetRescued = false;
-        globalDestructionRootTargets.clear();
         sweepPendingAfterOuterDestroy = false;
         rescuedObjects.clear();
         walkerGateClasses.clear();

@@ -9,7 +9,6 @@ priorities and future plans.
 - Bound captured subprocess output while continuing to drain child streams, preventing runaway diagnostics from exhausting the JVM heap.
 - Allow the Catalyst::Runtime release-acceptance suite up to four hours to finish its upstream tests.
 - Refresh the installed launcher distribution before CPAN acceptance so nested launchers use the current bundled preferences.
-- Preserve live unblessed arrays and hashes with weak back-references while nested calls replace temporary aliases.
 - Preserve Perl's UTF-8 flag behavior across transliteration, version strings, and `dualvar` string channels.
 
 - Document the 2026-10-03 imported core-suite milestone: 575 selected files
@@ -68,8 +67,7 @@ priorities and future plans.
 - Prevent stale CPAN archive-name entries and namespace-resolution errors from
   being recorded as compatibility regressions.
 - Support POSIX directory-handle `chdir` and Object::Pad scalar `:accessor`
-  fields, including the legacy `has` declaration, and preserve open process
-  pipes across temporary filehandle aliases used by `IO::Select`.
+  fields, including the legacy `has` declaration.
 
 - Keep SQLite column metadata fetchable and quote reserved table names, support
   Perl-compatible SQLite `REGEXP`, clear successful DBI error strings, and
@@ -93,9 +91,8 @@ priorities and future plans.
   ambiguity warnings, support `chdir` and `chmod` through open filehandles,
   report directory `chdir` as unavailable without `dirfd`, restore
   invalid-descriptor errors, preserve dynamic package variables and monotonic
-  clocks needed by AnyEvent::Tools, and short-circuit lifecycle root queries,
-  reuse snapshots across cleanup targets, and batch strong-cycle checks during
-  weak-reference sweeps.
+  clocks needed by AnyEvent::Tools, and reuse root reachability snapshots during
+  weak-reference cleanup.
 
 - Preserve ordinary `goto` jumps between conditional branches, including
   transfers out of nested conditions into an enclosing `if`/`elsif` arm, while
@@ -104,17 +101,8 @@ priorities and future plans.
 - Allow tail calls from helper subroutines invoked by sort comparators while
   preserving Perl's errors for tail calls written directly in comparators.
 
-- Close accepted `IO::Socket` connections when their final lexical handle leaves
-  scope, including handles created through `Symbol::gensym`.
-
-- Avoid false global-destruction resurrection warnings for package-rooted
-  objects while preserving warnings for objects actually rescued by `DESTROY`.
-
 - Emit prototype mismatch warnings in the `prototype` category under `syntax`,
   honoring lexical `no warnings 'syntax'` controls on both backends.
-
-- Allow tail calls from helper subroutines invoked by sort comparators while
-  preserving Perl's errors for tail calls written directly in comparators.
 
 - Support anonymous temporary files for read/write opens with undefined paths,
   report non-numeric process IDs passed to `kill()`, and release each result of

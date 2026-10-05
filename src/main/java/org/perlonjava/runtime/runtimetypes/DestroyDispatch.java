@@ -33,14 +33,6 @@ public class DestroyDispatch {
         return state().currentDestroyTarget;
     }
 
-    /** Mark a referent selected from a Perl package root during final teardown. */
-    public static void noteGlobalDestructionRoot(RuntimeBase referent) {
-        if (referent != null && "DESTRUCT".equals(
-                GlobalVariable.getGlobalVariable(GlobalContext.GLOBAL_PHASE).toString())) {
-            state().globalDestructionRootTargets.add(referent);
-        }
-    }
-
     static void markDestroyTargetRescued() {
         state().destroyTargetRescued = true;
     }
@@ -512,20 +504,9 @@ public class DestroyDispatch {
             // re-invoke DESTROY. Don't clear weak refs or cascade — the object
             // is still alive.
             if (referent.refCount > 0 && !state.destroyTargetRescued) {
-                if (state.globalDestructionRootTargets.contains(referent)
-                        || hasNoReachableOwnersDuringGlobalDestruction(referent)) {
-                    // A destructor can leave a positive selective count for
-                    // its own transient $self/$_[0] aliases after their owner
-                    // scalars have already been released. At DESTRUCT there
-                    // is no later Perl statement boundary to drain those
-                    // phantom counts. Treat a target with a complete, empty
-                    // active-owner set as dead and continue normal cleanup.
-                    referent.refCount = 0;
-                } else {
-                    warnIfResurrectedDuringGlobalDestruction(referent, className);
-                    referent.needsReDestroy = true;
-                    return;
-                }
+                warnIfResurrectedDuringGlobalDestruction(referent, className);
+                referent.needsReDestroy = true;
+                return;
             }
 
             // Check if DESTROY rescued the object by storing $self somewhere.
@@ -655,16 +636,6 @@ public class DestroyDispatch {
                         "DESTROY created new reference to dead object '" + name
                                 + "' during global destruction.\n"),
                 new RuntimeScalar(""));
-    }
-
-    private static boolean hasNoReachableOwnersDuringGlobalDestruction(RuntimeBase referent) {
-        if (!"DESTRUCT".equals(
-                GlobalVariable.getGlobalVariable(GlobalContext.GLOBAL_PHASE).toString())) {
-            return false;
-        }
-        // An absent registry is not proof that a referent has no owners: owner
-        // tracking is activated lazily, normally when a weak reference exists.
-        return referent.activeOwners != null && referent.reachableOwnerCount() == 0;
     }
 
     /**

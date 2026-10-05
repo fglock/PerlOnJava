@@ -1568,11 +1568,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * deleted stash entry must not become a permanent owner of its IO.
      */
     public RuntimeGlob setIOKeepingStashHidden(RuntimeIO io) {
-        // Some handle methods (for example autoflush during IO::Socket
-        // construction) may expose a gensym while initializing it.  This
-        // setter is specifically for anonymous handles whose stash deletion
-        // must remain in effect when their IO slot changes.
-        GlobalVariable.hideIORefAfterStashDelete(this.globName);
         return setIO(io, false);
     }
 

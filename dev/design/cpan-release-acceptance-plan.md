@@ -29,7 +29,7 @@ with status 2 and remains incomplete.
 | PPR | Pass | Retain this baseline; rerun in final integration. |
 | Template | Pass | Retain this baseline; rerun in final integration. |
 | Excel::Writer::XLSX | Pass: 1,247 files, 5,138 tests | Retain this baseline; rerun in final integration. |
-| Catalyst | Run 11 executed Catalyst-Runtime normally in an isolated CPAN home: 200 programs, 3,798 tests; two failures are the documented `area:parser` cases in `http_exceptions*.t`, and `live_fork.t` is the agreed fork exception | No in-scope failure remains. The shared default CPAN home was being rewritten by a separate tester in a sibling checkout, so acceptance runs must use a unique `PERLONJAVA_HOME`. |
+| Catalyst | A separate focused isolated run executed Catalyst-Runtime normally in an isolated CPAN home: 200 programs, 3,798 tests; two failures are the documented `area:parser` cases in `http_exceptions*.t`, and `live_fork.t` is the agreed fork exception | No in-scope failure remains. The shared default CPAN home was being rewritten by a separate tester in a sibling checkout, so acceptance runs must use a unique `PERLONJAVA_HOME`. |
 | Mojolicious | Run 10 timed out after 5,400 seconds with repeated warnings at `t/mojo/dom.t` line 1489. After the runtime fix, unchanged upstream `t/mojo/dom.t` passed 132 top-level subtests and 1,418 assertions with no warning or OOM matches. | Run the full Mojolicious acceptance target in the final coherent gate. |
 | Image::ExifTool | Run 10 reported `NOT TESTED`, 3/113 failed programs, and 2/595 failed subtests. Focused upstream `t/XMP.t` test 3 originally reproduced a write-and-reparse mismatch; the reduced test sequence now passes on system Perl, JVM, and interpreter. Focused `t/Writer.t` reproduces test 38's Sony metadata-copy mismatch, then reaches its 30-minute guard at test 54. | The in-scope XMP root cause is fixed and focused coverage passes. Retest the complete target in the final gate. The Sony transliteration range error and dependent Writer failures are the documented `area:parser` exclusion. |
 | DateTime | 1/51 failed programs, 0/3,518 failed subtests; `t/10subtract.t` exited without a TAP plan | Confirm the relationship to excluded issue #1269. |
@@ -225,3 +225,11 @@ and use distinct paths for later candidates.
 
 - [High-impact issue batch](high-impact-issues-20261002.md)
 - [CPAN preferences and patch layout](patch-and-cpan-prefs-layout.md)
+
+## Delivery split (2026-10-05)
+
+The independent reachability/lifecycle WIP includes all its fixes and new tests.
+PR #1628 now contains the remaining UAT fixes. Neither split is release-qualified.
+See [the durable UAT handoff](cpan-uat-handoff-20261005.md) for accurate run 11
+outcomes, setup gaps, confirmed reductions, and the next immutable gates.
+The goal, exclusions and requirement to fix DOM OOM remain unchanged.

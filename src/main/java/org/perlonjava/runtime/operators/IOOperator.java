@@ -2804,17 +2804,7 @@ public class IOOperator {
             }
 
             if (targetGlob != null) {
-                // Symbol::gensym removes its newly-created glob from the
-                // stash. Keep that status when attaching the accepted
-                // socket, so its lexical owner can close it at scope exit.
-                boolean symbolGensym = targetGlob.globName != null
-                        && targetGlob.globName.matches("Symbol::GEN\\d+");
-                if (symbolGensym || (targetGlob.globName != null
-                        && GlobalVariable.isIORefHiddenAfterStashDelete(targetGlob.globName))) {
-                    targetGlob.setIOKeepingStashHidden(clientRuntimeIO);
-                } else {
-                    targetGlob.setIO(clientRuntimeIO);
-                }
+                targetGlob.setIO(clientRuntimeIO);
                 targetGlob.acceptedSocket = true;
                 MyVarCleanupStack.retainLiveIoGlobOwners(targetGlob);
                 RuntimeScalar.retainUnstashedIoForDurableSlot(newSocketHandle);
