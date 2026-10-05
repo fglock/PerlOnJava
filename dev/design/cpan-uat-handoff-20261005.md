@@ -86,3 +86,14 @@ failures still need reductions with default upstream settings.
 Commit `1acfa1f80` passed full `nice -n 19 make` on 2026-10-05 (exit 0);
 all unit shards and Joni packaging checks completed. `nice -n 19 make check-links`
 also passed. This validates the split UAT code, not full release acceptance.
+
+## Independent lifecycle delivery
+
+- [Draft PR #1647](https://github.com/fglock/PerlOnJava/pull/1647)
+- [Lifecycle handoff with full regression code](https://github.com/fglock/PerlOnJava/blob/wip/reachability-lifecycle-20261005/dev/design/reachability-lifecycle-handoff-20261005.md)
+- [Qualification tracker #1646](https://github.com/fglock/PerlOnJava/issues/1646)
+
+The independent lifecycle source `63b9463d5` passed full make, seven deterministic
+Java tests and 22 Perl assertions on each of system Perl/JVM/interpreter. This
+establishes split regression coverage; unresolved Catalyst cost and full release
+acceptance remain open in #1642/#1646. The draft is not ready for merge.

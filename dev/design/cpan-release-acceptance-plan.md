@@ -233,3 +233,8 @@ PR #1628 now contains the remaining UAT fixes. Neither split is release-qualifie
 See [the durable UAT handoff](cpan-uat-handoff-20261005.md) for accurate run 11
 outcomes, setup gaps, confirmed reductions, and the next immutable gates.
 The goal, exclusions and requirement to fix DOM OOM remain unchanged.
+
+Next: resume [lifecycle draft #1647](https://github.com/fglock/PerlOnJava/pull/1647)
+through #1642 and [remaining qualification #1646](https://github.com/fglock/PerlOnJava/issues/1646).
+Both split candidates passed full make; lifecycle focused gates also passed.
+Do not mark the original acceptance goal complete.
