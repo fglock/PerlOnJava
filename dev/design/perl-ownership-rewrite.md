@@ -130,12 +130,15 @@ and first path establish implementation cost.
 - [x] Added a standalone oracle regression for captured-pad referent transfer,
   shared closure visibility, and exact final release. Perl 5.45.4 and both
   PerlOnJava backends pass 6/6.
+- [ ] Moved closure capture bridge counts into `PerlOwnerSlot` and attached
+  stable owner-slot identity and sequence tokens to deferred releases. Added a
+  Java regression for bridge acquisition and drain; repository validation is
+  pending.
 
 ### Next steps
 
-1. Make the closure-pad owner slot own its legacy count/deferred-release bridge
-   directly, then add acquisition, transfer, overwrite, scope-exit, and weak
-   transition bridge tests.
+1. Validate the closure-pad bridge on both PerlOnJava backends and add coverage
+   for overwrite, scope-exit, and weak transitions.
 2. Migrate direct scalar and array/hash owner slots through the same API while
    preserving transfers and deferred release ordering.
 3. Reproduce #1642's repeated deferred-cleanup root queries with deterministic

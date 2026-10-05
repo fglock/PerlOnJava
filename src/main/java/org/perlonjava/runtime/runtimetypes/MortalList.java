@@ -188,6 +188,18 @@ public class MortalList {
         queueDeferredBase(state, base, ownerRelease, null, ownerScalar);
     }
 
+    /** Queue a closure-capture bridge decrement with owner-slot provenance. */
+    static void deferOwnerSlotDecrement(RuntimeBase base, String transientOwnerKind,
+                                        PerlOwnerSlot.PendingRelease slotRelease) {
+        if (base.refCountTrace) {
+            base.traceRefCount(0, "MortalList.deferOwnerSlotDecrement (queued)");
+        }
+        LifecycleRuntimeState state = state();
+        markBoundaryWork(state);
+        RuntimeBase.PendingOwnerRelease ownerRelease = base.queueOwnerSlotRelease(slotRelease);
+        queueDeferredBase(state, base, ownerRelease, transientOwnerKind);
+    }
+
     private static void queueDeferredBase(LifecycleRuntimeState state, RuntimeBase base,
                                           RuntimeBase.PendingOwnerRelease ownerRelease) {
         queueDeferredBase(state, base, ownerRelease, null);

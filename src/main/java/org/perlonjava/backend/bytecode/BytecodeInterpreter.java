@@ -100,7 +100,7 @@ public class BytecodeInterpreter {
         return scalar instanceof ReadOnlyAlias
                 || scalar.threadShared
                 || scalar.captureCount > 0
-                || scalar.captureRefCountOwned > 0
+                || scalar.captureRefCountOwned() > 0
                 || scalar.referencedByScalarReference
                 || scalar.hasLiveSubstrLvalueObservers()
                 || scalar.hasWatchers()

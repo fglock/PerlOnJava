@@ -360,7 +360,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * untracked referent, or a scalar that already owns a normal refCount slot
      * may be captured without adding an extra selective refCount owner.
      */
-    public int captureRefCountOwned;
+    public int captureRefCountOwned() {
+        return closureOwnerSlot == null ? 0 : closureOwnerSlot.legacyCaptureCount();
+    }
 
     /**
      * True if {@link #scopeExitCleanup} has been called for this variable
@@ -467,8 +469,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             captureCount--;
         }
         if (captureCount == 0) {
-            releaseClosureOwnerSlot();
             releaseOneClosureCaptureReferent();
+            releaseClosureOwnerSlot();
         }
     }
 
@@ -486,12 +488,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     private void retainClosureCaptureReferent() {
         RuntimeBase base = closureCaptureReferent();
         if (base == null) return;
-        base.traceRefCount(+1, "RuntimeScalar.retainClosureCaptureReferent");
-        base.refCount++;
-        base.hadCountedReference = true;
-        captureRefCountOwned++;
-        base.acquireTransientTraceOwner("closure capture", "RuntimeScalar.closureCapture");
         updateClosureOwnerSlot(base, false);
+        closureOwnerSlot.acquireLegacyCapture(base);
     }
 
     private void updateClosureOwnerSlot(RuntimeBase referent) {
@@ -513,10 +511,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     private void retainMissingClosureCaptureReferents() {
-        while (captureRefCountOwned < captureCount) {
-            int before = captureRefCountOwned;
+        while (captureRefCountOwned() < captureCount) {
+            int before = captureRefCountOwned();
             retainClosureCaptureReferent();
-            if (captureRefCountOwned == before) break;
+            if (captureRefCountOwned() == before) break;
         }
     }
 
@@ -565,21 +563,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
 
     private void releaseOneClosureCaptureReferent() {
-        if (captureRefCountOwned <= 0) return;
-        if ((type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && value instanceof RuntimeBase base
-                && base.refCount > 0) {
-            MortalList.deferDecrement(base, "closure capture");
-        }
-        captureRefCountOwned--;
+        if (captureRefCountOwned() <= 0) return;
+        RuntimeBase base = (type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && value instanceof RuntimeBase referent ? referent : null;
+        closureOwnerSlot.deferLegacyCaptureRelease(base);
     }
 
     private void releaseAllClosureCaptureReferents(RuntimeBase oldBase) {
-        while (captureRefCountOwned > 0) {
-            if (oldBase != null && oldBase.refCount > 0) {
-                MortalList.deferDecrement(oldBase, "closure capture");
-            }
-            captureRefCountOwned--;
+        while (captureRefCountOwned() > 0) {
+            closureOwnerSlot.deferLegacyCaptureRelease(oldBase);
         }
     }
 
@@ -2382,7 +2374,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && this.value instanceof RuntimeBase oldReferent
                 && (oldReferent instanceof RuntimeHash || oldReferent instanceof RuntimeArray);
         if (!scalarRefContentTrackingNeeded
-                && !this.refCountOwned && this.captureCount == 0 && this.captureRefCountOwned == 0
+                && !this.refCountOwned && this.captureCount == 0 && this.captureRefCountOwned() == 0
                 && !WeakRefRegistry.isweak(this)
                 && !droppingAggregateWithWeakRefs
                 && this.type != GLOBREFERENCE && value.type != GLOBREFERENCE) {
@@ -2540,7 +2532,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && oldBase.blessId != 0
                 && WeakRefRegistry.weakRefsExist()
                 && blessedClassHasDestroy(oldBase);
-        if (oldBase != null && this.captureRefCountOwned > 0) {
+        if (oldBase != null && this.captureRefCountOwned() > 0) {
             releaseAllClosureCaptureReferents(oldBase);
         }
         if (oldBase != null && this.captureCount > 0) {
@@ -4541,7 +4533,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && base.refCount != -1 && base.refCount != Integer.MIN_VALUE) {
             oldBase = base;
         }
-        if (oldBase != null && this.captureRefCountOwned > 0) {
+        if (oldBase != null && this.captureRefCountOwned() > 0) {
             releaseAllClosureCaptureReferents(oldBase);
         }
 

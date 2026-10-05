@@ -463,13 +463,21 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         final long referentGeneration;
         final String acquireSite;
         final String queueSite;
+        final PerlOwnerSlot.PendingRelease ownerSlotRelease;
 
         PendingOwnerRelease(int scalarIdentity, long referentGeneration,
                             String acquireSite, String queueSite) {
+            this(scalarIdentity, referentGeneration, acquireSite, queueSite, null);
+        }
+
+        PendingOwnerRelease(int scalarIdentity, long referentGeneration,
+                            String acquireSite, String queueSite,
+                            PerlOwnerSlot.PendingRelease ownerSlotRelease) {
             this.scalarIdentity = scalarIdentity;
             this.referentGeneration = referentGeneration;
             this.acquireSite = acquireSite;
             this.queueSite = queueSite;
+            this.ownerSlotRelease = ownerSlotRelease;
         }
     }
 
@@ -523,9 +531,24 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return release;
     }
 
+    /** Queue provenance for a deferred owner-slot decrement. */
+    synchronized PendingOwnerRelease queueOwnerSlotRelease(
+            PerlOwnerSlot.PendingRelease ownerSlotRelease) {
+        PendingOwnerRelease release = new PendingOwnerRelease(
+                0, REFCOUNT_TRACE_ENV ? traceReferentGeneration(this) : 0,
+                "owner-slot", "MortalList.deferOwnerSlotDecrement", ownerSlotRelease);
+        if (REFCOUNT_TRACE_ENV) {
+            pendingTraceOwnerReleases.computeIfAbsent(this, ignored -> new java.util.ArrayList<>())
+                    .add(release);
+        }
+        return release;
+    }
+
     /** Mark the exact queued trace record as drained without relying on scalar state. */
     public synchronized void completeQueuedOwnerRelease(PendingOwnerRelease release, String releaseSite) {
-        if (release == null || !REFCOUNT_TRACE_ENV) return;
+        if (release == null) return;
+        if (release.ownerSlotRelease != null) release.ownerSlotRelease.complete();
+        if (!REFCOUNT_TRACE_ENV) return;
         java.util.ArrayList<PendingOwnerRelease> releases = pendingTraceOwnerReleases.get(this);
         if (releases != null) {
             releases.remove(release);
@@ -627,7 +650,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 result.append("scalar=").append(System.identityHashCode(pad))
                         .append(" type=").append(pad.type)
                         .append(" captureCount=").append(pad.captureCount)
-                        .append(" captureRefCountOwned=").append(pad.captureRefCountOwned)
+                        .append(" captureRefCountOwned=").append(pad.captureRefCountOwned())
                         .append(" scopeExited=").append(pad.scopeExited)
                         .append(" slotOwnsReferent=").append(pad.refCountOwned)
                         .append(" value=");
@@ -651,10 +674,16 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             for (int i = 0; i < pending.size(); i++) {
                 if (i != 0) result.append(", ");
                 PendingOwnerRelease release = pending.get(i);
-                result.append("scalar=").append(release.scalarIdentity)
-                        .append(" generation=").append(release.referentGeneration)
-                        .append(" acquire=").append(release.acquireSite)
-                        .append(" queued=").append(release.queueSite);
+                if (release.ownerSlotRelease != null) {
+                    result.append("ownerSlot=").append(release.ownerSlotRelease.ownerSlotIdentity())
+                            .append(" sequence=").append(release.ownerSlotRelease.sequence())
+                            .append(" kind=").append(release.ownerSlotRelease.kind());
+                } else {
+                    result.append("scalar=").append(release.scalarIdentity)
+                            .append(" generation=").append(release.referentGeneration)
+                            .append(" acquire=").append(release.acquireSite)
+                            .append(" queued=").append(release.queueSite);
+                }
             }
             result.append(']');
         }
