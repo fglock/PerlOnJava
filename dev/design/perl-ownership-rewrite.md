@@ -130,10 +130,11 @@ and first path establish implementation cost.
 - [x] Added a standalone oracle regression for captured-pad referent transfer,
   shared closure visibility, and exact final release. Perl 5.45.4 and both
   PerlOnJava backends pass 6/6.
-- [ ] Moved closure capture bridge counts into `PerlOwnerSlot` and attached
+- [x] Moved closure capture bridge counts into `PerlOwnerSlot` and attached
   stable owner-slot identity and sequence tokens to deferred releases. Added a
-  Java regression for bridge acquisition and drain; repository validation is
-  pending.
+  Java regression for bridge acquisition and drain. `nice -n 19 make` passes;
+  both Perl regressions pass on Perl 5.45.4 and on the JVM and interpreter
+  backends.
 
 ### Next steps
 
