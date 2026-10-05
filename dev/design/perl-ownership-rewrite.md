@@ -114,6 +114,9 @@ and first path establish implementation cost.
 - [x] Removed retired `InterpretedCode.capturedVars` entries from reachability
   ownership walks. The explicit capture-owner lists now determine whether
   closure pads are live Perl edges.
+- [x] Added an oracle-validated parser lifecycle reproducer at
+  [`dev/repros/issue-1649-html-treebuilder-lifecycle.t`](../repros/issue-1649-html-treebuilder-lifecycle.t)
+  for the remaining content and incremental parsing failures.
 
 ### Next steps
 
@@ -125,8 +128,10 @@ and first path establish implementation cost.
 3. Reproduce #1642's repeated deferred-cleanup root queries with deterministic
    counters on this baseline; separate that cost regression from Phase 1
    correctness unless the selected ownership path demonstrates the connection.
-4. Run unchanged HTML-Tree `t/refloop.t` against Perl 5.44 and both backends,
-   then run the repository gate from an immutable source commit.
+4. Resolve the immediate cleanup failures in the content and incremental
+   parser paths; verify both focused reproducers plus unchanged `t/refloop.t`.
+5. Run the repository gate from an immutable source commit after the ownership
+   path and its bridge tests are complete.
 
 ### Open questions and blockers
 
@@ -134,6 +139,10 @@ and first path establish implementation cost.
 - The local `perl5` checkout is dirty blead 5.45.4 with an existing untracked
   `.local-perl`; it remains untouched. Perl 5.44.0 was built from its local git
   tag in an isolated temporary copy with default macOS Configure options.
+- The focused `new_from_lol` regression now passes, but HTML-Tree 5.07's
+  content and incremental parser cases still retain two and three elements at
+  the immediate release assertion on both PerlOnJava backends; Perl 5.44 passes
+  all cases. The new parser lifecycle reproducer records this open failure.
 - The new owner-slot ledger, identity model, scalar/aggregate migration, and
-  explicit deferred-release bridge remain unimplemented. The regression fix is
+  explicit deferred-release bridge remain unimplemented. These fixes are
   evidence for the Phase 1 boundary, not completion of the ownership rewrite.
