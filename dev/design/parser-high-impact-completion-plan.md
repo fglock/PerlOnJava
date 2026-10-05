@@ -738,34 +738,41 @@ implementation or acceptance work.
   acceptance. Earlier frame-elision-only candidates failed assertion 4.
 - [x] Phase 4: the unchanged issue acceptance gates pass on candidate
   `d753a616e`; the interpreter inventory still has 49 matching-parent gaps.
-- [ ] Phase 5: update PR #1623 to the rebased candidate, verify required CI and
-  PR contents, then complete the five-issue closure audit.
+- [ ] Phase 5: PR #1623 now points at `c7349c917`, whose only change after the
+  accepted source `d753a616e` is documentation. Required CI and review are still
+  pending; complete the five-issue closure audit after merge.
 
 ### Immediate next steps
 
-Rebased commit `d753a616e` passes the full unit gate in 6m26s, all four parser
-issue gates, the label/pad regressions, and the unchanged seven-file AnyEvent
-suite on the required runtimes. Temporary dispatch/reachability instrumentation
-is removed. HTML::Tree has one existing TODO assertion and skips its optional
-LeakTrace file under system Perl; License::SPDX system-Perl execution is
-unavailable because its declared CPAN prerequisites are absent there. The
-project-owned ascending-version test passes standard Perl. Exact-window counts
-above are deterministic operation counts, not hardware instructions. An earlier
+Rebased source commit `d753a616e` passes the full unit gate in 6m26s, all four
+parser issue gates, the label/pad regressions, and the unchanged seven-file
+AnyEvent suite on the required runtimes. PR #1623 is updated to `c7349c917`;
+that follow-up only records the final acceptance evidence, so the tested source
+is unchanged. GitHub Linux and Windows CI are still running their `make ci`
+steps. Temporary dispatch/reachability instrumentation is removed. HTML::Tree
+has one existing TODO assertion and skips its optional LeakTrace file under
+system Perl; License::SPDX system-Perl execution is unavailable because its
+declared CPAN prerequisites are absent there. The project-owned
+ascending-version test passes standard Perl. Exact-window counts above are
+deterministic operation counts, not hardware instructions. An earlier
 instrumented test run failed an assertion and is not acceptance evidence.
 
-1. Update the existing PR #1623 branch from remote head
-   `52a7fc6349d08dd9a6574bd8d19ff5700c7d7896` to the rebased candidate on current
-   master, preserving the five-issue scope. Verify no production source changes
-   after the passing full gate.
-2. If a failure appears during PR integration, compare it to the matching
+1. Start user acceptance testing against PR #1623 at `c7349c917` (source
+   equivalent to `d753a616e`). Exercise the five reported workflows on the
+   realistic host; record semantic outcomes and deterministic work counts for
+   dispatch, with wall time as context because host load varies. Report any
+   failure before changing source so fixes can be batched and retested once.
+2. Wait for the active Linux and Windows CI jobs and PR review. The CI jobs
+   validate the unchanged runtime source; do not start duplicate local builds.
+3. If a failure appears during UAT or PR integration, compare it to the matching
    unfixed parent before
    attributing it. Add permanent project-owned coverage for every externally
    observed failure. Do not infer that #1482 shares this GOTO/ASM cause; its
    non-local `last SKIP` warning behavior needs its own evidence.
-3. Complete the interpreter regression audit and review the changelog entry.
-4. Wait for PR review and CI. Close only tickets confirmed fixed by the merged
+4. Complete the interpreter regression audit and review the changelog entry.
+5. After review and merge, close only tickets confirmed fixed by the merged
    five-issue PR and its complete acceptance audit.
-5. Record concise tracked evidence and remove task-created large logs,
+6. Record concise tracked evidence and remove task-created large logs,
    profiles, and unused build worktrees. Preserve WIP backups and unrelated
    host workloads. Poll confirmed running gates infrequently.
 
@@ -786,8 +793,9 @@ instrumented test run failed an assertion and is not acceptance evidence.
 - Does #1482 share a concrete cause, or require independent non-local LAST
   target and lexical warning-state fixes? Its report and a passing GOTO
   compilation regression do not establish that relationship.
-- Current commit `d753a616e` passes all candidate gates. PR update, CI/review, and
-  verification on the remote PR commit remain outstanding.
+- The source candidate `d753a616e` passes the local gates; PR head
+  `c7349c917` changes documentation only. Remote CI, review, user acceptance,
+  merge, and final issue closure remain outstanding.
 
 ## Related documents and skills
 

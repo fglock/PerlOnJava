@@ -18,7 +18,7 @@ retained in PR #1623, and the issues were closed with that evidence.
 
 ## Progress tracking
 
-### Current status: all five issue gates pass on candidate `d753a616e`; PR #1623 update and closure audit remain
+### Current status: all five issue gates pass on source candidate `d753a616e`; PR #1623 head `c7349c917` has pending CI/review and user acceptance
 
 ### Completed
 
@@ -366,16 +366,20 @@ interpreter files. Do not label this inventory green.
 ### Next steps
 
 Follow the [five-issue completion plan](parser-high-impact-completion-plan.md)
-for the authoritative sequence, acceptance gates, and build discipline. Reviewed
-2026-10-05: rebased candidate `d753a616e` passes the full unit gate and all five
-issue acceptance sets. PR #1623 publication, CI/review, and issue closure remain.
+for the authoritative sequence, acceptance gates, and build discipline. The
+rebased source candidate `d753a616e` passes the full unit gate and all five
+issue acceptance sets. PR #1623 is at `c7349c917`, a documentation-only update
+after that source candidate; its Linux and Windows `make ci` jobs are active.
 
-1. Update PR #1623 to the rebased `d753a616e` candidate, retaining one delivery
-   PR for all five fixes. Verify its remote contents and required CI.
-2. Review and respond to PR feedback without changing tests that pass standard
-   Perl; any source changes invalidate the existing final gate.
-3. Complete the interpreter regression audit and changelog decision. Close only
-   tickets confirmed fixed after the five-issue acceptance audit and PR review.
+1. Start user acceptance against PR #1623 using the realistic host, without
+   changing the tested source. Exercise the five issue workflows and record
+   semantic results; use deterministic work counts for dispatch comparisons
+   because wall time varies with host load.
+2. Wait for CI and PR review. If UAT or CI reveals a failure, compare it to the
+   matching unfixed parent, add project-owned regression coverage, and batch
+   necessary source changes before rebuilding.
+3. Complete the interpreter regression audit and changelog decision. After
+   merge, close only tickets confirmed fixed by the complete acceptance audit.
 
 ### Open questions
 
