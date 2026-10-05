@@ -471,34 +471,34 @@ public class DestroyDispatch {
                 RuntimeCode.apply(destroyMethod, args, RuntimeContextType.VOID);
             } finally {
                 MortalList.invalidateAllRootSnapshots();
-            }
-
-            // Phase 3: Drain pending entries added during apply, regardless
-            // of whether an outer flush is currently running.
-            MortalList.drainPendingSince(pendingBefore);
-
-            // Phase 3: Balance the args.push(self) increment. If the body
-            // consumed the element via shift, args.elements is empty (nothing
-            // to balance). Otherwise, the args.push bump is still on refCount
-            // and must be undone so we don't falsely detect resurrection.
-            //
-            // Direct decrement (not via MortalList pending) avoids
-            // infinite-loop feedback when this decrement itself would fire
-            // callDestroy recursively.
-            for (RuntimeScalar elem : args.elements) {
-                if (elem != null && elem.refCountOwned
-                        && elem.value instanceof RuntimeBase base
-                        && base.refCount > 0) {
-                    if (base.refCountTrace) {
-                        base.releaseOwner(elem, "doCallDestroy args balance");
+                try {
+                    // Drain entries added by DESTROY even when the Perl body
+                    // throws; scope cleanup must finish before its callback
+                    // owner is released.
+                    MortalList.drainPendingSince(pendingBefore);
+                } finally {
+                    // Balance the args.push(self) increment on both normal
+                    // and exceptional exits. If DESTROY consumed the element
+                    // via shift, args.elements is empty and MortalList already
+                    // released that owner. Otherwise this direct decrement
+                    // avoids recursively entering callDestroy while the same
+                    // referent is still in its DESTROY frame.
+                    for (RuntimeScalar elem : args.elements) {
+                        if (elem != null && elem.refCountOwned
+                                && elem.value instanceof RuntimeBase base
+                                && base.refCount > 0) {
+                            if (base.refCountTrace) {
+                                base.releaseOwner(elem, "doCallDestroy args balance");
+                            }
+                            base.releaseActiveOwner(elem);
+                            base.refCount--;
+                            elem.refCountOwned = false;
+                        }
                     }
-                    base.releaseActiveOwner(elem);
-                    base.refCount--;
-                    elem.refCountOwned = false;
+                    args.elements.clear();
+                    args.elementsOwned = false;
                 }
             }
-            args.elements.clear();
-            args.elementsOwned = false;
 
             // Reblessing an object while its DESTROY method is running starts
             // a new destruction lifecycle for the new class.  The original
