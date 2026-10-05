@@ -1863,12 +1863,15 @@ public class ReachabilityWalker {
 
         private final Set<RuntimeBase> nonLexicalReachable =
                 Collections.newSetFromMap(new IdentityHashMap<>(512));
+        private final ReachabilityQueryStats queryStats =
+                MortalList.activeReachabilityQueryStats();
 
         public ExternalRootSnapshot() {
             this(true);
         }
 
         public ExternalRootSnapshot(boolean includeRescued) {
+            if (queryStats != null) queryStats.externalRootSnapshotsBuilt++;
             buildNonLexicalRoots(includeRescued);
         }
 
@@ -1917,6 +1920,7 @@ public class ReachabilityWalker {
             while (!todo.isEmpty() && visits < MAX_VISITS) {
                 RuntimeBase cur = todo.removeFirst();
                 visits++;
+                if (queryStats != null) queryStats.externalRootSnapshotNodesVisited++;
                 walkSnapshotNode(cur, todo);
             }
         }
@@ -1944,6 +1948,7 @@ public class ReachabilityWalker {
         private void seedNonLexicalScalar(RuntimeScalar s,
                                           java.util.ArrayDeque<RuntimeBase> todo) {
             if (s == null) return;
+            if (queryStats != null) queryStats.externalRootSnapshotEdgesInspected++;
             if (WeakRefRegistry.isweak(s)) return;
             if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
                     && s.value instanceof RuntimeBase b) {

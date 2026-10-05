@@ -7,4 +7,8 @@ final class ReachabilityQueryStats {
     long edgesInspected;
     long nodesVisited;
     long snapshotsBuilt;
+    long deferredBasesProcessed;
+    long externalRootSnapshotsBuilt;
+    long externalRootSnapshotEdgesInspected;
+    long externalRootSnapshotNodesVisited;
 }

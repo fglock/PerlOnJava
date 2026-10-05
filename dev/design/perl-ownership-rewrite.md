@@ -179,12 +179,20 @@ and first path establish implementation cost.
   root graph: it observes three fresh root queries, at least 768 inspected
   edges and 771 visited nodes, and zero shared snapshots. `nice -n 19 make`
   passes on `3be05b505`.
+- [x] Count deferred bases and external-root snapshot work in the same
+  measurement. A deterministic test drains three separately queued weak
+  referents retained by one package array; each reaches
+  `MortalList.processDeferredBase()` and rebuilds the external-root snapshot,
+  inspecting at least 768 edges and visiting at least 771 nodes. This measures
+  the repeated deferred-cleanup fallback separately from aggregate
+  scope-unregister queries. The full `nice -n 19 make` gate passes on the
+  rebased tree.
 
 ### Next steps
 
-1. Map #1642's Catalyst `processDeferredBase` samples to current cleanup paths
-   and measure the remaining deferred-cleanup fallback with deterministic
-   counters.
+1. Reproduce the Catalyst scenario from #1642 and compare its cleanup traffic
+   with the measured deferred-release path; identify which releases can share
+   a root snapshot across statement boundaries.
 2. Qualify the closure owner's remaining lifecycle boundaries while preserving
    Perl 5.45.4 weak and exact count checkpoints.
 3. Extend the complete ownership path through scalar proxies and array/hash
@@ -195,10 +203,11 @@ and first path establish implementation cost.
 
 ### Open questions and blockers
 
-- The aggregate scope-unregister root walk is now covered by deterministic
-  counts. The repeated `processDeferredBase` root-walk sample described by
-  #1642 still needs reproduction against the current source and a corresponding
-  cleanup-path counter test.
+- The aggregate scope-unregister walk and repeated deferred-release snapshot
+  builds now have separate deterministic counters. The synthetic deferred
+  test observes one external-root snapshot per flush. Reproduction of the
+  Catalyst workload from #1642 remains open so its object and flush pattern can
+  be matched to these paths.
 - The current standard Perl oracle is
   `/Users/fglock/projects/perl5/perl`, version 5.45.4 with `useithreads=undef`.
   It needs the checkout's `lib`, `cpan/Test-Simple/lib`, and

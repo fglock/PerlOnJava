@@ -50,4 +50,50 @@ class ReachabilityQueryCostTest {
             }
         }
     }
+
+    @Test
+    void repeatedDeferredCleanupCountsExternalRootSnapshotWork() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray global = new RuntimeArray();
+            String globalName = "ReachabilityQueryCostTest::deferredGlobal";
+            GlobalVariable.globalArrays.put(globalName, global);
+            try {
+                for (int i = 0; i < 256; i++) {
+                    global.elements.add(new RuntimeHash().createReference());
+                }
+
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    for (int i = 0; i < 3; i++) {
+                        RuntimeHash target = new RuntimeHash();
+                        target.blessId = NameNormalizer.getBlessId(
+                                "Issue1649::DeferredRootTarget");
+                        global.elements.add(target.createAnonymousReference());
+                        RuntimeScalar weak = target.createAnonymousReference();
+                        WeakRefRegistry.weaken(weak);
+                        target.refCount = 1;
+
+                        MortalList.deferDecrement(target);
+                        MortalList.flush();
+
+                        assertEquals(1, target.refCount,
+                                "a strong package-root edge must protect the weak target");
+                    }
+
+                    ReachabilityQueryStats stats = measurement.stats();
+                    assertEquals(3, stats.deferredBasesProcessed,
+                            "each deferred release must reach processDeferredBase");
+                    assertEquals(3, stats.externalRootSnapshotsBuilt,
+                            "each separate flush rebuilds the external-root graph");
+                    assertTrue(stats.externalRootSnapshotEdgesInspected >= 3 * 256,
+                            "each deferred cleanup re-inspects the unrelated root array");
+                    assertTrue(stats.externalRootSnapshotNodesVisited >= 3 * 257,
+                            "each deferred cleanup revisits the root and its 256 children");
+                }
+            } finally {
+                GlobalVariable.globalArrays.remove(globalName);
+            }
+        }
+    }
 }

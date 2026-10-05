@@ -1449,6 +1449,8 @@ public class MortalList {
     private static void processDeferredBase(RuntimeBase base, boolean clearWeakRefsForLocalBinding,
                                             RuntimeBase.PendingOwnerRelease ownerRelease,
                                             String transientOwnerKind) {
+        ReachabilityQueryStats queryStats = activeReachabilityQueryStats();
+        if (queryStats != null) queryStats.deferredBasesProcessed++;
         base.completeQueuedOwnerRelease(ownerRelease, "MortalList.processDeferredBase");
         base.releaseTransientTraceOwner(transientOwnerKind,
                 "MortalList.processDeferredBase");
