@@ -615,3 +615,22 @@ done_testing;
 - [Reachability/lifecycle #1642](https://github.com/fglock/PerlOnJava/issues/1642)
 - [Mixed arithmetic UTF-8 flags #1643](https://github.com/fglock/PerlOnJava/issues/1643)
 - [Interpreter Test::Mojo application #1644](https://github.com/fglock/PerlOnJava/issues/1644)
+
+## Independent candidate validation (2026-10-05)
+
+Source commit `63b9463d5` passed full `nice -n 19 make` (exit 0), including
+seven ReachabilityQueryCostTest cases (0 failures/errors/skips). The five moved
+Perl tests passed 22/22 assertions on system Perl, JVM and interpreter, with
+unchanged Mojolicious 9.49 available for the optional incremental DOM test.
+The global-destruction child program also ran directly on each backend (exit 0,
+no resurrection warning), avoiding reliance on the parent test's default child
+launcher. Documentation link checks passed. These gates qualify the independent
+code/test split; Catalyst's repeated-root-query investigation and final CPAN
+acceptance remain open.
+
+Historical combined Math::Decimal 0.004 evidence: all ten *_pp.t files passed,
+107,058 system-Perl assertions with one optional pod-coverage skip and 107,059
+assertions on each PerlOnJava backend; cmp_pp.t contributed 62,210 per backend.
+This was not rerun on the independent split and is not claimed as its acceptance.
+
+- [Remaining release qualification #1646](https://github.com/fglock/PerlOnJava/issues/1646)
