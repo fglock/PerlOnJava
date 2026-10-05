@@ -44,13 +44,33 @@ permanent project-owned coverage without changing any existing tests:
 Validation after the rebase: `nice -n 19 timeout 1800 make` passes (531 unit
 tests); all five new unit tests pass on the interpreter; the four affected
 core files pass on the JVM (550 tests, including two TODOs); and all five new
-tests pass system Perl 5.42. The complete UAT and baseline comparison still
-need to run.
+tests pass system Perl 5.42. The full UAT against the Oct 3 baseline completed
+with 574/575 files passing and one assertion failure: `perl5_t/t/lib/croak.t`
+assertion 98 (`use warnings; use v5.12; use v5.20;`) expects a fatal diagnostic.
+The baseline had 344/344 assertions in this file; the current head has 343/344.
+No files timed out or were incomplete. Full output is in
+`/Users/fglock/projects/PerlOnJava/logs/test_20261005_162900_parser_uat_fix.log`,
+with comparator output in `/private/tmp/parser-uat-finalbatch-compare.log`.
 
-Next, update PR #1623 from this rebased branch and run the full five-directory
-Perl core UAT against the same Oct 3 baseline. Use a new log name so the 13:00
-evidence remains available. If that gate and fresh Linux and Windows CI pass,
-continue UAT/review; close only tickets confirmed fixed after merge.
+This exposed a compatibility conflict that needs a decision before the PR can
+be called UAT clean. PerlOnJava targets Perl 5.44.1, and its bundled
+`Pod/perldiag.pod` says differing in-scope `use VERSION` declarations are not
+permitted. The local system Perl is 5.42.2: it emits a deprecation warning for
+the UAT program but accepts it. The project-owned
+`use_version_ascending_scope.t` also expects an older-to-newer pair to succeed
+and passes system Perl 5.42. Making all differing versions fatal would satisfy
+the Perl 5.44 core test but fail that unit test on PerlOnJava; preserving the
+unit-test behavior retains the UAT failure. Existing tests must not be changed.
+
+Fresh CI was last observed still running on both Ubuntu and Windows for PR head
+`80d8cea3250e139514f7b412e22ea40cb8d533d3`; the most recent GitHub API request
+failed to connect, so refresh status before resuming.
+
+Next, resolve whether PR #1623 must enforce the target Perl 5.44 fatal behavior
+or retain the local Perl 5.42 behavior required by the unchanged project-owned
+unit test. Then add permanent coverage consistent with that decision, rerun
+the unit and full UAT gates, refresh CI, and close only confirmed-fixed tickets
+after merge.
 
 This handoff and Immediate next steps supersede older candidate status below.
 The final-batch record below also supersedes the earlier three-failure and
