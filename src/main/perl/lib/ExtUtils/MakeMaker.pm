@@ -1024,38 +1024,42 @@ sub _create_install_makefile {
                     $pl_targets{$t} = 1;
                     my $ignore = _pl_files_generates_pm($pl, $t) ? '' : '-';
                     my $dir = dirname($t);
+                    my $literal_dir = _expand_install_dir_macros(
+                        $dir, $inst_lib, $inst_archlib);
                     push @pl_cmds, _shell_mkdir($dir)
-                        if $dir ne '.' && !$generator_mkdirs{$dir}
+                        if $dir ne '.' && !$generator_mkdirs{$literal_dir}
                             && !$pl_target_dirs{$dir}++;
-                    if ($generator_mkdirs{$dir}) {
+                    if ($generator_mkdirs{$literal_dir}) {
                         my $parent = dirname($dir);
                         push @pl_cmds, _shell_mkdir($parent)
                             if $parent ne '.' && !$pl_target_dirs{$parent}++;
                     }
                     push @pl_cmds, "\t$ignore$perl $pl $t";
-                    my $mkdir = $dir ne '.' && !$generator_mkdirs{$dir}
+                    my $mkdir = $dir ne '.' && !$generator_mkdirs{$literal_dir}
                         ? _shell_mkdir($dir) . "\n" : '';
                     $mkdir = _shell_mkdir(dirname($dir)) . "\n"
-                        if $generator_mkdirs{$dir} && dirname($dir) ne '.';
+                        if $generator_mkdirs{$literal_dir} && dirname($dir) ne '.';
                     push @pl_rules, "$t :: $pl pm_to_blib\n$mkdir\t$ignore$perl $pl $t\n";
                 }
             } else {
                 $pl_targets{$target} = 1;
                 my $ignore = _pl_files_generates_pm($pl, $target) ? '' : '-';
                 my $dir = dirname($target);
+                my $literal_dir = _expand_install_dir_macros(
+                    $dir, $inst_lib, $inst_archlib);
                 push @pl_cmds, _shell_mkdir($dir)
-                    if $dir ne '.' && !$generator_mkdirs{$dir}
+                    if $dir ne '.' && !$generator_mkdirs{$literal_dir}
                         && !$pl_target_dirs{$dir}++;
-                if ($generator_mkdirs{$dir}) {
+                if ($generator_mkdirs{$literal_dir}) {
                     my $parent = dirname($dir);
                     push @pl_cmds, _shell_mkdir($parent)
                         if $parent ne '.' && !$pl_target_dirs{$parent}++;
                 }
                 push @pl_cmds, "\t$ignore$perl $pl $target";
-                my $mkdir = $dir ne '.' && !$generator_mkdirs{$dir}
+                my $mkdir = $dir ne '.' && !$generator_mkdirs{$literal_dir}
                     ? _shell_mkdir($dir) . "\n" : '';
                 $mkdir = _shell_mkdir(dirname($dir)) . "\n"
-                    if $generator_mkdirs{$dir} && dirname($dir) ne '.';
+                    if $generator_mkdirs{$literal_dir} && dirname($dir) ne '.';
                 push @pl_rules, "$target :: $pl pm_to_blib\n$mkdir\t$ignore$perl $pl $target\n";
             }
         }
@@ -1370,6 +1374,13 @@ sub _pl_files_created_dirs {
         $dirs{$dir} = 1 if defined $dir && length $dir;
     }
     return %dirs;
+}
+
+sub _expand_install_dir_macros {
+    my ($path, $inst_lib, $inst_archlib) = @_;
+    $path =~ s/\$\(INST_LIB\)/$inst_lib/g;
+    $path =~ s/\$\(INST_ARCHLIB\)/$inst_archlib/g;
+    return $path;
 }
 
 sub _pl_files_generates_pm {
