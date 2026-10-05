@@ -6,10 +6,36 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @Tag("unit")
 class PerlOwnerSlotLegacyBridgeTest {
+    @Test
+    void rejectsCaptureCountOverflowBeforeAcquiringTheSlot() {
+        RuntimeHash referent = new RuntimeHash();
+        referent.refCount = Integer.MAX_VALUE;
+        PerlOwnerSlot slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
+
+        assertThrows(IllegalStateException.class, () -> slot.acquireLegacyCapture(referent));
+        assertEquals(Integer.MAX_VALUE, referent.refCount);
+        assertEquals(0, slot.legacyCaptureCount());
+        assertFalse(slot.isActive());
+    }
+
+    @Test
+    void releasingAnUnownedCaptureDoesNotUnderflowOrScheduleCleanup() {
+        RuntimeHash referent = new RuntimeHash();
+        referent.refCount = 0;
+        PerlOwnerSlot slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
+
+        assertNull(slot.deferLegacyCaptureRelease(referent));
+        assertEquals(0, referent.refCount);
+        assertEquals(0, slot.legacyCaptureCount());
+        assertFalse(slot.isActive());
+    }
+
     @Test
     void queuedCaptureReleaseRetainsSlotProvenanceUntilDrain() {
         PerlRuntime runtime = new PerlRuntime();

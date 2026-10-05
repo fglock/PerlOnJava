@@ -99,14 +99,18 @@ public final class PerlOwnerSlot {
     /** Acquire one closure-pad referent count through the legacy bridge. */
     public synchronized void acquireLegacyCapture(RuntimeBase target) {
         Objects.requireNonNull(target, "target");
+        if (target.refCount < 0) {
+            throw new IllegalStateException("closure capture bridge requires a tracked referent");
+        }
+        if (target.refCount == Integer.MAX_VALUE
+                || legacyCaptureCount == Integer.MAX_VALUE) {
+            throw new IllegalStateException("closure capture bridge count overflow");
+        }
         if (referent != target) {
             if (legacyCaptureCount != 0) {
                 throw new IllegalStateException("cannot transfer a closure pad with live legacy counts");
             }
             transferTo(target);
-        }
-        if (target.refCount < 0) {
-            throw new IllegalStateException("closure capture bridge requires a tracked referent");
         }
         target.traceRefCount(+1, "RuntimeScalar.retainClosureCaptureReferent");
         target.refCount++;
