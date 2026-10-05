@@ -351,6 +351,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public int captureCount;
 
+    /** Explicit identity for this pad cell's closure owner edge. */
+    private PerlOwnerSlot closureOwnerSlot;
+
     /**
      * Number of closure-capture owners currently retained on this scalar's
      * referent. This is separate from {@link #captureCount}: a weak scalar, an
@@ -439,20 +442,21 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // lifetime of this closure capture without making weak slots,
             // untracked values, or conservative capture metadata strong.
             RuntimeBase base = semanticCaptureReferent();
-            if (base != null && base.blessId != 0) base.acquireSemanticCaptureOwner(this);
+            updateClosureOwnerSlot(base);
             retainClosureCaptureReferent();
         } else if (firstCapture) {
             // The ordinary pad-slot increment already exists in refCount.
             // Record the semantic edge separately so weak sweeping cannot
             // mistake a captured pad for an unowned JVM temporary.
             RuntimeBase base = semanticCaptureReferent();
-            if (base != null && base.blessId != 0) base.acquireSemanticCaptureOwner(this);
+            updateClosureOwnerSlot(base);
         }
     }
 
     /** Reconstruct capture ownership for an independent ithread snapshot. */
     void retainThreadCloneClosureCapture() {
         captureCount++;
+        updateClosureOwnerSlot(semanticCaptureReferent());
         // An owning lexical slot already protects its referent. Borrowed
         // argument aliases do not, and the source runtime's other owners are
         // not a lifetime guarantee in the cloned runtime.
@@ -464,8 +468,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             captureCount--;
         }
         if (captureCount == 0) {
-            RuntimeBase base = semanticCaptureReferent();
-            if (base != null) base.releaseSemanticCaptureOwner(this);
+            releaseClosureOwnerSlot();
             releaseOneClosureCaptureReferent();
         }
     }
@@ -478,8 +481,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * Perl lifetime owner at global-destruction time.
      */
     public void releaseUnreachableSemanticCaptureOwner() {
-        RuntimeBase base = semanticCaptureReferent();
-        if (base != null) base.releaseSemanticCaptureOwner(this);
+        releaseClosureOwnerSlot();
     }
 
     private void retainClosureCaptureReferent() {
@@ -490,7 +492,25 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         base.hadCountedReference = true;
         captureRefCountOwned++;
         base.acquireTransientTraceOwner("closure capture", "RuntimeScalar.closureCapture");
-        base.acquireSemanticCaptureOwner(this);
+        updateClosureOwnerSlot(base, false);
+    }
+
+    private void updateClosureOwnerSlot(RuntimeBase referent) {
+        updateClosureOwnerSlot(referent, true);
+    }
+
+    private void updateClosureOwnerSlot(RuntimeBase referent, boolean blessedOnly) {
+        RuntimeBase ownedReferent = referent != null
+                && (!blessedOnly || referent.blessId != 0)
+                ? referent : null;
+        if (closureOwnerSlot == null && ownedReferent != null) {
+            closureOwnerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD, this);
+        }
+        if (closureOwnerSlot != null) closureOwnerSlot.transferTo(ownedReferent);
+    }
+
+    private void releaseClosureOwnerSlot() {
+        if (closureOwnerSlot != null) closureOwnerSlot.release();
     }
 
     private void retainMissingClosureCaptureReferents() {
@@ -566,7 +586,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     void releaseClosureCaptureReferentsForWeaken(RuntimeBase oldBase) {
         if (captureCount > 0 && oldBase != null) {
-            oldBase.releaseSemanticCaptureOwner(this);
+            releaseClosureOwnerSlot();
         }
         releaseAllClosureCaptureReferents(oldBase);
     }
@@ -574,7 +594,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     void retainClosureCaptureReferentsForUnweaken() {
         if (captureCount > 0) {
             RuntimeBase base = semanticCaptureReferent();
-            if (base != null && base.blessId != 0) base.acquireSemanticCaptureOwner(this);
+            updateClosureOwnerSlot(base);
         }
         retainMissingClosureCaptureReferents();
     }
@@ -2525,7 +2545,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             releaseAllClosureCaptureReferents(oldBase);
         }
         if (oldBase != null && this.captureCount > 0) {
-            oldBase.releaseSemanticCaptureOwner(this);
+            releaseClosureOwnerSlot();
         }
 
         // Increment new value's refCount for tracked stores. RuntimeHash/RuntimeArray
@@ -2584,7 +2604,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (this.captureCount > 0 && (this.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && this.value instanceof RuntimeBase capturedBase
                 && !WeakRefRegistry.isweak(this)) {
-                if (capturedBase.blessId != 0) capturedBase.acquireSemanticCaptureOwner(this);
+                updateClosureOwnerSlot(capturedBase);
         }
         this.utf8UncheckedOctets = value.utf8UncheckedOctets;
         this.utf8MalformedWarning = value.utf8MalformedWarning;

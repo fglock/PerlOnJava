@@ -70,9 +70,12 @@ dependency-free regression reproduces the lifecycle, passes on Perl 5.44 and
 both PerlOnJava backends, and fails on the parent interpreter backend.
 
 This fixes the demonstrated path but does not yet implement the new owner-slot
-identity/count/lifecycle model. Existing scalar, aggregate, deferred-release,
-weak-reference, and DESTROY accounting remains behind the legacy bridge. Phase
-1 is complete only after the owner-slot API and bridge cover the selected
+count/lifecycle model. A typed `PerlOwnerSlot` identity is now wired into
+closure-pad semantic ownership, including transfer when a captured pad changes
+referents and idempotent release. The selective `refCount` increment and
+deferred decrement still form the legacy lifecycle bridge; scalar stores,
+aggregate slots, weak-reference transitions, and `DESTROY` are not yet migrated.
+Phase 1 is complete only after the owner-slot API and bridge cover the selected
 closure, scalar, aggregate, and deferred-release path on both backends.
 
 ## Phases
@@ -117,14 +120,17 @@ and first path establish implementation cost.
 - [x] Added an oracle-validated parser lifecycle reproducer at
   [`dev/repros/issue-1649-html-treebuilder-lifecycle.t`](../repros/issue-1649-html-treebuilder-lifecycle.t)
   for the remaining content and incremental parsing failures.
+- [x] Added typed owner-slot identity for closure pads, with acquire/transfer/
+  release operations and a primitive identity regression. Existing selective
+  refcount and deferred-release transitions remain the compatibility bridge.
 
 ### Next steps
 
-1. Define and implement the owner-slot identity/count/lifecycle API for the
-   verified closure-pad path, with an explicit bridge to the existing scalar,
-   aggregate, weak-reference, DESTROY, and deferred-release machinery.
-2. Migrate the closure capture stores and pad release points on both backends;
-   add primitive owner acquire/transfer/release tests and bridge tests.
+1. Make the closure-pad owner slot own its legacy count/deferred-release bridge
+   directly, then add acquisition, transfer, overwrite, scope-exit, and weak
+   transition bridge tests.
+2. Migrate direct scalar and array/hash owner slots through the same API while
+   preserving transfers and deferred release ordering.
 3. Reproduce #1642's repeated deferred-cleanup root queries with deterministic
    counters on this baseline; separate that cost regression from Phase 1
    correctness unless the selected ownership path demonstrates the connection.

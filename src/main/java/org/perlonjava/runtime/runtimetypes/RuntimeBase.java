@@ -240,33 +240,39 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     // ─────────────────────────────────────────────────────────────────────
     public java.util.Set<RuntimeScalar> activeOwners = null;
 
-    /**
-     * Semantic pad owners.  Unlike {@link #activeOwners}, this set models the
-     * one strong edge from a captured pad cell to its current referent.  It is
-     * deliberately keyed by the pad cell, not by the number of closures which
-     * share that cell: two closures must not create two Perl references.
-     */
-    private java.util.Set<RuntimeScalar> semanticCaptureOwners = null;
+    /** Identity ledger for migrated slots; selective refCount remains the
+     * lifecycle bridge while owner families move to this API. */
+    private java.util.Set<PerlOwnerSlot> ownerSlots = null;
 
-    public void acquireSemanticCaptureOwner(RuntimeScalar pad) {
-        if (semanticCaptureOwners == null) {
-            semanticCaptureOwners = java.util.Collections.newSetFromMap(
+    synchronized void addOwnerSlot(PerlOwnerSlot slot) {
+        if (ownerSlots == null) {
+            ownerSlots = java.util.Collections.newSetFromMap(
                     new java.util.IdentityHashMap<>());
         }
-        semanticCaptureOwners.add(pad);
+        ownerSlots.add(slot);
     }
 
-    public void releaseSemanticCaptureOwner(RuntimeScalar pad) {
-        if (semanticCaptureOwners != null) semanticCaptureOwners.remove(pad);
+    synchronized void removeOwnerSlot(PerlOwnerSlot slot) {
+        if (ownerSlots != null) ownerSlots.remove(slot);
     }
 
     public boolean hasSemanticCaptureOwner() {
-        return semanticCaptureOwners != null && !semanticCaptureOwners.isEmpty();
+        return ownerSlotCount(PerlOwnerSlot.Kind.CLOSURE_PAD) != 0;
     }
 
-    /** Number of distinct captured pad cells that currently own this referent. */
+    /** Number of active slots of the requested kind that own this referent. */
+    public synchronized int ownerSlotCount(PerlOwnerSlot.Kind kind) {
+        if (ownerSlots == null) return 0;
+        int count = 0;
+        for (PerlOwnerSlot slot : ownerSlots) {
+            if (slot.kind() == kind) count++;
+        }
+        return count;
+    }
+
+    /** Number of distinct captured pad slots that own this referent. */
     public int semanticCaptureOwnerCount() {
-        return semanticCaptureOwners == null ? 0 : semanticCaptureOwners.size();
+        return ownerSlotCount(PerlOwnerSlot.Kind.CLOSURE_PAD);
     }
 
     // Conservative gate for the tied-handler reachability fallback. Once a
@@ -608,12 +614,14 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             result.append(']');
         }
         result.append(" capturePads=");
-        if (semanticCaptureOwners == null || semanticCaptureOwners.isEmpty()) {
+        if (ownerSlots == null || ownerSlots.isEmpty()) {
             result.append("[]");
         } else {
             result.append('[');
             boolean first = true;
-            for (RuntimeScalar pad : semanticCaptureOwners) {
+            for (PerlOwnerSlot slot : ownerSlots) {
+                if (slot.kind() != PerlOwnerSlot.Kind.CLOSURE_PAD) continue;
+                RuntimeScalar pad = slot.padCell();
                 if (!first) result.append(", ");
                 first = false;
                 result.append("scalar=").append(System.identityHashCode(pad))
