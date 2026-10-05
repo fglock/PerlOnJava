@@ -172,11 +172,19 @@ and first path establish implementation cost.
   referent or owner slot, and verify an unowned release is an underflow no-op.
   All three `PerlOwnerSlotLegacyBridgeTest` cases and the full
   `nice -n 19 make` gate pass on `f164ca168`.
+- [x] Add optional runtime-scoped counters for root queries, seeded roots,
+  inspected edges, visited nodes, and full-root snapshots. A deterministic
+  test drives three real aggregate scope cleanups through
+  `MyVarCleanupStack.unregister()` and `MortalList` against the same unrelated
+  root graph: it observes three fresh root queries, at least 768 inspected
+  edges and 771 visited nodes, and zero shared snapshots. `nice -n 19 make`
+  passes on `3be05b505`.
 
 ### Next steps
 
-1. Reproduce #1642's repeated deferred-cleanup root queries with deterministic
-   counters on this baseline.
+1. Map #1642's Catalyst `processDeferredBase` samples to current cleanup paths
+   and measure the remaining deferred-cleanup fallback with deterministic
+   counters.
 2. Qualify the closure owner's remaining lifecycle boundaries while preserving
    Perl 5.45.4 weak and exact count checkpoints.
 3. Extend the complete ownership path through scalar proxies and array/hash
@@ -187,7 +195,10 @@ and first path establish implementation cost.
 
 ### Open questions and blockers
 
-- #1642's performance baseline is still outstanding.
+- The aggregate scope-unregister root walk is now covered by deterministic
+  counts. The repeated `processDeferredBase` root-walk sample described by
+  #1642 still needs reproduction against the current source and a corresponding
+  cleanup-path counter test.
 - The current standard Perl oracle is
   `/Users/fglock/projects/perl5/perl`, version 5.45.4 with `useithreads=undef`.
   It needs the checkout's `lib`, `cpan/Test-Simple/lib`, and
