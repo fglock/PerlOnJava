@@ -2,7 +2,7 @@ use strict;
 use warnings;
 use feature 'class';
 no warnings 'experimental::class';
-use Test::More tests => 5;
+use Test::More tests => 6;
 
 class UnitLexicalMethod {
     field $value = 'private';
@@ -43,3 +43,15 @@ is(UnitLexicalMethodWithSignature->new->run, '123:ok',
     'lexical method signatures retain the implicit self argument');
 ok(!UnitLexicalMethodWithSignature->can('format_value'),
     'signed lexical methods remain private');
+
+class UnitArrowDirectCall {
+    method value { return 'package-result'; }
+    method invoke { return $self->&value; }
+}
+
+class UnitArrowDirectCallChild :isa(UnitArrowDirectCall) {
+    method value { return 'child-result'; }
+}
+
+is(UnitArrowDirectCallChild->new->invoke, 'package-result',
+    '->& calls the current package method without inheritance dispatch');

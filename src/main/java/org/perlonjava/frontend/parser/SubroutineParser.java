@@ -2152,6 +2152,8 @@ public class SubroutineParser {
                     // their closure cells are cloned with the outer closure.
                     if (subName != null
                             && ("my".equals(entry.decl()) || "state".equals(entry.decl()))
+                            && (entryAst == null
+                                || !entryAst.getBooleanAnnotation("lexicalMethodStorage"))
                             && explicitlyUsedVars.contains(entry.name())
                             && WarningFlags.ckWarnForScope(parser.ctx.symbolTable, "closure")) {
                         WarnDie.warn(new RuntimeScalar("Subroutine \"" + entry.name()

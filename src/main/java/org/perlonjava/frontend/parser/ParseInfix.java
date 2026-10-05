@@ -535,20 +535,19 @@ public class ParseInfix {
                             return new BinaryOperatorNode("(", codeRef, args, parser.tokenIndex);
                         }
 
-                        // Not a lexical method - treat as a regular code reference call
-                        // This creates a call like $obj->(&NAME) which will look up &NAME at runtime
+                        // Not a lexical method - call the current package's CV
+                        // directly with the invocant. `->&` bypasses method
+                        // dispatch and inheritance, so retaining the outer `->`
+                        // node would change its semantics and produce an
+                        // unsupported nested-call shape.
                         Node methodRef = new OperatorNode("&", new IdentifierNode(methodName, parser.tokenIndex), parser.tokenIndex);
-
-                        // Check for method arguments
+                        ListNode callArgs = new ListNode(parser.tokenIndex);
+                        callArgs.elements.add(left);
                         if (peek(parser).text.equals("(")) {
-                            ListNode args = consumeArgsWithPrototype(parser, null);
-                            right = new BinaryOperatorNode("(", methodRef, args, parser.tokenIndex);
-                        } else {
-                            // No arguments - just the method reference
-                            right = methodRef;
+                            ListNode explicitArgs = consumeArgsWithPrototype(parser, null);
+                            callArgs.elements.addAll(explicitArgs.elements);
                         }
-
-                        return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
+                        return new BinaryOperatorNode("(", methodRef, callArgs, parser.tokenIndex);
                     default:
                         parser.parsingForLoopVariable = true;
                         if (nextText.equals("$")) {

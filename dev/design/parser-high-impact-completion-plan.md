@@ -52,19 +52,28 @@ zero errors; its tracked imports are committed in `179e91ac1`. The candidate
 and purges both bare and `main::`-qualified stash entries;
 `symbol_delete_package.t` passes on the JVM and interpreter.
 
-The full refreshed blead UAT on the follow-up passed **575/575 files**, with
-**0 failures, 0 errors, 0 timeouts, and 0 incomplete files** (680,708 passing
-assertions; 0 not-ok). This includes `lib/croak.t` (344/344), `op/caller.t`
-(126/126), and `re/anyof.t` (1187/1187). The captured log and JSON are
-`/Users/fglock/projects/PerlOnJava/logs/test_20261005_followup_2f840f179.log`
-and `/private/tmp/parser-uat-20261005-followup-2f840f179.json`.
+The full refreshed blead UAT's TAP summary reported **575/575 files** and
+680,708 passing assertions, with no `not ok` assertions. This result is not
+accepted: strict comparison found nonzero subprocess exits in
+`class/method.t`, `op/coreamp.t`, and `op/try.t`, despite their TAP output not
+containing failed assertions. The comparator report is
+`/private/tmp/parser-uat-20261005-followup-comparison.json`; the captured run is
+`/Users/fglock/projects/PerlOnJava/logs/test_20261005_followup_2f840f179.log`.
+The user's acceptance rule is zero UAT failures, including nonzero test-process
+exits, test errors, timeouts, incomplete files, or failed TAP assertions.
 
-The Oct 3 comparison shows no failed candidate files, but is not an exact test
-identity match after refreshing blead: ten regex fixtures each have ten fewer
-planned assertions, and three passing subprocess tests carry execution
-metadata warnings. The candidate runner's strict summary is clean. Preserve
-the comparison report and classify these count/metadata differences during
-the final exact-head audit rather than treating them as failed assertions.
+The current fix batch adds project-owned coverage for lexical class method
+calls and callable `CORE::bless`, and lowers `->&` to call a package CV directly
+with the invocant when there is no lexical method. This preserves Perl's
+no-inheritance-dispatch behavior. The lexical-method test passes the standard
+Perl oracle. A focused run on the old built JAR reached this package-method
+case and exited 2; that JAR predates the current parser source. Exact-head
+`make`, focused UAT cases, and full UAT remain required.
+
+The Oct 3 comparison also reports ten fewer planned assertions in each of ten
+regex fixtures after refreshing the blead corpus. Preserve the comparison
+report, but do not treat assertion-count differences as substitutes for a
+zero-failure current UAT run.
 
 This section supersedes the earlier Perl 5.44 target and expected-failure
 notes below. Those notes remain as historical evidence only.
