@@ -110,10 +110,10 @@ batch now does.
 
 | Issue | Implementation and recorded evidence | Remaining work |
 |---|---|---|
-| [#1619](https://github.com/fglock/PerlOnJava/issues/1619): HTML::Tree split parsing | Parser fix and interpreter lifecycle parity implemented; unchanged `t/split.t` 444/444 and `t/refloop.t` 8/8 on standard Perl and both backends; full HTML::Tree 5.07 suite 23 files / 989 tests on both backends | Repeat required acceptance on final PR commit |
-| [#1622](https://github.com/fglock/PerlOnJava/issues/1622): ascending version declarations | Fix and permanent regression implemented; License::SPDX 0.07 acceptance recorded at 35 tests on both backends | Verify final candidate, parent evidence, and issue scope |
-| [#1615](https://github.com/fglock/PerlOnJava/issues/1615): valid prototype warnings | Fix and standard-Perl-validated diagnostic regression implemented | Verify final candidate and unchanged issue reproducer |
-| [#1166](https://github.com/fglock/PerlOnJava/issues/1166): qualified indirect constructors | Both reported forms covered, including the compile-only constructor followed by a method call | Verify final candidate and both issue forms |
+| [#1619](https://github.com/fglock/PerlOnJava/issues/1619): HTML::Tree split parsing | On rebased commit `d753a616e`, system Perl passes 969 tests across 23 files (the LeakTrace-only file is skipped); JVM/interpreter each run 989 assertions across 23 files, with one existing TODO failure. `t/split.t` passes 444/444 and `t/refloop.t` 8/8. | Recheck after PR update; preserve the upstream TODO and skip status |
+| [#1622](https://github.com/fglock/PerlOnJava/issues/1622): ascending version declarations | `use_version_ascending_scope.t` passes standard Perl and both backends. `jcpan -t License::SPDX` passes 35/35 across 10 files on JVM; the same suite passes 35/35 on interpreter. | Recheck on the PR commit; full distro system-Perl run requires CPAN prerequisites unavailable in the host system-Perl environment |
+| [#1615](https://github.com/fglock/PerlOnJava/issues/1615): valid prototype warnings | `prototype_optional_after_array.t` passes standard Perl, JVM, and interpreter; included in the full unit gate. | Recheck on the PR commit |
+| [#1166](https://github.com/fglock/PerlOnJava/issues/1166): qualified indirect constructors | Both reported forms pass unchanged tests (five assertions total) on standard Perl, JVM, and interpreter. | Recheck both forms on the PR commit |
 | [#1470](https://github.com/fglock/PerlOnJava/issues/1470): AnyEvent compilation and dispatch | Earlier compiler compatibility landed in PR #1598; oversized closure source constant and dispatch changes are implemented locally. On the final batched source, unchanged mutex passes 8/8 and the full AnyEvent::Tools suite passes 103/103 on standard Perl, JVM, and interpreter. | Recheck on the final PR commit; then include in the five-issue closure audit |
 
 The [issue batch](parser-high-impact-issues-20261002.md) retains experiment
@@ -577,7 +577,7 @@ implementation or acceptance work.
 
 ## Progress tracking
 
-### Current status: current batch passes unit, label, and #1470 gates; four issue gates and PR integration remain
+### Current status: all five issue gates pass on rebased candidate `d753a616e`; PR update and closure audit remain
 
 - [x] Four selected parser fixes and permanent regressions implemented.
 - [x] Oversized closure constant diagnosed, fixed, and regression validated.
@@ -597,6 +597,22 @@ implementation or acceptance work.
 - [x] Unchanged AnyEvent mutex passes 8/8 on standard Perl, JVM, and
   interpreter. Full AnyEvent::Tools 0.12 suite passes 7 files / 103 assertions
   on standard Perl, JVM, and interpreter on this source batch.
+- [x] Rebasing the squashed candidate onto current `origin/master` was source
+  neutral: the only intervening upstream changes were the CPAN report refresh.
+  Exact rebased commit `d753a616e` passes `timeout 1800 nice -n 19 make` in
+  6m26s; output is `/private/tmp/parser-high-impact-integration-make.log`.
+- [x] On `d753a616e`, HTML::Tree 5.07 passes 23 files on all three runtimes:
+  system Perl reports 969 tests and skips the LeakTrace-only file; JVM and
+  interpreter run 989 assertions with one pre-existing TODO failure. The
+  issue reproducer `t/split.t` passes 444/444 and `t/refloop.t` 8/8.
+- [x] License::SPDX 0.07 passes 35/35 across 10 files on JVM via `jcpan -t`
+  and on interpreter with the same declared dependency set.
+- [x] The prototype, ascending version, both qualified-constructor forms, and
+  retained #1466/#1476 regression tests pass 9/9 on system Perl, JVM, and
+  interpreter.
+- [x] Repeat final-candidate AnyEvent::Tools acceptance on `d753a616e`: the
+  unchanged mutex and full seven-file suite pass 8/8 and 103/103 respectively
+  on standard Perl, JVM, and interpreter.
 - [x] Phase 1: matching-parent interpreter comparison; all 49 candidate
   failures are present with identical outcomes on parent `75681d00d`.
 - [x] Phase 2: exact callback-interval baseline; four runs each count one
@@ -720,36 +736,35 @@ implementation or acceptance work.
 - [x] Run the exact final-source unit and focused gates after this cleanup.
 - [x] Phase 3: combined cleanup and dispatch candidate passes current #1470
   acceptance. Earlier frame-elision-only candidates failed assertion 4.
-- [ ] Phase 4: all unchanged issue acceptance gates.
-- [ ] Phase 5: all unit gates, final PR #1623 update, and five-issue closure audit.
+- [x] Phase 4: the unchanged issue acceptance gates pass on candidate
+  `d753a616e`; the interpreter inventory still has 49 matching-parent gaps.
+- [ ] Phase 5: update PR #1623 to the rebased candidate, verify required CI and
+  PR contents, then complete the five-issue closure audit.
 
 ### Immediate next steps
 
-The final frozen batch corrects three JVM regressions and removes the temporary
-dispatch/reachability instrumentation. Its `timeout 1800 nice -n 19 make` gate
-passed in 4m59s. The three unchanged label/pad files pass all 66 assertions on
-standard Perl, JVM, and interpreter; the Java label-registration regression
-passes in the build. The unchanged AnyEvent mutex passes 8/8, and the complete
-seven-file AnyEvent::Tools suite passes 103/103 on standard Perl, JVM, and
-interpreter. A JVM `Test::More.pm` helper can use interpreter fallback; all
-AnyEvent assertions pass. The exact-window work counts above are deterministic
-operation counts, not hardware instructions. An earlier instrumented test run
-failed an assertion and is not acceptance evidence.
+Rebased commit `d753a616e` passes the full unit gate in 6m26s, all four parser
+issue gates, the label/pad regressions, and the unchanged seven-file AnyEvent
+suite on the required runtimes. Temporary dispatch/reachability instrumentation
+is removed. HTML::Tree has one existing TODO assertion and skips its optional
+LeakTrace file under system Perl; License::SPDX system-Perl execution is
+unavailable because its declared CPAN prerequisites are absent there. The
+project-owned ascending-version test passes standard Perl. Exact-window counts
+above are deterministic operation counts, not hardware instructions. An earlier
+instrumented test run failed an assertion and is not acceptance evidence.
 
-1. Recheck this exact candidate against PR #1623 and its remote branch. Keep the
-   PR as the single delivery point for all five fixes. Verify no production
-   source changed after the passing full gate.
+1. Update the existing PR #1623 branch from remote head
+   `52a7fc6349d08dd9a6574bd8d19ff5700c7d7896` to the rebased candidate on current
+   master, preserving the five-issue scope. Verify no production source changes
+   after the passing full gate.
 2. If a failure appears during PR integration, compare it to the matching
    unfixed parent before
    attributing it. Add permanent project-owned coverage for every externally
    observed failure. Do not infer that #1482 shares this GOTO/ASM cause; its
    non-local `last SKIP` warning behavior needs its own evidence.
-3. Finish final-candidate acceptance for #1619, #1622, #1615, and both #1166
-   forms; complete the interpreter regression audit and changelog decision.
-4. Rebase/integrate the passing candidate with WIP snapshots preserved, rerun
-   the required gates on the resulting source, and update PR #1623 for all five
-   fixes. Wait for review before merging; close only tickets confirmed fixed
-   after the complete acceptance audit.
+3. Complete the interpreter regression audit and review the changelog entry.
+4. Wait for PR review and CI. Close only tickets confirmed fixed by the merged
+   five-issue PR and its complete acceptance audit.
 5. Record concise tracked evidence and remove task-created large logs,
    profiles, and unused build worktrees. Preserve WIP backups and unrelated
    host workloads. Poll confirmed running gates infrequently.
@@ -760,19 +775,19 @@ failed an assertion and is not acceptance evidence.
   candidate must repeat the regression comparison if its failure inventory changes.
 - Does the self-tailcall proof cover every AST path for caller-argument sharing,
   and is it fail-closed for all other goto targets and argument aliases?
-- How can the ASM dispatcher avoid references to duplicate unvisited targets
-  while retaining per-source-scope semantics? Direct stack changes and global
-  name deduplication both failed three existing tests; current target sharing
-  also remains unaccepted.
-- Are the map error, false-branch diagnostic, and state-pad alias failure caused
-  by label changes or independent JVM semantics gaps? Parent-side evidence for
-  these outcomes must be checked before attributing them.
+- Label registration now shares the statement/declaration target and passes the
+  reducer plus all three unchanged JVM regressions on the current candidate.
+  Earlier name deduplication and stack changes remain rejected historical
+  attempts.
+- The map callback, constant-folded false branch, and state-pad failures are
+  fixed by eval-only protected-label propagation, live-branch construct-entry
+  collection, and returning the state refalias RHS value. The unchanged tests
+  pass on standard Perl and both PerlOnJava backends.
 - Does #1482 share a concrete cause, or require independent non-local LAST
   target and lexical warning-state fixes? Its report and a passing GOTO
   compilation regression do not establish that relationship.
-- The current source batch passes the unchanged mutex and full AnyEvent suite on
-  all three runtimes, plus the default unit gate. Final PR integration and
-  repeat validation on the resulting PR commit remain outstanding.
+- Current commit `d753a616e` passes all candidate gates. PR update, CI/review, and
+  verification on the remote PR commit remain outstanding.
 
 ## Related documents and skills
 

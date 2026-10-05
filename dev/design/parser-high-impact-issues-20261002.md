@@ -18,7 +18,7 @@ retained in PR #1623, and the issues were closed with that evidence.
 
 ## Progress tracking
 
-### Current status: current batch passes unit, label, and #1470 gates; four issue gates and PR #1623 integration remain
+### Current status: all five issue gates pass on candidate `d753a616e`; PR #1623 update and closure audit remain
 
 ### Completed
 
@@ -286,8 +286,19 @@ retained in PR #1623, and the issues were closed with that evidence.
   the mutex file passes 8/8, and all seven files / 103 assertions pass on
   standard Perl, JVM, and interpreter. This clears the prior JVM assertion-4
   acceptance gap for the current source candidate.
-- [ ] Rebase/integrate the accepted candidate into PR #1623, rerun the required
-  gates on the resulting commit, and complete the five-issue closure audit.
+- [x] Rebase the candidate onto current `origin/master` at `d753a616e`; only
+  CPAN report data had changed upstream. The exact rebased commit passes the
+  full unit gate in 6m26s and the five issue acceptance sets.
+- [x] HTML::Tree 5.07 passes on system Perl (969 tests; LeakTrace-only file
+  skipped), JVM, and interpreter (989 assertions each, one existing TODO
+  failure). `t/split.t` passes 444/444 and `t/refloop.t` 8/8.
+- [x] License::SPDX 0.07 passes 35/35 across 10 files on JVM via `jcpan -t`
+  and on interpreter with the same declared dependencies.
+- [x] Prototype, ascending version, both qualified constructor forms, and
+  retained #1466/#1476 regressions pass 9/9 on standard Perl and both backends.
+- [ ] Update PR #1623 from head `52a7fc6349d08dd9a6574bd8d19ff5700c7d7896`
+  to the rebased candidate; verify remote contents, required CI, review, then
+  complete the five-issue closure audit.
 
 ### Exact reader-callback work interval (2026-10-04)
 
@@ -356,18 +367,17 @@ interpreter files. Do not label this inventory green.
 
 Follow the [five-issue completion plan](parser-high-impact-completion-plan.md)
 for the authoritative sequence, acceptance gates, and build discipline. Reviewed
-2026-10-05: the current batched source passes the default build, focused label
-regressions, and full AnyEvent suite on all three runtimes. Final acceptance on
-the PR commit, the other four issue gates, and publication remain.
+2026-10-05: rebased candidate `d753a616e` passes the full unit gate and all five
+issue acceptance sets. PR #1623 publication, CI/review, and issue closure remain.
 
-1. Recheck PR #1623 branch and remote contents, then integrate/rebase this
-   accepted candidate into that single delivery PR. Preserve the WIP snapshot.
-2. Rerun the required full unit and focused issue gates on the resulting PR
-   commit; finish acceptance for #1619, #1622, #1615, and both #1166 forms.
+1. Update PR #1623 to the rebased `d753a616e` candidate, retaining one delivery
+   PR for all five fixes. Verify its remote contents and required CI.
+2. Review and respond to PR feedback without changing tests that pass standard
+   Perl; any source changes invalidate the existing final gate.
 3. Complete the interpreter regression audit and changelog decision. Close only
    tickets confirmed fixed after the five-issue acceptance audit and PR review.
 
 ### Open questions
 
-- The current source candidate passes the unchanged mutex and seven-file
-  AnyEvent::Tools suite on all three runtimes. Repeat on the final PR commit.
+- Candidate `d753a616e` passes the unchanged mutex and seven-file AnyEvent::Tools
+  suite on all three runtimes. Repeat on the final PR commit.
