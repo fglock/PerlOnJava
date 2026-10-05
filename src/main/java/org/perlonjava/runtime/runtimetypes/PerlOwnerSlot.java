@@ -24,6 +24,8 @@ public final class PerlOwnerSlot {
     private final RuntimeScalar padCell;
     private final long identity = NEXT_ID.incrementAndGet();
     private RuntimeBase referent;
+    private PerlRuntime ownerRuntime;
+    private LifecycleRuntimeState ownerRuntimeState;
     private int legacyCaptureCount;
     private long nextReleaseSequence;
 
@@ -135,15 +137,31 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("cannot transfer an owner slot with live legacy counts");
         }
         RuntimeBase previous = referent;
+        PerlRuntime previousRuntime = ownerRuntime;
+        LifecycleRuntimeState previousState = ownerRuntimeState;
+        PerlRuntime nextRuntime = nextReferent == null
+                ? null : PerlRuntime.currentOrNull();
+        if (nextReferent != null && nextRuntime == null) nextRuntime = previousRuntime;
+
         referent = nextReferent;
+        ownerRuntime = nextRuntime;
+        ownerRuntimeState = nextRuntime == null || nextReferent == null
+                ? null : nextRuntime.retainOwnerSlotReferent(nextReferent);
         if (previous != null) previous.removeOwnerSlot(this);
+        if (previous != null) {
+            PerlRuntime.releaseOwnerSlotReferent(previousState, previous);
+        }
         if (nextReferent != null) nextReferent.addOwnerSlot(this);
     }
 
     /** Release this slot. Repeated releases are harmless. */
     public synchronized void release() {
         RuntimeBase previous = referent;
+        LifecycleRuntimeState previousState = ownerRuntimeState;
         referent = null;
+        ownerRuntime = null;
+        ownerRuntimeState = null;
         if (previous != null) previous.removeOwnerSlot(this);
+        if (previous != null) PerlRuntime.releaseOwnerSlotReferent(previousState, previous);
     }
 }

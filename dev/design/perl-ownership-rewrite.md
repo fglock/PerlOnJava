@@ -52,13 +52,10 @@ captures, return values, `MortalList`, weak clearing, and `DESTROY`. Turning on 
 new scalar-only counter would omit owners at aggregate stores and could dispatch
 destruction while a legacy owner still exists.
 
-This finding rules out a scalar-only migration. The reduced #1618 reproducer
-also rules out scalar plus array/hash slots as a complete first path: the
-failing `HTML::Element->new_from_lol` lifecycle creates a recursive closure,
-stores its node references in aggregate slots, and undefines the closure before
-returning. Perl 5.44 releases the closure's pad owners there; PerlOnJava retained
-the tree. `undef $sub` is a scalar slot overwrite, not the separate `undef &sub`
-CV-body operation.
+This finding rules out treating a scalar-only migration as a fix for #1618.
+The reduced reproducer crosses closure pads and aggregate slots, so Phase 2
+must cover those boundaries before HTML::Tree can pass. `undef $sub` is a
+scalar slot overwrite, not the separate `undef &sub` CV-body operation.
 
 The first verified fix is at the reachability boundary. The interpreter's
 `capturedVars` array is execution metadata and can still contain a pad after
@@ -75,18 +72,21 @@ closure-pad semantic ownership, including transfer when a captured pad changes
 referents and idempotent release. The selective `refCount` increment and
 deferred decrement still form the legacy lifecycle bridge; scalar stores,
 aggregate slots, weak-reference transitions, and `DESTROY` are not yet migrated.
-Phase 1 is complete only after the owner-slot API and bridge cover the selected
-closure, scalar, aggregate, and deferred-release path on both backends.
+Phase 1 is complete only after the owner-slot identity/count/lifecycle contract,
+runtime-scoped cycle retention, and bridge cover one selected path end to end on
+both backends. Phase 2 extends that path across scalar proxies and array/hash
+ownership, with HTML::Tree as the integration exit criterion.
 
 ## Phases
 
 | Phase | Scope | Exit evidence |
 |---|---|---|
 | 0. Oracle and boundary audit | Pin Perl 5.44 oracle; reproduce #1618 and #1642; inventory ownership edges; capture baseline behavior and cleanup costs | Oracle configuration, permanent reproducers, source/sink inventory, and a selected path with a demonstrated boundary |
-| 1. First complete owned-slot path | Core owner identity/count/lifecycle API; closure pad slots and release; direct scalar and array/hash owner slots; deferred release bridge; weak/DESTROY transitions; positive-count cycle retention | Enabled by default for the path on both backends; a permanent externally visible regression fails on the parent and passes after; primitive and bridge tests pass |
-| 2. Calls and captured values | Argument aliases, return transfers, mortal temporaries, closures, pads, all cleanup exits and nested eval/fallback | Migrated call/capture paths are default-enabled and require no corrective whole-root scans |
-| 3. Remaining owner families | Globs, constants, tied/magic and provider boundaries, refcount APIs, thread/shared ownership, resources, runtime reset, global destruction | Inventory has no unsupported ownership edge; lifecycle and integration coverage passes |
-| 4. Qualification and legacy removal | Ecosystem/performance acceptance, stabilization, delete obsolete counter corrections and migration bridges | Full acceptance passes before and after removal with recorded CPU, allocation, heap and deterministic cleanup costs |
+| 1. First complete ownership path | Minimum owner identity/count/lifecycle API, retain/release/transfer primitives, runtime-scoped positive-count cycle retention, and explicit legacy bridge for one selected path | Enable the complete path by default on both backends; a permanent Perl-level regression changes from failing to passing; primitive and boundary tests pass |
+| 2. Aggregate ownership and HTML::Tree | Extend complete paths through scalar/proxy and array/hash operations, replacement, deletion, aliases, calls, cleanup, and destruction needed by HTML::Tree | Migrated paths are default-enabled; unchanged HTML-Tree 5.07 `t/refloop.t` passes 8/8 with correct counts and destruction |
+| 3. Calls and captured values | Migrate remaining argument/list ownership, return values, mortal temporaries, closures and pads together with cleanup on all exits, nested eval and fallback | Lifecycle regressions pass by default; migrated ordinary cleanup and count queries need no corrective whole-root scans |
+| 4. Remaining ownership families | Complete globs, code/constants, tied/magic and provider boundaries, refcount APIs, thread cloning/shared lifetimes, resources, runtime reset and global destruction | Every supported family is migrated and passes differential/integration tests |
+| 5. Qualification and legacy removal | Ecosystem/performance acceptance, stabilization, then removal of obsolete accounting and recovery | Final acceptance passes before and after removal with CPU, allocation, heap and deterministic cleanup costs recorded |
 
 Phase numbers are delivery boundaries, not estimates of the total project.
 The 20–36 engineer-week estimate remains provisional until the ownership audit
@@ -138,17 +138,17 @@ and first path establish implementation cost.
 
 ### Next steps
 
-1. Validate the closure-pad bridge on both PerlOnJava backends and add coverage
-   for overwrite, scope-exit, and weak transitions.
-2. Migrate direct scalar and array/hash owner slots through the same API while
-   preserving transfers and deferred release ordering.
+1. Add a runtime-scoped strong registry for positive owner slots so retained
+   closure referents survive as Perl cycles independently of JVM reachability.
+2. Complete the closure path's lifecycle API and boundary evidence, including
+   DESTROY, weak clearing, resurrection, and exact count checkpoints.
 3. Reproduce #1642's repeated deferred-cleanup root queries with deterministic
-   counters on this baseline; separate that cost regression from Phase 1
-   correctness unless the selected ownership path demonstrates the connection.
-4. Resolve the immediate cleanup failures in the content and incremental
-   parser paths; verify both focused reproducers plus unchanged `t/refloop.t`.
-5. Run the repository gate from an immutable source commit after the ownership
-   path and its bridge tests are complete.
+   counters on this baseline.
+4. Extend the complete ownership path through scalar proxies and array/hash
+   slots in Phase 2, then resolve the HTML::Tree teardown failures and verify
+   unchanged `t/refloop.t`.
+5. Run each repository gate from an immutable commit and record before/after
+   evidence for the enabled ownership path.
 
 ### Open questions and blockers
 

@@ -200,6 +200,36 @@ public final class PerlRuntime implements AutoCloseable {
         return frame != null ? frame.runtime : null;
     }
 
+    LifecycleRuntimeState retainOwnerSlotReferent(RuntimeBase referent) {
+        LifecycleRuntimeState state = lifecycleState;
+        synchronized (state) {
+            state.positiveOwnerReferents.merge(referent, 1, Integer::sum);
+        }
+        return state;
+    }
+
+    static void releaseOwnerSlotReferent(
+            LifecycleRuntimeState state, RuntimeBase referent) {
+        if (state == null || referent == null) return;
+        synchronized (state) {
+            Integer count = state.positiveOwnerReferents.get(referent);
+            if (count == null) return;
+            if (count <= 1) state.positiveOwnerReferents.remove(referent);
+            else state.positiveOwnerReferents.put(referent, count - 1);
+        }
+    }
+
+    int positiveOwnerSlotReferentCount(RuntimeBase referent) {
+        LifecycleRuntimeState state = lifecycleState;
+        synchronized (state) {
+            return state.positiveOwnerReferents.getOrDefault(referent, 0);
+        }
+    }
+
+    boolean retainsPositiveOwnerSlotReferent(RuntimeBase referent) {
+        return positiveOwnerSlotReferentCount(referent) > 0;
+    }
+
     /** Record the address exposed by Perl reference stringification for B introspection. */
     public void registerReferenceAddress(RuntimeBase value) {
         registerReferenceAddress(referenceAddress(value), value);
