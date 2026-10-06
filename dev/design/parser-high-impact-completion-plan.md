@@ -715,8 +715,11 @@ implementation or acceptance work.
   focused regressions pass on standard Perl and both PerlOnJava backends where
   applicable. Recheck all of them on this rebased candidate.
 - [x] Focused strict `coreamp.t` exposed callable `CORE::sysread`, `tie`,
-  `tied`, and `umask` gaps. The source fixes and project-owned regression are
-  now included in `5fcb368e3`; this exact candidate has not yet been rebuilt.
+  `tied`, and `umask` gaps. Its next run exposed the adjacent `CORE::undef`
+  reference prototype and dispatch gaps after passing 520/524 assertions.
+  Source fixes and project-owned regressions for these cases are now staged in
+  the next validation batch; `core_undef_coderef.t` passes standard Perl. The
+  candidate still needs a build and focused rerun.
 - [ ] Run full `make`, focused `coreamp.t`, then the full strict 575-file UAT
   on the immutable rebased candidate. Require zero failed assertions, child
   exit errors, timeouts, or incomplete files.

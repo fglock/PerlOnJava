@@ -38,6 +38,8 @@ priorities and future plans.
   `CORE::substr` code references.
 - Match Perl diagnostics, lvalue behavior, and list context for callable
   `CORE::recv`, `CORE::select`, `CORE::splice`, and `CORE::reset`.
+- Support callable `CORE::undef`, `CORE::sysread`, and `CORE::umask`, and validate
+  callable `CORE::tie` and `CORE::tied` reference arguments.
 - Support callable `CORE::close` and directory I/O wrappers with Perl-compatible
   false results and list-context behavior.
 - Preserve Perl diagnostics and lvalue behavior for callable `CORE::join`,

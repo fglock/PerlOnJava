@@ -237,6 +237,28 @@ public class CoreSubroutineGenerator {
      * Handle prototype patterns (regex-like matching for complex prototypes).
      */
     private static PerlSubroutine buildFromPrototypePattern(String name, String proto) {
+        if ("undef".equals(name) && ";\\[$@%&*]".equals(proto)) {
+            return (args, ctx) -> {
+                if (args.size() > 1) {
+                    throw new PerlCompilerException("Too many arguments for undef operator");
+                }
+                if (args.size() == 0) return Operator.undef().getList();
+                RuntimeBase target = args.get(0);
+                requireUndefTarget(target);
+                RuntimeScalar scalar = (RuntimeScalar) target;
+                switch (scalar.type) {
+                    case RuntimeScalarType.REFERENCE -> scalar.scalarDeref().undefine();
+                    case RuntimeScalarType.ARRAYREFERENCE -> scalar.arrayDeref().clear();
+                    case RuntimeScalarType.HASHREFERENCE -> scalar.hashDeref().clear();
+                    case RuntimeScalarType.CODE -> RuntimeCode.undefineCodeReference(scalar);
+                    case RuntimeScalarType.GLOBREFERENCE -> {
+                        if (scalar.value instanceof RuntimeGlob glob) glob.undefine();
+                    }
+                    default -> throw new PerlCompilerException("Invalid CORE::undef target");
+                }
+                return Operator.undef().getList();
+            };
+        }
         // \@@ — push, unshift (first arg is array ref, rest are list)
         if (proto.equals("\\@@")) {
             return buildArrayRefPlusList(name);
@@ -886,6 +908,19 @@ public class CoreSubroutineGenerator {
         if (!valid) {
             throw new PerlCompilerException("Type of arg 1 to &CORE::" + name
                     + " must be reference to one of [$@%*]");
+        }
+    }
+
+    private static void requireUndefTarget(RuntimeBase value) {
+        boolean valid = value instanceof RuntimeScalar scalar
+                && switch (scalar.type) {
+                    case RuntimeScalarType.REFERENCE, RuntimeScalarType.ARRAYREFERENCE,
+                            RuntimeScalarType.HASHREFERENCE, RuntimeScalarType.CODE,
+                            RuntimeScalarType.GLOBREFERENCE -> !(scalar.value instanceof RuntimeIO);
+                    default -> false;
+                };
+        if (!valid) {
+            throw new PerlCompilerException("Type of arg 1 to &CORE::undef must be reference to one of [$@%&*]");
         }
     }
 
