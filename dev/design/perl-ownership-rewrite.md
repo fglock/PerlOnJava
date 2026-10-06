@@ -192,12 +192,11 @@ and first path establish implementation cost.
   a rescued selective count is released after the active phaser returns. Two
   permanent regressions cover DESTROY ordering inside END and shared lexical
   access across LIFO END blocks; additional regressions cover explicit `exit`
-  dispatch, `die`-initiated shutdown, and nested `exit` from END. The nested
-  exit test exposed `PerlExitException` being reported as an END failure and
-  converted to status 1; shutdown now propagates that control signal through
-  `WarnDie.exit` and the top-level END dispatcher. All five END lifecycle
-  tests match Perl 5.45.4 and pass on both PerlOnJava backends. The full
-  `nice -n 19 make` gate passes on `74d6bc38b`.
+  dispatch, `die`-initiated shutdown, nested `exit` from END, and continuing
+  the END queue after a callback dies. Nested exit previously became a false
+  END failure; it now propagates as control flow. A callback `die` now records
+  its error, continues the queue, and produces a nonzero exit status. These
+  newest changes are Perl 5.45.4 validated; the full gate is pending.
 
 ### Next steps
 

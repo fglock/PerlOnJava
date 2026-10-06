@@ -89,13 +89,14 @@ public class SpecialBlock {
      * @param resetChildStatus if true, reset $? to 0 before running END blocks (normal exit).
      *                         if false, preserve $? (die/exception path).
      */
-    public static void runEndBlocks(boolean resetChildStatus) {
+    public static Throwable runEndBlocks(boolean resetChildStatus) {
         if (resetChildStatus) {
             // Reset $? to 0 before END blocks run (Perl semantics for normal exit)
             // This ensures END blocks see $? = 0 unless they explicitly set it
             getGlobalVariable("main::?").set(0);
         }
         
+        Throwable firstFailure = null;
         RuntimeArray endBlocks = getEndBlocks();
         while (!endBlocks.isEmpty()) {
             RuntimeScalar block = RuntimeArray.shift(endBlocks);
@@ -104,19 +105,30 @@ public class SpecialBlock {
                 if (code != null) code.beginEndBlockExecution();
                 try {
                     RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
+                } catch (PerlExitException exit) {
+                    // exit() recursively drains the remaining queue. It is a
+                    // control signal, not a failing END callback.
+                    throw exit;
+                } catch (Throwable failure) {
+                    if (firstFailure == null) firstFailure = failure;
+                    String message = ErrorMessageUtil.stringifyException(failure);
+                    System.err.print(message);
+                    if (!message.endsWith("\n")) System.err.println();
+                    System.err.println("END failed--call queue aborted.");
                 } finally {
                     if (code != null) code.endEndBlockExecution();
                 }
             }
         }
+        return firstFailure;
     }
 
     /**
      * Executes all code blocks stored in the endBlocks array in LIFO order.
      * Resets $? to 0 before running (normal exit behavior).
      */
-    public static void runEndBlocks() {
-        runEndBlocks(true);
+    public static Throwable runEndBlocks() {
+        return runEndBlocks(true);
     }
 
     /**

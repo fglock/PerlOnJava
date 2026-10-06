@@ -985,8 +985,9 @@ public class WarnDie {
         // Match normal shutdown: destroy captures unrelated to END now, while
         // preserving values reachable by END/global CODE until END completes.
         MortalList.flushDeferredCapturesBeforeEnd();
+        Throwable endFailure;
         try {
-            runEndBlocks(false);  // Don't reset $? - we just set it to the exit code
+            endFailure = runEndBlocks(false);  // Don't reset $? - we just set it to the exit code
         } catch (PerlExitException exit) {
             // exit() called by an active END block recursively drains the
             // remaining END queue. Its exit is the program's normal exit, not
@@ -1005,6 +1006,9 @@ public class WarnDie {
         // Global destruction: walk stashes for tracked blessed objects
         GlobalDestruction.runGlobalDestruction();
         RuntimeIO.closeAllHandles();
+        if (endFailure != null) {
+            throw new PerlExitException(1);
+        }
         // Use $? as the final exit code - END blocks may have modified it
         int finalExitCode = getGlobalVariable("main::?").getInt();
         throw new PerlExitException(finalExitCode);

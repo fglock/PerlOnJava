@@ -828,8 +828,9 @@ public class PerlLanguageProvider {
                     // captures reachable from queued END blocks or package CODE.
                     MortalList.flushDeferredCapturesBeforeEnd();
                     CallerStack.push("main", ctx.compilerOptions.fileName, 0);
+                    Throwable endFailure;
                     try {
-                        runEndBlocks();
+                        endFailure = runEndBlocks();
                     } finally {
                         CallerStack.pop();
                         // END may itself fail; captured cleanup still belongs after
@@ -839,6 +840,10 @@ public class PerlLanguageProvider {
                     }
                     // Global destruction: walk stashes for tracked blessed objects
                     GlobalDestruction.runGlobalDestruction();
+                    if (endFailure != null) {
+                        RuntimeIO.closeAllHandles();
+                        throw new PerlExitException(1);
+                    }
                 }
             } catch (PerlExitException exit) {
                 // An END block may call exit(), which drains the remaining
