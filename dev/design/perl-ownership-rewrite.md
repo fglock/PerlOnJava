@@ -201,14 +201,15 @@ and first path establish implementation cost.
   The full `nice -n 19 make` gate passes on `78369acc9` (8m33s).
 - [x] Add a permanent captured-aggregate pad regression at
   [`issue_1649_captured_aggregate_pad_lifecycle.t`](../../src/test/resources/unit/refcount/issue_1649_captured_aggregate_pad_lifecycle.t).
-  The test covers array and hash captures and passes all nine assertions on
-  Perl 5.45.4. Diagnosis found that assignment-form `my @array = ...` and
-  `my %hash = ...` omitted `REGISTER_MY_VAR` in interpreter bytecode, so the
-  statement-boundary weak sweep could miss live lexical aggregates. The
-  assignment compiler now registers both aggregate types, and the interpreter
-  also tracks aggregate-only closures for frame-exit capture release. Both
-  PerlOnJava backends pass all nine assertions, and the full `nice -n 19 make`
-  gate passes (11m39s, 2026-10-06).
+  The test covers array and hash captures, temporary aggregate-only closures,
+  and exact `DESTROY` counts; all fifteen assertions pass on Perl 5.45.4 and
+  both PerlOnJava backends. Diagnosis found that assignment-form
+  `my @array = ...` and `my %hash = ...` omitted `REGISTER_MY_VAR` in
+  interpreter bytecode, so the statement-boundary weak sweep could miss live
+  lexical aggregates. The assignment compiler now registers both aggregate
+  types, and the interpreter also tracks aggregate-only closures for frame-exit
+  capture release. The full `nice -n 19 make` gate passes (6m43s,
+  2026-10-06).
 
 ### Next steps
 
