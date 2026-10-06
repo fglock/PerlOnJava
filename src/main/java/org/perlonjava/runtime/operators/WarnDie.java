@@ -847,12 +847,12 @@ public class WarnDie {
                 DynamicVariableManager.popToLocalLevel(level);
             }
 
-            throw new PerlDieException(errVariable, snapshotWarningHandler(),
+            throw new PerlDieException(new RuntimeScalar(errVariable), snapshotWarningHandler(),
                     org.perlonjava.runtime.WarningBitsRegistry.getRuntimeWarningBits(),
                     WarningFlags.isWarningSuppressedAtRuntime("misc"));
         }
 
-        throw new PerlDieException(errVariable, snapshotWarningHandler(),
+        throw new PerlDieException(new RuntimeScalar(errVariable), snapshotWarningHandler(),
                 org.perlonjava.runtime.WarningBitsRegistry.getRuntimeWarningBits(),
                 WarningFlags.isWarningSuppressedAtRuntime("misc"));
     }

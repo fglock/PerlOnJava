@@ -465,7 +465,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return executionState.activeCodeStack;
     }
 
-    private record ActiveLexicalFrame(RuntimeCode code, Map<String, RuntimeBase> cells) {}
+    private record ActiveLexicalFrame(
+            RuntimeCode code,
+            Map<String, RuntimeBase> cells,
+            String previousCallerPackage,
+            String callSitePackage) {}
     @SuppressWarnings("unchecked")
     private static Deque<ActiveLexicalFrame> activeLexicalFrames(
             ExecutionRuntimeState executionState) {
@@ -594,12 +598,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static void pushActiveCode(RuntimeCode code) {
         PerlRuntime runtime = PerlRuntime.current();
         ExecutionRuntimeState executionState = runtime.executionState();
+        RuntimeScalar callerPackage = runtime.executionState().currentCallerPackage;
+        String previousPackage = callerPackage.toString();
+        String callSitePackage = executionState.pendingCallerPackages.peek();
+        if (callSitePackage == null) callSitePackage = previousPackage;
         activeCodeStack(executionState).push(code);
         // Keep the live pad for every active CV. Besides Devel::LexAlias and
         // runtime regex sources, eval STRING in package DB must resolve the
         // debugged caller's lexicals rather than DB's own closure.
         activeLexicalFrames(executionState).push(
-                new ActiveLexicalFrame(code, new HashMap<>()));
+                new ActiveLexicalFrame(code, new HashMap<>(), previousPackage, callSitePackage));
+        // Package statements inside a subroutine update this runtime tracker
+        // for the active lexical scope. Seed it with the subroutine's own
+        // package so calls made by that subroutine capture the right package,
+        // even when the sub itself was invoked from another package.
+        if (code.packageName != null && !code.packageName.isEmpty()) {
+            callerPackage.set(code.packageName);
+        }
     }
 
     /** Current compiled subroutine package for builtins that need call-site scope. */
@@ -637,7 +652,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         ExecutionRuntimeState executionState = runtime.executionState();
         Deque<ActiveLexicalFrame> frames = activeLexicalFrames(executionState);
         if (!frames.isEmpty() && frames.peek().code() == code) {
-            frames.pop();
+            ActiveLexicalFrame frame = frames.pop();
+            executionState.currentCallerPackage.set(frame.previousCallerPackage());
         } else {
             frames.removeIf(frame -> frame.code() == code);
         }
@@ -958,6 +974,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public static void pushCallContext(int callContext) {
         callContextStack().push(callContext);
+        PerlRuntime.current().executionState().pendingCallerPackages.push(
+                PerlRuntime.current().executionState().currentCallerPackage.toString());
     }
 
     public static int currentRawCallContext() {
@@ -987,6 +1005,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Deque<Integer> ctxStack = callContextStack();
         if (!ctxStack.isEmpty()) {
             ctxStack.pop();
+        }
+        Deque<String> pendingPackages = PerlRuntime.current().executionState().pendingCallerPackages;
+        if (!pendingPackages.isEmpty()) {
+            pendingPackages.pop();
         }
     }
 
@@ -1164,6 +1186,38 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 j++;
             }
             if (logicalIndex++ == logicalFrame) return outermostContext;
+            i = j;
+        }
+        return null;
+    }
+
+    /**
+     * Return the package active where a logical Perl frame was called.
+     *
+     * Source-mapped JVM frames normally provide the package from the compiled
+     * subroutine. For generated methods that report their own source location
+     * as the outer call site, caller() needs the package captured when the
+     * method was entered instead.
+     */
+    public static String getCallerPackageAtCallerFrame(int logicalFrame) {
+        if (logicalFrame < 0) return null;
+        java.util.List<RuntimeCode> codes = new java.util.ArrayList<>(activeCodeStack());
+        java.util.List<ActiveLexicalFrame> frames = new java.util.ArrayList<>(
+                activeLexicalFrames(PerlRuntime.current().executionState()));
+        int size = Math.min(codes.size(), frames.size());
+        int logicalIndex = 0;
+        for (int i = 0; i < size; ) {
+            RuntimeCode previous = codes.get(i);
+            String callSitePackage = frames.get(i).callSitePackage();
+            int j = i + 1;
+            while (j < size) {
+                RuntimeCode next = codes.get(j);
+                if (!isCompilerWrapperPair(next, previous)) break;
+                callSitePackage = frames.get(j).callSitePackage();
+                previous = next;
+                j++;
+            }
+            if (logicalIndex++ == logicalFrame) return callSitePackage;
             i = j;
         }
         return null;
@@ -5505,21 +5559,45 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             ArrayList<String> locationFrameInfo = interpreterFrameBeforeVirtualEval
                     ? stackTrace.get(frame + 1)
                     : frameInfo;
+            int syntheticOwnSubFramesBefore = countSyntheticOwnSubFramesBefore(stackTrace, frame);
+            int trackedOriginalFrame = Math.max(0, originalFrame - syntheticOwnSubFramesBefore);
+            // Interpreter stack traces may contain a synthetic entry for the
+            // current subroutine. That entry is already represented by the
+            // active-code stack, so do not subtract it when selecting the
+            // logical caller frame.
+            int trackedActiveCodeFrame = activeCodeFrameForCaller(
+                    result.firstFrameFromInterpreter() ? originalFrame : trackedOriginalFrame);
             // Runtime stack trace
             if (ctx == RuntimeContextType.SCALAR) {
                 String pkg = locationFrameInfo.getFirst();
+                RuntimeCode reportedCode = activeCodeAtCallerFrame(trackedActiveCodeFrame);
+                boolean carpTrustedFrame = isCarpStackActive() && reportedCode != null
+                        && isCarpTrustedCallerPackage(reportedCode.packageName);
+                if ((reportedCode != null && "DESTROY".equals(reportedCode.subName))
+                        || (isCarpStackActive()
+                                && !carpTrustedFrame)) {
+                    String callSitePackage = getCallerPackageAtCallerFrame(trackedActiveCodeFrame);
+                    if (callSitePackage != null && !callSitePackage.isEmpty()) {
+                        pkg = callSitePackage;
+                    }
+                }
                 res.add(new RuntimeScalar(normalizeCallerPackage(pkg)));
             } else {
-                int syntheticOwnSubFramesBefore = countSyntheticOwnSubFramesBefore(stackTrace, frame);
-                int trackedOriginalFrame = Math.max(0, originalFrame - syntheticOwnSubFramesBefore);
-                // Interpreter stack traces may contain a synthetic entry for the
-                // current subroutine.  That entry is already represented by the
-                // active-code stack, so do not subtract it when selecting the
-                // logical caller frame.
-                int trackedActiveCodeFrame = activeCodeFrameForCaller(
-                        result.firstFrameFromInterpreter() ? originalFrame : trackedOriginalFrame);
                 int trackedArgsFrame = Math.max(0, argsFrame - syntheticOwnSubFramesBefore);
                 String pkg = locationFrameInfo.get(0);
+                String callSitePackage = getCallerPackageAtCallerFrame(trackedActiveCodeFrame);
+                RuntimeCode reportedCode = activeCodeAtCallerFrame(trackedActiveCodeFrame);
+                if (reportedCode != null && "DESTROY".equals(reportedCode.subName)
+                        && callSitePackage != null && !callSitePackage.isEmpty()) {
+                    pkg = callSitePackage;
+                }
+                if (isCarpStackActive() && trackedActiveCodeFrame >= 0) {
+                    String carpCallSitePackage = getCallerPackageAtCallerFrame(
+                            trackedActiveCodeFrame + 1);
+                    if (carpCallSitePackage != null && !carpCallSitePackage.isEmpty()) {
+                        pkg = carpCallSitePackage;
+                    }
+                }
                 RuntimeCode callSiteOwner = activeCodeAtCallerFrame(trackedActiveCodeFrame + 1);
                 if (callSiteOwner != null && callSiteOwner.isQuotedRegexCallback) {
                     // Calls made by a qr// callback are compiled from the
@@ -6147,6 +6225,31 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             previous = active;
         }
         return null;
+    }
+
+    private static boolean isCarpStackActive() {
+        for (RuntimeCode active : activeCodeStack()) {
+            if ("Carp".equals(active.packageName)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Carp honors a caller package's @CARP_NOT list while walking through
+     * wrappers. Keep that package visible to Carp even when the dynamic
+     * call-site package tracker differs from the wrapper's source package.
+     */
+    private static boolean isCarpTrustedCallerPackage(String packageName) {
+        if (packageName == null || packageName.isEmpty()) return false;
+        for (RuntimeCode active : activeCodeStack()) {
+            if (active.packageName == null || active.packageName.isEmpty()) continue;
+            RuntimeArray carpNot = GlobalVariable.globalArrays.get(active.packageName + "::CARP_NOT");
+            if (carpNot == null) continue;
+            for (RuntimeScalar trustedPackage : carpNot.elements) {
+                if (packageName.equals(trustedPackage.toString())) return true;
+            }
+        }
+        return false;
     }
 
     /** Map a Perl-visible caller depth to the implementation stack depth. */

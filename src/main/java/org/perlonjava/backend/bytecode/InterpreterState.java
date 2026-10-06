@@ -62,6 +62,8 @@ public class InterpreterState {
     public static void setCurrentPackageStatic(String name) {
         GlobalVariable.ensurePackageStash(name);
         currentPackage.get().set(name);
+        org.perlonjava.runtime.runtimetypes.PerlRuntime.current()
+                .executionState().currentCallerPackage.set(name);
     }
 
     /**
@@ -80,6 +82,10 @@ public class InterpreterState {
         RuntimeScalar pkg = currentPackage.get();
         org.perlonjava.runtime.runtimetypes.DynamicVariableManager.pushLocalVariable(pkg);
         pkg.set(name);
+        RuntimeScalar callerPkg = org.perlonjava.runtime.runtimetypes.PerlRuntime.current()
+                .executionState().currentCallerPackage;
+        org.perlonjava.runtime.runtimetypes.DynamicVariableManager.pushLocalVariable(callerPkg);
+        callerPkg.set(name);
     }
     private static Deque<InterpreterFrame> frameStack() {
         return org.perlonjava.runtime.runtimetypes.PerlRuntime.current()
