@@ -71,7 +71,7 @@ public class CoreSubroutineGenerator {
             return installBarewordOnly(operatorName, prototype);
         }
 
-        if (prototype == null) {
+        if (prototype == null && !"select".equals(operatorName)) {
             return false; // syntax-only keyword with null prototype
         }
 
@@ -174,6 +174,9 @@ public class CoreSubroutineGenerator {
      * The lambda unpacks @_ and calls the operator's Java implementation.
      */
     private static PerlSubroutine buildSubroutine(String name, String proto) {
+        if (proto == null && "select".equals(name)) {
+            return buildGenericVarargs(name);
+        }
         // First try exact prototype match
         PerlSubroutine result = buildFromExactPrototype(name, proto);
         if (result != null) return result;
