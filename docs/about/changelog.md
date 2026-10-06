@@ -27,6 +27,8 @@ priorities and future plans.
   roots, and release aggregate-only closure captures when their frame exits.
 - Register BEGIN-backed scalar and aggregate lexical pads as interpreter roots
   when they enter the main pad, preserving weak references at runtime sweeps.
+- Count captured array and hash pads as closure owners and align named aggregate
+  `B::SV::REFCNT` results with Perl.
 - Release closure captures when retired interpreter pad metadata is no longer a Perl owner.
 - Keep END block captures alive through queued and active execution until END
   releases their lexical owners, including `die`-initiated shutdown, nested

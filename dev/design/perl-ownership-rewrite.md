@@ -218,6 +218,14 @@ and first path establish implementation cost.
   and both PerlOnJava backends. The pre-fix interpreter failed all three
   main-pad retention assertions; the Perl oracle and JVM passed. The full
   `nice -n 19 make` gate passes on `3ee9f9772` (12m01s, 2026-10-06).
+- [x] Count captured array and hash pads as referent owners through their
+  closure owner slots, and discount the `B::SV` probe's private hash slot for
+  named aggregates. The permanent regression records the Perl 5.45.4 sequence
+  2, 3, 4, 3, 2 for two closures capturing one array or hash. The pre-fix JVM
+  and interpreter each failed three of ten assertions; both backends now pass
+  all ten, as does the Perl oracle. Captured-aggregate lifecycle (15/15) and
+  scalar pad-transfer (6/6) regressions also pass on both backends. The full
+  `nice -n 19 make` gate passes on `5b9f41733` (9m51s, 2026-10-06).
 
 ### Next steps
 
@@ -225,7 +233,8 @@ and first path establish implementation cost.
    with the measured deferred-release path; identify which releases can share
    a root snapshot across statement boundaries.
 2. Qualify the closure owner's remaining lifecycle boundaries while preserving
-   Perl 5.45.4 weak and exact count checkpoints.
+   Perl 5.45.4 weak and exact count checkpoints, including closure replacement
+   and scope-exit cases for tracked blessed aggregates.
 3. Extend the complete ownership path through scalar proxies and array/hash
    slots in Phase 2, then resolve the HTML::Tree teardown failures and verify
    unchanged `t/refloop.t`.
