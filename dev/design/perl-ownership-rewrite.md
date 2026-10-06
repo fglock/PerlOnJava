@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 in progress; closure-pad release, capture transfer, weak transitions, and runtime cycle retention are covered
+**Status:** Phase 1 candidate is implemented; PR integration is pending. The selected closure-pad path has explicit ownership, cleanup, weak-reference, and cycle-retention coverage on both backends.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
@@ -102,7 +102,7 @@ and first path establish implementation cost.
 
 ## Progress tracking
 
-### Current status: Phase 1 in progress; closure-pad release regressions fixed
+### Current status: Phase 1 implementation candidate; PR integration pending
 
 ### Completed
 
@@ -266,17 +266,16 @@ and first path establish implementation cost.
 
 ### Next steps
 
-1. Reproduce the Catalyst scenario from #1642 and compare its cleanup traffic
-   with the measured deferred-release path; identify which releases can share
-   a root snapshot across statement boundaries.
-2. Qualify the closure owner's remaining lifecycle boundaries while preserving
-   Perl 5.45.4 weak and exact count checkpoints, including closure replacement
-   and scope-exit cases for tracked blessed aggregates.
-3. Extend the complete ownership path through scalar proxies and array/hash
+1. Complete PR CI and review for the enabled closure-pad path; keep the branch
+   draft until the integrated evidence is accepted.
+2. Continue the #1642 Catalyst cleanup profile as an integration follow-up.
+   The full suite remains enabled except for Catalyst's six unsupported fork
+   assertions; the broad test attempt and cleanup profile are incomplete.
+3. Extend the ownership path through scalar proxies and ordinary array/hash
    slots in Phase 2, then resolve the HTML::Tree teardown failures and verify
    unchanged `t/refloop.t`.
 4. Run each repository gate from an immutable commit and record before/after
-   evidence for the enabled ownership path.
+   evidence for each enabled path.
 
 ### Open questions and blockers
 
@@ -284,7 +283,8 @@ and first path establish implementation cost.
   builds now have separate deterministic counters. The synthetic deferred
   test observes one external-root snapshot per flush. Reproduction of the
   Catalyst workload from #1642 remains open so its object and flush pattern can
-  be matched to these paths.
+  be matched to these paths; it is tracked as integration follow-up beyond the
+  selected Phase 1 closure-pad path.
 - END CVs have queued and active lifetime tests, including aggregate captures,
   nested `exit`, `die`, and callback failure. UNITCHECK/CHECK/INIT lexical-pad
   lifetime is covered separately; the corresponding phaser ownership path is
