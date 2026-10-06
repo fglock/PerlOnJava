@@ -701,7 +701,29 @@ implementation or acceptance work.
 
 ## Progress tracking
 
-### Current status: all five issue gates pass on rebased candidate `d753a616e`; PR update and closure audit remain
+### Current status: final rebased candidate `5fcb368e3`; final build, UAT, PR CI, and issue audit pending (2026-10-06)
+
+- [x] Rebased all 28 PR commits onto `origin/master` at `1a056c033` before
+  final validation. The rebase had one `RuntimeCode.java` conflict; resolution
+  preserves upstream caller-package tracking and the PR's reusable active-frame
+  optimization.
+- [x] Added strict test-runner handling for nonzero child exits after complete
+  TAP, with a runner integration regression.
+- [x] Added permanent CORE coderef coverage for open, array I/O, substr lvalue,
+  raw DATA markers, and tie/tied/sysread/umask argument and dispatch behavior.
+  The new `core_tie_sysread_umask_coderef.t` passes on standard Perl; earlier
+  focused regressions pass on standard Perl and both PerlOnJava backends where
+  applicable. Recheck all of them on this rebased candidate.
+- [x] Focused strict `coreamp.t` exposed callable `CORE::sysread`, `tie`,
+  `tied`, and `umask` gaps. The source fixes and project-owned regression are
+  now included in `5fcb368e3`; this exact candidate has not yet been rebuilt.
+- [ ] Run full `make`, focused `coreamp.t`, then the full strict 575-file UAT
+  on the immutable rebased candidate. Require zero failed assertions, child
+  exit errors, timeouts, or incomplete files.
+- [ ] Compare the final UAT to the October 3 baseline and classify the known
+  imported-corpus count changes and existing zero-TAP rows.
+- [ ] Update PR #1623, wait for green required CI, audit the linked issues,
+  close only those confirmed fixed, and merge.
 
 - [x] Four selected parser fixes and permanent regressions implemented.
 - [x] Oversized closure constant diagnosed, fixed, and regression validated.
@@ -862,32 +884,26 @@ implementation or acceptance work.
   acceptance. Earlier frame-elision-only candidates failed assertion 4.
 - [x] Phase 4: the unchanged issue acceptance gates pass on candidate
   `d753a616e`; the interpreter inventory still has 49 matching-parent gaps.
-- [ ] Phase 5: PR #1623 is at `6651eb12b`, rebased onto the current
-  `origin/master` tip `3893a190` (the rebase was a no-op because that tip is
-  already the candidate's merge base). The exact commit passes `nice -n 19
-  make` in 5m31s. Full core UAT completed 574/575 files; the only two failed
-  assertions are in `lib/croak.t` at lines 318 and 324, whose fixture expects
-  the Perl 5.46 fatal behavior. The selected Perl 5.44 semantics emit the
-  deprecation warning and continue; the locally built Perl 5.44.0 oracle
-  confirms this. Perl 5.44.0's own `t/lib/croak.t` produces the same two `not
-  ok` assertions for those fixtures. Comparison with the Oct 3 baseline
-  reports only those two assertions as changed (680,762 tests in both runs).
-  Keep the imported tests unchanged. GitHub Linux and Windows CI are still running;
-  finish the CI and acceptance audit before closing tickets.
+- [ ] Phase 5: final rebased candidate `5fcb368e3` is based on `origin/master`
+  `1a056c033`. The final `make`, strict focused `coreamp.t`, full 575-file UAT,
+  baseline comparison, updated PR CI, and issue closure audit remain pending.
+  Earlier croak failures were checked against the local standard Perl 5.44.0
+  oracle and must remain unchanged in imported tests.
 
 ### Immediate next steps
 
-The current worktree contains the blead follow-up fixes and native-oracle-aligned
-unit expectations. Full `make` and the full refreshed blead UAT passed on this
-source tree. The Oct 3 comparator differences are documented above; final
-acceptance still requires rerunning the gates after the final rebase and
-classifying the comparator metadata/count differences.
+The final source commit `5fcb368e3` is rebased on `origin/master` `1a056c033`.
+The latest batch fixes strict subprocess-exit accounting and callable CORE
+operator gaps found after the previous broad run. No full build or UAT result
+applies to this exact source yet; the last strict `coreamp.t` run was on the
+previous JAR and correctly reported nonzero exit plus failures. Keep imported
+Perl tests unchanged.
 
-1. Commit the caller-line and namespace cleanup follow-up with this handoff
-   update, then fetch and rebase onto the latest `origin/master`.
-2. On the exact rebased commit, rerun `nice -n 19 timeout 3600 make` and the
-   full refreshed core corpus with five jobs and a 300-second per-test
-   timeout. Require zero failed UAT files and zero failed assertions.
+1. Run `nice -n 19 timeout 3600 make`, then rerun focused regressions and
+   strict `coreamp.t` on the resulting JAR.
+2. Run the full refreshed core corpus with five jobs and a 300-second per-test
+   timeout. Require zero failed UAT files, failed assertions, nonzero child
+   exits, timeouts, and incomplete files.
 3. Recompare the final corpus against
    `/Users/fglock/projects/PerlOnJava/logs/test_20261003_080000_mixed.log` and
    retain the normalized report with the assertion-count and subprocess
