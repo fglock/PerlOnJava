@@ -357,7 +357,11 @@ public class CoreSubroutineGenerator {
      */
     private static PerlSubroutine buildOptionalScalar(String name) {
         if ("umask".equals(name)) {
-            return (args, ctx) -> UmaskOperator.umask(ctx, args.toArray(new RuntimeBase[0])).getList();
+            return (args, ctx) -> {
+                RuntimeBase[] values = new RuntimeBase[args.size()];
+                for (int i = 0; i < args.size(); i++) values[i] = args.get(i);
+                return UmaskOperator.umask(ctx, values).getList();
+            };
         }
         // Some ;$ functions need special dispatch
         if ("caller".equals(name)) {
@@ -873,7 +877,8 @@ public class CoreSubroutineGenerator {
         boolean valid = false;
         if (args.length > 0 && args[0] instanceof RuntimeScalar scalar) {
             valid = switch (scalar.type) {
-                case REFERENCE, ARRAYREFERENCE, HASHREFERENCE, GLOBREFERENCE ->
+                case RuntimeScalarType.REFERENCE, RuntimeScalarType.ARRAYREFERENCE,
+                        RuntimeScalarType.HASHREFERENCE, RuntimeScalarType.GLOBREFERENCE ->
                         !(scalar.value instanceof RuntimeIO);
                 default -> false;
             };
