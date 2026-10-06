@@ -224,11 +224,19 @@ and first path establish implementation cost.
   2, 3, 4, 3, 2 for two closures capturing one array or hash, then checks the
   same owner releases after each declaring scope exits. The pre-fix JVM and
   interpreter each failed three of the original ten assertions; both backends
-  now pass all twenty-six, as does the Perl oracle. Blessed array/hash probes
-  also verify the 3, 2, 1 scope-exit sequence, weak clearing, and exactly-once
-  `DESTROY`. Captured-aggregate lifecycle (15/15) and scalar pad-transfer
-  (6/6) regressions also pass on both backends. The full `nice -n 19 make` gate
-  passes on `3bd4ef48b` (9m06s, 2026-10-06).
+  now pass all thirty, as does the Perl oracle. Closure replacement releases
+  array and hash capture owners with the same exact counts. Blessed array/hash
+  probes also verify the 3, 2, 1 scope-exit sequence, weak clearing, and
+  exactly-once `DESTROY`. Captured-aggregate lifecycle (15/15) and scalar
+  pad-transfer (6/6) regressions also pass on both backends. The full
+  `nice -n 19 make` gate passes on `bf977fc71` (8m34s, 2026-10-06).
+- [x] During global destruction, use active Perl owner slots to distinguish a
+  real resurrection from a stale selective count left by the synthetic
+  `DESTROY` argument. The Perl 5.45.4 regression passes 2/2; both unfixed
+  PerlOnJava backends emitted a false resurrection warning, and both now pass
+  2/2. A real saved reference still emits the expected warning on both
+  backends. Full `nice -n 19 make` passes on `8c85bf8af` (8m24s); link check
+  passes (555 OK, 0 errors).
 
 ### Next steps
 
@@ -263,6 +271,11 @@ and first path establish implementation cost.
   content and incremental parser cases still retain two and three elements at
   the immediate release assertion on both PerlOnJava backends; Perl 5.44 passes
   all cases. The new parser lifecycle reproducer records this open failure.
+- Catalyst-Runtime and Dancer2 cleanup workloads from #1642 remain unqualified:
+  local test setup currently stops on unavailable CPAN prerequisites before
+  reaching the target assertions. The owner-ledger check now has a focused
+  global-destruction regression, but that does not replace an integration run
+  of the original workload.
 - `RuntimeBase.refCount` still combines selective counts with legacy lifecycle
   sentinels and triggers cleanup for mixed-owner referents. The new explicit
   lifecycle prevents repeat dispatch and records destruction/resurrection, but
