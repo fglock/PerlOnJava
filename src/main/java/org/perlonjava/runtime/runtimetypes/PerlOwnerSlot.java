@@ -15,6 +15,8 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public final class PerlOwnerSlot {
     private static final AtomicLong NEXT_ID = new AtomicLong();
+    private static final ThreadLocal<java.util.IdentityHashMap<RuntimeBase, Integer>>
+            ACTIVE_REFERENTS = ThreadLocal.withInitial(java.util.IdentityHashMap::new);
 
     public enum Kind {
         CLOSURE_PAD
@@ -148,6 +150,8 @@ public final class PerlOwnerSlot {
         if (nextReferent != null && nextRuntime == null) nextRuntime = previousRuntime;
 
         referent = nextReferent;
+        if (previous != null) removeActiveReferent(previous);
+        if (nextReferent != null) addActiveReferent(nextReferent);
         ownerRuntime = nextRuntime;
         ownerRuntimeState = nextRuntime == null || nextReferent == null
                 ? null : nextRuntime.retainOwnerSlotReferent(nextReferent);
@@ -163,9 +167,26 @@ public final class PerlOwnerSlot {
         RuntimeBase previous = referent;
         LifecycleRuntimeState previousState = ownerRuntimeState;
         referent = null;
+        if (previous != null) removeActiveReferent(previous);
         ownerRuntime = null;
         ownerRuntimeState = null;
         if (previous != null) previous.removeOwnerSlot(this);
         if (previous != null) PerlRuntime.releaseOwnerSlotReferent(previousState, previous);
+    }
+
+    static java.util.List<RuntimeBase> snapshotActiveReferents() {
+        return java.util.List.copyOf(ACTIVE_REFERENTS.get().keySet());
+    }
+
+    private static void addActiveReferent(RuntimeBase referent) {
+        ACTIVE_REFERENTS.get().merge(referent, 1, Integer::sum);
+    }
+
+    private static void removeActiveReferent(RuntimeBase referent) {
+        java.util.IdentityHashMap<RuntimeBase, Integer> active = ACTIVE_REFERENTS.get();
+        Integer count = active.get(referent);
+        if (count == null) return;
+        if (count <= 1) active.remove(referent);
+        else active.put(referent, count - 1);
     }
 }

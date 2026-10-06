@@ -232,11 +232,16 @@ public final class PerlRuntime implements AutoCloseable {
 
     static java.util.List<RuntimeBase> snapshotOwnerSlotReferents() {
         PerlRuntime runtime = currentOrNull();
-        if (runtime == null) return java.util.List.of();
-        LifecycleRuntimeState state = runtime.lifecycleState;
-        synchronized (state) {
-            return java.util.List.copyOf(state.positiveOwnerReferents.keySet());
+        java.util.Set<RuntimeBase> referents = java.util.Collections.newSetFromMap(
+                new java.util.IdentityHashMap<>());
+        if (runtime != null) {
+            LifecycleRuntimeState state = runtime.lifecycleState;
+            synchronized (state) {
+                referents.addAll(state.positiveOwnerReferents.keySet());
+            }
         }
+        referents.addAll(PerlOwnerSlot.snapshotActiveReferents());
+        return java.util.List.copyOf(referents);
     }
 
     /** Record the address exposed by Perl reference stringification for B introspection. */
