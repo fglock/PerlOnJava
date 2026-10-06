@@ -14,6 +14,8 @@ our @destroyed;
 }
 
 my ($weak, $closure);
+sub discard_capture { return }
+
 {
     my @items = (bless { label => 'array' }, 'Issue1649::AggregateCaptureProbe');
     $weak = $items[0];
@@ -43,5 +45,31 @@ is($hash_closure->(), 1, 'the closure retains the captured hash pad');
 undef $hash_closure;
 ok(!defined $hash_weak, 'releasing the closure releases the hash value');
 is_deeply(\@destroyed, ['array', 'hash'], 'both aggregate values are destroyed exactly once');
+
+my $temporary_array_weak;
+sub exercise_temporary_array_capture {
+    my @items = (bless { label => 'temporary-array' }, 'Issue1649::AggregateCaptureProbe');
+    $temporary_array_weak = $items[0];
+    weaken($temporary_array_weak);
+    discard_capture(sub { scalar @items });
+    ok(defined $temporary_array_weak, 'the lexical array owns its element during the scope');
+}
+exercise_temporary_array_capture();
+ok(!defined $temporary_array_weak, 'a temporary array closure releases its capture at frame exit');
+is_deeply(\@destroyed, ['array', 'hash', 'temporary-array'],
+    'the temporary array capture destroys its element exactly once');
+
+my $temporary_hash_weak;
+sub exercise_temporary_hash_capture {
+    my %items = (item => bless { label => 'temporary-hash' }, 'Issue1649::AggregateCaptureProbe');
+    $temporary_hash_weak = $items{item};
+    weaken($temporary_hash_weak);
+    discard_capture(sub { scalar keys %items });
+    ok(defined $temporary_hash_weak, 'the lexical hash owns its value during the scope');
+}
+exercise_temporary_hash_capture();
+ok(!defined $temporary_hash_weak, 'a temporary hash closure releases its capture at frame exit');
+is_deeply(\@destroyed, ['array', 'hash', 'temporary-array', 'temporary-hash'],
+    'the temporary hash capture destroys its value exactly once');
 
 done_testing;
