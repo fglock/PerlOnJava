@@ -195,8 +195,9 @@ and first path establish implementation cost.
   dispatch, `die`-initiated shutdown, and nested `exit` from END. The nested
   exit test exposed `PerlExitException` being reported as an END failure and
   converted to status 1; shutdown now propagates that control signal through
-  `WarnDie.exit` and the top-level END dispatcher. The new test passes on the
-  Perl 5.45.4 oracle; PerlOnJava validation is pending a rebuild.
+  `WarnDie.exit` and the top-level END dispatcher. All five END lifecycle
+  tests match Perl 5.45.4 and pass on both PerlOnJava backends. The full
+  `nice -n 19 make` gate passes on `74d6bc38b`.
 
 ### Next steps
 
