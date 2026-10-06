@@ -12,6 +12,10 @@ priorities and future plans.
 - Stage MakeMaker inputs before `PL_FILES`, preserve generated nested modules,
   honor custom test targets, create the `pm_to_blib` marker, and expose install
   directory macros used by CPAN build tooling.
+- Preserve Thrift's list-returning `MY::test` customization, including its
+  generated-module include paths.
+- Preserve binary HTTP response bytes so CPAN downloads remain extractable.
+- Accept Perl's valid `\@;@` prototype without an `illegalproto` warning.
 
 - Keep format captures bound to their active lexical cell and prevent reuse of unrelated active lexicals.
 - Match Perl's reference count for the compile-time `%^H` hash.

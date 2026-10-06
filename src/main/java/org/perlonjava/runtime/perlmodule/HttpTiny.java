@@ -84,7 +84,10 @@ public class HttpTiny extends PerlModuleBase {
         HttpRequest request = requestBuilder.build();
         try {
             HttpClient client = createHttpClient(instanceHash);
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            // HTTP::Tiny exposes response content as Perl octets. Decoding a
+            // binary response as UTF-8 replaces arbitrary bytes and corrupts
+            // archives fetched by Alien::Build and similar clients.
+            HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
 
             // Prepare response map
             RuntimeHash responseMap = new RuntimeHash();
