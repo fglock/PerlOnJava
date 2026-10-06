@@ -1,8 +1,9 @@
-use Test::More tests => 8;
+use Test::More tests => 9;
 
 my $undef = \&CORE::undef;
 is($undef->(), undef, 'CORE::undef coderef returns undef');
 is_deeply([$undef->()], [undef], 'CORE::undef coderef returns undef in list context');
+is(\$undef->(), \undef, 'CORE::undef coderef returns the canonical lvalue');
 
 my $value = 'defined';
 $undef->(\$value);

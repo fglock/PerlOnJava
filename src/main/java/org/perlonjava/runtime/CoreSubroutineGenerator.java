@@ -114,6 +114,7 @@ public class CoreSubroutineGenerator {
         code.subName = operatorName;
         if ("pos".equals(operatorName) || "keys".equals(operatorName)
                 || "substr".equals(operatorName)
+                || "undef".equals(operatorName)
                 || "lock".equals(operatorName)) {
             code.attributes = new java.util.ArrayList<>(java.util.List.of("lvalue"));
         }
