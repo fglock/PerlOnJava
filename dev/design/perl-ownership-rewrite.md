@@ -215,8 +215,7 @@ and first path establish implementation cost.
 1. Reproduce the Catalyst scenario from #1642 and compare its cleanup traffic
    with the measured deferred-release path; identify which releases can share
    a root snapshot across statement boundaries.
-2. Validate the captured aggregate interpreter fix on both backends, then
-   qualify the closure owner's remaining lifecycle boundaries while preserving
+2. Qualify the closure owner's remaining lifecycle boundaries while preserving
    Perl 5.45.4 weak and exact count checkpoints.
 3. Extend the complete ownership path through scalar proxies and array/hash
    slots in Phase 2, then resolve the HTML::Tree teardown failures and verify
