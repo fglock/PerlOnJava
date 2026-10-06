@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 15;
+use Test::More tests => 16;
 
 my $join = \&CORE::join;
 is($join->(',', 'a', 'b'), 'a,b',
@@ -14,6 +14,8 @@ my $values = \&CORE::values;
 my %hash = (a => 1, b => 2);
 is_deeply([sort $keys->(\%hash)], [qw(a b)],
     'CORE::keys code reference returns hash keys');
+$keys->(\%hash) = 17;
+pass('CORE::keys code reference retains its lvalue behavior');
 is(scalar $keys->(\%hash), 2,
     'CORE::keys code reference returns the hash size in scalar context');
 is_deeply([sort $values->(\%hash)], [1, 2],

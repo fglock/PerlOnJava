@@ -35,8 +35,8 @@ priorities and future plans.
   `goto` targets.
 - Support callable `CORE::close` and directory I/O wrappers with Perl-compatible
   false results and list-context behavior.
-- Preserve Perl diagnostics for callable `CORE::join` and reference aliases to
-  class aggregate fields.
+- Preserve Perl diagnostics and lvalue behavior for callable `CORE::join` and
+  `CORE::keys`, and support reference aliases to class aggregate fields.
 - Preserve caller argument presence through `CORE::caller` references and
   support `CORE::continue` code references inside `given` blocks.
 - Route callable `CORE::dbmopen` and `CORE::dbmclose` through the PerlOnJava DBM backend.

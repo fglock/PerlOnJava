@@ -112,7 +112,7 @@ public class CoreSubroutineGenerator {
         RuntimeCode code = new RuntimeCode(checkedSub, prototype);
         code.packageName = "CORE";
         code.subName = operatorName;
-        if ("pos".equals(operatorName)) {
+        if ("pos".equals(operatorName) || "keys".equals(operatorName)) {
             code.attributes = new java.util.ArrayList<>(java.util.List.of("lvalue"));
         }
         GlobalVariable.getGlobalCodeRef(fullName).set(new RuntimeScalar(code));
@@ -691,11 +691,17 @@ public class CoreSubroutineGenerator {
                 }
                 RuntimeBase result;
                 if (scalar.type == RuntimeScalarType.HASHREFERENCE) {
+                    RuntimeHash hash = scalar.hashDeref();
                     result = "keys".equals(name)
-                            ? scalar.hashDeref().keys(ctx) : scalar.hashDeref().values();
+                            ? (ctx == RuntimeContextType.LVALUE || ctx == RuntimeContextType.LVALUE_LIST
+                                    ? RuntimeCode.keysLvalue(hash) : hash.keys(ctx))
+                            : hash.values();
                 } else if (scalar.type == RuntimeScalarType.ARRAYREFERENCE) {
+                    RuntimeArray array = scalar.arrayDeref();
                     result = "keys".equals(name)
-                            ? scalar.arrayDeref().keys() : scalar.arrayDeref().values();
+                            ? (ctx == RuntimeContextType.LVALUE || ctx == RuntimeContextType.LVALUE_LIST
+                                    ? RuntimeCode.keysLvalue(array) : array.keys())
+                            : array.values();
                 } else {
                     throw new PerlCompilerException("Type of arg 1 to &CORE::" + name
                             + " must be hash or array reference");
