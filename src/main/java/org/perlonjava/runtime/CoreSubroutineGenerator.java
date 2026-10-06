@@ -609,6 +609,8 @@ public class CoreSubroutineGenerator {
                 yield target.pos().getList();
             }
             case "not" -> MathOperators.not((RuntimeScalar) args[0]).getList();
+            case "scalar" -> args.length == 0 ? RuntimeScalarCache.scalarUndef.getList()
+                    : args[0].scalar().getList();
             case "lock" -> {
                 if (args.length == 0) yield RuntimeScalarCache.scalarUndef.getList();
                 if (args[0] instanceof RuntimeScalar scalar
