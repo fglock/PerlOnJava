@@ -330,70 +330,97 @@ public class EmitBlock {
         }
     }
 
-    private static void collectConditionalGotoContexts(Node node, Map<String, Integer> labelContexts,
-            Map<Integer, Integer> sourceContexts, int conditionalContext) {
+    private static void collectConditionalGotoContexts(Node node, Map<String, Set<Integer>> labelContexts,
+            Map<Integer, Set<Integer>> sourceContexts, Set<String> simpleConditionalBranchLabels,
+            Set<Integer> conditionalContexts, boolean simpleConditionalBranch) {
         if (node == null) return;
         if (node instanceof LabelNode label) {
-            if (conditionalContext >= 0) labelContexts.putIfAbsent(label.label, conditionalContext);
+            if (!conditionalContexts.isEmpty()) {
+                labelContexts.putIfAbsent(label.label, Set.copyOf(conditionalContexts));
+                if (simpleConditionalBranch) simpleConditionalBranchLabels.add(label.label);
+            }
             return;
         }
         if (node instanceof BlockNode block) {
-            if (conditionalContext >= 0) {
-                for (String label : block.labels) labelContexts.putIfAbsent(label, conditionalContext);
+            if (!conditionalContexts.isEmpty()) {
+                for (String label : block.labels) {
+                    labelContexts.putIfAbsent(label, Set.copyOf(conditionalContexts));
+                    if (simpleConditionalBranch) simpleConditionalBranchLabels.add(label);
+                }
             }
             for (Node child : block.elements) {
-                collectConditionalGotoContexts(child, labelContexts, sourceContexts, conditionalContext);
+                collectConditionalGotoContexts(child, labelContexts, sourceContexts,
+                        simpleConditionalBranchLabels, conditionalContexts, false);
             }
             return;
         }
         if (node instanceof IfNode conditional) {
-            collectConditionalGotoContexts(conditional.condition, labelContexts, sourceContexts, conditionalContext);
+            collectConditionalGotoContexts(conditional.condition, labelContexts, sourceContexts,
+                    simpleConditionalBranchLabels, conditionalContexts, false);
+            Set<Integer> branchContexts = new LinkedHashSet<>(conditionalContexts);
+            branchContexts.add(conditional.getIndex());
             collectConditionalGotoContexts(conditional.thenBranch, labelContexts, sourceContexts,
-                    conditional.getIndex());
+                    simpleConditionalBranchLabels, branchContexts, true);
             collectConditionalGotoContexts(conditional.elseBranch, labelContexts, sourceContexts,
-                    conditional.getIndex());
+                    simpleConditionalBranchLabels, branchContexts, true);
             return;
         }
         if (node instanceof OperatorNode operator) {
             if ("goto".equals(operator.operator)) {
-                sourceContexts.putIfAbsent(operator.getIndex(), conditionalContext);
+                sourceContexts.putIfAbsent(operator.getIndex(), Set.copyOf(conditionalContexts));
             }
-            collectConditionalGotoContexts(operator.operand, labelContexts, sourceContexts, conditionalContext);
+            collectConditionalGotoContexts(operator.operand, labelContexts, sourceContexts,
+                    simpleConditionalBranchLabels, conditionalContexts, false);
             return;
         }
         if (node instanceof SubroutineNode subroutine) {
-            collectConditionalGotoContexts(subroutine.block, labelContexts, sourceContexts, conditionalContext);
+            collectConditionalGotoContexts(subroutine.block, labelContexts, sourceContexts,
+                    simpleConditionalBranchLabels, conditionalContexts, false);
             return;
         }
         if (node instanceof For1Node loop) {
-            collectConditionalGotoContexts(loop.list, labelContexts, sourceContexts, conditionalContext);
-            collectConditionalGotoContexts(loop.body, labelContexts, sourceContexts, conditionalContext);
-            collectConditionalGotoContexts(loop.continueBlock, labelContexts, sourceContexts, conditionalContext);
+            collectConditionalGotoContexts(loop.list, labelContexts, sourceContexts,
+                    simpleConditionalBranchLabels, conditionalContexts, false);
+            collectConditionalGotoContexts(loop.body, labelContexts, sourceContexts,
+                    simpleConditionalBranchLabels, conditionalContexts, false);
+            collectConditionalGotoContexts(loop.continueBlock, labelContexts, sourceContexts,
+                    simpleConditionalBranchLabels, conditionalContexts, false);
             return;
         }
         if (node instanceof For3Node loop) {
-            collectConditionalGotoContexts(loop.initialization, labelContexts, sourceContexts, conditionalContext);
-            collectConditionalGotoContexts(loop.condition, labelContexts, sourceContexts, conditionalContext);
-            collectConditionalGotoContexts(loop.increment, labelContexts, sourceContexts, conditionalContext);
-            collectConditionalGotoContexts(loop.body, labelContexts, sourceContexts, conditionalContext);
-            collectConditionalGotoContexts(loop.continueBlock, labelContexts, sourceContexts, conditionalContext);
+            collectConditionalGotoContexts(loop.initialization, labelContexts, sourceContexts,
+                    simpleConditionalBranchLabels, conditionalContexts, false);
+            collectConditionalGotoContexts(loop.condition, labelContexts, sourceContexts,
+                    simpleConditionalBranchLabels, conditionalContexts, false);
+            collectConditionalGotoContexts(loop.increment, labelContexts, sourceContexts,
+                    simpleConditionalBranchLabels, conditionalContexts, false);
+            collectConditionalGotoContexts(loop.body, labelContexts, sourceContexts,
+                    simpleConditionalBranchLabels, conditionalContexts, false);
+            collectConditionalGotoContexts(loop.continueBlock, labelContexts, sourceContexts,
+                    simpleConditionalBranchLabels, conditionalContexts, false);
             return;
         }
         if (node instanceof ListNode list) {
             for (Node child : list.elements) {
-                collectConditionalGotoContexts(child, labelContexts, sourceContexts, conditionalContext);
+                collectConditionalGotoContexts(child, labelContexts, sourceContexts,
+                        simpleConditionalBranchLabels, conditionalContexts, false);
             }
             return;
         }
         if (node instanceof BinaryOperatorNode binary) {
-            collectConditionalGotoContexts(binary.left, labelContexts, sourceContexts, conditionalContext);
-            collectConditionalGotoContexts(binary.right, labelContexts, sourceContexts, conditionalContext);
+            collectConditionalGotoContexts(binary.left, labelContexts, sourceContexts,
+                    simpleConditionalBranchLabels, conditionalContexts, false);
+            collectConditionalGotoContexts(binary.right, labelContexts, sourceContexts,
+                    simpleConditionalBranchLabels, conditionalContexts, false);
             return;
         }
         if (node instanceof TernaryOperatorNode ternary) {
-            collectConditionalGotoContexts(ternary.condition, labelContexts, sourceContexts, conditionalContext);
-            collectConditionalGotoContexts(ternary.trueExpr, labelContexts, sourceContexts, conditionalContext);
-            collectConditionalGotoContexts(ternary.falseExpr, labelContexts, sourceContexts, conditionalContext);
+            collectConditionalGotoContexts(ternary.condition, labelContexts, sourceContexts,
+                    simpleConditionalBranchLabels, conditionalContexts, false);
+            collectConditionalGotoContexts(ternary.trueExpr, labelContexts, sourceContexts,
+                    simpleConditionalBranchLabels, conditionalContexts, false);
+            collectConditionalGotoContexts(ternary.falseExpr, labelContexts, sourceContexts,
+                    simpleConditionalBranchLabels, conditionalContexts, false);
         }
     }
 
@@ -468,7 +495,8 @@ public class EmitBlock {
                 emitterVisitor.ctx.javaClassInfo.gotoLoopLabelTokenIndices, false);
         collectConditionalGotoContexts(node,
                 emitterVisitor.ctx.javaClassInfo.gotoConditionalLabelContexts,
-                emitterVisitor.ctx.javaClassInfo.gotoConditionalSourceContexts, -1);
+                emitterVisitor.ctx.javaClassInfo.gotoConditionalSourceContexts,
+                emitterVisitor.ctx.javaClassInfo.gotoSimpleConditionalBranchLabels, Set.of(), false);
         collectConstructEntryLabels(node, emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideConstruct, false);
         collectBinaryOrListExpressionLabels(node,
                 emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideBinaryOrListExpression);

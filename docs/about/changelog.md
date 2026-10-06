@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Pass the Image::ExifTool 13.55 test suite by preserving escaped
+  transliteration ranges and numeric string flags, and allowing valid nested
+  conditional `goto` targets.
 - Document the 2026-10-03 imported core-suite milestone: 575 selected files
   completed without unexpected failures, with skips, TODOs, exclusions, and
   verification scope recorded in the testing guide.

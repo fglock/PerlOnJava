@@ -2290,10 +2290,11 @@ public class CompileOperator {
         boolean sourceFollowsTargetBlockStart = staticTarget != null
                 && staticTarget.owner != null
                 && staticTarget.owner.getIndex() <= node.getIndex();
+        java.util.Set<Integer> sourceConditionalContexts = bc.gotoConditionalContextsByToken
+                .getOrDefault(node.getIndex(), java.util.Set.of());
         boolean sourceAndTargetShareConditional = staticTarget != null
-                && staticTarget.conditionalContext >= 0
-                && staticTarget.conditionalContext == bc.gotoConditionalContextsByToken
-                        .getOrDefault(node.getIndex(), -1);
+                && staticTarget.simpleConditionalBranch
+                && staticTarget.conditionalContexts.stream().anyMatch(sourceConditionalContexts::contains);
         if (staticTarget != null && staticTarget.constructEntry
                 && !bc.isInsideGotoLabelBlock(staticTarget.owner)
                 && !staticTarget.fieldInitializer
