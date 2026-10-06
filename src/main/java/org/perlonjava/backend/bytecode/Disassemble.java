@@ -2080,10 +2080,12 @@ public class Disassemble {
                         int hints = interpretedCode.bytecode[pc++];
                         int hintHashId = interpretedCode.bytecode[pc++];
                         int warningScopeId = interpretedCode.bytecode[pc++];
+                        int featureFlags = interpretedCode.bytecode[pc++];
                         sb.append("APPLY_COMPILER_FLAGS warningBits=")
                                 .append(warningBitsIdx).append(" hints=").append(hints)
                                 .append(" hintHash=").append(hintHashId)
-                                .append(" warningScope=").append(warningScopeId).append("\n");
+                                .append(" warningScope=").append(warningScopeId)
+                                .append(" features=").append(featureFlags).append("\n");
                         break;
                     }
                     case Opcodes.SET_CALL_SITE_HINTS:
@@ -2092,6 +2094,10 @@ public class Disassemble {
                         break;
                     case Opcodes.SET_CALL_SITE_HINT_HASH:
                         sb.append("SET_CALL_SITE_HINT_HASH id=")
+                                .append(interpretedCode.bytecode[pc++]).append("\n");
+                        break;
+                    case Opcodes.SET_CALL_SITE_FEATURE_FLAGS:
+                        sb.append("SET_CALL_SITE_FEATURE_FLAGS flags=")
                                 .append(interpretedCode.bytecode[pc++]).append("\n");
                         break;
                     case Opcodes.SET_CALL_SITE_WARNING_BITS:

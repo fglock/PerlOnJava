@@ -39,6 +39,8 @@ priorities and future plans.
   support `CORE::continue` code references inside `given` blocks.
 - Route callable `CORE::dbmopen` and `CORE::dbmclose` through the PerlOnJava DBM backend.
 - Dispatch callable `CORE::die` with the original Perl call-site location.
+- Support `CORE::evalbytes` code references with caller lexical hints and `CORE::each` references.
+- Preserve caller `unicode_strings` behavior in `CORE::fc` and support `CORE::glob` references.
 - Keep lexical class methods visible across method declarations without
   installing them in the package stash, and support callable `CORE::bless`.
 

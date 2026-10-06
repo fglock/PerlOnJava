@@ -3338,9 +3338,12 @@ public class BytecodeInterpreter {
                                 int hints = bytecode[pc++];
                                 int hintHashId = bytecode[pc++];
                                 int warningScopeId = bytecode[pc++];
+                                int featureFlags = bytecode[pc++];
                                 WarningBitsRegistry.setCallSiteBits(code.stringPool[warningBitsIdx]);
                                 WarningBitsRegistry.setCallSiteHints(hints);
                                 HintHashRegistry.setCallSiteHintHashId(hintHashId);
+                                org.perlonjava.runtime.FeatureFlagsRegistry
+                                        .setCallSiteFeatureFlags(featureFlags);
                                 if (warningScopeId > 0) {
                                     // Localize the scope before installing its
                                     // warning mask so dynamic unwind can restore
@@ -3357,6 +3360,10 @@ public class BytecodeInterpreter {
 
                             case Opcodes.SET_CALL_SITE_HINT_HASH ->
                                 HintHashRegistry.setCallSiteHintHashId(bytecode[pc++]);
+
+                            case Opcodes.SET_CALL_SITE_FEATURE_FLAGS ->
+                                org.perlonjava.runtime.FeatureFlagsRegistry
+                                        .setCallSiteFeatureFlags(bytecode[pc++]);
 
                             case Opcodes.SET_CALL_SITE_WARNING_BITS -> {
                                 String warningBits = code.stringPool[bytecode[pc++]];

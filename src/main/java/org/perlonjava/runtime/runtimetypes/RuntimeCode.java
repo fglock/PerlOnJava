@@ -56,6 +56,8 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.runUnitcheckBlock
  * It provides functionality to compile, store, and execute Perl subroutines and eval strings.
  */
 public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
+    private static final java.util.concurrent.atomic.AtomicLong CORE_EVALBYTES_TAGS =
+            new java.util.concurrent.atomic.AtomicLong();
     private static final ThreadLocal<ArrayDeque<EvalRuntimeContext>> EVAL_RUNTIME_CONTEXTS =
             ThreadLocal.withInitial(ArrayDeque::new);
     private static final ThreadLocal<Map<EvalBeginLexicalKey, Integer>> EVAL_BEGIN_LEXICAL_IDS =
@@ -2005,6 +2007,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public static void putEvalContext(String evalTag, EmitterContext context) {
         PerlRuntime.current().runtimeCodeState().evalContexts.put(evalTag, context);
+    }
+
+    public static void removeEvalContext(String evalTag) {
+        PerlRuntime.current().runtimeCodeState().evalContexts.remove(evalTag);
     }
 
     private static EmitterContext getEvalContext(String evalTag) {
@@ -7057,6 +7063,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             WarningBitsRegistry.pushCallerHints(compilationState);
             // Save caller's call-site hint hash so caller()[10] can retrieve them
             HintHashRegistry.pushCallerHintHash(compilationState);
+            org.perlonjava.runtime.FeatureFlagsRegistry.pushCallerFeatureFlags(compilationState);
             WarningBitsRegistry.setCallSiteHints(code.lexicalHints);
             int cleanupMark = MyVarCleanupStack.pushMark();
             // Establish a function-scoped mortal boundary so that
@@ -7212,6 +7219,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 WarningBitsRegistry.setCallSiteHints(callerCallSiteHints);
                 WarningBitsRegistry.setCallSiteBits(callerCallSiteWarningBits);
                 HintHashRegistry.popCallerHintHash(compilationState);
+                org.perlonjava.runtime.FeatureFlagsRegistry.popCallerFeatureFlags(compilationState);
                 WarningBitsRegistry.popCallerHints(compilationState);
                 WarningBitsRegistry.popCallerBits(compilationState);
                 compilationState.runtimeWarningBits = savedRuntimeWarningBits;
@@ -7387,6 +7395,55 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             throw new PerlCompilerException(message + "\n");
         }
         return result;
+    }
+
+    /** Execute a CORE::evalbytes code reference using the active caller's lexical hints. */
+    public static RuntimeList evalbytesCodeReference(RuntimeScalar code, RuntimeArray args,
+                                                      int callContext) {
+        rejectTaintedEval(code);
+        ScalarUtils.assertBytes(code);
+
+        RuntimeCode caller = getActiveCodeAt(1);
+        ScopedSymbolTable currentScope = getCurrentScope();
+        ScopedSymbolTable evalScope = currentScope == null
+                ? new ScopedSymbolTable() : currentScope.snapShot();
+        if (caller != null && caller.packageName != null) {
+            evalScope.setCurrentPackage(caller.packageName, false);
+        }
+        if (!evalScope.strictOptionsStack.isEmpty()) {
+            evalScope.strictOptionsStack.set(evalScope.strictOptionsStack.size() - 1,
+                    WarningBitsRegistry.getCallerHintsAtFrame(0));
+        }
+        if (!evalScope.featureFlagsStack.isEmpty()) {
+            evalScope.featureFlagsStack.set(evalScope.featureFlagsStack.size() - 1,
+                    org.perlonjava.runtime.FeatureFlagsRegistry
+                            .getCallerFeatureFlagsAtFrame(0));
+        }
+
+        CompilerOptions options = new CompilerOptions();
+        options.fileName = caller != null && caller.cvStartFile != null
+                ? caller.cvStartFile : "(evalbytes)";
+        options.isEvalbytes = true;
+        options.useInterpreter = true;
+        EmitterContext evalContext = new EmitterContext(
+                null, evalScope, null, null, callContext, true,
+                new ErrorMessageUtil(options.fileName, List.of()), options,
+                new RuntimeArray());
+        evalContext.capturedEnv = new String[0];
+        evalContext.isEvalbytes = true;
+        String evalTag = "coreEvalbytes" + CORE_EVALBYTES_TAGS.incrementAndGet();
+        putEvalContext(evalTag, evalContext);
+        int callerHintHashId = HintHashRegistry.getCallerHintHashIdAtFrame(0);
+        HintHashRegistry.setCallSiteHintHashId(callerHintHashId);
+        try {
+            return evalStringWithInterpreter(code, evalTag, new Object[0], args, callContext);
+        } catch (Throwable failure) {
+            WarnDie.catchEval(failure);
+            return RuntimeContextType.isListLike(callContext)
+                    ? new RuntimeList() : new RuntimeList(new RuntimeScalar());
+        } finally {
+            removeEvalContext(evalTag);
+        }
     }
 
     // Method to apply (execute) a subroutine reference for eval/evalbytes.
@@ -7711,6 +7768,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 WarningBitsRegistry.pushCallerHints(compilationState);
                 // Save caller's call-site hint hash so caller()[10] can retrieve them
                 HintHashRegistry.pushCallerHintHash(compilationState);
+                org.perlonjava.runtime.FeatureFlagsRegistry.pushCallerFeatureFlags(compilationState);
                 WarningBitsRegistry.setCallSiteHints(code.lexicalHints);
                 int cleanupMark = MyVarCleanupStack.pushMark();
                 MortalList.pushMark();
@@ -7762,6 +7820,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     WarningBitsRegistry.setCallSiteHints(callerCallSiteHints);
                     WarningBitsRegistry.setCallSiteBits(callerCallSiteWarningBits);
                     HintHashRegistry.popCallerHintHash(compilationState);
+                    org.perlonjava.runtime.FeatureFlagsRegistry.popCallerFeatureFlags(compilationState);
                     WarningBitsRegistry.popCallerHints(compilationState);
                     WarningBitsRegistry.popCallerBits(compilationState);
                     compilationState.runtimeWarningBits = savedRuntimeWarningBits;
@@ -8071,6 +8130,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 WarningBitsRegistry.pushCallerHints(compilationState);
                 // Save caller's call-site hint hash so caller()[10] can retrieve them
                 HintHashRegistry.pushCallerHintHash(compilationState);
+                org.perlonjava.runtime.FeatureFlagsRegistry.pushCallerFeatureFlags(compilationState);
                 WarningBitsRegistry.setCallSiteHints(code.lexicalHints);
                 int cleanupMark = MyVarCleanupStack.pushMark();
                 MortalList.pushMark();
@@ -8120,6 +8180,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     WarningBitsRegistry.setCallSiteHints(callerCallSiteHints);
                     WarningBitsRegistry.setCallSiteBits(callerCallSiteWarningBits);
                     HintHashRegistry.popCallerHintHash(compilationState);
+                    org.perlonjava.runtime.FeatureFlagsRegistry.popCallerFeatureFlags(compilationState);
                     WarningBitsRegistry.popCallerHints(compilationState);
                     WarningBitsRegistry.popCallerBits(compilationState);
                     compilationState.runtimeWarningBits = savedRuntimeWarningBits;

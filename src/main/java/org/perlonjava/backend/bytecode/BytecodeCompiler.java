@@ -2198,6 +2198,11 @@ public class BytecodeCompiler implements Visitor {
             emit(Opcodes.SET_CALL_SITE_HINTS);
             emit(hints);
         }
+        Object postBlockFeatureFlags = node.getAnnotation("postBlockFeatureFlags");
+        if (postBlockFeatureFlags instanceof Integer featureFlags) {
+            emit(Opcodes.SET_CALL_SITE_FEATURE_FLAGS);
+            emit(featureFlags);
+        }
 
         if (needsLocalRestore) {
             emit(Opcodes.POP_LOCAL_LEVEL);
@@ -9107,6 +9112,7 @@ public class BytecodeCompiler implements Visitor {
         emit(node.getStrictOptions());
         emit(node.getHintHashSnapshotId());
         emit(node.getWarningScopeId());
+        emit(node.getFeatureFlags());
         if (node.getWarningScopeId() > 0) {
             usesLocalization = true;
         }

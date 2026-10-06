@@ -1002,6 +1002,14 @@ public class EmitBlock {
                     "setCallSiteHints",
                     "(I)V", false);
         }
+        Object postBlockFeatureFlags = node.getAnnotation("postBlockFeatureFlags");
+        if (postBlockFeatureFlags instanceof Integer featureFlags) {
+            mv.visitLdcInsn(featureFlags);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/FeatureFlagsRegistry",
+                    "setCallSiteFeatureFlags",
+                    "(I)V", false);
+        }
     }
 
 }

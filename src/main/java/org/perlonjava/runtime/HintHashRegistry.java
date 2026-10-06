@@ -207,6 +207,16 @@ public class HintHashRegistry {
         return state().callSiteHintHashId;
     }
 
+    /** Returns the saved compile-time hint snapshot ID for a caller frame. */
+    public static int getCallerHintHashIdAtFrame(int frame) {
+        if (frame < 0) return 0;
+        int index = 0;
+        for (int id : state().callerHintHashIdStack) {
+            if (index++ == frame) return id;
+        }
+        return 0;
+    }
+
     /**
      * Saves the current call-site hint hash snapshot ID onto the caller stack,
      * then resets the callsite to 0 so the callee starts fresh.

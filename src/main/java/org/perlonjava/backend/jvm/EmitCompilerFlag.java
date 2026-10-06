@@ -60,6 +60,12 @@ public class EmitCompilerFlag {
                 "setCallSiteHintHashId",
                 "(I)V", false);
 
+        mv.visitLdcInsn(node.getFeatureFlags());
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/FeatureFlagsRegistry",
+                "setCallSiteFeatureFlags",
+                "(I)V", false);
+
         // Emit runtime code for warning scope if needed
         int warningScopeId = node.getWarningScopeId();
         if (warningScopeId > 0) {

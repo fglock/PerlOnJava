@@ -121,6 +121,7 @@ public class CoreSubroutineGenerator {
      * Perl's arity diagnostics before dispatching to their Java implementation.
      */
     private static void validatePrototypeArity(String name, String prototype, int actual) {
+        String displayName = "evalbytes".equals(name) ? "eval \"string\"" : name;
         int minimum = 0;
         int maximum = 0;
         boolean optional = false;
@@ -158,10 +159,10 @@ public class CoreSubroutineGenerator {
         }
 
         if (actual < minimum) {
-            throw new PerlCompilerException("Not enough arguments for " + name);
+            throw new PerlCompilerException("Not enough arguments for " + displayName);
         }
         if (!unlimited && actual > maximum) {
-            throw new PerlCompilerException("Too many arguments for " + name);
+            throw new PerlCompilerException("Too many arguments for " + displayName);
         }
     }
 
@@ -188,6 +189,8 @@ public class CoreSubroutineGenerator {
 
             // Unary with $_ default: abs, chr, hex, int, lc, length, ord, ref, ...
             case "_" -> buildUnaryDefault(name);
+            // Optional unary default: glob and similar
+            case "_;" -> buildUnaryDefault(name);
 
             // Optional scalar: rand, chdir, exit, sleep, srand, caller, ...
             case ";$" -> buildOptionalScalar(name);
@@ -310,8 +313,22 @@ public class CoreSubroutineGenerator {
      * Unary with $_ default (prototype "_"): abs, chr, hex, int, length, ...
      */
     private static PerlSubroutine buildUnaryDefault(String name) {
+        if ("glob".equals(name)) {
+            int globId = ScalarGlobOperator.allocateId();
+            return (args, ctx) -> {
+                RuntimeScalar arg = args.size() > 0
+                        ? args.get(0) : GlobalVariable.getGlobalVariable("main::_");
+                return ScalarGlobOperator.evaluate(globId, arg, ctx).getList();
+            };
+        }
         return (args, ctx) -> {
             RuntimeScalar arg = args.size() > 0 ? args.get(0) : GlobalVariable.getGlobalVariable("main::_");
+            if ("evalbytes".equals(name)) {
+                return RuntimeCode.evalbytesCodeReference(arg, args, ctx);
+            }
+            if ("not".equals(name)) {
+                return MathOperators.not(arg).getList();
+            }
             return callUnary(name, arg);
         };
     }
@@ -323,6 +340,12 @@ public class CoreSubroutineGenerator {
         // Some ;$ functions need special dispatch
         if ("caller".equals(name)) {
             return (args, ctx) -> RuntimeCode.caller(args.getList(), ctx);
+        }
+        if ("gmtime".equals(name)) {
+            return (args, ctx) -> Time.gmtime(new RuntimeList(args), ctx);
+        }
+        if ("localtime".equals(name)) {
+            return (args, ctx) -> Time.localtime(new RuntimeList(args), ctx);
         }
         return (args, ctx) -> {
             RuntimeScalar arg = args.size() > 0 ? args.get(0) : new RuntimeScalar();
@@ -450,10 +473,16 @@ public class CoreSubroutineGenerator {
             case "chroot" -> throw new PerlCompilerException("&CORE::chroot not yet implemented");
             case "cos" -> MathOperators.cos(arg).getList();
             case "chdir" -> Directory.chdir(arg).getList();
-            case "evalbytes" -> throw new PerlCompilerException("&CORE::evalbytes not yet supported");
+            case "pos" -> arg.pos().getList();
+            case "scalar" -> arg.getList();
+            case "evalbytes" -> throw new IllegalStateException("evalbytes must be dispatched with call context");
             case "exit" -> WarnDie.exit(arg).getList();
             case "exp" -> MathOperators.exp(arg).getList();
-            case "fc" -> StringOperators.fc(arg).getList();
+            case "fc" -> RuntimeCode.featureFlagsContain(
+                    org.perlonjava.runtime.FeatureFlagsRegistry.getCallerFeatureFlagsAtFrame(0),
+                    "unicode_strings")
+                    ? StringOperators.fcUnicode(arg).getList()
+                    : StringOperators.fc(arg).getList();
             case "hex" -> ScalarOperators.hex(arg).getList();
             case "int" -> MathOperators.integer(arg).getList();
             case "lc" -> StringOperators.lc(arg).getList();
@@ -550,6 +579,21 @@ public class CoreSubroutineGenerator {
             case "write" -> IOOperator.write(ctx, args).getList();
             case "getc" -> IOOperator.getc(ctx, args).getList();
             case "syscall" -> SyscallOperator.syscall(ctx, args).getList();
+            case "each" -> {
+                RuntimeBase target = args[0];
+                if (target instanceof RuntimeScalar scalar
+                        && scalar.type == RuntimeScalarType.HASHREFERENCE) {
+                    yield scalar.hashDeref().each(ctx);
+                }
+                if (target instanceof RuntimeScalar scalar
+                        && scalar.type == RuntimeScalarType.ARRAYREFERENCE) {
+                    yield scalar.arrayDeref().each(ctx);
+                }
+                throw new PerlCompilerException(
+                        "Type of arg 1 to &CORE::each must be hash or array reference");
+            }
+            case "lock" -> args.length == 0 ? RuntimeScalarCache.scalarUndef.getList()
+                    : args[0].getList();
 
             // Directory operators
             case "mkdir" -> Directory.mkdir(new RuntimeList(args)).getList();
@@ -566,9 +610,12 @@ public class CoreSubroutineGenerator {
             case "umask" -> UmaskOperator.umask(ctx, args).getList();
             case "waitpid" -> WaitpidOperator.waitpid(ctx, args).getList();
             case "die" -> {
+                RuntimeCode caller = RuntimeCode.getActiveCodeAt(1);
                 CallerStack.CallerInfo callSite = CallerStack.peek(0);
-                String file = callSite == null ? null : callSite.filename();
-                int line = callSite == null ? 0 : callSite.line();
+                String file = caller != null && caller.cvStartFile != null
+                        ? caller.cvStartFile : callSite == null ? null : callSite.filename();
+                int line = caller != null && caller.cvStartLine > 0
+                        ? caller.cvStartLine : callSite == null ? 0 : callSite.line();
                 yield WarnDie.die(new RuntimeList(args), RuntimeScalarCache.scalarEmptyString,
                         file, line).getList();
             }
@@ -591,8 +638,48 @@ public class CoreSubroutineGenerator {
                 yield ReferenceOperators.bless((RuntimeScalar) args[0], className).getList();
             }
             case "substr" -> Operator.substr(ctx, args).getList();
+            case "join" -> StringOperators.join((RuntimeScalar) args[0], tailList(args, 1)).getList();
+            case "index" -> StringOperators.index((RuntimeScalar) args[0],
+                    (RuntimeScalar) args[1], args.length > 2
+                            ? (RuntimeScalar) args[2] : new RuntimeScalar()).getList();
+            case "rindex" -> StringOperators.rindex((RuntimeScalar) args[0],
+                    (RuntimeScalar) args[1], args.length > 2
+                            ? (RuntimeScalar) args[2] : new RuntimeScalar()).getList();
+            case "keys", "values" -> {
+                if (args.length == 0 || !(args[0] instanceof RuntimeScalar scalar)) {
+                    throw new PerlCompilerException("Type of arg 1 to &CORE::" + name
+                            + " must be hash or array reference");
+                }
+                RuntimeBase result;
+                if (scalar.type == RuntimeScalarType.HASHREFERENCE) {
+                    result = "keys".equals(name)
+                            ? scalar.hashDeref().keys(ctx) : scalar.hashDeref().values();
+                } else if (scalar.type == RuntimeScalarType.ARRAYREFERENCE) {
+                    result = "keys".equals(name)
+                            ? scalar.arrayDeref().keys() : scalar.arrayDeref().values();
+                } else {
+                    throw new PerlCompilerException("Type of arg 1 to &CORE::" + name
+                            + " must be hash or array reference");
+                }
+                yield result.getList();
+            }
             case "rename" -> Operator.rename(ctx, args).getList();
             case "readlink" -> Operator.readlink(ctx, args).getList();
+            case "read" -> IOOperator.read(ctx, args).getList();
+            case "readline" -> IOOperator.readline(ctx, args).getList();
+            case "seek" -> IOOperator.seek(ctx, args).getList();
+            case "tell" -> IOOperator.tell(ctx, args).getList();
+            case "select" -> IOOperator.select(new RuntimeList(args), ctx).getList();
+            case "prototype" -> {
+                RuntimeCode caller = RuntimeCode.getActiveCodeAt(1);
+                String packageName = caller == null || caller.packageName == null
+                        ? "main" : caller.packageName;
+                yield RuntimeCode.prototype((RuntimeScalar) args[0], packageName).getList();
+            }
+            case "pack" -> Pack.pack(new RuntimeList(args)).getList();
+            case "unpack" -> Unpack.unpack(ctx, args);
+            case "sprintf" -> SprintfOperator.sprintf((RuntimeScalar) args[0],
+                    tailList(args, 1)).getList();
             case "getpgrp" -> Operator.getpgrp(ctx, args).getList();
             case "setpgrp" -> Operator.setpgrp(ctx, args).getList();
             case "getpriority" -> Operator.getpriority(ctx, args).getList();
@@ -630,6 +717,14 @@ public class CoreSubroutineGenerator {
             default ->
                     throw new PerlCompilerException("&CORE::" + name + " not yet supported as subroutine reference");
         };
+    }
+
+    private static RuntimeList tailList(RuntimeBase[] args, int start) {
+        RuntimeList result = new RuntimeList();
+        for (int i = start; i < args.length; i++) {
+            result.elements.add(args[i]);
+        }
+        return result;
     }
 
     private static void requireHashReference(String name, RuntimeBase[] args) {
