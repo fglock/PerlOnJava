@@ -598,9 +598,20 @@ public class CoreSubroutineGenerator {
                 throw new PerlCompilerException(
                         "Type of arg 1 to &CORE::each must be hash or array reference");
             }
+            case "pos" -> {
+                RuntimeScalar target = args.length > 0
+                        ? (RuntimeScalar) args[0] : GlobalVariable.getGlobalVariable("main::_");
+                yield target.pos().getList();
+            }
             case "not" -> MathOperators.not((RuntimeScalar) args[0]).getList();
-            case "lock" -> args.length == 0 ? RuntimeScalarCache.scalarUndef.getList()
-                    : args[0].getList();
+            case "lock" -> {
+                if (args.length == 0) yield RuntimeScalarCache.scalarUndef.getList();
+                if (args[0] instanceof RuntimeScalar scalar
+                        && scalar.type == RuntimeScalarType.SCALARREFERENCE) {
+                    yield scalar.scalarDeref().getList();
+                }
+                yield args[0].getList();
+            }
 
             // Directory operators
             case "mkdir" -> Directory.mkdir(new RuntimeList(args)).getList();
