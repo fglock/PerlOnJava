@@ -111,6 +111,9 @@ public class CoreSubroutineGenerator {
         RuntimeCode code = new RuntimeCode(checkedSub, prototype);
         code.packageName = "CORE";
         code.subName = operatorName;
+        if ("pos".equals(operatorName)) {
+            code.attributes = new java.util.ArrayList<>(java.util.List.of("lvalue"));
+        }
         GlobalVariable.getGlobalCodeRef(fullName).set(new RuntimeScalar(code));
         return true;
     }
@@ -473,7 +476,8 @@ public class CoreSubroutineGenerator {
             case "chroot" -> throw new PerlCompilerException("&CORE::chroot not yet implemented");
             case "cos" -> MathOperators.cos(arg).getList();
             case "chdir" -> Directory.chdir(arg).getList();
-            case "pos" -> arg.pos().getList();
+            case "pos" -> (arg.type == RuntimeScalarType.REFERENCE ? arg.scalarDeref() : arg)
+                    .pos().getList();
             case "scalar" -> arg.getList();
             case "prototype" -> {
                 RuntimeCode caller = RuntimeCode.getActiveCodeAt(1);
@@ -601,6 +605,7 @@ public class CoreSubroutineGenerator {
             case "pos" -> {
                 RuntimeScalar target = args.length > 0
                         ? (RuntimeScalar) args[0] : GlobalVariable.getGlobalVariable("main::_");
+                if (target.type == RuntimeScalarType.REFERENCE) target = target.scalarDeref();
                 yield target.pos().getList();
             }
             case "not" -> MathOperators.not((RuntimeScalar) args[0]).getList();
