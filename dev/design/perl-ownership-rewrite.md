@@ -224,11 +224,11 @@ and first path establish implementation cost.
   2, 3, 4, 3, 2 for two closures capturing one array or hash, then checks the
   same owner releases after each declaring scope exits. The pre-fix JVM and
   interpreter each failed three of the original ten assertions; both backends
-  now pass all sixteen, as does the Perl oracle. Captured-aggregate lifecycle
-  (15/15) and scalar pad-transfer (6/6) regressions also pass on both backends.
-  The full `nice -n 19 make` gate passed on the preceding implementation
-  commit `5b9f41733` (9m51s, 2026-10-06); the expanded scope-exit regression is
-  awaiting its committed full gate.
+  now pass all twenty-six, as does the Perl oracle. Blessed array/hash probes
+  also verify the 3, 2, 1 scope-exit sequence, weak clearing, and exactly-once
+  `DESTROY`. Captured-aggregate lifecycle (15/15) and scalar pad-transfer
+  (6/6) regressions also pass on both backends. The full `nice -n 19 make` gate
+  passes on `3bd4ef48b` (9m06s, 2026-10-06).
 
 ### Next steps
 
