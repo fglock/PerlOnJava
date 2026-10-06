@@ -229,7 +229,7 @@ public class BytecodeInterpreter {
         frame.suspendedRuntimeDisabledWarningCategories = null;
 
         for (RuntimeCode closure : frame.createdClosures) {
-            if (closure.capturedScalars != null
+            if ((closure.capturedScalars != null || closure.capturedAggregates != null)
                     && closure.refCount == 0
                     && closure.stashRefCount <= 0
                     && (frame.returnedClosures == null
@@ -3802,7 +3802,7 @@ public class BytecodeInterpreter {
             // scopeExitCleanup special case for CODE refs).
             if (!frame.suspended && !createdClosures.isEmpty()) {
                 for (RuntimeCode closure : createdClosures) {
-                    if (closure.capturedScalars != null
+                    if ((closure.capturedScalars != null || closure.capturedAggregates != null)
                             && closure.refCount == 0
                             && closure.stashRefCount <= 0
                             && (frame.returnedClosures == null || !frame.returnedClosures.contains(closure))) {

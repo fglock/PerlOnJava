@@ -388,6 +388,14 @@ public class ReachabilityWalker {
                 // and must survive the weak sweep.
                 if (walkCaptures || WeakRefRegistry.hasWeakRefsTo(code)) {
                     visitCodeCaptures(code, todo);
+                } else if (code.capturedAggregates != null) {
+                    // Explicit aggregate capture entries are semantic owner
+                    // edges even when conservative scalar/reflection capture
+                    // walking is disabled. Unlike retired interpreter capture
+                    // metadata, this list is cleared by releaseCaptures().
+                    for (RuntimeBase aggregate : code.capturedAggregates) {
+                        addReachable(aggregate, todo);
+                    }
                 }
             } else if (cur instanceof RuntimeScalar s) {
                 visitScalar(s, todo);
