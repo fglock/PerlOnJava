@@ -189,9 +189,10 @@ and first path establish implementation cost.
   rebased tree.
 - [x] Preserve END-block captures across assertion and callback cleanup.
   END CVs now retain their capture edges while queued and during invocation;
-  a rescued selective count is released after the active phaser returns. The
-  permanent regression matches Perl 5.45.4 and passes on both PerlOnJava
-  backends. The full `nice -n 19 make` gate passes on 2026-10-06.
+  a rescued selective count is released after the active phaser returns. Two
+  permanent regressions cover DESTROY ordering inside END and shared lexical
+  access across LIFO END blocks. They match Perl 5.45.4 and pass on both
+  PerlOnJava backends. The full `nice -n 19 make` gate passes on 2026-10-06.
 
 ### Next steps
 
