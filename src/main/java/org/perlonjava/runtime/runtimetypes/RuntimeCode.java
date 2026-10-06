@@ -5575,6 +5575,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         && isCarpTrustedCallerPackage(reportedCode.packageName);
                 if ((reportedCode != null && "DESTROY".equals(reportedCode.subName))
                         || (isCarpStackActive()
+                                && isDestroyActiveOnStack()
                                 && !carpTrustedFrame)) {
                     String callSitePackage = getCallerPackageAtCallerFrame(trackedActiveCodeFrame);
                     if (callSitePackage != null && !callSitePackage.isEmpty()) {
@@ -5591,7 +5592,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         && callSitePackage != null && !callSitePackage.isEmpty()) {
                     pkg = callSitePackage;
                 }
-                if (isCarpStackActive() && trackedActiveCodeFrame >= 0) {
+                if (isCarpStackActive() && isDestroyActiveOnStack()
+                        && trackedActiveCodeFrame >= 0) {
                     String carpCallSitePackage = getCallerPackageAtCallerFrame(
                             trackedActiveCodeFrame + 1);
                     if (carpCallSitePackage != null && !carpCallSitePackage.isEmpty()) {
@@ -6230,6 +6232,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static boolean isCarpStackActive() {
         for (RuntimeCode active : activeCodeStack()) {
             if ("Carp".equals(active.packageName)) return true;
+        }
+        return false;
+    }
+
+    private static boolean isDestroyActiveOnStack() {
+        for (RuntimeCode active : activeCodeStack()) {
+            if ("DESTROY".equals(active.subName)) return true;
         }
         return false;
     }
