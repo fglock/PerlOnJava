@@ -26,7 +26,7 @@ priorities and future plans.
 - Register assignment-initialized lexical arrays and hashes as interpreter
   roots, and release aggregate-only closure captures when their frame exits.
 - Register BEGIN-backed scalar and aggregate lexical pads as interpreter roots
-  before UNITCHECK runs, preserving weak references and Perl destruction timing.
+  when they enter the main pad, preserving weak references at runtime sweeps.
 - Release closure captures when retired interpreter pad metadata is no longer a Perl owner.
 - Keep END block captures alive through queued and active execution until END
   releases their lexical owners, including `die`-initiated shutdown, nested
