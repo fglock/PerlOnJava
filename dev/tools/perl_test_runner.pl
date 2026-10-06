@@ -953,6 +953,10 @@ sub parse_tap_output {
     if ($incomplete_tests > 0) {
         # Incomplete run is a special high-priority case
         $status = 'incomplete';
+    } elsif ($exit_code != 0 && $not_ok_count == 0) {
+        # A complete all-ok TAP stream does not make a failed child process a
+        # pass. Runtime cleanup and END blocks can fail after the final TAP line.
+        $status = 'error';
     } elsif ($ok_count == 0 && $not_ok_count == 0) {
         $status = $exit_code == 0 ? 'pass' : 'error';
     } elsif ($not_ok_count == 0 && $ok_count > 0) {

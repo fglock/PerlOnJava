@@ -23,6 +23,7 @@ priorities and future plans.
   generated-module include paths.
 - Implement `Bit::Vector::Chunk_Store` used by Thrift's 64-bit protocol.
 - Preserve binary HTTP response bytes so CPAN downloads remain extractable.
+- Make strict test runs fail when a child process exits nonzero after complete TAP.
 - Preserve Unix executable permissions when extracting ZIP archive entries.
 - Accept Perl's valid `\@;@` prototype without an `illegalproto` warning.
 - Match current blead's fatal checks for differing in-scope `use VERSION`
@@ -33,11 +34,18 @@ priorities and future plans.
 - Preserve direct-call semantics for lexical and package `->&` methods, support
   `CORE::bless` and `CORE::break` code references, and allow same-finally local
   `goto` targets.
+- Preserve raw-source DATA handles for `CORE::__DATA__` and lvalue behavior for
+  `CORE::substr` code references.
+- Match Perl diagnostics, lvalue behavior, and list context for callable
+  `CORE::recv`, `CORE::select`, `CORE::splice`, and `CORE::reset`.
 - Support callable `CORE::close` and directory I/O wrappers with Perl-compatible
   false results and list-context behavior.
 - Preserve Perl diagnostics and lvalue behavior for callable `CORE::join`,
   `CORE::keys`, and `CORE::lock`, and support reference aliases to class
-  aggregate fields.
+  aggregate fields. Allow callable `CORE::open` to use read-only literals as
+  one-argument handle names without mutating the literal; preserve the default
+  caller arrays for `CORE::pop` and `CORE::push`, and match callable `CORE::pos`,
+  `CORE::prototype`, `CORE::read`, and `CORE::readline` type and context behavior.
 - Preserve caller argument presence through `CORE::caller` references and
   support `CORE::continue` code references inside `given` blocks.
 - Route callable `CORE::dbmopen` and `CORE::dbmclose` through the PerlOnJava DBM backend.

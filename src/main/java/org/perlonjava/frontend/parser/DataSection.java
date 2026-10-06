@@ -285,6 +285,7 @@ public class DataSection {
 
     private static RawDataHandle extractDataFromRawBytes(byte[] rawBytes, String markerText) {
         byte[] marker = markerText.getBytes(StandardCharsets.US_ASCII);
+        byte[] corePrefix = "CORE::".getBytes(StandardCharsets.US_ASCII);
         int markerLen = marker.length;
 
         // Search for the marker at the start of a line in raw bytes
@@ -294,18 +295,20 @@ public class DataSection {
                 continue;
             }
 
-            // Check if the marker matches at this position
-            boolean match = true;
-            for (int j = 0; j < markerLen; j++) {
-                if (rawBytes[i + j] != marker[j]) {
-                    match = false;
-                    break;
+            // __DATA__/__END__ may be written as CORE::__DATA__/CORE::__END__.
+            // The lexer consumes CORE:: before handing the marker to this
+            // routine, so account for that prefix in the raw source too.
+            int markerOffset = i;
+            if (!matchesAt(rawBytes, markerOffset, marker)) {
+                if (!matchesAt(rawBytes, markerOffset, corePrefix)
+                        || !matchesAt(rawBytes, markerOffset + corePrefix.length, marker)) {
+                    continue;
                 }
+                markerOffset += corePrefix.length;
             }
-            if (!match) continue;
 
             // Verify the marker is followed by whitespace/newline/EOF (not part of a longer identifier)
-            int afterMarker = i + markerLen;
+            int afterMarker = markerOffset + markerLen;
             if (afterMarker < rawBytes.length) {
                 byte next = rawBytes[afterMarker];
                 if (next != '\n' && next != '\r' && next != ' ' && next != '\t') {
@@ -336,6 +339,14 @@ public class DataSection {
         }
 
         return null; // Marker not found
+    }
+
+    private static boolean matchesAt(byte[] source, int offset, byte[] expected) {
+        if (offset < 0 || offset + expected.length > source.length) return false;
+        for (int i = 0; i < expected.length; i++) {
+            if (source[offset + i] != expected[i]) return false;
+        }
+        return true;
     }
 
     static int parseDataSection(Parser parser, int tokenIndex, List<LexerToken> tokens, LexerToken token) {
