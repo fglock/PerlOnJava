@@ -298,10 +298,13 @@ and first path establish implementation cost.
   by the PerlOnJava provider. `jperl -MCatalyst` loads Catalyst-Runtime 5.90132.
   Its checked-in distropref patches only `t/live_fork.t` to skip the six
   process-fork assertions on PerlOnJava; the `system` and backtick assertions
-  and all other distribution tests remain enabled. The focused patched test
-  passes those ten non-fork assertions and skips the six fork assertions. A
-  broader Catalyst `jcpan -t` attempt exceeded its 900-second deadline while
-  progressing through aggregate tests, so it did not produce a cleanup
+  and all other distribution tests remain enabled. A direct run from the
+  newest patched CPAN build passes all ten non-fork assertions, skips exactly
+  the six fork assertions, and exits successfully. The broader Catalyst
+  `jcpan -t` attempt exceeded its 900-second deadline while running
+  `t/aggregate/live_component_controller_action_chained2.t`, after 21 earlier
+  tests reported `ok`; that test passes 9/9 when run alone in about 25 seconds.
+  The full attempt therefore remains incomplete and did not produce a cleanup
   profile. A post-change Dancer2 `jcpan -t` run reported
   `t/01_both_using_rsnames.t` ok, then exceeded the 240-second command deadline
   later in the distribution suite; the earlier direct six-assertion run
