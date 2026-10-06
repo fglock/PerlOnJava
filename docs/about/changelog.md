@@ -24,7 +24,10 @@ priorities and future plans.
   identity, guard bridge count overflow, and balance DESTROY callback ownership
   on exceptional exits.
 - Release closure captures when retired interpreter pad metadata is no longer a Perl owner.
-- Keep END block captures alive through queued and active execution until END releases their lexical owners, including `die`-initiated shutdown, nested `exit`, and draining remaining END blocks after a callback fails.
+- Keep END block captures alive through queued and active execution until END
+  releases their lexical owners, including `die`-initiated shutdown, nested
+  `exit`, and draining remaining END blocks after a callback fails. Match Perl
+  5.45.4's exit status 22 for an uncaught END callback failure.
 - Document the 2026-10-03 imported core-suite milestone: 575 selected files
   completed without unexpected failures, with skips, TODOs, exclusions, and
   verification scope recorded in the testing guide.
