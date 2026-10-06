@@ -378,13 +378,12 @@ public class Internals extends PerlModuleBase {
             RuntimeCode code, RuntimeBase previous, RuntimeBase replacement) {
         if (previous == replacement) return;
 
-        if (previous != null) previous.releaseClosureCapture();
-        replacement.retainClosureCapture();
-
         if (previous instanceof RuntimeScalar && replacement instanceof RuntimeScalar scalar
                 && code.capturedScalars != null) {
             for (int i = 0; i < code.capturedScalars.length; i++) {
                 if (code.capturedScalars[i] == previous) {
+                    scalar.retainClosureCapture();
+                    previous.releaseClosureCapture();
                     code.capturedScalars[i] = scalar;
                     return;
                 }
@@ -395,11 +394,26 @@ public class Internals extends PerlModuleBase {
                 && code.capturedAggregates != null) {
             for (int i = 0; i < code.capturedAggregates.length; i++) {
                 if (code.capturedAggregates[i] == previous) {
+                    PerlOwnerSlot replacementOwner =
+                            replacement.retainClosureCaptureOwner();
+                    PerlOwnerSlot[] ownerSlots = code.capturedAggregateOwnerSlots;
+                    PerlOwnerSlot previousOwner = ownerSlots != null
+                                    && i < ownerSlots.length
+                            ? ownerSlots[i] : null;
+                    previous.releaseClosureCaptureOwner(previousOwner);
                     code.capturedAggregates[i] = replacement;
+                    if (ownerSlots == null || ownerSlots.length != code.capturedAggregates.length) {
+                        ownerSlots = new PerlOwnerSlot[code.capturedAggregates.length];
+                        code.capturedAggregateOwnerSlots = ownerSlots;
+                    }
+                    ownerSlots[i] = replacementOwner;
                     return;
                 }
             }
         }
+
+        if (previous != null) previous.releaseClosureCapture();
+        replacement.retainClosureCapture();
     }
 
     /**
@@ -553,9 +567,18 @@ public class Internals extends PerlModuleBase {
                     && !base.localBindingExists
                     && base.hashSlotOwnerCount > 0
                     && !ReachabilityWalker.hasLiveStrongScalarReferentOtherThan(base, arg);
+            boolean bObjectProbe = args.size() > 1 && args.get(1).getBoolean();
             int adjust = compileHintsHash
                     ? -1
                     : base.localBindingExists || fieldOwnedMethodResult ? 0 : -1;
+            // B::SV keeps its referent in a PerlOnJava hash slot, unlike the
+            // native B object which stores an SV pointer without owning the
+            // referent. For named aggregates, the local-binding adjustment
+            // already accounts for the pad, so discount this extra wrapper
+            // slot instead of counting both as Perl owners.
+            if (bObjectProbe && base.localBindingExists && !compileHintsHash) {
+                adjust = -1;
+            }
             return new RuntimeScalar(rc + extra + adjust).getList();
         }
         return new RuntimeScalar(1).getList();

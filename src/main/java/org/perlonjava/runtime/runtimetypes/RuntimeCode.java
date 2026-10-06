@@ -2667,11 +2667,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             capturedAggregateOwnerSlots = null;
             for (int i = 0; i < aggregates.length; i++) {
                 RuntimeBase aggregate = aggregates[i];
-                if (ownerSlots != null && i < ownerSlots.length && ownerSlots[i] != null) {
-                    ownerSlots[i].release();
-                }
                 if (aggregate != null) {
-                    aggregate.releaseClosureCapture();
+                    aggregate.releaseClosureCaptureOwner(
+                            ownerSlots != null && i < ownerSlots.length
+                                    ? ownerSlots[i] : null);
+                } else if (ownerSlots != null && i < ownerSlots.length
+                        && ownerSlots[i] != null) {
+                    ownerSlots[i].release();
                 }
             }
         }
@@ -5069,9 +5071,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     code.closedOverVariables.put(f.getName(), capturedAggregate);
                     capturedAggregates.add(capturedAggregate);
-                    capturedAggregate.retainClosureCapture();
-                    PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
-                    ownerSlot.transferTo(capturedAggregate);
+                    PerlOwnerSlot ownerSlot = capturedAggregate.retainClosureCaptureOwner();
                     capturedAggregateOwnerSlots.add(ownerSlot);
                 }
             }

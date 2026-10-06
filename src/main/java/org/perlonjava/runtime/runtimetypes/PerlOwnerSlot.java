@@ -119,6 +119,23 @@ public final class PerlOwnerSlot {
         legacyCaptureCount++;
     }
 
+    /**
+     * Acquire a closure-pad owner for an aggregate. Tracked referents also
+     * cross the legacy count bridge; untracked referents still need a semantic
+     * owner slot so runtime retention follows the closure.
+     */
+    public synchronized void acquireCapture(RuntimeBase target) {
+        Objects.requireNonNull(target, "target");
+        if (target.refCount == Integer.MIN_VALUE) {
+            throw new IllegalStateException("cannot capture a destroyed referent");
+        }
+        if (target.refCount >= 0) {
+            acquireLegacyCapture(target);
+        } else {
+            transferTo(target);
+        }
+    }
+
     /** Queue one closure-pad count release and retain its slot provenance. */
     public synchronized PendingRelease deferLegacyCaptureRelease(RuntimeBase target) {
         if (legacyCaptureCount <= 0) return null;

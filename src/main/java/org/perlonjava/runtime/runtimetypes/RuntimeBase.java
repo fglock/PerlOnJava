@@ -235,6 +235,28 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         captureCount++;
     }
 
+    /** Retain one aggregate pad capture through an explicit owner slot. */
+    public PerlOwnerSlot retainClosureCaptureOwner() {
+        PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
+        ownerSlot.acquireCapture(this);
+        retainClosureCapture();
+        return ownerSlot;
+    }
+
+    /** Release one aggregate pad capture, balancing its bridged count. */
+    public void releaseClosureCaptureOwner(PerlOwnerSlot ownerSlot) {
+        if (ownerSlot == null) {
+            releaseClosureCapture();
+            return;
+        }
+        ownerSlot.deferLegacyCaptureRelease(this);
+        try {
+            releaseClosureCapture();
+        } finally {
+            ownerSlot.release();
+        }
+    }
+
     public void releaseClosureCapture() {
         if (captureCount > 0) {
             captureCount--;
@@ -249,7 +271,9 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             if (blessId != 0 && refCount <= 0) {
                 refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(this);
-            } else if (refCount > 0 && (blessId != 0 || this instanceof RuntimeCode)) {
+            } else if (refCount > 0
+                    && (blessId != 0 || this instanceof RuntimeCode)
+                    && !hasSemanticCaptureOwner()) {
                 MortalList.deferDecrement(this, "closure aggregate release");
             }
         }
