@@ -201,21 +201,23 @@ and first path establish implementation cost.
   The full `nice -n 19 make` gate passes on `78369acc9` (8m33s).
 - [x] Add a permanent captured-aggregate pad regression at
   [`issue_1649_captured_aggregate_pad_lifecycle.t`](../../src/test/resources/unit/refcount/issue_1649_captured_aggregate_pad_lifecycle.t).
-  Perl 5.45.4 and the JVM backend pass all five assertions. The interpreter
-  fails the first two lifetime assertions, so the implementation boundary
-  remains open; the failure also reproduces on the parent interpreter. The
-  test is retained to prevent losing this evidence while the interpreter path
-  is completed.
+  The test covers array and hash captures and passes all nine assertions on
+  Perl 5.45.4. Diagnosis found that assignment-form `my @array = ...` and
+  `my %hash = ...` omitted `REGISTER_MY_VAR` in interpreter bytecode, so the
+  statement-boundary weak sweep could miss live lexical aggregates. The
+  assignment compiler now registers both aggregate types, and the interpreter
+  also tracks aggregate-only closures for frame-exit capture release. Both
+  PerlOnJava backends pass all nine assertions, and the full `nice -n 19 make`
+  gate passes (11m39s, 2026-10-06).
 
 ### Next steps
 
 1. Reproduce the Catalyst scenario from #1642 and compare its cleanup traffic
    with the measured deferred-release path; identify which releases can share
    a root snapshot across statement boundaries.
-2. Qualify the closure owner's remaining lifecycle boundaries while preserving
-   Perl 5.45.4 weak and exact count checkpoints. Fix the captured aggregate
-   lifetime failure on the interpreter backend and validate the permanent
-   regression on both backends.
+2. Validate the captured aggregate interpreter fix on both backends, then
+   qualify the closure owner's remaining lifecycle boundaries while preserving
+   Perl 5.45.4 weak and exact count checkpoints.
 3. Extend the complete ownership path through scalar proxies and array/hash
    slots in Phase 2, then resolve the HTML::Tree teardown failures and verify
    unchanged `t/refloop.t`.

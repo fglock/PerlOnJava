@@ -1356,7 +1356,8 @@ public class BytecodeInterpreter {
                                 RuntimeBase closureVal = registers[closureRd];
                                 if (closureVal instanceof RuntimeScalar crs
                                         && crs.value instanceof RuntimeCode ic
-                                        && ic.capturedScalars != null) {
+                                        && (ic.capturedScalars != null
+                                                || ic.capturedAggregates != null)) {
                                     createdClosures.add(ic);
                                 }
                                 if (closureVal instanceof RuntimeScalar crs
