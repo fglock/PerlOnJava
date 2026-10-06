@@ -19,6 +19,18 @@ sub { overload->import('!' => 'clone_negate', fallback => 1); Test2::Util::HashB
     $sub->();
 
     no strict 'refs';
+    no warnings 'once';
+    # The HashBase import above runs through an eval-created helper so its
+    # generated methods can land in the consumer package. The interpreter can
+    # miss those generated symbols while compiling subsequent methods that use
+    # the NEGATE constant. Install the role's small attribute API directly as
+    # a fallback, before the consumer continues compiling.
+    *{"$pkg\::NEGATE"} = sub () { 'negate' }
+        unless defined &{"$pkg\::NEGATE"};
+    *{"$pkg\::negate"} = sub { $_[0]->{'negate'} }
+        unless defined &{"$pkg\::negate"};
+    *{"$pkg\::set_negate"} = sub { $_[0]->{'negate'} = $_[1] }
+        unless defined &{"$pkg\::set_negate"};
     *{"$pkg\::clone_negate"} = \&clone_negate;
     *{"$pkg\::toggle_negate"} = \&toggle_negate;
 }
