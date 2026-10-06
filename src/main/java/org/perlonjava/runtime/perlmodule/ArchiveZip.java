@@ -54,6 +54,29 @@ public class ArchiveZip extends PerlModuleBase {
         return Paths.get(RuntimeEnvironment.currentDirectory()).resolve(p);
     }
 
+    private static void applyUnixFilePermissions(RuntimeHash member, Path path) throws IOException {
+        RuntimeScalar modeScalar = member.get("_unixMode");
+        if (modeScalar == null || modeScalar.type == RuntimeScalarType.UNDEF) return;
+
+        java.nio.file.attribute.PosixFileAttributeView view = Files.getFileAttributeView(
+                path, java.nio.file.attribute.PosixFileAttributeView.class);
+        if (view == null) return;
+
+        int mode = modeScalar.getInt();
+        java.util.Set<java.nio.file.attribute.PosixFilePermission> permissions =
+                java.util.EnumSet.noneOf(java.nio.file.attribute.PosixFilePermission.class);
+        if ((mode & 0400) != 0) permissions.add(java.nio.file.attribute.PosixFilePermission.OWNER_READ);
+        if ((mode & 0200) != 0) permissions.add(java.nio.file.attribute.PosixFilePermission.OWNER_WRITE);
+        if ((mode & 0100) != 0) permissions.add(java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE);
+        if ((mode & 0040) != 0) permissions.add(java.nio.file.attribute.PosixFilePermission.GROUP_READ);
+        if ((mode & 0020) != 0) permissions.add(java.nio.file.attribute.PosixFilePermission.GROUP_WRITE);
+        if ((mode & 0010) != 0) permissions.add(java.nio.file.attribute.PosixFilePermission.GROUP_EXECUTE);
+        if ((mode & 0004) != 0) permissions.add(java.nio.file.attribute.PosixFilePermission.OTHERS_READ);
+        if ((mode & 0002) != 0) permissions.add(java.nio.file.attribute.PosixFilePermission.OTHERS_WRITE);
+        if ((mode & 0001) != 0) permissions.add(java.nio.file.attribute.PosixFilePermission.OTHERS_EXECUTE);
+        view.setPermissions(permissions);
+    }
+
     // Constants (matching Archive::Zip)
     public static final int AZ_OK = 0;
     public static final int AZ_STREAM_END = 1;
@@ -236,7 +259,7 @@ public class ArchiveZip extends PerlModuleBase {
 
             // Extract raw DOS timestamps from central directory
             // (Java's ZipEntry uses extended timestamps when available)
-            java.util.Map<String, Long> rawDosTimestamps = extractRawDosTimestamps(resolvedName);
+            java.util.Map<String, ZipMetadata> zipMetadata = extractZipMetadata(resolvedName);
 
             try (ZipFile zipFile = new ZipFile(resolvedName)) {
                 // Store the zipfile comment
@@ -252,8 +275,8 @@ public class ArchiveZip extends PerlModuleBase {
                     ZipEntry entry = entries.nextElement();
 
                     // Create member object with raw DOS timestamp if available
-                    Long rawDosTime = rawDosTimestamps.get(entry.getName());
-                    RuntimeHash member = createMemberFromEntry(zipFile, entry, rawDosTime);
+                    ZipMetadata metadata = zipMetadata.get(entry.getName());
+                    RuntimeHash member = createMemberFromEntry(zipFile, entry, metadata);
                     RuntimeScalar memberRef = member.createReference();
                     ReferenceOperators.bless(memberRef, new RuntimeScalar("Archive::Zip::Member"));
 
@@ -317,7 +340,7 @@ public class ArchiveZip extends PerlModuleBase {
             }
 
             // Extract raw DOS timestamps from the ZIP data
-            java.util.Map<String, Long> rawDosTimestamps = extractRawDosTimestampsFromBytes(zipData);
+            java.util.Map<String, ZipMetadata> zipMetadata = extractZipMetadataFromBytes(zipData);
 
             // Create a ZipInputStream from the byte array
             try (ByteArrayInputStream bais = new ByteArrayInputStream(zipData);
@@ -348,11 +371,14 @@ public class ArchiveZip extends PerlModuleBase {
                     
                     // Store raw MS-DOS format for lastModFileDateTime
                     // Use the raw DOS timestamp extracted from ZIP data if available
-                    Long rawDosTime = rawDosTimestamps.get(entry.getName());
-                    if (rawDosTime != null) {
-                        member.put("_lastModFileDateTime", new RuntimeScalar(rawDosTime));
+                    ZipMetadata metadata = zipMetadata.get(entry.getName());
+                    if (metadata != null && metadata.rawDosTimestamp != null) {
+                        member.put("_lastModFileDateTime", new RuntimeScalar(metadata.rawDosTimestamp));
                     } else {
                         member.put("_lastModFileDateTime", new RuntimeScalar(getRawDosTime(entry)));
+                    }
+                    if (metadata != null && metadata.unixMode != null) {
+                        member.put("_unixMode", new RuntimeScalar(metadata.unixMode));
                     }
                     
                     member.put("_crc32", new RuntimeScalar(entry.getCrc() >= 0 ? entry.getCrc() : 0));
@@ -773,6 +799,7 @@ public class ArchiveZip extends PerlModuleBase {
                             }
                             byte[] data = contents.toString().getBytes(StandardCharsets.ISO_8859_1);
                             Files.write(path, data);
+                            applyUnixFilePermissions(member, path);
                         }
                     }
                     return new RuntimeScalar(AZ_OK).getList();
@@ -838,6 +865,7 @@ public class ArchiveZip extends PerlModuleBase {
                 }
                 byte[] data = contents.toString().getBytes(StandardCharsets.ISO_8859_1);
                 Files.write(destPath, data);
+                applyUnixFilePermissions(member, destPath);
             }
 
             return new RuntimeScalar(AZ_OK).getList();
@@ -877,6 +905,7 @@ public class ArchiveZip extends PerlModuleBase {
                     ? contents.toString().getBytes(StandardCharsets.ISO_8859_1)
                     : new byte[0];
             Files.write(path, data);
+            applyUnixFilePermissions(member, path);
             return new RuntimeScalar(AZ_OK).getList();
         } catch (IOException e) {
             return new RuntimeScalar(AZ_IO_ERROR).getList();
@@ -931,6 +960,7 @@ public class ArchiveZip extends PerlModuleBase {
                     if (contents != null) {
                         byte[] data = contents.toString().getBytes(StandardCharsets.ISO_8859_1);
                         Files.write(destPath, data);
+                        applyUnixFilePermissions(member, destPath);
                     }
                 }
             }
@@ -1220,7 +1250,7 @@ public class ArchiveZip extends PerlModuleBase {
         return name;
     }
 
-    private static RuntimeHash createMemberFromEntry(ZipFile zipFile, ZipEntry entry, Long rawDosTimestamp) throws IOException {
+    private static RuntimeHash createMemberFromEntry(ZipFile zipFile, ZipEntry entry, ZipMetadata metadata) throws IOException {
         RuntimeHash member = new RuntimeHash();
         putMemberName(member, entry.getName());
         member.put("_externalFileName", new RuntimeScalar(""));
@@ -1234,10 +1264,13 @@ public class ArchiveZip extends PerlModuleBase {
         member.put("_lastModTime", new RuntimeScalar(timeMillis / 1000));
         // Store raw MS-DOS format for lastModFileDateTime
         // Use the raw DOS timestamp from central directory if available
-        if (rawDosTimestamp != null) {
-            member.put("_lastModFileDateTime", new RuntimeScalar(rawDosTimestamp));
+        if (metadata != null && metadata.rawDosTimestamp != null) {
+            member.put("_lastModFileDateTime", new RuntimeScalar(metadata.rawDosTimestamp));
         } else {
             member.put("_lastModFileDateTime", new RuntimeScalar(getRawDosTime(entry)));
+        }
+        if (metadata != null && metadata.unixMode != null) {
+            member.put("_unixMode", new RuntimeScalar(metadata.unixMode));
         }
         
         member.put("_crc32", new RuntimeScalar(entry.getCrc()));
@@ -1319,16 +1352,14 @@ public class ArchiveZip extends PerlModuleBase {
         return crc.getValue();
     }
 
-    /**
-     * Parse the ZIP central directory to extract raw DOS timestamps.
-     * This is necessary because Java's ZipEntry uses extended Unix timestamps
-     * when available, but we need the raw DOS timestamps for compatibility
-     * with Perl's Archive::Zip.
-     * 
-     * @return Map from entry name to raw DOS timestamp (32-bit value)
-     */
-    private static java.util.Map<String, Long> extractRawDosTimestamps(String filename) {
-        java.util.Map<String, Long> timestamps = new java.util.HashMap<>();
+    /** Metadata from the ZIP central directory that ZipEntry does not expose. */
+    private static final class ZipMetadata {
+        private Long rawDosTimestamp;
+        private Integer unixMode;
+    }
+
+    private static java.util.Map<String, ZipMetadata> extractZipMetadata(String filename) {
+        java.util.Map<String, ZipMetadata> metadataByName = new java.util.HashMap<>();
         
         try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(filename, "r")) {
             // Find the end of central directory record
@@ -1357,7 +1388,7 @@ public class ArchiveZip extends PerlModuleBase {
             }
             
             if (eocdOffset < 0) {
-                return timestamps; // EOCD not found
+                return metadataByName; // EOCD not found
             }
             
             // Read central directory offset from EOCD
@@ -1419,7 +1450,22 @@ public class ArchiveZip extends PerlModuleBase {
                 raf.readFully(nameBytes);
                 String fileName = new String(nameBytes, StandardCharsets.UTF_8);
                 
-                timestamps.put(fileName, dosTimestamp);
+                // The central directory stores the originating OS in the
+                // high byte of "version made by" and Unix mode in the high
+                // 16 bits of external file attributes.
+                raf.seek(pos + 5);
+                int madeByHost = raf.read();
+                raf.seek(pos + 38);
+                long externalAttributes = readUInt32LE(raf);
+
+                ZipMetadata metadata = new ZipMetadata();
+                metadata.rawDosTimestamp = dosTimestamp;
+                if ((madeByHost == 3 || madeByHost == 19) && (externalAttributes >>> 16) != 0) {
+                    // Preserve ordinary rwx bits, but never restore setuid,
+                    // setgid, or sticky bits from an untrusted archive.
+                    metadata.unixMode = (int) ((externalAttributes >>> 16) & 0777);
+                }
+                metadataByName.put(fileName, metadata);
                 
                 // Move to next entry (46 + fileNameLen + extraFieldLen + fileCommentLen)
                 raf.seek(pos + 46 + fileNameLen + extraFieldLen + fileCommentLen);
@@ -1428,17 +1474,16 @@ public class ArchiveZip extends PerlModuleBase {
             // Fall back to empty map if parsing fails
         }
         
-        return timestamps;
+        return metadataByName;
     }
 
     /**
-     * Parse ZIP data from a byte array to extract raw DOS timestamps.
-     * This is similar to extractRawDosTimestamps but works with in-memory data.
+     * Parse ZIP data from a byte array to extract raw DOS timestamps and Unix modes.
      * 
      * @return Map from entry name to raw DOS timestamp (32-bit value)
      */
-    private static java.util.Map<String, Long> extractRawDosTimestampsFromBytes(byte[] zipData) {
-        java.util.Map<String, Long> timestamps = new java.util.HashMap<>();
+    private static java.util.Map<String, ZipMetadata> extractZipMetadataFromBytes(byte[] zipData) {
+        java.util.Map<String, ZipMetadata> metadataByName = new java.util.HashMap<>();
         
         try {
             // Find the end of central directory record
@@ -1461,7 +1506,7 @@ public class ArchiveZip extends PerlModuleBase {
             }
             
             if (eocdOffset < 0) {
-                return timestamps; // EOCD not found
+                return metadataByName; // EOCD not found
             }
             
             // Read central directory offset from EOCD (at offset 16 from EOCD start)
@@ -1502,7 +1547,18 @@ public class ArchiveZip extends PerlModuleBase {
                 if (pos + 46 + fileNameLen > fileLen) break;
                 String fileName = new String(zipData, pos + 46, fileNameLen, StandardCharsets.UTF_8);
                 
-                timestamps.put(fileName, dosTimestamp);
+                int madeByHost = zipData[pos + 5] & 0xFF;
+                long externalAttributes = (zipData[pos + 38] & 0xFFL)
+                        | ((zipData[pos + 39] & 0xFFL) << 8)
+                        | ((zipData[pos + 40] & 0xFFL) << 16)
+                        | ((zipData[pos + 41] & 0xFFL) << 24);
+
+                ZipMetadata metadata = new ZipMetadata();
+                metadata.rawDosTimestamp = dosTimestamp;
+                if ((madeByHost == 3 || madeByHost == 19) && (externalAttributes >>> 16) != 0) {
+                    metadata.unixMode = (int) ((externalAttributes >>> 16) & 0777);
+                }
+                metadataByName.put(fileName, metadata);
                 
                 // Move to next entry (46 + fileNameLen + extraFieldLen + fileCommentLen)
                 pos += 46 + fileNameLen + extraFieldLen + fileCommentLen;
@@ -1511,7 +1567,14 @@ public class ArchiveZip extends PerlModuleBase {
             // Fall back to empty map if parsing fails
         }
         
-        return timestamps;
+        return metadataByName;
+    }
+
+    private static long readUInt32LE(java.io.RandomAccessFile raf) throws IOException {
+        return (raf.read() & 0xFFL)
+                | ((raf.read() & 0xFFL) << 8)
+                | ((raf.read() & 0xFFL) << 16)
+                | ((raf.read() & 0xFFL) << 24);
     }
 
     /**

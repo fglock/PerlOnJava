@@ -866,7 +866,7 @@ sub _create_install_makefile {
     } elsif ($test_glob) {
         # Use ExtUtils::Command::MM::test_harness with undef *Test::Harness::Switches
         # to disable the default -w switch, matching standard MakeMaker behavior
-        $test_cmd = qq{JPERL_OPTS="\$\${PERLONJAVA_TEST_JPERL_OPTS:-\$\$JPERL_OPTS}" PERL5LIB="\$(PERLONJAVA_TEST_PERL5LIB)" $perl "-MExtUtils::Command::MM" "-MTest::Harness" "-e" "undef *Test::Harness::Switches; test_harness(0, '\$(INST_LIB)', '\$(INST_ARCHLIB)')" $test_glob};
+        $test_cmd = qq{JPERL_OPTS="\$\${PERLONJAVA_TEST_JPERL_OPTS:-\$\$JPERL_OPTS}" PERL5LIB="\$(PERLONJAVA_TEST_PERL5LIB)" $perl "-MExtUtils::Command::MM" "-MTest::Harness" "-e" "undef *Test::Harness::Switches; test_harness(0, '\$(INST_LIB)', '\$(INST_ARCHLIB)')" \$(TEST_FILES)};
     } elsif (-f 'test.pl') {
         # Legacy convention: some older CPAN dists use test.pl instead of t/*.t
         $test_cmd = qq{JPERL_OPTS="\$\${PERLONJAVA_TEST_JPERL_OPTS:-\$\$JPERL_OPTS}" PERL5LIB="\$(PERLONJAVA_TEST_PERL5LIB)" $perl test.pl};
@@ -874,16 +874,16 @@ sub _create_install_makefile {
         $test_cmd = qq{$perl -e "print qq{PerlOnJava: No tests found (no t/ directory)\\n}"};
     }
 
-    # A distribution may override MY::test to provide its own harness command
-    # or add test-only include paths (for example, generated Thrift modules).
-    # Treat a non-empty override as the complete test target, as MakeMaker
-    # does, and pass the configured test selection to the hook.
+    # MakeMaker's MY::test hook returns a list of Makefile lines. Keep the
+    # list context so wrappers that call SUPER::test can edit those lines
+    # (Thrift adds generated-module include paths to $(TEST_FILES)).
+    $mm->{_perlonjava_test_rule} = "test::\n\t$test_cmd\n";
     my $my_test = '';
     if (defined &MY::test) {
-        $my_test = MY::test($mm, TESTS => $test_glob);
-        $my_test = '' unless defined $my_test;
+        my @my_test = MY::test($mm, TESTS => $test_glob);
+        $my_test = join '', grep { defined } @my_test;
     }
-    my $test_target = $my_test || "test::\n\t$test_cmd\n";
+    my $test_target = length($my_test) ? $my_test : "test::\n\t$test_cmd\n";
     
     # Convert module name to dist name (My::Module -> My-Module)
     my $distname = $args->{DISTNAME} || $name;
@@ -1137,6 +1137,7 @@ DISTVNAME = $distname-$version
 SUFFIX = .gz
 SHELL = /bin/sh
 TEST_VERBOSE = 0
+TEST_FILES = $test_glob
 RECORD_REVISION = \@true
 REVISION =
 OLD_REVISION =
@@ -1891,7 +1892,11 @@ sub dist_core { '' }
 sub install   { '' }
 sub realclean { '' }
 sub clean     { '' }
-sub test      { '' }
+sub test {
+    my ($self) = @_;
+    my $rule = $self->{_perlonjava_test_rule} || '';
+    return split /(?<=\n)/, $rule;
+}
 sub top_targets { '' }
 
 # Methods needed by File::ShareDir::Install postamble
