@@ -11,11 +11,11 @@ my $context;
 my $context_probe = sub {
     $context = qw[void scalar list][&mywantarray + defined mywantarray()];
 };
-() = $context_probe->();
+() = &$context_probe;
 is($context, 'list', 'CORE::wantarray coderef sees list context of its caller');
-scalar $context_probe->();
+scalar &$context_probe;
 is($context, 'scalar', 'CORE::wantarray coderef sees scalar context of its caller');
-$context_probe->();
+&$context_probe;
 is($context, 'void', 'CORE::wantarray coderef sees void context of its caller');
 
 my $warn = \&CORE::warn;
