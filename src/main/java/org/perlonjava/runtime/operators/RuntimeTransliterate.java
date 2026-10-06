@@ -173,10 +173,9 @@ public class RuntimeTransliterate {
                         "Useless use of non-destructive transliteration (tr///r)");
             }
             RuntimeScalar rv = new RuntimeScalar(resultString);
-            // Preserve BYTE_STRING type from input
-            if (originalString.type == RuntimeScalarType.BYTE_STRING) {
-                rv.type = RuntimeScalarType.BYTE_STRING;
-            }
+            // Perl stringifies numeric scalars to unflagged strings before tr///.
+            // Keep the UTF-8 flag only when the original value had it already.
+            rv.type = transliterationResultType(originalString);
             return rv;
         }
 
@@ -184,16 +183,25 @@ public class RuntimeTransliterate {
         // missing elements and destroy references even though no change is possible.
         // Conversely a modifying operation assigns even when nothing matched.
         if (modifiesTarget()) {
-            // Preserve BYTE_STRING type: tr/// on a byte string should produce a byte string
-            boolean wasByteString = originalString.type == RuntimeScalarType.BYTE_STRING;
+            boolean wasPlainScalar = originalString.type < RuntimeScalarType.TIED_SCALAR;
+            int resultType = transliterationResultType(originalString);
             originalString.set(resultString);
-            if (wasByteString) {
-                originalString.type = RuntimeScalarType.BYTE_STRING;
+            // Assignment turns INTEGER/DOUBLE/UNDEF into STRING by default.  Perl's
+            // numeric stringification is unflagged, so preserve only an existing
+            // UTF-8 flag and mark every other plain scalar as a byte string.
+            if (wasPlainScalar) {
+                originalString.type = resultType;
             }
         }
 
         // Return the count of matched characters
         return new RuntimeScalar(count);
+    }
+
+    private static int transliterationResultType(RuntimeScalar originalString) {
+        return originalString.type == RuntimeScalarType.STRING
+                ? RuntimeScalarType.STRING
+                : RuntimeScalarType.BYTE_STRING;
     }
 
     /** Whether this compiled operation requires a writable target. */

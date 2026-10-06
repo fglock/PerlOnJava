@@ -196,10 +196,11 @@ public class JavaClassInfo {
     public Map<String, Integer> gotoLoopLabelTokenIndices;
     /** Labels in expression-level do blocks, which goto may not enter. */
     public Set<String> gotoLabelsInsideConstruct;
-    /** If context containing a conditional label; sibling branch jumps remain legal. */
-    public Map<String, Integer> gotoConditionalLabelContexts;
-    /** If context containing each goto expression. */
-    public Map<Integer, Integer> gotoConditionalSourceContexts;
+    /** Enclosing if contexts for each conditional label and goto expression. */
+    public Map<String, Set<Integer>> gotoConditionalLabelContexts;
+    public Map<Integer, Set<Integer>> gotoConditionalSourceContexts;
+    /** Labels directly in if/elsif/else statement branches can be sibling goto targets. */
+    public Set<String> gotoSimpleConditionalBranchLabels;
     /** Labels in binary or list expression operands, with Perl's specific diagnostic. */
     public Set<String> gotoLabelsInsideBinaryOrListExpression;
     /** Labels inside given blocks, which goto may not enter. */
@@ -237,6 +238,7 @@ public class JavaClassInfo {
         this.gotoLabelsInsideConstruct = new HashSet<>();
         this.gotoConditionalLabelContexts = new HashMap<>();
         this.gotoConditionalSourceContexts = new HashMap<>();
+        this.gotoSimpleConditionalBranchLabels = new HashSet<>();
         this.gotoLabelsInsideBinaryOrListExpression = new HashSet<>();
         this.gotoLabelsInsideGiven = new HashSet<>();
         this.gotoLabelsInsideDefer = new HashSet<>();

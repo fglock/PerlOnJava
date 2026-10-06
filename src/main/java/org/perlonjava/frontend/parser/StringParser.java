@@ -1235,9 +1235,11 @@ public class StringParser {
             // For single quotes, only remove \ from pairs of \\
             searchList = searchList.replace("\\\\", "\\");
             searchNode = new StringNode(searchList, rawStr.index);
-        } else if (searchList.contains("\\-")) {
-            // Preserve escaped dashes until RuntimeTransliterate expands the
-            // list; decoding one here would make it a range operator.
+        } else if (containsEscapedDash(searchList)) {
+            // Preserve escapes that produce a dash until RuntimeTransliterate
+            // expands the list; decoding one here would make it a range
+            // operator. This includes hexadecimal escapes such as \x2d, used
+            // by byte-oriented translation tables.
             searchNode = new StringNode(searchList, rawStr.index);
         } else {
             ParsedString searchParsed = new ParsedString(
@@ -1255,7 +1257,7 @@ public class StringParser {
         if (rawStr.secondBufferStartDelim == '\'') {
             replacementList = replacementList.replace("\\\\", "\\");
             replacementNode = new StringNode(replacementList, rawStr.index);
-        } else if (replacementList.contains("\\-")) {
+        } else if (containsEscapedDash(replacementList)) {
             replacementNode = new StringNode(replacementList, rawStr.index);
         } else {
             ParsedString replaceParsed = new ParsedString(
@@ -1278,6 +1280,60 @@ public class StringParser {
 
         ListNode list = new ListNode(elements, rawStr.index);
         return new OperatorNode(operator, list, rawStr.index);
+    }
+
+    /** Returns true when an escape in a transliteration list denotes a dash. */
+    private static boolean containsEscapedDash(String list) {
+        for (int i = 0; i + 1 < list.length(); i++) {
+            if (list.charAt(i) != '\\') continue;
+            char escape = list.charAt(++i);
+            if (escape == '-') return true;
+            if (escape == 'x') {
+                int start = i + 1;
+                int end;
+                if (start < list.length() && list.charAt(start) == '{') {
+                    end = list.indexOf('}', start + 1);
+                    if (end < 0) continue;
+                    start++;
+                } else {
+                    end = start;
+                    while (end < list.length() && end - start < 2
+                            && Character.digit(list.charAt(end), 16) >= 0) end++;
+                    if (end == start) continue;
+                    end--;
+                }
+                if (end >= start) {
+                    try {
+                        if (Integer.parseInt(list.substring(start, end + 1), 16) == '-') return true;
+                    } catch (NumberFormatException ignored) {
+                        // Let the normal string parser report malformed escapes.
+                    }
+                }
+                i = end;
+            } else if (escape >= '0' && escape <= '7') {
+                int start = i;
+                int end = i + 1;
+                while (end < list.length() && end - start < 3
+                        && list.charAt(end) >= '0' && list.charAt(end) <= '7') end++;
+                try {
+                    if (Integer.parseInt(list.substring(start, end), 8) == '-') return true;
+                } catch (NumberFormatException ignored) {
+                    // Let the normal string parser report malformed escapes.
+                }
+                i = end - 1;
+            } else if (escape == 'N' && i + 1 < list.length() && list.charAt(i + 1) == '{') {
+                int end = list.indexOf('}', i + 2);
+                if (end < 0) continue;
+                try {
+                    if (org.perlonjava.runtime.regex.UnicodeResolver
+                            .getCodePointFromName(list.substring(i + 2, end).trim()) == '-') return true;
+                } catch (IllegalArgumentException ignored) {
+                    // Let transliteration parsing report the invalid character name.
+                }
+                i = end;
+            }
+        }
+        return false;
     }
 
     /** Perl rejects Unicode named sequences in either side of tr/// before

@@ -11,6 +11,8 @@ import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
+import java.util.Set;
+
 /**
  * Handles the emission of control flow bytecode instructions for Perl-like language constructs.
  * This class manages loop control operators (next, last, redo), subroutine returns, and goto statements.
@@ -959,10 +961,11 @@ public class EmitControlFlow {
                 && !node.getBooleanAnnotation("insideGivenBlock");
         boolean gotoIntoBinaryOrListExpression = ctx.javaClassInfo
                 .gotoLabelsInsideBinaryOrListExpression.contains(labelName);
-        Integer targetConditional = ctx.javaClassInfo.gotoConditionalLabelContexts.get(labelName);
-        Integer sourceConditional = ctx.javaClassInfo.gotoConditionalSourceContexts.get(node.tokenIndex);
-        boolean sameConditional = targetConditional != null
-                && targetConditional.equals(sourceConditional);
+        Set<Integer> targetConditional = ctx.javaClassInfo.gotoConditionalLabelContexts.get(labelName);
+        Set<Integer> sourceConditional = ctx.javaClassInfo.gotoConditionalSourceContexts.get(node.tokenIndex);
+        boolean sameConditional = ctx.javaClassInfo.gotoSimpleConditionalBranchLabels.contains(labelName)
+                && targetConditional != null && sourceConditional != null
+                && targetConditional.stream().anyMatch(sourceConditional::contains);
         if (gotoIntoGiven || gotoIntoBinaryOrListExpression
                 || (ctx.javaClassInfo.gotoLabelsInsideConstruct.contains(labelName) && !sameConditional)) {
             if (gotoIntoGiven) {
