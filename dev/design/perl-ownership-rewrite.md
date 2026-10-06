@@ -195,8 +195,10 @@ and first path establish implementation cost.
   dispatch, `die`-initiated shutdown, nested `exit` from END, and continuing
   the END queue after a callback dies. Nested exit previously became a false
   END failure; it now propagates as control flow. A callback `die` now records
-  its error, continues the queue, and produces a nonzero exit status. These
-  newest changes are Perl 5.45.4 validated; the full gate is pending.
+  its error, continues the queue, and produces a nonzero exit status. All six
+  END lifecycle regressions pass on Perl 5.45.4 and both PerlOnJava backends.
+  The runtime-reset contract still propagates a failing END after cleanup.
+  The full `nice -n 19 make` gate passes on `4211613f0`.
 
 ### Next steps
 
