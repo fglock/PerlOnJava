@@ -230,13 +230,18 @@ and first path establish implementation cost.
   exactly-once `DESTROY`. Captured-aggregate lifecycle (15/15) and scalar
   pad-transfer (6/6) regressions also pass on both backends. The full
   `nice -n 19 make` gate passes on `bf977fc71` (8m34s, 2026-10-06).
-- [x] During global destruction, use active Perl owner slots to distinguish a
-  real resurrection from a stale selective count left by the synthetic
-  `DESTROY` argument. The Perl 5.45.4 regression passes 2/2; both unfixed
-  PerlOnJava backends emitted a false resurrection warning, and both now pass
-  2/2. A real saved reference still emits the expected warning on both
-  backends. Full `nice -n 19 make` passes on `8c85bf8af` (8m24s); link check
-  passes (555 OK, 0 errors).
+- [x] During global destruction, snapshot active Perl owner-slot identities
+  before `DESTROY` and treat only newly retained slots as resurrection. This
+  ignores temporary arguments and preexisting global aliases while preserving
+  warnings for a real saved reference. The Perl 5.45.4 regression passes 3/3;
+  the unfixed JVM and interpreter warned for weak and non-weak temporary
+  arguments, while both fixed backends pass. Full `nice -n 19 make` passes on
+  `7f4c85c4d` (7m18s, 2026-10-06); link check passes (555 OK, 0 errors).
+- [x] Re-run Dancer2-Plugin-DBIx-Class 1.1001's `t/01_both_using_rsnames.t`,
+  the #1642 global teardown workload. After installing its missing pure-Perl
+  dependencies in the local CPAN cache, PerlOnJava passes all six assertions
+  and exits cleanly without the prior repeated `Type::Tiny` resurrection
+  warnings.
 
 ### Next steps
 
@@ -271,11 +276,10 @@ and first path establish implementation cost.
   content and incremental parser cases still retain two and three elements at
   the immediate release assertion on both PerlOnJava backends; Perl 5.44 passes
   all cases. The new parser lifecycle reproducer records this open failure.
-- Catalyst-Runtime and Dancer2 cleanup workloads from #1642 remain unqualified:
-  local test setup currently stops on unavailable CPAN prerequisites before
-  reaching the target assertions. The owner-ledger check now has a focused
-  global-destruction regression, but that does not replace an integration run
-  of the original workload.
+- The Dancer2-Plugin-DBIx-Class teardown workload from #1642 now passes. The
+  full Catalyst-Runtime workload remains unqualified because its local setup
+  cannot load Moose and `B::Hooks::EndOfScope`; the owner-slot delta check does
+  not yet have a measured Catalyst cleanup profile.
 - `RuntimeBase.refCount` still combines selective counts with legacy lifecycle
   sentinels and triggers cleanup for mixed-owner referents. The new explicit
   lifecycle prevents repeat dispatch and records destruction/resurrection, but
