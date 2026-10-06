@@ -86,59 +86,50 @@ public class RuntimeVecLvalue extends RuntimeBaseProxy {
         return this;
     }
 
-    @Override
-    public RuntimeScalar preAutoIncrement() {
-        super.preAutoIncrement();
-        set(this);
-        return this;
+    private RuntimeScalar autoModify(int delta, boolean postfix, boolean integer) {
+        RuntimeList args = new RuntimeList(
+                lvalue, new RuntimeScalar(offset), new RuntimeScalar(bits));
+        RuntimeScalar current = Vec.vec(args);
+        RuntimeScalar previous = new RuntimeScalar(current);
+        RuntimeScalar updated = new RuntimeScalar(current);
+        if (integer) {
+            if (delta > 0) {
+                updated = updated.integerPreAutoIncrement();
+            } else {
+                updated = updated.integerPreAutoDecrement();
+            }
+        } else if (delta > 0) {
+            updated = updated.preAutoIncrement();
+        } else {
+            updated = updated.preAutoDecrement();
+        }
+        Vec.set(args, updated);
+        this.type = updated.type;
+        this.value = updated.value;
+        return postfix ? previous : this;
     }
 
     @Override
-    public RuntimeScalar postAutoIncrement() {
-        RuntimeScalar previous = super.postAutoIncrement();
-        set(this);
-        return previous;
-    }
+    public RuntimeScalar preAutoIncrement() { return autoModify(1, false, false); }
 
     @Override
-    public RuntimeScalar preAutoDecrement() {
-        super.preAutoDecrement();
-        set(this);
-        return this;
-    }
+    public RuntimeScalar postAutoIncrement() { return autoModify(1, true, false); }
 
     @Override
-    public RuntimeScalar postAutoDecrement() {
-        RuntimeScalar previous = super.postAutoDecrement();
-        set(this);
-        return previous;
-    }
+    public RuntimeScalar preAutoDecrement() { return autoModify(-1, false, false); }
 
     @Override
-    public RuntimeScalar integerPreAutoIncrement() {
-        super.integerPreAutoIncrement();
-        set(this);
-        return this;
-    }
+    public RuntimeScalar postAutoDecrement() { return autoModify(-1, true, false); }
 
     @Override
-    public RuntimeScalar integerPostAutoIncrement() {
-        RuntimeScalar previous = super.integerPostAutoIncrement();
-        set(this);
-        return previous;
-    }
+    public RuntimeScalar integerPreAutoIncrement() { return autoModify(1, false, true); }
 
     @Override
-    public RuntimeScalar integerPreAutoDecrement() {
-        super.integerPreAutoDecrement();
-        set(this);
-        return this;
-    }
+    public RuntimeScalar integerPostAutoIncrement() { return autoModify(1, true, true); }
 
     @Override
-    public RuntimeScalar integerPostAutoDecrement() {
-        RuntimeScalar previous = super.integerPostAutoDecrement();
-        set(this);
-        return previous;
-    }
+    public RuntimeScalar integerPreAutoDecrement() { return autoModify(-1, false, true); }
+
+    @Override
+    public RuntimeScalar integerPostAutoDecrement() { return autoModify(-1, true, true); }
 }
