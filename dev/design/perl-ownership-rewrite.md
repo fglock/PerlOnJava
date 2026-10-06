@@ -221,11 +221,14 @@ and first path establish implementation cost.
 - [x] Count captured array and hash pads as referent owners through their
   closure owner slots, and discount the `B::SV` probe's private hash slot for
   named aggregates. The permanent regression records the Perl 5.45.4 sequence
-  2, 3, 4, 3, 2 for two closures capturing one array or hash. The pre-fix JVM
-  and interpreter each failed three of ten assertions; both backends now pass
-  all ten, as does the Perl oracle. Captured-aggregate lifecycle (15/15) and
-  scalar pad-transfer (6/6) regressions also pass on both backends. The full
-  `nice -n 19 make` gate passes on `5b9f41733` (9m51s, 2026-10-06).
+  2, 3, 4, 3, 2 for two closures capturing one array or hash, then checks the
+  same owner releases after each declaring scope exits. The pre-fix JVM and
+  interpreter each failed three of the original ten assertions; both backends
+  now pass all sixteen, as does the Perl oracle. Captured-aggregate lifecycle
+  (15/15) and scalar pad-transfer (6/6) regressions also pass on both backends.
+  The full `nice -n 19 make` gate passed on the preceding implementation
+  commit `5b9f41733` (9m51s, 2026-10-06); the expanded scope-exit regression is
+  awaiting its committed full gate.
 
 ### Next steps
 

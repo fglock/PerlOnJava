@@ -37,4 +37,42 @@ is(refcount($hash), 3, 'dropping one closure releases one hash capture owner');
 undef $second_hash;
 is(refcount($hash), 2, 'dropping the last closure releases its hash capture owner');
 
+sub make_scoped_array_capture {
+    my @scoped_items = (1);
+    my $array_ref = \@scoped_items;
+    my $first_closure = sub { scalar @scoped_items };
+    my $second_closure = sub { scalar @scoped_items };
+    return ($array_ref, $first_closure, $second_closure);
+}
+
+my ($scoped_array, $first_array_closure, $second_array_closure) =
+        make_scoped_array_capture();
+is(refcount($scoped_array), 3,
+    'scope exit releases the pad owner but keeps both closure owners');
+undef $first_array_closure;
+is(refcount($scoped_array), 2,
+    'dropping one closure after scope exit releases one owner');
+undef $second_array_closure;
+is(refcount($scoped_array), 1,
+    'dropping the last closure after scope exit preserves the external owner');
+
+sub make_scoped_hash_capture {
+    my %scoped_entries = (item => 1);
+    my $hash_ref = \%scoped_entries;
+    my $first_closure = sub { scalar keys %scoped_entries };
+    my $second_closure = sub { scalar keys %scoped_entries };
+    return ($hash_ref, $first_closure, $second_closure);
+}
+
+my ($scoped_hash, $first_hash_closure, $second_hash_closure) =
+        make_scoped_hash_capture();
+is(refcount($scoped_hash), 3,
+    'hash scope exit releases the pad owner but keeps both closure owners');
+undef $first_hash_closure;
+is(refcount($scoped_hash), 2,
+    'dropping one hash closure after scope exit releases one owner');
+undef $second_hash_closure;
+is(refcount($scoped_hash), 1,
+    'dropping the last hash closure after scope exit preserves the external owner');
+
 done_testing;
