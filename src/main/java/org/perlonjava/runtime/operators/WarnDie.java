@@ -987,6 +987,11 @@ public class WarnDie {
         MortalList.flushDeferredCapturesBeforeEnd();
         try {
             runEndBlocks(false);  // Don't reset $? - we just set it to the exit code
+        } catch (PerlExitException exit) {
+            // exit() called by an active END block recursively drains the
+            // remaining END queue. Its exit is the program's normal exit, not
+            // an END callback failure to report or replace with status 1.
+            throw exit;
         } catch (Throwable t) {
             RuntimeRegex.emitCurrentRuntimeDebugFreeTraces();
             RuntimeIO.closeAllHandles();

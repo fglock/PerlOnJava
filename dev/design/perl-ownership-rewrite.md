@@ -192,9 +192,11 @@ and first path establish implementation cost.
   a rescued selective count is released after the active phaser returns. Two
   permanent regressions cover DESTROY ordering inside END and shared lexical
   access across LIFO END blocks; additional regressions cover explicit `exit`
-  dispatch and `die`-initiated shutdown. All four match Perl 5.45.4 and pass on
-  both PerlOnJava backends. The full `nice -n 19 make` gate passed before the
-  final `die` test was added; its focused backend runs pass.
+  dispatch, `die`-initiated shutdown, and nested `exit` from END. The nested
+  exit test exposed `PerlExitException` being reported as an END failure and
+  converted to status 1; shutdown now propagates that control signal through
+  `WarnDie.exit` and the top-level END dispatcher. The new test passes on the
+  Perl 5.45.4 oracle; PerlOnJava validation is pending a rebuild.
 
 ### Next steps
 

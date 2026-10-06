@@ -840,6 +840,11 @@ public class PerlLanguageProvider {
                     // Global destruction: walk stashes for tracked blessed objects
                     GlobalDestruction.runGlobalDestruction();
                 }
+            } catch (PerlExitException exit) {
+                // An END block may call exit(), which drains the remaining
+                // queue and propagates the final process status through this
+                // dispatch frame.
+                throw exit;
             } catch (Throwable endException) {
                 RuntimeIO.closeAllHandles();
                 String errorMessage = ErrorMessageUtil.stringifyException(endException);
