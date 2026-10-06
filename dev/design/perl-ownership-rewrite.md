@@ -214,10 +214,10 @@ and first path establish implementation cost.
   interpreter retrieves them into the main pad. Before this fix, the first
   interpreter statement-boundary weak sweep could clear blessed values still
   owned by the main lexical scope after UNITCHECK; the JVM path did not fail.
-  The new permanent UNITCHECK regression passes 8/8 on Perl 5.45.4 and both
-  PerlOnJava backends, and fails assertions 2-4 on the unfixed interpreter.
-  The full `nice -n 19 make` gate passes on `3ee9f9772` (12m01s,
-  2026-10-06).
+  The permanent UNITCHECK/CHECK/INIT regression passes 11/11 on Perl 5.45.4
+  and both PerlOnJava backends. The pre-fix interpreter failed all three
+  main-pad retention assertions; the Perl oracle and JVM passed. The full
+  `nice -n 19 make` gate passes on `3ee9f9772` (12m01s, 2026-10-06).
 
 ### Next steps
 
