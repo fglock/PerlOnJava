@@ -191,6 +191,12 @@ and first path establish implementation cost.
   the repeated deferred-cleanup fallback separately from aggregate
   scope-unregister queries. The full `nice -n 19 make` gate passes on the
   rebased tree.
+- [x] Measure cleanup cost for the migrated captured-aggregate path. A
+  deterministic test places 256 unrelated referents under a package root,
+  exits a captured array pad, and releases its native owner slot; the release
+  performs zero root queries, snapshot builds, or edge inspections. The full
+  `nice -n 19 make` gate passes on the candidate tree committed as
+  `75406d339` (8m05s, 2026-10-06).
 - [x] Preserve END-block captures across assertion and callback cleanup.
   END CVs now retain their capture edges while queued and during invocation;
   a rescued selective count is released after the active phaser returns. Two
