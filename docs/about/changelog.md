@@ -19,6 +19,8 @@ priorities and future plans.
 - Pass the Image::ExifTool 13.55 test suite by preserving escaped
   transliteration ranges and numeric string flags, and allowing valid nested
   conditional `goto` targets.
+- Distinguish real Perl owners from temporary DESTROY arguments when checking
+  resurrection during global destruction.
 - Retain positive closure-pad owner cycles per Perl runtime, record destruction
   separately from count sentinels, track deferred releases by owner-slot
   identity, guard bridge count overflow, and balance DESTROY callback ownership

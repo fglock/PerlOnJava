@@ -542,7 +542,7 @@ public class DestroyDispatch {
             // self-save). Mark needsReDestroy and let the next decrement-to-0
             // re-invoke DESTROY. Don't clear weak refs or cascade — the object
             // is still alive.
-            if (referent.refCount > 0 && !state.destroyTargetRescued) {
+            if (hasEscapedPerlOwner(referent) && !state.destroyTargetRescued) {
                 warnIfResurrectedDuringGlobalDestruction(referent, className);
                 referent.needsReDestroy = true;
                 return;
@@ -662,6 +662,20 @@ public class DestroyDispatch {
                 ReachabilityWalker.sweepWeakRefs(false, false);
             }
         }
+    }
+
+    /**
+     * Decide resurrection from Perl owner slots when the owner ledger is
+     * active. During global destruction the legacy selective count can still
+     * include temporary argument aliases after their Perl owners have gone;
+     * those aliases are not resurrection. Objects which have not activated
+     * owner tracking retain the legacy count-based behavior.
+     */
+    private static boolean hasEscapedPerlOwner(RuntimeBase referent) {
+        if (referent.activeOwners == null) {
+            return referent.refCount > 0;
+        }
+        return referent.activeOwnerCount() > 0 || referent.hasSemanticCaptureOwner();
     }
 
     /**
