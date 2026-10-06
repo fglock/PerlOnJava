@@ -191,8 +191,9 @@ and first path establish implementation cost.
   END CVs now retain their capture edges while queued and during invocation;
   a rescued selective count is released after the active phaser returns. Two
   permanent regressions cover DESTROY ordering inside END and shared lexical
-  access across LIFO END blocks. They match Perl 5.45.4 and pass on both
-  PerlOnJava backends. The full `nice -n 19 make` gate passes on 2026-10-06.
+  access across LIFO END blocks; a third covers explicit `exit` dispatch.
+  All three match Perl 5.45.4 and pass on both PerlOnJava backends. The full
+  `nice -n 19 make` gate passes on 2026-10-06.
 
 ### Next steps
 
