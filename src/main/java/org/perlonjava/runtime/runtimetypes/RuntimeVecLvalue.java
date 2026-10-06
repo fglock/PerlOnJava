@@ -85,4 +85,60 @@ public class RuntimeVecLvalue extends RuntimeBaseProxy {
 
         return this;
     }
+
+    @Override
+    public RuntimeScalar preAutoIncrement() {
+        super.preAutoIncrement();
+        set(this);
+        return this;
+    }
+
+    @Override
+    public RuntimeScalar postAutoIncrement() {
+        RuntimeScalar previous = super.postAutoIncrement();
+        set(this);
+        return previous;
+    }
+
+    @Override
+    public RuntimeScalar preAutoDecrement() {
+        super.preAutoDecrement();
+        set(this);
+        return this;
+    }
+
+    @Override
+    public RuntimeScalar postAutoDecrement() {
+        RuntimeScalar previous = super.postAutoDecrement();
+        set(this);
+        return previous;
+    }
+
+    @Override
+    public RuntimeScalar integerPreAutoIncrement() {
+        super.integerPreAutoIncrement();
+        set(this);
+        return this;
+    }
+
+    @Override
+    public RuntimeScalar integerPostAutoIncrement() {
+        RuntimeScalar previous = super.integerPostAutoIncrement();
+        set(this);
+        return previous;
+    }
+
+    @Override
+    public RuntimeScalar integerPreAutoDecrement() {
+        super.integerPreAutoDecrement();
+        set(this);
+        return this;
+    }
+
+    @Override
+    public RuntimeScalar integerPostAutoDecrement() {
+        RuntimeScalar previous = super.integerPostAutoDecrement();
+        set(this);
+        return previous;
+    }
 }

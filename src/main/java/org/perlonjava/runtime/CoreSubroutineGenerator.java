@@ -324,8 +324,11 @@ public class CoreSubroutineGenerator {
                     Time.times(ctx);
             case "wait" -> (args, ctx) ->
                     WaitpidOperator.waitForChild().getList();
-            case "wantarray" -> (args, ctx) ->
-                    Operator.wantarray(ctx).getList();
+            case "wantarray" -> (args, ctx) -> {
+                Integer callerContext = RuntimeCode.getCallContextAtCallerFrame(1);
+                return Operator.wantarray(callerContext == null
+                        ? RuntimeContextType.VOID : callerContext).getList();
+            };
             case "break" -> (args, ctx) -> {
                 CallerStack.CallerInfo callSite = CallerStack.peek(0);
                 String file = callSite == null ? "(eval)" : callSite.filename();
@@ -844,8 +847,12 @@ public class CoreSubroutineGenerator {
                 yield RuntimeCode.prototype((RuntimeScalar) args[0], packageName).getList();
             }
             case "pack" -> Pack.pack(new RuntimeList(args)).getList();
-            case "unpack" -> Unpack.unpack(ctx, args);
+            case "unpack" -> Unpack.unpack(ctx, args.length == 1
+                    ? new RuntimeBase[]{args[0], GlobalVariable.getGlobalVariable("main::_")}
+                    : args);
             case "vec" -> Vec.vec(new RuntimeList(args)).getList();
+            case "warn" -> WarnDie.warn(new RuntimeList(args),
+                    RuntimeScalarCache.scalarEmptyString).getList();
             case "sprintf" -> SprintfOperator.sprintf((RuntimeScalar) args[0],
                     tailList(args, 1)).getList();
             case "getpgrp" -> Operator.getpgrp(ctx, args).getList();

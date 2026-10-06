@@ -1,4 +1,4 @@
-use Test::More tests => 6;
+use Test::More tests => 7;
 
 my $vec = \&CORE::vec;
 my $value = '';
@@ -9,6 +9,11 @@ is($vec->($value, 0, 8), 65, 'CORE::vec coderef reads the selected bits');
 $value = '';
 &$vec($value, 1, 8) = 66;
 is($value, "\0B", 'CORE::vec coderef assignment works with explicit dereference');
+
+*myvec = \&CORE::vec;
+my $packed = 'foo';
+++&myvec($packed, 0, 4);
+is($packed, 'goo', 'CORE::vec coderef compound lvalue updates the selected field');
 
 my $untie = \&CORE::untie;
 eval { $untie->(1) };
