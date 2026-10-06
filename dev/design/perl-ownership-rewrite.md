@@ -68,13 +68,17 @@ both PerlOnJava backends, and fails on the parent interpreter backend.
 
 This fixes the demonstrated path and wires typed `PerlOwnerSlot` identity into
 closure-pad semantic ownership, including transfer when a captured pad changes
-referents and idempotent release. Runtime-scoped retention now follows active
-slots, and legacy increments/deferred decrements carry slot provenance. The
-selected closure path also covers weak/unweaken transitions, callback
-reentrancy, resurrection, and exception cleanup on both backends. The selective
-`refCount` bridge still decides whether a referent reaches destruction; the
-independent lifecycle state records that transition but does not yet replace
-sentinel interpretation across legacy boundaries. Scalar stores and
+referents and idempotent release. Runtime-scoped retention follows active
+slots. Captured array/hash pads now use their owner-slot count directly and do
+not also increment the selective count; `B::SV::REFCNT` includes those slots,
+and final scope-exit cleanup is dispatched when the last slot releases. Other
+unmigrated references to the same referent remain represented by the selective
+legacy count, so mixed lifetimes compose without counting the captured edge in
+both systems. Scalar captures still use the explicit legacy bridge. The
+selected aggregate-capture path also covers weak/unweaken transitions,
+callback reentrancy, resurrection, replacement, and exception cleanup on both
+backends. The independent lifecycle state records destruction separately from
+sentinel interpretation at remaining legacy boundaries. Scalar stores and
 array/hash-element ownership remain outside this path. Phase 1 is complete only
 after the slot identity/count/lifecycle contract, positive-count cycle
 retention, and bridge cover the selected path end to end on both backends.
@@ -230,6 +234,13 @@ and first path establish implementation cost.
   exactly-once `DESTROY`. Captured-aggregate lifecycle (15/15) and scalar
   pad-transfer (6/6) regressions also pass on both backends. The full
   `nice -n 19 make` gate passes on `bf977fc71` (8m34s, 2026-10-06).
+- [x] Move captured array/hash pad edges from the selective `refCount` bridge
+  into native owner-slot counts. `Internals::SvREFCNT` combines native capture
+  slots with remaining legacy owners, and a final native slot release now
+  drives scope-exit cleanup without manufacturing a legacy decrement. The new
+  `PerlOwnerSlotNativeCaptureTest` verifies slot retention independently from
+  `refCount`; the 30-assertion Perl 5.45.4 regression and both backends pass.
+  `nice -n 19 make` passes (9m23s, 2026-10-06).
 - [x] During global destruction, snapshot active Perl owner-slot identities
   before `DESTROY` and treat only newly retained slots as resurrection. This
   ignores temporary arguments and preexisting global aliases while preserving

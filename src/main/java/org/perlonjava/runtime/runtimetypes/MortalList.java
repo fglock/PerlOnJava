@@ -1460,10 +1460,12 @@ public class MortalList {
         }
         if (base.refCount > 0 && --base.refCount == 0) {
             if (base.hasSemanticCaptureOwner()) {
-                // The shared captured pad cell is an authoritative strong
-                // owner.  It is intentionally independent of the transient
-                // selective count being drained here.
-                base.refCount = 1;
+                // Captured aggregate pads use native owner slots. Keep the
+                // legacy count at zero while one is active; its final release
+                // will perform the lifecycle transition. Scalar captures still
+                // have a legacy bridge count and retain the old compatibility
+                // sentinel behavior.
+                if (base.nativeCaptureOwnerCount() == 0) base.refCount = 1;
             } else if (base.localBindingExists) {
                 if (base instanceof RuntimeScalar scalar
                         && scalar.referencedByScalarReference

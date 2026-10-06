@@ -488,7 +488,13 @@ public class Internals extends PerlModuleBase {
         if (base != null) {
             int rc = base.refCount;
             if (rc == Integer.MIN_VALUE) return new RuntimeScalar(0).getList();
-            if (rc < 0) return new RuntimeScalar(1).getList(); // untracked
+            int nativeCaptureOwners = base.nativeCaptureOwnerCount();
+            if (rc < 0) {
+                if (nativeCaptureOwners == 0) return new RuntimeScalar(1).getList(); // untracked
+                rc = nativeCaptureOwners;
+            } else {
+                rc += nativeCaptureOwners;
+            }
             // An ampersand-style call may pass a weak qr// scalar directly
             // (qr-72922's refcount_is helper does this).  The call-frame alias
             // is represented as a transient counted regex holder here, whereas

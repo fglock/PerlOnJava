@@ -249,15 +249,27 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             releaseClosureCapture();
             return;
         }
+        if (ownerSlot.isNativeCaptureOwner()) {
+            // Captured aggregate pads are native owner slots. Remove the slot
+            // before releasing the capture so a final release can dispatch
+            // from the owner count without manufacturing a legacy decrement.
+            ownerSlot.release();
+            releaseClosureCapture(true);
+            return;
+        }
         ownerSlot.deferLegacyCaptureRelease(this);
         try {
-            releaseClosureCapture();
+            releaseClosureCapture(false);
         } finally {
             ownerSlot.release();
         }
     }
 
     public void releaseClosureCapture() {
+        releaseClosureCapture(false);
+    }
+
+    private void releaseClosureCapture(boolean nativeOwnerSlot) {
         if (captureCount > 0) {
             captureCount--;
         }
@@ -271,7 +283,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             if (blessId != 0 && refCount <= 0) {
                 refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(this);
-            } else if (refCount > 0
+            } else if (!nativeOwnerSlot && refCount > 0
                     && (blessId != 0 || this instanceof RuntimeCode)
                     && !hasSemanticCaptureOwner()) {
                 MortalList.deferDecrement(this, "closure aggregate release");
@@ -323,6 +335,19 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     /** Number of distinct captured pad slots that own this referent. */
     public int semanticCaptureOwnerCount() {
         return ownerSlotCount(PerlOwnerSlot.Kind.CLOSURE_PAD);
+    }
+
+    /** Count captured aggregate pads whose lifetime is owned natively by slots. */
+    public synchronized int nativeCaptureOwnerCount() {
+        if (ownerSlots == null) return 0;
+        int count = 0;
+        for (PerlOwnerSlot slot : ownerSlots) {
+            if (slot.kind() == PerlOwnerSlot.Kind.CLOSURE_PAD
+                    && slot.isNativeCaptureOwner()) {
+                count++;
+            }
+        }
+        return count;
     }
 
     // Conservative gate for the tied-handler reachability fallback. Once a

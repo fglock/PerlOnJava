@@ -27,6 +27,7 @@ public final class PerlOwnerSlot {
     private PerlRuntime ownerRuntime;
     private LifecycleRuntimeState ownerRuntimeState;
     private int legacyCaptureCount;
+    private volatile boolean nativeCaptureOwner;
     private long nextReleaseSequence;
 
     /** Provenance token carried with one queued legacy decrement. */
@@ -84,6 +85,10 @@ public final class PerlOwnerSlot {
         return padCell;
     }
 
+    boolean isNativeCaptureOwner() {
+        return nativeCaptureOwner;
+    }
+
     public synchronized RuntimeBase referent() {
         return referent;
     }
@@ -119,21 +124,14 @@ public final class PerlOwnerSlot {
         legacyCaptureCount++;
     }
 
-    /**
-     * Acquire a closure-pad owner for an aggregate. Tracked referents also
-     * cross the legacy count bridge; untracked referents still need a semantic
-     * owner slot so runtime retention follows the closure.
-     */
+    /** Acquire a captured aggregate pad as an explicit owner slot. */
     public synchronized void acquireCapture(RuntimeBase target) {
         Objects.requireNonNull(target, "target");
         if (target.refCount == Integer.MIN_VALUE) {
             throw new IllegalStateException("cannot capture a destroyed referent");
         }
-        if (target.refCount >= 0) {
-            acquireLegacyCapture(target);
-        } else {
-            transferTo(target);
-        }
+        nativeCaptureOwner = true;
+        transferTo(target);
     }
 
     /** Queue one closure-pad count release and retain its slot provenance. */
