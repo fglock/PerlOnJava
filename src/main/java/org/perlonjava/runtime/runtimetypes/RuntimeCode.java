@@ -3524,6 +3524,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.capturedScalars = codeFrom.capturedScalars;
         this.capturedAggregates = codeFrom.capturedAggregates;
         this.captureFieldsRecorded = codeFrom.captureFieldsRecorded;
+        this.capturedAggregateOwnerSlots = codeFrom.capturedAggregateOwnerSlots;
         this.closedOverVariables = codeFrom.closedOverVariables;
         this.lexicalVariableNames = codeFrom.lexicalVariableNames;
         this.lexicalHints = codeFrom.lexicalHints;
@@ -8791,6 +8792,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // callable body is cleared.
         code.isDeclared = true;
         code.codeReferenceUndefined = true;
+        code.releaseCaptures();
         code.clearPadConstantWeakRefs();
         code.methodHandle = null;
         code.subroutine = null;

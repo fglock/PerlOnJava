@@ -2666,7 +2666,7 @@ public class SubroutineParser {
             GlobalVariable.invalidateGlobalCodeRefGraphRoots();
         }
         if (code == null || capturedValues == null || capturedValues.isEmpty()
-                || code.capturedScalars != null) {
+                || code.capturedScalars != null || code.capturedAggregates != null) {
             return;
         }
 

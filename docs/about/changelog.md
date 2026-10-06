@@ -34,6 +34,10 @@ priorities and future plans.
 - Keep captured aggregate ownership in native owner slots, compose slot counts
   with legacy owners for `B::SV::REFCNT`, and dispatch final scope cleanup when
   the last captured pad releases.
+- Transfer aggregate capture owner slots when forward-declared subs adopt
+  definitions, retain lazy capture ownership across forward-CV adoption, and
+  release captures on `undef &sub`; keep Catalyst::Runtime's system and
+  backtick tests active while skipping only its `fork()` assertions.
 - Release closure captures when retired interpreter pad metadata is no longer a Perl owner.
 - Keep END block captures alive through queued and active execution until END
   releases their lexical owners, including `die`-initiated shutdown, nested
