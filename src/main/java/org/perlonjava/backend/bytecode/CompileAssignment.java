@@ -3703,6 +3703,21 @@ public class CompileAssignment {
                             return;
                         }
                     }
+                    if (refAliasTarget instanceof OperatorNode aggregateField
+                            && (aggregateField.operator.equals("@") || aggregateField.operator.equals("%"))
+                            && aggregateField.operand instanceof BinaryOperatorNode fieldSlot
+                            && fieldSlot.operator.equals("->")) {
+                        // Class aggregate fields are stored in the object hash.
+                        // Alias the field slot itself, not the dereferenced
+                        // aggregate value, so the field can be rebound safely.
+                        bytecodeCompiler.compileNode(fieldSlot, -1, RuntimeContextType.LVALUE);
+                        int targetReg = bytecodeCompiler.lastResultReg;
+                        bytecodeCompiler.emit(Opcodes.ALIAS_LVALUE_REFERENCE);
+                        bytecodeCompiler.emitReg(targetReg);
+                        bytecodeCompiler.emitReg(valueReg);
+                        bytecodeCompiler.lastResultReg = targetReg;
+                        return;
+                    }
                     if (refAliasTarget instanceof OperatorNode varNode
                             && (varNode.operator.equals("$") || varNode.operator.equals("@")
                             || varNode.operator.equals("%") || varNode.operator.equals("&"))) {

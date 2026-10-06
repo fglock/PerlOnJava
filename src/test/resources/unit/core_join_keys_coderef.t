@@ -1,10 +1,13 @@
 use strict;
 use warnings;
-use Test::More tests => 14;
+use Test::More tests => 15;
 
 my $join = \&CORE::join;
 is($join->(',', 'a', 'b'), 'a,b',
     'CORE::join code reference joins its remaining arguments');
+eval { $join->() };
+like($@, qr/^Not enough arguments for join or string at .+ line \d+\.\n$/,
+    'CORE::join code reference uses the Perl arity diagnostic');
 
 my $keys = \&CORE::keys;
 my $values = \&CORE::values;

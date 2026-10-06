@@ -1134,13 +1134,33 @@ public class EmitVariable {
                     }
                     BinaryOperatorNode element = refAliasTarget instanceof BinaryOperatorNode binaryElement
                             ? binaryElement : null;
-                    if (element != null && (element.operator.equals("{") || element.operator.equals("["))) {
+                    if (element != null && (element.operator.equals("{") || element.operator.equals("[")
+                            || element.operator.equals("->"))) {
                         if (element.operator.equals("[")) {
                             Dereference.handleArrayElementOperator(
                                     emitterVisitor.with(RuntimeContextType.LVALUE), element, "getLvalue");
                         } else {
                             element.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
                         }
+                        mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
+                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                                "aliasLvalueReference",
+                                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                false);
+                        if (ctx.contextType == RuntimeContextType.VOID) mv.visitInsn(Opcodes.POP);
+                        if (pooledRhs) ctx.javaClassInfo.releaseSpillSlot();
+                        return;
+                    }
+
+                    // A class aggregate field is represented as a sigil node
+                    // over `$self->{field}`. Refalias the field's slot so the
+                    // aggregate stored there can be rebound safely.
+                    if (refAliasTarget instanceof OperatorNode aggregateField
+                            && (aggregateField.operator.equals("@") || aggregateField.operator.equals("%"))
+                            && aggregateField.operand instanceof BinaryOperatorNode fieldSlot
+                            && fieldSlot.operator.equals("->")) {
+                        fieldSlot.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
                         mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
                         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                                 "org/perlonjava/runtime/runtimetypes/RuntimeScalar",

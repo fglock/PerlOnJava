@@ -1,6 +1,7 @@
 package org.perlonjava.runtime;
 
 import org.perlonjava.frontend.parser.ParserTables;
+import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.runtime.operators.*;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -124,7 +125,11 @@ public class CoreSubroutineGenerator {
      * Perl's arity diagnostics before dispatching to their Java implementation.
      */
     private static void validatePrototypeArity(String name, String prototype, int actual) {
-        String displayName = "evalbytes".equals(name) ? "eval \"string\"" : name;
+        String displayName = switch (name) {
+            case "evalbytes" -> "eval \"string\"";
+            case "join" -> "join or string";
+            default -> name;
+        };
         int minimum = 0;
         int maximum = 0;
         boolean optional = false;
@@ -643,10 +648,13 @@ public class CoreSubroutineGenerator {
                 // An interpreted CV's cvStartLine is its compile-time default,
                 // which can differ from the active source line after #line.
                 // The call frame records the actual CORE::die expression site.
-                String file = callSite != null && callSite.filename() != null
-                        ? callSite.filename() : caller == null ? null : caller.cvStartFile;
-                int line = callSite != null && callSite.line() > 0
-                        ? callSite.line() : caller == null ? 0 : caller.cvStartLine;
+                boolean interpreterCaller = caller instanceof InterpretedCode;
+                String file = interpreterCaller && callSite != null && callSite.filename() != null
+                        ? callSite.filename() : caller != null && caller.cvStartFile != null
+                        ? caller.cvStartFile : callSite == null ? null : callSite.filename();
+                int line = interpreterCaller && callSite != null && callSite.line() > 0
+                        ? callSite.line() : caller != null && caller.cvStartLine > 0
+                        ? caller.cvStartLine : callSite == null ? 0 : callSite.line();
                 yield WarnDie.die(new RuntimeList(args), RuntimeScalarCache.scalarEmptyString,
                         file, line).getList();
             }
