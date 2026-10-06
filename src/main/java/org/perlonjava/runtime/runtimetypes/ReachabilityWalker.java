@@ -1170,6 +1170,9 @@ public class ReachabilityWalker {
         for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
             if (seen.add(rescued)) todo.addLast(rescued);
         }
+        for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotReferents()) {
+            if (seen.add(ownerReferent)) todo.addLast(ownerReferent);
+        }
 
         int visits = 0;
         while (!todo.isEmpty() && visits < maxVisits) {
@@ -1548,6 +1551,13 @@ public class ReachabilityWalker {
             }
             if (hash != null && seen.add(hash)) {
                 todo.addLast(hash);
+                if (stats != null) stats.rootsSeeded++;
+            }
+        }
+        for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotReferents()) {
+            if (ownerReferent == target) return true;
+            if (ownerReferent != null && seen.add(ownerReferent)) {
+                todo.addLast(ownerReferent);
                 if (stats != null) stats.rootsSeeded++;
             }
         }
