@@ -14,6 +14,7 @@ priorities and future plans.
   directory macros used by CPAN build tooling.
 - Preserve Thrift's list-returning `MY::test` customization, including its
   generated-module include paths.
+- Implement `Bit::Vector::Chunk_Store` used by Thrift's 64-bit protocol.
 - Preserve binary HTTP response bytes so CPAN downloads remain extractable.
 - Preserve Unix executable permissions when extracting ZIP archive entries.
 - Accept Perl's valid `\@;@` prototype without an `illegalproto` warning.

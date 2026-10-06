@@ -89,6 +89,60 @@ sub Concat_List {
     return bless { bits => $bits, value => $value, set_bits => \%set_bits }, $class;
 }
 
+sub Chunk_Store {
+    my ($self, $chunk_bits, $offset, $value) = @_;
+    _check_size($chunk_bits);
+    die "Bit::Vector::Chunk_Store(): chunk size out of range\n"
+        unless $chunk_bits > 0 && $chunk_bits <= Long_Bits();
+    die "Bit::Vector::Chunk_Store(): offset out of range\n"
+        unless defined($offset) && "$offset" =~ /\A\d+\z/
+            && $offset < $self->{bits};
+    die "Bit::Vector::Chunk_Store(): not an integer\n"
+        unless defined($value) && "$value" =~ /\A[+-]?\d+\z/;
+
+    my $decimal = "$value";
+    my $negative = $decimal =~ s/\A-//;
+    $decimal =~ s/\A\+//;
+    $decimal =~ s/\A0+(?=\d)//;
+    my @bits;
+    while ($decimal ne '0') {
+        my ($quotient, $carry) = ('', 0);
+        for my $digit (split //, $decimal) {
+            my $number = $carry * 10 + $digit;
+            my $next = int($number / 2);
+            $quotient .= $next if length($quotient) || $next;
+            $carry = $number % 2;
+        }
+        push @bits, $carry;
+        $decimal = length($quotient) ? $quotient : '0';
+    }
+    @bits = (0) unless @bits;
+    @bits = @bits[0 .. $chunk_bits - 1]
+        if @bits > $chunk_bits;
+    push @bits, (0) x ($chunk_bits - @bits);
+    if ($negative) {
+        my $found_one = 0;
+        for my $bit (@bits) {
+            if ($found_one) {
+                $bit = $bit ? 0 : 1;
+            } elsif ($bit) {
+                $found_one = 1;
+            }
+        }
+    }
+    my $stored_bits = $chunk_bits;
+    $stored_bits = $self->{bits} - $offset if $offset + $stored_bits > $self->{bits};
+
+    for my $index (0 .. $stored_bits - 1) {
+        my $target = $offset + $index;
+        !$bits[$index]
+            ? delete $self->{set_bits}{$target}
+            : ($self->{set_bits}{$target} = 1);
+    }
+    _sync_value_from_bits($self);
+    return;
+}
+
 sub Chunk_Read {
     my ($self, $chunk_bits, $offset) = @_;
     _check_size($chunk_bits);
@@ -96,10 +150,35 @@ sub Chunk_Read {
         unless defined($offset) && $offset =~ /\A\d+\z/
             && $offset + $chunk_bits <= $self->{bits};
 
-    _sync_value_from_bits($self);
-    my $mask = Math::BigInt->new(2)->bpow($chunk_bits)->bdec;
-    my $chunk = $self->{value}->copy->brsft($offset)->band($mask);
-    return 0 + "$chunk";
+    my @chunk = map { $self->{set_bits}{$_} ? 1 : 0 }
+        $offset .. $offset + $chunk_bits - 1;
+    if ($chunk_bits == 64 && $chunk[-1]) {
+        my $found_one = 0;
+        for my $bit (@chunk) {
+            if ($found_one) {
+                $bit = $bit ? 0 : 1;
+            } elsif ($bit) {
+                $found_one = 1;
+            }
+        }
+    }
+
+    my @digits = (0);
+    for my $bit (reverse @chunk) {
+        my $carry = $bit;
+        for my $digit (0 .. $#digits) {
+            my $value = $digits[$digit] * 2 + $carry;
+            $digits[$digit] = $value % 10;
+            $carry = int($value / 10);
+        }
+        while ($carry) {
+            push @digits, $carry % 10;
+            $carry = int($carry / 10);
+        }
+    }
+    my $result = join '', reverse @digits;
+    return "-$result" if $chunk_bits == 64 && $self->{set_bits}{$offset + 63};
+    return $result;
 }
 
 sub Bit_Off {
@@ -237,9 +316,24 @@ sub _set_bits_from_value {
 
 sub _sync_value_from_bits {
     my ($self) = @_;
-    my $value = Math::BigInt->new(0);
-    $value->bior(Math::BigInt->new(2)->bpow($_)) for keys %{ $self->{set_bits} };
-    $self->{value} = $value;
+    my @digits = (0);
+    my $highest = -1;
+    for my $index (keys %{ $self->{set_bits} }) {
+        $highest = $index if $index > $highest;
+    }
+    for my $index (reverse 0 .. $highest) {
+        my $carry = $self->{set_bits}{$index} ? 1 : 0;
+        for my $digit (0 .. $#digits) {
+            my $value = $digits[$digit] * 2 + $carry;
+            $digits[$digit] = $value % 10;
+            $carry = int($value / 10);
+        }
+        while ($carry) {
+            push @digits, $carry % 10;
+            $carry = int($carry / 10);
+        }
+    }
+    $self->{value} = Math::BigInt->new(join '', reverse @digits);
 }
 
 sub _check_size {
