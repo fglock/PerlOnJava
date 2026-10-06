@@ -124,6 +124,7 @@ public class CoreSubroutineGenerator {
         code.subName = operatorName;
         if ("pos".equals(operatorName) || "keys".equals(operatorName)
                 || "substr".equals(operatorName)
+                || "vec".equals(operatorName)
                 || "undef".equals(operatorName)
                 || "lock".equals(operatorName)) {
             code.attributes = new java.util.ArrayList<>(java.util.List.of("lvalue"));
@@ -844,6 +845,7 @@ public class CoreSubroutineGenerator {
             }
             case "pack" -> Pack.pack(new RuntimeList(args)).getList();
             case "unpack" -> Unpack.unpack(ctx, args);
+            case "vec" -> Vec.vec(new RuntimeList(args)).getList();
             case "sprintf" -> SprintfOperator.sprintf((RuntimeScalar) args[0],
                     tailList(args, 1)).getList();
             case "getpgrp" -> Operator.getpgrp(ctx, args).getList();
@@ -867,7 +869,10 @@ public class CoreSubroutineGenerator {
                 requireTieTarget(name, args);
                 yield TieOperators.tie(ctx, args).getList();
             }
-            case "untie" -> TieOperators.untie(ctx, args).getList();
+            case "untie" -> {
+                requireTieTarget(name, args);
+                yield TieOperators.untie(ctx, args).getList();
+            }
             case "tied" -> {
                 requireTieTarget(name, args);
                 yield TieOperators.tied(ctx, args).getList();
