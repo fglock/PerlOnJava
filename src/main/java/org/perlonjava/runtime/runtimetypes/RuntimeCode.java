@@ -1925,7 +1925,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static boolean isLvalueCode(RuntimeCode code) {
-        return code != null && code.attributes != null && code.attributes.contains("lvalue");
+        return code != null && ((code.attributes != null && code.attributes.contains("lvalue"))
+                || ("CORE".equals(code.packageName) && "undef".equals(code.subName)));
     }
 
     private static void restoreLazyAttributes(RuntimeCode code, java.util.List<String> savedAttributes) {
