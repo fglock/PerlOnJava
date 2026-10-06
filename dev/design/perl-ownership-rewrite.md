@@ -199,6 +199,13 @@ and first path establish implementation cost.
   All six END lifecycle regressions pass on Perl 5.45.4 and both PerlOnJava backends.
   The runtime-reset contract still propagates a failing END after cleanup.
   The full `nice -n 19 make` gate passes on `78369acc9` (8m33s).
+- [x] Add a permanent captured-aggregate pad regression at
+  [`issue_1649_captured_aggregate_pad_lifecycle.t`](../../src/test/resources/unit/refcount/issue_1649_captured_aggregate_pad_lifecycle.t).
+  Perl 5.45.4 and the JVM backend pass all five assertions. The interpreter
+  fails the first two lifetime assertions, so the implementation boundary
+  remains open; the failure also reproduces on the parent interpreter. The
+  test is retained to prevent losing this evidence while the interpreter path
+  is completed.
 
 ### Next steps
 
@@ -206,7 +213,9 @@ and first path establish implementation cost.
    with the measured deferred-release path; identify which releases can share
    a root snapshot across statement boundaries.
 2. Qualify the closure owner's remaining lifecycle boundaries while preserving
-   Perl 5.45.4 weak and exact count checkpoints.
+   Perl 5.45.4 weak and exact count checkpoints. Fix the captured aggregate
+   lifetime failure on the interpreter backend and validate the permanent
+   regression on both backends.
 3. Extend the complete ownership path through scalar proxies and array/hash
    slots in Phase 2, then resolve the HTML::Tree teardown failures and verify
    unchanged `t/refloop.t`.
