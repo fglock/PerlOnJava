@@ -199,6 +199,13 @@ public class ReachabilityWalker {
         for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
             addReachable(rescued, todo);
         }
+        // Explicit owner slots carry semantic Perl ownership even when the
+        // owning pad cell is intentionally absent from conservative lexical
+        // walker roots. Captured aggregate pads use this path so their
+        // elements remain reachable until the closure releases the slot.
+        for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotReferents()) {
+            addReachable(ownerReferent, todo);
+        }
         for (RuntimeBase suspended : MortalList.snapshotSuspendedRoots()) {
             addReachable(suspended, todo);
         }
