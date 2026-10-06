@@ -53,6 +53,7 @@ public final class ExecutionRuntimeState {
     final RuntimeArray checkBlocks = new RuntimeArray();
 
     public final RuntimeScalar currentPackage = new RuntimeScalar("main");
+    public final RuntimeScalar currentCallerPackage = new RuntimeScalar("main");
     public final Deque<InterpreterState.InterpreterFrame> interpreterFrames = new ArrayDeque<>();
     public final ArrayList<int[]> interpreterPcs = new ArrayList<>();
 
@@ -81,6 +82,8 @@ public final class ExecutionRuntimeState {
             new IdentityHashMap<>();
     public final Deque<Boolean> hasArgsStack = new ArrayDeque<>();
     public final Deque<Integer> callContextStack = new ArrayDeque<>();
+    /** Call-site packages pending association with the CV entered for each call context. */
+    public final Deque<String> pendingCallerPackages = new ArrayDeque<>();
     public int evalDepth;
     /** Compact stash entries materialized by an eval-held CODE assignment. */
     public final Deque<LinkedHashMap<String, RuntimeScalar>> evalPseudoConstantScopes =
