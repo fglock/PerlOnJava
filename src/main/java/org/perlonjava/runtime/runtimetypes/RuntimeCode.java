@@ -3001,6 +3001,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         syntheticCallerFrames().addLast(frame);
     }
 
+    private static void pushSignatureValidationCallerFrame(
+            String packageName, String filename, int line) {
+        pushSyntheticCallerFrame(packageName, filename, line,
+                "(signature)", "signature-validation");
+    }
+
+    private static void popSignatureValidationCallerFrame() {
+        ArrayDeque<ArrayList<String>> stack = syntheticCallerFrames();
+        if (!stack.isEmpty()) {
+            ArrayList<String> frame = stack.peekLast();
+            if (frame.size() > 4 && "signature-validation".equals(frame.get(4))) {
+                stack.removeLast();
+            }
+        }
+        if (stack.isEmpty()) {
+            stack.clear();
+        }
+    }
+
     public static void popSyntheticCallerFrame() {
         ArrayDeque<ArrayList<String>> stack = syntheticCallerFrames();
         if (!stack.isEmpty()) {
@@ -7222,11 +7241,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return apply(resolved, subroutineName, args, callContext);
         }
 
-        pushSyntheticCallerFrame(callerPackage, callerFile, callerLine, "(signature)");
+        pushSignatureValidationCallerFrame(callerPackage, callerFile, callerLine);
         try {
             return apply(resolved, subroutineName, args, callContext);
         } finally {
-            popSyntheticCallerFrame();
+            popSignatureValidationCallerFrame();
         }
     }
 
@@ -8530,6 +8549,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             boolean signatureCall = enterSignatureCall();
             try {
                 validateNamedSignatureArguments(a);
+                popSignatureValidationCallerFrame();
                 RuntimeList result;
                 // Prefer functional interface over MethodHandle for better performance
                 if (this.subroutine != null) {
@@ -8697,6 +8717,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             boolean signatureCall = enterSignatureCall();
             try {
                 validateNamedSignatureArguments(a);
+                popSignatureValidationCallerFrame();
                 RuntimeList result;
                 // Prefer functional interface over MethodHandle for better performance
                 if (this.subroutine != null) {

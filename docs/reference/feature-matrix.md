@@ -912,6 +912,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
   native module's non-vivifying scalar inspection; the rest of the upstream
   API is supplied by its pure-Perl fallback.
 - ✅  **Scalar::Type** module backed by PerlOnJava scalar metadata (replaces native XS).
+- ✅  **Scalar::Readonly** scalar read-only query and mutation functions are backed by Java in place of XS.
 - 🟡 **PadWalker**: `peek_sub`, `closed_over`, and `set_closed_over` use
   runtime-maintained lexical metadata on both backends; caller-pad APIs are
   not implemented.

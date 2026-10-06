@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Add Java-backed `Scalar::Readonly` support and fix caller-frame visibility
+  for nested signature calls.
+
 - Pass the Image::ExifTool 13.55 test suite by preserving escaped
   transliteration ranges and numeric string flags, and allowing valid nested
   conditional `goto` targets.
