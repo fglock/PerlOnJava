@@ -248,8 +248,8 @@ public class CoreSubroutineGenerator {
                 RuntimeScalar scalar = (RuntimeScalar) target;
                 switch (scalar.type) {
                     case RuntimeScalarType.REFERENCE -> scalar.scalarDeref().undefine();
-                    case RuntimeScalarType.ARRAYREFERENCE -> scalar.arrayDeref().clear();
-                    case RuntimeScalarType.HASHREFERENCE -> scalar.hashDeref().clear();
+                    case RuntimeScalarType.ARRAYREFERENCE -> scalar.arrayDeref().undefine();
+                    case RuntimeScalarType.HASHREFERENCE -> scalar.hashDeref().undefine();
                     case RuntimeScalarType.CODE -> RuntimeCode.undefineCodeReference(scalar);
                     case RuntimeScalarType.GLOBREFERENCE -> {
                         if (scalar.value instanceof RuntimeGlob glob) glob.undefine();
