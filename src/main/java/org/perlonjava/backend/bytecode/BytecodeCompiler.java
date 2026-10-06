@@ -3797,6 +3797,14 @@ public class BytecodeCompiler implements Visitor {
                             }
                             default -> throwCompilerException("Unsupported variable type: " + sigil);
                         }
+                        if (op.equals("my")) {
+                            // The BEGIN cell becomes the live lexical pad slot
+                            // when the main code retrieves it. Keep it visible
+                            // to interpreter reachability sweeps from this
+                            // point until the declaring scope exits.
+                            emit(Opcodes.REGISTER_MY_VAR);
+                            emitReg(reg);
+                        }
                         emitActiveLexicalBinding(reg, varName);
 
                         // Match JVM EmitVariable: MODIFY_*_ATTRIBUTES must run for : ATTR(...)
@@ -4263,6 +4271,12 @@ public class BytecodeCompiler implements Visitor {
                                     }
                                     default ->
                                             throwCompilerException("Unsupported variable type in list declaration: " + sigil);
+                                }
+                                if (op.equals("my")) {
+                                    // Match the JVM backend for BEGIN-backed
+                                    // declaration-list pad slots.
+                                    emit(Opcodes.REGISTER_MY_VAR);
+                                    emitReg(reg);
                                 }
                                 emitActiveLexicalBinding(reg, varName);
 
