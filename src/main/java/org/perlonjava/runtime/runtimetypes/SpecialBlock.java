@@ -13,6 +13,9 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariab
  * - CHECK blocks are stored oldest-first and consumed from the back.
  */
 public class SpecialBlock {
+    /** Exit status observed from the target Perl 5.45.4 END-call failure path. */
+    public static final int END_FAILURE_EXIT_STATUS = 22;
+
 
     /** Identifies a failure raised while dispatching a deferred phaser. */
     public static final class DeferredPhaseException extends RuntimeException {

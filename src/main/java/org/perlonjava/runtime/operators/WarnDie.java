@@ -1007,7 +1007,7 @@ public class WarnDie {
         GlobalDestruction.runGlobalDestruction();
         RuntimeIO.closeAllHandles();
         if (endFailure != null) {
-            throw new PerlExitException(1);
+            throw new PerlExitException(SpecialBlock.END_FAILURE_EXIT_STATUS);
         }
         // Use $? as the final exit code - END blocks may have modified it
         int finalExitCode = getGlobalVariable("main::?").getInt();

@@ -490,7 +490,7 @@ public class PerlLanguageProvider {
         GlobalDestruction.runGlobalDestruction();
         RuntimeIO.closeAllHandles();
         if (endFailure != null) {
-            throw new PerlExitException(1);
+            throw new PerlExitException(SpecialBlock.END_FAILURE_EXIT_STATUS);
         }
     }
 
@@ -846,7 +846,7 @@ public class PerlLanguageProvider {
                     GlobalDestruction.runGlobalDestruction();
                     if (endFailure != null) {
                         RuntimeIO.closeAllHandles();
-                        throw new PerlExitException(1);
+                        throw new PerlExitException(SpecialBlock.END_FAILURE_EXIT_STATUS);
                     }
                 }
             } catch (PerlExitException exit) {
