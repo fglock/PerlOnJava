@@ -33,6 +33,12 @@ priorities and future plans.
 - Preserve direct-call semantics for lexical and package `->&` methods, support
   `CORE::bless` and `CORE::break` code references, and allow same-finally local
   `goto` targets.
+- Support callable `CORE::close` and directory I/O wrappers with Perl-compatible
+  false results and list-context behavior.
+- Preserve caller argument presence through `CORE::caller` references and
+  support `CORE::continue` code references inside `given` blocks.
+- Route callable `CORE::dbmopen` and `CORE::dbmclose` through the PerlOnJava DBM backend.
+- Dispatch callable `CORE::die` with the original Perl call-site location.
 - Keep lexical class methods visible across method declarations without
   installing them in the package stash, and support callable `CORE::bless`.
 

@@ -276,6 +276,13 @@ public class CoreSubroutineGenerator {
                 return new RuntimeControlFlowList(
                         ControlFlowType.LAST, null, file, line, null, "break");
             };
+            case "continue" -> (args, ctx) -> {
+                CallerStack.CallerInfo callSite = CallerStack.peek(0);
+                String file = callSite == null ? "(eval)" : callSite.filename();
+                int line = callSite == null ? 0 : callSite.line();
+                return new RuntimeControlFlowList(
+                        ControlFlowType.NEXT, null, file, line, null, "continue");
+            };
             case "__SUB__" -> (args, ctx) -> {
                 // A CORE::__SUB__ wrapper is itself a RuntimeCode frame, so
                 // the Perl subroutine whose identity is requested is its
@@ -315,8 +322,7 @@ public class CoreSubroutineGenerator {
     private static PerlSubroutine buildOptionalScalar(String name) {
         // Some ;$ functions need special dispatch
         if ("caller".equals(name)) {
-            return (args, ctx) ->
-                    RuntimeCode.caller(new RuntimeList(args), ctx);
+            return (args, ctx) -> RuntimeCode.caller(args.getList(), ctx);
         }
         return (args, ctx) -> {
             RuntimeScalar arg = args.size() > 0 ? args.get(0) : new RuntimeScalar();
@@ -512,7 +518,12 @@ public class CoreSubroutineGenerator {
             // I/O operators
             case "open" -> IOOperator.open(ctx, args).getList();
             case "binmode" -> IOOperator.binmode(ctx, args).getList();
-            case "close" -> IOOperator.close(ctx, args).getList();
+            case "close" -> {
+                RuntimeScalar result = IOOperator.close(ctx, args);
+                // Perl's false close result is the empty string, including
+                // when the runtime's generic I/O path reports it as undef.
+                yield result.getBoolean() ? result.getList() : new RuntimeScalar("").getList();
+            }
             case "fileno" -> IOOperator.fileno(ctx, args).getList();
             case "flock" -> IOOperator.flock(ctx, args).getList();
             case "fcntl" -> IOOperator.fcntl(ctx, args).getList();
@@ -543,13 +554,24 @@ public class CoreSubroutineGenerator {
             // Directory operators
             case "mkdir" -> Directory.mkdir(new RuntimeList(args)).getList();
             case "opendir" -> Directory.opendir(new RuntimeList(args)).getList();
+            case "closedir" -> Directory.closedir((RuntimeScalar) args[0]).getList();
+            case "readdir" -> Directory.readdir((RuntimeScalar) args[0], ctx).getList();
+            case "rewinddir" -> Directory.rewinddir((RuntimeScalar) args[0]).getList();
             case "seekdir" -> Directory.seekdir(new RuntimeList(args)).getList();
+            case "telldir" -> Directory.telldir((RuntimeScalar) args[0]).getList();
 
             // System operators
             case "fork" -> SystemOperator.fork(ctx, args).getList();
             case "kill" -> KillOperator.kill(ctx, args).getList();
             case "umask" -> UmaskOperator.umask(ctx, args).getList();
             case "waitpid" -> WaitpidOperator.waitpid(ctx, args).getList();
+            case "die" -> {
+                CallerStack.CallerInfo callSite = CallerStack.peek(0);
+                String file = callSite == null ? null : callSite.filename();
+                int line = callSite == null ? 0 : callSite.line();
+                yield WarnDie.die(new RuntimeList(args), RuntimeScalarCache.scalarEmptyString,
+                        file, line).getList();
+            }
 
             // Misc operators
             case "bless" -> {
@@ -591,9 +613,30 @@ public class CoreSubroutineGenerator {
             case "tie" -> TieOperators.tie(ctx, args).getList();
             case "untie" -> TieOperators.untie(ctx, args).getList();
             case "tied" -> TieOperators.tied(ctx, args).getList();
+            case "dbmopen" -> {
+                requireHashReference(name, args);
+                RuntimeBase[] tieArgs = new RuntimeBase[args.length + 1];
+                tieArgs[0] = args[0];
+                tieArgs[1] = new RuntimeScalar("PerlOnJava::DBM");
+                System.arraycopy(args, 1, tieArgs, 2, args.length - 1);
+                RuntimeScalar tied = TieOperators.tie(ctx, tieArgs);
+                yield tied.getBoolean() ? RuntimeScalarCache.scalarTrue.getList() : tied.getList();
+            }
+            case "dbmclose" -> {
+                requireHashReference(name, args);
+                yield TieOperators.untie(ctx, args).getList();
+            }
 
             default ->
                     throw new PerlCompilerException("&CORE::" + name + " not yet supported as subroutine reference");
         };
+    }
+
+    private static void requireHashReference(String name, RuntimeBase[] args) {
+        if (args.length == 0 || !(args[0] instanceof RuntimeScalar scalar)
+                || scalar.type != RuntimeScalarType.HASHREFERENCE) {
+            throw new PerlCompilerException("Type of arg 1 to &CORE::" + name
+                    + " must be hash reference");
+        }
     }
 }
