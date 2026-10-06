@@ -132,6 +132,22 @@ public class ReachabilityWalker {
         return "DB::args".equals(name);
     }
 
+    private static boolean hasCapturedAggregateElementOwner(RuntimeBase referent) {
+        for (RuntimeScalar owner : ScalarRefRegistry.snapshot()) {
+            if (owner == null || !owner.refCountOwned || owner.value != referent) continue;
+            RuntimeBase container = owner.containerOwner;
+            if (container instanceof RuntimeArray array
+                    && array.captureCount > 0 && array.elements.contains(owner)) {
+                return true;
+            }
+            if (container instanceof RuntimeHash hash
+                    && hash.captureCount > 0 && hash.elements.containsValue(owner)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Walk from Perl-visible roots and mark reachable objects.
      * <p>
@@ -2502,6 +2518,9 @@ public class ReachabilityWalker {
             if (!liveReferent && referent.hasSemanticCaptureOwner()) {
                 continue;
             }
+            if (!liveReferent && hasCapturedAggregateElementOwner(referent)) {
+                continue;
+            }
             boolean localBinding = (referent instanceof RuntimeHash || referent instanceof RuntimeArray)
                     && referent.localBindingExists;
             boolean cycleProtected = quiet && strongCycleProtected.contains(referent);
@@ -2584,6 +2603,9 @@ public class ReachabilityWalker {
                 continue;
             }
             if (referent.hasSemanticCaptureOwner()) {
+                continue;
+            }
+            if (hasCapturedAggregateElementOwner(referent)) {
                 continue;
             }
             if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
