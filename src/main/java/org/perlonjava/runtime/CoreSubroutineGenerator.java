@@ -640,10 +640,13 @@ public class CoreSubroutineGenerator {
             case "die" -> {
                 RuntimeCode caller = RuntimeCode.getActiveCodeAt(1);
                 CallerStack.CallerInfo callSite = CallerStack.peek(0);
-                String file = caller != null && caller.cvStartFile != null
-                        ? caller.cvStartFile : callSite == null ? null : callSite.filename();
-                int line = caller != null && caller.cvStartLine > 0
-                        ? caller.cvStartLine : callSite == null ? 0 : callSite.line();
+                // An interpreted CV's cvStartLine is its compile-time default,
+                // which can differ from the active source line after #line.
+                // The call frame records the actual CORE::die expression site.
+                String file = callSite != null && callSite.filename() != null
+                        ? callSite.filename() : caller == null ? null : caller.cvStartFile;
+                int line = callSite != null && callSite.line() > 0
+                        ? callSite.line() : caller == null ? 0 : caller.cvStartLine;
                 yield WarnDie.die(new RuntimeList(args), RuntimeScalarCache.scalarEmptyString,
                         file, line).getList();
             }

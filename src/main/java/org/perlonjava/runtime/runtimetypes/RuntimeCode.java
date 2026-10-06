@@ -8534,6 +8534,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         // System.out.println("type: " + code.type);
         if (code.type == RuntimeScalarType.CODE) {
+            if (code.value instanceof RuntimeCode runtimeCode
+                    && runtimeCode.prototype == null
+                    && runtimeCode.referenceOriginFqn != null
+                    && runtimeCode.referenceOriginFqn.startsWith("CORE::")) {
+                String coreName = runtimeCode.referenceOriginFqn.substring("CORE::".length());
+                if (CORE_PROTOTYPES.containsKey(coreName)) {
+                    return new RuntimeScalar(CORE_PROTOTYPES.get(coreName));
+                }
+            }
             // System.out.println("prototype: " + ((RuntimeCode) code.value).prototype);
             return new RuntimeScalar(((RuntimeCode) code.value).prototype);
         }
