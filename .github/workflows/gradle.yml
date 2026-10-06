@@ -63,7 +63,9 @@ jobs:
       - name: Build with Make (Linux)
         id: build-linux
         if: runner.os == 'Linux'
-        timeout-minutes: 45
+        # The full unit gate starts thousands of Perl scripts; leave headroom
+        # for hosted-runner speed variance rather than truncating the corpus.
+        timeout-minutes: 60
         run: make ci
 
       - name: Checkout latest Perl thread compatibility corpus
