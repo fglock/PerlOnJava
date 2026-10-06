@@ -57,7 +57,6 @@ sub _bootstrap_prefs {
         'Test-Trap.yml'              => 'PerlOnJava/CpanDistroprefs/Test-Trap.yml',
         'Filesys-Notify-Simple.yml'  => 'PerlOnJava/CpanDistroprefs/Filesys-Notify-Simple.yml',
         'Class-C3-Adopt-NEXT.yml'    => 'PerlOnJava/CpanDistroprefs/Class-C3-Adopt-NEXT.yml',
-        'Catalyst-Runtime.yml'       => 'PerlOnJava/CpanDistroprefs/Catalyst-Runtime.yml',
         'MooseX-Types-Path-Tiny.yml' => 'PerlOnJava/CpanDistroprefs/MooseX-Types-Path-Tiny.yml',
         'Text-SimpleTable.yml'       => 'PerlOnJava/CpanDistroprefs/Text-SimpleTable.yml',
         'Data-Dmp.yml'               => 'PerlOnJava/CpanDistroprefs/Data-Dmp.yml',
@@ -189,6 +188,7 @@ sub _bootstrap_prefs {
         Test-Deep.yml
         Test-Deep-JSON.yml
         Test-File-ShareDir.yml
+        Catalyst-Runtime.yml
         Test2-Plugin-NoWarnings.yml
         Term-ANSIColor-Markup.yml
         Graph.yml

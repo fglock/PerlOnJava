@@ -22,6 +22,8 @@ import java.util.concurrent.TimeUnit;
 
 /** JVM-backed argv-safe process execution for PerlOnJava tooling. */
 public class PerlOnJavaProcess extends PerlModuleBase {
+    static final int MAX_CAPTURED_OUTPUT_BYTES_PER_STREAM = 8 * 1024 * 1024;
+
 
     public PerlOnJavaProcess() {
         super("PerlOnJava::Process", false);
@@ -51,8 +53,8 @@ public class PerlOnJavaProcess extends PerlModuleBase {
 
         RuntimeHash result = new RuntimeHash();
         Process process = null;
-        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
-        ByteArrayOutputStream stderr = new ByteArrayOutputStream();
+        CapturedOutput stdout = new CapturedOutput(MAX_CAPTURED_OUTPUT_BYTES_PER_STREAM);
+        CapturedOutput stderr = new CapturedOutput(MAX_CAPTURED_OUTPUT_BYTES_PER_STREAM);
         Thread stdoutReader = null;
         Thread stderrReader = null;
         boolean timedOut = false;
@@ -111,8 +113,8 @@ public class PerlOnJavaProcess extends PerlModuleBase {
             joinReader(stderrReader);
         }
 
-        String stdoutText = stdout.toString(StandardCharsets.UTF_8);
-        String stderrText = stderr.toString(StandardCharsets.UTF_8);
+        String stdoutText = stdout.asUtf8String();
+        String stderrText = stderr.asUtf8String();
         result.put("exit_code", new RuntimeScalar(exitCode));
         result.put("stdout", new RuntimeScalar(stdoutText));
         result.put("stderr", new RuntimeScalar(stderrText));
@@ -155,15 +157,13 @@ public class PerlOnJavaProcess extends PerlModuleBase {
         }
     }
 
-    private static void copyOutput(InputStream input, ByteArrayOutputStream output,
+    static void copyOutput(InputStream input, CapturedOutput output,
             boolean tee, boolean errorStream) {
         try (input) {
             byte[] buffer = new byte[8192];
             int read;
             while ((read = input.read(buffer)) != -1) {
-                synchronized (output) {
-                    output.write(buffer, 0, read);
-                }
+                output.append(buffer, 0, read);
                 if (tee) {
                     if (errorStream) {
                         SystemOperator.writeToPerlStderrBytes(buffer, read);
@@ -174,6 +174,36 @@ public class PerlOnJavaProcess extends PerlModuleBase {
             }
         } catch (IOException ignored) {
             // Process termination closes the stream.
+        }
+    }
+
+    /** Retains a bounded prefix while continuing to drain the child's pipe. */
+    static final class CapturedOutput {
+        private final int maxBytes;
+        private final ByteArrayOutputStream captured;
+        private long discardedBytes;
+
+        CapturedOutput(int maxBytes) {
+            if (maxBytes < 0) throw new IllegalArgumentException("maxBytes must not be negative");
+            this.maxBytes = maxBytes;
+            this.captured = new ByteArrayOutputStream(Math.min(maxBytes, 8192));
+        }
+
+        synchronized void append(byte[] bytes, int offset, int length) {
+            int retained = Math.min(length, maxBytes - captured.size());
+            if (retained > 0) captured.write(bytes, offset, retained);
+            discardedBytes += length - retained;
+        }
+
+        synchronized long discardedBytes() {
+            return discardedBytes;
+        }
+
+        synchronized String asUtf8String() {
+            String text = captured.toString(StandardCharsets.UTF_8);
+            if (discardedBytes == 0) return text;
+            return text + "\n[PerlOnJava: captured output truncated; discarded "
+                    + discardedBytes + " bytes]\n";
         }
     }
 

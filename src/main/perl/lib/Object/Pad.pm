@@ -6,11 +6,10 @@ use feature ();
 
 our $VERSION = '0.66';
 
-# PerlOnJava compiles the class, field, and method syntax natively.  Object::Pad
-# normally installs those keywords through XS; its compatibility layer only
-# needs to enable the equivalent lexical compiler feature here.  This covers
-# the core syntax shared with Perl's class feature, including :param fields,
-# method signatures, and :isa inheritance.
+# PerlOnJava compiles class, field, method, and :accessor syntax natively.
+# Object::Pad normally installs those keywords through XS; this compatibility
+# layer enables the equivalent lexical compiler feature. The legacy `has`
+# field spelling remains accepted for the advertised 0.66 compatibility level.
 sub import {
     feature->import('class');
     warnings->unimport('experimental::class');
@@ -32,9 +31,11 @@ Object::Pad - PerlOnJava compatibility pragma for native class syntax
 
 =head1 DESCRIPTION
 
-PerlOnJava implements the class syntax used by Object::Pad directly in its
-compiler. This pragma enables that lexical syntax without loading the module's
-XS keyword parser. Object::Pad-specific MOP and extension APIs are not provided.
+PerlOnJava implements core Object::Pad class syntax directly in its compiler,
+including `class`, `field` (and the 0.66 `has` spelling), `method`, `:param`,
+`:isa`, and scalar `:accessor` fields. This pragma enables that lexical syntax
+without loading the module's XS keyword parser. Object::Pad-specific MOP and
+other extension APIs are not provided.
 
 =head1 AUTHOR
 

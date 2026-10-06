@@ -2,6 +2,7 @@ package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.regex.UnicodeResolver;
 import org.perlonjava.runtime.perlmodule.Warnings;
+import org.perlonjava.runtime.runtimetypes.DualVar;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -173,10 +174,7 @@ public class RuntimeTransliterate {
                         "Useless use of non-destructive transliteration (tr///r)");
             }
             RuntimeScalar rv = new RuntimeScalar(resultString);
-            // Preserve BYTE_STRING type from input
-            if (originalString.type == RuntimeScalarType.BYTE_STRING) {
-                rv.type = RuntimeScalarType.BYTE_STRING;
-            }
+            rv.type = transliteratedStringType(originalString, resultString);
             return rv;
         }
 
@@ -184,16 +182,39 @@ public class RuntimeTransliterate {
         // missing elements and destroy references even though no change is possible.
         // Conversely a modifying operation assigns even when nothing matched.
         if (modifiesTarget()) {
-            // Preserve BYTE_STRING type: tr/// on a byte string should produce a byte string
-            boolean wasByteString = originalString.type == RuntimeScalarType.BYTE_STRING;
-            originalString.set(resultString);
-            if (wasByteString) {
-                originalString.type = RuntimeScalarType.BYTE_STRING;
-            }
+            RuntimeScalar translatedValue = new RuntimeScalar(resultString);
+            translatedValue.type = transliteratedStringType(originalString, resultString);
+            originalString.set(translatedValue);
         }
 
         // Return the count of matched characters
         return new RuntimeScalar(count);
+    }
+
+    /**
+     * Perl keeps an existing UTF-8 flag through transliteration, and a result
+     * containing characters above the byte range must be UTF-8. Stringifying
+     * a numeric scalar for tr///, however, starts with an unflagged byte string.
+     */
+    private static int transliteratedStringType(RuntimeScalar original, String result) {
+        if (hasUtf8StringValue(original)) {
+            return RuntimeScalarType.STRING;
+        }
+        for (int i = 0; i < result.length(); i++) {
+            if (result.charAt(i) > 0xff) {
+                return RuntimeScalarType.STRING;
+            }
+        }
+        return RuntimeScalarType.BYTE_STRING;
+    }
+
+    private static boolean hasUtf8StringValue(RuntimeScalar scalar) {
+        return switch (scalar.type) {
+            case RuntimeScalarType.STRING, RuntimeScalarType.VSTRING -> true;
+            case RuntimeScalarType.DUALVAR -> hasUtf8StringValue(((DualVar) scalar.value).stringValue());
+            case RuntimeScalarType.READONLY_SCALAR -> hasUtf8StringValue((RuntimeScalar) scalar.value);
+            default -> false;
+        };
     }
 
     /** Whether this compiled operation requires a writable target. */

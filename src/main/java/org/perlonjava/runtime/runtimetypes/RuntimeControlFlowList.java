@@ -30,6 +30,8 @@ public class RuntimeControlFlowList extends RuntimeList {
      * the caller dispatches the marker.
      */
     private final boolean suppressEscapingLoopControlWarning;
+    /** A helper's tail call may finish as the value of its sort comparator. */
+    private final boolean sortHelperTailCall;
 
     /**
      * Constructor for control flow (last/next/redo/goto).
@@ -55,6 +57,7 @@ public class RuntimeControlFlowList extends RuntimeList {
         super();
         this.marker = new ControlFlowMarker(type, label, fileName, lineNumber, evalScope, switchControlOperator);
         this.returnValue = null;
+        this.sortHelperTailCall = false;
         this.suppressEscapingLoopControlWarning = Warnings.isWarnFlagLocalized()
                 && !Warnings.isWarnFlagSet();
         if (DEBUG_TAILCALL) {
@@ -92,11 +95,10 @@ public class RuntimeControlFlowList extends RuntimeList {
     public RuntimeControlFlowList(RuntimeScalar codeRef, RuntimeArray args, String fileName, int lineNumber,
                                   String evalScope, String namedTarget) {
         super();
-        if (RuntimeCode.isInSortComparator()) {
-            throw new PerlCompilerException(RuntimeCode.isCurrentSortComparatorBlock()
-                    ? "Can't goto subroutine outside a subroutine"
-                    : "Can't goto subroutine from a sort sub");
+        if (RuntimeCode.isCurrentSortComparatorSubroutine()) {
+            throw RuntimeCode.sortTailCallError();
         }
+        this.sortHelperTailCall = RuntimeCode.isSortComparatorInvocationActive();
         this.marker = new ControlFlowMarker(retainTailCallCodeRef(codeRef), args, fileName, lineNumber,
                 namedTarget, evalScope);
         this.returnValue = null;
@@ -127,6 +129,7 @@ public class RuntimeControlFlowList extends RuntimeList {
         super();
         this.marker = new ControlFlowMarker(ControlFlowType.RETURN, null, fileName, lineNumber);
         this.returnValue = returnValue;
+        this.sortHelperTailCall = false;
         this.suppressEscapingLoopControlWarning = false;
     }
 
@@ -137,6 +140,10 @@ public class RuntimeControlFlowList extends RuntimeList {
      */
     public RuntimeBase getReturnValue() {
         return returnValue;
+    }
+
+    public boolean isSortHelperTailCall() {
+        return sortHelperTailCall;
     }
 
     public void markClassAdjustOrigin() {

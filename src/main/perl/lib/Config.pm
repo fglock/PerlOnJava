@@ -205,6 +205,9 @@ my $startperl = $is_windows
     PERL_VERSION => 44,
     PERL_SUBVERSION => 1,
     d_fchdir => 'define',
+    # POSIX directory handles are accepted by chdir() using their captured
+    # absolute directory path; Windows keeps this capability unavailable.
+    d_dirfd => $is_windows ? '' : 'define',
     d_fchmod => 'define',
 
     # PerlOnJava specific

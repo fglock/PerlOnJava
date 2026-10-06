@@ -168,6 +168,30 @@ public class ClassTransformer {
         // Generate reader and writer methods
         List<SubroutineNode> deferredAccessors = new ArrayList<>();
         for (OperatorNode field : fields) {
+            if (field.getAnnotation("attr:accessor") != null) {
+                if (!"$".equals(field.getAnnotation("sigil"))) {
+                    throw PerlCompilerException.withSourceLocation(field.getIndex(),
+                            "Cannot apply an :accessor attribute to a non-scalar field",
+                            parser.ctx.errorUtil);
+                }
+                if (field.getAnnotation("attr:reader") != null
+                        || field.getAnnotation("attr:writer") != null) {
+                    throw PerlCompilerException.withSourceLocation(field.getIndex(),
+                            "Cannot combine :accessor with :reader or :writer",
+                            parser.ctx.errorUtil);
+                }
+                String accessorName = (String) field.getAnnotation("attr:accessor");
+                if (accessorName == null || accessorName.isEmpty()) {
+                    accessorName = defaultAccessorName((String) field.getAnnotation("name"));
+                }
+                validateGeneratedMethodName(parser, field, accessorName);
+                SubroutineNode accessor = generateCombinedAccessorMethod(
+                        field, className, accessorName, parser);
+                block.elements.add(accessor);
+                deferredAccessors.add(accessor);
+                continue;
+            }
+
             if (field.getAnnotation("attr:reader") != null) {
                 String readerName = (String) field.getAnnotation("attr:reader");
                 validateGeneratedMethodName(parser, field,
@@ -867,6 +891,52 @@ public class ClassTransformer {
         );
 
         return writer;
+    }
+
+    /** Generate Object::Pad's combined zero-or-one-argument field accessor. */
+    private static SubroutineNode generateCombinedAccessorMethod(
+            OperatorNode field, String className, String accessorName, Parser parser) {
+        String fieldName = (String) field.getAnnotation("name");
+        List<Node> bodyElements = new ArrayList<>();
+        BlockNode body = new BlockNode(bodyElements, 0);
+
+        Node atLeastInvocant = new BinaryOperatorNode(">=",
+                new OperatorNode("scalar", ParserNodeUtils.atUnderscore(parser), 0),
+                new NumberNode("1", 0), 0);
+        Node atMostOneArgument = new BinaryOperatorNode("<=",
+                new OperatorNode("scalar", ParserNodeUtils.atUnderscore(parser), 0),
+                new NumberNode("2", 0), 0);
+        Node tooFewError = OperatorParser.dieWarnNode(parser, "die",
+                new ListNode(List.of(new StringNode("Too few arguments for subroutine '"
+                        + className + "::" + accessorName + "'", 0)), 0), 0);
+        Node tooManyError = OperatorParser.dieWarnNode(parser, "die",
+                new ListNode(List.of(new StringNode("Too many arguments for subroutine '"
+                        + className + "::" + accessorName + "'", 0)), 0), 0);
+        body.elements.add(new ListNode(List.of(
+                new BinaryOperatorNode("||", atLeastInvocant, tooFewError, 0),
+                new BinaryOperatorNode("||", atMostOneArgument, tooManyError, 0)), 0));
+
+        Node assignedValue = new BinaryOperatorNode("[", new OperatorNode("$",
+                new IdentifierNode("_", 0), 0),
+                new ArrayLiteralNode(List.of(new NumberNode("1", 0)), 0), 0);
+        Node hasValueArgument = new BinaryOperatorNode(">",
+                new OperatorNode("scalar", ParserNodeUtils.atUnderscore(parser), 0),
+                new NumberNode("1", 0), 0);
+        Node assignField = new BinaryOperatorNode("=", combinedAccessorField(fieldName),
+                assignedValue, 0);
+        body.elements.add(new IfNode("if", hasValueArgument,
+                new BlockNode(List.of(assignField), 0), null, 0));
+        body.elements.add(combinedAccessorField(fieldName));
+
+        return new SubroutineNode(accessorName, null, null, body, false, 0);
+    }
+
+    private static Node combinedAccessorField(String fieldName) {
+        Node invocant = new BinaryOperatorNode("[", new OperatorNode("$",
+                new IdentifierNode("_", 0), 0),
+                new ArrayLiteralNode(List.of(new NumberNode("0", 0)), 0), 0);
+        return new BinaryOperatorNode("->", invocant,
+                new HashLiteralNode(List.of(new IdentifierNode(fieldName, 0)), 0), 0);
     }
 
     private static Node accessorArityCheck(Parser parser, String name, int expected) {

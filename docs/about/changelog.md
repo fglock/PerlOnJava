@@ -6,6 +6,11 @@ priorities and future plans.
 
 ## Work in progress
 
+- Bound captured subprocess output while continuing to drain child streams, preventing runaway diagnostics from exhausting the JVM heap.
+- Allow the Catalyst::Runtime release-acceptance suite up to four hours to finish its upstream tests.
+- Refresh the installed launcher distribution before CPAN acceptance so nested launchers use the current bundled preferences.
+- Preserve Perl's UTF-8 flag behavior across transliteration, version strings, and `dualvar` string channels.
+
 - Document the 2026-10-03 imported core-suite milestone: 575 selected files
   completed without unexpected failures, with skips, TODOs, exclusions, and
   verification scope recorded in the testing guide.
@@ -64,10 +69,15 @@ priorities and future plans.
 
 - Prevent stale CPAN archive-name entries and namespace-resolution errors from
   being recorded as compatibility regressions.
+- Support POSIX directory-handle `chdir` and Object::Pad scalar `:accessor`
+  fields, including the legacy `has` declaration.
 
 - Keep SQLite column metadata fetchable and quote reserved table names, support
   Perl-compatible SQLite `REGEXP`, clear successful DBI error strings, and
   delegate non-JDBC transaction methods to their drivers.
+- Keep `close` and `fileno` probes from creating nonexistent symbolic filehandles.
+- Preserve typeglob values from scalar assignments and selected-handle lookups.
+- Return EOF as undef from scalar-backed `getc`, and let argumentless `system()` wait.
 
 - Preserve objects with counted collection owners during weak-reference sweeps,
   and resolve deferred user-defined regex properties in the match caller's
@@ -87,8 +97,15 @@ priorities and future plans.
   clocks needed by AnyEvent::Tools, and reuse root reachability snapshots during
   weak-reference cleanup.
 
-- Preserve ordinary `goto` jumps between conditional branches while rejecting
-  jumps into conditional blocks from outside.
+- Preserve ordinary `goto` jumps between conditional branches, including
+  transfers out of nested conditions into an enclosing `if`/`elsif` arm, while
+  rejecting jumps into conditional blocks from outside.
+
+- Allow tail calls from helper subroutines invoked by sort comparators while
+  preserving Perl's errors for tail calls written directly in comparators.
+
+- Emit prototype mismatch warnings in the `prototype` category under `syntax`,
+  honoring lexical `no warnings 'syntax'` controls on both backends.
 
 - Support anonymous temporary files for read/write opens with undefined paths,
   report non-numeric process IDs passed to `kill()`, and release each result of
