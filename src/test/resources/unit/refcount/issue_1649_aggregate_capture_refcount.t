@@ -32,6 +32,11 @@ is(refcount($array), 3, 'dropping one closure releases one capture owner');
 undef $second;
 is(refcount($array), 2, 'dropping the last closure releases its capture owner');
 
+my $replaceable_array_closure = sub { scalar @items };
+is(refcount($array), 3, 'a replaceable closure owns the captured array pad');
+$replaceable_array_closure = sub { 1 };
+is(refcount($array), 2, 'replacing the closure releases its array capture owner');
+
 my %entries = (item => 1);
 my $hash = \%entries;
 is(refcount($hash), 2, 'the lexical pad and explicit reference own the hash');
@@ -47,6 +52,11 @@ is(refcount($hash), 3, 'dropping one closure releases one hash capture owner');
 
 undef $second_hash;
 is(refcount($hash), 2, 'dropping the last closure releases its hash capture owner');
+
+my $replaceable_hash_closure = sub { scalar keys %entries };
+is(refcount($hash), 3, 'a replaceable closure owns the captured hash pad');
+$replaceable_hash_closure = sub { 1 };
+is(refcount($hash), 2, 'replacing the closure releases its hash capture owner');
 
 sub make_scoped_array_capture {
     my @scoped_items = (1);
