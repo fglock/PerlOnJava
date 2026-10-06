@@ -15,6 +15,7 @@ priorities and future plans.
 - Preserve Thrift's list-returning `MY::test` customization, including its
   generated-module include paths.
 - Preserve binary HTTP response bytes so CPAN downloads remain extractable.
+- Preserve Unix executable permissions when extracting ZIP archive entries.
 - Accept Perl's valid `\@;@` prototype without an `illegalproto` warning.
 
 - Keep format captures bound to their active lexical cell and prevent reuse of unrelated active lexicals.
