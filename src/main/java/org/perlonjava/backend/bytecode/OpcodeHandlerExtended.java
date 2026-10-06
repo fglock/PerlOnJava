@@ -1100,6 +1100,7 @@ public class OpcodeHandlerExtended {
         // via this closure, and may prematurely clear weak references to its value.
         java.util.List<RuntimeScalar> capturedScalars = new java.util.ArrayList<>();
         java.util.List<RuntimeBase> capturedAggregates = new java.util.ArrayList<>();
+        java.util.List<PerlOwnerSlot> capturedAggregateOwnerSlots = new java.util.ArrayList<>();
         java.util.Set<RuntimeScalar> seenScalars = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
         java.util.Set<RuntimeBase> seenAggregates = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
         for (RuntimeBase captured : capturedVars) {
@@ -1111,6 +1112,9 @@ public class OpcodeHandlerExtended {
                 if (!seenAggregates.add(captured)) continue;
                 capturedAggregates.add(captured);
                 captured.retainClosureCapture();
+                PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
+                ownerSlot.transferTo(captured);
+                capturedAggregateOwnerSlots.add(ownerSlot);
             }
         }
         if (!capturedScalars.isEmpty()) {
@@ -1118,6 +1122,8 @@ public class OpcodeHandlerExtended {
         }
         if (!capturedAggregates.isEmpty()) {
             closureCode.capturedAggregates = capturedAggregates.toArray(new RuntimeBase[0]);
+            closureCode.capturedAggregateOwnerSlots = capturedAggregateOwnerSlots.toArray(
+                    new PerlOwnerSlot[0]);
         }
         if (!capturedScalars.isEmpty() || !capturedAggregates.isEmpty()) {
             closureCode.refCount = 0;

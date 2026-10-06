@@ -446,8 +446,15 @@ public class RuntimeGraphCloner {
                 target.capturedAggregates[i] = cloneValue(source.capturedAggregates[i]);
             }
             try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+                target.capturedAggregateOwnerSlots =
+                        new PerlOwnerSlot[target.capturedAggregates.length];
                 for (RuntimeBase captured : target.capturedAggregates) {
                     captured.retainClosureCapture();
+                }
+                for (int i = 0; i < target.capturedAggregates.length; i++) {
+                    PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
+                    ownerSlot.transferTo(target.capturedAggregates[i]);
+                    target.capturedAggregateOwnerSlots[i] = ownerSlot;
                 }
             }
         }
