@@ -411,6 +411,28 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return count;
     }
 
+    /** Snapshot the currently live scalar owner slots by identity. */
+    public java.util.Set<RuntimeScalar> activeOwnerSnapshot() {
+        if (activeOwnerCount() == 0) {
+            return java.util.Collections.emptySet();
+        }
+        java.util.Set<RuntimeScalar> snapshot = java.util.Collections.newSetFromMap(
+                new java.util.IdentityHashMap<>());
+        snapshot.addAll(activeOwners);
+        return snapshot;
+    }
+
+    /** Snapshot semantic owner-slot identities, including closure pads. */
+    public synchronized java.util.Set<PerlOwnerSlot> ownerSlotSnapshot() {
+        if (ownerSlots == null || ownerSlots.isEmpty()) {
+            return java.util.Collections.emptySet();
+        }
+        java.util.Set<PerlOwnerSlot> snapshot = java.util.Collections.newSetFromMap(
+                new java.util.IdentityHashMap<>());
+        snapshot.addAll(ownerSlots);
+        return snapshot;
+    }
+
     /**
      * D-W6.14: count owners that are reachable from package globals or
      * live my-vars. This is the strict version used by the production

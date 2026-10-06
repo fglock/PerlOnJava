@@ -406,6 +406,23 @@ public class DestroyDispatch {
             return;
         }
 
+        // A non-weak referent may not have activated the scalar-owner ledger
+        // yet. Turn it on before invoking DESTROY so temporary callback slots
+        // can be distinguished from real resurrection during teardown. There
+        // is intentionally no backfill: package roots are themselves being
+        // dismantled, while any new owner created by DESTROY is recorded.
+        String globalPhase = GlobalVariable.getGlobalVariable(
+                GlobalContext.GLOBAL_PHASE).toString();
+        boolean checkingGlobalOwnerDelta = "DESTRUCT".equals(globalPhase)
+                || MortalList.isDrainingTopLevelTemporary();
+        Set<RuntimeScalar> activeOwnersAtStart = null;
+        Set<PerlOwnerSlot> ownerSlotsAtStart = null;
+        if (checkingGlobalOwnerDelta) {
+            referent.activateOwnerTracking();
+            activeOwnersAtStart = referent.activeOwnerSnapshot();
+            ownerSlotsAtStart = referent.ownerSlotSnapshot();
+        }
+
         // Mark as destroyed only once we will run Perl DESTROY. Setting destroyFired
         // before the null check above incorrectly skips PPI::Element::DESTROY (and
         // any other Perl destructor) when method resolution transiently returned null
@@ -542,7 +559,9 @@ public class DestroyDispatch {
             // self-save). Mark needsReDestroy and let the next decrement-to-0
             // re-invoke DESTROY. Don't clear weak refs or cascade — the object
             // is still alive.
-            if (hasEscapedPerlOwner(referent) && !state.destroyTargetRescued) {
+            if (hasEscapedPerlOwner(referent, checkingGlobalOwnerDelta,
+                    activeOwnersAtStart, ownerSlotsAtStart)
+                    && !state.destroyTargetRescued) {
                 warnIfResurrectedDuringGlobalDestruction(referent, className);
                 referent.needsReDestroy = true;
                 return;
@@ -671,7 +690,19 @@ public class DestroyDispatch {
      * those aliases are not resurrection. Objects which have not activated
      * owner tracking retain the legacy count-based behavior.
      */
-    private static boolean hasEscapedPerlOwner(RuntimeBase referent) {
+    private static boolean hasEscapedPerlOwner(RuntimeBase referent,
+                                                boolean checkingGlobalOwnerDelta,
+                                                Set<RuntimeScalar> activeOwnersAtStart,
+                                                Set<PerlOwnerSlot> ownerSlotsAtStart) {
+        if (checkingGlobalOwnerDelta) {
+            for (RuntimeScalar owner : referent.activeOwnerSnapshot()) {
+                if (!activeOwnersAtStart.contains(owner)) return true;
+            }
+            for (PerlOwnerSlot ownerSlot : referent.ownerSlotSnapshot()) {
+                if (!ownerSlotsAtStart.contains(ownerSlot)) return true;
+            }
+            return false;
+        }
         if (referent.activeOwners == null) {
             return referent.refCount > 0;
         }
