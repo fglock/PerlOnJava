@@ -1,9 +1,13 @@
-use Test::More tests => 9;
+use Test::More tests => 11;
 
 my $undef = \&CORE::undef;
 is($undef->(), undef, 'CORE::undef coderef returns undef');
 is_deeply([$undef->()], [undef], 'CORE::undef coderef returns undef in list context');
 is(\$undef->(), \undef, 'CORE::undef coderef returns the canonical lvalue');
+my $assigned;
+($undef->(), $assigned) = (42, 'kept');
+is($assigned, 'kept', 'CORE::undef coderef accepts a list-assignment lvalue');
+is($undef->(), undef, 'list assignment through CORE::undef does not change undef');
 
 my $value = 'defined';
 $undef->(\$value);

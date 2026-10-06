@@ -254,7 +254,7 @@ public class CoreSubroutineGenerator {
                 if (args.size() > 1) {
                     throw new PerlCompilerException("Too many arguments for undef operator");
                 }
-                if (args.size() == 0) return Operator.undef().getList();
+                if (args.size() == 0) return new UndefLvalue().getList();
                 RuntimeBase target = args.get(0);
                 requireUndefTarget(target);
                 RuntimeScalar scalar = (RuntimeScalar) target;
@@ -268,7 +268,7 @@ public class CoreSubroutineGenerator {
                     }
                     default -> throw new PerlCompilerException("Invalid CORE::undef target");
                 }
-                return Operator.undef().getList();
+                return new UndefLvalue().getList();
             };
         }
         // \@@ — push, unshift (first arg is array ref, rest are list)
@@ -934,6 +934,23 @@ public class CoreSubroutineGenerator {
         if (!valid) {
             throw new PerlCompilerException("Type of arg 1 to &CORE::undef must be reference to one of [$@%&*]");
         }
+    }
+
+    /** The intrinsic undef lvalue aliases PL_sv_undef; writes to its return slot are ignored. */
+    private static final class UndefLvalue extends ReadOnlyAlias {
+        private UndefLvalue() {
+            super(RuntimeScalarCache.scalarUndef);
+        }
+
+        @Override public RuntimeScalar set(RuntimeScalar value) { return this; }
+        @Override public RuntimeScalar set(String value) { return this; }
+        @Override public RuntimeScalar set(int value) { return this; }
+        @Override public RuntimeScalar set(long value) { return this; }
+        @Override public RuntimeScalar set(java.math.BigInteger value) { return this; }
+        @Override public RuntimeScalar set(boolean value) { return this; }
+        @Override public RuntimeScalar set(RuntimeGlob value) { return this; }
+        @Override public RuntimeScalar set(RuntimeIO value) { return this; }
+        @Override public RuntimeScalar set(Object value) { return this; }
     }
 
     private static void requireHashReference(String name, RuntimeBase[] args) {
