@@ -607,7 +607,7 @@ public class CoreSubroutineGenerator {
             case "lock" -> {
                 if (args.length == 0) yield RuntimeScalarCache.scalarUndef.getList();
                 if (args[0] instanceof RuntimeScalar scalar
-                        && scalar.type == RuntimeScalarType.SCALARREFERENCE) {
+                        && scalar.type == RuntimeScalarType.REFERENCE) {
                     yield scalar.scalarDeref().getList();
                 }
                 yield args[0].getList();
