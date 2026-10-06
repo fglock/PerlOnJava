@@ -160,6 +160,19 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
         return referent;
     }
 
+    /** Replace this hash slot with an array or hash reference from an aggregate refalias. */
+    public RuntimeScalar aliasToAggregateReference(RuntimeScalar reference) {
+        if (parent.threadShared) SharedPerlStorage.validateStoredValue(reference);
+        parent.notePackageRootMutation();
+        parent.elements.put(key, reference);
+        parent.markKeyByte(key, byteKey);
+        parent.markPackageRootedValue(reference);
+        this.lvalue = reference;
+        this.type = reference.type;
+        this.value = reference.value;
+        return reference;
+    }
+
     /**
      * Saves the current state of the RuntimeScalar instance.
      *

@@ -3717,9 +3717,10 @@ public class CompileAssignment {
                             bytecodeCompiler.endLocalHashLvalueCompile();
                         }
                         int targetReg = bytecodeCompiler.lastResultReg;
-                        bytecodeCompiler.emit(Opcodes.ALIAS_LVALUE_REFERENCE);
+                        bytecodeCompiler.emit(Opcodes.ALIAS_AGGREGATE_LVALUE_REFERENCE);
                         bytecodeCompiler.emitReg(targetReg);
                         bytecodeCompiler.emitReg(valueReg);
+                        bytecodeCompiler.emit(aggregateField.operator.equals("%") ? 1 : 0);
                         bytecodeCompiler.lastResultReg = targetReg;
                         return;
                     }

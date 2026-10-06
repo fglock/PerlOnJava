@@ -905,6 +905,15 @@ public class BytecodeInterpreter {
                                         .aliasLvalueReference(registers[reference].getFirst());
                             }
 
+                            case Opcodes.ALIAS_AGGREGATE_LVALUE_REFERENCE -> {
+                                int target = bytecode[pc++];
+                                int reference = bytecode[pc++];
+                                boolean hashTarget = bytecode[pc++] != 0;
+                                registers[target] = registers[target].getFirst()
+                                        .aliasAggregateLvalueReference(
+                                                registers[reference].getFirst(), hashTarget);
+                            }
+
                             case Opcodes.ALIAS_GLOBAL_SCALAR -> {
                                 int nameIdx = bytecode[pc++];
                                 int scalarReg = bytecode[pc++];

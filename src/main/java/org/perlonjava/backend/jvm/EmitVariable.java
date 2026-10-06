@@ -1178,10 +1178,12 @@ public class EmitVariable {
                             fieldSlot.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
                         }
                         mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
+                        mv.visitInsn(aggregateField.operator.equals("%")
+                                ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
                         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                                 "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                                "aliasLvalueReference",
-                                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                "aliasAggregateLvalueReference",
+                                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Z)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                                 false);
                         if (ctx.contextType == RuntimeContextType.VOID) mv.visitInsn(Opcodes.POP);
                         if (pooledRhs) ctx.javaClassInfo.releaseSpillSlot();

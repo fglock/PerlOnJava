@@ -2210,6 +2210,22 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         throw new PerlCompilerException("Assignment to unsupported ref aliasing target");
     }
 
+    /** Compiler hook for refaliasing an aggregate field through its owning slot. */
+    public RuntimeScalar aliasAggregateLvalueReference(RuntimeScalar reference, boolean hashTarget) {
+        int expectedType = hashTarget ? RuntimeScalarType.HASHREFERENCE : RuntimeScalarType.ARRAYREFERENCE;
+        String expectedName = hashTarget ? "HASH" : "ARRAY";
+        if (reference.type != expectedType) {
+            throw new PerlCompilerException("Assigned value is not a " + expectedName + " reference");
+        }
+        if (this instanceof RuntimeHashProxyEntry hashEntry) {
+            return hashEntry.aliasToAggregateReference(reference);
+        }
+        if (this instanceof RuntimeArrayProxyEntry arrayEntry) {
+            return arrayEntry.aliasToAggregateReference(reference);
+        }
+        throw new PerlCompilerException("Assignment to unsupported ref aliasing target");
+    }
+
     RuntimeScalar setFromSubstrLvalue(RuntimeScalar value) {
         if (this != value) {
             RuntimeScalar result = setLarge(value);

@@ -2747,6 +2747,9 @@ public class Opcodes {
     /** Dynamic symbolic subroutine existence probe: rd = exists(&{rname}) in package. */
     public static final short EXISTS_CODE_DYNAMIC = 633;
 
+    /** Refalias an aggregate field slot to an array/hash reference. Format: targetReg refReg isHash. */
+    public static final short ALIAS_AGGREGATE_LVALUE_REFERENCE = 635;
+
     /** Create a LAST marker retaining loop-topicalizer break diagnostics. Format: rd labelIdx. */
     public static final short CREATE_SWITCH_BREAK_LOOP_TOPICALIZER = 620;
 

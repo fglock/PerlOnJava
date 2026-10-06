@@ -109,6 +109,24 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
         return referent;
     }
 
+    /** Replace this array slot with an array or hash reference from an aggregate refalias. */
+    public RuntimeScalar aliasToAggregateReference(RuntimeScalar reference) {
+        if (parent.threadShared) SharedPerlStorage.validateStoredValue(reference);
+        int currentKey = currentKey();
+        if (currentKey < 0) {
+            throw new PerlCompilerException(
+                    "Modification of non-creatable array value attempted, subscript " + diagnosticKey);
+        }
+        parent.notePackageRootMutation();
+        while (currentKey >= parent.elements.size()) parent.elements.add(null);
+        parent.elements.set(currentKey, reference);
+        parent.markPackageRootedValue(reference);
+        this.lvalue = reference;
+        this.type = reference.type;
+        this.value = reference.value;
+        return reference;
+    }
+
     @Override
     public RuntimeScalar undefine() {
         vivify();

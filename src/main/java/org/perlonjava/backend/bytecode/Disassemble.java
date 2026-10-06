@@ -238,6 +238,14 @@ public class Disassemble {
                         sb.append("ALIAS_LVALUE_REFERENCE r").append(rd)
                                 .append(" <- r").append(src).append("\n");
                         break;
+                    case Opcodes.ALIAS_AGGREGATE_LVALUE_REFERENCE:
+                        rd = interpretedCode.bytecode[pc++];
+                        src = interpretedCode.bytecode[pc++];
+                        int aggregateAliasKind = interpretedCode.bytecode[pc++];
+                        sb.append("ALIAS_AGGREGATE_LVALUE_REFERENCE r").append(rd)
+                                .append(" <- r").append(src)
+                                .append(aggregateAliasKind != 0 ? " HASH\n" : " ARRAY\n");
+                        break;
                     case Opcodes.ALIAS_GLOBAL_SCALAR:
                         int globalAliasNameIdx = interpretedCode.bytecode[pc++];
                         src = interpretedCode.bytecode[pc++];
