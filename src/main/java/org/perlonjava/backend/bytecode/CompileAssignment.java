@@ -2201,8 +2201,15 @@ public class CompileAssignment {
             if (!preserveListContext && node.right instanceof ListNode rhsList) {
                 rhsList.setAnnotation("emptyTargetAssignmentVoidRhs", true);
             }
-            bytecodeCompiler.compileNode(node.right, -1, preserveListContext
-                    ? RuntimeContextType.LIST : RuntimeContextType.VOID);
+            int savedCallContext = bytecodeCompiler.currentCallContext;
+            int emptyAssignmentRhsContext = preserveListContext
+                    ? RuntimeContextType.LIST : RuntimeContextType.VOID;
+            bytecodeCompiler.currentCallContext = emptyAssignmentRhsContext;
+            try {
+                bytecodeCompiler.compileNode(node.right, -1, emptyAssignmentRhsContext);
+            } finally {
+                bytecodeCompiler.currentCallContext = savedCallContext;
+            }
             bytecodeCompiler.lastResultReg = -1;
             return;
         }
