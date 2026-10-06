@@ -112,7 +112,8 @@ public class CoreSubroutineGenerator {
         RuntimeCode code = new RuntimeCode(checkedSub, prototype);
         code.packageName = "CORE";
         code.subName = operatorName;
-        if ("pos".equals(operatorName) || "keys".equals(operatorName)) {
+        if ("pos".equals(operatorName) || "keys".equals(operatorName)
+                || "lock".equals(operatorName)) {
             code.attributes = new java.util.ArrayList<>(java.util.List.of("lvalue"));
         }
         GlobalVariable.getGlobalCodeRef(fullName).set(new RuntimeScalar(code));
@@ -621,11 +622,18 @@ public class CoreSubroutineGenerator {
                     : args[0].scalar().getList();
             case "lock" -> {
                 if (args.length == 0) yield RuntimeScalarCache.scalarUndef.getList();
-                if (args[0] instanceof RuntimeScalar scalar
-                        && scalar.type == RuntimeScalarType.REFERENCE) {
-                    yield scalar.scalarDeref().getList();
+                if (!(args[0] instanceof RuntimeScalar scalar)
+                        || !(scalar.type == RuntimeScalarType.REFERENCE
+                        || scalar.type == RuntimeScalarType.ARRAYREFERENCE
+                        || scalar.type == RuntimeScalarType.HASHREFERENCE
+                        || scalar.type == RuntimeScalarType.CODE
+                        || scalar.type == RuntimeScalarType.GLOB
+                        || (scalar.type == RuntimeScalarType.GLOBREFERENCE
+                        && scalar.value instanceof RuntimeGlob))) {
+                    throw new PerlCompilerException(
+                            "Type of arg 1 to &CORE::lock must be reference to one of [$@%&*]");
                 }
-                yield args[0].getList();
+                yield TieOperators.lock(ctx, args).getList();
             }
 
             // Directory operators

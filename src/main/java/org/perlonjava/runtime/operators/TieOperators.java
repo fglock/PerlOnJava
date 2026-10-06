@@ -509,9 +509,17 @@ public class TieOperators {
         }
         // For scalar references, dereference to get the value
         // For other reference types (arrays, hashes), return the reference itself
-        return switch (variable.type) {
-            case REFERENCE -> variable.scalarDeref();
+        RuntimeScalar result = switch (variable.type) {
+            case REFERENCE, GLOBREFERENCE -> variable.scalarDeref();
             default -> variable;
         };
+        if (result.type == RuntimeScalarType.GLOB && result.value instanceof RuntimeGlob glob) {
+            // Keep the glob object itself as the returned lvalue. scalarDeref()
+            // makes a lightweight GLOB scalar wrapper for GLOBREFERENCE; that
+            // wrapper has the same display value but taking a reference to it
+            // would produce a different glob identity.
+            return glob;
+        }
+        return result;
     }
 }

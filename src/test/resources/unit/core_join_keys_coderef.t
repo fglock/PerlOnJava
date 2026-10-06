@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 16;
+use Test::More tests => 20;
 
 my $join = \&CORE::join;
 is($join->(',', 'a', 'b'), 'a,b',
@@ -47,8 +47,23 @@ my @locked_array = (1, 2);
 my %locked_hash = (a => 1);
 my $code = sub { 1 };
 is($lock->(\$scalar), $scalar, 'CORE::lock returns the scalar value');
+is(\$lock->(\$scalar), \$scalar,
+    'CORE::lock code reference preserves its scalar lvalue');
+eval { $lock->(1) };
+like($@, qr/^Type of arg 1 to &CORE::lock must be reference to one of/,
+    'CORE::lock code reference validates its argument type');
+my $io_handle = *STDOUT{IO};
+eval { $lock->($io_handle) };
+like($@, qr/^Type of arg 1 to &CORE::lock must be reference to one of/,
+    'CORE::lock code reference rejects an I/O handle reference');
 is($lock->(\@locked_array), \@locked_array,
     'CORE::lock returns an array reference');
 is($lock->(\%locked_hash), \%locked_hash,
     'CORE::lock returns a hash reference');
 is($lock->($code), $code, 'CORE::lock returns a code reference');
+{
+    no warnings 'once';
+    *mylock = \&CORE::lock;
+    is(\&mylock(\*foo), \*foo,
+        'CORE::lock code reference preserves its glob lvalue');
+}
