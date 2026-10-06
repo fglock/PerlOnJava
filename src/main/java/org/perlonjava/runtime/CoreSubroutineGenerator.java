@@ -136,6 +136,7 @@ public class CoreSubroutineGenerator {
             case "readpipe" -> "quoted execution (``, qx)";
             case "ref" -> "reference-type operator";
             case "reset" -> "symbol reset";
+            case "undef" -> "undef operator";
             default -> name;
         };
         int minimum = 0;
