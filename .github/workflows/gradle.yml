@@ -9,7 +9,8 @@ on:
 jobs:
   build:
     name: build (${{ matrix.os }})
-    timeout-minutes: 150
+    # The longest platform path budgets 155 minutes across bounded steps.
+    timeout-minutes: 180
 
     # Define a matrix to run the job on multiple operating systems
     runs-on: ${{ matrix.os }}
