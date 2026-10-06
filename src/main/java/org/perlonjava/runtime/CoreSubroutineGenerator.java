@@ -60,6 +60,16 @@ public class CoreSubroutineGenerator {
 
         // Already generated?
         if (GlobalVariable.isGlobalCodeRefDefined(fullName)) {
+            // Some CORE entries are installed before lazy wrapper generation.
+            // Keep undef's intrinsic lvalue behavior when that early entry is
+            // reused rather than replaced by this generator.
+            if ("undef".equals(operatorName)) {
+                RuntimeScalar existing = GlobalVariable.getGlobalCodeRef(fullName);
+                if (existing != null && existing.value instanceof RuntimeCode code) {
+                    if (code.attributes == null) code.attributes = new java.util.ArrayList<>();
+                    if (!code.attributes.contains("lvalue")) code.attributes.add("lvalue");
+                }
+            }
             return true;
         }
 
