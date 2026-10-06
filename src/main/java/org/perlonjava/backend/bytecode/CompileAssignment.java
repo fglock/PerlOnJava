@@ -3710,7 +3710,12 @@ public class CompileAssignment {
                         // Class aggregate fields are stored in the object hash.
                         // Alias the field slot itself, not the dereferenced
                         // aggregate value, so the field can be rebound safely.
-                        bytecodeCompiler.compileNode(fieldSlot, -1, RuntimeContextType.LVALUE);
+                        bytecodeCompiler.beginLocalHashLvalueCompile();
+                        try {
+                            bytecodeCompiler.compileNode(fieldSlot, -1, RuntimeContextType.LVALUE);
+                        } finally {
+                            bytecodeCompiler.endLocalHashLvalueCompile();
+                        }
                         int targetReg = bytecodeCompiler.lastResultReg;
                         bytecodeCompiler.emit(Opcodes.ALIAS_LVALUE_REFERENCE);
                         bytecodeCompiler.emitReg(targetReg);

@@ -1139,6 +1139,14 @@ public class EmitVariable {
                         if (element.operator.equals("[")) {
                             Dereference.handleArrayElementOperator(
                                     emitterVisitor.with(RuntimeContextType.LVALUE), element, "getLvalue");
+                        } else if (element.operator.equals("->")
+                                && element.right instanceof HashLiteralNode) {
+                            Dereference.handleArrowHashDeref(
+                                    emitterVisitor.with(RuntimeContextType.LVALUE), element, "getForLocal");
+                        } else if (element.operator.equals("->")
+                                && element.right instanceof ArrayLiteralNode) {
+                            Dereference.handleArrowArrayDeref(
+                                    emitterVisitor.with(RuntimeContextType.LVALUE), element, "getForLocal");
                         } else {
                             element.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
                         }
@@ -1160,7 +1168,15 @@ public class EmitVariable {
                             && (aggregateField.operator.equals("@") || aggregateField.operator.equals("%"))
                             && aggregateField.operand instanceof BinaryOperatorNode fieldSlot
                             && fieldSlot.operator.equals("->")) {
-                        fieldSlot.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+                        if (fieldSlot.right instanceof HashLiteralNode) {
+                            Dereference.handleArrowHashDeref(
+                                    emitterVisitor.with(RuntimeContextType.LVALUE), fieldSlot, "getForLocal");
+                        } else if (fieldSlot.right instanceof ArrayLiteralNode) {
+                            Dereference.handleArrowArrayDeref(
+                                    emitterVisitor.with(RuntimeContextType.LVALUE), fieldSlot, "getForLocal");
+                        } else {
+                            fieldSlot.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+                        }
                         mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
                         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                                 "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
