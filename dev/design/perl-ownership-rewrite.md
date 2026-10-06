@@ -290,13 +290,17 @@ and first path establish implementation cost.
 - The Dancer2-Plugin-DBIx-Class teardown workload from #1642 now passes. The
   local CPAN cache now also has `B::Hooks::EndOfScope` 0.28; Moose is supplied
   by the PerlOnJava provider. `jperl -MCatalyst` loads Catalyst-Runtime 5.90132.
-  Its broad CPAN test phase is intentionally skipped by the checked-in
-  distroprefs because it includes unsupported process-management suites, so
-  that run is not a cleanup profile. A post-change Dancer2 `jcpan -t` run
-  reported `t/01_both_using_rsnames.t` ok, then exceeded the 240-second command
-  deadline later in the distribution suite; the earlier direct six-assertion
-  run remains the clean integration result. The Catalyst owner-slot delta
-  workload and cleanup profile are still open.
+  Its checked-in distropref patches only `t/live_fork.t` to skip the six
+  process-fork assertions on PerlOnJava; the `system` and backtick assertions
+  and all other distribution tests remain enabled. The focused patched test
+  passes those ten non-fork assertions and skips the six fork assertions. A
+  broader Catalyst `jcpan -t` attempt exceeded its 900-second deadline while
+  progressing through aggregate tests, so it did not produce a cleanup
+  profile. A post-change Dancer2 `jcpan -t` run reported
+  `t/01_both_using_rsnames.t` ok, then exceeded the 240-second command deadline
+  later in the distribution suite; the earlier direct six-assertion run
+  remains the clean integration result. The Catalyst owner-slot delta workload
+  and cleanup profile are still open.
 - `RuntimeBase.refCount` still combines selective counts with legacy lifecycle
   sentinels and triggers cleanup for mixed-owner referents. The new explicit
   lifecycle prevents repeat dispatch and records destruction/resurrection, but
