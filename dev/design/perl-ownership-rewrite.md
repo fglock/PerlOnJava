@@ -209,6 +209,10 @@ and first path establish implementation cost.
   All six END lifecycle regressions pass on Perl 5.45.4 and both PerlOnJava backends.
   The runtime-reset contract still propagates a failing END after cleanup.
   The full `nice -n 19 make` gate passes on `78369acc9` (8m33s).
+- [x] Keep array/hash referents alive through queued END closures, then release
+  them when the phaser clears the captured lexical. The new permanent
+  `issue_1649_end_aggregate_capture_lifecycle.t` passes 6/6 on Perl 5.45.4,
+  JVM, and interpreter, including exactly-once `DESTROY` and weak clearing.
 - [x] Add a permanent captured-aggregate pad regression at
   [`issue_1649_captured_aggregate_pad_lifecycle.t`](../../src/test/resources/unit/refcount/issue_1649_captured_aggregate_pad_lifecycle.t).
   The test covers array and hash captures, temporary aggregate-only closures,
@@ -281,8 +285,10 @@ and first path establish implementation cost.
   test observes one external-root snapshot per flush. Reproduction of the
   Catalyst workload from #1642 remains open so its object and flush pattern can
   be matched to these paths.
-- END block CVs have explicit queued and active lifetime protection. Other
-  phaser queues and nested exit paths still need the same ownership audit.
+- END CVs have queued and active lifetime tests, including aggregate captures,
+  nested `exit`, `die`, and callback failure. UNITCHECK/CHECK/INIT lexical-pad
+  lifetime is covered separately; the corresponding phaser ownership path is
+  no longer an open Phase 1 boundary.
 - The current standard Perl oracle is
   `/Users/fglock/projects/perl5/perl`, version 5.45.4 with `useithreads=undef`.
   It needs the checkout's `lib`, `cpan/Test-Simple/lib`, and
