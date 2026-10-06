@@ -9,6 +9,42 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class ReachabilityQueryCostTest {
     @Test
+    void capturedAggregateOwnerReleaseDoesNotScanUnrelatedRoots() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray global = new RuntimeArray();
+            String globalName = "ReachabilityQueryCostTest::captureGlobal";
+            GlobalVariable.globalArrays.put(globalName, global);
+            try {
+                for (int i = 0; i < 256; i++) {
+                    global.elements.add(new RuntimeHash().createReference());
+                }
+
+                RuntimeArray captured = new RuntimeArray();
+                PerlOwnerSlot owner = captured.retainClosureCaptureOwner();
+                captured.scopeExited = true;
+
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    captured.releaseClosureCaptureOwner(owner);
+
+                    ReachabilityQueryStats stats = measurement.stats();
+                    assertEquals(0, stats.rootQueries,
+                            "native captured-pad release must use its owner slot, not a root proof");
+                    assertEquals(0, stats.snapshotsBuilt);
+                    assertEquals(0, stats.externalRootSnapshotsBuilt);
+                    assertEquals(0, stats.edgesInspected,
+                            "unrelated package roots must not add cleanup work");
+                    assertEquals(0, stats.externalRootSnapshotEdgesInspected);
+                    assertEquals(0, captured.semanticCaptureOwnerCount());
+                }
+            } finally {
+                GlobalVariable.globalArrays.remove(globalName);
+            }
+        }
+    }
+
+    @Test
     void repeatedAggregateScopeCleanupCountsActualRootWalkWork() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
