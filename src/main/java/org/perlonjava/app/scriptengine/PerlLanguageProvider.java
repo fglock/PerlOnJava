@@ -479,8 +479,9 @@ public class PerlLanguageProvider {
         MortalList.flush();
         MortalList.flushDeferredCapturesBeforeEnd();
         CallerStack.push("main", ctx.compilerOptions.fileName, 0);
+        Throwable endFailure;
         try {
-            runEndBlocks(false);
+            endFailure = runEndBlocks(false);
         } finally {
             CallerStack.pop();
             MortalList.flushDeferredCaptures();
@@ -488,6 +489,9 @@ public class PerlLanguageProvider {
         }
         GlobalDestruction.runGlobalDestruction();
         RuntimeIO.closeAllHandles();
+        if (endFailure != null) {
+            throw new PerlExitException(1);
+        }
     }
 
     /** Report a dying deferred phaser before draining the remaining queues. */

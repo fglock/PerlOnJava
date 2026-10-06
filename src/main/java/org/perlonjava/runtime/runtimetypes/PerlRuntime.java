@@ -648,8 +648,9 @@ public final class PerlRuntime implements AutoCloseable {
     private void releaseResettableResources() {
         MortalList.flush();
         MortalList.flushDeferredCapturesBeforeEnd();
+        Throwable endFailure;
         try {
-            SpecialBlock.runEndBlocks(false);
+            endFailure = SpecialBlock.runEndBlocks(false);
         } finally {
             MortalList.flushDeferredCaptures();
             org.perlonjava.runtime.regex.RuntimeRegex.emitCurrentRuntimeDebugFreeTraces();
@@ -660,6 +661,15 @@ public final class PerlRuntime implements AutoCloseable {
         RuntimeIO.closeAllHandles();
         NetSSLeay.resetState();
         MortalList.clearCurrentRuntimeState();
+        if (endFailure instanceof RuntimeException runtimeException) {
+            throw runtimeException;
+        }
+        if (endFailure instanceof Error error) {
+            throw error;
+        }
+        if (endFailure != null) {
+            throw new RuntimeException(endFailure);
+        }
     }
 
     private void replaceRuntimeState() {
