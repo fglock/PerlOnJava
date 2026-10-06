@@ -475,6 +475,12 @@ public class CoreSubroutineGenerator {
             case "chdir" -> Directory.chdir(arg).getList();
             case "pos" -> arg.pos().getList();
             case "scalar" -> arg.getList();
+            case "prototype" -> {
+                RuntimeCode caller = RuntimeCode.getActiveCodeAt(1);
+                String packageName = caller == null || caller.packageName == null
+                        ? "main" : caller.packageName;
+                yield RuntimeCode.prototype(arg, packageName).getList();
+            }
             case "evalbytes" -> throw new IllegalStateException("evalbytes must be dispatched with call context");
             case "exit" -> WarnDie.exit(arg).getList();
             case "exp" -> MathOperators.exp(arg).getList();
@@ -592,6 +598,7 @@ public class CoreSubroutineGenerator {
                 throw new PerlCompilerException(
                         "Type of arg 1 to &CORE::each must be hash or array reference");
             }
+            case "not" -> MathOperators.not((RuntimeScalar) args[0]).getList();
             case "lock" -> args.length == 0 ? RuntimeScalarCache.scalarUndef.getList()
                     : args[0].getList();
 
