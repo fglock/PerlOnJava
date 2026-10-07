@@ -83,8 +83,8 @@ public class TestRegexResidualClassRendering {
         assertDescription("[aA]", "ANYOFM[Aa]");
         assertDescription("[bB]", "ANYOFM[Bb]");
         assertDescription("[kK]", "ANYOFM[Kk]");
-        assertDescription("(?i:[^:])", "NEXACTb[:]");
-        assertDescription("(?i:[^9])", "NEXACTb[9]");
+        assertDescription("(?i:[^:])", "NANYOFM[:]");
+        assertDescription("(?i:[^9])", "NANYOFM[9]");
         assertDescription("(?i:[^a])", "NANYOFM[Aa]");
     }
 

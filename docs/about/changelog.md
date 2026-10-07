@@ -14,6 +14,7 @@ priorities and future plans.
   seeded incremental checksums.
 - Deliver `SIGCHLD` for exited ProcessBuilder children, wake blocked event loops,
   and forward package-local filehandle input to `IPC::Open3` children.
+- Match Perl's `re 'debug'` mask output for caseless negated ASCII singletons.
 - Add Java-backed `Scalar::Readonly` support, fix caller-frame visibility for
   nested signature calls, and keep Test2 negation accessors visible to the
   interpreter.
