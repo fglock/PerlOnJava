@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More;
+use Test::More tests => 8;
 
 {
     no strict 'refs';
@@ -14,6 +14,18 @@ like $@, qr/^Can't use an undefined value as a symbol reference at /,
     'accept rejects an undefined source handle';
 is ref $new_socket, 'GLOB',
     'accept vivifies its destination before rejecting the source handle';
+
+{
+    no strict 'refs';
+    my ($new_socket, $listen_socket);
+    local $SIG{__WARN__} = sub {};
+    eval { &CORE::accept($new_socket, $listen_socket) };
+    is $@, '', 'accept permits an undefined source without strict refs';
+    is ref $new_socket, 'GLOB',
+        'accept vivifies its destination without strict refs';
+    is $listen_socket, undef,
+        'accept leaves its undefined source unchanged without strict refs';
+}
 
 {
     no strict 'refs';

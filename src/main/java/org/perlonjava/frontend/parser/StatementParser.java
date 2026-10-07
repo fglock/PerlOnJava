@@ -821,6 +821,11 @@ public class StatementParser {
         BlockNode whenBlock = ParseBlock.parseBlock(parser);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
+        // A CORE::continue code reference produces a non-local switch marker.
+        // Keep the when block as a dispatch boundary so that marker resumes
+        // after this clause without escaping the whole given block.
+        whenBlock.setAnnotation("switchContinueTarget", true);
+
         // After a successful match, Perl returns the value of the when block
         // and implicitly leaves the enclosing given block. Keep the final
         // expression attached to our synthetic last so the backends can carry

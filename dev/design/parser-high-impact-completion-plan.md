@@ -887,41 +887,49 @@ implementation or acceptance work.
   acceptance. Earlier frame-elision-only candidates failed assertion 4.
 - [x] Phase 4: the unchanged issue acceptance gates pass on candidate
   `d753a616e`; the interpreter inventory still has 49 matching-parent gaps.
-- [ ] Phase 5: final rebased candidate `5fcb368e3` is based on `origin/master`
-  `1a056c033`. The final `make`, strict focused `coreamp.t`, full 575-file UAT,
-  baseline comparison, updated PR CI, and issue closure audit remain pending.
-  Earlier croak failures were checked against the local standard Perl 5.44.0
-  oracle and must remain unchanged in imported tests.
+- [x] Phase 5 source validation on the rebased tree (2026-10-07):
+  `nice -n 19 timeout 3600 make` passed; strict JVM `coreamp.t` passed 785/785;
+  the full refreshed JVM core UAT passed 575/575 with no failures, errors,
+  timeouts, or incomplete files. The source tree is based on `origin/master`
+  `1a056c033` and current parent `08219fd5a`.
+- [x] Rechecked the changed control-flow regressions on standard Perl, JVM, and
+  interpreter. The Moo destructor-location regression passes 3/3 on all three.
+  HTML::Tree passes 969 standard-Perl tests (LeakTrace skipped) and 989 JVM and
+  interpreter assertions; License::SPDX passes 35/35 and AnyEvent::Tools
+  103/103 on JVM and interpreter. The valid-prototype and qualified-constructor
+  regressions pass 6/6 on all three runtimes.
+- [x] Compared the JVM UAT with the Oct 3 baseline: +703 passing assertions;
+  the ten regex-file count reductions match the refreshed Perl 5.45.4 corpus
+  (`re/regexp.t` passes 2280/2280 on standard Perl). No failing UAT files.
+- [ ] Update PR #1623 with the validated source and handoff, wait for fresh CI,
+  merge after all required checks pass, then close the confirmed fixed issues.
+  Keep #1656 open as the separate Moo caller-location follow-up: Moo 2.005005's
+  `t/croak-locations.t` still fails tests 6, 8, 13–16, and 27 on PerlOnJava;
+  these seven failures pass standard Perl and are already documented as present
+  on the PR base.
 
 ### Immediate next steps
 
-The final source commit `5fcb368e3` is rebased on `origin/master` `1a056c033`.
-The latest batch fixes strict subprocess-exit accounting and callable CORE
-operator gaps found after the previous broad run. No full build or UAT result
-applies to this exact source yet; the last strict `coreamp.t` run was on the
-previous JAR and correctly reported nonzero exit plus failures. Keep imported
-Perl tests unchanged.
+The rebased source passes the full JVM build/unit gate and refreshed imported
+core UAT. The full interpreter inventory also ran: 540/575 files pass, with 19
+failed, 10 errors, 1 timeout, and 5 incomplete files. The changed focused
+interpreter tests pass; the inventory includes existing interpreter gaps such
+as `coreamp.t`'s unrelated `&prototype` assertion. The previous matching-parent
+inventory used 2,129 files, so its aggregate counts are not directly comparable
+to this refreshed 575-file selection.
 
-1. Run `nice -n 19 timeout 3600 make`, then rerun focused regressions and
-   strict `coreamp.t` on the resulting JAR.
-2. Run the full refreshed core corpus with five jobs and a 300-second per-test
-   timeout. Require zero failed UAT files, failed assertions, nonzero child
-   exits, timeouts, and incomplete files.
-3. Recompare the final corpus against
-   `/Users/fglock/projects/PerlOnJava/logs/test_20261003_080000_mixed.log` and
-   retain the normalized report with the assertion-count and subprocess
-   metadata classification.
-4. Push the validated candidate to PR #1623, check every required CI job, and
-   fix and retest any failure. Close only tickets confirmed fixed by the
-   merged PR and full acceptance evidence.
-5. Keep the UAT logs and JSON as evidence, remove only task-created temporary
-   artifacts that are no longer needed, and poll long-running gates
-   infrequently.
+1. Commit the validated source and this handoff update, then update PR #1623.
+2. Wait for fresh CI, address any candidate-specific failures, merge after the
+   required checks pass, and close #1619, #1622, #1166, and #1470 with their
+   acceptance evidence. #1615 is already closed; keep #1656 open.
+3. Preserve the UAT/module logs as evidence and remove task-owned temporary
+   files and wrappers that are no longer needed.
 
 ### Open questions and blockers
 
-- The 49 interpreter nonpassing files match the parent exactly; a later runtime
-  candidate must repeat the regression comparison if its failure inventory changes.
+- The current refreshed interpreter inventory was not compared file-by-file
+  against a same-corpus parent run. Focused changed-behavior tests pass on both
+  backends; the full inventory remains a known-gap report, not a clean gate.
 - Does the self-tailcall proof cover every AST path for caller-argument sharing,
   and is it fail-closed for all other goto targets and argument aliases?
 - Label registration now shares the statement/declaration target and passes the
@@ -935,10 +943,8 @@ Perl tests unchanged.
 - Does #1482 share a concrete cause, or require independent non-local LAST
   target and lexical warning-state fixes? Its report and a passing GOTO
   compilation regression do not establish that relationship.
-- The current local code batch passes full `make` and refreshed blead UAT.
-  Final acceptance still requires repeating both on the latest rebased commit,
-  classifying the Oct 3 comparator's corpus/count and subprocess metadata
-  differences, and green PR CI after pushing.
+- The source-validation gate and JVM UAT pass on the rebased tree. PR update,
+  fresh CI, merge, and issue closure remain pending.
 
 ## Related documents and skills
 

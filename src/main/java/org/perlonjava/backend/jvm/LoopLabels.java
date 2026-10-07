@@ -90,6 +90,9 @@ public class LoopLabels {
     /** True for a boundary selected by a when clause's synthesized last. */
     public boolean implicitWhenTarget;
 
+    /** True for the block boundary selected by a non-local CORE::continue marker. */
+    public boolean switchContinueTarget;
+
     /**
      * Creates a new LoopLabels instance with all necessary label information.
      *

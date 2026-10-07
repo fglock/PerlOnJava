@@ -112,9 +112,10 @@ public class CoreSubroutineGenerator {
     private static boolean installWrapper(String fullName, String operatorName,
                                           String prototype, PerlSubroutine sub) {
         PerlSubroutine checkedSub = (args, ctx) -> {
-            // Bareword-only CORE entries such as chomp and chop have no
-            // prototype. Their generated stub owns the direct-call error.
-            if (prototype != null) {
+            // Bareword-only CORE entries such as chomp, chop, and truncate
+            // always reject a direct reference call. Their generated stub
+            // owns that error even when Perl exposes a prototype.
+            if (prototype != null && !BAREWORD_ONLY.contains(operatorName)) {
                 validatePrototypeArity(operatorName, prototype, args.size());
             }
             return sub.apply(args, ctx);

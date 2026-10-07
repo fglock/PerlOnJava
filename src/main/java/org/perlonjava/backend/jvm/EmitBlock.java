@@ -682,7 +682,8 @@ public class EmitBlock {
         // Restore 'local' environment if 'redo' was called
         Local.localTeardown(localRecord, mv);
 
-        if (node.isLoop) {
+        boolean switchContinueTarget = node.getBooleanAnnotation("switchContinueTarget");
+        if (node.isLoop || switchContinueTarget) {
             // A labeled/bare block used as a loop target (e.g. SKIP: { ... }) is a
             // pseudo-loop: it supports labeled next/last/redo (e.g. next SKIP), but
             // an unlabeled next/last/redo must target the nearest enclosing true loop.
@@ -699,8 +700,8 @@ public class EmitBlock {
                     redoLabel,
                     nextLabel,
                     emitterVisitor.ctx.contextType,
-                    topicalizerLoopBody ? false : isBareBlock,
-                    topicalizerLoopBody ? false : isBareBlock);
+                    (topicalizerLoopBody || switchContinueTarget) ? false : isBareBlock,
+                    (topicalizerLoopBody || switchContinueTarget) ? false : isBareBlock);
             LoopLabels loopLabels = emitterVisitor.ctx.javaClassInfo.getInnermostLoopLabels();
             Object resultRegister = node.getAnnotation("resultRegister");
             if (resultRegister instanceof Integer resultSlot) {
@@ -711,6 +712,7 @@ public class EmitBlock {
                 }
             }
             loopLabels.implicitWhenTarget = node.getBooleanAnnotation("givenBlock") || topicalizerLoopBody;
+            loopLabels.switchContinueTarget = switchContinueTarget;
             // An implicit `last` from a when, or an explicit `break`, jumps
             // past this synthetic given block.  Record its lexical boundary
             // so loop control tears down variables declared by nested when
@@ -861,7 +863,7 @@ public class EmitBlock {
             }
         }
 
-        if (node.isLoop) {
+        if (node.isLoop || switchContinueTarget) {
             emitterVisitor.ctx.javaClassInfo.popLoopLabels();
         }
 

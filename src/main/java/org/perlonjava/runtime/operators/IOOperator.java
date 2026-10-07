@@ -2775,7 +2775,14 @@ public class IOOperator {
             // handle, even if accept() ultimately returns undef.
             ensureGlobDestination(newSocketHandle);
             if (listenSocketHandle.type == RuntimeScalarType.UNDEF) {
-                throw new PerlCompilerException("Can't use an undefined value as a symbol reference");
+                int callerHints = WarningBitsRegistry.getCallerHintsAtFrame(0);
+                if ((callerHints & Strict.HINT_STRICT_REFS) != 0) {
+                    throw new PerlCompilerException(
+                            "Can't use an undefined value as a symbol reference");
+                }
+                getGlobalVariable("main::!").set(
+                        "Invalid listening socket handle for accept");
+                return scalarUndef;
             }
 
             RuntimeIO listenRuntimeIO = listenSocketHandle.getRuntimeIO();

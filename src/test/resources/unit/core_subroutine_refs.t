@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 29;
+use Test::More tests => 32;
 
 # ==============================================
 # Tests for \&CORE::X subroutine references
@@ -95,6 +95,13 @@ my $chop = \&CORE::chop;
 is(ref($chop), 'CODE', '\&CORE::chop returns CODE ref');
 eval { $chop->("test"); };
 like($@, qr/cannot be called directly/, 'CORE::chop via ref dies correctly');
+
+my $truncate = \&CORE::truncate;
+is(ref($truncate), 'CODE', '\\&CORE::truncate returns CODE ref');
+eval { $truncate->(); };
+like($@, qr/cannot be called directly/, 'CORE::truncate via ref ignores prototype arity');
+eval { $truncate->("file", 0); };
+like($@, qr/cannot be called directly/, 'CORE::truncate via ref rejects direct call with args');
 
 # --- Tier 3: Keywords (no subroutine form) ---
 # defined(\&CORE::print) should return false in standard Perl,

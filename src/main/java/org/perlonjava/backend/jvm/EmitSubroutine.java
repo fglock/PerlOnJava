@@ -1724,6 +1724,21 @@ public class EmitSubroutine {
         for (LoopLabels loopLabels : emitterVisitor.ctx.javaClassInfo.loopLabelStack) {
             Label nextLoopCheck = new Label();
 
+            // A switch-only continue is consumed by the nearest when-clause
+            // boundary. It must not fall through to the synthetic given loop
+            // (which would skip the remaining statements in the given body),
+            // nor should ordinary next select the when block as a loop.
+            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
+                    "isSwitchContinue", "()Z", false);
+            if (loopLabels.switchContinueTarget) {
+                mv.visitJumpInsn(Opcodes.IFEQ, nextLoopCheck);
+            } else {
+                mv.visitJumpInsn(Opcodes.IFNE, nextLoopCheck);
+            }
+
             // if (!marked.matchesLabel(loopLabels.labelName)) continue;
             mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
             mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");

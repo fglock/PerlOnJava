@@ -267,6 +267,14 @@ public class BytecodeInterpreter {
         code.releaseRegisters();
     }
 
+    private static boolean matchesInterpreterControlBlock(RuntimeControlFlowList flow, String blockLabel) {
+        boolean switchContinueBoundary = RuntimeControlFlowList.SWITCH_CONTINUE_BLOCK_LABEL.equals(blockLabel);
+        if (flow.isSwitchContinue()) {
+            return switchContinueBoundary;
+        }
+        return !switchContinueBoundary && flow.matchesLabel(blockLabel);
+    }
+
     private static RuntimeList execute(SuspendedInterpreterFrame frame) {
         InterpretedCode code = frame.code;
         int callContext = frame.callContext;
@@ -2065,7 +2073,7 @@ public class BytecodeInterpreter {
                                         for (int i = controlBlockStack.size() - 1; i >= 0; i--) {
                                             int[] entry = controlBlockStack.get(i);
                                             String blockLabel = code.stringPool[entry[0]];
-                                            if (flow.matchesLabel(blockLabel)) {
+                                            if (matchesInterpreterControlBlock(flow, blockLabel)) {
                                                 while (controlBlockStack.size() > i + 1) {
                                                     controlBlockStack.removeLast();
                                                 }
@@ -2088,7 +2096,7 @@ public class BytecodeInterpreter {
                                         if (handled) break;
                                         int[] entry = labeledBlockStack.get(i);
                                         String blockLabel = code.stringPool[entry[0]];
-                                        if (flow.matchesLabel(blockLabel)) {
+                                        if (matchesInterpreterControlBlock(flow, blockLabel)) {
                                             // Pop entries down to and including the match
                                             while (labeledBlockStack.size() > i) {
                                                 labeledBlockStack.removeLast();
@@ -2242,7 +2250,7 @@ public class BytecodeInterpreter {
                                         for (int i = controlBlockStack.size() - 1; i >= 0; i--) {
                                             int[] entry = controlBlockStack.get(i);
                                             String blockLabel = code.stringPool[entry[0]];
-                                            if (flow.matchesLabel(blockLabel)) {
+                                            if (matchesInterpreterControlBlock(flow, blockLabel)) {
                                                 while (controlBlockStack.size() > i + 1) {
                                                     controlBlockStack.removeLast();
                                                 }
@@ -2265,7 +2273,7 @@ public class BytecodeInterpreter {
                                         if (handled) break;
                                         int[] entry = labeledBlockStack.get(i);
                                         String blockLabel = code.stringPool[entry[0]];
-                                        if (flow.matchesLabel(blockLabel)) {
+                                        if (matchesInterpreterControlBlock(flow, blockLabel)) {
                                             while (labeledBlockStack.size() > i) {
                                                 labeledBlockStack.removeLast();
                                             }
@@ -3115,7 +3123,7 @@ public class BytecodeInterpreter {
                                     boolean handled = false;
                                     for (int i = controlBlockStack.size() - 1; i >= 0; i--) {
                                         int[] entry = controlBlockStack.get(i);
-                                        if (!flow.matchesLabel(code.stringPool[entry[0]])) continue;
+                                        if (!matchesInterpreterControlBlock(flow, code.stringPool[entry[0]])) continue;
                                         int targetPc = switch (flow.getControlFlowType()) {
                                             case LAST -> entry[1];
                                             case NEXT -> entry[2];
