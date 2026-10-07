@@ -701,7 +701,7 @@ implementation or acceptance work.
 
 ## Progress tracking
 
-### Current status: final rebased candidate `5fcb368e3`; final build, UAT, PR CI, and issue audit pending (2026-10-06)
+### Current status: rebased candidate validated locally; PR update and fresh CI pending (2026-10-07)
 
 - [x] Rebased all 28 PR commits onto `origin/master` at `1a056c033` before
   final validation. The rebase had one `RuntimeCode.java` conflict; resolution
@@ -905,6 +905,17 @@ implementation or acceptance work.
   depended on ignored `perl5_t/` corpus data. It now opens its own source file;
   the regression passes on standard Perl, JVM, and interpreter, and the full
   `nice -n 19 timeout 3600 make` gate passes on the corrected tree.
+- [x] Fixed the refreshed thread compatibility corpus exposed by PR CI. Added
+  the `threads::shared::bless` API and Perl-compatible argument checks for
+  `share`, shared conditions, and locks. Core blessing publishes reblessings
+  of canonical shared referents while fetched proxy views stay runtime-local
+  until stored. Added `threads_shared_bless.t`; system Perl 5.34 passes its
+  available checks (its threads::shared 1.62 predates the 1.74 API).
+- [x] Final `nice -n 19 timeout 3600 make` passes after the thread fix. The
+  refreshed `nice -n 19 timeout 3600 make test-threads` gate passes all 64/64
+  files and 1,925/1,925 assertions on both JVM virtual and interpreter virtual
+  modes, plus all 19/19 focused platform files and 485/485 assertions. No
+  failures, errors, or timeouts.
 - [ ] Update PR #1623 with the validated source and handoff, wait for fresh CI,
   merge after all required checks pass, then close the confirmed fixed issues.
   Keep #1656 open as the separate Moo caller-location follow-up: Moo 2.005005's
@@ -914,21 +925,22 @@ implementation or acceptance work.
 
 ### Immediate next steps
 
-The rebased source passes the full JVM build/unit gate and refreshed imported
-core UAT. The full interpreter inventory also ran: 540/575 files pass, with 19
+The rebased source passes the full JVM build/unit gate, refreshed imported core
+UAT, and refreshed thread compatibility gate. The full interpreter inventory also ran: 540/575 files pass, with 19
 failed, 10 errors, 1 timeout, and 5 incomplete files. The changed focused
 interpreter tests pass; the inventory includes existing interpreter gaps such
 as `coreamp.t`'s unrelated `&prototype` assertion. The previous matching-parent
 inventory used 2,129 files, so its aggregate counts are not directly comparable
 to this refreshed 575-file selection.
 
-1. Commit the self-contained regression test and this handoff update, then
-   update PR #1623.
+1. Run documentation link checks, then commit the thread fix, its permanent
+   regression, changelog entry, and this handoff update. Push the branch and
+   refresh PR #1623.
 2. Wait for fresh CI, address any candidate-specific failures, merge after the
    required checks pass, and close #1619, #1622, #1166, and #1470 with their
    acceptance evidence. #1615 is already closed; keep #1656 open.
-3. Preserve the UAT/module logs as evidence and remove task-owned temporary
-   files and wrappers that are no longer needed.
+3. Preserve the final UAT/module/thread logs as evidence and remove task-owned
+   temporary files and wrappers that are no longer needed.
 
 ### Open questions and blockers
 

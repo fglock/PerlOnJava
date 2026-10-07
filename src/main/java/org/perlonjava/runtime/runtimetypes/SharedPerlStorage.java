@@ -107,7 +107,11 @@ public final class SharedPerlStorage {
      * behavior when a later value is invalid.</p>
      */
     public static void validateStoredValue(RuntimeScalar value) {
-        if (value == null || !RuntimeScalarType.isReference(value)) return;
+        if (value == null) return;
+        if (value.type == RuntimeScalarType.GLOB) {
+            throw new PerlCompilerException("Invalid value for shared scalar");
+        }
+        if (!RuntimeScalarType.isReference(value)) return;
         RuntimeBase assigned = referent(value);
         if (assigned == null || !assigned.threadShared) {
             throw new PerlCompilerException("Invalid value for shared scalar");
@@ -280,8 +284,8 @@ public final class SharedPerlStorage {
                 timed ? "cond_timedwait" : "cond_wait");
         ReentrantLock lock = lockState(lockRoot).lock;
         if (!lock.isHeldByCurrentThread()) {
-            throw new IllegalStateException((timed ? "cond_timedwait" : "cond_wait")
-                    + "() called on unlocked variable");
+            throw new IllegalStateException("You need a lock before you can cond_"
+                    + (timed ? "timedwait" : "wait"));
         }
 
         Waiter waiter = new Waiter(new CountDownLatch(1));
@@ -336,7 +340,15 @@ public final class SharedPerlStorage {
     private static RuntimeBase requireShared(RuntimeScalar reference, String operation) {
         RuntimeBase root = referent(reference);
         if (root == null || !root.threadShared) {
-            throw new IllegalArgumentException(operation + " requires a shared variable");
+            String message = switch (operation) {
+                case "lock" -> "lock can only be used on shared values";
+                case "cond_wait" -> "cond_wait can only be used on shared values";
+                case "cond_timedwait" -> "cond_timedwait can only be used on shared values";
+                case "cond_signal" -> "cond_signal can only be used on shared values";
+                case "cond_broadcast" -> "cond_broadcast can only be used on shared values";
+                default -> operation + " requires a shared variable";
+            };
+            throw new IllegalArgumentException(message);
         }
         return root;
     }

@@ -2136,7 +2136,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             value = value.getDefinedBoolean()
                     ? new RuntimeScalar(value.toString()) : new RuntimeScalar();
         }
-        if (threadShared && value != null && RuntimeScalarType.isReference(value)) {
+        if (threadShared && value != null
+                && (RuntimeScalarType.isReference(value) || value.type == GLOB)) {
             SharedPerlStorage.validateStoredValue(value);
             // Assignment into a shared scalar publishes the referent's current
             // class. A local shared reference may be reblessed privately, but

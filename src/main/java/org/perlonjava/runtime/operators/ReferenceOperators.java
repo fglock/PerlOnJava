@@ -270,7 +270,10 @@ public class ReferenceOperators {
             // A reference stored in a shared scalar publishes its class to
             // the common slot. An ordinary argument/reference remains an
             // ithread-local wrapper, even when its aggregate storage is shared.
-            if (runtimeScalar.threadShared
+            boolean canonicalSharedReferent = referent.threadShared
+                    && !referent.threadSharedFetchedView
+                    && !referent.threadSharedRuntimeView;
+            if (runtimeScalar.threadShared || canonicalSharedReferent
                     || referent.sharedBlessingUnpublished()) {
                 SharedPerlStorage.publishBlessing(runtimeScalar);
             }

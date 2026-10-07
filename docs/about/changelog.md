@@ -42,6 +42,8 @@ priorities and future plans.
   callable `CORE::tie` and `CORE::tied` reference arguments.
 - Support callable `CORE::close` and directory I/O wrappers with Perl-compatible
   false results and list-context behavior.
+- Support `threads::shared::bless` and report Perl-compatible argument errors
+  for shared storage, conditions, and locks.
 - Preserve Perl diagnostics and lvalue behavior for callable `CORE::join`,
   `CORE::keys`, and `CORE::lock`, and support reference aliases to class
   aggregate fields. Allow callable `CORE::open` to use read-only literals as
