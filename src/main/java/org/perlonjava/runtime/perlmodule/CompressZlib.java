@@ -461,7 +461,12 @@ public class CompressZlib extends PerlModuleBase {
         }
     }
 
-    private static long crc32WithSeed(byte[] data, long seed) {
+    static long crc32WithSeed(byte[] data, long seed) {
+        if ((seed & 0xFFFFFFFFL) == 0) {
+            CRC32 crc = new CRC32();
+            crc.update(data);
+            return crc.getValue();
+        }
         long crc = seed ^ 0xFFFFFFFFL;
         for (byte b : data) {
             crc = CRC32_TABLE[(int) ((crc ^ b) & 0xFF)] ^ (crc >>> 8);
