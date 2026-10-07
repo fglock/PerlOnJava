@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Support `sprintf` field widths up to 1,000,000 characters, including widths
+  above the former 8192-character limit.
+- Preserve bare carriage returns in quote-like strings and regex patterns read
+  from Perl source files.
 - Keep version-control conflict-marker diagnostics out of quoted strings and
   heredoc contents.
 - Preserve diagnostics for malformed CSV rows, decode EUC-JP row-13 extension

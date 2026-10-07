@@ -24,11 +24,10 @@ public class FileUtils {
      */
     public static String decodePerlSourceBytes(byte[] bytes, CompilerOptions parsedArgs) {
         String content = detectEncodingAndDecode(bytes, parsedArgs);
-        // Normalize line endings: \r\n → \n, bare \r → \n
-        // This must happen for source files so the Lexer sees clean \n line endings.
-        // For eval STRING input, \r characters are preserved (they don't go through this path).
+        // Normalize Windows line endings while preserving bare carriage returns.
+        // A bare CR can be part of a Perl quote-like string or regex pattern.
         if (content.indexOf('\r') >= 0) {
-            content = content.replace("\r\n", "\n").replace("\r", "\n");
+            content = content.replace("\r\n", "\n");
         }
         return content;
     }

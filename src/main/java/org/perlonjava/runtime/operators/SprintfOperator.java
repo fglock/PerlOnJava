@@ -20,8 +20,11 @@ import java.math.BigInteger;
  */
 public class SprintfOperator {
 
-    // Maximum practical limit for width/precision to prevent memory issues
-    public static final int MAX_PRACTICAL_FORMAT_SIZE = 8192;
+    // Avoid allocating impractically large formatted fields while supporting
+    // ordinary wide values such as table columns produced by Text::Diff.
+    public static final int MAX_PRACTICAL_FORMAT_WIDTH = 1_000_000;
+    // Maximum practical precision to prevent unexpectedly large numeric output
+    public static final int MAX_PRACTICAL_PRECISION = 8192;
     /**
      * Formats the elements according to the specified format string.
      * <p>
@@ -87,14 +90,11 @@ public class SprintfOperator {
                     throw new PerlCompilerException("Integer overflow in format string for sprintf ");
                 }
                 // Check for integer overflow FIRST
-                if ((spec.width != null && spec.width > MAX_PRACTICAL_FORMAT_SIZE) ||
-                        (spec.precision != null && (spec.precision == Integer.MAX_VALUE || spec.precision > MAX_PRACTICAL_FORMAT_SIZE)) ||
+                if ((spec.width != null && spec.width > MAX_PRACTICAL_FORMAT_WIDTH) ||
+                        (spec.precision != null && spec.precision > MAX_PRACTICAL_PRECISION) ||
                         (spec.parameterIndex != null && spec.parameterIndex == Integer.MAX_VALUE) ||
                         (spec.widthArgIndex != null && spec.widthArgIndex == Integer.MAX_VALUE) ||
-                        (spec.precisionArgIndex != null && spec.precisionArgIndex == Integer.MAX_VALUE) ||
-                        // Check for impractically large width/precision values
-                        (spec.width != null && spec.width > MAX_PRACTICAL_FORMAT_SIZE) ||
-                        (spec.precision != null && spec.precision > MAX_PRACTICAL_FORMAT_SIZE)) {
+                        (spec.precisionArgIndex != null && spec.precisionArgIndex == Integer.MAX_VALUE)) {
                     throw new PerlCompilerException("Integer overflow in format string for sprintf ");
                 }
 
@@ -620,10 +620,10 @@ public class SprintfOperator {
                     spec.flags += "-";
                     args.width = -args.width;
                     // After negation, check again for overflow
-                    if (args.width < 0 || args.width > MAX_PRACTICAL_FORMAT_SIZE) {
+                    if (args.width < 0 || args.width > MAX_PRACTICAL_FORMAT_WIDTH) {
                         throw new PerlCompilerException("Integer overflow in format string for sprintf ");
                     }
-                } else if (args.width > MAX_PRACTICAL_FORMAT_SIZE) {
+                } else if (args.width > MAX_PRACTICAL_FORMAT_WIDTH) {
                     throw new PerlCompilerException("Integer overflow in format string for sprintf ");
                 }
             } else {
@@ -665,11 +665,11 @@ public class SprintfOperator {
                 args.precision = precisionValue.intValue();
                 if (args.precision < 0) {
                     // For precision, check if negating would cause issues
-                    if (args.precision < -MAX_PRACTICAL_FORMAT_SIZE) {
+                    if (args.precision < -MAX_PRACTICAL_PRECISION) {
                         throw new PerlCompilerException("Integer overflow in format string for sprintf ");
                     }
                     args.precision = -1;  // Negative precision is ignored
-                } else if (args.precision > MAX_PRACTICAL_FORMAT_SIZE) {
+                } else if (args.precision > MAX_PRACTICAL_PRECISION) {
                     throw new PerlCompilerException("Integer overflow in format string for sprintf ");
                 }
             } else {
