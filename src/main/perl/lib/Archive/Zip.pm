@@ -194,6 +194,14 @@ Returns the compression method (COMPRESSION_STORED or COMPRESSION_DEFLATED).
 Gets or sets the compression method that will be used when the member is
 written. When setting a method, returns the previous desired method.
 
+=item desiredCompressionLevel( [$level] )
+
+Gets or sets the compression level used when a deflated member is written.
+Stored members start at COMPRESSION_LEVEL_NONE (0). Switching a stored member
+to DEFLATED selects COMPRESSION_LEVEL_DEFAULT (-1). Setting a level of 0
+selects STORED; other values select DEFLATED. When setting a level, returns
+the previous desired level.
+
 =item lastModTime()
 
 Returns the last modification time (Unix timestamp).

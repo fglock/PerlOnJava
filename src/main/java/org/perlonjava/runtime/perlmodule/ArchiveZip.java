@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.zip.Deflater;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
@@ -127,6 +128,7 @@ public class ArchiveZip extends PerlModuleBase {
             az.registerMethod("compressedSize", null);
             az.registerMethod("compressionMethod", null);
             az.registerMethod("desiredCompressionMethod", null);
+            az.registerMethod("desiredCompressionLevel", null);
             az.registerMethod("lastModTime", null);
             az.registerMethod("lastModFileDateTime", null);
             az.registerMethod("crc32", null);
@@ -666,6 +668,7 @@ public class ArchiveZip extends PerlModuleBase {
             member.put("_compressedSize", new RuntimeScalar(content.length));
             member.put("_compressionMethod", new RuntimeScalar(COMPRESSION_STORED));
             member.put("_desiredCompressionMethod", new RuntimeScalar(COMPRESSION_DEFLATED));
+            member.put("_desiredCompressionLevel", new RuntimeScalar(COMPRESSION_LEVEL_DEFAULT));
             member.put("_lastModTime", new RuntimeScalar(lastModified / 1000));
             member.put("_crc32", new RuntimeScalar(computeCRC32(content)));
 
@@ -706,6 +709,7 @@ public class ArchiveZip extends PerlModuleBase {
         member.put("_compressedSize", new RuntimeScalar(contentBytes.length));
         member.put("_compressionMethod", new RuntimeScalar(COMPRESSION_STORED));
         member.put("_desiredCompressionMethod", new RuntimeScalar(COMPRESSION_STORED));
+        member.put("_desiredCompressionLevel", new RuntimeScalar(COMPRESSION_LEVEL_NONE));
         member.put("_lastModTime", new RuntimeScalar(System.currentTimeMillis() / 1000));
         member.put("_crc32", new RuntimeScalar(computeCRC32(contentBytes)));
 
@@ -744,6 +748,7 @@ public class ArchiveZip extends PerlModuleBase {
         member.put("_compressedSize", scalarZero);
         member.put("_compressionMethod", new RuntimeScalar(COMPRESSION_STORED));
         member.put("_desiredCompressionMethod", new RuntimeScalar(COMPRESSION_STORED));
+        member.put("_desiredCompressionLevel", new RuntimeScalar(COMPRESSION_LEVEL_NONE));
         member.put("_lastModTime", new RuntimeScalar(System.currentTimeMillis() / 1000));
         member.put("_crc32", scalarZero);
 
@@ -1165,7 +1170,49 @@ public class ArchiveZip extends PerlModuleBase {
         }
         RuntimeScalar previous = desired != null ? desired : scalarZero;
         member.put("_desiredCompressionMethod", new RuntimeScalar(method));
+        if (method == COMPRESSION_STORED) {
+            member.put("_desiredCompressionLevel", new RuntimeScalar(COMPRESSION_LEVEL_NONE));
+        } else if (desired == null || desired.getInt() == COMPRESSION_STORED) {
+            member.put("_desiredCompressionLevel", new RuntimeScalar(COMPRESSION_LEVEL_DEFAULT));
+        }
         return previous.getList();
+    }
+
+    /**
+     * Get or set the compression level used when writing a member.
+     * Valid values are -1 (the zlib default) through 9. The setter returns
+     * the previous desired level, matching Archive::Zip's API.
+     */
+    public static RuntimeList desiredCompressionLevel(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            return new RuntimeScalar(COMPRESSION_LEVEL_NONE).getList();
+        }
+        RuntimeHash member = args.get(0).hashDeref();
+        RuntimeScalar desired = member.get("_desiredCompressionLevel");
+        if (desired == null) {
+            desired = new RuntimeScalar(COMPRESSION_LEVEL_NONE);
+        }
+        if (args.size() < 2) {
+            return desired.getList();
+        }
+
+        RuntimeScalar levelArg = args.get(1);
+        if (levelArg.type == RuntimeScalarType.UNDEF) {
+            return desired.getList();
+        }
+        if (levelArg.type == RuntimeScalarType.REFERENCE) {
+            RuntimeHash options = levelArg.hashDeref();
+            RuntimeScalar optionLevel = options.get("compressionLevel");
+            if (optionLevel == null || optionLevel.type == RuntimeScalarType.UNDEF) {
+                return desired.getList();
+            }
+            levelArg = optionLevel;
+        }
+        int level = levelArg.getInt();
+        member.put("_desiredCompressionLevel", new RuntimeScalar(level));
+        member.put("_desiredCompressionMethod", new RuntimeScalar(
+                level == COMPRESSION_LEVEL_NONE ? COMPRESSION_STORED : COMPRESSION_DEFLATED));
+        return desired.getList();
     }
 
     /**
@@ -1369,6 +1416,8 @@ public class ArchiveZip extends PerlModuleBase {
                 entry.setSize(data.length);
                 entry.setCrc(computeCRC32(data));
             } else {
+                RuntimeScalar level = member.get("_desiredCompressionLevel");
+                zos.setLevel(level != null ? level.getInt() : Deflater.DEFAULT_COMPRESSION);
                 entry.setMethod(ZipEntry.DEFLATED);
             }
 

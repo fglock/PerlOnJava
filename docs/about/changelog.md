@@ -8,7 +8,10 @@ priorities and future plans.
 
 - Preserve diagnostics for malformed CSV rows, decode EUC-JP row-13 extension
   characters, accept open filehandles in `Tie::File`, and honor ZIP member
-  `desiredCompressionMethod` when writing archives.
+  `desiredCompressionMethod` and `desiredCompressionLevel` when writing
+  archives.
+- Add Java-backed `String::CRC32` support for byte strings, filehandles, and
+  seeded incremental checksums.
 - Add Java-backed `Scalar::Readonly` support, fix caller-frame visibility for
   nested signature calls, and keep Test2 negation accessors visible to the
   interpreter.

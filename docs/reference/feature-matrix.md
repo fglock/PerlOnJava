@@ -869,6 +869,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Unicode::Normalize**: canonical and compatibility normalization passes the focused audit batch.
 - ✅  **Archive::Tar** module.
 - ✅  **Archive::Zip** module.
+- ✅  **String::CRC32** module for byte strings and filehandles, including seeded checksums.
 - ✅  **IPC::Open2** module.
 - ✅  **IPC::Open3** module.
 - ✅  **Net::FTP** module.

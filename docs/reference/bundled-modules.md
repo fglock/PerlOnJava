@@ -325,6 +325,7 @@ These are loaded automatically or via `use`:
 | `Compress::Raw::Bzip2` | Java + Perl | Uses Apache Commons Compress |
 | `Compress::Raw::Zlib` | Java | Uses `java.util.zip` |
 | `Compress::Zlib` | Java + Perl | |
+| `String::CRC32` | Java + Perl | Uses Java CRC-32 with seeded checksum support |
 | `IO::Zlib` | Perl | |
 
 ### XML & HTML
