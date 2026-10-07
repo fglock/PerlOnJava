@@ -102,7 +102,7 @@ and first path establish implementation cost.
 
 ## Progress tracking
 
-### Current status: Phase 1 implementation and acceptance complete on draft PR #1653; review remains pending
+### Current status: Phase 1 complete; merged in PR #1653 as `84f32be179bdc2b351c3eaae1cb26df39964ab6b` (2026-10-07)
 
 ### Completed
 
@@ -284,8 +284,8 @@ and first path establish implementation cost.
   `nice -n 19 make check-links`; both pass. The post-rebase UAT passes 575/575
   files and 681,471 assertions, and comparison reports 575 unchanged files and
   no regressions.
-- [ ] Confirm CI on the latest rebased PR #1653 head is green on Ubuntu and
-  Windows, then merge the PR.
+- [x] Confirm CI on final PR #1653 head `c52918c92269d7295bb3095b4f156c389af58f23`
+  is green on Ubuntu and Windows, then merge as `84f32be179bdc2b351c3eaae1cb26df39964ab6b`.
 - [x] Compare the additional user-requested Moo and DBIx::Class CPAN failures
   against current master and target Perl 5.45.4. Moo's seven call-site
   assertions fail identically on master while target Perl passes 29/29; the
@@ -298,13 +298,14 @@ and first path establish implementation cost.
 
 ### Next steps
 
-1. Merge PR #1653 after CI is green.
-2. Extend the ownership path through scalar proxies and ordinary array/hash
+1. Extend the ownership path through scalar proxies and ordinary array/hash
    slots in Phase 2, then resolve the HTML::Tree teardown failures and verify
    unchanged `t/refloop.t`.
-3. Continue the #1642 Catalyst cleanup profile as an integration follow-up.
+2. Continue the #1642 Catalyst cleanup profile as an integration follow-up.
    The full suite remains enabled except for Catalyst's six unsupported fork
    assertions; the broad test attempt and cleanup profile are incomplete.
+3. Rerun Moo and DBIx::Class after their separate tracked fixes land; classify
+   the two DBIx::Class assertions independently.
 4. Run each repository gate from an immutable commit and record before/after
    evidence for each enabled path.
 
