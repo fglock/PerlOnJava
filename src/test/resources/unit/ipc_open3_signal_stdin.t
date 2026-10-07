@@ -7,7 +7,7 @@ use IPC::Open3;
 use File::Temp ();
 use Symbol qw(gensym);
 
-plan tests => 4;
+plan tests => 6;
 
 SKIP: {
     skip 'signal wait status is not available on native Windows', 2
@@ -21,6 +21,16 @@ SKIP: {
     is(waitpid($pid, 0), $pid, 'signal-terminated child is reaped');
     alarm 0;
     is($? & 127, 9, 'wait status preserves signal 9');
+    close $stdout;
+    close $stderr;
+}
+
+{
+    my ($stdin, $stdout, $stderr) = (undef, undef, gensym);
+    my $pid = open3($stdin, $stdout, $stderr, $^X, '-e', 'exit 255');
+    close $stdin;
+    is(waitpid($pid, 0), $pid, 'normally exiting child is reaped');
+    is($? >> 8, 255, 'normal exit 255 remains an exit status');
     close $stdout;
     close $stderr;
 }
