@@ -61,9 +61,9 @@ priorities and future plans.
   representation for case-folded negated singleton regex classes.
 - Remove deleted package stashes from their parent namespace in
   `Symbol::delete_package`.
-- Preserve direct-call semantics for lexical and package `->&` methods, support
-  `CORE::bless` and `CORE::break` code references, and allow same-finally local
-  `goto` targets.
+- Preserve direct-call semantics for lexical and package `->&` methods across
+  both backends, support `CORE::bless` and `CORE::break` code references, and
+  allow same-finally local `goto` targets.
 - Preserve raw-source DATA handles for `CORE::__DATA__` and lvalue behavior for
   `CORE::substr` code references.
 - Match Perl diagnostics, lvalue behavior, and list context for callable

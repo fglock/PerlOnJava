@@ -1350,28 +1350,11 @@ public class MortalList {
                 || !WeakRefRegistry.hasWeakRefsTo(base)) {
             return;
         }
-        // noteVarLeftScope() immediately requests a complete weak sweep after
-        // this method returns. At a safe outer statement boundary that sweep
-        // will perform the same root test for every referent, so a separate
-        // target-specific root walk here only delays later sibling callbacks.
-        // Keep the eager path when the sweep could be blocked or disabled.
-        if (willRunImmediateSweepAtNextBoundary()) {
-            return;
-        }
         if (ReachabilityWalker.isReachableFromRoots(base)) {
             return;
         }
         base.refCount = Integer.MIN_VALUE;
         DestroyDispatch.callDestroy(base);
-    }
-
-    private static boolean willRunImmediateSweepAtNextBoundary() {
-        LifecycleRuntimeState state = state();
-        return !AUTO_GC_DISABLED
-                && !state.inAutoSweep
-                && !ModuleInitGuard.inModuleInit()
-                && RuntimeCode.argsStackDepth() <= 1
-                && state.temporaryRoots.isEmpty();
     }
 
     // D-W6.18 perf: cached reachable-set, valid for the duration of a

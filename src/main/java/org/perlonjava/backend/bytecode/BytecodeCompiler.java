@@ -1854,6 +1854,23 @@ public class BytecodeCompiler implements Visitor {
      * This allows {@code POP_LOCAL_LEVEL} after the loop to restore {@code $_}
      * correctly regardless of nesting depth.
      */
+    private static boolean isDeferredClassSubroutine(BlockNode block, Node statement) {
+        if (!(statement instanceof SubroutineNode subroutine)) {
+            return false;
+        }
+        Object methods = block.getAnnotation("deferredMethods");
+        if (methods instanceof List<?> deferred
+                && deferred.stream().anyMatch(candidate -> candidate == subroutine)) {
+            return true;
+        }
+        if (block.getAnnotation("deferredConstructor") == subroutine) {
+            return true;
+        }
+        Object accessors = block.getAnnotation("deferredAccessors");
+        return accessors instanceof List<?> deferred
+                && deferred.stream().anyMatch(candidate -> candidate == subroutine);
+    }
+
     @Override
     public void visit(BlockNode node) {
         // Blocks create a new lexical scope
@@ -1980,6 +1997,7 @@ public class BytecodeCompiler implements Visitor {
         for (int i = numStatements - 1; i >= 0; i--) {
             Node elem = node.elements.get(i);
             if (elem == null) continue;
+            if (isDeferredClassSubroutine(node, elem)) continue;
             if (elem instanceof ListNode ln && ln.elements.isEmpty()) continue;
             // Pragma flag nodes and format declarations adjust compile-time state
             // but do not contribute a do/require return value (matches Perl 5:
@@ -1998,6 +2016,11 @@ public class BytecodeCompiler implements Visitor {
             // Skip the 'local $_' child when For1Node handles it via LOCAL_SCALAR_SAVE_LEVEL
             if (i == 0 && skipFirstChild) continue;
             Node stmt = node.elements.get(i);
+            // ClassTransformer registers these methods while parsing. The
+            // interpreter must leave their lazy RuntimeCode placeholders in
+            // place instead of recompiling method ASTs in the class block's
+            // unrelated bytecode lexical frame.
+            if (isDeferredClassSubroutine(node, stmt)) continue;
             // Visit CompilerFlagNode to set strict/warning/feature flags, even if marked compileTimeOnly.
             // This is needed because pragmas like 'use strict' create CompilerFlagNode with compileTimeOnly=true,
             // but we still need to process it to set the flags before compiling subsequent statements.

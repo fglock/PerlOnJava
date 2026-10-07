@@ -204,7 +204,12 @@ public class VariableCollectorVisitor implements Visitor {
 
         if (isVariableOperator(op) && node.operand instanceof IdentifierNode idNode) {
             // This is a variable reference
-            String varName = op + idNode.name;
+            String hiddenVarName = node.getAnnotation("hiddenVarName") instanceof String hidden
+                    ? hidden : null;
+            String varName = hiddenVarName != null && op.equals("$")
+                    && hiddenVarName.contains("__lexmethod_")
+                    ? "$" + hiddenVarName
+                    : op + idNode.name;
             if (!isDeclaredLocal(varName)) {
                 variables.add(varName);
             }
