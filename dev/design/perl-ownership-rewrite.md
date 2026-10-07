@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 candidate is implemented; PR integration is pending. The selected closure-pad path has explicit ownership, cleanup, weak-reference, and cycle-retention coverage on both backends.
+**Status:** Phase 1 candidate is implemented; the selected closure-pad path passes JVM and interpreter tests. Full UAT and selected CPAN workloads pass. PR #1653 remains a draft pending CI and review.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
@@ -102,7 +102,7 @@ and first path establish implementation cost.
 
 ## Progress tracking
 
-### Current status: Phase 1 implementation candidate; PR integration pending
+### Current status: Phase 1 implementation candidate; integrated acceptance in progress on draft PR #1653
 
 ### Completed
 
@@ -263,6 +263,22 @@ and first path establish implementation cost.
   dependencies in the local CPAN cache, PerlOnJava passes all six assertions
   and exits cleanly without the prior repeated `Type::Tiny` resurrection
   warnings.
+- [x] Import the current Perl 5.45.4 test suite with
+  `dev/import-perl5/sync.pl --only perl5/t`; both selected imports completed
+  successfully and the synced tree required no follow-up edits.
+- [x] Run the complete imported suite on the current PR code: 575/575 files,
+  681,471/681,471 passing assertions, zero failed, timed out, or incomplete
+  files. Comparison with the 2026-10-05 baseline reports 575 unchanged files
+  and no regressions.
+- [x] Recheck selected CPAN ownership workloads: Dancer2-Plugin-DBIx-Class
+  `t/01_both_using_rsnames.t` passes 6/6; Catalyst-Runtime's patched
+  `t/live_fork.t` passes all ten supported assertions and skips only the six
+  fork assertions; `t/aggregate/live_component_controller_action_chained2.t`
+  passes 9/9.
+- [x] Verify the draft PR is based on the latest fetched `master` commit
+  `40214064de245032549d9e61da59b512deec7d78`; the branch required no rebase.
+  The Windows build timeout is set to 75 minutes after the prior job reached
+  its 60-minute step limit; the updated CI run will validate the new budget.
 
 ### Next steps
 

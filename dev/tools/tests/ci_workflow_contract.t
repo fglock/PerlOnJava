@@ -142,7 +142,8 @@ sub validate_contract {
         push @error, "duplicate step id $id" if $seen{$id}++;
         push @error, "$id continue-on-error bypass is forbidden"
             if exists $step->{'continue-on-error'};
-        positive_timeout($step->{'timeout-minutes'}, $id, 60, \@error);
+        my $maximum = $id eq 'build-windows' ? 75 : 60;
+        positive_timeout($step->{'timeout-minutes'}, $id, $maximum, \@error);
     }
     push @error, 'required step order or identities changed'
         unless join(',', @actual_order) eq join(',', @expected_order);

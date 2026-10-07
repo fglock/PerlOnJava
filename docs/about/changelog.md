@@ -43,6 +43,8 @@ priorities and future plans.
   releases their lexical owners, including `die`-initiated shutdown, nested
   `exit`, and draining remaining END blocks after a callback fails. Match Perl
   5.45.4's exit status 22 for an uncaught END callback failure.
+- Set the Windows CI unit gate budget to 75 minutes while preserving its
+  per-test watchdogs.
 - Document the 2026-10-03 imported core-suite milestone: 575 selected files
   completed without unexpected failures, with skips, TODOs, exclusions, and
   verification scope recorded in the testing guide.

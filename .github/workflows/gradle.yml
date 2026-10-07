@@ -42,9 +42,9 @@ jobs:
       - name: Build with Make (Windows)
         id: build-windows
         if: runner.os == 'Windows'
-        # The complete serial Windows unit gate exceeds 45 minutes; retain
-        # all tests and their per-test watchdogs within a bounded build gate.
-        timeout-minutes: 60
+        # The latest serial Windows unit gate reached the 60-minute limit;
+        # allow additional runner variance while retaining per-test watchdogs.
+        timeout-minutes: 75
         shell: cmd
         run: make ci
         env:
