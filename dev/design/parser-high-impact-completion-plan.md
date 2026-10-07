@@ -901,6 +901,10 @@ implementation or acceptance work.
 - [x] Compared the JVM UAT with the Oct 3 baseline: +703 passing assertions;
   the ten regex-file count reductions match the refreshed Perl 5.45.4 corpus
   (`re/regexp.t` passes 2280/2280 on standard Perl). No failing UAT files.
+- [x] Repaired a clean-checkout CI failure in `core_open_coderef.t`: the test
+  depended on ignored `perl5_t/` corpus data. It now opens its own source file;
+  the regression passes on standard Perl, JVM, and interpreter, and the full
+  `nice -n 19 timeout 3600 make` gate passes on the corrected tree.
 - [ ] Update PR #1623 with the validated source and handoff, wait for fresh CI,
   merge after all required checks pass, then close the confirmed fixed issues.
   Keep #1656 open as the separate Moo caller-location follow-up: Moo 2.005005's
@@ -918,7 +922,8 @@ as `coreamp.t`'s unrelated `&prototype` assertion. The previous matching-parent
 inventory used 2,129 files, so its aggregate counts are not directly comparable
 to this refreshed 575-file selection.
 
-1. Commit the validated source and this handoff update, then update PR #1623.
+1. Commit the self-contained regression test and this handoff update, then
+   update PR #1623.
 2. Wait for fresh CI, address any candidate-specific failures, merge after the
    required checks pass, and close #1619, #1622, #1166, and #1470 with their
    acceptance evidence. #1615 is already closed; keep #1656 open.
