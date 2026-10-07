@@ -4,9 +4,16 @@ use warnings;
 use Test::More;
 use IPC::Open3;
 use Symbol qw(gensym);
-use AnyEvent;
 use File::Temp qw(tempdir);
 use File::Spec;
+
+BEGIN {
+    eval { require AnyEvent; 1 } or do {
+        require Test::More;
+        Test::More::plan(skip_all => 'AnyEvent is not installed');
+    };
+}
+use AnyEvent;
 
 plan skip_all => 'SIGCHLD is not supported on native Windows'
     if $^O eq 'MSWin32';

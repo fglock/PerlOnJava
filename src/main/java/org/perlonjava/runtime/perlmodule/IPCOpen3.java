@@ -10,6 +10,8 @@ import org.perlonjava.runtime.runtimetypes.*;
 import java.io.File;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -205,8 +207,17 @@ public class IPCOpen3 extends PerlModuleBase {
             boolean inheritOut = shouldInheritStdout(innerRdr);
             boolean inheritErr = !mergeStderr && errIsUsable && shouldInheritStderr(innerErr);
 
+            boolean inputRedirection = isInputRedirection(wtrRef);
+            RuntimeIO redirectedInputIO = inputRedirection ? inputRedirectionIO(wtrRef) : null;
+            java.nio.file.Path redirectedInput = redirectedInputIO == null
+                    ? null : redirectedInputIO.openedPath;
+            if (redirectedInput != null && !Files.isReadable(redirectedInput)) {
+                redirectedInput = null;
+            }
             if (inheritIn) {
                 processBuilder.redirectInput(ProcessBuilder.Redirect.INHERIT);
+            } else if (redirectedInput != null) {
+                processBuilder.redirectInput(redirectedInput.toFile());
             }
             if (inheritOut) {
                 processBuilder.redirectOutput(ProcessBuilder.Redirect.INHERIT);
@@ -242,9 +253,13 @@ public class IPCOpen3 extends PerlModuleBase {
 
             // Set up the write handle (to child's stdin)
             // Check for redirection directive like "<&STDIN"
-            if (isInputRedirection(wtrRef)) {
-                // Input redirection - just close the process stdin
-                process.getOutputStream().close();
+            if (inputRedirection) {
+                if (redirectedInput == null && redirectedInputIO != null) {
+                    forwardInputHandle(redirectedInputIO, process.getOutputStream());
+                } else {
+                    // ProcessBuilder file redirection leaves its pipe unused.
+                    process.getOutputStream().close();
+                }
             } else if (!inheritIn) {
                 setupWriteHandle(wtrRef, process.getOutputStream());
             }
@@ -383,6 +398,57 @@ public class IPCOpen3 extends PerlModuleBase {
         // Get the actual string value (may need to dereference)
         String str = getStringValue(handleRef);
         return str != null && str.startsWith("<&");
+    }
+
+    /** Resolve a named filehandle in a Perl <&HANDLE input redirection. */
+    private static RuntimeIO inputRedirectionIO(RuntimeScalar handleRef) {
+        String redirection = getStringValue(handleRef);
+        if (redirection == null || !redirection.startsWith("<&")) return null;
+        String name = redirection.substring(2).trim();
+        if (name.isEmpty() || name.matches("[0-9]+")) return null;
+        if (name.contains("::")) {
+            return getIOHandle(name);
+        }
+
+        // open3 receives the redirection as a string, so package qualification
+        // must come from its Perl caller. The handle may be localized in a
+        // wrapper package (for example AnyEvent::Open3::Simple's TEMP).
+        for (int frame = 0; frame <= 8; frame++) {
+            RuntimeList caller = RuntimeCode.caller(
+                    new RuntimeList(new RuntimeScalar(frame)), RuntimeContextType.LIST);
+            if (caller.isEmpty()) break;
+            String packageName = caller.getFirst().toString();
+            if (packageName.endsWith("::")) {
+                packageName = packageName.substring(0, packageName.length() - 2);
+            }
+            RuntimeIO io = getIOHandle(packageName + "::" + name);
+            if (io != null) return io;
+        }
+        return getIOHandle("main::" + name);
+    }
+
+    private static RuntimeIO getIOHandle(String name) {
+        RuntimeGlob glob = getGlobalIO(name);
+        return glob.IO == null ? null : RuntimeIO.getRuntimeIO(glob.IO);
+    }
+
+    /** Copy from an open Perl filehandle when its backing file cannot be inherited by path. */
+    private static void forwardInputHandle(RuntimeIO source, OutputStream childInput) {
+        Thread forwarder = new Thread(() -> {
+            try (OutputStream out = childInput) {
+                while (true) {
+                    RuntimeScalar chunk = source.ioHandle.doRead(8192, StandardCharsets.ISO_8859_1);
+                    if (!chunk.getDefinedBoolean()) break;
+                    String data = chunk.toString();
+                    if (data.isEmpty()) break;
+                    out.write(data.getBytes(StandardCharsets.ISO_8859_1));
+                }
+            } catch (Exception ignored) {
+                // The child may close stdin before consuming the complete source.
+            }
+        }, "perl-open3-stdin-forwarder");
+        forwarder.setDaemon(true);
+        forwarder.start();
     }
 
     /**

@@ -12,8 +12,8 @@ priorities and future plans.
   archives.
 - Add Java-backed `String::CRC32` support for byte strings, filehandles, and
   seeded incremental checksums.
-- Deliver `SIGCHLD` for exited ProcessBuilder children and wake blocked event
-  loops so child watchers receive their callbacks.
+- Deliver `SIGCHLD` for exited ProcessBuilder children, wake blocked event loops,
+  and forward package-local filehandle input to `IPC::Open3` children.
 - Add Java-backed `Scalar::Readonly` support, fix caller-frame visibility for
   nested signature calls, and keep Test2 negation accessors visible to the
   interpreter.

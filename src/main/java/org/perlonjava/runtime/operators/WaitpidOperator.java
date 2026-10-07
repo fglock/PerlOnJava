@@ -145,7 +145,7 @@ public class WaitpidOperator {
                 // ECHILD by returning -1. Do NOT update $?.
                 return new RuntimeScalar(-1);
             }
-            setExitStatus(exitCode << 8);
+            setExitStatus(toPerlWaitStatus(exitCode));
             return new RuntimeScalar(pid);
         }
         try {
@@ -154,12 +154,25 @@ public class WaitpidOperator {
             if (chldIgnore) {
                 return new RuntimeScalar(-1);
             }
-            setExitStatus(exitCode << 8);
+            setExitStatus(toPerlWaitStatus(exitCode));
             return new RuntimeScalar(pid);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return new RuntimeScalar(-1);
         }
+    }
+
+    /**
+     * Process.exitValue() exposes POSIX signal termination as 128 + signal.
+     * Convert that convention back to Perl's wait(2) status layout. Java's
+     * Process API cannot distinguish this from a program that exits with the
+     * same value, so values >= 128 follow the POSIX convention.
+     */
+    private static int toPerlWaitStatus(int exitCode) {
+        if (!IS_WINDOWS && exitCode >= 129 && exitCode <= 255) {
+            return exitCode - 128;
+        }
+        return exitCode << 8;
     }
 
     private static RuntimeScalar waitpidWindows(int pid, int flags) {
