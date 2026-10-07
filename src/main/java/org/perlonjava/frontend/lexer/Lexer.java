@@ -7,6 +7,8 @@ import org.perlonjava.runtime.operators.PerlUtfString;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * The Lexer class is responsible for converting a sequence of characters (input string)
@@ -40,6 +42,8 @@ import java.util.List;
  * The Parser is aware of these issues and implements workarounds to handle them.
  */
 public class Lexer {
+    private static final Pattern HEREDOC_START = Pattern.compile(
+            "(?<!<)<<(?!<)[-~]?\\s*(['\"]?)([A-Za-z_][A-Za-z_0-9]*)\\1");
     // End of File character constant
     public static final String EOF = Character.toString((char) -1);
     // Array to mark operator characters
@@ -238,7 +242,64 @@ public class Lexer {
                 return false;
             }
         }
-        return true;
+        return !isInsideLiteral(position);
+    }
+
+    /**
+     * Conflict markers are diagnostics for Perl source, not text embedded in
+     * quoted strings or heredoc bodies. The lexer otherwise leaves string
+     * contents as ordinary tokens, so determine this narrowly at the marker
+     * position before emitting the special token.
+     */
+    private boolean isInsideLiteral(int target) {
+        char quote = 0;
+        boolean escaped = false;
+        String heredoc = null;
+        int lineStart = 0;
+        int cursor = 0;
+        while (cursor < target) {
+            int newline = input.indexOf('\n', cursor);
+            int lineEnd = newline < 0 || newline > target ? target : newline;
+            if (heredoc != null) {
+                String line = input.substring(lineStart, lineEnd);
+                if (line.stripLeading().equals(heredoc)) {
+                    heredoc = null;
+                } else if (lineStart <= target) {
+                    return true;
+                }
+            } else {
+                boolean inComment = false;
+                for (int i = cursor; i < lineEnd; i++) {
+                    char c = input.charAt(i);
+                    if (quote != 0) {
+                        if (escaped) {
+                            escaped = false;
+                        } else if (c == '\\') {
+                            escaped = true;
+                        } else if (c == quote) {
+                            quote = 0;
+                        }
+                    } else if (c == '#') {
+                        inComment = true;
+                        break;
+                    } else if (c == '\'' || c == '"' || c == '`') {
+                        quote = c;
+                    }
+                }
+                if (quote == 0 && !inComment) {
+                    Matcher matcher = HEREDOC_START.matcher(input.substring(lineStart, lineEnd));
+                    if (matcher.find()) {
+                        heredoc = matcher.group(2);
+                    }
+                }
+            }
+            if (lineEnd == target) {
+                break;
+            }
+            cursor = lineEnd + 1;
+            lineStart = cursor;
+        }
+        return quote != 0 || heredoc != null;
     }
 
     public LexerToken consumeWhitespace() {
