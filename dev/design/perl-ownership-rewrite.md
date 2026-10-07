@@ -274,16 +274,18 @@ and first path establish implementation cost.
   `t/01_both_using_rsnames.t` passes 6/6; Catalyst-Runtime's patched
   `t/live_fork.t` passes all ten supported assertions and skips only the six
   fork assertions; `t/aggregate/live_component_controller_action_chained2.t`
-  passes 9/9.
+  passes 9/9. The additional requested Moo and DBIx::Class suites still fail
+  on the rebased build for pre-existing defects tracked in #1656 and #1434;
+  DBIx::Class's two assertion failures remain unclassified in #1646.
 - [x] Rebase the draft PR onto the latest fetched `master` commit
-  `5193a5e8ffb5604aefdda91feb39b93f2adefcff`; the two upstream commits replayed
-  cleanly, with the changelog retaining both upstream and Phase 1 entries.
+  `7bdd1cfbe16cd123dd5ee8a6b103e0f8375ab0a8`; all 82 Phase 1 commits replayed
+  cleanly, with the upstream ZIP changes and Phase 1 changelog entry retained.
 - [x] Validate the rebased candidate with `nice -n 19 make` and
-  `nice -n 19 make check-links`; both pass. The full post-rebase UAT comparison
-  reports 575 unchanged files and no regressions.
-- [x] Confirm PR #1653 CI is green on both platforms: Ubuntu `make` and thread
-  compatibility gates pass; Windows `make` and its focused thread gate pass
-  within the extended 75-minute build-step limit.
+  `nice -n 19 make check-links`; both pass. The post-rebase UAT passes 575/575
+  files and 681,471 assertions, and comparison reports 575 unchanged files and
+  no regressions.
+- [ ] Confirm CI on the latest rebased PR #1653 head is green on Ubuntu and
+  Windows, then merge the PR.
 - [x] Compare the additional user-requested Moo and DBIx::Class CPAN failures
   against current master and target Perl 5.45.4. Moo's seven call-site
   assertions fail identically on master while target Perl passes 29/29; the
@@ -296,14 +298,13 @@ and first path establish implementation cost.
 
 ### Next steps
 
-1. Obtain review for PR #1653; keep the branch draft until the user is ready to
-   move it out of WIP.
-2. Continue the #1642 Catalyst cleanup profile as an integration follow-up.
-   The full suite remains enabled except for Catalyst's six unsupported fork
-   assertions; the broad test attempt and cleanup profile are incomplete.
-3. Extend the ownership path through scalar proxies and ordinary array/hash
+1. Merge PR #1653 after CI is green.
+2. Extend the ownership path through scalar proxies and ordinary array/hash
    slots in Phase 2, then resolve the HTML::Tree teardown failures and verify
    unchanged `t/refloop.t`.
+3. Continue the #1642 Catalyst cleanup profile as an integration follow-up.
+   The full suite remains enabled except for Catalyst's six unsupported fork
+   assertions; the broad test attempt and cleanup profile are incomplete.
 4. Run each repository gate from an immutable commit and record before/after
    evidence for each enabled path.
 
