@@ -346,8 +346,8 @@ public class CompileBinaryOperator {
                     // arguments report the block/arg line.
                     int callSiteToken = effectiveCallerLineToken(
                             bytecodeCompiler, node,
-                            methodCallerLineCallSiteToken(node, argsNode,
-                                    bytecodeCompiler.statementTokenIndex));
+                    methodCallerLineCallSiteToken(node,
+                            bytecodeCompiler.statementTokenIndex));
                     if (callSiteToken > 0) {
                         bytecodeCompiler.emitWithToken(Opcodes.CALL_METHOD, callSiteToken);
                     } else {
@@ -1083,16 +1083,9 @@ public class CompileBinaryOperator {
     }
 
     private static int callerLineCallSiteToken(BinaryOperatorNode node, int statementTokenIndex) {
-        if (!usesBlockArgumentLine(node)) {
-            // Perl's per-statement COP: a call anywhere inside a multi-line
-            // statement reports the statement's first line.
-            return statementTokenIndex > 0 ? statementTokenIndex : expressionStartIndex(node);
-        }
-
-        if (node.right != null && node.right.getIndex() > 0) {
-            return node.right.getIndex();
-        }
-        return expressionStartIndex(node);
+        // Match Perl's call-statement COP: anonymous code arguments do not
+        // shift the line reported by caller() to the argument's line.
+        return statementTokenIndex > 0 ? statementTokenIndex : expressionStartIndex(node);
     }
 
     private static int effectiveCallerLineToken(
@@ -1113,47 +1106,14 @@ public class CompileBinaryOperator {
         return node.getIndex() > 0 ? node.getIndex() : -1;
     }
 
-    private static int methodCallerLineCallSiteToken(BinaryOperatorNode node, Node argsNode,
+    private static int methodCallerLineCallSiteToken(BinaryOperatorNode node,
                                                      int statementTokenIndex) {
-        if (firstArgumentIsLiteralSub(argsNode) && argsNode.getIndex() > 0) {
-            return argsNode.getIndex();
-        }
-
         // Perl's per-statement COP: a method call at the end of a multi-line chain
         // reports the statement's first line, not the closing `)->method` line.
         if (statementTokenIndex > 0) {
             return statementTokenIndex;
         }
         return node.left != null ? node.left.getIndex() : -1;
-    }
-
-    private static boolean usesBlockArgumentLine(BinaryOperatorNode node) {
-        String prototype = directCallPrototype(node);
-        if (prototype != null) {
-            for (int i = 0; i < prototype.length(); i++) {
-                char c = prototype.charAt(i);
-                if (Character.isWhitespace(c) || c == ';' || c == ',') {
-                    continue;
-                }
-                return c == '&';
-            }
-
-            return false;
-        }
-
-        return firstArgumentIsLiteralSub(node);
-    }
-
-    private static boolean firstArgumentIsLiteralSub(BinaryOperatorNode node) {
-        return firstArgumentIsLiteralSub(node.right);
-    }
-
-    private static boolean firstArgumentIsLiteralSub(Node argsNode) {
-        if (!(argsNode instanceof ListNode list) || list.elements == null || list.elements.isEmpty()) {
-            return false;
-        }
-
-        return list.elements.get(0) instanceof SubroutineNode;
     }
 
     /**
@@ -1187,16 +1147,6 @@ public class CompileBinaryOperator {
     private static int sourceArgumentStart(AbstractNode node) {
         Object annotated = node.getAnnotation("argumentStartIndex");
         return annotated instanceof Integer token && token > 0 ? token : node.getIndex();
-    }
-
-    private static String directCallPrototype(BinaryOperatorNode node) {
-        if (!(node.left instanceof OperatorNode operatorNode)
-                || !operatorNode.operator.equals("&")
-                || !(operatorNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef)
-                || !(codeRef.value instanceof RuntimeCode code)) {
-            return null;
-        }
-        return code.prototype;
     }
 
     private static boolean directCallIsLvalue(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {

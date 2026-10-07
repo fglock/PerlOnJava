@@ -1946,11 +1946,14 @@ public class BytecodeCompiler implements Visitor {
         int blockControlLastPatch = -1;
         int blockControlNextPatch = -1;
         int blockControlRedoPatch = -1;
-        if (node.isLoop) {
+        boolean switchContinueTarget = node.getBooleanAnnotation("switchContinueTarget");
+        if (node.isLoop || switchContinueTarget) {
             boolean topicalizerLoopBody = node.getBooleanAnnotation("topicalizerLoopBody");
             blockLoopStartPc = bytecode.size();
             emit(Opcodes.PUSH_CONTROL_BLOCK);
-            emit(addToStringPool(node.labelName != null ? node.labelName : ""));
+            emit(addToStringPool(switchContinueTarget
+                    ? org.perlonjava.runtime.runtimetypes.RuntimeControlFlowList.SWITCH_CONTINUE_BLOCK_LABEL
+                    : node.labelName != null ? node.labelName : ""));
             blockControlLastPatch = bytecode.size(); emitInt(0);
             blockControlNextPatch = bytecode.size(); emitInt(0);
             blockControlRedoPatch = bytecode.size(); emitInt(0);
@@ -1958,8 +1961,8 @@ public class BytecodeCompiler implements Visitor {
             // For a bare block, `node.labelName` is null and the block is a
             // valid target for unlabeled last/next/redo (matches JVM
             // EmitBlock's pushLoopLabels(... isBareBlock, isBareBlock)).
-            blockLoopInfo = new LoopInfo(node.labelName, blockLoopStartPc,
-                    !topicalizerLoopBody && !node.getBooleanAnnotation("givenBlock"),
+            blockLoopInfo = new LoopInfo(switchContinueTarget ? null : node.labelName, blockLoopStartPc,
+                    !switchContinueTarget && !topicalizerLoopBody && !node.getBooleanAnnotation("givenBlock"),
                     node.getBooleanAnnotation("givenBlock") || topicalizerLoopBody);
             blockLoopInfo.resultReg = outerResultReg;
             // An implicit `last` from when/default must preserve the context
@@ -2197,6 +2200,11 @@ public class BytecodeCompiler implements Visitor {
             }
             emit(Opcodes.SET_CALL_SITE_HINTS);
             emit(hints);
+        }
+        Object postBlockFeatureFlags = node.getAnnotation("postBlockFeatureFlags");
+        if (postBlockFeatureFlags instanceof Integer featureFlags) {
+            emit(Opcodes.SET_CALL_SITE_FEATURE_FLAGS);
+            emit(featureFlags);
         }
 
         if (needsLocalRestore) {
@@ -9107,6 +9115,7 @@ public class BytecodeCompiler implements Visitor {
         emit(node.getStrictOptions());
         emit(node.getHintHashSnapshotId());
         emit(node.getWarningScopeId());
+        emit(node.getFeatureFlags());
         if (node.getWarningScopeId() > 0) {
             usesLocalization = true;
         }

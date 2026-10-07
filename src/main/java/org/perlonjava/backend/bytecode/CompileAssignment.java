@@ -2201,8 +2201,15 @@ public class CompileAssignment {
             if (!preserveListContext && node.right instanceof ListNode rhsList) {
                 rhsList.setAnnotation("emptyTargetAssignmentVoidRhs", true);
             }
-            bytecodeCompiler.compileNode(node.right, -1, preserveListContext
-                    ? RuntimeContextType.LIST : RuntimeContextType.VOID);
+            int savedCallContext = bytecodeCompiler.currentCallContext;
+            int emptyAssignmentRhsContext = preserveListContext
+                    ? RuntimeContextType.LIST : RuntimeContextType.VOID;
+            bytecodeCompiler.currentCallContext = emptyAssignmentRhsContext;
+            try {
+                bytecodeCompiler.compileNode(node.right, -1, emptyAssignmentRhsContext);
+            } finally {
+                bytecodeCompiler.currentCallContext = savedCallContext;
+            }
             bytecodeCompiler.lastResultReg = -1;
             return;
         }
@@ -2467,6 +2474,8 @@ public class CompileAssignment {
                             bytecodeCompiler.emit(Opcodes.NEW_ARRAY);
                             bytecodeCompiler.emitReg(arrayReg);
                             bytecodeCompiler.emitLexicalAlias(arrayReg, varName);
+                            bytecodeCompiler.emit(Opcodes.REGISTER_MY_VAR);
+                            bytecodeCompiler.emitReg(arrayReg);
 
                             bytecodeCompiler.emit(Opcodes.ARRAY_SET_FROM_LIST);
                             bytecodeCompiler.emitReg(arrayReg);
@@ -3700,6 +3709,27 @@ public class CompileAssignment {
                             bytecodeCompiler.lastResultReg = targetReg;
                             return;
                         }
+                    }
+                    if (refAliasTarget instanceof OperatorNode aggregateField
+                            && (aggregateField.operator.equals("@") || aggregateField.operator.equals("%"))
+                            && aggregateField.operand instanceof BinaryOperatorNode fieldSlot
+                            && fieldSlot.operator.equals("->")) {
+                        // Class aggregate fields are stored in the object hash.
+                        // Alias the field slot itself, not the dereferenced
+                        // aggregate value, so the field can be rebound safely.
+                        bytecodeCompiler.beginLocalHashLvalueCompile();
+                        try {
+                            bytecodeCompiler.compileNode(fieldSlot, -1, RuntimeContextType.LVALUE);
+                        } finally {
+                            bytecodeCompiler.endLocalHashLvalueCompile();
+                        }
+                        int targetReg = bytecodeCompiler.lastResultReg;
+                        bytecodeCompiler.emit(Opcodes.ALIAS_AGGREGATE_LVALUE_REFERENCE);
+                        bytecodeCompiler.emitReg(targetReg);
+                        bytecodeCompiler.emitReg(valueReg);
+                        bytecodeCompiler.emit(aggregateField.operator.equals("%") ? 1 : 0);
+                        bytecodeCompiler.lastResultReg = targetReg;
+                        return;
                     }
                     if (refAliasTarget instanceof OperatorNode varNode
                             && (varNode.operator.equals("$") || varNode.operator.equals("@")

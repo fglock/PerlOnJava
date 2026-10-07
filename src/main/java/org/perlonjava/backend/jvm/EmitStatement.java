@@ -419,19 +419,7 @@ public class EmitStatement {
 
         // Try to evaluate the condition at compile time for dead code elimination
         String currentPackage = emitterVisitor.ctx.symbolTable.getCurrentPackage();
-        Boolean constantValue = ConstantFoldingVisitor.getConstantConditionValue(node.condition, currentPackage);
-
-        // Localization in a condition has expression scope.  Keep such
-        // conditions on the normal emission path so the temporary dynamic
-        // binding can be torn down immediately after boolean conversion.
-        if (FindDeclarationVisitor.containsLocalOrDefer(node.condition)) {
-            constantValue = null;
-        }
-
-        // For "unless", invert the condition
-        if (constantValue != null && "unless".equals(node.operator)) {
-            constantValue = !constantValue;
-        }
+        Boolean constantValue = constantIfConditionValue(node, currentPackage);
 
         // If we have a constant condition, we can eliminate dead code
         if (constantValue != null) {
@@ -574,6 +562,24 @@ public class EmitStatement {
         }
 
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("IF end");
+    }
+
+    /** Return the branch that emitIf will retain, or null when both branches remain dynamic. */
+    static Boolean constantIfConditionValue(IfNode node, String currentPackage) {
+        Boolean constantValue = ConstantFoldingVisitor.getConstantConditionValue(
+                node.condition, currentPackage);
+
+        // Localization in a condition has expression scope. Keep such
+        // conditions on the normal emission path so the temporary dynamic
+        // binding can be torn down immediately after boolean conversion.
+        if (FindDeclarationVisitor.containsLocalOrDefer(node.condition)) {
+            constantValue = null;
+        }
+
+        if (constantValue != null && "unless".equals(node.operator)) {
+            constantValue = !constantValue;
+        }
+        return constantValue;
     }
 
     private static EmitterVisitor branchVisitor(EmitterVisitor emitterVisitor, Node branch) {
@@ -1054,12 +1060,16 @@ public class EmitStatement {
         // Finally block
         mv.visitLabel(finallyStart);
         if (node.finallyBlock != null) {
-            // Track that we're inside a finally block for control flow checks
-            emitterVisitor.ctx.javaClassInfo.finallyBlockDepth++;
+            // Track the current finally body so local goto targets are allowed
+            // while transfers out of finally remain compile-time errors.
+            JavaClassInfo javaClassInfo = emitterVisitor.ctx.javaClassInfo;
+            javaClassInfo.finallyBlockDepth++;
+            javaClassInfo.finallyLabelScopes.push(EmitBlock.collectLabels(node.finallyBlock));
             try {
                 node.finallyBlock.accept(emitterVisitor.with(RuntimeContextType.VOID));
             } finally {
-                emitterVisitor.ctx.javaClassInfo.finallyBlockDepth--;
+                javaClassInfo.finallyLabelScopes.pop();
+                javaClassInfo.finallyBlockDepth--;
             }
         }
         Local.localTeardown(errorLocalLevel, mv);

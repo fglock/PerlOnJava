@@ -496,6 +496,7 @@ public class ParseInfix {
                             throw new PerlCompilerException(parser.tokenIndex, "Expecting method name after ->&", parser.ctx.errorUtil);
                         }
                         String methodName = methodToken.text;
+                        int methodTokenIndex = parser.tokenIndex;
                         TokenUtils.consume(parser); // consume method name
 
                         // Look up the lexical method in the symbol table
@@ -503,36 +504,50 @@ public class ParseInfix {
                         SymbolTable.SymbolEntry entry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
 
                         if (entry != null && entry.ast() instanceof OperatorNode varNode) {
-                            // This is a lexical method - get the hidden variable AST
-                            // The AST contains the hidden variable (e.g., $priv__lexmethod_123)
-                            // Create a method call using the hidden variable
-                            right = varNode; // The hidden variable node
-
-                            // Check for method arguments
-                            if (peek(parser).text.equals("(")) {
-                                // Method call with arguments: ->&priv(args)
-                                ListNode args = consumeArgsWithPrototype(parser, null);
-                                right = new BinaryOperatorNode("(", right, args, parser.tokenIndex);
+                            // A lexical method call is a direct CV call with the
+                            // invocant prepended. It does not perform package or
+                            // inheritance method lookup.
+                            String hiddenVarName = (String) varNode.getAnnotation("hiddenVarName");
+                            String storageName = hiddenVarName;
+                            if (!varNode.getBooleanAnnotation("runtimeLexicalSub")
+                                    && varNode.getAnnotation("declaringPackage") instanceof String declaringPackage
+                                    && hiddenVarName != null && !hiddenVarName.contains("::")) {
+                                storageName = declaringPackage + "::" + hiddenVarName;
+                            }
+                            if (hiddenVarName == null) {
+                                throw new PerlCompilerException(parser.tokenIndex,
+                                        "Lexical method has no storage", parser.ctx.errorUtil);
+                            }
+                            OperatorNode codeRef = new OperatorNode("$",
+                                    new IdentifierNode(storageName, methodTokenIndex), methodTokenIndex);
+                            SymbolTable.SymbolEntry hiddenEntry = parser.ctx.symbolTable
+                                    .getSymbolEntry("$" + hiddenVarName);
+                            if (hiddenEntry != null && hiddenEntry.ast() instanceof OperatorNode hiddenVar) {
+                                codeRef.id = hiddenVar.id;
                             }
 
-                            // Return method call via the hidden variable
-                            return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
+                            ListNode args = new ListNode(parser.tokenIndex);
+                            args.elements.add(left);
+                            if (peek(parser).text.equals("(")) {
+                                ListNode explicitArgs = consumeArgsWithPrototype(parser, null);
+                                args.elements.addAll(explicitArgs.elements);
+                            }
+                            return new BinaryOperatorNode("(", codeRef, args, parser.tokenIndex);
                         }
 
-                        // Not a lexical method - treat as a regular code reference call
-                        // This creates a call like $obj->(&NAME) which will look up &NAME at runtime
+                        // Not a lexical method - call the current package's CV
+                        // directly with the invocant. `->&` bypasses method
+                        // dispatch and inheritance, so retaining the outer `->`
+                        // node would change its semantics and produce an
+                        // unsupported nested-call shape.
                         Node methodRef = new OperatorNode("&", new IdentifierNode(methodName, parser.tokenIndex), parser.tokenIndex);
-
-                        // Check for method arguments
+                        ListNode callArgs = new ListNode(parser.tokenIndex);
+                        callArgs.elements.add(left);
                         if (peek(parser).text.equals("(")) {
-                            ListNode args = consumeArgsWithPrototype(parser, null);
-                            right = new BinaryOperatorNode("(", methodRef, args, parser.tokenIndex);
-                        } else {
-                            // No arguments - just the method reference
-                            right = methodRef;
+                            ListNode explicitArgs = consumeArgsWithPrototype(parser, null);
+                            callArgs.elements.addAll(explicitArgs.elements);
                         }
-
-                        return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
+                        return new BinaryOperatorNode("(", methodRef, callArgs, parser.tokenIndex);
                     default:
                         parser.parsingForLoopVariable = true;
                         if (nextText.equals("$")) {

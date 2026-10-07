@@ -274,6 +274,10 @@ public class DestroyDispatch {
                 RuntimeScalar.scopeExitCleanup(scalar);
                 MortalList.flush();
             }
+            if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
+                    && MortalList.requestWeakSweepsForDestroyedContainer(referent)) {
+                MortalList.requestImmediateWeakSweep();
+            }
             return;
         }
 
@@ -363,6 +367,10 @@ public class DestroyDispatch {
             } else if (referent instanceof RuntimeScalar scalar) {
                 RuntimeScalar.scopeExitCleanup(scalar);
                 MortalList.flush();
+            }
+            if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
+                    && MortalList.requestWeakSweepsForDestroyedContainer(referent)) {
+                MortalList.requestImmediateWeakSweep();
             }
             return;
         }

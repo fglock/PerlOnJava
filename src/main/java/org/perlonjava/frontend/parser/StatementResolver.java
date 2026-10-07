@@ -827,6 +827,25 @@ public class StatementResolver {
 
                             // Generate unique hidden variable name
                             String hiddenVarName = methodName + "__lexmethod_" + parser.tokenIndex;
+                            int lexicalMethodScope = parser.ctx.symbolTable.currentScopeIndex();
+                            OperatorNode innerVarNode = new OperatorNode("$",
+                                    new IdentifierNode(hiddenVarName, parser.tokenIndex), parser.tokenIndex);
+                            OperatorNode varDecl = new OperatorNode(declaration,
+                                    innerVarNode, parser.tokenIndex);
+                            varDecl.setAnnotation("hiddenVarName", hiddenVarName);
+                            varDecl.setAnnotation("declaringPackage", parser.ctx.symbolTable.getCurrentPackage());
+                            varDecl.setAnnotation("runtimeLexicalSub", true);
+                            varDecl.setAnnotation("lexicalMethodStorage", true);
+                            // Register the actual pad cell as well as the name-to-cell
+                            // binding. Method bodies capture this scalar when they use
+                            // the lexical method, just as they capture class lexicals.
+                            parser.ctx.symbolTable.addVariableInScope(
+                                    lexicalMethodScope, "$" + hiddenVarName, declaration, innerVarNode);
+                            // Lexical methods belong to the enclosing class pad. Keep the
+                            // binding visible while parsing this method and later methods;
+                            // the temporary method scope below is only for $self/signatures.
+                            parser.ctx.symbolTable.addVariableInScope(
+                                    lexicalMethodScope, "&" + methodName, declaration, varDecl);
 
                             // Parse attributes before the optional signature/block.
                             String prototype = null;
@@ -920,18 +939,10 @@ public class StatementResolver {
                                 anonMethod.setAnnotation("signatureAST", signatureAST);
                             }
 
-                            // Create AST for: my $hiddenVarName = sub {...}
-                            OperatorNode varDecl = new OperatorNode(declaration,
-                                    new OperatorNode("$", new IdentifierNode(hiddenVarName, parser.tokenIndex), parser.tokenIndex),
-                                    parser.tokenIndex);
-
                             ListNode declList = new ListNode(parser.tokenIndex);
                             declList.elements.add(varDecl);
 
                             BinaryOperatorNode assignment = new BinaryOperatorNode("=", declList, anonMethod, parser.tokenIndex);
-
-                            // Store mapping for method calls
-                            parser.ctx.symbolTable.addVariable("&" + methodName, declaration, varDecl);
 
                             yield assignment;
                             } finally {

@@ -1134,10 +1134,19 @@ public class EmitVariable {
                     }
                     BinaryOperatorNode element = refAliasTarget instanceof BinaryOperatorNode binaryElement
                             ? binaryElement : null;
-                    if (element != null && (element.operator.equals("{") || element.operator.equals("["))) {
+                    if (element != null && (element.operator.equals("{") || element.operator.equals("[")
+                            || element.operator.equals("->"))) {
                         if (element.operator.equals("[")) {
                             Dereference.handleArrayElementOperator(
                                     emitterVisitor.with(RuntimeContextType.LVALUE), element, "getLvalue");
+                        } else if (element.operator.equals("->")
+                                && element.right instanceof HashLiteralNode) {
+                            Dereference.handleArrowHashDeref(
+                                    emitterVisitor.with(RuntimeContextType.LVALUE), element, "getForLocal");
+                        } else if (element.operator.equals("->")
+                                && element.right instanceof ArrayLiteralNode) {
+                            Dereference.handleArrowArrayDeref(
+                                    emitterVisitor.with(RuntimeContextType.LVALUE), element, "getForLocal");
                         } else {
                             element.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
                         }
@@ -1146,6 +1155,35 @@ public class EmitVariable {
                                 "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
                                 "aliasLvalueReference",
                                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                false);
+                        if (ctx.contextType == RuntimeContextType.VOID) mv.visitInsn(Opcodes.POP);
+                        if (pooledRhs) ctx.javaClassInfo.releaseSpillSlot();
+                        return;
+                    }
+
+                    // A class aggregate field is represented as a sigil node
+                    // over `$self->{field}`. Refalias the field's slot so the
+                    // aggregate stored there can be rebound safely.
+                    if (refAliasTarget instanceof OperatorNode aggregateField
+                            && (aggregateField.operator.equals("@") || aggregateField.operator.equals("%"))
+                            && aggregateField.operand instanceof BinaryOperatorNode fieldSlot
+                            && fieldSlot.operator.equals("->")) {
+                        if (fieldSlot.right instanceof HashLiteralNode) {
+                            Dereference.handleArrowHashDeref(
+                                    emitterVisitor.with(RuntimeContextType.LVALUE), fieldSlot, "getForLocal");
+                        } else if (fieldSlot.right instanceof ArrayLiteralNode) {
+                            Dereference.handleArrowArrayDeref(
+                                    emitterVisitor.with(RuntimeContextType.LVALUE), fieldSlot, "getForLocal");
+                        } else {
+                            fieldSlot.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+                        }
+                        mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
+                        mv.visitInsn(aggregateField.operator.equals("%")
+                                ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                                "aliasAggregateLvalueReference",
+                                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Z)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                                 false);
                         if (ctx.contextType == RuntimeContextType.VOID) mv.visitInsn(Opcodes.POP);
                         if (pooledRhs) ctx.javaClassInfo.releaseSpillSlot();
@@ -1219,6 +1257,15 @@ public class EmitVariable {
                                         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                                                 "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "set",
                                                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                                        // The scalar cell stored for a state
+                                        // variable is persistent, but Perl's
+                                        // assignment expression still yields
+                                        // the reference supplied on the RHS.
+                                        // Keep that expression result instead
+                                        // of returning the state's current
+                                        // value (which may be undef).
+                                        mv.visitInsn(Opcodes.POP);
+                                        mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
                                     }
                                     case "@" -> {
                                         mv.visitLdcInsn(varName);

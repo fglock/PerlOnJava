@@ -2540,7 +2540,7 @@ public class Opcodes {
 
     /**
      * Apply lexical pragma state at a runtime statement boundary.
-     * Format: APPLY_COMPILER_FLAGS warningBitsIdx hints hintHashId warningScopeId
+     * Format: APPLY_COMPILER_FLAGS warningBitsIdx hints hintHashId warningScopeId featureFlags
      */
     public static final short APPLY_COMPILER_FLAGS = 512;
 
@@ -2747,6 +2747,9 @@ public class Opcodes {
     /** Dynamic symbolic subroutine existence probe: rd = exists(&{rname}) in package. */
     public static final short EXISTS_CODE_DYNAMIC = 633;
 
+    /** Refalias an aggregate field slot to an array/hash reference. Format: targetReg refReg isHash. */
+    public static final short ALIAS_AGGREGATE_LVALUE_REFERENCE = 635;
+
     /** Create a LAST marker retaining loop-topicalizer break diagnostics. Format: rd labelIdx. */
     public static final short CREATE_SWITCH_BREAK_LOOP_TOPICALIZER = 620;
 
@@ -2769,6 +2772,8 @@ public class Opcodes {
     public static final short FOREACH_ALIAS_RETAIN = 623;
     /** Release the active lexical foreach alias before replacing its slot or leaving the loop. */
     public static final short FOREACH_ALIAS_RELEASE = 624;
+    /** Restore lexical feature flags at a block boundary. Format: SET_CALL_SITE_FEATURE_FLAGS flags. */
+    public static final short SET_CALL_SITE_FEATURE_FLAGS = 634;
 
     /** Restore a loop regex baseline and retain a fresh baseline for its next iteration. Format: register. */
     public static final short RESTORE_LOOP_REGEX_STATE = 631;

@@ -122,6 +122,11 @@ public class EmitEval {
             throw new PerlCompilerException("implicit-topic eval requires interpreter fallback");
         }
         EmitterContext ctx = emitterVisitor.ctx;
+        if (ctx.javaClassInfo != null) {
+            // Eval code is compiled and wrapped at runtime, so the enclosing
+            // generated method must retain a closure frame for that creation.
+            ctx.javaClassInfo.jvmClosureFrameRequired = true;
+        }
         MethodVisitor mv = ctx.mv;
 
         evalTrace("EmitEval.handleEvalOperator op=" + node.operator + " ctx=" + emitterVisitor.ctx.contextType +

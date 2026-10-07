@@ -107,8 +107,8 @@ public class IOOperator {
         }
         // select FILEHANDLE (returns/sets current filehandle)
         RuntimeScalar fh = RuntimeIO.getSelectedHandleValue();
-        RuntimeScalar fileHandleArg = new RuntimeScalar(
-                RuntimeScalar.dereferenceAndFetchOnce(runtimeList.getFirst()));
+        RuntimeScalar fileHandleArg = RuntimeScalar.dereferenceAndFetchOnce(
+                runtimeList.getFirst());
         RuntimeIO newIO = fileHandleArg.getRuntimeIO();
         // Selecting a named but unopened typeglob materializes its IO slot.
         // Perl relies on this for `select select ++$name`, after which
@@ -771,8 +771,8 @@ public class IOOperator {
         // Numbered capture variables are readonly aliases.  Unlike a numeric
         // literal used as a one-argument handle name, an attempt to install an
         // IO slot into one must report Perl's normal readonly-lvalue error.
-        if (fileHandle.type == RuntimeScalarType.READONLY_SCALAR
-                || fileHandle instanceof RuntimeScalarReadOnly
+        if (args.length >= 2 && (fileHandle.type == RuntimeScalarType.READONLY_SCALAR
+                || fileHandle instanceof RuntimeScalarReadOnly)
                 || fileHandle instanceof ScalarSpecialVariable specialVariable
                         && specialVariable.isNumberedCapture()
                 || openTargetSource != null && openTargetSource.matches("\\$[0-9]+")
@@ -2775,7 +2775,14 @@ public class IOOperator {
             // handle, even if accept() ultimately returns undef.
             ensureGlobDestination(newSocketHandle);
             if (listenSocketHandle.type == RuntimeScalarType.UNDEF) {
-                throw new PerlCompilerException("Can't use an undefined value as a symbol reference");
+                int callerHints = WarningBitsRegistry.getCallerHintsAtFrame(0);
+                if ((callerHints & Strict.HINT_STRICT_REFS) != 0) {
+                    throw new PerlCompilerException(
+                            "Can't use an undefined value as a symbol reference");
+                }
+                getGlobalVariable("main::!").set(
+                        "Invalid listening socket handle for accept");
+                return scalarUndef;
             }
 
             RuntimeIO listenRuntimeIO = listenSocketHandle.getRuntimeIO();
@@ -4094,9 +4101,9 @@ public class IOOperator {
         return printf(list, fh);
     }
 
-    public static RuntimeScalar readline(int ctx, RuntimeBase... args) {
+    public static RuntimeBase readline(int ctx, RuntimeBase... args) {
         RuntimeScalar fh = args.length > 0 ? args[0].scalar() : new RuntimeScalar("main::STDIN");
-        return (RuntimeScalar) Readline.readline(fh, ctx);
+        return Readline.readline(fh, ctx);
     }
 
     public static RuntimeScalar sysseek(int ctx, RuntimeBase... args) {

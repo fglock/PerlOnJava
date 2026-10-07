@@ -28,9 +28,9 @@ sub unprototyped_call_site {
     return (caller(0))[2];
 }
 
-my $expected_unprototyped = __LINE__ + 3;
+my $expected_unprototyped = __LINE__ + 1;
 my $got_unprototyped = unprototyped_call_site(
     sub { 1 }
 );
 is($got_unprototyped, $expected_unprototyped,
-   'caller line for multiline unprototyped named call remains closing line');
+   'caller line for multiline unprototyped named call reports expression start');

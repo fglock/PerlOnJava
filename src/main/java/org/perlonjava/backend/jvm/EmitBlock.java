@@ -104,6 +104,46 @@ public class EmitBlock {
         }
     }
 
+    /** Collect labels that a goto may target without leaving a finally body. */
+    static Set<String> collectLabels(Node node) {
+        Set<String> labels = new LinkedHashSet<>();
+        collectLabels(node, labels);
+        return labels;
+    }
+
+    private static void collectLabels(Node node, Set<String> labels) {
+        if (node == null || node instanceof SubroutineNode) return;
+        if (node instanceof LabelNode label) {
+            labels.add(label.label);
+        } else if (node instanceof BlockNode block) {
+            labels.addAll(block.labels);
+            for (Node child : block.elements) collectLabels(child, labels);
+        } else if (node instanceof IfNode conditional) {
+            collectLabels(conditional.thenBranch, labels);
+            collectLabels(conditional.elseBranch, labels);
+        } else if (node instanceof For1Node loop) {
+            collectLabels(loop.body, labels);
+            collectLabels(loop.continueBlock, labels);
+        } else if (node instanceof For3Node loop) {
+            collectLabels(loop.body, labels);
+            collectLabels(loop.continueBlock, labels);
+        } else if (node instanceof OperatorNode operator) {
+            collectLabels(operator.operand, labels);
+        } else if (node instanceof ListNode list) {
+            for (Node child : list.elements) collectLabels(child, labels);
+        } else if (node instanceof BinaryOperatorNode binary) {
+            collectLabels(binary.left, labels);
+            collectLabels(binary.right, labels);
+        } else if (node instanceof TernaryOperatorNode ternary) {
+            collectLabels(ternary.trueExpr, labels);
+            collectLabels(ternary.falseExpr, labels);
+        } else if (node instanceof TryNode attempt) {
+            collectLabels(attempt.tryBlock, labels);
+            collectLabels(attempt.catchBlock, labels);
+            collectLabels(attempt.finallyBlock, labels);
+        }
+    }
+
     /**
      * Record labels that are only reachable after a loop has initialized its
      * iterator and control state.  An eval may not jump into such a body.
@@ -189,10 +229,6 @@ public class EmitBlock {
      * containing block. A goto to one would skip the enclosing expression's
      * setup, which Perl rejects.
      */
-    private static void collectConstructEntryLabels(Node node, Set<String> out, boolean expressionContext) {
-        collectConstructEntryLabels(node, out, expressionContext, false, false);
-    }
-
     /** Collect labels inside defer blocks so goto validation crosses their boundary. */
     static void collectDeferLabels(Node node, Set<String> out) {
         collectDeferLabels(node, out, false);
@@ -284,49 +320,69 @@ public class EmitBlock {
 
     private static void collectConstructEntryLabels(
             Node node, Set<String> out, boolean expressionContext, boolean fieldInitializer,
-            boolean insideEvalBlock) {
+            boolean insideEvalBlock, String currentPackage) {
         if (node == null) return;
         if (node instanceof AbstractNode abstractNode) {
             fieldInitializer |= abstractNode.getBooleanAnnotation("fieldInitializer");
         }
         if (node instanceof LabelNode labelNode) {
-            if (expressionContext && !fieldInitializer) out.add(labelNode.label);
+            if (expressionContext && !fieldInitializer) {
+                out.add(labelNode.label);
+            } else {
+                // A later unconditional definition of the same Perl label is
+                // the reachable destination. Do not let an earlier
+                // expression-only occurrence poison it by name.
+                out.remove(labelNode.label);
+            }
             return;
         }
         if (node instanceof BlockNode block) {
-            if (expressionContext && !fieldInitializer) out.addAll(block.labels);
+            if (expressionContext && !fieldInitializer) {
+                out.addAll(block.labels);
+            } else {
+                out.removeAll(block.labels);
+            }
             for (Node child : block.elements) collectConstructEntryLabels(child, out,
-                    expressionContext, fieldInitializer, insideEvalBlock);
+                    expressionContext, fieldInitializer, insideEvalBlock, currentPackage);
             return;
         }
         if (node instanceof SubroutineNode subroutine) {
             collectConstructEntryLabels(subroutine.block, out, true, fieldInitializer,
-                    insideEvalBlock || subroutine.useTryCatch);
+                    insideEvalBlock || subroutine.useTryCatch, currentPackage);
             return;
         }
         if (node instanceof OperatorNode op) {
-            collectConstructEntryLabels(op.operand, out, true, fieldInitializer, insideEvalBlock);
+            collectConstructEntryLabels(op.operand, out, true, fieldInitializer, insideEvalBlock, currentPackage);
             return;
         }
         if (node instanceof ListNode list) {
-            for (Node child : list.elements) collectConstructEntryLabels(child, out, true, fieldInitializer, insideEvalBlock);
+            for (Node child : list.elements) collectConstructEntryLabels(child, out, true, fieldInitializer, insideEvalBlock, currentPackage);
             return;
         }
         if (node instanceof BinaryOperatorNode binary) {
-            collectConstructEntryLabels(binary.left, out, true, fieldInitializer, insideEvalBlock);
-            collectConstructEntryLabels(binary.right, out, true, fieldInitializer, insideEvalBlock);
+            collectConstructEntryLabels(binary.left, out, true, fieldInitializer, insideEvalBlock, currentPackage);
+            collectConstructEntryLabels(binary.right, out, true, fieldInitializer, insideEvalBlock, currentPackage);
             return;
         }
         if (node instanceof TernaryOperatorNode ternary) {
-            collectConstructEntryLabels(ternary.condition, out, true, fieldInitializer, insideEvalBlock);
-            collectConstructEntryLabels(ternary.trueExpr, out, true, fieldInitializer, insideEvalBlock);
-            collectConstructEntryLabels(ternary.falseExpr, out, true, fieldInitializer, insideEvalBlock);
+            collectConstructEntryLabels(ternary.condition, out, true, fieldInitializer, insideEvalBlock, currentPackage);
+            collectConstructEntryLabels(ternary.trueExpr, out, true, fieldInitializer, insideEvalBlock, currentPackage);
+            collectConstructEntryLabels(ternary.falseExpr, out, true, fieldInitializer, insideEvalBlock, currentPackage);
             return;
         }
         if (node instanceof IfNode ifNode) {
-            collectConstructEntryLabels(ifNode.condition, out, true, fieldInitializer, insideEvalBlock);
-            collectConstructEntryLabels(ifNode.thenBranch, out, true, fieldInitializer, insideEvalBlock);
-            collectConstructEntryLabels(ifNode.elseBranch, out, true, fieldInitializer, insideEvalBlock);
+            collectConstructEntryLabels(ifNode.condition, out, true, fieldInitializer, insideEvalBlock, currentPackage);
+            Boolean constantValue = EmitStatement.constantIfConditionValue(ifNode, currentPackage);
+            if (constantValue == null) {
+                collectConstructEntryLabels(ifNode.thenBranch, out, true, fieldInitializer,
+                        insideEvalBlock, currentPackage);
+                collectConstructEntryLabels(ifNode.elseBranch, out, true, fieldInitializer,
+                        insideEvalBlock, currentPackage);
+            } else {
+                Node liveBranch = constantValue ? ifNode.thenBranch : ifNode.elseBranch;
+                collectConstructEntryLabels(liveBranch, out, true, fieldInitializer,
+                        insideEvalBlock, currentPackage);
+            }
         }
     }
 
@@ -336,16 +392,22 @@ public class EmitBlock {
         if (node == null) return;
         if (node instanceof LabelNode label) {
             if (!conditionalContexts.isEmpty()) {
-                labelContexts.putIfAbsent(label.label, Set.copyOf(conditionalContexts));
+                labelContexts.put(label.label, Set.copyOf(conditionalContexts));
                 if (simpleConditionalBranch) simpleConditionalBranchLabels.add(label.label);
+            } else {
+                labelContexts.remove(label.label);
+                simpleConditionalBranchLabels.remove(label.label);
             }
             return;
         }
         if (node instanceof BlockNode block) {
-            if (!conditionalContexts.isEmpty()) {
-                for (String label : block.labels) {
-                    labelContexts.putIfAbsent(label, Set.copyOf(conditionalContexts));
+            for (String label : block.labels) {
+                if (!conditionalContexts.isEmpty()) {
+                    labelContexts.put(label, Set.copyOf(conditionalContexts));
                     if (simpleConditionalBranch) simpleConditionalBranchLabels.add(label);
+                } else {
+                    labelContexts.remove(label);
+                    simpleConditionalBranchLabels.remove(label);
                 }
             }
             for (Node child : block.elements) {
@@ -497,7 +559,8 @@ public class EmitBlock {
                 emitterVisitor.ctx.javaClassInfo.gotoConditionalLabelContexts,
                 emitterVisitor.ctx.javaClassInfo.gotoConditionalSourceContexts,
                 emitterVisitor.ctx.javaClassInfo.gotoSimpleConditionalBranchLabels, Set.of(), false);
-        collectConstructEntryLabels(node, emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideConstruct, false);
+        collectConstructEntryLabels(node, emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideConstruct,
+                false, false, false, emitterVisitor.ctx.symbolTable.getCurrentPackage());
         collectBinaryOrListExpressionLabels(node,
                 emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideBinaryOrListExpression);
         collectGivenLabels(node, emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideGiven,
@@ -571,11 +634,29 @@ public class EmitBlock {
         // their own EmitBlock invocation and maintain proper scoping/shadowing via the stack.
         List<String> statementLabelNames = new ArrayList<>();
         collectStatementLabelNames(list, statementLabelNames);
+        Set<String> labelsAlreadyVisible = new LinkedHashSet<>();
+        for (String labelName : statementLabelNames) {
+            if (emitterVisitor.ctx.javaClassInfo.findGotoLabelsByName(labelName) != null) {
+                labelsAlreadyVisible.add(labelName);
+            }
+        }
         int statementLabelsPushed = pushNewGotoLabels(emitterVisitor.ctx.javaClassInfo, statementLabelNames);
 
         // Create labels used inside the block, like `{ L1: ... }`
+        Set<String> directStatementLabelNames = new LinkedHashSet<>();
+        for (Node element : list) {
+            if (element instanceof LabelNode labelNode) {
+                directStatementLabelNames.add(labelNode.label);
+            }
+        }
         for (int i = 0; i < node.labels.size(); i++) {
-            emitterVisitor.ctx.javaClassInfo.pushGotoLabels(node.labels.get(i), new Label());
+            String labelName = node.labels.get(i);
+            GotoLabels statementLabel = !labelsAlreadyVisible.contains(labelName)
+                    && directStatementLabelNames.contains(labelName)
+                    ? emitterVisitor.ctx.javaClassInfo.findGotoLabelsByName(labelName)
+                    : null;
+            Label target = statementLabel == null ? new Label() : statementLabel.gotoLabel;
+            emitterVisitor.ctx.javaClassInfo.pushGotoLabels(labelName, target);
         }
 
         // Setup 'local' environment if needed
@@ -601,7 +682,8 @@ public class EmitBlock {
         // Restore 'local' environment if 'redo' was called
         Local.localTeardown(localRecord, mv);
 
-        if (node.isLoop) {
+        boolean switchContinueTarget = node.getBooleanAnnotation("switchContinueTarget");
+        if (node.isLoop || switchContinueTarget) {
             // A labeled/bare block used as a loop target (e.g. SKIP: { ... }) is a
             // pseudo-loop: it supports labeled next/last/redo (e.g. next SKIP), but
             // an unlabeled next/last/redo must target the nearest enclosing true loop.
@@ -618,8 +700,8 @@ public class EmitBlock {
                     redoLabel,
                     nextLabel,
                     emitterVisitor.ctx.contextType,
-                    topicalizerLoopBody ? false : isBareBlock,
-                    topicalizerLoopBody ? false : isBareBlock);
+                    (topicalizerLoopBody || switchContinueTarget) ? false : isBareBlock,
+                    (topicalizerLoopBody || switchContinueTarget) ? false : isBareBlock);
             LoopLabels loopLabels = emitterVisitor.ctx.javaClassInfo.getInnermostLoopLabels();
             Object resultRegister = node.getAnnotation("resultRegister");
             if (resultRegister instanceof Integer resultSlot) {
@@ -630,6 +712,7 @@ public class EmitBlock {
                 }
             }
             loopLabels.implicitWhenTarget = node.getBooleanAnnotation("givenBlock") || topicalizerLoopBody;
+            loopLabels.switchContinueTarget = switchContinueTarget;
             // An implicit `last` from a when, or an explicit `break`, jumps
             // past this synthetic given block.  Record its lexical boundary
             // so loop control tears down variables declared by nested when
@@ -780,7 +863,7 @@ public class EmitBlock {
             }
         }
 
-        if (node.isLoop) {
+        if (node.isLoop || switchContinueTarget) {
             emitterVisitor.ctx.javaClassInfo.popLoopLabels();
         }
 
@@ -867,8 +950,30 @@ public class EmitBlock {
             returnedLvalueSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
             mv.visitVarInsn(Opcodes.ASTORE, returnedLvalueSlot);
         }
+        boolean protectReturnedWeakOwner = returnedLvalueSlot >= 0
+                && emitterVisitor.ctx.javaClassInfo.cleanupNeeded;
+        if (protectReturnedWeakOwner) {
+            // A weakly observed local may also be the implicit sub return.
+            // Keep that return value as an explicit root while lexical cleanup
+            // runs so noteVarLeftScope can avoid a global reachability sweep
+            // during the caller's callback dispatch.
+            mv.visitVarInsn(Opcodes.ALOAD, returnedLvalueSlot);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "pushTemporaryRoot",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
+                    false);
+        }
         EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, flushAtScopeExit, returnedLvalueSlot);
         if (returnedLvalueSlot >= 0) {
+            if (protectReturnedWeakOwner) {
+                mv.visitVarInsn(Opcodes.ALOAD, returnedLvalueSlot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "popTemporaryRoot",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
+                        false);
+            }
             mv.visitVarInsn(Opcodes.ALOAD, returnedLvalueSlot);
         }
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
@@ -897,6 +1002,14 @@ public class EmitBlock {
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/WarningBitsRegistry",
                     "setCallSiteHints",
+                    "(I)V", false);
+        }
+        Object postBlockFeatureFlags = node.getAnnotation("postBlockFeatureFlags");
+        if (postBlockFeatureFlags instanceof Integer featureFlags) {
+            mv.visitLdcInsn(featureFlags);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/FeatureFlagsRegistry",
+                    "setCallSiteFeatureFlags",
                     "(I)V", false);
         }
     }

@@ -348,6 +348,7 @@ public class SubroutineParser {
                     && token.text.equals("-")
                     && parser.tokenIndex + 1 < parser.tokens.size()
                     && parser.tokens.get(parser.tokenIndex + 1).type == LexerTokenType.IDENTIFIER;
+            boolean qualifiedConstantArgument = isQualifiedConstantArgument(parser);
             String fullName1 = NameNormalizer.normalizeVariableName(packageName, parser.ctx.symbolTable.getCurrentPackage());
             boolean isLexicalSub = parser.ctx.symbolTable.getSymbolEntry("&" + packageName) != null;
             boolean isKnownSub = false;
@@ -418,7 +419,7 @@ public class SubroutineParser {
                 if (!isKnownSub && !isLexicalSub && isValidIndirectMethod(packageName)) {
                     if (!(token.text.equals("->") || token.text.equals("=>")
                             || (INFIX_OP.contains(token.text) && !qualifiedNamedArgument
-                                && !hashDereferenceArgument))) {
+                                && !hashDereferenceArgument && !qualifiedConstantArgument))) {
                         // System.out.println("  package loaded: " + packageName + "->" + subName);
 
                         ListNode arguments;
@@ -2151,6 +2152,8 @@ public class SubroutineParser {
                     // their closure cells are cloned with the outer closure.
                     if (subName != null
                             && ("my".equals(entry.decl()) || "state".equals(entry.decl()))
+                            && (entryAst == null
+                                || !entryAst.getBooleanAnnotation("lexicalMethodStorage"))
                             && explicitlyUsedVars.contains(entry.name())
                             && WarningFlags.ckWarnForScope(parser.ctx.symbolTable, "closure")) {
                         WarnDie.warn(new RuntimeScalar("Subroutine \"" + entry.name()
@@ -2343,6 +2346,7 @@ public class SubroutineParser {
         Node foldedBody = ConstantFoldingVisitor.foldAnonymousLexicalGlobConstants(
                 block, parser.ctx.symbolTable.getCurrentPackage());
         BlockNode compilationBlock = foldedBody instanceof BlockNode folded ? folded : block;
+        compilationBlock.setAnnotation("compiledSubroutineName", fullName);
 
         // Clone warning flags (critical for 'no warnings' pragmas)
         filteredSnapshot.warningFlagsStack.pop(); // Remove the initial value pushed by enterScope
@@ -2395,6 +2399,10 @@ public class SubroutineParser {
             }
             RuntimeCode runtimeCode =
                     EmitterMethodCreator.createRuntimeCode(newCtx, compilationBlock, false);
+            placeholder.setJvmClosureFrameRequired(
+                    runtimeCode.requiresJvmClosureFrame());
+            placeholder.setPristineArgsSnapshotRequired(
+                    runtimeCode.requiresPristineArgsSnapshot());
 
             // The callable published in the symbol table is the placeholder,
             // not the temporary backend object returned by the factory. Keep
@@ -2555,6 +2563,7 @@ public class SubroutineParser {
             if (newCtx.javaClassInfo.padConstants != null && !newCtx.javaClassInfo.padConstants.isEmpty()) {
                 placeholder.padConstants = newCtx.javaClassInfo.padConstants.toArray(
                         new org.perlonjava.runtime.runtimetypes.RuntimeBase[0]);
+                GlobalVariable.invalidateGlobalCodeRefGraphRoots();
             }
 
             // Clear the compilerSupplier once done (use the captured placeholder variable)
@@ -2652,6 +2661,10 @@ public class SubroutineParser {
                 }
             }
         }
+        if (code != null) {
+            code.captureFieldsRecorded = true;
+            GlobalVariable.invalidateGlobalCodeRefGraphRoots();
+        }
         if (code == null || capturedValues == null || capturedValues.isEmpty()
                 || code.capturedScalars != null) {
             return;
@@ -2683,6 +2696,7 @@ public class SubroutineParser {
         if (!capturedAggregates.isEmpty()) {
             code.capturedAggregates = capturedAggregates.toArray(new RuntimeBase[0]);
         }
+        GlobalVariable.invalidateGlobalCodeRefGraphRoots();
         if (!capturedScalars.isEmpty() || !capturedAggregates.isEmpty()) {
             code.refCount = 0;
         }
@@ -3131,5 +3145,39 @@ public class SubroutineParser {
                 || token.text.equals("}")
                 || token.text.equals("]")
                 || token.type == LexerTokenType.EOF;
+    }
+
+    /**
+     * A prefix ampersand followed by a qualified sub name starts an ordinary
+     * indirect-constructor argument, even though {@code &} is also an infix
+     * operator.  Preserve this form for source such as
+     * {@code new HTTP::Response &HTTP::Status::RC_BAD_REQUEST, ...}.
+     */
+    private static boolean isQualifiedConstantArgument(Parser parser) {
+        int index = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+        if (index >= parser.tokens.size() || !"&".equals(parser.tokens.get(index).text)) {
+            return false;
+        }
+        index = Whitespace.skipWhitespace(parser, index + 1, parser.tokens);
+        if (index >= parser.tokens.size()
+                || parser.tokens.get(index).type != LexerTokenType.IDENTIFIER) {
+            return false;
+        }
+        boolean qualified = false;
+        index++;
+        while (index < parser.tokens.size()) {
+            index = Whitespace.skipWhitespace(parser, index, parser.tokens);
+            if (index >= parser.tokens.size() || !"::".equals(parser.tokens.get(index).text)) {
+                break;
+            }
+            qualified = true;
+            index = Whitespace.skipWhitespace(parser, index + 1, parser.tokens);
+            if (index >= parser.tokens.size()
+                    || parser.tokens.get(index).type != LexerTokenType.IDENTIFIER) {
+                return false;
+            }
+            index++;
+        }
+        return qualified;
     }
 }

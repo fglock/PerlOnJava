@@ -85,4 +85,51 @@ public class RuntimeVecLvalue extends RuntimeBaseProxy {
 
         return this;
     }
+
+    private RuntimeScalar autoModify(int delta, boolean postfix, boolean integer) {
+        RuntimeList args = new RuntimeList(
+                lvalue, new RuntimeScalar(offset), new RuntimeScalar(bits));
+        RuntimeScalar current = Vec.vec(args);
+        RuntimeScalar previous = new RuntimeScalar(current);
+        RuntimeScalar updated = new RuntimeScalar(current);
+        if (integer) {
+            if (delta > 0) {
+                updated = updated.integerPreAutoIncrement();
+            } else {
+                updated = updated.integerPreAutoDecrement();
+            }
+        } else if (delta > 0) {
+            updated = updated.preAutoIncrement();
+        } else {
+            updated = updated.preAutoDecrement();
+        }
+        Vec.set(args, updated);
+        this.type = updated.type;
+        this.value = updated.value;
+        return postfix ? previous : this;
+    }
+
+    @Override
+    public RuntimeScalar preAutoIncrement() { return autoModify(1, false, false); }
+
+    @Override
+    public RuntimeScalar postAutoIncrement() { return autoModify(1, true, false); }
+
+    @Override
+    public RuntimeScalar preAutoDecrement() { return autoModify(-1, false, false); }
+
+    @Override
+    public RuntimeScalar postAutoDecrement() { return autoModify(-1, true, false); }
+
+    @Override
+    public RuntimeScalar integerPreAutoIncrement() { return autoModify(1, false, true); }
+
+    @Override
+    public RuntimeScalar integerPostAutoIncrement() { return autoModify(1, true, true); }
+
+    @Override
+    public RuntimeScalar integerPreAutoDecrement() { return autoModify(-1, false, true); }
+
+    @Override
+    public RuntimeScalar integerPostAutoDecrement() { return autoModify(-1, true, true); }
 }

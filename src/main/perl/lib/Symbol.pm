@@ -141,4 +141,35 @@ sub qualify_to_ref ($;$) {
 #
 # of Safe.pm lineage
 #
+sub delete_package ($) {
+    my $pkg = shift;
+
+    # expand to full symbol table name if needed
+
+    unless ($pkg =~ /^main::.*::$/) {
+        $pkg = "main$pkg"	if	$pkg =~ /^::/;
+        $pkg = "main::$pkg"	unless	$pkg =~ /^main::/;
+        $pkg .= '::'		unless	$pkg =~ /::$/;
+    }
+
+    my($stem, $leaf) = $pkg =~ m/(.*::)(\w+::)$/;
+    no strict 'refs';
+    my $stem_symtab = *{$stem}{HASH};
+    return unless defined $stem_symtab and exists $stem_symtab->{$leaf};
+
+
+    # free all the symbols in the package
+
+    my $leaf_symtab = *{$stem_symtab->{$leaf}}{HASH};
+    foreach my $name (keys %$leaf_symtab) {
+        undef *{$pkg . $name};
+    }
+    use strict 'refs';
+
+    # delete the symbol table
+
+    %$leaf_symtab = ();
+    delete $stem_symtab->{$leaf};
+}
+
 1;

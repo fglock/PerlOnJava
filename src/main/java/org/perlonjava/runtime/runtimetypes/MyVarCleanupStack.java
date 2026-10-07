@@ -200,16 +200,28 @@ public class MyVarCleanupStack {
     }
 
     private static void noteVarLeftScope(Object var) {
+        if (var instanceof RuntimeBase base
+                && (base instanceof RuntimeArray || base instanceof RuntimeHash)
+                && WeakRefRegistry.weakRefsExist()) {
+            MortalList.requestWeakSweepsForDestroyedContainer(base);
+        }
         if (var instanceof RuntimeBase base && WeakRefRegistry.hasWeakRefsTo(base)) {
-            MortalList.finalizeClearedAggregateOwnerAfterScopeExit(base);
-            MortalList.requestImmediateWeakSweep();
+            requestWeakCleanupAfterScopeExit(base);
         } else if (var instanceof RuntimeScalar scalar
                 && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && scalar.value instanceof RuntimeBase base
                 && WeakRefRegistry.hasWeakRefsTo(base)) {
-            MortalList.finalizeClearedAggregateOwnerAfterScopeExit(base);
-            MortalList.requestImmediateWeakSweep();
+            requestWeakCleanupAfterScopeExit(base);
         }
+    }
+
+    private static void requestWeakCleanupAfterScopeExit(RuntimeBase base) {
+        MortalList.finalizeClearedAggregateOwnerAfterScopeExit(base);
+        // Selective owner records can outlive the Perl lexical that created
+        // them when a closure graph is being torn down. Recheck weak refs at
+        // the scope boundary so the reachability walker can reconcile those
+        // records with the remaining Perl-visible roots.
+        MortalList.requestImmediateWeakSweep();
     }
 
     /**

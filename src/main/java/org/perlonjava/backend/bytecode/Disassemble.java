@@ -238,6 +238,14 @@ public class Disassemble {
                         sb.append("ALIAS_LVALUE_REFERENCE r").append(rd)
                                 .append(" <- r").append(src).append("\n");
                         break;
+                    case Opcodes.ALIAS_AGGREGATE_LVALUE_REFERENCE:
+                        rd = interpretedCode.bytecode[pc++];
+                        src = interpretedCode.bytecode[pc++];
+                        int aggregateAliasKind = interpretedCode.bytecode[pc++];
+                        sb.append("ALIAS_AGGREGATE_LVALUE_REFERENCE r").append(rd)
+                                .append(" <- r").append(src)
+                                .append(aggregateAliasKind != 0 ? " HASH\n" : " ARRAY\n");
+                        break;
                     case Opcodes.ALIAS_GLOBAL_SCALAR:
                         int globalAliasNameIdx = interpretedCode.bytecode[pc++];
                         src = interpretedCode.bytecode[pc++];
@@ -2080,10 +2088,12 @@ public class Disassemble {
                         int hints = interpretedCode.bytecode[pc++];
                         int hintHashId = interpretedCode.bytecode[pc++];
                         int warningScopeId = interpretedCode.bytecode[pc++];
+                        int featureFlags = interpretedCode.bytecode[pc++];
                         sb.append("APPLY_COMPILER_FLAGS warningBits=")
                                 .append(warningBitsIdx).append(" hints=").append(hints)
                                 .append(" hintHash=").append(hintHashId)
-                                .append(" warningScope=").append(warningScopeId).append("\n");
+                                .append(" warningScope=").append(warningScopeId)
+                                .append(" features=").append(featureFlags).append("\n");
                         break;
                     }
                     case Opcodes.SET_CALL_SITE_HINTS:
@@ -2092,6 +2102,10 @@ public class Disassemble {
                         break;
                     case Opcodes.SET_CALL_SITE_HINT_HASH:
                         sb.append("SET_CALL_SITE_HINT_HASH id=")
+                                .append(interpretedCode.bytecode[pc++]).append("\n");
+                        break;
+                    case Opcodes.SET_CALL_SITE_FEATURE_FLAGS:
+                        sb.append("SET_CALL_SITE_FEATURE_FLAGS flags=")
                                 .append(interpretedCode.bytecode[pc++]).append("\n");
                         break;
                     case Opcodes.SET_CALL_SITE_WARNING_BITS:

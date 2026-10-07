@@ -22,6 +22,7 @@ public final class RuntimeCodeRuntimeState {
     final Map<String, Class<?>> evalCache = lruMap(EVAL_CACHE_SIZE);
     final Map<Class<?>, MethodHandle> methodHandleCache = lruMap(METHOD_HANDLE_CACHE_SIZE);
     final HashMap<String, Class<?>> anonymousSubs = new HashMap<>();
+    final HashMap<String, String> deparseSourceTextsByClassName = new HashMap<>();
     final HashMap<String, Object> interpretedSubs = new HashMap<>();
     final HashMap<String, EmitterContext> evalContexts = new HashMap<>();
     final ConcurrentHashMap<String, RuntimeBase[]> padConstantsByClassName =
@@ -112,6 +113,7 @@ public final class RuntimeCodeRuntimeState {
         evalCache.clear();
         methodHandleCache.clear();
         anonymousSubs.clear();
+        deparseSourceTextsByClassName.clear();
         interpretedSubs.clear();
         evalContexts.clear();
         padConstantsByClassName.clear();

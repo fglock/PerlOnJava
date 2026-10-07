@@ -224,6 +224,7 @@ public class ParseBlock {
         }
 
         Integer postBlockStrictOptions = null;
+        Integer postBlockFeatureFlags = null;
         String postBlockWarningBits = null;
 
         // Run compile-time end-of-scope callbacks while this block is still
@@ -236,6 +237,7 @@ public class ParseBlock {
         if (exitScope) {
             parser.ctx.symbolTable.exitScope(scopeIndex);
             postBlockStrictOptions = parser.ctx.symbolTable.getStrictOptions();
+            postBlockFeatureFlags = parser.ctx.symbolTable.featureFlagsStack.peek();
             postBlockWarningBits = parser.ctx.symbolTable.getWarningBitsString();
         }
         parser.exitLexicalSubDeclarationFrame();
@@ -245,6 +247,7 @@ public class ParseBlock {
         blockNode.labels = blockLabels; // Set the collected labels in the BlockNode
         if (postBlockStrictOptions != null) {
             blockNode.setAnnotation("postBlockStrictOptions", postBlockStrictOptions);
+            blockNode.setAnnotation("postBlockFeatureFlags", postBlockFeatureFlags);
             blockNode.setAnnotation("postBlockWarningBits", postBlockWarningBits);
         }
         return new BlockWithScope(blockNode, scopeIndex);

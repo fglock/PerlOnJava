@@ -96,10 +96,10 @@ my $expected_single = __LINE__ + 1;
 my $single = $obj->report;
 is($single, $expected_single, 'single-line method call reports its own line');
 
-# 10. a literal anon sub argument is still exempt from the statement line
-my $expected_block = __LINE__ + 3;
+# 10. an anonymous sub argument does not replace the call statement's COP
+my $expected_block = __LINE__ + 1;
 my $block = plain_report(
     sub { 1 }
 );
 is($block, $expected_block,
-    'literal anon sub argument keeps its own block line');
+    'literal anon sub argument reports the statement line');

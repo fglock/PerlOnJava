@@ -57,6 +57,15 @@ public class JavaClassInfo {
     public String javaClassName;
 
     /**
+     * Whether executing this generated Perl body can create a JVM CODE object
+     * whose captures need the invocation-scoped cleanup frame.
+     */
+    public boolean jvmClosureFrameRequired;
+
+    /** Whether this generated Perl body needs copied pristine {@code @_} slots. */
+    public boolean pristineArgsSnapshotRequired = true;
+
+    /**
      * The label to return to after method execution.
      */
     public Label returnLabel;
@@ -144,6 +153,8 @@ public class JavaClassInfo {
      * This is a counter rather than a boolean to handle nested finally blocks.
      */
     public int finallyBlockDepth;
+    /** Label names scoped to each active finally body, innermost first. */
+    public final Deque<Set<String>> finallyLabelScopes = new ArrayDeque<>();
 
     public int[] spillSlots;
     public int spillTop;

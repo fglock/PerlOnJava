@@ -120,8 +120,8 @@ public class ScopedSymbolTable {
     private final Stack<Integer> regexDebugFlagsStack = new Stack<>();
     /** True when this compilation unit explicitly invoked re->import/unimport. */
     private boolean lexicalRegexPragmaChanged;
-    // `use VERSION` is lexical: a second declaration in the same scope is
-    // rejected, while an inner block gets its own declaration state.
+    // `use VERSION` is lexical: declaration and warning state resets for an
+    // inner block and is restored when that block exits.
     private final Stack<String> useVersionStack = new Stack<>();
     // A stack to manage nested scopes of symbol tables.
     private final Stack<SymbolTable> symbolTableStack = new Stack<>();
@@ -265,6 +265,17 @@ public class ScopedSymbolTable {
      */
     public int currentScopeIndex() {
         return symbolTableStack.size() - 1;
+    }
+
+    /** Adds a lexical binding to an enclosing scope without changing the active scope. */
+    public int addVariableInScope(int scopeIndex, String name, String variableDeclType, OperatorNode ast) {
+        if (scopeIndex < 0 || scopeIndex >= symbolTableStack.size()) {
+            throw new IllegalArgumentException("Invalid lexical scope index: " + scopeIndex);
+        }
+        clearVisibleVariablesCache();
+        SymbolTable scope = symbolTableStack.get(scopeIndex);
+        return scope.addVariable(name, variableDeclType,
+                packageStack.get(scopeIndex).packageName(), ast);
     }
 
     /**

@@ -267,6 +267,14 @@ public class BytecodeInterpreter {
         code.releaseRegisters();
     }
 
+    private static boolean matchesInterpreterControlBlock(RuntimeControlFlowList flow, String blockLabel) {
+        boolean switchContinueBoundary = RuntimeControlFlowList.SWITCH_CONTINUE_BLOCK_LABEL.equals(blockLabel);
+        if (flow.isSwitchContinue()) {
+            return switchContinueBoundary;
+        }
+        return !switchContinueBoundary && flow.matchesLabel(blockLabel);
+    }
+
     private static RuntimeList execute(SuspendedInterpreterFrame frame) {
         InterpretedCode code = frame.code;
         int callContext = frame.callContext;
@@ -905,6 +913,15 @@ public class BytecodeInterpreter {
                                         .aliasLvalueReference(registers[reference].getFirst());
                             }
 
+                            case Opcodes.ALIAS_AGGREGATE_LVALUE_REFERENCE -> {
+                                int target = bytecode[pc++];
+                                int reference = bytecode[pc++];
+                                boolean hashTarget = bytecode[pc++] != 0;
+                                registers[target] = registers[target].getFirst()
+                                        .aliasAggregateLvalueReference(
+                                                registers[reference].getFirst(), hashTarget);
+                            }
+
                             case Opcodes.ALIAS_GLOBAL_SCALAR -> {
                                 int nameIdx = bytecode[pc++];
                                 int scalarReg = bytecode[pc++];
@@ -1421,7 +1438,12 @@ public class BytecodeInterpreter {
                                 RuntimeBase target = registers[rd];
                                 RuntimeScalar targetScalar;
                                 RuntimeScalar sourceScalar = registers[rs].scalar();
-                                if (lexicalAssignmentMustPreserveSlot(target)
+                                // Undef assignment must release the value through
+                                // the existing scalar cell. Replacing the cell
+                                // defers weakly observed aggregate cleanup until
+                                // a later sweep, after Perl code can observe it.
+                                if (sourceScalar.type == RuntimeScalarType.UNDEF
+                                        || lexicalAssignmentMustPreserveSlot(target)
                                         || (sourceScalar.type == RuntimeScalarType.GLOBREFERENCE
                                             && target instanceof RuntimeScalar)) {
                                     targetScalar = (RuntimeScalar) target;
@@ -2051,7 +2073,7 @@ public class BytecodeInterpreter {
                                         for (int i = controlBlockStack.size() - 1; i >= 0; i--) {
                                             int[] entry = controlBlockStack.get(i);
                                             String blockLabel = code.stringPool[entry[0]];
-                                            if (flow.matchesLabel(blockLabel)) {
+                                            if (matchesInterpreterControlBlock(flow, blockLabel)) {
                                                 while (controlBlockStack.size() > i + 1) {
                                                     controlBlockStack.removeLast();
                                                 }
@@ -2074,7 +2096,7 @@ public class BytecodeInterpreter {
                                         if (handled) break;
                                         int[] entry = labeledBlockStack.get(i);
                                         String blockLabel = code.stringPool[entry[0]];
-                                        if (flow.matchesLabel(blockLabel)) {
+                                        if (matchesInterpreterControlBlock(flow, blockLabel)) {
                                             // Pop entries down to and including the match
                                             while (labeledBlockStack.size() > i) {
                                                 labeledBlockStack.removeLast();
@@ -2228,7 +2250,7 @@ public class BytecodeInterpreter {
                                         for (int i = controlBlockStack.size() - 1; i >= 0; i--) {
                                             int[] entry = controlBlockStack.get(i);
                                             String blockLabel = code.stringPool[entry[0]];
-                                            if (flow.matchesLabel(blockLabel)) {
+                                            if (matchesInterpreterControlBlock(flow, blockLabel)) {
                                                 while (controlBlockStack.size() > i + 1) {
                                                     controlBlockStack.removeLast();
                                                 }
@@ -2251,7 +2273,7 @@ public class BytecodeInterpreter {
                                         if (handled) break;
                                         int[] entry = labeledBlockStack.get(i);
                                         String blockLabel = code.stringPool[entry[0]];
-                                        if (flow.matchesLabel(blockLabel)) {
+                                        if (matchesInterpreterControlBlock(flow, blockLabel)) {
                                             while (labeledBlockStack.size() > i) {
                                                 labeledBlockStack.removeLast();
                                             }
@@ -3101,7 +3123,7 @@ public class BytecodeInterpreter {
                                     boolean handled = false;
                                     for (int i = controlBlockStack.size() - 1; i >= 0; i--) {
                                         int[] entry = controlBlockStack.get(i);
-                                        if (!flow.matchesLabel(code.stringPool[entry[0]])) continue;
+                                        if (!matchesInterpreterControlBlock(flow, code.stringPool[entry[0]])) continue;
                                         int targetPc = switch (flow.getControlFlowType()) {
                                             case LAST -> entry[1];
                                             case NEXT -> entry[2];
@@ -3333,9 +3355,12 @@ public class BytecodeInterpreter {
                                 int hints = bytecode[pc++];
                                 int hintHashId = bytecode[pc++];
                                 int warningScopeId = bytecode[pc++];
+                                int featureFlags = bytecode[pc++];
                                 WarningBitsRegistry.setCallSiteBits(code.stringPool[warningBitsIdx]);
                                 WarningBitsRegistry.setCallSiteHints(hints);
                                 HintHashRegistry.setCallSiteHintHashId(hintHashId);
+                                org.perlonjava.runtime.FeatureFlagsRegistry
+                                        .setCallSiteFeatureFlags(featureFlags);
                                 if (warningScopeId > 0) {
                                     // Localize the scope before installing its
                                     // warning mask so dynamic unwind can restore
@@ -3352,6 +3377,10 @@ public class BytecodeInterpreter {
 
                             case Opcodes.SET_CALL_SITE_HINT_HASH ->
                                 HintHashRegistry.setCallSiteHintHashId(bytecode[pc++]);
+
+                            case Opcodes.SET_CALL_SITE_FEATURE_FLAGS ->
+                                org.perlonjava.runtime.FeatureFlagsRegistry
+                                        .setCallSiteFeatureFlags(bytecode[pc++]);
 
                             case Opcodes.SET_CALL_SITE_WARNING_BITS -> {
                                 String warningBits = code.stringPool[bytecode[pc++]];

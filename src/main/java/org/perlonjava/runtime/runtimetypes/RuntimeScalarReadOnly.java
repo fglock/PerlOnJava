@@ -132,6 +132,30 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
         this.type = RuntimeScalarType.DOUBLE;
     }
 
+    private RuntimeScalarReadOnly(RuntimeScalarReadOnly source) {
+        super();
+        this.b = source.b;
+        this.i = source.i;
+        this.s = source.s;
+        this.d = source.d;
+        this.value = source.value;
+        this.type = source.type;
+        this.utf8UncheckedOctets = source.utf8UncheckedOctets;
+        this.utf8MalformedWarning = source.utf8MalformedWarning;
+        this.tainted = source.tainted;
+        this.numericLiteralText = source.numericLiteralText;
+        this.numericContextSeen = source.numericContextSeen;
+        this.firstClassRegexScalar = source.firstClassRegexScalar;
+        this.firstClassRegexReferent = source.firstClassRegexReferent;
+        this.firstClassRegexValue = source.firstClassRegexValue;
+        this.formatPictureTainted = source.formatPictureTainted;
+    }
+
+    /** Copy a cached literal when it is installed as a stash pseudo-constant. */
+    RuntimeScalarReadOnly copyForPseudoConstantReference() {
+        return new RuntimeScalarReadOnly(this);
+    }
+
     /**
      * Throws an exception as this scalar is immutable and cannot be modified.
      *

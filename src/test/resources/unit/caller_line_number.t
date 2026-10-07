@@ -86,11 +86,11 @@ ok($result3 > 0 && $result3 < 100,
    "caller(2) line ($result3) is a reasonable positive number");
 
 sub multiline_direct_caller { return (caller(0))[2]; }
-my $expected_line_9 = __LINE__ + 3;
+my $expected_line_9 = __LINE__ + 1;
 my $result9 = multiline_direct_caller(
     sub { 1 }
 );
-is($result9, $expected_line_9, "caller(0) reports closing line for multiline direct call");
+is($result9, $expected_line_9, "caller(0) reports statement line for multiline direct call");
 
 {
     package CallerLineNumber::Obj;
@@ -98,11 +98,11 @@ is($result9, $expected_line_9, "caller(0) reports closing line for multiline dir
     sub multiline_method_caller { return (caller(0))[2]; }
 }
 
-my $expected_line_10 = __LINE__ + 3;
+my $expected_line_10 = __LINE__ + 1;
 my $result10 = CallerLineNumber::Obj->new->multiline_method_caller(
     sub { 1 }
 );
-is($result10, $expected_line_10, "caller(0) reports closing line for multiline method call");
+is($result10, $expected_line_10, "caller(0) reports statement line for multiline method call");
 
 my $expected_line_11 = __LINE__ + 3;
 eval {

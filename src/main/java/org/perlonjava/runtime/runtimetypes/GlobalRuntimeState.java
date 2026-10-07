@@ -5,6 +5,7 @@ import org.perlonjava.backend.jvm.CustomClassLoader;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.HashSet;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -67,6 +68,13 @@ public final class GlobalRuntimeState {
     private int nextCompiledCodeRefId = 1;
     private long stashEnumerationVersion;
     private long codeRefVersion;
+    private long codeRefGraphVersion;
+    private long cachedInstalledCodeRefsVersion = -1;
+    private Set<RuntimeCode> cachedInstalledCodeRefs;
+    private long cachedCodeRefEdgeRootsVersion = -1;
+    private long cachedCodeRefEdgeRootsCodeVersion = -1;
+    private List<RuntimeScalar> cachedCodeRefEdgeRoots;
+    private java.util.ArrayList<RuntimeScalar> cachedCodeRefEdgeRootValues;
     private long cachedStashEnumerationVersion = -1;
     private boolean coreGlobalsInitialized;
 
@@ -256,6 +264,78 @@ public final class GlobalRuntimeState {
 
     void invalidateCodeRefs() {
         codeRefVersion++;
+    }
+
+    void noteCodeRefMutation(RuntimeScalar previous, RuntimeScalar replacement) {
+        boolean canUpdateCachedRoots = cachedCodeRefEdgeRootValues != null
+                && cachedCodeRefEdgeRootsCodeVersion == codeRefVersion
+                && cachedCodeRefEdgeRootsVersion == codeRefGraphVersion;
+        codeRefVersion++;
+        if (!canUpdateCachedRoots) {
+            cachedCodeRefEdgeRoots = null;
+            cachedCodeRefEdgeRootValues = null;
+            cachedCodeRefEdgeRootsCodeVersion = -1;
+            cachedCodeRefEdgeRootsVersion = -1;
+            return;
+        }
+
+        if (previous != null) {
+            for (int i = 0; i < cachedCodeRefEdgeRootValues.size(); i++) {
+                if (cachedCodeRefEdgeRootValues.get(i) == previous) {
+                    cachedCodeRefEdgeRootValues.remove(i);
+                    break;
+                }
+            }
+        }
+        if (isCodeRefEdgeRoot(replacement)) {
+            cachedCodeRefEdgeRootValues.add(replacement);
+        }
+        cachedCodeRefEdgeRootsCodeVersion = codeRefVersion;
+    }
+
+    private static boolean isCodeRefEdgeRoot(RuntimeScalar scalar) {
+        if (scalar == null) return false;
+        return !(scalar.value instanceof RuntimeCode code)
+                || ReachabilityWalker.hasWalkableCodeEdges(code, true);
+    }
+
+    /** Identity set of globally installed RuntimeCode values, cached by slot version. */
+    Set<RuntimeCode> installedCodeRefs() {
+        if (cachedInstalledCodeRefs == null
+                || cachedInstalledCodeRefsVersion != codeRefVersion) {
+            Set<RuntimeCode> installed = Collections.newSetFromMap(new IdentityHashMap<>());
+            for (RuntimeScalar scalar : codeRefs.values()) {
+                if (scalar != null
+                        && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && scalar.value instanceof RuntimeCode code) {
+                    installed.add(code);
+                }
+            }
+            cachedInstalledCodeRefs = Collections.unmodifiableSet(installed);
+            cachedInstalledCodeRefsVersion = codeRefVersion;
+        }
+        return cachedInstalledCodeRefs;
+    }
+
+    void invalidateCodeRefGraphRoots() {
+        codeRefGraphVersion++;
+    }
+
+    List<RuntimeScalar> codeRefRootsWithEdges() {
+        if (cachedCodeRefEdgeRoots == null
+                || cachedCodeRefEdgeRootsCodeVersion != codeRefVersion
+                || cachedCodeRefEdgeRootsVersion != codeRefGraphVersion) {
+            java.util.ArrayList<RuntimeScalar> roots = new java.util.ArrayList<>();
+            for (RuntimeScalar scalar : codeRefs.values()) {
+                if (scalar == null) continue;
+                if (isCodeRefEdgeRoot(scalar)) roots.add(scalar);
+            }
+            cachedCodeRefEdgeRootValues = roots;
+            cachedCodeRefEdgeRoots = Collections.unmodifiableList(cachedCodeRefEdgeRootValues);
+            cachedCodeRefEdgeRootsVersion = codeRefGraphVersion;
+            cachedCodeRefEdgeRootsCodeVersion = codeRefVersion;
+        }
+        return cachedCodeRefEdgeRoots;
     }
 
     /** Return whether this runtime already installed its core globals. */

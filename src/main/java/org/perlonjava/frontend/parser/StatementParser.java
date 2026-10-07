@@ -821,6 +821,11 @@ public class StatementParser {
         BlockNode whenBlock = ParseBlock.parseBlock(parser);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
+        // A CORE::continue code reference produces a non-local switch marker.
+        // Keep the when block as a dispatch boundary so that marker resumes
+        // after this clause without escaping the whole given block.
+        whenBlock.setAnnotation("switchContinueTarget", true);
+
         // After a successful match, Perl returns the value of the when block
         // and implicitly leaves the enclosing given block. Keep the final
         // expression attached to our synthetic last so the backends can carry
@@ -1690,27 +1695,29 @@ public class StatementParser {
 
     private static void rejectRepeatedUseVersion(Parser parser, RuntimeScalar version) {
         String requested = normalizeVersion(version);
-        String previous = parser.ctx.symbolTable.getUseVersion();
+        ScopedSymbolTable symbolTable = parser.ctx.symbolTable;
+        String previous = symbolTable.getUseVersion();
         if (previous != null) {
-            // Repeating the same lexical version is valid.  CPAN modules
-            // commonly do this after changing packages within one file.
-            if (previous.equals(requested)) {
-                return;
+            // Before v5.10, use VERSION only selected the minimum interpreter
+            // version and had no lexical feature or strictness side effects.
+            // Blead therefore permits one later declaration after such a
+            // legacy minimum. Repeating the current version is always valid.
+            if (versionAtLeast(previous, 5, 10) && !previous.equals(requested)) {
+                String message;
+                if (versionAtLeast(requested, 5, 39)) {
+                    message = "use VERSION of 5.39 or above is not permitted while another use VERSION is in scope";
+                } else if (versionAtLeast(previous, 5, 39)) {
+                    message = "use VERSION is not permitted while another use VERSION of 5.39 or above is in scope";
+                } else if (versionAtLeast(previous, 5, 11) && !versionAtLeast(requested, 5, 11)) {
+                    message = "Downgrading a use VERSION declaration to below v5.11 is not permitted";
+                } else {
+                    message = "Changing use VERSION while another use VERSION is in scope is not permitted";
+                }
+                var loc = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
+                throw new PerlParserException(message + " at " + loc.fileName() + " line " + loc.lineNumber() + ".");
             }
-            String message;
-            if (versionAtLeast(requested, 5, 39)) {
-                message = "use VERSION of 5.39 or above is not permitted while another use VERSION is in scope";
-            } else if (versionAtLeast(previous, 5, 39)) {
-                message = "use VERSION is not permitted while another use VERSION of 5.39 or above is in scope";
-            } else if (versionAtLeast(previous, 5, 11) && !versionAtLeast(requested, 5, 11)) {
-                message = "Downgrading a use VERSION declaration to below v5.11 is not permitted";
-            } else {
-                message = "Changing use VERSION while another use VERSION is in scope is not permitted";
-            }
-            var loc = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
-            throw new PerlParserException(message + " at " + loc.fileName() + " line " + loc.lineNumber() + ".");
         }
-        parser.ctx.symbolTable.setUseVersion(requested);
+        symbolTable.setUseVersion(requested);
     }
 
     private static boolean versionAtLeast(String version, int major, int minor) {

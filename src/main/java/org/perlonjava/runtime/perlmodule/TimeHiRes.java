@@ -27,8 +27,10 @@ public class TimeHiRes extends PerlModuleBase {
             module.registerMethod("usleep", null);
             module.registerMethod("nanosleep", null);
             module.registerMethod("gettimeofday", null);
-            module.registerMethod("clock_gettime", null);
-            module.registerMethod("time", "");
+            // getLong() can fetch tied scalars or run numeric overload code.
+            // Keep call-depth tracking so those callbacks remain visible.
+            module.registerMethodWithReadOnlyArgsWithoutJvmClosureFrame("clock_gettime", null);
+            module.registerLeafMethodWithReadOnlyArgs("time", "");
             module.registerMethod("sleep", null);
             module.registerMethod("alarm", null);
             module.registerMethod("ualarm", null);

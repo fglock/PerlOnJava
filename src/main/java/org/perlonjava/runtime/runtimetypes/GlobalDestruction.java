@@ -44,7 +44,7 @@ public class GlobalDestruction {
         // CODE slots are kept in a separate namespace map from ordinary
         // package variables. They are also the roots for closures whose pads
         // may contain the last blessed object reference.
-        for (RuntimeScalar code : new ArrayList<>(GlobalVariable.globalCodeRefs.values())) {
+        for (RuntimeScalar code : new ArrayList<>(GlobalVariable.globalCodeRefValuesView())) {
             if (code != null && code.value instanceof RuntimeCode runtimeCode) {
                 runtimeCode.releaseCaptures();
             }

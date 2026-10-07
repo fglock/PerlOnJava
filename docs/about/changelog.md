@@ -23,8 +23,44 @@ priorities and future plans.
   generated-module include paths.
 - Implement `Bit::Vector::Chunk_Store` used by Thrift's 64-bit protocol.
 - Preserve binary HTTP response bytes so CPAN downloads remain extractable.
+- Make strict test runs fail when a child process exits nonzero after complete TAP.
 - Preserve Unix executable permissions when extracting ZIP archive entries.
 - Accept Perl's valid `\@;@` prototype without an `illegalproto` warning.
+- Match current blead's fatal checks for differing in-scope `use VERSION`
+  declarations, its `caller()` statement-line reporting, and its compiled
+  representation for case-folded negated singleton regex classes.
+- Remove deleted package stashes from their parent namespace in
+  `Symbol::delete_package`.
+- Preserve direct-call semantics for lexical and package `->&` methods, support
+  `CORE::bless` and `CORE::break` code references, and allow same-finally local
+  `goto` targets.
+- Preserve raw-source DATA handles for `CORE::__DATA__` and lvalue behavior for
+  `CORE::substr` code references.
+- Match Perl diagnostics, lvalue behavior, and list context for callable
+  `CORE::recv`, `CORE::select`, `CORE::splice`, and `CORE::reset`.
+- Support callable `CORE::undef`, `CORE::sysread`, and `CORE::umask`, and validate
+  callable `CORE::tie` and `CORE::tied` reference arguments.
+- Support callable `CORE::close` and directory I/O wrappers with Perl-compatible
+  false results and list-context behavior.
+- Support `threads::shared::bless` and report Perl-compatible argument errors
+  for shared storage, conditions, and locks.
+- Preserve Perl diagnostics and lvalue behavior for callable `CORE::join`,
+  `CORE::keys`, and `CORE::lock`, and support reference aliases to class
+  aggregate fields. Allow callable `CORE::open` to use read-only literals as
+  one-argument handle names without mutating the literal; preserve the default
+  caller arrays for `CORE::pop` and `CORE::push`, and match callable `CORE::pos`,
+  `CORE::prototype`, `CORE::read`, and `CORE::readline` type and context behavior.
+- Preserve caller argument presence through `CORE::caller` references and
+  support `CORE::continue` code references inside `given` blocks.
+- Route callable `CORE::dbmopen` and `CORE::dbmclose` through the PerlOnJava DBM backend.
+- Dispatch callable `CORE::die` with the original Perl call-site location.
+- Support `CORE::evalbytes` code references with caller lexical hints and `CORE::each` references.
+- Match Perl's strict-refs behavior for callable `CORE::accept`, preserve
+  `CORE::truncate`'s bareword-only reference error, and propagate caller context
+  through `CORE::wantarray` references.
+- Preserve caller `unicode_strings` behavior in `CORE::fc` and support `CORE::glob` references.
+- Keep lexical class methods visible across method declarations without
+  installing them in the package stash, and support callable `CORE::bless`.
 
 - Keep format captures bound to their active lexical cell and prevent reuse of unrelated active lexicals.
 - Match Perl's reference count for the compile-time `%^H` hash.
@@ -74,6 +110,7 @@ priorities and future plans.
 - Preserve malformed octets read through Perl's `:utf8` layer while decoding valid UTF-8.
 - Keep `$^X` unflagged for shell command construction and preserve encoded input octets.
 - Evaluate `readline` in list context when an empty-target assignment discards its results.
+- Preserve valid Unicode goto targets after conditional labels, non-vivifying symbolic glob checks, compact pseudo-constant aliases after redefinition, and weak-reference cleanup when closure captures leave scope.
 
 - Prevent stale CPAN archive-name entries and namespace-resolution errors from
   being recorded as compatibility regressions.
@@ -97,8 +134,12 @@ priorities and future plans.
   ambiguity warnings, support `chdir` and `chmod` through open filehandles,
   report directory `chdir` as unavailable without `dirfd`, restore
   invalid-descriptor errors, preserve dynamic package variables and monotonic
-  clocks needed by AnyEvent::Tools, and reuse root reachability snapshots during
-  weak-reference cleanup.
+  clocks needed by AnyEvent::Tools, and reuse root reachability snapshots
+  during weak-reference cleanup.
+
+- Support ascending Perl version declarations, accept valid optional-array
+  prototypes and fully qualified indirect constructors, and preserve text and
+  entity boundaries across incremental HTML parsing.
 
 - Preserve ordinary `goto` jumps between conditional branches while rejecting
   jumps into conditional blocks from outside.

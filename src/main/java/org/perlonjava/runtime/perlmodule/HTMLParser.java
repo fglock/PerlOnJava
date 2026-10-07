@@ -74,6 +74,7 @@ public class HTMLParser extends PerlModuleBase {
             code = new RuntimeCode(mh, null, null);
             code.isStatic = true;
             GlobalVariable.getGlobalCodeRef("HTML::Entities::decode_entities").set(new RuntimeScalar(code));
+            GlobalVariable.getGlobalCodeRef("HTML::Entities::decode").set(new RuntimeScalar(code));
 
             mh = RuntimeCode.lookup.findStatic(HTMLParser.class, "_decode_entities", RuntimeCode.methodType);
             code = new RuntimeCode(mh, null, null);
@@ -879,6 +880,11 @@ public class HTMLParser extends PerlModuleBase {
      * This is a simplified version; Phase 2 will port the full hparser.c logic.
      */
     private static void parseHtml(RuntimeScalar self, RuntimeHash selfHash, RuntimeHash pstate, String html) {
+        parseHtml(self, selfHash, pstate, html, true);
+    }
+
+    private static void parseHtml(RuntimeScalar self, RuntimeHash selfHash, RuntimeHash pstate,
+            String html, boolean bufferTrailingChunkTail) {
         int len = html.length();
         int i = 0;
         int textStart = 0;
@@ -993,7 +999,7 @@ public class HTMLParser extends PerlModuleBase {
                                         // Save and restore textStart since we recurse
                                         RuntimeScalar savedBuf = pstate.get("_buf");
                                         pstate.put("_buf", new RuntimeScalar(""));
-                                        parseHtml(self, selfHash, pstate, content);
+                                        parseHtml(self, selfHash, pstate, content, false);
                                         pstate.put("_buf", savedBuf);
                                         break;
                                 }
@@ -1203,9 +1209,73 @@ public class HTMLParser extends PerlModuleBase {
 
         // Flush remaining text
         if (textStart < len) {
+            int tailStart = bufferTrailingChunkTail
+                    ? trailingTextSuffixStart(html, textStart, len) : -1;
+            if (tailStart >= 0) {
+                if (tailStart > textStart) {
+                    fireEvent(self, selfHash, pstate, "text",
+                            parsedScalar(pstate, html.substring(textStart, tailStart)));
+                }
+                pstate.put("_buf", parsedScalar(pstate, html.substring(tailStart)));
+                return;
+            }
             fireEvent(self, selfHash, pstate, "text",
                     parsedScalar(pstate, html.substring(textStart)));
         }
+    }
+
+    private static int trailingTextSuffixStart(String input, int start, int end) {
+        int entityStart = trailingEntitySuffixStart(input, start, end);
+        int whitespaceStart = end;
+        while (whitespaceStart > start && isHtmlSpace(input.charAt(whitespaceStart - 1))) {
+            whitespaceStart--;
+        }
+        if (whitespaceStart < end && (entityStart < 0 || whitespaceStart < entityStart)) {
+            entityStart = whitespaceStart;
+        }
+        return entityStart;
+    }
+
+    private static boolean isHtmlSpace(char value) {
+        return value == ' ' || value == '\t' || value == '\n' || value == '\r' || value == '\f';
+    }
+
+    /**
+     * Return the start of a possible entity reference at the end of this
+     * input chunk.  The next parse() call may provide the remaining digits,
+     * entity name, or semicolon, so decoding it now would make output depend
+     * on where the caller split the document.
+     */
+    private static int trailingEntitySuffixStart(String input, int start, int end) {
+        int ampersand = input.lastIndexOf('&', end - 1);
+        if (ampersand < start) {
+            return -1;
+        }
+        int cursor = ampersand + 1;
+        if (cursor == end) {
+            return ampersand;
+        }
+        char first = input.charAt(cursor);
+        if (first == '#') {
+            cursor++;
+            if (cursor < end && (input.charAt(cursor) == 'x' || input.charAt(cursor) == 'X')) {
+                cursor++;
+                while (cursor < end && hexDigit(input.charAt(cursor)) >= 0) cursor++;
+            } else {
+                while (cursor < end && input.charAt(cursor) >= '0' && input.charAt(cursor) <= '9') {
+                    cursor++;
+                }
+            }
+        } else if (Character.isLetter(first)) {
+            cursor++;
+            while (cursor < end && isAlnum(input.charAt(cursor))) cursor++;
+        } else {
+            return -1;
+        }
+        if (cursor == end) {
+            return ampersand;
+        }
+        return -1;
     }
 
     private static int findLiteralEnd(RuntimeHash pstate, String html, String tagName, int fromIndex) {
@@ -1235,7 +1305,11 @@ public class HTMLParser extends PerlModuleBase {
                 if (pstate.get("_buf").toString().equals(remaining)
                         && pstate.get("_literal_mode").toString().isEmpty()) {
                     pstate.put("_buf", parsedScalar(pstate, ""));
-                    fireEvent(self, selfHash, pstate, "comment", parsedScalar(pstate, remaining));
+                    if (!remaining.startsWith("<")) {
+                        fireEvent(self, selfHash, pstate, "text", parsedScalar(pstate, remaining));
+                    } else {
+                        fireEvent(self, selfHash, pstate, "comment", parsedScalar(pstate, remaining));
+                    }
                 }
             } else if (literalMode.equals("script") || literalMode.equals("style")) {
                 fireEvent(self, selfHash, pstate, "end",

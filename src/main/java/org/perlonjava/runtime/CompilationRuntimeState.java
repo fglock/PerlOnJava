@@ -35,6 +35,8 @@ public final class CompilationRuntimeState {
     public final Deque<Set<String>> callerDisabledWarningCategoriesStack = new ArrayDeque<>();
     public int callSiteHints;
     public final Deque<Integer> callerHintsStack = new ArrayDeque<>();
+    public int callSiteFeatureFlags;
+    public final Deque<Integer> callerFeatureFlagsStack = new ArrayDeque<>();
     public Map<String, RuntimeScalar> callSiteHintHash = new HashMap<>();
     public final Deque<Map<String, RuntimeScalar>> callerHintHashStack = new ArrayDeque<>();
     public FeatureFlags featureManager = new FeatureFlags();
@@ -88,6 +90,8 @@ public final class CompilationRuntimeState {
         callerDisabledWarningCategoriesStack.clear();
         callSiteHints = 0;
         callerHintsStack.clear();
+        callSiteFeatureFlags = 0;
+        callerFeatureFlagsStack.clear();
         callSiteHintHash.clear();
         callerHintHashStack.clear();
         featureManager = new FeatureFlags();

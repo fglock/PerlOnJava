@@ -67,6 +67,64 @@ public abstract class PerlModuleBase {
      * @throws NoSuchMethodException If the method does not exist.
      */
     protected void registerMethod(String perlMethodName, String javaMethodName, String signature) throws NoSuchMethodException {
+        registerMethod(perlMethodName, javaMethodName, signature, true);
+    }
+
+    /**
+     * Registers a Java-backed method whose implementation cannot create Perl
+     * CODE objects, so invocation does not need closure-lifetime tracking.
+     */
+    protected void registerMethodWithoutJvmClosureFrame(
+            String methodName, String signature) throws NoSuchMethodException {
+        registerMethod(methodName, methodName, signature, false);
+    }
+
+    /** Registers a read-only Java method with no Perl lexical pad or CODE creation. */
+    protected void registerMethodWithReadOnlyArgsWithoutJvmClosureFrame(
+            String methodName, String signature) throws NoSuchMethodException {
+        registerMethod(methodName, methodName, signature, false, false, false);
+    }
+
+    /**
+     * Registers a leaf Java method with read-only arguments, no Perl lexical
+     * pad, and no path that can re-enter Perl or create Perl CODE objects.
+     */
+    protected void registerLeafMethodWithReadOnlyArgs(
+            String methodName, String signature) throws NoSuchMethodException {
+        registerMethod(methodName, methodName, signature, false, false, false, false);
+    }
+
+    private void registerMethod(String perlMethodName, String javaMethodName,
+                                String signature, boolean jvmClosureFrameRequired)
+            throws NoSuchMethodException {
+        registerMethod(perlMethodName, javaMethodName, signature,
+                jvmClosureFrameRequired, true, true);
+    }
+
+    private void registerMethod(String perlMethodName, String javaMethodName,
+                                String signature, boolean jvmClosureFrameRequired,
+                                boolean pristineArgsSnapshotRequired)
+            throws NoSuchMethodException {
+        registerMethod(perlMethodName, javaMethodName, signature,
+                jvmClosureFrameRequired, pristineArgsSnapshotRequired, true, true);
+    }
+
+    private void registerMethod(String perlMethodName, String javaMethodName,
+                                String signature, boolean jvmClosureFrameRequired,
+                                boolean pristineArgsSnapshotRequired,
+                                boolean activeLexicalFrameRequired)
+            throws NoSuchMethodException {
+        registerMethod(perlMethodName, javaMethodName, signature,
+                jvmClosureFrameRequired, pristineArgsSnapshotRequired,
+                activeLexicalFrameRequired, true);
+    }
+
+    private void registerMethod(String perlMethodName, String javaMethodName,
+                                String signature, boolean jvmClosureFrameRequired,
+                                boolean pristineArgsSnapshotRequired,
+                                boolean activeLexicalFrameRequired,
+                                boolean callDepthTrackingRequired)
+            throws NoSuchMethodException {
         try {
             // Retrieve the method from the current class using the Java method name
             MethodHandle methodHandle = RuntimeCode.lookup.findStatic(this.getClass(), javaMethodName, RuntimeCode.methodType);
@@ -75,6 +133,10 @@ public abstract class PerlModuleBase {
             code.isStatic = true;
             code.packageName = moduleName;
             code.subName = perlMethodName;
+            code.setJvmClosureFrameRequired(jvmClosureFrameRequired);
+            code.setPristineArgsSnapshotRequired(pristineArgsSnapshotRequired);
+            code.setActiveLexicalFrameRequired(activeLexicalFrameRequired);
+            code.setCallDepthTrackingRequired(callDepthTrackingRequired);
 
             String fullMethodName = NameNormalizer.normalizeVariableName(perlMethodName, moduleName);
 

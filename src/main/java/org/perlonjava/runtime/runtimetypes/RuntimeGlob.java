@@ -1905,7 +1905,24 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             return this;
         }
         // Undefine CODE
-        GlobalVariable.getGlobalCodeRef(this.globName).set(new RuntimeScalar());
+        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(this.globName);
+        RuntimeCode displacedCode = codeRef.value instanceof RuntimeCode code ? code : null;
+        boolean displacedCodeHadWalkableEdges = displacedCode != null
+                && ReachabilityWalker.hasWalkableCodeEdges(displacedCode, true);
+        codeRef.set(new RuntimeScalar());
+        // The CODE scalar can be pinned separately from the stash-map entry.
+        // Undefining a whole glob must invalidate root indexes even when that
+        // scalar was not marked as a package-global root itself.
+        GlobalVariable.noteGlobalCodeRefSlotMutation(codeRef);
+        // A CODE-owned state variable can be the only strong Perl owner of an
+        // unblessed object with weak observers. Removing the glob drops that
+        // owner immediately in Perl, so clear weak observers before returning
+        // instead of waiting for a later statement-boundary sweep.
+        if (displacedCodeHadWalkableEdges
+                && WeakRefRegistry.weakRefsExist()
+                && !ModuleInitGuard.inModuleInit()) {
+            ReachabilityWalker.sweepWeakRefs(true);
+        }
 
         // Invalidate the method resolution cache
         InheritanceResolver.invalidateCache();

@@ -8,6 +8,8 @@ import org.perlonjava.runtime.perlmodule.Warnings;
  * to signal non-local control flow across subroutine boundaries.
  */
 public class RuntimeControlFlowList extends RuntimeList {
+    /** Internal control-block label for a when clause's switch-only continue target. */
+    public static final String SWITCH_CONTINUE_BLOCK_LABEL = "\u0001switch-continue-target";
     // Debug flag - set to true to enable detailed tracing
     private static final boolean DEBUG_TAILCALL = false;
 
@@ -154,6 +156,11 @@ public class RuntimeControlFlowList extends RuntimeList {
     /** Switch controls cannot escape an eval or subroutine as ordinary loop controls can. */
     public boolean isSwitchControl() {
         return marker.switchControlOperator != null;
+    }
+
+    /** True when a CORE::continue marker must resume after its current when clause. */
+    public boolean isSwitchContinue() {
+        return "continue".equals(marker.switchControlOperator);
     }
 
     /**

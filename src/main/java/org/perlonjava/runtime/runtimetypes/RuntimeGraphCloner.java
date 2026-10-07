@@ -312,6 +312,11 @@ public class RuntimeGraphCloner {
         target.isBuiltin = source.isBuiltin;
         target.isDeclared = source.isDeclared;
         target.isSymbolicReference = source.isSymbolicReference;
+        target.setJvmClosureFrameRequired(source.requiresJvmClosureFrame());
+        target.setActiveLexicalFrameRequired(source.requiresActiveLexicalFrame());
+        target.setCallDepthTrackingRequired(source.requiresCallDepthTracking());
+        target.setPristineArgsSnapshotRequired(
+                source.requiresPristineArgsSnapshot());
         target.isClosurePrototype = source.isClosurePrototype;
         target.tracksRuntimeRegexLexicals = source.tracksRuntimeRegexLexicals;
         target.definitionPending = source.definitionPending;
@@ -380,6 +385,7 @@ public class RuntimeGraphCloner {
         target.stashInstallSub = source.stashInstallSub;
         target.hadStashRef = source.hadStashRef;
         target.explicitlyMaterializedGlob = source.explicitlyMaterializedGlob;
+        target.captureFieldsRecorded = source.captureFieldsRecorded;
         target.installedViaAnonGlobAssign = source.installedViaAnonGlobAssign;
         target.cvStartFile = source.cvStartFile;
         target.cvStartLine = source.cvStartLine;

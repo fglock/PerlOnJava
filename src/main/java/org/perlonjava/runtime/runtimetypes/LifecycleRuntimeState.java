@@ -38,16 +38,27 @@ final class LifecycleRuntimeState {
     final ArrayList<Integer> ioReleaseMarks = new ArrayList<>();
     boolean flushing;
     int topLevelFlushDepth;
-    long lastAutoSweepNanos;
+    // Start within the configured quiet-sweep throttle window. A zero value
+    // would trigger a full root walk at the first statement boundary, often
+    // between callbacks that are expected to dispatch together.
+    long lastAutoSweepNanos = System.nanoTime();
     boolean inAutoSweep;
     boolean immediateWeakSweepRequested;
+    boolean deferCaptureReachabilityToBoundarySweep;
+    final ArrayList<RuntimeBase> deferredCaptureSweepCandidates = new ArrayList<>();
+    long boundaryWeakSweepGeneration;
+    long deferredCaptureSweepGeneration;
     final Set<RuntimeBase> targetedWeakSweepReferents =
             Collections.newSetFromMap(new IdentityHashMap<>());
     Set<RuntimeBase> flushReachableCache;
     Set<RuntimeBase> flushTiedReachableCache;
     ReachabilityWalker.ExternalRootSnapshot externalRootSnapshot;
     ReachabilityWalker.LiveRootSnapshot liveRootSnapshot;
-    Set<RuntimeBase> fullRootSnapshot;
+    Set<RuntimeBase> weakSweepLiveReferents;
+
+    ReachabilityWalker.RootReachabilitySnapshot fullRootSnapshot;
+    final IdentityHashMap<RuntimeBase, ReachabilityWalker.WeakRootWitness>
+            weakSweepRootWitnesses = new IdentityHashMap<>();
 
     final Set<RuntimeScalar> weakScalars = Collections.newSetFromMap(new IdentityHashMap<>());
     final IdentityHashMap<RuntimeBase, Set<RuntimeScalar>> referentToWeakRefs = new IdentityHashMap<>();
@@ -101,15 +112,21 @@ final class LifecycleRuntimeState {
         ioReleaseMarks.clear();
         flushing = false;
         topLevelFlushDepth = 0;
-        lastAutoSweepNanos = 0;
+        lastAutoSweepNanos = System.nanoTime();
         inAutoSweep = false;
         fullRootSnapshot = null;
+        weakSweepRootWitnesses.clear();
         immediateWeakSweepRequested = false;
+        deferCaptureReachabilityToBoundarySweep = false;
+        deferredCaptureSweepCandidates.clear();
+        boundaryWeakSweepGeneration = 0;
+        deferredCaptureSweepGeneration = 0;
         targetedWeakSweepReferents.clear();
         flushReachableCache = null;
         flushTiedReachableCache = null;
         externalRootSnapshot = null;
         liveRootSnapshot = null;
+        weakSweepLiveReferents = null;
         weakScalars.clear();
         referentToWeakRefs.clear();
         weakRefsExist = false;

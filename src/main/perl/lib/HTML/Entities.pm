@@ -13,7 +13,7 @@ our @EXPORT_OK = qw(%entity2char %char2entity encode_entities_numeric);
 
 %entity2char = (
     amp => '&', gt => '>', lt => '<', quot => '"', apos => "'",
-    nbsp => chr(160), copy => chr(169), reg => chr(174),
+    nbsp => chr(160), copy => chr(169), reg => chr(174), aring => chr(229),
 );
 %char2entity = reverse %entity2char;
 

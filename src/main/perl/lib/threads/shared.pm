@@ -8,6 +8,14 @@ our $threads_shared = 1;
 our $clone_warn;
 our @EXPORT = qw(share is_shared shared_clone cond_wait cond_timedwait
                  cond_signal cond_broadcast);
+push @EXPORT, 'bless' if $threads::threads;
+
+sub bless ($;$) {
+    my ($reference, $class) = @_;
+    die "Attempt to bless into a reference" if @_ > 1 && ref($class);
+    $class = caller unless @_ > 1;
+    return _bless($reference, $class);
+}
 
 sub _active_share (\[$@%]) { return _share($_[0]) }
 sub _active_is_shared (\[$@%]) { return _is_shared($_[0]) }

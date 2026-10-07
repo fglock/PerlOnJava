@@ -107,6 +107,12 @@ public class EmitSubroutine {
         if (ctx.contextType == RuntimeContextType.VOID) {
             return;
         }
+        // This generated body will instantiate a nested CODE object at runtime.
+        // Its invocation frame owns capture cleanup until the object is stored,
+        // returned, or discarded.
+        if (ctx.javaClassInfo != null) {
+            ctx.javaClassInfo.jvmClosureFrameRequired = true;
+        }
         MethodVisitor mv = ctx.mv;
 
         Set<String> declaredLexicalNames = new LinkedHashSet<>();
@@ -254,7 +260,9 @@ public class EmitSubroutine {
         // Carry the loop-body set so it can reject an illegal entry before the
         // loop's iterator/control state has been initialized.
         if (ctx.javaClassInfo != null) {
-            newJavaClassInfo.gotoLabelsInsideLoop.addAll(ctx.javaClassInfo.gotoLabelsInsideLoop);
+            if (node.useTryCatch) {
+                newJavaClassInfo.gotoLabelsInsideLoop.addAll(ctx.javaClassInfo.gotoLabelsInsideLoop);
+            }
             newJavaClassInfo.gotoLabelsInsideDefer.addAll(ctx.javaClassInfo.gotoLabelsInsideDefer);
         }
         // A subroutine body is emitted into a separate JavaClassInfo from the
@@ -323,6 +331,16 @@ public class EmitSubroutine {
                     EmitterMethodCreator.createClassWithMethod(
                             subCtx, node.block, node.useTryCatch
                     );
+            String deparseSourceText = ctx.compilerOptions == null
+                    ? null
+                    : (ctx.compilerOptions.deparseSourceCode != null
+                            ? ctx.compilerOptions.deparseSourceCode
+                            : ctx.compilerOptions.code);
+            boolean deparseSourceNeedsRegistry = exceedsModifiedUtf8ConstantLimit(deparseSourceText);
+            if (deparseSourceNeedsRegistry) {
+                RuntimeCode.registerDeparseSourceText(
+                        subCtx.javaClassInfo.javaClassName, deparseSourceText);
+            }
             try {
                 // HotSpot can defer verification of a generated lazy sub until
                 // it is first invoked. If that happens after the enclosing file
@@ -374,12 +392,6 @@ public class EmitSubroutine {
                 if (node.sourceEndTokenIndex >= 0) {
                     deparseSourceEnd = ctx.errorUtil.getSourceOffset(node.sourceEndTokenIndex);
                 }
-            }
-            String deparseSourceText = null;
-            if (ctx.compilerOptions != null) {
-                deparseSourceText = ctx.compilerOptions.deparseSourceCode != null
-                        ? ctx.compilerOptions.deparseSourceCode
-                        : ctx.compilerOptions.code;
             }
             int deparseFlags = 0;
             if (node.getBooleanAnnotation("simpleLexicalConstantCandidate")) {
@@ -447,7 +459,15 @@ public class EmitSubroutine {
             mv.visitLdcInsn(callbackPackage);
             mv.visitLdcInsn(cvStartFile);
             mv.visitLdcInsn(cvStartLine);
-            if (deparseSourceText != null) {
+            if (deparseSourceNeedsRegistry) {
+                mv.visitLdcInsn(subCtx.javaClassInfo.javaClassName);
+                mv.visitMethodInsn(
+                        Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "getDeparseSourceText",
+                        "(Ljava/lang/String;)Ljava/lang/String;",
+                        false);
+            } else if (deparseSourceText != null) {
                 mv.visitLdcInsn(deparseSourceText);
             } else {
                 mv.visitInsn(Opcodes.ACONST_NULL);
@@ -461,6 +481,22 @@ public class EmitSubroutine {
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "makeCodeObject",
                     "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;IIII)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            mv.visitInsn(subCtx.javaClassInfo.jvmClosureFrameRequired
+                    ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "setJvmClosureFrameRequired",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Z)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            mv.visitInsn(subCtx.javaClassInfo.pristineArgsSnapshotRequired
+                    ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "setPristineArgsSnapshotRequired",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Z)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
             if (node.getBooleanAnnotation("simpleLexicalConstantCandidate")
                     || node.getBooleanAnnotation("lexicalLiteralConstantCv")) {
@@ -851,6 +887,21 @@ public class EmitSubroutine {
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("SUB end");
     }
 
+    private static boolean exceedsModifiedUtf8ConstantLimit(String value) {
+        if (value == null) {
+            return false;
+        }
+        int encodedLength = 0;
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            encodedLength += c == 0 ? 2 : c <= 0x7f ? 1 : c <= 0x7ff ? 2 : 3;
+            if (encodedLength > 65_535) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Handles the postfix `()` node, which runs a subroutine.
      *
@@ -1083,6 +1134,10 @@ public class EmitSubroutine {
 
             // Registry-based non-local control flow check (for next/last/redo LABEL from closures)
             emitControlFlowCheck(emitterVisitor.ctx);
+            // Direct code-reference calls can return a RuntimeControlFlowList
+            // (for example \\&CORE::break). Dispatch the returned marker in
+            // the caller after folding any registry action into the result.
+            emitTaggedControlFlowHandling(emitterVisitor);
 
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
                     || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE) {
@@ -1414,16 +1469,9 @@ public class EmitSubroutine {
     }
 
     private static int callerLineCallSiteIndex(BinaryOperatorNode node, int statementTokenIndex) {
-        if (!usesBlockArgumentLine(node)) {
-            // Perl's per-statement COP: a call anywhere inside a multi-line
-            // statement reports the statement's first line.
-            return statementTokenIndex > 0 ? statementTokenIndex : expressionStartIndex(node);
-        }
-
-        if (node.right != null && node.right.getIndex() > 0) {
-            return node.right.getIndex();
-        }
-        return expressionStartIndex(node);
+        // Perl's COP records the start of the call statement. An anonymous
+        // subroutine argument must not move caller() to the argument's line.
+        return statementTokenIndex > 0 ? statementTokenIndex : expressionStartIndex(node);
     }
 
     private static int expressionStartIndex(BinaryOperatorNode node) {
@@ -1431,31 +1479,6 @@ public class EmitSubroutine {
             return node.left.getIndex();
         }
         return node.getIndex() > 0 ? node.getIndex() : -1;
-    }
-
-    private static boolean usesBlockArgumentLine(BinaryOperatorNode node) {
-        String prototype = directCallPrototype(node);
-        if (prototype != null) {
-            for (int i = 0; i < prototype.length(); i++) {
-                char c = prototype.charAt(i);
-                if (Character.isWhitespace(c) || c == ';' || c == ',') {
-                    continue;
-                }
-                return c == '&';
-            }
-
-            return false;
-        }
-
-        return firstArgumentIsLiteralSub(node);
-    }
-
-    private static boolean firstArgumentIsLiteralSub(BinaryOperatorNode node) {
-        if (!(node.right instanceof ListNode list) || list.elements == null || list.elements.isEmpty()) {
-            return false;
-        }
-
-        return list.elements.get(0) instanceof SubroutineNode;
     }
 
     /**
@@ -1489,16 +1512,6 @@ public class EmitSubroutine {
     private static int sourceArgumentStart(AbstractNode node) {
         Object annotated = node.getAnnotation("argumentStartIndex");
         return annotated instanceof Integer token && token > 0 ? token : node.getIndex();
-    }
-
-    private static String directCallPrototype(BinaryOperatorNode node) {
-        if (!(node.left instanceof OperatorNode operatorNode)
-                || !operatorNode.operator.equals("&")
-                || !(operatorNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef)
-                || !(codeRef.value instanceof RuntimeCode code)) {
-            return null;
-        }
-        return code.prototype;
     }
 
     /**
@@ -1710,6 +1723,21 @@ public class EmitSubroutine {
         mv.visitLabel(checkLoopLabels);
         for (LoopLabels loopLabels : emitterVisitor.ctx.javaClassInfo.loopLabelStack) {
             Label nextLoopCheck = new Label();
+
+            // A switch-only continue is consumed by the nearest when-clause
+            // boundary. It must not fall through to the synthetic given loop
+            // (which would skip the remaining statements in the given body),
+            // nor should ordinary next select the when block as a loop.
+            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
+                    "isSwitchContinue", "()Z", false);
+            if (loopLabels.switchContinueTarget) {
+                mv.visitJumpInsn(Opcodes.IFEQ, nextLoopCheck);
+            } else {
+                mv.visitJumpInsn(Opcodes.IFNE, nextLoopCheck);
+            }
 
             // if (!marked.matchesLabel(loopLabels.labelName)) continue;
             mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
