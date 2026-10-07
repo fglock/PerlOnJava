@@ -8,9 +8,11 @@ our @ISA = qw(Tie::Array);
 our $VERSION = '1.09';
 
 sub TIEARRAY {
-    my ($class, $filename, %options) = @_;
+    my ($class, $target, %options) = @_;
+    my $fh = _is_filehandle($target) ? $target : undef;
     my $self = bless {
-        filename => $filename,
+        filename => $fh ? undef : $target,
+        fh       => $fh,
         recsep   => exists $options{recsep} ? $options{recsep} : $/,
         records  => [],
         trailing => 0,
@@ -19,8 +21,25 @@ sub TIEARRAY {
     return $self;
 }
 
+sub _is_filehandle {
+    my ($target) = @_;
+    return 0 unless defined $target;
+    return 1 if ref $target;
+    return eval { defined fileno($target) } ? 1 : 0;
+}
+
 sub _load {
     my ($self) = @_;
+    if (my $fh = $self->{fh}) {
+        my $pos = tell($fh);
+        seek($fh, 0, 0) or return;
+        local $/;
+        my $content = <$fh>;
+        $content = '' unless defined $content;
+        seek($fh, $pos, 0) if defined $pos && $pos >= 0;
+        return $self->_load_content($content);
+    }
+
     my $filename = $self->{filename};
     return unless defined $filename && -e $filename;
 
@@ -30,6 +49,11 @@ sub _load {
     close $fh;
     $content = '' unless defined $content;
 
+    $self->_load_content($content);
+}
+
+sub _load_content {
+    my ($self, $content) = @_;
     my $sep = defined $self->{recsep} ? $self->{recsep} : "\n";
     if ($sep eq '') {
         $self->{records} = length($content) ? [ $content ] : [];
@@ -47,6 +71,17 @@ sub _load {
 
 sub _flush {
     my ($self) = @_;
+    if (my $fh = $self->{fh}) {
+        seek($fh, 0, 0) or return;
+        my $sep = defined $self->{recsep} ? $self->{recsep} : "\n";
+        print {$fh} join $sep, @{ $self->{records} } or return;
+        print {$fh} $sep if $self->{trailing} && @{ $self->{records} };
+        my $end = tell($fh);
+        truncate($fh, $end) if defined $end && $end >= 0;
+        seek($fh, $end, 0) if defined $end && $end >= 0;
+        return;
+    }
+
     my $filename = $self->{filename};
     return unless defined $filename;
 

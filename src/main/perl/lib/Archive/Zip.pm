@@ -189,6 +189,11 @@ Returns the compressed size.
 
 Returns the compression method (COMPRESSION_STORED or COMPRESSION_DEFLATED).
 
+=item desiredCompressionMethod( [$method] )
+
+Gets or sets the compression method that will be used when the member is
+written. When setting a method, returns the previous desired method.
+
 =item lastModTime()
 
 Returns the last modification time (Unix timestamp).

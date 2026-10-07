@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve diagnostics for malformed CSV rows, decode EUC-JP row-13 extension
+  characters, accept open filehandles in `Tie::File`, and honor ZIP member
+  `desiredCompressionMethod` when writing archives.
 - Add Java-backed `Scalar::Readonly` support, fix caller-frame visibility for
   nested signature calls, and keep Test2 negation accessors visible to the
   interpreter.

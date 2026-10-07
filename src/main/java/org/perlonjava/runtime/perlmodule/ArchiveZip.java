@@ -126,6 +126,7 @@ public class ArchiveZip extends PerlModuleBase {
             az.registerMethod("uncompressedSize", null);
             az.registerMethod("compressedSize", null);
             az.registerMethod("compressionMethod", null);
+            az.registerMethod("desiredCompressionMethod", null);
             az.registerMethod("lastModTime", null);
             az.registerMethod("lastModFileDateTime", null);
             az.registerMethod("crc32", null);
@@ -663,7 +664,8 @@ public class ArchiveZip extends PerlModuleBase {
             member.put("_isDirectory", scalarFalse);
             member.put("_uncompressedSize", new RuntimeScalar(content.length));
             member.put("_compressedSize", new RuntimeScalar(content.length));
-            member.put("_compressionMethod", new RuntimeScalar(COMPRESSION_DEFLATED));
+            member.put("_compressionMethod", new RuntimeScalar(COMPRESSION_STORED));
+            member.put("_desiredCompressionMethod", new RuntimeScalar(COMPRESSION_DEFLATED));
             member.put("_lastModTime", new RuntimeScalar(lastModified / 1000));
             member.put("_crc32", new RuntimeScalar(computeCRC32(content)));
 
@@ -702,7 +704,8 @@ public class ArchiveZip extends PerlModuleBase {
         member.put("_isDirectory", scalarFalse);
         member.put("_uncompressedSize", new RuntimeScalar(contentBytes.length));
         member.put("_compressedSize", new RuntimeScalar(contentBytes.length));
-        member.put("_compressionMethod", new RuntimeScalar(COMPRESSION_DEFLATED));
+        member.put("_compressionMethod", new RuntimeScalar(COMPRESSION_STORED));
+        member.put("_desiredCompressionMethod", new RuntimeScalar(COMPRESSION_STORED));
         member.put("_lastModTime", new RuntimeScalar(System.currentTimeMillis() / 1000));
         member.put("_crc32", new RuntimeScalar(computeCRC32(contentBytes)));
 
@@ -740,6 +743,7 @@ public class ArchiveZip extends PerlModuleBase {
         member.put("_uncompressedSize", scalarZero);
         member.put("_compressedSize", scalarZero);
         member.put("_compressionMethod", new RuntimeScalar(COMPRESSION_STORED));
+        member.put("_desiredCompressionMethod", new RuntimeScalar(COMPRESSION_STORED));
         member.put("_lastModTime", new RuntimeScalar(System.currentTimeMillis() / 1000));
         member.put("_crc32", scalarZero);
 
@@ -1139,6 +1143,32 @@ public class ArchiveZip extends PerlModuleBase {
     }
 
     /**
+     * Get or set the compression method that will be used when writing a member.
+     * Returns the previous desired method, matching Archive::Zip's API.
+     */
+    public static RuntimeList desiredCompressionMethod(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            return scalarZero.getList();
+        }
+        RuntimeHash member = args.get(0).hashDeref();
+        RuntimeScalar desired = member.get("_desiredCompressionMethod");
+        if (desired == null) {
+            desired = member.get("_compressionMethod");
+        }
+        if (args.size() < 2) {
+            return desired != null ? desired.getList() : scalarZero.getList();
+        }
+
+        int method = args.get(1).getInt();
+        if (method != COMPRESSION_STORED && method != COMPRESSION_DEFLATED) {
+            return desired != null ? desired.getList() : scalarZero.getList();
+        }
+        RuntimeScalar previous = desired != null ? desired : scalarZero;
+        member.put("_desiredCompressionMethod", new RuntimeScalar(method));
+        return previous.getList();
+    }
+
+    /**
      * Get last modification time.
      */
     public static RuntimeList lastModTime(RuntimeArray args, int ctx) {
@@ -1330,7 +1360,10 @@ public class ArchiveZip extends PerlModuleBase {
                     ? contents.toString().getBytes(StandardCharsets.ISO_8859_1)
                     : new byte[0];
 
-            RuntimeScalar method = member.get("_compressionMethod");
+            RuntimeScalar method = member.get("_desiredCompressionMethod");
+            if (method == null) {
+                method = member.get("_compressionMethod");
+            }
             if (method != null && method.getInt() == COMPRESSION_STORED) {
                 entry.setMethod(ZipEntry.STORED);
                 entry.setSize(data.length);
