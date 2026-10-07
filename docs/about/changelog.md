@@ -19,6 +19,32 @@ priorities and future plans.
 - Pass the Image::ExifTool 13.55 test suite by preserving escaped
   transliteration ranges and numeric string flags, and allowing valid nested
   conditional `goto` targets.
+- Compare owner-slot identities around DESTROY to distinguish new resurrection
+  from preexisting global owners during global destruction.
+- Retain positive closure-pad owner cycles per Perl runtime, record destruction
+  separately from count sentinels, track deferred releases by owner-slot
+  identity, guard bridge count overflow, and balance DESTROY callback ownership
+  on exceptional exits.
+- Register assignment-initialized lexical arrays and hashes as interpreter
+  roots, and release aggregate-only closure captures when their frame exits.
+- Register BEGIN-backed scalar and aggregate lexical pads as interpreter roots
+  when they enter the main pad, preserving weak references at runtime sweeps.
+- Count captured array and hash pads as closure owners and align named aggregate
+  `B::SV::REFCNT` results with Perl.
+- Keep captured aggregate ownership in native owner slots, compose slot counts
+  with legacy owners for `B::SV::REFCNT`, and dispatch final scope cleanup when
+  the last captured pad releases.
+- Transfer aggregate capture owner slots when forward-declared subs adopt
+  definitions, retain lazy capture ownership across forward-CV adoption, and
+  release captures on `undef &sub`; keep Catalyst::Runtime's system and
+  backtick tests active while skipping only its `fork()` assertions.
+- Release closure captures when retired interpreter pad metadata is no longer a Perl owner.
+- Keep END block captures alive through queued and active execution until END
+  releases their lexical owners, including `die`-initiated shutdown, nested
+  `exit`, and draining remaining END blocks after a callback fails. Match Perl
+  5.45.4's exit status 22 for an uncaught END callback failure.
+- Set the Windows CI unit gate budget to 75 minutes while preserving its
+  per-test watchdogs.
 - Document the 2026-10-03 imported core-suite milestone: 575 selected files
   completed without unexpected failures, with skips, TODOs, exclusions, and
   verification scope recorded in the testing guide.
@@ -37,9 +63,9 @@ priorities and future plans.
   representation for case-folded negated singleton regex classes.
 - Remove deleted package stashes from their parent namespace in
   `Symbol::delete_package`.
-- Preserve direct-call semantics for lexical and package `->&` methods, support
-  `CORE::bless` and `CORE::break` code references, and allow same-finally local
-  `goto` targets.
+- Preserve direct-call semantics for lexical and package `->&` methods across
+  both backends, support `CORE::bless` and `CORE::break` code references, and
+  allow same-finally local `goto` targets.
 - Preserve raw-source DATA handles for `CORE::__DATA__` and lvalue behavior for
   `CORE::substr` code references.
 - Match Perl diagnostics, lvalue behavior, and list context for callable

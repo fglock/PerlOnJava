@@ -159,6 +159,14 @@ public class MyVarCleanupStack {
             if (stack.get(i) == var) {
                 stack.remove(i);
                 decLiveCount(var);
+                if (!isRegistered(var)
+                        && var instanceof RuntimeBase base
+                        && (base instanceof RuntimeArray || base instanceof RuntimeHash)) {
+                    // The scope cleanup normally clears this marker before
+                    // unregistering. Keep the stack authoritative as well for
+                    // callers that release a lexical slot directly.
+                    base.localBindingExists = false;
+                }
                 noteVarLeftScope(var);
                 return;
             }

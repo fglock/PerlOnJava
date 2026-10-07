@@ -524,8 +524,14 @@ public class CompileBinaryOperator {
             // A dynamic `$sub(...)` call is a CODE dereference before it is a
             // call.  Under strict refs, a string invocant must be rejected
             // before dispatch; otherwise it is resolved as a symbolic CODE ref.
+            String hiddenVarName = node.left instanceof OperatorNode lexical
+                    && lexical.operator.equals("$")
+                    && lexical.getAnnotation("hiddenVarName") instanceof String hidden
+                    ? hidden : null;
             if (node.left instanceof OperatorNode op && op.operator.equals("$")
-                    && (op.getAnnotation("hiddenVarName") == null || bytecodeCompiler.evalBlockDepth == 0)) {
+                    && (hiddenVarName == null
+                    || !hiddenVarName.contains("__lexmethod_")
+                    && bytecodeCompiler.evalBlockDepth == 0)) {
                 boolean strictRefs = bytecodeCompiler.isStrictRefsEnabled();
                 int codeRefReg = bytecodeCompiler.allocateRegister();
                 if (strictRefs) {

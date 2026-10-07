@@ -219,7 +219,8 @@ public final class PerlThreadControlBlock {
                 if (cleanup != null) cleanup.run();
                 MortalList.flushDeferredCapturesBeforeEnd();
                 try {
-                    SpecialBlock.runEndBlocks(false);
+                    Throwable endFailure = SpecialBlock.runEndBlocks(false);
+                    if (failure == null && endFailure != null) failure = endFailure;
                 } catch (Throwable endFailure) {
                     if (failure == null) failure = endFailure;
                 } finally {

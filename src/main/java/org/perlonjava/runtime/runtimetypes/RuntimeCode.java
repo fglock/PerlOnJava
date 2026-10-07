@@ -2343,6 +2343,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public RuntimeBase[] capturedAggregates;
 
+    /** Owner slots that keep each captured aggregate pad in Perl reachability. */
+    public PerlOwnerSlot[] capturedAggregateOwnerSlots;
+
     /** Live lexical containers keyed by their Perl pad names for PadWalker. */
     public Map<String, RuntimeBase> closedOverVariables;
 
@@ -2537,6 +2540,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public int stashRefCount = 0;
 
+    /** Number of queued phaser executions currently invoking this CV. */
+    int activeEndBlockExecutions;
+    /** The queue's last selective owner was rescued while this CV was running. */
+    boolean rescuedActiveEndBlockOwner;
+
+    void beginEndBlockExecution() {
+        activeEndBlockExecutions++;
+    }
+
+    void endEndBlockExecution() {
+        if (activeEndBlockExecutions > 0) activeEndBlockExecutions--;
+        if (activeEndBlockExecutions == 0 && rescuedActiveEndBlockOwner) {
+            rescuedActiveEndBlockOwner = false;
+            MortalList.deferDecrement(this);
+        }
+    }
+
     /**
      * Cached constants referenced via backslash (e.g., \"yay") inside this subroutine.
      * When the CODE slot of a glob is replaced, weak references to these constants
@@ -2643,9 +2663,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (capturedAggregates != null) {
             RuntimeBase[] aggregates = capturedAggregates;
             capturedAggregates = null;
-            for (RuntimeBase aggregate : aggregates) {
+            PerlOwnerSlot[] ownerSlots = capturedAggregateOwnerSlots;
+            capturedAggregateOwnerSlots = null;
+            for (int i = 0; i < aggregates.length; i++) {
+                RuntimeBase aggregate = aggregates[i];
                 if (aggregate != null) {
-                    aggregate.releaseClosureCapture();
+                    aggregate.releaseClosureCaptureOwner(
+                            ownerSlots != null && i < ownerSlots.length
+                                    ? ownerSlots[i] : null);
+                } else if (ownerSlots != null && i < ownerSlots.length
+                        && ownerSlots[i] != null) {
+                    ownerSlots[i].release();
                 }
             }
         }
@@ -3496,6 +3524,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.capturedScalars = codeFrom.capturedScalars;
         this.capturedAggregates = codeFrom.capturedAggregates;
         this.captureFieldsRecorded = codeFrom.captureFieldsRecorded;
+        this.capturedAggregateOwnerSlots = codeFrom.capturedAggregateOwnerSlots;
         this.closedOverVariables = codeFrom.closedOverVariables;
         this.lexicalVariableNames = codeFrom.lexicalVariableNames;
         this.lexicalHints = codeFrom.lexicalHints;
@@ -5019,6 +5048,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Field[] allFields = clazz.getDeclaredFields();
         List<RuntimeScalar> captured = new ArrayList<>();
         List<RuntimeBase> capturedAggregates = new ArrayList<>();
+        List<PerlOwnerSlot> capturedAggregateOwnerSlots = new ArrayList<>();
         Set<RuntimeScalar> seenScalars = Collections.newSetFromMap(new IdentityHashMap<>());
         Set<RuntimeBase> seenAggregates = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Field f : allFields) {
@@ -5042,7 +5072,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     code.closedOverVariables.put(f.getName(), capturedAggregate);
                     capturedAggregates.add(capturedAggregate);
-                    capturedAggregate.retainClosureCapture();
+                    PerlOwnerSlot ownerSlot = capturedAggregate.retainClosureCaptureOwner();
+                    capturedAggregateOwnerSlots.add(ownerSlot);
                 }
             }
         }
@@ -5052,6 +5083,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         if (!capturedAggregates.isEmpty()) {
             code.capturedAggregates = capturedAggregates.toArray(new RuntimeBase[0]);
+            code.capturedAggregateOwnerSlots =
+                    capturedAggregateOwnerSlots.toArray(new PerlOwnerSlot[0]);
         }
         GlobalVariable.invalidateGlobalCodeRefGraphRoots();
 
@@ -8759,6 +8792,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // callable body is cleared.
         code.isDeclared = true;
         code.codeReferenceUndefined = true;
+        code.releaseCaptures();
         code.clearPadConstantWeakRefs();
         code.methodHandle = null;
         code.subroutine = null;

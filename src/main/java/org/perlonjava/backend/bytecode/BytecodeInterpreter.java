@@ -100,7 +100,7 @@ public class BytecodeInterpreter {
         return scalar instanceof ReadOnlyAlias
                 || scalar.threadShared
                 || scalar.captureCount > 0
-                || scalar.captureRefCountOwned > 0
+                || scalar.captureRefCountOwned() > 0
                 || scalar.referencedByScalarReference
                 || scalar.hasLiveSubstrLvalueObservers()
                 || scalar.hasWatchers()
@@ -229,7 +229,7 @@ public class BytecodeInterpreter {
         frame.suspendedRuntimeDisabledWarningCategories = null;
 
         for (RuntimeCode closure : frame.createdClosures) {
-            if (closure.capturedScalars != null
+            if ((closure.capturedScalars != null || closure.capturedAggregates != null)
                     && closure.refCount == 0
                     && closure.stashRefCount <= 0
                     && (frame.returnedClosures == null
@@ -1356,7 +1356,8 @@ public class BytecodeInterpreter {
                                 RuntimeBase closureVal = registers[closureRd];
                                 if (closureVal instanceof RuntimeScalar crs
                                         && crs.value instanceof RuntimeCode ic
-                                        && ic.capturedScalars != null) {
+                                        && (ic.capturedScalars != null
+                                                || ic.capturedAggregates != null)) {
                                     createdClosures.add(ic);
                                 }
                                 if (closureVal instanceof RuntimeScalar crs
@@ -3802,7 +3803,7 @@ public class BytecodeInterpreter {
             // scopeExitCleanup special case for CODE refs).
             if (!frame.suspended && !createdClosures.isEmpty()) {
                 for (RuntimeCode closure : createdClosures) {
-                    if (closure.capturedScalars != null
+                    if ((closure.capturedScalars != null || closure.capturedAggregates != null)
                             && closure.refCount == 0
                             && closure.stashRefCount <= 0
                             && (frame.returnedClosures == null || !frame.returnedClosures.contains(closure))) {

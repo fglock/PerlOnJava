@@ -132,6 +132,22 @@ public class ReachabilityWalker {
         return "DB::args".equals(name);
     }
 
+    private static boolean hasCapturedAggregateElementOwner(RuntimeBase referent) {
+        for (RuntimeScalar owner : ScalarRefRegistry.snapshot()) {
+            if (owner == null || !owner.refCountOwned || owner.value != referent) continue;
+            RuntimeBase container = owner.containerOwner;
+            if (container instanceof RuntimeArray array
+                    && array.captureCount > 0 && array.elements.contains(owner)) {
+                return true;
+            }
+            if (container instanceof RuntimeHash hash
+                    && hash.captureCount > 0 && hash.elements.containsValue(owner)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Walk from Perl-visible roots and mark reachable objects.
      * <p>
@@ -198,6 +214,13 @@ public class ReachabilityWalker {
         }
         for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
             addReachable(rescued, todo);
+        }
+        // Explicit owner slots carry semantic Perl ownership even when the
+        // owning pad cell is intentionally absent from conservative lexical
+        // walker roots. Captured aggregate pads use this path so their
+        // elements remain reachable until the closure releases the slot.
+        for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotReferents()) {
+            addReachable(ownerReferent, todo);
         }
         for (RuntimeBase suspended : MortalList.snapshotSuspendedRoots()) {
             addReachable(suspended, todo);
@@ -365,6 +388,14 @@ public class ReachabilityWalker {
                 // and must survive the weak sweep.
                 if (walkCaptures || WeakRefRegistry.hasWeakRefsTo(code)) {
                     visitCodeCaptures(code, todo);
+                } else if (code.capturedAggregates != null) {
+                    // Explicit aggregate capture entries are semantic owner
+                    // edges even when conservative scalar/reflection capture
+                    // walking is disabled. Unlike retired interpreter capture
+                    // metadata, this list is cleared by releaseCaptures().
+                    for (RuntimeBase aggregate : code.capturedAggregates) {
+                        addReachable(aggregate, todo);
+                    }
                 }
             } else if (cur instanceof RuntimeScalar s) {
                 visitScalar(s, todo);
@@ -514,6 +545,9 @@ public class ReachabilityWalker {
                 visitScalar(cap, todo);
             }
         }
+        if (code.capturedAggregates != null) {
+            for (RuntimeBase cap : code.capturedAggregates) addReachable(cap, todo);
+        }
         visitReflectiveCodeScalars(code, cap -> {
             addReachable(cap, todo);
             visitScalar(cap, todo);
@@ -528,17 +562,10 @@ public class ReachabilityWalker {
             }
             addReachable(base, todo);
         });
-        if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
-                && interpreted.capturedVars != null) {
-            for (RuntimeBase cap : interpreted.capturedVars) {
-                if (cap instanceof RuntimeScalar scalar) {
-                    addReachable(scalar, todo);
-                    visitScalar(scalar, todo);
-                } else if (cap != null) {
-                    addReachable(cap, todo);
-                }
-            }
-        }
+        // InterpretedCode.capturedVars is immutable execution-frame metadata.
+        // Captured entries can remain there after their lexical lifetime has
+        // ended and releaseCaptures has removed them from the semantic owner
+        // lists. Only capturedScalars/capturedAggregates describe live owners.
     }
 
     private void recordWeakArraySlotWitness(RuntimeArray array, RuntimeScalar ownerScalar) {
@@ -725,25 +752,19 @@ public class ReachabilityWalker {
                         visitScalarPath(cap, curPath + "<closure " + name + "::" + sub + " cap#" + (i++) + ">", howReached, todo);
                     }
                 }
+                if (code.capturedAggregates != null) {
+                    int i = 0;
+                    for (RuntimeBase cap : code.capturedAggregates) {
+                        String path = curPath + "<closure aggregate cap#" + (i++) + ">";
+                        if (howReached.putIfAbsent(cap, path) == null) todo.add(cap);
+                    }
+                }
                 String name = code.packageName == null ? "?" : code.packageName;
                 String sub = code.subName == null ? "(anon)" : code.subName;
                 final int[] reflectiveIdx = {0};
                 visitReflectiveCodeScalars(code, cap ->
                         visitScalarPath(cap, curPath + "<closure " + name + "::" + sub
                                 + " field-cap#" + (reflectiveIdx[0]++) + ">", howReached, todo));
-                if (cur instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
-                        && interpreted.capturedVars != null) {
-                    int i = 0;
-                    for (RuntimeBase cap : interpreted.capturedVars) {
-                        String path = curPath + "<interpreted closure " + name + "::" + sub
-                                + " cap#" + (i++) + ">";
-                        if (cap instanceof RuntimeScalar scalar) {
-                            visitScalarPath(scalar, path, howReached, todo);
-                        } else if (cap != null && howReached.putIfAbsent(cap, path) == null) {
-                            todo.add(cap);
-                        }
-                    }
-                }
             }
         }
         return null;
@@ -800,13 +821,17 @@ public class ReachabilityWalker {
         Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
 
-        if (enqueueStrongEdges(target, target, seen, todo)) return true;
+        if (enqueueStrongEdges(target, target, seen, todo)) {
+            return true;
+        }
 
         int visits = 0;
         while (!todo.isEmpty() && visits < MAX_VISITS) {
             RuntimeBase cur = todo.removeFirst();
             visits++;
-            if (enqueueStrongEdges(cur, target, seen, todo)) return true;
+            if (enqueueStrongEdges(cur, target, seen, todo)) {
+                return true;
+            }
         }
         return false;
     }
@@ -894,17 +919,9 @@ public class ReachabilityWalker {
                     if (seen.add(cap)) todo.addLast(cap);
                 }
             }
-            if (cur instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
-                    && interpreted.capturedVars != null) {
-                for (RuntimeBase cap : interpreted.capturedVars) {
-                    if (cap instanceof RuntimeScalar scalar) {
-                        if (enqueueStrongScalar(scalar, target, seen, todo)) return true;
-                    } else if (cap != null) {
-                        if (cap == target) return true;
-                        if (seen.add(cap)) todo.addLast(cap);
-                    }
-                }
-            }
+            // Do not traverse InterpretedCode.capturedVars here. It is retained
+            // for execution after capture owners have been retired; walking it
+            // would turn dead pad metadata into a strong Perl reference.
             Object closureObject = code.codeObject != null ? code.codeObject : code.subroutine;
             if (closureObject != null) {
                 try {
@@ -1137,6 +1154,8 @@ public class ReachabilityWalker {
     }
 
     static RootReachabilitySnapshot reachableFromRootsSnapshotWithStatus() {
+        ReachabilityQueryStats stats = MortalList.activeReachabilityQueryStats();
+        if (stats != null) stats.snapshotsBuilt++;
         final int maxVisits = 50_000;
         Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>(512));
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
@@ -1174,6 +1193,9 @@ public class ReachabilityWalker {
         }
         for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
             if (seen.add(rescued)) todo.addLast(rescued);
+        }
+        for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotReferents()) {
+            if (seen.add(ownerReferent)) todo.addLast(ownerReferent);
         }
 
         int visits = 0;
@@ -1465,6 +1487,12 @@ public class ReachabilityWalker {
                         if (seen.add(cap)) todo.addLast(cap);
                     }
                 }
+                if (code.capturedAggregates != null) {
+                    for (RuntimeBase cap : code.capturedAggregates) {
+                        if (cap == target) return true;
+                        if (seen.add(cap)) todo.addLast(cap);
+                    }
+                }
                 final boolean[] foundReflectiveCapture = {false};
                 visitReflectiveCodeScalars(code, cap -> {
                     if (foundReflectiveCapture[0]) return;
@@ -1481,18 +1509,6 @@ public class ReachabilityWalker {
                         todo.addLast(base);
                     }
                 });
-                if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
-                        && interpreted.capturedVars != null) {
-                    for (RuntimeBase captured : interpreted.capturedVars) {
-                        if (captured == null) continue;
-                        if (captured instanceof RuntimeScalar scalar
-                                && WeakRefRegistry.isweak(scalar)) {
-                            continue;
-                        }
-                        if (captured == target) return true;
-                        if (seen.add(captured)) todo.addLast(captured);
-                    }
-                }
             }
         }
         return false;
@@ -1517,6 +1533,8 @@ public class ReachabilityWalker {
      */
     public static boolean isReachableFromRoots(RuntimeBase target, boolean globalOnly) {
         if (target == null) return false;
+        ReachabilityQueryStats stats = MortalList.activeReachabilityQueryStats();
+        if (stats != null) stats.rootQueries++;
         // Hard cap to prevent pathological worst-case walks. Class::MOP
         // bootstrap touches ~thousands of nodes; pick a generous limit
         // that still bounds cost.
@@ -1527,7 +1545,7 @@ public class ReachabilityWalker {
 
         // Seed: package globals (scalars, arrays, hashes, code refs).
         for (RuntimeScalar codeRef : GlobalVariable.globalCodeRefValuesView()) {
-            seedTarget(codeRef, target, seen, todo);
+            seedTarget(codeRef, target, seen, todo, stats);
             if (seen.contains(target)) return true;
             if (!globalOnly
                     && codeRef != null
@@ -1536,17 +1554,36 @@ public class ReachabilityWalker {
             }
         }
         for (RuntimeScalar scalar : GlobalVariable.globalVariableValuesView()) {
-            seedTarget(scalar, target, seen, todo);
+            seedTarget(scalar, target, seen, todo, stats);
             if (seen.contains(target)) return true;
         }
         for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrayEntriesView()) {
             if (isNonOwningDebugArgsArray(e.getKey())) continue;
-            if (e.getValue() == target) return true;
-            if (e.getValue() != null && seen.add(e.getValue())) todo.addLast(e.getValue());
+            if (e.getValue() == target) {
+                if (stats != null) stats.rootsSeeded++;
+                return true;
+            }
+            if (e.getValue() != null && seen.add(e.getValue())) {
+                todo.addLast(e.getValue());
+                if (stats != null) stats.rootsSeeded++;
+            }
         }
         for (RuntimeHash hash : GlobalVariable.globalHashValuesView()) {
-            if (hash == target) return true;
-            if (hash != null && seen.add(hash)) todo.addLast(hash);
+            if (hash == target) {
+                if (stats != null) stats.rootsSeeded++;
+                return true;
+            }
+            if (hash != null && seen.add(hash)) {
+                todo.addLast(hash);
+                if (stats != null) stats.rootsSeeded++;
+            }
+        }
+        for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotReferents()) {
+            if (ownerReferent == target) return true;
+            if (ownerReferent != null && seen.add(ownerReferent)) {
+                todo.addLast(ownerReferent);
+                if (stats != null) stats.rootsSeeded++;
+            }
         }
         // Seed: ScalarRefRegistry-tracked scalars whose declaration
         // scope is still live (per MyVarCleanupStack). This is what
@@ -1565,7 +1602,7 @@ public class ReachabilityWalker {
                 if (WeakRefRegistry.isweak(sc)) continue;
                 if (!MyVarCleanupStack.isLive(sc) && !sc.refCountOwned) continue;
                 if (sc.scopeExited) continue;
-                seedTarget(sc, target, seen, todo);
+                seedTarget(sc, target, seen, todo, stats);
                 if (seen.contains(target)) return true;
             }
             // Seed: live my-vars themselves (RuntimeHash / RuntimeArray /
@@ -1581,19 +1618,34 @@ public class ReachabilityWalker {
                 // the BFS only follows hashes/arrays, missing the scalar's
                 // referent (e.g. `my $schema = DBICTest->init_schema()`).
                 if (liveVar instanceof RuntimeScalar sc) {
-                    if (sc == target) return true;
-                    seedTarget(sc, target, seen, todo);
+                    if (sc == target) {
+                        if (stats != null) stats.rootsSeeded++;
+                        return true;
+                    }
+                    seedTarget(sc, target, seen, todo, stats);
                     if (seen.contains(target)) return true;
                 } else if (liveVar instanceof RuntimeBase rb) {
-                    if (rb == target) return true;
-                    if (seen.add(rb)) todo.addLast(rb);
+                    if (rb == target) {
+                        if (stats != null) stats.rootsSeeded++;
+                        return true;
+                    }
+                    if (seen.add(rb)) {
+                        todo.addLast(rb);
+                        if (stats != null) stats.rootsSeeded++;
+                    }
                 }
             }
         }
         // Seed: rescued objects.
         for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
-            if (rescued == target) return true;
-            if (seen.add(rescued)) todo.addLast(rescued);
+            if (rescued == target) {
+                if (stats != null) stats.rootsSeeded++;
+                return true;
+            }
+            if (seen.add(rescued)) {
+                todo.addLast(rescued);
+                if (stats != null) stats.rootsSeeded++;
+            }
         }
 
         // BFS, short-circuiting on target.
@@ -1601,19 +1653,25 @@ public class ReachabilityWalker {
         while (!todo.isEmpty() && visits < MAX_VISITS) {
             RuntimeBase cur = todo.removeFirst();
             visits++;
+            if (stats != null) stats.nodesVisited++;
             if (cur == target) return true;
             // Phase D-W2 (perf): skip RuntimeStash — see bfs().
             if (cur instanceof RuntimeStash) continue;
             if (cur instanceof RuntimeHash h) {
+                if (h.elements instanceof TieHash) {
+                    if (stats != null) stats.edgesInspected++;
+                }
                 if (h.elements instanceof TieHash tieHash
                         && followScalar(tieHash.getSelf(), target, seen, todo)) {
                     return true;
                 }
                 for (RuntimeScalar v : h.elements.values()) {
+                    if (stats != null) stats.edgesInspected++;
                     if (followScalar(v, target, seen, todo)) return true;
                 }
             } else if (cur instanceof RuntimeArray a) {
                 for (RuntimeScalar v : a.elements) {
+                    if (stats != null) stats.edgesInspected++;
                     if (followScalar(v, target, seen, todo)) return true;
                 }
             }
@@ -1846,12 +1904,15 @@ public class ReachabilityWalker {
 
         private final Set<RuntimeBase> nonLexicalReachable =
                 Collections.newSetFromMap(new IdentityHashMap<>(512));
+        private final ReachabilityQueryStats queryStats =
+                MortalList.activeReachabilityQueryStats();
 
         public ExternalRootSnapshot() {
             this(true);
         }
 
         public ExternalRootSnapshot(boolean includeRescued) {
+            if (queryStats != null) queryStats.externalRootSnapshotsBuilt++;
             buildNonLexicalRoots(includeRescued);
         }
 
@@ -1900,6 +1961,7 @@ public class ReachabilityWalker {
             while (!todo.isEmpty() && visits < MAX_VISITS) {
                 RuntimeBase cur = todo.removeFirst();
                 visits++;
+                if (queryStats != null) queryStats.externalRootSnapshotNodesVisited++;
                 walkSnapshotNode(cur, todo);
             }
         }
@@ -1927,6 +1989,7 @@ public class ReachabilityWalker {
         private void seedNonLexicalScalar(RuntimeScalar s,
                                           java.util.ArrayDeque<RuntimeBase> todo) {
             if (s == null) return;
+            if (queryStats != null) queryStats.externalRootSnapshotEdgesInspected++;
             if (WeakRefRegistry.isweak(s)) return;
             if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
                     && s.value instanceof RuntimeBase b) {
@@ -1941,17 +2004,10 @@ public class ReachabilityWalker {
                     seedNonLexicalScalar(cap, todo);
                 }
             }
-            visitReflectiveCodeScalars(code, cap -> seedNonLexicalScalar(cap, todo));
-            if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
-                    && interpreted.capturedVars != null) {
-                for (RuntimeBase cap : interpreted.capturedVars) {
-                    if (cap instanceof RuntimeScalar scalar) {
-                        seedNonLexicalScalar(scalar, todo);
-                    } else {
-                        addNonLexical(cap, todo);
-                    }
-                }
+            if (code.capturedAggregates != null) {
+                for (RuntimeBase cap : code.capturedAggregates) addNonLexical(cap, todo);
             }
+            visitReflectiveCodeScalars(code, cap -> seedNonLexicalScalar(cap, todo));
         }
 
         private void addNonLexical(RuntimeBase b,
@@ -2072,15 +2128,26 @@ public class ReachabilityWalker {
     private static void seedTarget(RuntimeScalar s, RuntimeBase target,
                                    Set<RuntimeBase> seen,
                                    java.util.ArrayDeque<RuntimeBase> todo) {
+        seedTarget(s, target, seen, todo, null);
+    }
+
+    private static void seedTarget(RuntimeScalar s, RuntimeBase target,
+                                   Set<RuntimeBase> seen,
+                                   java.util.ArrayDeque<RuntimeBase> todo,
+                                   ReachabilityQueryStats stats) {
         if (s == null) return;
+        if (stats != null) stats.edgesInspected++;
         if (WeakRefRegistry.isweak(s)) return;
         if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && s.value instanceof RuntimeBase b) {
             if (b == target) {
-                seen.add(target);
+                if (seen.add(target) && stats != null) stats.rootsSeeded++;
                 return;
             }
-            if (seen.add(b)) todo.addLast(b);
+            if (seen.add(b)) {
+                todo.addLast(b);
+                if (stats != null) stats.rootsSeeded++;
+            }
         }
     }
 
@@ -2133,6 +2200,12 @@ public class ReachabilityWalker {
                 if (followScalar(cap, target, seen, todo)) return true;
             }
         }
+        if (code.capturedAggregates != null) {
+            for (RuntimeBase cap : code.capturedAggregates) {
+                if (cap == target) return true;
+                if (seen.add(cap)) todo.addLast(cap);
+            }
+        }
         final boolean[] foundReflectiveCapture = {false};
         visitReflectiveCodeScalars(code, cap -> {
             if (!foundReflectiveCapture[0] && followScalar(cap, target, seen, todo)) {
@@ -2150,17 +2223,6 @@ public class ReachabilityWalker {
             }
         });
         if (foundReflectiveBase[0]) return true;
-        if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
-                && interpreted.capturedVars != null) {
-            for (RuntimeBase cap : interpreted.capturedVars) {
-                if (cap instanceof RuntimeScalar scalar) {
-                    if (followScalar(scalar, target, seen, todo)) return true;
-                } else if (cap != null) {
-                    if (cap == target) return true;
-                    if (seen.add(cap)) todo.addLast(cap);
-                }
-            }
-        }
         return false;
     }
 
@@ -2464,6 +2526,9 @@ public class ReachabilityWalker {
             if (!liveReferent && referent.hasSemanticCaptureOwner()) {
                 continue;
             }
+            if (!liveReferent && hasCapturedAggregateElementOwner(referent)) {
+                continue;
+            }
             boolean localBinding = (referent instanceof RuntimeHash || referent instanceof RuntimeArray)
                     && referent.localBindingExists;
             boolean cycleProtected = quiet && strongCycleProtected.contains(referent);
@@ -2546,6 +2611,9 @@ public class ReachabilityWalker {
                 continue;
             }
             if (referent.hasSemanticCaptureOwner()) {
+                continue;
+            }
+            if (hasCapturedAggregateElementOwner(referent)) {
                 continue;
             }
             if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)

@@ -21,6 +21,43 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class MortalList {
     private static final AtomicInteger runtimesWithBoundaryWork = new AtomicInteger();
 
+    static final class ReachabilityQueryMeasurement implements AutoCloseable {
+        private final LifecycleRuntimeState state;
+        private final ReachabilityQueryStats stats;
+        private final ReachabilityQueryStats previous;
+
+        private ReachabilityQueryMeasurement(LifecycleRuntimeState state,
+                                             ReachabilityQueryStats stats,
+                                             ReachabilityQueryStats previous) {
+            this.state = state;
+            this.stats = stats;
+            this.previous = previous;
+        }
+
+        ReachabilityQueryStats stats() {
+            return stats;
+        }
+
+        @Override
+        public void close() {
+            if (state.activeReachabilityQueryStats == stats) {
+                state.activeReachabilityQueryStats = previous;
+            }
+        }
+    }
+
+    static ReachabilityQueryMeasurement measureReachabilityQueries() {
+        LifecycleRuntimeState state = state();
+        ReachabilityQueryStats previous = state.activeReachabilityQueryStats;
+        ReachabilityQueryStats stats = new ReachabilityQueryStats();
+        state.activeReachabilityQueryStats = stats;
+        return new ReachabilityQueryMeasurement(state, stats, previous);
+    }
+
+    static ReachabilityQueryStats activeReachabilityQueryStats() {
+        return state().activeReachabilityQueryStats;
+    }
+
     // Always-on: refCount tracking for birth-tracked objects (anonymous hashes,
     // arrays, closures with captures) requires balanced increment/decrement.
     // The increment side fires unconditionally in setLarge() when refCount >= 0,
@@ -186,6 +223,18 @@ public class MortalList {
         RuntimeBase.PendingOwnerRelease ownerRelease =
                 base.queueOwnerRelease(ownerScalar, releaseSite);
         queueDeferredBase(state, base, ownerRelease, null, ownerScalar);
+    }
+
+    /** Queue a closure-capture bridge decrement with owner-slot provenance. */
+    static void deferOwnerSlotDecrement(RuntimeBase base, String transientOwnerKind,
+                                        PerlOwnerSlot.PendingRelease slotRelease) {
+        if (base.refCountTrace) {
+            base.traceRefCount(0, "MortalList.deferOwnerSlotDecrement (queued)");
+        }
+        LifecycleRuntimeState state = state();
+        markBoundaryWork(state);
+        RuntimeBase.PendingOwnerRelease ownerRelease = base.queueOwnerSlotRelease(slotRelease);
+        queueDeferredBase(state, base, ownerRelease, transientOwnerKind);
     }
 
     private static void queueDeferredBase(LifecycleRuntimeState state, RuntimeBase base,
@@ -1301,28 +1350,11 @@ public class MortalList {
                 || !WeakRefRegistry.hasWeakRefsTo(base)) {
             return;
         }
-        // noteVarLeftScope() immediately requests a complete weak sweep after
-        // this method returns. At a safe outer statement boundary that sweep
-        // will perform the same root test for every referent, so a separate
-        // target-specific root walk here only delays later sibling callbacks.
-        // Keep the eager path when the sweep could be blocked or disabled.
-        if (willRunImmediateSweepAtNextBoundary()) {
-            return;
-        }
         if (ReachabilityWalker.isReachableFromRoots(base)) {
             return;
         }
         base.refCount = Integer.MIN_VALUE;
         DestroyDispatch.callDestroy(base);
-    }
-
-    private static boolean willRunImmediateSweepAtNextBoundary() {
-        LifecycleRuntimeState state = state();
-        return !AUTO_GC_DISABLED
-                && !state.inAutoSweep
-                && !ModuleInitGuard.inModuleInit()
-                && RuntimeCode.argsStackDepth() <= 1
-                && state.temporaryRoots.isEmpty();
     }
 
     // D-W6.18 perf: cached reachable-set, valid for the duration of a
@@ -1400,6 +1432,8 @@ public class MortalList {
     private static void processDeferredBase(RuntimeBase base, boolean clearWeakRefsForLocalBinding,
                                             RuntimeBase.PendingOwnerRelease ownerRelease,
                                             String transientOwnerKind) {
+        ReachabilityQueryStats queryStats = activeReachabilityQueryStats();
+        if (queryStats != null) queryStats.deferredBasesProcessed++;
         base.completeQueuedOwnerRelease(ownerRelease, "MortalList.processDeferredBase");
         base.releaseTransientTraceOwner(transientOwnerKind,
                 "MortalList.processDeferredBase");
@@ -1409,10 +1443,12 @@ public class MortalList {
         }
         if (base.refCount > 0 && --base.refCount == 0) {
             if (base.hasSemanticCaptureOwner()) {
-                // The shared captured pad cell is an authoritative strong
-                // owner.  It is intentionally independent of the transient
-                // selective count being drained here.
-                base.refCount = 1;
+                // Captured aggregate pads use native owner slots. Keep the
+                // legacy count at zero while one is active; its final release
+                // will perform the lifecycle transition. Scalar captures still
+                // have a legacy bridge count and retain the old compatibility
+                // sentinel behavior.
+                if (base.nativeCaptureOwnerCount() == 0) base.refCount = 1;
             } else if (base.localBindingExists) {
                 if (base instanceof RuntimeScalar scalar
                         && scalar.referencedByScalarReference

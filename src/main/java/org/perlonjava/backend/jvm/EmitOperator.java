@@ -1451,6 +1451,21 @@ public class EmitOperator {
                     handleVoidContext(emitterVisitor);
                     return;
                 }
+                if (ampNode.operand instanceof IdentifierNode identifierNode) {
+                    String name = NameNormalizer.normalizeVariableName(
+                            identifierNode.name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
+                    MethodVisitor mv = emitterVisitor.ctx.mv;
+                    mv.visitLdcInsn(name);
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                            "undefineVisibleGlobalCodeRef",
+                            "(Ljava/lang/String;)V",
+                            false);
+                    if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+                        emitUndef(mv);
+                    }
+                    return;
+                }
             }
         }
 

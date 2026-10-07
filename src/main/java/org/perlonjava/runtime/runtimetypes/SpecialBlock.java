@@ -13,6 +13,9 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariab
  * - CHECK blocks are stored oldest-first and consumed from the back.
  */
 public class SpecialBlock {
+    /** Exit status observed from the target Perl 5.45.4 END-call failure path. */
+    public static final int END_FAILURE_EXIT_STATUS = 22;
+
 
     /** Identifies a failure raised while dispatching a deferred phaser. */
     public static final class DeferredPhaseException extends RuntimeException {
@@ -54,6 +57,15 @@ public class SpecialBlock {
         RuntimeArray.unshift(getEndBlocks(), codeRef);
     }
 
+    /** Return whether {@code code} still has an owning slot in the END queue. */
+    static boolean hasPendingEndBlock(RuntimeCode code) {
+        if (code == null) return false;
+        for (RuntimeScalar block : getEndBlocks().elements) {
+            if (block != null && block.value == code) return true;
+        }
+        return false;
+    }
+
     /**
      * Saves a code reference to the initBlocks array.
      * Blocks are added using `unshift`, meaning they will be executed in FIFO order.
@@ -80,28 +92,46 @@ public class SpecialBlock {
      * @param resetChildStatus if true, reset $? to 0 before running END blocks (normal exit).
      *                         if false, preserve $? (die/exception path).
      */
-    public static void runEndBlocks(boolean resetChildStatus) {
+    public static Throwable runEndBlocks(boolean resetChildStatus) {
         if (resetChildStatus) {
             // Reset $? to 0 before END blocks run (Perl semantics for normal exit)
             // This ensures END blocks see $? = 0 unless they explicitly set it
             getGlobalVariable("main::?").set(0);
         }
         
+        Throwable firstFailure = null;
         RuntimeArray endBlocks = getEndBlocks();
         while (!endBlocks.isEmpty()) {
             RuntimeScalar block = RuntimeArray.shift(endBlocks);
             if (block.getDefinedBoolean()) {
-                RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
+                RuntimeCode code = block.value instanceof RuntimeCode runtimeCode ? runtimeCode : null;
+                if (code != null) code.beginEndBlockExecution();
+                try {
+                    RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
+                } catch (PerlExitException exit) {
+                    // exit() recursively drains the remaining queue. It is a
+                    // control signal, not a failing END callback.
+                    throw exit;
+                } catch (Throwable failure) {
+                    if (firstFailure == null) firstFailure = failure;
+                    String message = ErrorMessageUtil.stringifyException(failure);
+                    System.err.print(message);
+                    if (!message.endsWith("\n")) System.err.println();
+                    System.err.println("END failed--call queue aborted.");
+                } finally {
+                    if (code != null) code.endEndBlockExecution();
+                }
             }
         }
+        return firstFailure;
     }
 
     /**
      * Executes all code blocks stored in the endBlocks array in LIFO order.
      * Resets $? to 0 before running (normal exit behavior).
      */
-    public static void runEndBlocks() {
-        runEndBlocks(true);
+    public static Throwable runEndBlocks() {
+        return runEndBlocks(true);
     }
 
     /**

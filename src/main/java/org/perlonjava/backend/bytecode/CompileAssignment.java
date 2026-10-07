@@ -2546,6 +2546,8 @@ public class CompileAssignment {
                             bytecodeCompiler.emit(Opcodes.NEW_HASH);
                             bytecodeCompiler.emitReg(hashReg);
                             bytecodeCompiler.emitLexicalAlias(hashReg, varName);
+                            bytecodeCompiler.emit(Opcodes.REGISTER_MY_VAR);
+                            bytecodeCompiler.emitReg(hashReg);
 
                             int countReg = -1;
                             if (outerContext == RuntimeContextType.SCALAR) {

@@ -9,7 +9,8 @@ on:
 jobs:
   build:
     name: build (${{ matrix.os }})
-    timeout-minutes: 150
+    # The longest platform path budgets 155 minutes across bounded steps.
+    timeout-minutes: 180
 
     # Define a matrix to run the job on multiple operating systems
     runs-on: ${{ matrix.os }}
@@ -41,9 +42,9 @@ jobs:
       - name: Build with Make (Windows)
         id: build-windows
         if: runner.os == 'Windows'
-        # The complete serial Windows unit gate exceeds 45 minutes; retain
-        # all tests and their per-test watchdogs within a bounded build gate.
-        timeout-minutes: 60
+        # The latest serial Windows unit gate reached the 60-minute limit;
+        # allow additional runner variance while retaining per-test watchdogs.
+        timeout-minutes: 75
         shell: cmd
         run: make ci
         env:
@@ -63,7 +64,9 @@ jobs:
       - name: Build with Make (Linux)
         id: build-linux
         if: runner.os == 'Linux'
-        timeout-minutes: 45
+        # The full unit gate starts thousands of Perl scripts; leave headroom
+        # for hosted-runner speed variance rather than truncating the corpus.
+        timeout-minutes: 60
         run: make ci
 
       - name: Checkout latest Perl thread compatibility corpus

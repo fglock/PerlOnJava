@@ -266,6 +266,8 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/Exception-Class-1.45/GeneratedSubclassVersion.patch' ],
         [ 'Net-Server/SkipForkTests.patch',
           'PerlOnJava/CpanPatches/Net-Server-2.018/SkipForkTests.patch' ],
+        [ 'Catalyst-Runtime/SkipLiveForkTest.patch',
+          'PerlOnJava/CpanPatches/Catalyst-Runtime-5.90132/SkipLiveForkTest.patch' ],
         [ 'PPIx-Regexp/ParentMapCleanup.patch',
           'PerlOnJava/CpanPatches/PPIx-Regexp-0.092/ParentMapCleanup.patch' ],
         [ 'Device-SerialPort/NoXsBitsFallback.patch',

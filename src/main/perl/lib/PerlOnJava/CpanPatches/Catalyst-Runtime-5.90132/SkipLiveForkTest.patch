@@ -1,0 +1,24 @@
+--- t/live_fork.t.orig
++++ t/live_fork.t
+@@ -11,3 +11,4 @@
+ use Test::More;
++use Config ();
+ use FindBin;
+ use lib "$FindBin::Bin/lib";
+@@ -43,10 +44,14 @@
+-{
++SKIP: {
++    skip 'Catalyst live fork test requires fork()', 6
++        unless $Config::Config{d_fork}
++            && !$ENV{PERLONJAVA_EXECUTABLE}
++            && $^X !~ m{(?:^|[\\/])jperl(?:\z|[.])};
+     ok(my $result = get('/fork/fork'), 'fork');
+ 
+     if (my $result_ref = result_ok($result)) {
+         ok($result_ref, 'is JSON');
+         isnt($result_ref->{pid}, 0, q{fork's "pid" wasn't 0});
+         isnt($result_ref->{pid}, $$, 'fork got a new pid');
+         is($result_ref->{result}, 'ok', 'fork was effective');
+     }
+ }
+ 

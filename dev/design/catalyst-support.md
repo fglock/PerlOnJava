@@ -323,10 +323,11 @@ implementation is now the only fix.
 
 - [x] Installed every runtime prerequisite and Catalyst::Runtime 5.90132 from
   upstream CPAN sources without `-f` or a Catalyst source patch.
-- [x] Added a narrow Catalyst distribution policy that skips its broad legacy
-  test phase. That phase mixes unsupported process/development modes with
-  aggregate fixtures that require unresolved readonly configuration-lvalue
-  semantics; the runtime application path is tested independently below.
+- [x] Initially skipped Catalyst's broad legacy test phase while runtime
+  support was incomplete. Replaced that policy with a fork-only skip:
+  `t/live_fork.t` skips its six process-fork assertions, while every other
+  Catalyst distribution test remains enabled. The checked-in rule is in
+  `src/main/perl/lib/PerlOnJava/CpanDistroprefs/Catalyst-Runtime.yml`.
 - [x] Loaded the installed runtime from the isolated home with
   `-MCatalyst`; it reported version 5.90132 and exited zero.
 - [x] Preserved the classification rule: optional or test-only failures do not

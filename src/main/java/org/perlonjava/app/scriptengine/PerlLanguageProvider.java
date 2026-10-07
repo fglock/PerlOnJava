@@ -479,8 +479,9 @@ public class PerlLanguageProvider {
         MortalList.flush();
         MortalList.flushDeferredCapturesBeforeEnd();
         CallerStack.push("main", ctx.compilerOptions.fileName, 0);
+        Throwable endFailure;
         try {
-            runEndBlocks(false);
+            endFailure = runEndBlocks(false);
         } finally {
             CallerStack.pop();
             MortalList.flushDeferredCaptures();
@@ -488,6 +489,9 @@ public class PerlLanguageProvider {
         }
         GlobalDestruction.runGlobalDestruction();
         RuntimeIO.closeAllHandles();
+        if (endFailure != null) {
+            throw new PerlExitException(SpecialBlock.END_FAILURE_EXIT_STATUS);
+        }
     }
 
     /** Report a dying deferred phaser before draining the remaining queues. */
@@ -828,8 +832,9 @@ public class PerlLanguageProvider {
                     // captures reachable from queued END blocks or package CODE.
                     MortalList.flushDeferredCapturesBeforeEnd();
                     CallerStack.push("main", ctx.compilerOptions.fileName, 0);
+                    Throwable endFailure;
                     try {
-                        runEndBlocks();
+                        endFailure = runEndBlocks();
                     } finally {
                         CallerStack.pop();
                         // END may itself fail; captured cleanup still belongs after
@@ -839,7 +844,16 @@ public class PerlLanguageProvider {
                     }
                     // Global destruction: walk stashes for tracked blessed objects
                     GlobalDestruction.runGlobalDestruction();
+                    if (endFailure != null) {
+                        RuntimeIO.closeAllHandles();
+                        throw new PerlExitException(SpecialBlock.END_FAILURE_EXIT_STATUS);
+                    }
                 }
+            } catch (PerlExitException exit) {
+                // An END block may call exit(), which drains the remaining
+                // queue and propagates the final process status through this
+                // dispatch frame.
+                throw exit;
             } catch (Throwable endException) {
                 RuntimeIO.closeAllHandles();
                 String errorMessage = ErrorMessageUtil.stringifyException(endException);

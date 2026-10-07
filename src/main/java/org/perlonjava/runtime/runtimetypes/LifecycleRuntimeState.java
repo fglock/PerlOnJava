@@ -30,6 +30,9 @@ final class LifecycleRuntimeState {
     final ArrayList<RuntimeScalar> pendingIoReleases = new ArrayList<>();
     final ArrayList<RuntimeScalar> deferredCaptures = new ArrayList<>();
     final IdentityHashMap<RuntimeScalar, Integer> deferredCapturesSet = new IdentityHashMap<>();
+    // Strong semantic referents retained by explicit Perl owner slots. Counts
+    // are per referent because several independent pad slots can own one base.
+    final IdentityHashMap<RuntimeBase, Integer> positiveOwnerReferents = new IdentityHashMap<>();
     boolean deferredCapturesMayBeReady;
     final ArrayDeque<RuntimeBase> temporaryRoots = new ArrayDeque<>();
     final IdentityHashMap<RuntimeBase, Integer> suspendedRoots = new IdentityHashMap<>();
@@ -59,6 +62,7 @@ final class LifecycleRuntimeState {
     ReachabilityWalker.RootReachabilitySnapshot fullRootSnapshot;
     final IdentityHashMap<RuntimeBase, ReachabilityWalker.WeakRootWitness>
             weakSweepRootWitnesses = new IdentityHashMap<>();
+    ReachabilityQueryStats activeReachabilityQueryStats;
 
     final Set<RuntimeScalar> weakScalars = Collections.newSetFromMap(new IdentityHashMap<>());
     final IdentityHashMap<RuntimeBase, Set<RuntimeScalar>> referentToWeakRefs = new IdentityHashMap<>();
@@ -104,6 +108,9 @@ final class LifecycleRuntimeState {
         pendingIoReleases.clear();
         deferredCaptures.clear();
         deferredCapturesSet.clear();
+        synchronized (this) {
+            positiveOwnerReferents.clear();
+        }
         deferredCapturesMayBeReady = false;
         temporaryRoots.clear();
         suspendedRoots.clear();
@@ -116,6 +123,7 @@ final class LifecycleRuntimeState {
         inAutoSweep = false;
         fullRootSnapshot = null;
         weakSweepRootWitnesses.clear();
+        activeReachabilityQueryStats = null;
         immediateWeakSweepRequested = false;
         deferCaptureReachabilityToBoundarySweep = false;
         deferredCaptureSweepCandidates.clear();

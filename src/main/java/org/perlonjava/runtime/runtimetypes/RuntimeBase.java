@@ -11,6 +11,32 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  * and interfaces for these entities.
  */
 public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScalar> {
+    /** Lifecycle is independent of the selective-count compatibility bridge. */
+    public enum PerlLifecycleState {
+        LIVE,
+        DESTROYING,
+        RESURRECTED,
+        DESTROYED
+    }
+
+    private volatile PerlLifecycleState perlLifecycleState = PerlLifecycleState.LIVE;
+
+    public PerlLifecycleState perlLifecycleState() {
+        return perlLifecycleState;
+    }
+
+    void beginPerlDestruction() {
+        perlLifecycleState = PerlLifecycleState.DESTROYING;
+    }
+
+    void markPerlResurrected() {
+        perlLifecycleState = PerlLifecycleState.RESURRECTED;
+    }
+
+    void markPerlDestroyed() {
+        perlLifecycleState = PerlLifecycleState.DESTROYED;
+    }
+
     /** Storage identity retained across ithread graph clones. */
     public volatile boolean threadShared;
     /**
@@ -209,7 +235,41 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         captureCount++;
     }
 
+    /** Retain one aggregate pad capture through an explicit owner slot. */
+    public PerlOwnerSlot retainClosureCaptureOwner() {
+        PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
+        ownerSlot.acquireCapture(this);
+        retainClosureCapture();
+        return ownerSlot;
+    }
+
+    /** Release one aggregate pad capture, balancing its bridged count. */
+    public void releaseClosureCaptureOwner(PerlOwnerSlot ownerSlot) {
+        if (ownerSlot == null) {
+            releaseClosureCapture();
+            return;
+        }
+        if (ownerSlot.isNativeCaptureOwner()) {
+            // Captured aggregate pads are native owner slots. Remove the slot
+            // before releasing the capture so a final release can dispatch
+            // from the owner count without manufacturing a legacy decrement.
+            ownerSlot.release();
+            releaseClosureCapture(true);
+            return;
+        }
+        ownerSlot.deferLegacyCaptureRelease(this);
+        try {
+            releaseClosureCapture(false);
+        } finally {
+            ownerSlot.release();
+        }
+    }
+
     public void releaseClosureCapture() {
+        releaseClosureCapture(false);
+    }
+
+    private void releaseClosureCapture(boolean nativeOwnerSlot) {
         if (captureCount > 0) {
             captureCount--;
         }
@@ -223,7 +283,9 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             if (blessId != 0 && refCount <= 0) {
                 refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(this);
-            } else if (refCount > 0 && (blessId != 0 || this instanceof RuntimeCode)) {
+            } else if (!nativeOwnerSlot && refCount > 0
+                    && (blessId != 0 || this instanceof RuntimeCode)
+                    && !hasSemanticCaptureOwner()) {
                 MortalList.deferDecrement(this, "closure aggregate release");
             }
         }
@@ -240,33 +302,52 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     // ─────────────────────────────────────────────────────────────────────
     public java.util.Set<RuntimeScalar> activeOwners = null;
 
-    /**
-     * Semantic pad owners.  Unlike {@link #activeOwners}, this set models the
-     * one strong edge from a captured pad cell to its current referent.  It is
-     * deliberately keyed by the pad cell, not by the number of closures which
-     * share that cell: two closures must not create two Perl references.
-     */
-    private java.util.Set<RuntimeScalar> semanticCaptureOwners = null;
+    /** Identity ledger for migrated slots; selective refCount remains the
+     * lifecycle bridge while owner families move to this API. */
+    private java.util.Set<PerlOwnerSlot> ownerSlots = null;
 
-    public void acquireSemanticCaptureOwner(RuntimeScalar pad) {
-        if (semanticCaptureOwners == null) {
-            semanticCaptureOwners = java.util.Collections.newSetFromMap(
+    synchronized void addOwnerSlot(PerlOwnerSlot slot) {
+        if (ownerSlots == null) {
+            ownerSlots = java.util.Collections.newSetFromMap(
                     new java.util.IdentityHashMap<>());
         }
-        semanticCaptureOwners.add(pad);
+        ownerSlots.add(slot);
     }
 
-    public void releaseSemanticCaptureOwner(RuntimeScalar pad) {
-        if (semanticCaptureOwners != null) semanticCaptureOwners.remove(pad);
+    synchronized void removeOwnerSlot(PerlOwnerSlot slot) {
+        if (ownerSlots != null) ownerSlots.remove(slot);
     }
 
     public boolean hasSemanticCaptureOwner() {
-        return semanticCaptureOwners != null && !semanticCaptureOwners.isEmpty();
+        return ownerSlotCount(PerlOwnerSlot.Kind.CLOSURE_PAD) != 0;
     }
 
-    /** Number of distinct captured pad cells that currently own this referent. */
+    /** Number of active slots of the requested kind that own this referent. */
+    public synchronized int ownerSlotCount(PerlOwnerSlot.Kind kind) {
+        if (ownerSlots == null) return 0;
+        int count = 0;
+        for (PerlOwnerSlot slot : ownerSlots) {
+            if (slot.kind() == kind) count++;
+        }
+        return count;
+    }
+
+    /** Number of distinct captured pad slots that own this referent. */
     public int semanticCaptureOwnerCount() {
-        return semanticCaptureOwners == null ? 0 : semanticCaptureOwners.size();
+        return ownerSlotCount(PerlOwnerSlot.Kind.CLOSURE_PAD);
+    }
+
+    /** Count captured aggregate pads whose lifetime is owned natively by slots. */
+    public synchronized int nativeCaptureOwnerCount() {
+        if (ownerSlots == null) return 0;
+        int count = 0;
+        for (PerlOwnerSlot slot : ownerSlots) {
+            if (slot.kind() == PerlOwnerSlot.Kind.CLOSURE_PAD
+                    && slot.isNativeCaptureOwner()) {
+                count++;
+            }
+        }
+        return count;
     }
 
     // Conservative gate for the tied-handler reachability fallback. Once a
@@ -353,6 +434,28 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             }
         }
         return count;
+    }
+
+    /** Snapshot the currently live scalar owner slots by identity. */
+    public java.util.Set<RuntimeScalar> activeOwnerSnapshot() {
+        if (activeOwnerCount() == 0) {
+            return java.util.Collections.emptySet();
+        }
+        java.util.Set<RuntimeScalar> snapshot = java.util.Collections.newSetFromMap(
+                new java.util.IdentityHashMap<>());
+        snapshot.addAll(activeOwners);
+        return snapshot;
+    }
+
+    /** Snapshot semantic owner-slot identities, including closure pads. */
+    public synchronized java.util.Set<PerlOwnerSlot> ownerSlotSnapshot() {
+        if (ownerSlots == null || ownerSlots.isEmpty()) {
+            return java.util.Collections.emptySet();
+        }
+        java.util.Set<PerlOwnerSlot> snapshot = java.util.Collections.newSetFromMap(
+                new java.util.IdentityHashMap<>());
+        snapshot.addAll(ownerSlots);
+        return snapshot;
     }
 
     /**
@@ -457,13 +560,21 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         final long referentGeneration;
         final String acquireSite;
         final String queueSite;
+        final PerlOwnerSlot.PendingRelease ownerSlotRelease;
 
         PendingOwnerRelease(int scalarIdentity, long referentGeneration,
                             String acquireSite, String queueSite) {
+            this(scalarIdentity, referentGeneration, acquireSite, queueSite, null);
+        }
+
+        PendingOwnerRelease(int scalarIdentity, long referentGeneration,
+                            String acquireSite, String queueSite,
+                            PerlOwnerSlot.PendingRelease ownerSlotRelease) {
             this.scalarIdentity = scalarIdentity;
             this.referentGeneration = referentGeneration;
             this.acquireSite = acquireSite;
             this.queueSite = queueSite;
+            this.ownerSlotRelease = ownerSlotRelease;
         }
     }
 
@@ -517,9 +628,24 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return release;
     }
 
+    /** Queue provenance for a deferred owner-slot decrement. */
+    synchronized PendingOwnerRelease queueOwnerSlotRelease(
+            PerlOwnerSlot.PendingRelease ownerSlotRelease) {
+        PendingOwnerRelease release = new PendingOwnerRelease(
+                0, REFCOUNT_TRACE_ENV ? traceReferentGeneration(this) : 0,
+                "owner-slot", "MortalList.deferOwnerSlotDecrement", ownerSlotRelease);
+        if (REFCOUNT_TRACE_ENV) {
+            pendingTraceOwnerReleases.computeIfAbsent(this, ignored -> new java.util.ArrayList<>())
+                    .add(release);
+        }
+        return release;
+    }
+
     /** Mark the exact queued trace record as drained without relying on scalar state. */
     public synchronized void completeQueuedOwnerRelease(PendingOwnerRelease release, String releaseSite) {
-        if (release == null || !REFCOUNT_TRACE_ENV) return;
+        if (release == null) return;
+        if (release.ownerSlotRelease != null) release.ownerSlotRelease.complete();
+        if (!REFCOUNT_TRACE_ENV) return;
         java.util.ArrayList<PendingOwnerRelease> releases = pendingTraceOwnerReleases.get(this);
         if (releases != null) {
             releases.remove(release);
@@ -607,6 +733,35 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             }
             result.append(']');
         }
+        result.append(" capturePads=");
+        if (ownerSlots == null || ownerSlots.isEmpty()) {
+            result.append("[]");
+        } else {
+            result.append('[');
+            boolean first = true;
+            for (PerlOwnerSlot slot : ownerSlots) {
+                if (slot.kind() != PerlOwnerSlot.Kind.CLOSURE_PAD) continue;
+                RuntimeScalar pad = slot.padCell();
+                if (!first) result.append(", ");
+                first = false;
+                result.append("scalar=").append(System.identityHashCode(pad))
+                        .append(" type=").append(pad.type)
+                        .append(" captureCount=").append(pad.captureCount)
+                        .append(" captureRefCountOwned=").append(pad.captureRefCountOwned())
+                        .append(" scopeExited=").append(pad.scopeExited)
+                        .append(" slotOwnsReferent=").append(pad.refCountOwned)
+                        .append(" value=");
+                if (pad.value instanceof RuntimeBase valueBase) {
+                    result.append(valueBase.getClass().getSimpleName())
+                            .append('#').append(System.identityHashCode(valueBase));
+                } else if (pad.value == null) {
+                    result.append("null");
+                } else {
+                    result.append(pad.value.getClass().getSimpleName());
+                }
+            }
+            result.append(']');
+        }
         result.append(" pending=");
         java.util.ArrayList<PendingOwnerRelease> pending = pendingTraceOwnerReleases.get(this);
         if (pending == null || pending.isEmpty()) {
@@ -616,10 +771,16 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             for (int i = 0; i < pending.size(); i++) {
                 if (i != 0) result.append(", ");
                 PendingOwnerRelease release = pending.get(i);
-                result.append("scalar=").append(release.scalarIdentity)
-                        .append(" generation=").append(release.referentGeneration)
-                        .append(" acquire=").append(release.acquireSite)
-                        .append(" queued=").append(release.queueSite);
+                if (release.ownerSlotRelease != null) {
+                    result.append("ownerSlot=").append(release.ownerSlotRelease.ownerSlotIdentity())
+                            .append(" sequence=").append(release.ownerSlotRelease.sequence())
+                            .append(" kind=").append(release.ownerSlotRelease.kind());
+                } else {
+                    result.append("scalar=").append(release.scalarIdentity)
+                            .append(" generation=").append(release.referentGeneration)
+                            .append(" acquire=").append(release.acquireSite)
+                            .append(" queued=").append(release.queueSite);
+                }
             }
             result.append(']');
         }
