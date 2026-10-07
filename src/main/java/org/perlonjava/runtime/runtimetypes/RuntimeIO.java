@@ -10,6 +10,7 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.runtime.io.*;
 import org.perlonjava.runtime.HintHashRegistry;
+import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.operators.IOOperator;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Warnings;
@@ -621,7 +622,30 @@ public class RuntimeIO extends RuntimeScalar {
     }
 
     public static void registerChildProcess(Process p) {
-        if (p != null) registry().childProcesses.put(p.pid(), p);
+        if (p != null) {
+            PerlRuntime runtime = PerlRuntime.current();
+            PerlSignalQueue.State signalState = runtime.signalState;
+            Thread executionThread = Thread.currentThread();
+            registry().childProcesses.put(p.pid(), p);
+            // ProcessBuilder children do not raise a JVM-visible Perl SIGCHLD
+            // automatically. Queue it when the child exits so Perl handlers,
+            // including event-loop child watchers, can run at a safe point.
+            // Interrupt the registering execution thread as well: pure-Perl
+            // event loops commonly block in select() until their next timer,
+            // and otherwise would not reach a signal safe point promptly.
+            if (!NativeUtils.IS_WINDOWS) {
+                p.onExit().thenRun(() -> {
+                    try (PerlRuntime.Binding ignored = runtime.bind()) {
+                        RuntimeScalar handler = GlobalVariable.getGlobalHash("main::SIG").get("CHLD");
+                        if (handler == null || !handler.getDefinedBoolean()) return;
+                        String disposition = handler.toString();
+                        if ("IGNORE".equals(disposition) || "DEFAULT".equals(disposition)) return;
+                        PerlSignalQueue.enqueue(signalState, "CHLD");
+                        executionThread.interrupt();
+                    }
+                });
+            }
+        }
     }
 
     public static Process getChildProcess(long pid) {
