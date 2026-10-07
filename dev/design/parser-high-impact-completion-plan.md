@@ -701,7 +701,7 @@ implementation or acceptance work.
 
 ## Progress tracking
 
-### Current status: rebased candidate validated locally; PR update and fresh CI pending (2026-10-07)
+### Current status: PR #1623 merged; five-issue audit complete (2026-10-07)
 
 - [x] Rebased all 28 PR commits onto `origin/master` at `1a056c033` before
   final validation. The rebase had one `RuntimeCode.java` conflict; resolution
@@ -916,31 +916,25 @@ implementation or acceptance work.
   files and 1,925/1,925 assertions on both JVM virtual and interpreter virtual
   modes, plus all 19/19 focused platform files and 485/485 assertions. No
   failures, errors, or timeouts.
-- [ ] Update PR #1623 with the validated source and handoff, wait for fresh CI,
-  merge after all required checks pass, then close the confirmed fixed issues.
-  Keep #1656 open as the separate Moo caller-location follow-up: Moo 2.005005's
-  `t/croak-locations.t` still fails tests 6, 8, 13–16, and 27 on PerlOnJava;
-  these seven failures pass standard Perl and are already documented as present
-  on the PR base.
+- [x] PR #1623 merged as `699b2f2856bd655af9526b768540ea81b542a2ed` after
+  Linux and Windows CI passed. Issues #1619, #1622, #1166, and #1470 are closed
+  with acceptance evidence; #1615 was already closed. Follow-up #1671 tracks
+  deterministic AnyEvent RWMutex reader-order coverage. Keep #1656 open for
+  Moo's separate caller-location defect; its seven known failures remain on
+  the PR base.
 
 ### Immediate next steps
 
-The rebased source passes the full JVM build/unit gate, refreshed imported core
-UAT, and refreshed thread compatibility gate. The full interpreter inventory also ran: 540/575 files pass, with 19
-failed, 10 errors, 1 timeout, and 5 incomplete files. The changed focused
-interpreter tests pass; the inventory includes existing interpreter gaps such
-as `coreamp.t`'s unrelated `&prototype` assertion. The previous matching-parent
-inventory used 2,129 files, so its aggregate counts are not directly comparable
-to this refreshed 575-file selection.
+Phase 5 is complete. The rebased source passed the JVM build/unit gate, refreshed
+575-file JVM core UAT, and refreshed thread compatibility gate. The full
+interpreter inventory remains a known-gap report: 540/575 files passed, with 19
+failed, 10 errors, 1 timeout, and 5 incomplete files; focused changed-behavior
+tests pass on both backends. The prior matching-parent inventory used 2,129
+files, so its aggregate counts are not directly comparable.
 
-1. Run documentation link checks, then commit the thread fix, its permanent
-   regression, changelog entry, and this handoff update. Push the branch and
-   refresh PR #1623.
-2. Wait for fresh CI, address any candidate-specific failures, merge after the
-   required checks pass, and close #1619, #1622, #1166, and #1470 with their
-   acceptance evidence. #1615 is already closed; keep #1656 open.
-3. Preserve the final UAT/module/thread logs as evidence and remove task-owned
-   temporary files and wrappers that are no longer needed.
+1. Track deterministic AnyEvent RWMutex reader-order coverage in #1671.
+2. Keep #1656 open for the independent Moo `Carp::croak` caller-location bug.
+3. Reopen implementation work only for a new confirmed regression or follow-up.
 
 ### Open questions and blockers
 
@@ -969,3 +963,12 @@ to this refreshed 575-file selection.
 - [Reference owner ledger](refcount-owner-ledger.md)
 - [Runtime profiling skill](../../.agents/skills/profile-perlonjava/SKILL.md)
 - [Debugging skill](../../.agents/skills/debug-perlonjava/SKILL.md)
+
+### Closure update — 2026-10-07
+
+PR #1623 merged at `699b2f2856bd655af9526b768540ea81b542a2ed`; required Linux
+and Windows checks passed. The refreshed thread gate passed 64/64 files and
+1,925/1,925 assertions on JVM and interpreter virtual modes, plus 19/19 platform
+files and 485/485 assertions. Confirmed fixes #1619, #1622, #1166, and #1470
+are closed with evidence; #1615 was already closed. Issue #1671 records the
+remaining deterministic RWMutex test follow-up. Moo issue #1656 remains open.
