@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 candidate is implemented; the selected closure-pad path passes JVM and interpreter tests. Full UAT and selected CPAN workloads pass. PR #1653 remains a draft pending CI and review.
+**Status:** Phase 1 closure-pad path is implemented and validated on both backends. Full UAT comparison, local gates, selected CPAN workloads, and PR CI pass. PR #1653 remains a draft pending review.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
@@ -102,7 +102,7 @@ and first path establish implementation cost.
 
 ## Progress tracking
 
-### Current status: Phase 1 implementation candidate; integrated acceptance in progress on draft PR #1653
+### Current status: Phase 1 implementation and acceptance complete on draft PR #1653; review remains pending
 
 ### Completed
 
@@ -275,15 +275,29 @@ and first path establish implementation cost.
   `t/live_fork.t` passes all ten supported assertions and skips only the six
   fork assertions; `t/aggregate/live_component_controller_action_chained2.t`
   passes 9/9.
-- [x] Verify the draft PR is based on the latest fetched `master` commit
-  `40214064de245032549d9e61da59b512deec7d78`; the branch required no rebase.
-  The Windows build timeout is set to 75 minutes after the prior job reached
-  its 60-minute step limit; the updated CI run will validate the new budget.
+- [x] Rebase the draft PR onto the latest fetched `master` commit
+  `5193a5e8ffb5604aefdda91feb39b93f2adefcff`; the two upstream commits replayed
+  cleanly, with the changelog retaining both upstream and Phase 1 entries.
+- [x] Validate the rebased candidate with `nice -n 19 make` and
+  `nice -n 19 make check-links`; both pass. The full post-rebase UAT comparison
+  reports 575 unchanged files and no regressions.
+- [x] Confirm PR #1653 CI is green on both platforms: Ubuntu `make` and thread
+  compatibility gates pass; Windows `make` and its focused thread gate pass
+  within the extended 75-minute build-step limit.
+- [x] Compare the additional user-requested Moo and DBIx::Class CPAN failures
+  against current master and target Perl 5.45.4. Moo's seven call-site
+  assertions fail identically on master while target Perl passes 29/29; the
+  DBIx::Class heredoc conflict-marker diagnostic reproduces on master while
+  target Perl loads the helper. These are pre-existing issues tracked in
+  [#1656](https://github.com/fglock/PerlOnJava/issues/1656) and
+  [#1434](https://github.com/fglock/PerlOnJava/issues/1434); the DBIx run's two
+  assertion failures remain separately unclassified under
+  [#1646](https://github.com/fglock/PerlOnJava/issues/1646).
 
 ### Next steps
 
-1. Complete PR CI and review for the enabled closure-pad path; keep the branch
-   draft until the integrated evidence is accepted.
+1. Obtain review for PR #1653; keep the branch draft until the user is ready to
+   move it out of WIP.
 2. Continue the #1642 Catalyst cleanup profile as an integration follow-up.
    The full suite remains enabled except for Catalyst's six unsupported fork
    assertions; the broad test attempt and cleanup profile are incomplete.
