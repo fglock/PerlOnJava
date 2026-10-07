@@ -23,6 +23,23 @@ public class Encode extends PerlModuleBase {
 
     private static final Map<String, Charset> CHARSET_ALIASES = new HashMap<>();
 
+    // Unicode mappings for the NEC-selected symbols in EUC-JP row 13.
+    // The JDK EUC-JP decoder omits this row, while Perl's Encode::EUC_JP
+    // includes it (for example, AD A1 is U+2460 CIRCLED DIGIT ONE).
+    private static final int[] EUC_JP_ROW_13 = {
+            0x2460, 0x2461, 0x2462, 0x2463, 0x2464, 0x2465, 0x2466, 0x2467,
+            0x2468, 0x2469, 0x246A, 0x246B, 0x246C, 0x246D, 0x246E, 0x246F,
+            0x2470, 0x2471, 0x2472, 0x2473, 0x2160, 0x2161, 0x2162, 0x2163,
+            0x2164, 0x2165, 0x2166, 0x2167, 0x2168, 0x2169, 0x216A, 0x3349,
+            0x3314, 0x3322, 0x334D, 0x3318, 0x3327, 0x3303, 0x3336, 0x3351,
+            0x3357, 0x330D, 0x3326, 0x3323, 0x332B, 0x334A, 0x333B, 0x339C,
+            0x339D, 0x339E, 0x338E, 0x338F, 0x33C4, 0x33A1, 0x216B, 0, 0,
+            0, 0, 0, 0, 0, 0x337B, 0x301D, 0x301F, 0x2116, 0x33CD, 0x2121,
+            0x32A4, 0x32A5, 0x32A6, 0x32A7, 0x32A8, 0x3231, 0x3232, 0x3239,
+            0x337E, 0x337D, 0x337C, 0, 0, 0, 0x222E, 0, 0, 0, 0, 0x221F,
+            0x22BF, 0, 0, 0, 0x2756, 0x261E
+    };
+
     // Encode check-flag bit constants (from Perl's encode.h)
     // These are bitmask values used by the $check parameter.
     private static final int DIE_ON_ERR = 0x0001;          // Croak on error
@@ -681,7 +698,7 @@ public class Encode extends PerlModuleBase {
 
         if (check == FB_DEFAULT_VAL) {
             // Fast path: no error handling
-            String decoded = new String(bytes, charset);
+            String decoded = decodeWithEucJpExtensions(bytes, charset);
             return new RuntimeScalar(decoded).getList();
         }
 
@@ -773,6 +790,42 @@ public class Encode extends PerlModuleBase {
         }
 
         return new RuntimeScalar(result.toString());
+    }
+
+    /**
+     * Decode EUC-JP while retaining the valid row-13 mappings that the JDK
+     * charset provider does not include. All other bytes stay on the JDK path.
+     */
+    private static String decodeWithEucJpExtensions(byte[] bytes, Charset charset) {
+        if (!"EUC-JP".equalsIgnoreCase(charset.name())) {
+            return new String(bytes, charset);
+        }
+
+        StringBuilder decoded = new StringBuilder(bytes.length);
+        int chunkStart = 0;
+        int i = 0;
+        while (i + 1 < bytes.length) {
+            if ((bytes[i] & 0xFF) == 0xAD) {
+                int trail = bytes[i + 1] & 0xFF;
+                if (trail >= 0xA1 && trail <= 0xFE) {
+                    int codePoint = EUC_JP_ROW_13[trail - 0xA1];
+                    if (codePoint != 0) {
+                        if (chunkStart < i) {
+                            decoded.append(new String(bytes, chunkStart, i - chunkStart, charset));
+                        }
+                        decoded.appendCodePoint(codePoint);
+                        i += 2;
+                        chunkStart = i;
+                        continue;
+                    }
+                }
+            }
+            i++;
+        }
+        if (chunkStart < bytes.length) {
+            decoded.append(new String(bytes, chunkStart, bytes.length - chunkStart, charset));
+        }
+        return decoded.toString();
     }
 
     /**
@@ -1027,7 +1080,7 @@ public class Encode extends PerlModuleBase {
 
             if (check == FB_DEFAULT_VAL) {
                 // Fast path: no error handling
-                String decoded = new String(bytes, charset);
+                String decoded = decodeWithEucJpExtensions(bytes, charset);
                 return new RuntimeScalar(decoded).getList();
             }
 
