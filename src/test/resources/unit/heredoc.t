@@ -1,7 +1,7 @@
 use 5.38.0;
 use strict;
 use warnings;
-use Test::More tests => 23;
+use Test::More tests => 25;
 
 # Test 1: Basic heredoc
 my $basic_heredoc = <<'END';
@@ -81,6 +81,19 @@ FIRST
 Second heredoc
 SECOND
 is($multiple_heredocs, "First heredoc\nSecond heredoc\n", 'Multiple heredocs in a single statement');
+
+# Test 13a: A heredoc followed by a phaser-name forward declaration
+my $end_forward_declaration = eval q{
+    use strict;
+    sub {
+        return <<'END_REGEX';
+pattern
+END_REGEX
+        END;
+    }
+};
+is($@, '', 'Heredoc followed by END forward declaration compiles');
+is($end_forward_declaration->(), "pattern\n", 'Heredoc value survives END forward declaration');
 
 # Test 14: Heredoc with interpolation
 my $interpolated_var = "interpolated";
