@@ -76,6 +76,8 @@ priorities and future plans.
   representation for case-folded negated singleton regex classes.
 - Remove deleted package stashes from their parent namespace in
   `Symbol::delete_package`.
+- Forward only parent-declared named parameters to generated parent class
+  constructors, preserving child fields and validation across inheritance.
 - Preserve direct-call semantics for lexical and package `->&` methods across
   both backends, support `CORE::bless` and `CORE::break` code references, and
   allow same-finally local `goto` targets.

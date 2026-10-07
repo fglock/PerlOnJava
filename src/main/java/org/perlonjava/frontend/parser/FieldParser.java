@@ -173,6 +173,7 @@ public class FieldParser {
             List<OperatorNode> fields = parser.unitClassFields.computeIfAbsent(
                     currentClass, ignored -> new java.util.ArrayList<>());
             fields.add(fieldPlaceholder);
+            FieldRegistry.registerGeneratedConstructor(currentClass);
             SubroutineNode constructor = ClassTransformer.generateUnitClassConstructor(fields, currentClass);
             SubroutineParser.handleNamedSubWithFilter(parser, constructor.name, constructor.prototype,
                     constructor.attributes, (org.perlonjava.frontend.astnode.BlockNode) constructor.block,

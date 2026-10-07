@@ -61,6 +61,7 @@ public final class GlobalRuntimeState {
     private final Set<String> classNames = new HashSet<>();
     private final Map<String, Set<String>> classFields = new HashMap<>();
     private final Map<String, Set<String>> classParameters = new HashMap<>();
+    private final Set<String> generatedClassConstructors = new HashSet<>();
     private final Map<String, String> classParents = new HashMap<>();
     private final Map<String, String> packageVersions = new HashMap<>();
     private CustomClassLoader generatedClassLoader =
@@ -221,6 +222,11 @@ public final class GlobalRuntimeState {
     /** Parent declarations used by the class-field parser. */
     public Map<String, String> classParents() {
         return classParents;
+    }
+
+    /** Classes whose {@code new} method is synthesized from their field declarations. */
+    public Set<String> generatedClassConstructors() {
+        return generatedClassConstructors;
     }
 
     /** Package versions visible to later compilation units in this runtime. */
@@ -405,7 +411,9 @@ public final class GlobalRuntimeState {
         declaredGlobalHashes.clear();
         classNames.clear();
         classFields.clear();
+        classParameters.clear();
         classParents.clear();
+        generatedClassConstructors.clear();
         packageVersions.clear();
         generatedClassLoader = new CustomClassLoader(GlobalVariable.class.getClassLoader());
     }
@@ -456,7 +464,10 @@ public final class GlobalRuntimeState {
         target.declaredGlobalHashes.addAll(declaredGlobalHashes);
         target.classNames.addAll(classNames);
         classFields.forEach((name, fields) -> target.classFields.put(name, new HashSet<>(fields)));
+        classParameters.forEach((name, parameters) ->
+                target.classParameters.put(name, new HashSet<>(parameters)));
         target.classParents.putAll(classParents);
+        target.generatedClassConstructors.addAll(generatedClassConstructors);
         target.packageVersions.putAll(packageVersions);
         // Lazy named CVs may compile in the parent after this snapshot while
         // the child also compiles new code. Give every snapshot runtime its

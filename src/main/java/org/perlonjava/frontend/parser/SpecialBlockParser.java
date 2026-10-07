@@ -204,6 +204,7 @@ public class SpecialBlockParser {
             adjustBlocks.add(adjustSub);
             List<OperatorNode> fields = parser.unitClassFields.computeIfAbsent(
                     className, ignored -> new ArrayList<>());
+            FieldRegistry.registerGeneratedConstructor(className);
             SubroutineNode constructor = ClassTransformer.generateUnitClassConstructor(
                     fields, className, adjustBlocks);
             SubroutineParser.handleNamedSubWithFilter(parser, constructor.name,

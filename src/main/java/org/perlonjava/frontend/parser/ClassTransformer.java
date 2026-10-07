@@ -160,9 +160,12 @@ public class ClassTransformer {
 
         // Generate constructor if not present
         if (existingConstructor == null) {
+            FieldRegistry.registerGeneratedConstructor(className);
             SubroutineNode constructor = generateConstructor(fields, className, adjustNodes);
             block.elements.add(constructor);
             block.setAnnotation("deferredConstructor", constructor);
+        } else {
+            FieldRegistry.unregisterGeneratedConstructor(className);
         }
 
         // Generate reader and writer methods
@@ -340,14 +343,44 @@ public class ClassTransformer {
 
         Node selfValue;
         if (parentClass != null) {
-            // Call SUPER::new() to get the blessed object with parent fields initialized
-            // my $self = $class->SUPER::new(%args);
+            // A generated parent constructor validates only parameters declared
+            // on that parent and its ancestors. Pass it that subset so a child
+            // field parameter is not rejected before this constructor initializes
+            // it. Preserve all arguments for a user-defined parent constructor.
+            String parentArgumentVariable = "args";
+            if (FieldRegistry.hasGeneratedConstructor(parentClass)) {
+                parentArgumentVariable = "parentArgs";
+                OperatorNode parentArgs = new OperatorNode("my",
+                        new OperatorNode("%", new IdentifierNode(parentArgumentVariable, 0), 0), 0);
+                ((OperatorNode) parentArgs.operand).setAnnotation("reuseBytecodeLexicalRegister", Boolean.TRUE);
+                body.elements.add(parentArgs);
+                for (String parameterName : FieldRegistry.getParameterNamesInHierarchy(parentClass)) {
+                    OperatorNode argsForExists = new OperatorNode("$", new IdentifierNode("args", 0), 0);
+                    HashLiteralNode existsKey = new HashLiteralNode(
+                            List.of(new StringNode(parameterName, 0)), 0);
+                    OperatorNode exists = new OperatorNode("exists",
+                            new ListNode(List.of(new BinaryOperatorNode("{", argsForExists, existsKey, 0)), 0), 0);
+                    OperatorNode parentArgsForWrite = new OperatorNode("$",
+                            new IdentifierNode(parentArgumentVariable, 0), 0);
+                    HashLiteralNode writeKey = new HashLiteralNode(
+                            List.of(new StringNode(parameterName, 0)), 0);
+                    BinaryOperatorNode write = new BinaryOperatorNode("=",
+                            new BinaryOperatorNode("{", parentArgsForWrite, writeKey, 0),
+                            new BinaryOperatorNode("{", new OperatorNode("$", new IdentifierNode("args", 0), 0),
+                                    new HashLiteralNode(List.of(new StringNode(parameterName, 0)), 0), 0), 0);
+                    body.elements.add(new IfNode("if", exists,
+                            new BlockNode(new ArrayList<>(List.of(write)), 0), null, 0));
+                }
+            }
+
+            // Call SUPER::new() to get the blessed object with parent fields initialized.
+            // The child's own %args remains intact for its field initialization.
             OperatorNode classVar = new OperatorNode("$", new IdentifierNode("class", 0), 0);
 
             // Create SUPER::new as a method call
             // First create the method name with arguments
             ListNode methodArgs = new ListNode(0);
-            methodArgs.elements.add(new OperatorNode("%", new IdentifierNode("args", 0), 0));
+            methodArgs.elements.add(new OperatorNode("%", new IdentifierNode(parentArgumentVariable, 0), 0));
 
             // Create SUPER::new(args) as a subroutine call
             OperatorNode superNewCall = new OperatorNode("&",
