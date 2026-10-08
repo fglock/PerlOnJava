@@ -2152,6 +2152,13 @@ public class RuntimeIO extends RuntimeScalar {
         if (socket != null) {
             return socket.getpeername();
         }
+        IOHandle handle = ioHandle;
+        while (handle instanceof LayeredIOHandle layered) {
+            handle = layered.getDelegate();
+        }
+        if (handle instanceof org.perlonjava.runtime.io.NativeSocketIOHandle nativeSocket) {
+            return nativeSocket.getpeername();
+        }
         return scalarUndef;
     }
 

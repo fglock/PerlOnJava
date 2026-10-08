@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve blessed IO classes during `can()` checks so socket-specific methods remain discoverable.
+- Report native socketpair readiness from the descriptor instead of treating every event as ready.
+
 - Autovivify undefined hash references when an element is read, including in
   `defined` checks.
 - Support `sprintf` field widths up to 1,000,000 characters, including widths

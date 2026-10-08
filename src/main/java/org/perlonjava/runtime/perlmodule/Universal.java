@@ -114,7 +114,16 @@ public class Universal extends PerlModuleBase {
         // A bare glob and a handle bareword are both valid IO invocants in
         // Perl.  Resolve an actual IO slot before the generic scalar path,
         // which would otherwise treat *STDOUT or "STDOUT" as package names.
-        if (RuntimeIO.getRuntimeIO(object) != null) {
+        RuntimeIO runtimeIO = RuntimeIO.getRuntimeIO(object);
+        if (runtimeIO != null && object.value instanceof RuntimeBase runtimeBase
+                && runtimeBase.blessId != 0) {
+            // Blessed socket/filehandle objects retain their Perl class even
+            // though their storage is backed by RuntimeIO.  Resolve their
+            // methods from that class first (for example IO::Socket::IP's
+            // peerhost/peerport).
+            perlClassName = NameNormalizer.getBlessStr(runtimeBase.blessId);
+        } else if (runtimeIO != null) {
+            // Unblessed handles use the IO::Handle interface.
             perlClassName = "IO::Handle";
         } else {
         switch (object.type) {
