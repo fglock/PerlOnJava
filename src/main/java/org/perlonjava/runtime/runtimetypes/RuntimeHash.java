@@ -828,6 +828,13 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             return get(new RuntimeScalar(key));
         }
 
+        // Accessing an element through an undefined scalar autovivifies the
+        // parent hash even when the element itself is only read (for example,
+        // `defined $hash->{key}`).
+        if (type == AUTOVIVIFY_HASH) {
+            AutovivificationHash.vivify(this);
+        }
+
         var value = elements.get(key);
         if (value != null) {
             return SharedPerlStorage.fetchedElement(this, value);
@@ -901,9 +908,13 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     RuntimeScalarCache.scalarEmptyString,
                     "uninitialized");
         }
+        // An element fetch materializes the parent hash. The element remains
+        // lazy through RuntimeHashProxyEntry until it is itself written.
+        if (type == AUTOVIVIFY_HASH) {
+            AutovivificationHash.vivify(this);
+        }
         return switch (this.type) {
             case PLAIN_HASH, AUTOVIVIFY_HASH, READONLY_HASH -> {
-                // Note: get() does not autovivify the hash, so we don't call AutovivificationHash.vivify()
                 String key = isEnvironmentHash ? normalizeEnvironmentKey(keyScalar.toString()) : keyScalar.toString();
                 var value = elements.get(key);
                 if (value != null) {

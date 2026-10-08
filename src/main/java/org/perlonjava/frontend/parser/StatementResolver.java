@@ -117,6 +117,14 @@ public class StatementResolver {
                 case "CHECK", "INIT", "UNITCHECK", "BEGIN", "END", "ADJUST" -> {
                     // Check if next token is '{' - if not, this might be a lexical sub call
                     parser.tokenIndex++;
+                    if (!"ADJUST".equals(token.text) && peek(parser).text.equals(";")) {
+                        // Perl accepts a phaser name by itself as a forward
+                        // subroutine declaration (for example, `END;`).
+                        // Leave it to the subroutine parser instead of
+                        // treating the name as a strict-subs bareword.
+                        parser.tokenIndex = currentIndex;
+                        yield SubroutineParser.parseSubroutineDefinition(parser, true, "our");
+                    }
                     if (peek(parser).text.equals("{")
                             || (peek(parser).text.equals("(") && hasSpecialBlockPrototype(parser))) {
                         parser.tokenIndex = currentIndex;
