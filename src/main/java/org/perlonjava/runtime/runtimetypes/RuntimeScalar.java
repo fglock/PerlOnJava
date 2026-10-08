@@ -1360,7 +1360,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 yield NumberParser.parseNumber(this).getInt();
             }
             case UNDEF -> 0;
-            case VSTRING -> 0;
+            case VSTRING -> NumberParser.parseNumber(this).getInt();
             case BOOLEAN -> (boolean) value ? 1 : 0;
             case GLOB -> throw new PerlCompilerException("Can't coerce GLOB to integer in numeric context");
             case JAVAOBJECT -> value != null ? 1 : 0;
@@ -1556,7 +1556,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 yield NumberParser.parseNumber(this).getLong();
             }
             case UNDEF -> 0L;
-            case VSTRING -> 0L;
+            case VSTRING -> NumberParser.parseNumber(this).getLong();
             case BOOLEAN -> (boolean) value ? 1L : 0L;
             case GLOB -> 1L;
             case JAVAOBJECT -> value != null ? 1L : 0L;
@@ -1600,7 +1600,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 yield NumberParser.parseNumber(this).getDouble();
             }
             case UNDEF -> 0.0;
-            case VSTRING -> 0.0;
+            case VSTRING -> NumberParser.parseNumber(this).getDouble();
             case BOOLEAN -> (boolean) value ? 1.0 : 0.0;
             case GLOB -> 1.0;
             case JAVAOBJECT -> value != null ? 1.0 : 0.0;
