@@ -28,6 +28,7 @@ priorities and future plans.
   nested signature calls, and keep Test2 negation accessors visible to the
   interpreter.
 - Preserve call-site package information in generated subroutine frames so Moo destructor croaks report the correct source location.
+- Preserve generated-method call-site packages while Carp selects croak locations through eval wrappers.
 - Pass the Image::ExifTool 13.55 test suite by preserving escaped
   transliteration ranges and numeric string flags, and allowing valid nested
   conditional `goto` targets.
