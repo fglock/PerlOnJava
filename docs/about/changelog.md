@@ -10,6 +10,11 @@ priorities and future plans.
 - Report native socketpair readiness from the descriptor instead of treating every event as ready.
 - Apply IO::Handle blocking mode changes to native descriptors so nonblocking socket writes can return EAGAIN.
 - Retain queued IO::Async call futures until dispatch completes, preserving queued worker results.
+- Fix vstring numification: dotted-numeric literals (`49.46.48`, `v49.46.48`) now
+  correctly numify via their character content ("1.0" → 1.0), fixing the
+  `Scalar-List-Utils isvstring.t` `dotted num` assertion (#1683).
+  Non-printable vstrings (e.g. `v5.6`) retain version-number numification
+  (5.006) to preserve `require`-override compatibility.
 
 - Autovivify undefined hash references when an element is read, including in
   `defined` checks.
