@@ -9,6 +9,7 @@ priorities and future plans.
 - Preserve blessed IO classes during `can()` checks so socket-specific methods remain discoverable.
 - Report native socketpair readiness from the descriptor instead of treating every event as ready.
 - Apply IO::Handle blocking mode changes to native descriptors so nonblocking socket writes can return EAGAIN.
+- Retain queued IO::Async call futures until dispatch completes, preserving queued worker results.
 
 - Autovivify undefined hash references when an element is read, including in
   `defined` checks.

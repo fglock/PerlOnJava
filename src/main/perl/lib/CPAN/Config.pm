@@ -276,6 +276,8 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/Pod-Parser-1.67/Pod-Find-core-probe.patch' ],
         [ 'IO-Async/NoFork.patch',
           'PerlOnJava/CpanPatches/IO-Async-0.805/NoFork.patch' ],
+        [ 'IO-Async/RetainQueuedFutures.patch',
+          'PerlOnJava/CpanPatches/IO-Async-0.805/RetainQueuedFutures.patch' ],
         [ 'IO-Async/PerlOnJava.patch',
           'PerlOnJava/CpanPatches/IO-Async-0.805/PerlOnJava.patch' ],
         [ 'IO-Async/SkipUnsupportedSocketTests.patch',

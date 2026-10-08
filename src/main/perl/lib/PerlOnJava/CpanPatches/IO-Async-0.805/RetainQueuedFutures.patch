@@ -1,0 +1,5 @@
+--- lib/IO/Async/Function.pm.orig
++++ lib/IO/Async/Function.pm
+@@ -519,0 +520,2 @@
++      # The queued call must survive until it is dispatched and completes.
++      $future->retain;
