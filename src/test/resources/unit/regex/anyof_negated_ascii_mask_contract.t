@@ -24,8 +24,8 @@ sub first_program {
     return $line;
 }
 
-is first_program(q{qr/(?i:[^:])/}), 'NANYOFM[:]',
-    'caseless negated punctuation singleton uses the Perl ANYOF mask';
+is first_program(q{qr/(?i:[^:])/}), 'NEXACTb[:]',
+    'caseless negated singleton with no fold peers uses NEXACTb node';
 is first_program(q{qr/(?i:[^a])/}), 'NANYOFM[Aa]',
     'caseless negated singleton with fold peers retains both mask bytes';
 is first_program(q{qr/(?i:[:])/}), 'EXACT <:>',
