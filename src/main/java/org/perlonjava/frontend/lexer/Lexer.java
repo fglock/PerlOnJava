@@ -124,9 +124,8 @@ public class Lexer {
     /**
      * Helper method to check if a character is ASCII whitespace only.
      * This excludes Unicode whitespace characters that should be treated as invalid identifier characters.
-     * Note: \r is included as whitespace. It is consumed by consumeWhitespace() along with
-     * spaces and tabs, which preserves it in the token text. This is critical for eval'd code
-     * (e.g., from Template Toolkit) where \r inside string literals must be preserved.
+     * Bare carriage returns are handled as line terminators by nextToken() so quote-like
+     * parsers can preserve them in string and regex contents.
      */
     private static boolean isAsciiWhitespace(char c) {
         return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
@@ -202,9 +201,9 @@ public class Lexer {
         }
 
         if (isAsciiWhitespace(current)) {
-            if (current == '\n') {
+            if (current == '\n' || current == '\r') {
                 position++;
-                return new LexerToken(LexerTokenType.NEWLINE, "\n");
+                return new LexerToken(LexerTokenType.NEWLINE, String.valueOf(current));
             } else {
                 return consumeWhitespace();
             }

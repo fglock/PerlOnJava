@@ -80,8 +80,7 @@ public class SprintfPaddingHelper {
      * Pad a string on the left with a specified character.
      */
     public static String padLeft(String str, int width, char padChar) {
-        // Add overflow protection
-        if (width > SprintfOperator.MAX_PRACTICAL_FORMAT_SIZE) {
+        if (width > SprintfOperator.MAX_PRACTICAL_FORMAT_WIDTH) {
             throw new PerlCompilerException("Integer overflow in format string for sprintf ");
         }
 

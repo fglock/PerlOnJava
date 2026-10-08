@@ -8,6 +8,10 @@ priorities and future plans.
 
 - Autovivify undefined hash references when an element is read, including in
   `defined` checks.
+- Support `sprintf` field widths up to 1,000,000 characters, including widths
+  above the former 8192-character limit.
+- Preserve bare carriage returns in quote-like strings and regex patterns read
+  from Perl source files.
 - Keep version-control conflict-marker diagnostics out of quoted strings and
   heredoc contents.
 - Parse bare phaser-name forward declarations such as `END;` after heredocs.
