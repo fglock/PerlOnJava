@@ -10,7 +10,11 @@ plan skip_all => "UNIX socketpair unavailable: $!" unless $left && $right;
 
 is($left->blocking(0), 1, 'blocking returns the previous socket mode');
 is($left->blocking(), 0, 'socketpair switches to nonblocking mode');
-ok(fcntl($left, F_GETFL, 0) & O_NONBLOCK, 'nonblocking mode reaches the native descriptor');
+SKIP: {
+    skip 'Windows socketpair uses a Java loopback channel, not a native descriptor', 1
+        if $^O eq 'MSWin32';
+    ok(fcntl($left, F_GETFL, 0) & O_NONBLOCK, 'nonblocking mode reaches the native descriptor');
+}
 
 is($left->send('payload'), 7, 'send recognizes a connected socketpair');
 my $received = '';
