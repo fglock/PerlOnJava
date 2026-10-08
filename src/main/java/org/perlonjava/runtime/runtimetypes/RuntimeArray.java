@@ -1215,7 +1215,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             return proxy;
         }
 
-        element.recordLocalArrayOwner(this, index);
+        // Only record ownership for arrays that own their elements. Aliased
+        // arrays like @_ borrow scalars from the caller; recording @_ as the
+        // owner here would let clearStaleLocalArrayAliases() later zero out the
+        // caller's variable when @_ is shifted (GH-1682).
+        if (elementsOwned) {
+            element.recordLocalArrayOwner(this, index);
+        }
         return SharedPerlStorage.fetchedElement(this, element);
     }
 
@@ -1373,7 +1379,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             return proxy;
         }
 
-        element.recordLocalArrayOwner(this, index);
+        // Only record ownership for arrays that own their elements (GH-1682).
+        if (elementsOwned) {
+            element.recordLocalArrayOwner(this, index);
+        }
         return SharedPerlStorage.fetchedElement(this, element);
     }
 
