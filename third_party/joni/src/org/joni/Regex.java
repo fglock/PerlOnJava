@@ -1678,6 +1678,14 @@ public final class Regex {
             }
         }
         int expected = 1 << Integer.bitCount(bitsDiffering);
+        if (negativeMask && characterClass.caseFolded()
+                && count == 1
+                && first <= 0x7f
+                && PerlCaseFold.simpleFoldClassLength(first) <= 1) {
+            // Perl compiles a caseless negated singleton with no fold peers
+            // as a negated exact byte node, rather than an ANYOF mask.
+            return "NEXACTb[" + genericByte(first) + "]";
+        }
         if (count != expected || !negativeMask
                 && count == 1) return "";
 
