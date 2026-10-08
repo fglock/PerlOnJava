@@ -73,9 +73,18 @@ public class HttpTiny extends PerlModuleBase {
 
         // Set headers
         requestBuilder.header("User-Agent", instanceHash.get("agent").toString());
-        // requestBuilder.header("Connection", "keep-alive");
 
-        // Add default and custom headers
+        // Replicate HTTP::Tiny _prepare_headers_and_cb: for a non-empty scalar body,
+        // send Content-Type: application/octet-stream unless the caller already supplied one.
+        if (!content.isEmpty()) {
+            boolean callerHasContentType = headers.elements.keySet().stream()
+                    .anyMatch(k -> k.equalsIgnoreCase("content-type"));
+            if (!callerHasContentType) {
+                requestBuilder.header("Content-Type", "application/octet-stream");
+            }
+        }
+
+        // Add caller-supplied headers (override any defaults set above)
         headers.elements.forEach((key, value) ->
                 requestBuilder.header(key, value.toString())
         );
