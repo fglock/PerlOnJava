@@ -778,6 +778,31 @@ public class NumberParser {
 
     // parseNumber(RuntimeScalar, String) method - with optional operation context for warnings
     public static RuntimeScalar parseNumber(RuntimeScalar runtimeScalar, String operation) {
+        if (runtimeScalar.type == RuntimeScalarType.VSTRING
+                && runtimeScalar.value instanceof String vstring && !vstring.isEmpty()) {
+            // A vstring whose character content starts with a digit (e.g. v49.46.48 → "1.0")
+            // numifies via its string value, matching Perl's behaviour.
+            // A vstring whose content starts with a non-printable byte (e.g. v5.6 → "\x05\x06")
+            // numifies via the version-number representation (e.g. "5.006"), which matches
+            // what Perl's `require` operator pre-caches in the SV before calling any
+            // CORE::GLOBAL::require override.
+            char first = vstring.charAt(0);
+            if (Character.isDigit(first) || first == '+' || first == '-') {
+                // Fall through to normal string numification using the char content.
+                // toString() already returns the correct char bytes for VSTRING.
+            } else {
+                StringBuilder decimal = new StringBuilder();
+                decimal.append((int) first);
+                if (vstring.length() > 1) {
+                    decimal.append('.');
+                    for (int i = 1; i < vstring.length(); i++) {
+                        if (i > 1) decimal.append('_');
+                        decimal.append(String.format("%03d", (int) vstring.charAt(i)));
+                    }
+                }
+                return parseNumber(new RuntimeScalar(decimal.toString()), operation);
+            }
+        }
         String str = runtimeScalar.toString();
         if (str == null) {
             str = "";
