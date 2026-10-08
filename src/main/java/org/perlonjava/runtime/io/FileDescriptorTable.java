@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.io;
 
+import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -167,6 +168,9 @@ public class FileDescriptorTable {
         }
         if (handle instanceof StandardIO standardIO) {
             return standardIO.isReadReady();
+        }
+        if (handle instanceof NativeFdIOHandle nativeFd) {
+            return FFMPosix.get().pollReadReady(nativeFd.getNativeFd());
         }
         // For unknown handle types, report as ready to avoid blocking
         return true;

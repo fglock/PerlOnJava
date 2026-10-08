@@ -1871,6 +1871,13 @@ public class SubroutineParser {
         // CODE-only assignment can split the two CV slots while the other
         // typeglob slots remain aliased.
         fullName = GlobalVariable.resolveCodeDefinitionGlobAlias(fullName);
+        if ("new".equals(subName)
+                && (block == null || !block.getBooleanAnnotation("generatedClassConstructor"))) {
+            int packageSeparator = fullName.lastIndexOf("::new");
+            if (packageSeparator >= 0) {
+                FieldRegistry.unregisterGeneratedConstructor(fullName.substring(0, packageSeparator));
+            }
+        }
         RuntimeScalar codeRef = GlobalVariable.defineGlobalCodeRef(fullName);
         InheritanceResolver.invalidateCache();
         

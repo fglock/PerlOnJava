@@ -6,6 +6,11 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve blessed IO classes during `can()` checks so socket-specific methods remain discoverable.
+- Report native socketpair readiness from the descriptor instead of treating every event as ready.
+- Apply IO::Handle blocking mode changes to native descriptors so nonblocking socket writes can return EAGAIN.
+- Retain queued IO::Async call futures until dispatch completes, preserving queued worker results.
+
 - Autovivify undefined hash references when an element is read, including in
   `defined` checks.
 - Support `sprintf` field widths up to 1,000,000 characters, including widths
@@ -76,6 +81,8 @@ priorities and future plans.
   representation for case-folded negated singleton regex classes.
 - Remove deleted package stashes from their parent namespace in
   `Symbol::delete_package`.
+- Forward only parent-declared named parameters to generated parent class
+  constructors, preserving child fields and validation across inheritance.
 - Preserve direct-call semantics for lexical and package `->&` methods across
   both backends, support `CORE::bless` and `CORE::break` code references, and
   allow same-finally local `goto` targets.

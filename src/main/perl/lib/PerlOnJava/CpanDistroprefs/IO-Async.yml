@@ -11,6 +11,7 @@ match:
   distribution: "^PEVANS/IO-Async-[0-9]"
 patches:
   - "IO-Async/NoFork.patch"
+  - "IO-Async/RetainQueuedFutures.patch"
   - "IO-Async/PerlOnJava.patch"
   - "IO-Async/SkipUnsupportedSocketTests.patch"
 test:

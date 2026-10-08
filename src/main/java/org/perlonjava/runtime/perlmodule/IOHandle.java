@@ -1,6 +1,8 @@
 package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.runtimetypes.*;
+import org.perlonjava.runtime.io.NativeFdIOHandle;
+import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 
 /**
  * Java::System - Perl module for accessing IO::Handle internals
@@ -178,6 +180,14 @@ public class IOHandle extends PerlModuleBase {
             currentBlocking = socketIO.isBlocking();
         } else if (ioHandle instanceof org.perlonjava.runtime.io.InternalPipeHandle pipeHandle) {
             currentBlocking = pipeHandle.isBlocking();
+        } else if (ioHandle instanceof NativeFdIOHandle nativeFd) {
+            int flags = FFMPosix.get().fcntl(nativeFd.getNativeFd(), 3, 0); // F_GETFL
+            if (flags == -1) {
+                RuntimeIO.handleIOError(FFMPosix.get().errno());
+                return new RuntimeList();
+            }
+            int nonblockFlag = org.perlonjava.runtime.nativ.NativeUtils.IS_MAC ? 4 : 04000;
+            currentBlocking = (flags & nonblockFlag) == 0;
         }
 
         if (args.size() == 2) {
@@ -188,6 +198,18 @@ public class IOHandle extends PerlModuleBase {
             } else if (ioHandle instanceof org.perlonjava.runtime.io.InternalPipeHandle pipeHandle) {
                 // For internal pipes, set blocking mode
                 pipeHandle.setBlocking(newBlocking);
+            } else if (ioHandle instanceof NativeFdIOHandle nativeFd) {
+                int flags = FFMPosix.get().fcntl(nativeFd.getNativeFd(), 3, 0); // F_GETFL
+                if (flags == -1) {
+                    RuntimeIO.handleIOError(FFMPosix.get().errno());
+                    return new RuntimeList();
+                }
+                int nonblockFlag = org.perlonjava.runtime.nativ.NativeUtils.IS_MAC ? 4 : 04000;
+                int updatedFlags = newBlocking ? flags & ~nonblockFlag : flags | nonblockFlag;
+                if (FFMPosix.get().fcntl(nativeFd.getNativeFd(), 4, updatedFlags) == -1) { // F_SETFL
+                    RuntimeIO.handleIOError(FFMPosix.get().errno());
+                    return new RuntimeList();
+                }
             } else if (!newBlocking) {
                 // Non-blocking I/O not supported for other handle types
                 RuntimeIO.handleIOError("Non-blocking I/O not supported");

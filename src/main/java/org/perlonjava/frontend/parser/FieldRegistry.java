@@ -26,6 +26,10 @@ public class FieldRegistry {
         return PerlRuntime.current().globalState().classParameters();
     }
 
+    private static Set<String> generatedConstructors() {
+        return PerlRuntime.current().globalState().generatedClassConstructors();
+    }
+
     /**
      * Register a field declaration in a class
      */
@@ -68,6 +72,18 @@ public class FieldRegistry {
 
     public static void registerParameterName(String className, String parameterName) {
         classParameters().computeIfAbsent(className, ignored -> new HashSet<>()).add(parameterName);
+    }
+
+    public static void registerGeneratedConstructor(String className) {
+        generatedConstructors().add(className);
+    }
+
+    public static void unregisterGeneratedConstructor(String className) {
+        generatedConstructors().remove(className);
+    }
+
+    public static boolean hasGeneratedConstructor(String className) {
+        return generatedConstructors().contains(className);
     }
 
     /**
@@ -125,5 +141,6 @@ public class FieldRegistry {
         classParents().clear();
         classFields().clear();
         classParameters().clear();
+        generatedConstructors().clear();
     }
 }
