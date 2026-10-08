@@ -219,9 +219,12 @@ subtest 'Autovivification rules summary' => sub {
     my $h7;
     eval { defined $h7->{key}; };
     is($@, '', 'Hash element access autovivifies');
-    
-    ## TODO
-    ## ok(defined $h7 && ref $h7 eq 'HASH', 'Hash was created by element access');
+    ok(defined $h7 && ref $h7 eq 'HASH', 'defined hash element access creates the hash');
+
+    my $h8;
+    my $value = delete $h8->{key} if defined $h8->{key};
+    is(ref $h8, 'HASH', 'defined hash element access autovivifies before conditional delete');
+    is_deeply($h8, {}, 'conditional delete leaves the autovivified hash empty');
 };
 
 subtest 'Nested array rvalue autovivification' => sub {

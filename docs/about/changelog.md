@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Autovivify undefined hash references when an element is read, including in
+  `defined` checks.
 - Keep version-control conflict-marker diagnostics out of quoted strings and
   heredoc contents.
 - Parse bare phaser-name forward declarations such as `END;` after heredocs.
