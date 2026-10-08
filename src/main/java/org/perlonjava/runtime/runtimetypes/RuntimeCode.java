@@ -5825,9 +5825,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 boolean carpTrustedFrame = isCarpStackActive() && reportedCode != null
                         && isCarpTrustedCallerPackage(reportedCode.packageName);
                 if ((reportedCode != null && "DESTROY".equals(reportedCode.subName))
-                        || (isCarpStackActive()
-                                && isDestroyActiveOnStack()
-                                && !carpTrustedFrame)) {
+                        || (isCarpStackActive() && !carpTrustedFrame)) {
                     String callSitePackage = getCallerPackageAtCallerFrame(trackedActiveCodeFrame);
                     if (callSitePackage != null && !callSitePackage.isEmpty()) {
                         pkg = callSitePackage;
