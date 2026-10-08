@@ -12,6 +12,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 import java.net.InetSocketAddress;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HttpTinyBinaryResponseTest {
@@ -64,5 +65,108 @@ class HttpTinyBinaryResponseTest {
         } finally {
             server.stop(0);
         }
+    }
+
+    @Tag("unit")
+    @Test
+    void requestAddsDefaultContentTypeForNonEmptyBody() throws Exception {
+        String[] capturedContentType = {null};
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/post", exchange -> {
+            capturedContentType[0] = exchange.getRequestHeaders().getFirst("Content-Type");
+            exchange.sendResponseHeaders(200, 0);
+            exchange.getResponseBody().close();
+        });
+        server.start();
+        try {
+            RuntimeHash instance = buildInstance();
+
+            RuntimeHash optHeaders = new RuntimeHash();
+            RuntimeHash options = new RuntimeHash();
+            options.put("content", new RuntimeScalar("hello"));
+            options.put("headers", optHeaders.createReference());
+
+            RuntimeList result = HttpTiny.request(buildArgs(instance, "POST",
+                    "http://127.0.0.1:" + server.getAddress().getPort() + "/post", options), 0);
+            assertNotNull(result);
+            assertEquals("application/octet-stream", capturedContentType[0],
+                    "non-empty scalar body without caller content-type gets default Content-Type");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Tag("unit")
+    @Test
+    void requestPreservesCallerSuppliedContentType() throws Exception {
+        String[] capturedContentType = {null};
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/post", exchange -> {
+            capturedContentType[0] = exchange.getRequestHeaders().getFirst("Content-Type");
+            exchange.sendResponseHeaders(200, 0);
+            exchange.getResponseBody().close();
+        });
+        server.start();
+        try {
+            RuntimeHash instance = buildInstance();
+
+            RuntimeHash optHeaders = new RuntimeHash();
+            optHeaders.put("Content-Type", new RuntimeScalar("application/json"));
+            RuntimeHash options = new RuntimeHash();
+            options.put("content", new RuntimeScalar("{\"k\":1}"));
+            options.put("headers", optHeaders.createReference());
+
+            HttpTiny.request(buildArgs(instance, "POST",
+                    "http://127.0.0.1:" + server.getAddress().getPort() + "/post", options), 0);
+            assertEquals("application/json", capturedContentType[0],
+                    "caller-supplied content-type is not overridden by the default");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Tag("unit")
+    @Test
+    void requestDoesNotAddContentTypeForEmptyBody() throws Exception {
+        String[] capturedContentType = {"(sentinel)"};
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/post", exchange -> {
+            String ct = exchange.getRequestHeaders().getFirst("Content-Type");
+            capturedContentType[0] = ct;
+            exchange.sendResponseHeaders(200, 0);
+            exchange.getResponseBody().close();
+        });
+        server.start();
+        try {
+            RuntimeHash instance = buildInstance();
+
+            RuntimeHash options = new RuntimeHash();
+            options.put("content", new RuntimeScalar(""));
+
+            HttpTiny.request(buildArgs(instance, "POST",
+                    "http://127.0.0.1:" + server.getAddress().getPort() + "/post", options), 0);
+            assertNull(capturedContentType[0],
+                    "empty body does not get a default Content-Type header");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    private static RuntimeHash buildInstance() {
+        RuntimeHash instance = new RuntimeHash();
+        instance.put("agent", new RuntimeScalar("PerlOnJava-test"));
+        instance.put("timeout", new RuntimeScalar(10));
+        instance.put("verify_SSL", new RuntimeScalar(false));
+        return instance;
+    }
+
+    private static RuntimeArray buildArgs(RuntimeHash instance, String method, String url,
+                                          RuntimeHash options) {
+        RuntimeArray args = new RuntimeArray();
+        args.elements.add(instance.createReference());
+        args.elements.add(new RuntimeScalar(method));
+        args.elements.add(new RuntimeScalar(url));
+        args.elements.add(options.createReference());
+        return args;
     }
 }
