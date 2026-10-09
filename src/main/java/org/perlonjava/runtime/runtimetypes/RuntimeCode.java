@@ -7543,12 +7543,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return;
         }
         String warningBits = flow.warningBitsAtSite();
-        boolean lexicalWarningsInEffect = warningBits != null && hasAnyWarningBitSet(warningBits);
-        boolean enabled = WarningFlags.areWarningsForcedOn()
-                || (!flow.exitingWarningDisabledAtSite()
-                        && (lexicalWarningsInEffect
-                                ? WarningFlags.isEnabledInBits(warningBits, "exiting")
-                                : Warnings.isWarnFlagSet()));
+        boolean enabled = WarningFlags.areWarningsForcedOn();
+        if (!enabled && !flow.exitingWarningDisabledAtSite()) {
+            if (warningBits == null) {
+                // The statement's bits were never installed at runtime (for example a
+                // class ADJUST block run by the generated constructor), so there is no
+                // site decision to make: keep the boundary check used before the site
+                // was captured.
+                enabled = Warnings.warningManager.isWarningEnabled("exiting");
+            } else if (hasAnyWarningBitSet(warningBits)) {
+                enabled = WarningFlags.isEnabledInBits(warningBits, "exiting");
+            } else {
+                enabled = Warnings.isWarnFlagSet();
+            }
+        }
         if (!enabled) {
             return;
         }
