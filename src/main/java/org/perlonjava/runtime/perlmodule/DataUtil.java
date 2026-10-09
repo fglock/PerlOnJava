@@ -30,9 +30,9 @@ public final class DataUtil extends PerlModuleBase {
             throw new RuntimeException(e);
         }
 
-        // Install the distribution's reusable pure-Perl implementation for
-        // the remaining API, then let the shim restore these XS-like methods.
-        XSLoader.loadJarShimOverrides("Data::Util");
+        // Data::Util.pm loads its pure-Perl implementation after XSLoader
+        // returns. Re-evaluating the same .pm as a jar shim here would recurse
+        // into the module while its first require is still in progress.
     }
 
     public static RuntimeList is_value(RuntimeArray args, int ctx) {
