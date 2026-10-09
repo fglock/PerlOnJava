@@ -494,7 +494,9 @@ public class Variable {
                 varName, parser.ctx.symbolTable.getCurrentPackage());
         boolean existsGlobally = false;
         if (sigil.equals("$")) {
-            existsGlobally = GlobalVariable.existsGlobalVariable(normalizedName);
+            // Perl's strict vars accepts an unqualified package scalar only when it was
+            // imported; an existing container alone (e.g. from another scope's `our`) is not enough.
+            existsGlobally = GlobalVariable.isDeclaredGlobalVariable(normalizedName);
             // For $hash{...} and $array[...], also check global container
             if (!existsGlobally) {
                 int peekIdx = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
@@ -1373,9 +1375,11 @@ public class Variable {
             if (isMaybeOperator(bracedVarName, parser)) {
                 // Reset and parse as expression
                 parser.tokenIndex = savedIndex;
-            } else if (isBuiltinFunctionFollowedByArrow(bracedVarName, parser)) {
-                // Built-in function followed by -> should be parsed as expression, not variable
+            } else if (isBuiltinFunctionFollowedByArrow(bracedVarName, parser)
+                    || isFollowedByArrow(parser)) {
+                // An identifier followed by -> is an expression, not a variable name.
                 // Example: @{ shift->{'pagers'} } should be @{ (shift)->{'pagers'} }
+                // and @{ CONSTANT->{list} } dereferences the constant's value.
                 parser.tokenIndex = savedIndex;
             } else {
                 Node operand = new OperatorNode(sigil, new IdentifierNode(bracedVarName, parser.tokenIndex), parser.tokenIndex);
@@ -1700,6 +1704,12 @@ public class Variable {
      * - @{ shift->{'pagers'} } should be @{ (shift)->{'pagers'} }, not @shift->{'pagers'}
      * - %{ caller(1)->[3] } should be %{ (caller(1))->[3] }, not %caller(1)->[3]
      */
+    /** True when the next token is {@code ->}, so the identifier just read starts an expression. */
+    private static boolean isFollowedByArrow(Parser parser) {
+        return parser.tokenIndex < parser.tokens.size()
+                && "->".equals(parser.tokens.get(parser.tokenIndex).text);
+    }
+
     private static boolean isBuiltinFunctionFollowedByArrow(String identifier, Parser parser) {
         // List of built-in functions that commonly return objects/references
         // and might be used with -> for method calls or dereferences

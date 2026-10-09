@@ -97,6 +97,11 @@ public class InterpreterState {
                 .executionState().interpreterPcs;
     }
 
+    private static ArrayList<String> callerPackageStack() {
+        return org.perlonjava.runtime.runtimetypes.PerlRuntime.current()
+                .executionState().interpreterCallerPackages;
+    }
+
     /**
      * Push a new interpreter frame onto the stack.
      * Called at entry to BytecodeInterpreter.execute().
@@ -120,6 +125,9 @@ public class InterpreterState {
      * @return The PC holder array for direct updates
      */
     public static int[] pushFrame(InterpreterFrame frame) {
+        // Record the call-site package before the new frame sets currentPackage
+        // to its own package (see BytecodeInterpreter.execute).
+        callerPackageStack().add(currentPackage.get().toString());
         frameStack().push(frame);
         int[] pcHolder = new int[]{0};  // Mutable holder for PC
         pcStack().add(pcHolder);
@@ -143,6 +151,7 @@ public class InterpreterState {
             packageName = current.packageName();
         }
 
+        callerPackageStack().add(packageName);
         frameStack().push(new InterpreterFrame(
                 current.code(),
                 packageName,
@@ -183,6 +192,11 @@ public class InterpreterState {
         ArrayList<int[]> pcs = pcStack();
         if (!pcs.isEmpty()) {
             pcs.removeLast();
+        }
+
+        ArrayList<String> callerPackages = callerPackageStack();
+        if (!callerPackages.isEmpty()) {
+            callerPackages.removeLast();
         }
     }
 
@@ -234,6 +248,18 @@ public class InterpreterState {
      */
     public static List<InterpreterFrame> getStack() {
         return new ArrayList<>(frameStack());
+    }
+
+    /**
+     * Call-site package of each frame in {@link #getStack()} order (most recent first).
+     */
+    public static List<String> getCallerPackages() {
+        ArrayList<String> packages = callerPackageStack();
+        ArrayList<String> result = new ArrayList<>(packages.size());
+        for (int i = packages.size() - 1; i >= 0; i--) {
+            result.add(packages.get(i));
+        }
+        return result;
     }
 
     public static List<Integer> getPcStack() {

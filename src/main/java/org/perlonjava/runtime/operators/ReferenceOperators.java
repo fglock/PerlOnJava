@@ -245,11 +245,11 @@ public class ReferenceOperators {
                             RuntimeScalarType.isReference(runtimeScalar)
                             && !runtimeScalar.refCountOwned
                             && (runtimeScalar instanceof GlobalRuntimeScalar
-                            || GlobalVariable.globalVariables.containsValue(runtimeScalar)
+                            || GlobalVariable.scalarSlots().containsValue(runtimeScalar)
                             || MyVarCleanupStack.isRegistered(runtimeScalar));
                     if (existingScalarOwner
                             && (runtimeScalar instanceof GlobalRuntimeScalar
-                            || GlobalVariable.globalVariables.containsValue(runtimeScalar))
+                            || GlobalVariable.scalarSlots().containsValue(runtimeScalar))
                             && referent instanceof RuntimeScalar scalarReferent
                             && scalarReferent.referencedByScalarReference) {
                         scalarReferent.localBindingExists = true;
@@ -378,7 +378,12 @@ public class ReferenceOperators {
                             case REGEX -> "REF";
                             case ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE, REFERENCE -> "REF";
                             case GLOB -> "GLOB";
-                            case READONLY_SCALAR -> ref((RuntimeScalar) scalar.value).toString();
+                            case READONLY_SCALAR -> {
+                                // A reference to a read-only scalar is REF when the scalar holds
+                                // a reference of any kind, and SCALAR for a plain value.
+                                String wrapped = ref((RuntimeScalar) scalar.value).toString();
+                                yield wrapped.isEmpty() ? "SCALAR" : "REF";
+                            }
                             default -> "SCALAR";
                         };
                     }

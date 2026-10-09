@@ -86,12 +86,12 @@ public class GlobalContext {
             String varName = "main::" + Character.toString(c - 'A' + 1);
             GlobalVariable.getGlobalVariable(varName);
         }
-        GlobalVariable.globalVariables.put(encodeSpecialVar("N"),
+        GlobalVariable.scalarSlots().put(encodeSpecialVar("N"),
                 new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_CLOSED_PAREN_MATCH));
         // $^S - current state of the interpreter (undef=compiling, 0=not in eval, 1=in eval)
-        GlobalVariable.globalVariables.put("main::" + Character.toString('S' - 'A' + 1),
+        GlobalVariable.scalarSlots().put("main::" + Character.toString('S' - 'A' + 1),
                 new ScalarSpecialVariable(ScalarSpecialVariable.Id.EVAL_STATE));
-        GlobalVariable.globalVariables.put(
+        GlobalVariable.scalarSlots().put(
                 "main::" + Character.toString('O' - 'A' + 1),
                 new OperatingSystemVariable(SystemUtils.getPerlOsName()));    // initialize $^O
         GlobalVariable.getGlobalVariable("main::" + Character.toString('V' - 'A' + 1)).set(Configuration.getPerlVersionVString());    // initialize $^V
@@ -134,25 +134,25 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable("main::a");    // initialize $a to "undef"
         GlobalVariable.getGlobalVariable("main::b");    // initialize $b to "undef"
         ErrnoVariable errnoVariable = new ErrnoVariable();
-        GlobalVariable.globalVariables.put("main::!", errnoVariable);    // initialize $! with dualvar support
+        GlobalVariable.scalarSlots().put("main::!", errnoVariable);    // initialize $! with dualvar support
         // Model $^E as $! until platform-specific extended errors are needed.
-        GlobalVariable.globalVariables.put(encodeSpecialVar("E"), errnoVariable);
+        GlobalVariable.scalarSlots().put(encodeSpecialVar("E"), errnoVariable);
         // Initialize $, (output field separator) with special variable class
-        if (!GlobalVariable.globalVariables.containsKey("main::,")) {
+        if (!GlobalVariable.scalarSlots().containsKey("main::,")) {
             var ofs = new OutputFieldSeparator();
             ofs.set("");
-            GlobalVariable.globalVariables.put("main::,", ofs);
+            GlobalVariable.scalarSlots().put("main::,", ofs);
         }
-        GlobalVariable.globalVariables.put("main::|", new OutputAutoFlushVariable());
-        GlobalVariable.globalVariables.put("main::~", new CurrentFormatVariable(false));
-        GlobalVariable.globalVariables.put("main::^", new CurrentFormatVariable(true));
-        GlobalVariable.globalVariables.put("main::=", new OutputFormatVariable(OutputFormatVariable.Id.PAGE_LENGTH));
-        GlobalVariable.globalVariables.put("main::-", new OutputFormatVariable(OutputFormatVariable.Id.LINES_LEFT));
+        GlobalVariable.scalarSlots().put("main::|", new OutputAutoFlushVariable());
+        GlobalVariable.scalarSlots().put("main::~", new CurrentFormatVariable(false));
+        GlobalVariable.scalarSlots().put("main::^", new CurrentFormatVariable(true));
+        GlobalVariable.scalarSlots().put("main::=", new OutputFormatVariable(OutputFormatVariable.Id.PAGE_LENGTH));
+        GlobalVariable.scalarSlots().put("main::-", new OutputFormatVariable(OutputFormatVariable.Id.LINES_LEFT));
         // Only set $\ if it hasn't been set yet - prevents overwriting during re-entrant calls
-        if (!GlobalVariable.globalVariables.containsKey("main::\\")) {
+        if (!GlobalVariable.scalarSlots().containsKey("main::\\")) {
             var ors = new OutputRecordSeparator();
             ors.set(compilerOptions.outputRecordSeparator);    // initialize $\
-            GlobalVariable.globalVariables.put("main::\\", ors);
+            GlobalVariable.scalarSlots().put("main::\\", ors);
         }
         GlobalVariable.getGlobalVariable("main::$").set(ForkOpenState.initialProcessId());
         // Perl starts with a successful child status. Leaving this as undef
@@ -161,8 +161,8 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable("main::?").set(0);
         // Only set $0 if it hasn't been set yet - prevents overwriting during re-entrant calls
         // (e.g., when require() is called during module initialization)
-        if (!GlobalVariable.globalVariables.containsKey("main::0")) {
-            GlobalVariable.globalVariables.put("main::0",
+        if (!GlobalVariable.scalarSlots().containsKey("main::0")) {
+            GlobalVariable.scalarSlots().put("main::0",
                     new ProgramNameVariable().initialize(compilerOptions.fileName));
         }
         if (compilerOptions.taintMode || compilerOptions.taintWarnings) {
@@ -175,16 +175,16 @@ public class GlobalContext {
         RuntimeScalar taintStatus = compilerOptions.taintMode
                 ? RuntimeScalarCache.scalarOne
                 : compilerOptions.taintWarnings ? new RuntimeScalar(-1) : RuntimeScalarCache.scalarZero;
-        if (!GlobalVariable.globalVariables.containsKey(taintVarName)
+        if (!GlobalVariable.scalarSlots().containsKey(taintVarName)
                 || ((compilerOptions.taintMode || compilerOptions.taintWarnings)
-                && GlobalVariable.globalVariables.get(taintVarName) == RuntimeScalarCache.scalarZero)) {
-            GlobalVariable.globalVariables.put(taintVarName, taintStatus);
+                && GlobalVariable.scalarSlots().get(taintVarName) == RuntimeScalarCache.scalarZero)) {
+            GlobalVariable.scalarSlots().put(taintVarName, taintStatus);
         }
-        GlobalVariable.globalVariables.put("main::>", new ScalarSpecialVariable(ScalarSpecialVariable.Id.EFFECTIVE_UID));  // $> - effective UID (lazy)
-        GlobalVariable.globalVariables.put("main::<", new ScalarSpecialVariable(ScalarSpecialVariable.Id.REAL_UID));  // $< - real UID (lazy)
+        GlobalVariable.scalarSlots().put("main::>", new ScalarSpecialVariable(ScalarSpecialVariable.Id.EFFECTIVE_UID));  // $> - effective UID (lazy)
+        GlobalVariable.scalarSlots().put("main::<", new ScalarSpecialVariable(ScalarSpecialVariable.Id.REAL_UID));  // $< - real UID (lazy)
         GlobalVariable.getGlobalVariable("main::;").set("\034");  // initialize $; (SUBSEP) to \034
-        GlobalVariable.globalVariables.put("main::(", new ScalarSpecialVariable(ScalarSpecialVariable.Id.REAL_GID));  // $( - real GID (lazy)
-        GlobalVariable.globalVariables.put("main::)", new ScalarSpecialVariable(ScalarSpecialVariable.Id.EFFECTIVE_GID));  // $) - effective GID (lazy)
+        GlobalVariable.scalarSlots().put("main::(", new ScalarSpecialVariable(ScalarSpecialVariable.Id.REAL_GID));  // $( - real GID (lazy)
+        GlobalVariable.scalarSlots().put("main::)", new ScalarSpecialVariable(ScalarSpecialVariable.Id.EFFECTIVE_GID));  // $) - effective GID (lazy)
         // $^ is installed above as a per-filehandle current top-format variable.
         // $: (format lines per page) has Perl's historical default of
         // space, newline, and hyphen. It is writable like an ordinary
@@ -193,21 +193,21 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable("main:::").set(" \n-");
 
         // Only set $/ if it hasn't been set yet - prevents overwriting during re-entrant calls
-        if (!GlobalVariable.globalVariables.containsKey("main::/")) {
-            GlobalVariable.globalVariables.put("main::/", new InputRecordSeparator(compilerOptions.inputRecordSeparator)); // initialize $/
+        if (!GlobalVariable.scalarSlots().containsKey("main::/")) {
+            GlobalVariable.scalarSlots().put("main::/", new InputRecordSeparator(compilerOptions.inputRecordSeparator)); // initialize $/
         }
 
-        GlobalVariable.globalVariables.put("main::`", new ScalarSpecialVariable(ScalarSpecialVariable.Id.PREMATCH));
-        GlobalVariable.globalVariables.put("main::&", new ScalarSpecialVariable(ScalarSpecialVariable.Id.MATCH));
-        GlobalVariable.globalVariables.put("main::'", new ScalarSpecialVariable(ScalarSpecialVariable.Id.POSTMATCH));
-        GlobalVariable.globalVariables.put("main::.", new ScalarSpecialVariable(ScalarSpecialVariable.Id.INPUT_LINE_NUMBER)); // $.
-        GlobalVariable.globalVariables.put("main::+", new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_PAREN_MATCH));
-        GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_SUCCESSFUL_PATTERN"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_SUCCESSFUL_PATTERN));
-        GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_FH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_FH)); // $^LAST_FH
-        GlobalVariable.globalVariables.put(encodeSpecialVar("H"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.HINTS)); // $^H - compile-time hints
-        GlobalVariable.globalVariables.put(encodeSpecialVar("ENCODING"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.REMOVED_ENCODING));
+        GlobalVariable.scalarSlots().put("main::`", new ScalarSpecialVariable(ScalarSpecialVariable.Id.PREMATCH));
+        GlobalVariable.scalarSlots().put("main::&", new ScalarSpecialVariable(ScalarSpecialVariable.Id.MATCH));
+        GlobalVariable.scalarSlots().put("main::'", new ScalarSpecialVariable(ScalarSpecialVariable.Id.POSTMATCH));
+        GlobalVariable.scalarSlots().put("main::.", new ScalarSpecialVariable(ScalarSpecialVariable.Id.INPUT_LINE_NUMBER)); // $.
+        GlobalVariable.scalarSlots().put("main::+", new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_PAREN_MATCH));
+        GlobalVariable.scalarSlots().put(encodeSpecialVar("LAST_SUCCESSFUL_PATTERN"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_SUCCESSFUL_PATTERN));
+        GlobalVariable.scalarSlots().put(encodeSpecialVar("LAST_FH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_FH)); // $^LAST_FH
+        GlobalVariable.scalarSlots().put(encodeSpecialVar("H"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.HINTS)); // $^H - compile-time hints
+        GlobalVariable.scalarSlots().put(encodeSpecialVar("ENCODING"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.REMOVED_ENCODING));
         // $^R is writable, not read-only - initialize as regular variable instead of ScalarSpecialVariable
-        // GlobalVariable.globalVariables.put(encodeSpecialVar("R"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_REGEXP_CODE_RESULT)); // $^R
+        // GlobalVariable.scalarSlots().put(encodeSpecialVar("R"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_REGEXP_CODE_RESULT)); // $^R
         GlobalVariable.getGlobalVariable(encodeSpecialVar("R"));    // initialize $^R to "undef" - writable variable
         GlobalVariable.getGlobalVariable(encodeSpecialVar("A")).set("");    // initialize $^A to "" - format accumulator variable
         GlobalVariable.getGlobalVariable(encodeSpecialVar("P")).set(0);    // initialize $^P to 0 - debugger flags
@@ -219,23 +219,23 @@ public class GlobalContext {
             GlobalVariable.getGlobalVariable(encodeSpecialVar("I")).set(
                 compilerOptions.inPlaceExtension != null ? compilerOptions.inPlaceExtension : "");
         }
-        GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_SUCCESSFUL_PATTERN"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_SUCCESSFUL_PATTERN));
-        GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_FH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_FH)); // $^LAST_FH
+        GlobalVariable.scalarSlots().put(encodeSpecialVar("LAST_SUCCESSFUL_PATTERN"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_SUCCESSFUL_PATTERN));
+        GlobalVariable.scalarSlots().put(encodeSpecialVar("LAST_FH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_FH)); // $^LAST_FH
         GlobalVariable.getGlobalVariable(encodeSpecialVar("UNICODE")).set(0);    // initialize $^UNICODE to 0 - `-C` unicode flags
 
-        GlobalVariable.globalVariables.put(encodeSpecialVar("PREMATCH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.P_PREMATCH));
-        GlobalVariable.globalVariables.put(encodeSpecialVar("MATCH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.P_MATCH));
-        GlobalVariable.globalVariables.put(encodeSpecialVar("POSTMATCH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.P_POSTMATCH));
+        GlobalVariable.scalarSlots().put(encodeSpecialVar("PREMATCH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.P_PREMATCH));
+        GlobalVariable.scalarSlots().put(encodeSpecialVar("MATCH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.P_MATCH));
+        GlobalVariable.scalarSlots().put(encodeSpecialVar("POSTMATCH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.P_POSTMATCH));
 
         GlobalVariable.getGlobalVariable(encodeSpecialVar("SAFE_LOCALES"));  // TODO
 
         // Initialize additional magic scalar variables that tests expect to exist at startup
         GlobalVariable.getGlobalVariable(encodeSpecialVar("UTF8LOCALE"));  // ${^UTF8LOCALE}
-        GlobalVariable.globalVariables.put(encodeSpecialVar("WARNING_BITS"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.WARNING_BITS));  // ${^WARNING_BITS}
+        GlobalVariable.scalarSlots().put(encodeSpecialVar("WARNING_BITS"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.WARNING_BITS));  // ${^WARNING_BITS}
         GlobalVariable.getGlobalVariable(encodeSpecialVar("UTF8CACHE")).set(0);  // ${^UTF8CACHE}
         GlobalVariable.getGlobalVariable("main::[").set(0);  // $[ (array base, deprecated)
         // $~ is installed above as a per-filehandle current format variable.
-        GlobalVariable.globalVariables.put("main::%", new OutputFormatVariable(OutputFormatVariable.Id.PAGE_NUMBER));
+        GlobalVariable.scalarSlots().put("main::%", new OutputFormatVariable(OutputFormatVariable.Id.PAGE_NUMBER));
         
         // Initialize capture variables $1-$9 (these are read-only and return undef until a match)
         for (int i = 1; i <= 9; i++) {

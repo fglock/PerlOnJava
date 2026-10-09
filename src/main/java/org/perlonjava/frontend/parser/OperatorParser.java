@@ -604,8 +604,9 @@ public class OperatorParser {
                             name, ctx.symbolTable.getCurrentPackage());
                     switch (sigil) {
                         case "$" -> {
+                            // Materialize the glob only. `our` is lexical, so it does not
+                            // make the variable visible to strict vars elsewhere; imports do.
                             GlobalVariable.getGlobalVariable(fullName);
-                            GlobalVariable.declareGlobalVariable(fullName);
                         }
                         case "@" -> {
                             GlobalVariable.getGlobalArray(fullName);
@@ -637,7 +638,6 @@ public class OperatorParser {
                             name, ctx.symbolTable.getCurrentPackage());
                     switch (sigil) {
                         case "$" -> {
-                            GlobalVariable.declareGlobalVariable(fullName);
                             GlobalVariable.getGlobalVariable(fullName);
                         }
                         case "@" -> {

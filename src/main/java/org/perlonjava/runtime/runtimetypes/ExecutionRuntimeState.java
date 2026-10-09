@@ -56,6 +56,8 @@ public final class ExecutionRuntimeState {
     public final RuntimeScalar currentCallerPackage = new RuntimeScalar("main");
     public final Deque<InterpreterState.InterpreterFrame> interpreterFrames = new ArrayDeque<>();
     public final ArrayList<int[]> interpreterPcs = new ArrayList<>();
+    /** Package in effect at the call site of each interpreter frame, aligned with interpreterFrames. */
+    public final ArrayList<String> interpreterCallerPackages = new ArrayList<>();
 
     /** Source strings of eval STRING invocations currently executing on this runtime. */
     public final Deque<RuntimeCode.EvalSourceFrame> activeEvalSources = new ArrayDeque<>();

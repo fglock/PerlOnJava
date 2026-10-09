@@ -37,7 +37,7 @@ public class GlobalDestruction {
         // spawns further cleanup. See dev/modules/git_modules_support.md.
 
         // Walk all global scalars
-        for (RuntimeScalar val : new ArrayList<>(GlobalVariable.globalVariables.values())) {
+        for (RuntimeScalar val : new ArrayList<>(GlobalVariable.scalarSlots().values())) {
             destroyIfTracked(val, visited);
         }
 

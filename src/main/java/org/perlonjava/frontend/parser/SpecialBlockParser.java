@@ -399,7 +399,7 @@ public class SpecialBlockParser {
                                 GlobalVariable.globalHashes.put(fullName, (RuntimeHash) runtimeValue);
                                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("BEGIN block: Aliased hash " + fullName);
                             } else if (runtimeValue instanceof RuntimeScalar) {
-                                GlobalVariable.globalVariables.put(fullName, (RuntimeScalar) runtimeValue);
+                                GlobalVariable.scalarSlots().put(fullName, (RuntimeScalar) runtimeValue);
                                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("BEGIN block: Aliased scalar " + fullName);
                             }
                         }

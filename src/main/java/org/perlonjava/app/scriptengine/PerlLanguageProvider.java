@@ -6,6 +6,7 @@ import org.perlonjava.backend.bytecode.BytecodeCompiler;
 import org.perlonjava.backend.bytecode.Disassemble;
 import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.backend.bytecode.InterpreterState;
+import org.perlonjava.backend.bytecode.VariableCollectorVisitor;
 import org.perlonjava.backend.jvm.CompiledCode;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
@@ -763,7 +764,7 @@ public class PerlLanguageProvider {
             Map<String, RuntimeArray> beginArrays = null;
             Map<String, RuntimeHash> beginHashes = null;
             if (runtimeCode instanceof CompiledCode) {
-                beginScalars = snapshotBeginHandoffs(GlobalVariable.globalVariables);
+                beginScalars = snapshotBeginHandoffs(GlobalVariable.scalarSlots());
                 beginArrays = snapshotBeginHandoffs(GlobalVariable.globalArrays);
                 beginHashes = snapshotBeginHandoffs(GlobalVariable.globalHashes);
             }
@@ -784,7 +785,7 @@ public class PerlLanguageProvider {
                     // existed before the failed attempt. Normal successful
                     // execution remains destructive, which preserves fresh
                     // lexical pads on recursive calls.
-                    restoreBeginHandoffs(GlobalVariable.globalVariables, beginScalars);
+                    restoreBeginHandoffs(GlobalVariable.scalarSlots(), beginScalars);
                     restoreBeginHandoffs(GlobalVariable.globalArrays, beginArrays);
                     restoreBeginHandoffs(GlobalVariable.globalHashes, beginHashes);
                     InterpretedCode interpretedCode;
@@ -958,6 +959,9 @@ public class PerlLanguageProvider {
                         generatedClass,
                         ctx
                 );
+                // File-scope `our` declarations, for PadWalker::peek_our(0) at file scope
+                Map<String, String> ourDeclarations = VariableCollectorVisitor.declaredOurVariables(ast);
+                compiled.declaredOurVariables = ourDeclarations.isEmpty() ? null : ourDeclarations;
                 return compiled;
 
             } catch (InterpreterFallbackException fallback) {
