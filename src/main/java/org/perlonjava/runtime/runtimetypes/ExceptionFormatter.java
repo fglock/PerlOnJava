@@ -93,6 +93,7 @@ public class ExceptionFormatter {
         // level; consuming them in order gives the correct nested call stack.
         var interpreterFrames = InterpreterState.getStack();
         var interpreterPcs = InterpreterState.getPcStack();
+        var interpreterCallerPackages = InterpreterState.getCallerPackages();
         // Start at index 0 - caller() will skip this (the current function)
         int interpreterFrameIndex = 0;
         
@@ -253,6 +254,18 @@ public class ExceptionFormatter {
                                 pkg = (interpreterFrameIndex == 0)
                                         ? InterpreterState.currentPackage.get().toString()
                                         : frame.packageName();
+                            }
+                            // An outer eval frame's package is the one in effect where it called
+                            // the next inner frame. currentPackage belongs to the innermost frame
+                            // only, so use the call-site package recorded when that inner frame
+                            // was entered.
+                            if (isEvalSource && interpreterFrameIndex > 0
+                                    && !frame.code().isQuotedRegexCallback
+                                    && interpreterFrameIndex - 1 < interpreterCallerPackages.size()) {
+                                String callSitePackage = interpreterCallerPackages.get(interpreterFrameIndex - 1);
+                                if (callSitePackage != null && !callSitePackage.isEmpty()) {
+                                    pkg = callSitePackage;
+                                }
                             }
 
                             // Use tokenIndex for line lookup

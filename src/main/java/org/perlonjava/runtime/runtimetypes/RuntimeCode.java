@@ -2361,6 +2361,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public Map<String, String> ourVariableRegistry;
 
     /**
+     * {@code our} declarations made directly in this CV's own body (name to
+     * package). Kept apart from {@link #ourVariableRegistry}, which seeds eval
+     * STRING aliases and must only contain declarations visible where the CV
+     * was defined. Read by PadWalker::peek_our and regex callback snapshots.
+     */
+    public Map<String, String> declaredOurVariables;
+
+    /**
      * Attach the lexical names declared directly by an anonymous subroutine.
      * Returning the original scalar keeps this convenient for JVM bytecode
      * emission, where the CODE reference is already on the operand stack.
@@ -2759,6 +2767,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 ? null : new java.util.LinkedHashSet<>(this.lexicalVariableNames);
         clone.ourVariableRegistry = this.ourVariableRegistry == null
                 ? null : new java.util.LinkedHashMap<>(this.ourVariableRegistry);
+        clone.declaredOurVariables = this.declaredOurVariables == null
+                ? null : new java.util.LinkedHashMap<>(this.declaredOurVariables);
         clone.compilerSupplier = this.compilerSupplier;
         clone.jvmClosureFrameRequired = this.jvmClosureFrameRequired;
         clone.activeLexicalFrameRequired = this.activeLexicalFrameRequired;
@@ -3337,8 +3347,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             switch (alias.sigil) {
                 case '$' -> {
-                    if (GlobalVariable.globalVariables.get(alias.fullName) == alias.value) {
-                        GlobalVariable.globalVariables.remove(alias.fullName);
+                    if (GlobalVariable.scalarSlots().get(alias.fullName) == alias.value) {
+                        GlobalVariable.scalarSlots().remove(alias.fullName);
                     }
                 }
                 case '@' -> {
@@ -3363,7 +3373,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             boolean installed = switch (alias.sigil) {
                 case '$' -> alias.value instanceof RuntimeScalar scalar
-                        && GlobalVariable.globalVariables.putIfAbsent(alias.fullName, scalar) == null;
+                        && GlobalVariable.scalarSlots().putIfAbsent(alias.fullName, scalar) == null;
                 case '@' -> alias.value instanceof RuntimeArray array
                         && GlobalVariable.globalArrays.putIfAbsent(alias.fullName, array) == null;
                 case '%' -> alias.value instanceof RuntimeHash hash
@@ -3530,6 +3540,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.lexicalHints = codeFrom.lexicalHints;
         this.lexicalDisabledWarningCategories = codeFrom.lexicalDisabledWarningCategories;
         this.ourVariableRegistry = codeFrom.ourVariableRegistry;
+        this.declaredOurVariables = codeFrom.declaredOurVariables;
         this.padConstants = codeFrom.padConstants;
     }
 
@@ -3884,7 +3895,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                         installed = true;
                                     }
                                 } else if (runtimeValue instanceof RuntimeScalar) {
-                                    if (GlobalVariable.globalVariables.putIfAbsent(fullName, (RuntimeScalar) runtimeValue) == null) {
+                                    if (GlobalVariable.scalarSlots().putIfAbsent(fullName, (RuntimeScalar) runtimeValue) == null) {
                                         installed = true;
                                     }
                                 }
@@ -4470,7 +4481,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                         installed = true;
                                     }
                                 } else if (runtimeValue instanceof RuntimeScalar) {
-                                    if (GlobalVariable.globalVariables.putIfAbsent(fullName, (RuntimeScalar) runtimeValue) == null) {
+                                    if (GlobalVariable.scalarSlots().putIfAbsent(fullName, (RuntimeScalar) runtimeValue) == null) {
                                         installed = true;
                                     }
                                 }

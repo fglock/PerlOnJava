@@ -322,7 +322,7 @@ public class RuntimeStashEntry extends RuntimeGlob {
                             GlobalVariable.globalHashes.put(this.globName, sourceGlob.hashSlot);
                         }
                         if (sourceGlob.scalarSlot != null) {
-                            GlobalVariable.globalVariables.put(this.globName, sourceGlob.scalarSlot);
+                            GlobalVariable.scalarSlots().put(this.globName, sourceGlob.scalarSlot);
                         }
                     } else {
                         // Copy all slots from source to destination
@@ -487,15 +487,18 @@ public class RuntimeStashEntry extends RuntimeGlob {
             return null;
         }
 
+        // Blead keeps a subroutine in the stash as a bare CV only for main::.
+        // Elsewhere a sub-only entry is a GV, so ref() is "".
+        boolean mainStashEntry = this.globName.startsWith("main::");
         RuntimeScalar codeRef = GlobalVariable.globalCodeRefs.get(this.globName);
         if (codeRef != null
                 && codeRef.type == CODE
                 && codeRef.value instanceof RuntimeCode code
                 && code.isConstantCv
-                && code.prototype != null) {
+                && code.prototype != null
+                && (mainStashEntry || GlobalVariable.hasGlobalPseudoConstant(this.globName))) {
             // An explicit-prototype constant CV is a compact scalar stash
-            // entry. An ordinary constant-bodied sub has no prototype and
-            // remains a CODE entry in the stash.
+            // entry in main::, and a constant.pm proxy is one everywhere.
             return new RuntimeScalar().createReference();
         }
 
@@ -506,7 +509,7 @@ public class RuntimeStashEntry extends RuntimeGlob {
         }
 
         boolean hasNonCodeSlot =
-                GlobalVariable.globalVariables.containsKey(this.globName)
+                GlobalVariable.scalarSlots().containsKey(this.globName)
                         || GlobalVariable.globalArrays.containsKey(this.globName)
                         || GlobalVariable.globalHashes.containsKey(this.globName)
                         || GlobalVariable.globalIORefs.containsKey(this.globName)
@@ -515,10 +518,11 @@ public class RuntimeStashEntry extends RuntimeGlob {
             return null;
         }
 
-        if (codeRef != null
+        if (mainStashEntry
+                && codeRef != null
                 && codeRef.type == CODE
                 && codeRef.value instanceof RuntimeCode code
-                && (code.defined() || code.isDeclared)) {
+                && code.defined()) {
             return codeRef;
         }
         return null;

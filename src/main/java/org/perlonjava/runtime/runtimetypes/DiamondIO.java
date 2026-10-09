@@ -348,7 +348,7 @@ public class DiamondIO {
         // the actual scalar value instead.
         RuntimeScalar argvName = GlobalVariable.getGlobalVariable("main::ARGV");
         if (argvName instanceof RuntimeGlob) {
-            GlobalVariable.globalVariables.put("main::ARGV", new RuntimeScalar(originalFileName));
+            GlobalVariable.scalarSlots().put("main::ARGV", new RuntimeScalar(originalFileName));
         } else {
             argvName.set(originalFileName);
         }

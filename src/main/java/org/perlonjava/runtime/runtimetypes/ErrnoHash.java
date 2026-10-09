@@ -53,7 +53,7 @@ public class ErrnoHash extends AbstractMap<String, RuntimeScalar> {
      * Get the current errno value from $!.
      */
     private static int getCurrentErrno() {
-        RuntimeScalar errnoVar = GlobalVariable.globalVariables.get("main::!");
+        RuntimeScalar errnoVar = GlobalVariable.scalarSlots().get("main::!");
         return errnoVar != null ? errnoVar.getInt() : 0;
     }
 

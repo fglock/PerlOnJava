@@ -635,7 +635,7 @@ public class ReachabilityWalker {
         java.util.IdentityHashMap<RuntimeBase, String> howReached = new java.util.IdentityHashMap<>();
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
         // Seed from roots with labels
-        for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalVariables.entrySet()) {
+        for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.scalarSlots().entrySet()) {
             seedPath(e.getValue(), "$" + e.getKey(), howReached, todo);
         }
         for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrays.entrySet()) {
@@ -1369,7 +1369,7 @@ public class ReachabilityWalker {
             return true;
         }
         if (target.isPackageGlobalRoot
-                && (GlobalVariable.globalVariables.containsValue(target)
+                && (GlobalVariable.scalarSlots().containsValue(target)
                     || GlobalVariable.globalCodeRefs.containsValue(target))) {
             return true;
         }

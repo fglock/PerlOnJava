@@ -32,6 +32,26 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     public final int[] bytecode;           // Instruction stream (opcodes + operands as ints)
     public final Object[] constants;       // Constant pool (RuntimeBase objects)
     public final String[] stringPool;      // String constants (variable names, etc.)
+    /** Package-scalar pins for the global scalar opcodes, indexed by string-pool slot. */
+    private ScalarPin[] scalarPins;
+
+    /**
+     * The pin this code's global scalar opcode at {@code nameIdx} reads through. Pins are
+     * created on first execution and kept, so later calls keep the binding (see ScalarPin).
+     */
+    public ScalarPin scalarPin(int nameIdx) {
+        ScalarPin[] pins = scalarPins;
+        if (pins == null || pins.length != stringPool.length) {
+            pins = new ScalarPin[stringPool.length];
+            scalarPins = pins;
+        }
+        ScalarPin pin = pins[nameIdx];
+        if (pin == null) {
+            pin = GlobalVariable.pinScalar(stringPool[nameIdx]);
+            pins[nameIdx] = pin;
+        }
+        return pin;
+    }
     public final int maxRegisters;         // Number of registers needed
     public final RuntimeBase[] capturedVars; // Closure support (captured from outer scope)
     public final Map<String, Integer> variableRegistry; // Variable name → register index (for eval STRING)

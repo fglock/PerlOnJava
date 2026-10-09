@@ -63,8 +63,8 @@ public class EvalStringHandler {
         for (EvalSeedAlias alias : aliases) {
             switch (alias.sigil) {
                 case '$' -> {
-                    if (GlobalVariable.globalVariables.get(alias.fullName) == alias.value) {
-                        GlobalVariable.globalVariables.remove(alias.fullName);
+                    if (GlobalVariable.scalarSlots().get(alias.fullName) == alias.value) {
+                        GlobalVariable.scalarSlots().remove(alias.fullName);
                     }
                 }
                 case '@' -> {
@@ -430,6 +430,16 @@ public class EvalStringHandler {
                     RuntimeBase value = dbCallerLexicals.containsKey(varName)
                             ? dbCallerLexicals.get(varName)
                             : registers[parentRegIndex];
+                    // An `our` scalar resolves by name at use time, as in Perl. A container
+                    // captured earlier may have left its stash, so take the current one
+                    // instead of re-linking the stale container.
+                    String ourPackage = currentCode != null && currentCode.ourVariableRegistry != null
+                            && varName.startsWith("$") && varName.length() > 1
+                            ? currentCode.ourVariableRegistry.get(varName) : null;
+                    if (ourPackage != null) {
+                        value = GlobalVariable.getGlobalVariable(
+                                ourPackage + "::" + varName.substring(1));
+                    }
                     // Skip non-Perl values (like Iterator objects from for loops).
                     if (value == null) {
                         // Null is fine — capture it.
@@ -455,7 +465,7 @@ public class EvalStringHandler {
                     String bareName = varName.substring(1);
                     String fullName = seedPkg + "::" + bareName;
                     if (sigil == '$' && value instanceof RuntimeScalar rs) {
-                        if (GlobalVariable.globalVariables.putIfAbsent(fullName, rs) == null) {
+                        if (GlobalVariable.scalarSlots().putIfAbsent(fullName, rs) == null) {
                             seedAliases.add(new EvalSeedAlias(sigil, fullName, rs));
                         }
                     } else if (sigil == '@' && value instanceof RuntimeArray ra) {

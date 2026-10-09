@@ -5,6 +5,7 @@ import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.lang.reflect.Field;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -272,12 +273,17 @@ public class Internals extends PerlModuleBase {
         RuntimeHash result = new RuntimeHash();
         int level = args.isEmpty() ? 0 : args.get(0).getInt();
         RuntimeCode code = RuntimeCode.getActiveCodeAtPadWalkerFrame(level);
-        if (code == null || code.ourVariableRegistry == null) {
-            return result.createReference().getList();
+        Map<String, String> ourNames = new LinkedHashMap<>();
+        if (code != null) {
+            if (code.ourVariableRegistry != null) ourNames.putAll(code.ourVariableRegistry);
+            if (code.declaredOurVariables != null) ourNames.putAll(code.declaredOurVariables);
         }
-        for (Map.Entry<String, String> entry : code.ourVariableRegistry.entrySet()) {
+        for (Map.Entry<String, String> entry : ourNames.entrySet()) {
             String name = entry.getKey();
             if (name == null || name.isEmpty()) continue;
+            // @_ is seeded as an `our` alias in every symbol table, but Perl does
+            // not allow declaring it with `our`, so it is not a package variable here.
+            if ("@_".equals(name)) continue;
             String bareName = name.substring(1);
             String packageName = entry.getValue();
             String fullName = packageName + "::" + bareName;
