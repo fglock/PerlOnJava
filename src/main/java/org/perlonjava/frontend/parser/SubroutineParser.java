@@ -1298,6 +1298,7 @@ public class SubroutineParser {
             // pragmas such as bigfloat do not affect literals after the sub.
             HintHashRegistry.enterScope();
             BlockNode block;
+            int sourceEndTokenIndex;
             try {
                 // Parse the block of the subroutine, which contains the actual code.
                 block = ParseBlock.parseBlock(parser);
@@ -1309,6 +1310,7 @@ public class SubroutineParser {
                     parser.throwMissingRightCurlyOrSquareBracketError();
                 }
                 TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+                sourceEndTokenIndex = parser.tokenIndex;
             } finally {
                 HintHashRegistry.exitScope();
             }
@@ -1348,7 +1350,7 @@ public class SubroutineParser {
             }
 
             if (attributes != null && !attributes.isEmpty()) {
-                block.setAnnotation("subroutineSourceEndTokenIndex", parser.tokenIndex);
+                block.setAnnotation("subroutineSourceEndTokenIndex", sourceEndTokenIndex);
             }
 
             // Insert signature code in the block
@@ -1372,7 +1374,7 @@ public class SubroutineParser {
 
             if (subName == null) {
                 Node result = handleAnonSub(parser, subName, prototype, attributes, block, currentIndex,
-                        parser.tokenIndex);
+                        sourceEndTokenIndex);
                 if (futureAsyncAwaitSub && result instanceof AbstractNode abstractNode) {
                     abstractNode.setAnnotation("futureAsyncAwaitSub", true);
                 }

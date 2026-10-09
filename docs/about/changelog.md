@@ -7,6 +7,7 @@ priorities and future plans.
 ## Work in progress
 
 - Suppress the `exiting` warning for a non-local `last SKIP` from `Test::More::skip()` and other callees that disable it lexically, and stop a labeled block that ends a sub from leaking an unmatched loop-control marker on the interpreter (#1482).
+- Parse `return` with imported subroutines followed by `map` expressions (#1584).
 - Report file-scope and enclosing `our` variables from `PadWalker::peek_our`
   on both backends, including `our` assignments in subs (#1669).
 - Report `ref()` of a reference to a read-only scalar as `SCALAR`, or `REF`
@@ -97,6 +98,13 @@ priorities and future plans.
   generated-module include paths.
 - Implement `Bit::Vector::Chunk_Store` used by Thrift's 64-bit protocol.
 - Preserve binary HTTP response bytes so CPAN downloads remain extractable.
+- Release captures from retired direct callback arguments, report the host's
+  `EAGAIN` value for nonblocking `flock` conflicts, and release DBI statement
+  handles without retaining their parent database handle.
+- Keep array-size proxies usable while strong references to returned arrays
+  remain in flight, preserving DBIx::Class nested-query bind records.
+- Release weakly observed objects after their exited, unreachable closure pads
+  stop owning them.
 - Make strict test runs fail when a child process exits nonzero after complete TAP.
 - Preserve Unix executable permissions when extracting ZIP archive entries.
 - Accept Perl's valid `\@;@` prototype without an `illegalproto` warning.

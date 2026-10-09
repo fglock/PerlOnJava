@@ -1450,6 +1450,7 @@ public class CompileOperator {
                 for (int idx : arrayIdxs) {
                     bytecodeCompiler.emit(Opcodes.RETURN_SCOPE_CLEANUP_ARRAY);
                     bytecodeCompiler.emitReg(idx);
+                    bytecodeCompiler.emitReg(exprReg);
                 }
 
                 bytecodeCompiler.emitWithToken(returnOpcode, node.getIndex());

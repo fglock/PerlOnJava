@@ -225,6 +225,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return codeRef;
     }
 
+    /** Attach the source span's final location to an anonymous CV. */
+    public static RuntimeScalar setCvEndLocation(
+            RuntimeScalar codeRef, String filename, int line) {
+        if (codeRef != null
+                && codeRef.type == RuntimeScalarType.CODE
+                && codeRef.value instanceof RuntimeCode code) {
+            code.cvEndFile = filename;
+            code.cvEndLine = line;
+        }
+        return codeRef;
+    }
+
     public boolean requiresJvmClosureFrame() {
         return jvmClosureFrameRequired;
     }
@@ -760,6 +772,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         String previousPackage = callerPackage.toString();
         String callSitePackage = executionState.pendingCallerPackages.peek();
         if (callSitePackage == null) callSitePackage = previousPackage;
+        CallerStack.CallerInfo directCallSite = executionState.pendingDirectCallSites.poll();
+        executionState.activeCodeCallSites.push(directCallSite != null
+                ? directCallSite
+                : new CallerStack.CallerInfo(callSitePackage, null, 0));
         activeCodeStack(executionState).push(code);
         // Keep the live pad for every active CV. Besides Devel::LexAlias and
         // runtime regex sources, eval STRING in package DB must resolve the
@@ -832,9 +848,33 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Deque<RuntimeCode> stack = activeCodeStack(executionState);
         if (!stack.isEmpty() && stack.peek() == code) {
             stack.pop();
+            if (!executionState.activeCodeCallSites.isEmpty()) {
+                executionState.activeCodeCallSites.pop();
+            }
             return;
         }
-        stack.removeFirstOccurrence(code);
+        int index = 0;
+        for (Iterator<RuntimeCode> iterator = stack.iterator(); iterator.hasNext();) {
+            if (iterator.next() == code) {
+                iterator.remove();
+                removeActiveCodeCallSiteAt(executionState, index);
+                break;
+            }
+            index++;
+        }
+    }
+
+    private static void removeActiveCodeCallSiteAt(
+            ExecutionRuntimeState executionState, int frameIndex) {
+        int index = 0;
+        for (Iterator<CallerStack.CallerInfo> iterator =
+                executionState.activeCodeCallSites.iterator(); iterator.hasNext();) {
+            iterator.next();
+            if (index++ == frameIndex) {
+                iterator.remove();
+                return;
+            }
+        }
     }
 
     private static void recycleActiveLexicalFrame(
@@ -1178,13 +1218,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public static void popArgs() {
         Deque<RuntimeArray> stack = argsStack();
+        RuntimeArray exitedArgs = null;
         if (!stack.isEmpty()) {
-            stack.pop();
+            exitedArgs = stack.pop();
         }
         Deque<java.util.List<RuntimeScalar>> pStack = pristineArgsStack();
         if (!pStack.isEmpty()) {
             pStack.pop();
         }
+        cleanupOwnedArgumentAliases(exitedArgs);
         drainDeferredArgumentAggregateCleanup();
         Deque<Boolean> haStack = hasArgsStack();
         if (!haStack.isEmpty()) {
@@ -1197,6 +1239,35 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Deque<String> pendingPackages = PerlRuntime.current().executionState().pendingCallerPackages;
         if (!pendingPackages.isEmpty()) {
             pendingPackages.pop();
+        }
+    }
+
+    /**
+     * Release temporary scalar wrappers created when a RuntimeCode is passed
+     * through an aliased argument array. Ordinary scalar arguments alias their
+     * caller's slot and must remain untouched when the callee returns.
+     */
+    private static void cleanupOwnedArgumentAliases(RuntimeArray args) {
+        if (args == null || args.ownedAliasElements == null
+                || args.ownedAliasElements.isEmpty()) return;
+        RuntimeScalar[] owned = args.ownedAliasElements.toArray(new RuntimeScalar[0]);
+        for (RuntimeScalar scalar : owned) {
+            RuntimeScalar.scopeExitCleanup(scalar);
+            if (scalar.type == RuntimeScalarType.CODE
+                    && scalar.value instanceof RuntimeCode code
+                    && (code.capturedScalars != null || code.capturedAggregates != null)
+                    && code.refCount > 0
+                    && !isActiveCode(code)
+                    && !ReachabilityWalker.isReachableFromRoots(code)) {
+                // A closure may have reached @_ after its lexical scope had
+                // already ended. In that case the scalar's original cleanup
+                // ran while it still appeared to be held by an alias array,
+                // leaving a positive manual CV count. Once this argument
+                // frame is gone, release its captures only if no Perl root
+                // can still reach the CV.
+                code.releaseCaptures();
+            }
+            args.forgetOwnedAliasElement(scalar);
         }
     }
 
@@ -2151,6 +2222,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public String cvStartFile;
     public int cvStartLine;
+    /** Source location immediately after the closing brace of an anonymous CV. */
+    public String cvEndFile;
+    public int cvEndLine;
     public String deparseSourceText;
     public int deparseFlags;
     public int deparseSourceOffset = -1;
@@ -2743,6 +2817,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.installedViaAnonGlobAssign = this.installedViaAnonGlobAssign;
         clone.cvStartFile = this.cvStartFile;
         clone.cvStartLine = this.cvStartLine;
+        clone.cvEndFile = this.cvEndFile;
+        clone.cvEndLine = this.cvEndLine;
         clone.isRegexCallbackPseudoBlock = this.isRegexCallbackPseudoBlock;
         clone.isSortComparator = this.isSortComparator;
         clone.isQuotedRegexCallback = this.isQuotedRegexCallback;
@@ -3447,6 +3523,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         code.codeObject = codeFrom.codeObject;
         code.cvStartFile = codeFrom.cvStartFile;
         code.cvStartLine = codeFrom.cvStartLine;
+        code.cvEndFile = codeFrom.cvEndFile;
+        code.cvEndLine = codeFrom.cvEndLine;
         code.deparseSourceText = codeFrom.deparseSourceText;
         code.deparseFlags = codeFrom.deparseFlags;
         code.deparseSourceOffset = codeFrom.deparseSourceOffset;
@@ -3506,6 +3584,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.deferredConstantCvError = codeFrom.deferredConstantCvError;
         this.cvStartFile = codeFrom.cvStartFile;
         this.cvStartLine = codeFrom.cvStartLine;
+        this.cvEndFile = codeFrom.cvEndFile;
+        this.cvEndLine = codeFrom.cvEndLine;
         this.deparseSourceText = codeFrom.deparseSourceText;
         this.deparseFlags = codeFrom.deparseFlags;
         this.deparseSourceOffset = codeFrom.deparseSourceOffset;
@@ -5876,8 +5956,22 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                 }
                 res.add(new RuntimeScalar(normalizeCallerPackage(pkg)));  // package
-                res.add(new RuntimeScalar(locationFrameInfo.get(1)));  // filename
+                String locationFile = locationFrameInfo.get(1);
                 String locationLine = locationFrameInfo.get(2);
+                int reportedLine;
+                try {
+                    reportedLine = Integer.parseInt(locationLine);
+                } catch (NumberFormatException ignored) {
+                    reportedLine = 0;
+                }
+                CallerStack.CallerInfo uplevelCallSite = subUplevelCallSite(
+                        trackedActiveCodeFrame, locationFile, reportedLine);
+                if (uplevelCallSite != null
+                        && uplevelCallSite.filename() != null && uplevelCallSite.line() > 0) {
+                    locationFile = uplevelCallSite.filename();
+                    locationLine = Integer.toString(uplevelCallSite.line());
+                }
+                res.add(new RuntimeScalar(locationFile));  // filename
                 if (callSiteOwner != null && callSiteOwner.isQuotedRegexCallback
                         && callSiteOwner.cvStartLine > 0) {
                     locationLine = Integer.toString(callSiteOwner.cvStartLine);
@@ -6468,6 +6562,82 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     private static int activeCodeFrameForCaller(int originalFrame) {
         return originalFrame + (WarnDie.isInsideUnhandledDieHandler() ? 1 : 0);
+    }
+
+    private static CallerStack.CallerInfo subUplevelCallSite(
+            int logicalFrame, String sourceFile, int reportedLine) {
+        if (isSubUplevelCallerActive()) {
+            CallerStack.CallerInfo activeSite = activeCallerSiteAt(logicalFrame);
+            if (activeSite != null && activeSite.filename() != null
+                    && activeSite.line() > 0) return activeSite;
+
+            // Some indirect calls leave no source location on the active
+            // frame. If the adjacent anonymous CV begins at the stack trace's
+            // reported line, Perl reports the line after that CV closes.
+            RuntimeCode nextCode = activeCodeAtCallerFrame(logicalFrame + 1);
+            if (nextCode != null
+                    && (nextCode.subName == null || nextCode.subName.isBlank())
+                    && sourceFile != null && sourceFile.equals(nextCode.cvStartFile)
+                    && nextCode.cvStartLine == reportedLine) {
+                CallerStack.CallerInfo anonymousEndSite =
+                        activeAnonymousEndSiteAt(logicalFrame + 1);
+                if (anonymousEndSite != null && anonymousEndSite.line() > 0) {
+                    return anonymousEndSite;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static CallerStack.CallerInfo activeAnonymousEndSiteAt(int logicalFrame) {
+        if (logicalFrame < 0) return null;
+        ExecutionRuntimeState executionState = PerlRuntime.current().executionState();
+        Iterator<RuntimeCode> codeIterator = executionState.activeCodeStack.iterator();
+        Iterator<CallerStack.CallerInfo> siteIterator = executionState.activeCodeCallSites.iterator();
+        RuntimeCode previous = null;
+        int logicalIndex = 0;
+        while (codeIterator.hasNext() && siteIterator.hasNext()) {
+            RuntimeCode active = codeIterator.next();
+            siteIterator.next();
+            if (isCompilerWrapperPair(active, previous)) continue;
+            if (logicalIndex++ == logicalFrame) {
+                if ((active.subName == null || active.subName.isBlank())
+                        && active.cvEndFile != null && active.cvEndLine > 0) {
+                    return new CallerStack.CallerInfo(
+                            active.packageName, active.cvEndFile, active.cvEndLine);
+                }
+                return null;
+            }
+            previous = active;
+        }
+        return null;
+    }
+
+    private static boolean isSubUplevelCallerActive() {
+        for (RuntimeCode active : activeCodeStack()) {
+            if ("Sub::Uplevel".equals(active.packageName)
+                    && "_uplevel_caller".equals(active.subName)) return true;
+        }
+        return false;
+    }
+
+    private static CallerStack.CallerInfo activeCallerSiteAt(int logicalFrame) {
+        if (logicalFrame < 0) return null;
+        ExecutionRuntimeState executionState = PerlRuntime.current().executionState();
+        Iterator<RuntimeCode> codeIterator = executionState.activeCodeStack.iterator();
+        Iterator<CallerStack.CallerInfo> siteIterator = executionState.activeCodeCallSites.iterator();
+        RuntimeCode previous = null;
+        int logicalIndex = 0;
+        while (codeIterator.hasNext() && siteIterator.hasNext()) {
+            RuntimeCode active = codeIterator.next();
+            CallerStack.CallerInfo site = siteIterator.next();
+            if (isCompilerWrapperPair(active, previous)) continue;
+            if (logicalIndex++ == logicalFrame) {
+                return site;
+            }
+            previous = active;
+        }
+        return null;
     }
 
     /**
@@ -7153,7 +7323,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // argument frame before its replacement runs.  The broad
                     // scope flush below deliberately cannot do this: it must
                     // leave caller-owned weak-schema aliases intact.
-                    MortalList.drainPendingTailCallArgs(tailArgs, cfList.marker.argumentFrame);
+                    MortalList.drainPendingTailCallArgs(
+                            tailArgs, cfList.marker.argumentFrame, null);
                     MortalList.releaseLastOwnedTailCallArgs(tailArgs);
                     // Fall through to finally; outer loop will re-enter apply()
                     // with the new code ref. We stay inside this apply()
@@ -7677,37 +7848,44 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     // Method to apply (execute) a subroutine reference using native array for parameters
-    /**
-     * Invoke a generated direct call while retaining its source location for
-     * signature validation.  Named-signature validation happens before the
-     * callee body has entered a normal Perl frame, so {@code caller()} alone
-     * cannot otherwise identify the Perl call site for its diagnostic.
-     *
-     * <p>The synthetic frame is deliberately limited to signature-bearing
-     * callees.  Installing one for every call changes observable {@code caller}
-     * results in ordinary subroutines.</p>
-     */
+    /** Invoke a generated direct call while retaining its Perl source callsite. */
     public static RuntimeList applyAtLocation(RuntimeScalar runtimeScalar, String subroutineName,
                                               RuntimeBase[] args, int callContext,
                                               String callerPackage, String callerFile,
                                               int callerLine) {
+        ExecutionRuntimeState executionState = PerlRuntime.current().executionState();
+        String pkg = callerPackage == null ? "main" : callerPackage;
+        CallerStack.CallerInfo directCallSite =
+                new CallerStack.CallerInfo(pkg, callerFile, callerLine);
+        executionState.pendingDirectCallSites.push(directCallSite);
         RuntimeScalar resolved = resolveDirectCallTarget(runtimeScalar, subroutineName);
         RuntimeScalar target = resolved;
         while (target != null && target.type == RuntimeScalarType.READONLY_SCALAR) {
             target = (RuntimeScalar) target.value;
         }
-        if (target == null || target.type != RuntimeScalarType.CODE
-                || !(target.value instanceof RuntimeCode code)
-                || (code.signatureNamedParams.isEmpty()
-                && !"%".equals(code.signatureSlurpySigil))) {
-            return apply(resolved, subroutineName, args, callContext);
+        boolean needsSignatureLocation = target != null
+                && target.type == RuntimeScalarType.CODE
+                && target.value instanceof RuntimeCode code
+                && (!code.signatureNamedParams.isEmpty()
+                || "%".equals(code.signatureSlurpySigil));
+        if (!needsSignatureLocation) {
+            try {
+                return apply(resolved, subroutineName, args, callContext);
+            } finally {
+                if (executionState.pendingDirectCallSites.peek() == directCallSite) {
+                    executionState.pendingDirectCallSites.pop();
+                }
+            }
         }
 
-        pushSignatureValidationCallerFrame(callerPackage, callerFile, callerLine);
+        pushSignatureValidationCallerFrame(pkg, callerFile, callerLine);
         try {
             return apply(resolved, subroutineName, args, callContext);
         } finally {
             popSignatureValidationCallerFrame();
+            if (executionState.pendingDirectCallSites.peek() == directCallSite) {
+                executionState.pendingDirectCallSites.pop();
+            }
         }
     }
 
@@ -8049,7 +8227,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Drain only queued decrements whose original owner is an alias
             // in the abandoned source @_ frame. This keeps caller-owned
             // referents (including DBIC schema aliases) out of the handoff.
-            MortalList.drainPendingTailCallArgs(cfList.getTailCallArgs(), cfList.marker.argumentFrame);
+            MortalList.drainPendingTailCallArgs(
+                    cfList.getTailCallArgs(), cfList.marker.argumentFrame, result);
             MortalList.releaseLastOwnedTailCallArgs(cfList.getTailCallArgs());
             cleanupTailCallArgs(cfList.marker.ownedArgs);
             cleanupTailCallCodeRef(cfList.getTailCallCodeRef());
@@ -9342,7 +9521,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     // Get the Scalar alias into an Array
     public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
-        arr.elements.add(new RuntimeScalar(this));
+        arr.elementsAliased = true;
+        RuntimeScalar alias = new RuntimeScalar(this);
+        arr.elements.add(alias);
+        arr.markOwnedAliasElement(alias);
         return arr;
     }
 

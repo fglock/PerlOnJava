@@ -68,7 +68,9 @@ public class Disassemble {
                         break;
                     case Opcodes.RETURN_SCOPE_CLEANUP_ARRAY:
                         int rscaReg = interpretedCode.bytecode[pc++];
-                        sb.append("RETURN_SCOPE_CLEANUP_ARRAY r").append(rscaReg).append("\n");
+                        int rscaReturnReg = interpretedCode.bytecode[pc++];
+                        sb.append("RETURN_SCOPE_CLEANUP_ARRAY r").append(rscaReg)
+                                .append(" r").append(rscaReturnReg).append("\n");
                         break;
                     case Opcodes.RETURN:
                         int retReg = interpretedCode.bytecode[pc++];

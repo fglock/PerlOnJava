@@ -423,8 +423,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         // value==this. Stale entries (overwritten without going through a
         // tracked release path, or scope-exited via untracked paths) are
         // pruned and ignored.
-        java.util.Iterator<RuntimeScalar> it = activeOwners.iterator();
         int count = 0;
+        java.util.Iterator<RuntimeScalar> it = activeOwners.iterator();
         while (it.hasNext()) {
             RuntimeScalar sc = it.next();
             if (sc != null && sc.refCountOwned && sc.value == this) {
@@ -438,9 +438,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     /** Snapshot the currently live scalar owner slots by identity. */
     public java.util.Set<RuntimeScalar> activeOwnerSnapshot() {
-        if (activeOwnerCount() == 0) {
-            return java.util.Collections.emptySet();
-        }
+        if (activeOwnerCount() == 0) return java.util.Collections.emptySet();
         java.util.Set<RuntimeScalar> snapshot = java.util.Collections.newSetFromMap(
                 new java.util.IdentityHashMap<>());
         snapshot.addAll(activeOwners);

@@ -15,10 +15,6 @@ public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
     private boolean isOrphaned() {
         return lvalue != null
                 && lvalue.value instanceof RuntimeArray parent
-                // A lexical array can mark its proxies orphaned during scope
-                // teardown before an escaped \@array reference is accounted
-                // for.  An externally referenced array must retain a usable
-                // $# proxy; only a zero-reference array is genuinely orphaned.
                 && parent.arrayLengthLvalueOrphaned
                 && parent.refCount <= 0;
     }
@@ -47,6 +43,15 @@ public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
         this.lvalue.value = parent;
         this.type = RuntimeScalarType.INTEGER;
         this.value = parent.lastElementIndex();
+        // A fresh $# proxy can only be constructed after the operand resolved
+        // to a usable array. An array reference returned through intermediate
+        // list/scalar temporaries may reach this point before its counted owner
+        // is installed, even though scope teardown already orphaned its older
+        // proxies. Revive the array for this new access; proxies orphaned at
+        // teardown have already been changed to undef and stay that way.
+        if (parent.arrayLengthLvalueOrphaned && parent.refCount <= 0) {
+            parent.arrayLengthLvalueOrphaned = false;
+        }
         parent.registerArraySizeLvalue(this);
     }
 
