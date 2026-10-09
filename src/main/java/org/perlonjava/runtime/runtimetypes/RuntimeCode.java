@@ -7354,7 +7354,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (flow.suppressEscapingLoopControlWarning()) {
             return;
         }
-        if (!Warnings.warningManager.isWarningEnabled("exiting")) {
+        // The loop-control statement's own lexical warnings decide, as in Perl:
+        // a lexical `no warnings 'exiting'` there suppresses the warning even
+        // under -w.  Without any lexical warnings at that statement, $^W decides.
+        if (WarningFlags.areWarningsForcedOff()) {
+            return;
+        }
+        String warningBits = flow.warningBitsAtSite();
+        boolean lexicalWarningsInEffect = warningBits != null && hasAnyWarningBitSet(warningBits);
+        boolean enabled = WarningFlags.areWarningsForcedOn()
+                || (!flow.exitingWarningDisabledAtSite()
+                        && (lexicalWarningsInEffect
+                                ? WarningFlags.isEnabledInBits(warningBits, "exiting")
+                                : Warnings.isWarnFlagSet()));
+        if (!enabled) {
             return;
         }
         String operation = flow.getControlFlowType().name().toLowerCase();
@@ -7364,6 +7377,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         WarnDie.warn(new RuntimeScalar("Exiting " + scope + " via " + operation),
                 new RuntimeScalar(" at " + flow.marker.fileName + " line "
                         + flow.marker.lineNumber));
+    }
+
+    private static boolean hasAnyWarningBitSet(String warningBits) {
+        for (int i = 0; i < warningBits.length(); i++) {
+            if (warningBits.charAt(i) != 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Error assigned to {@code $@} when loop control from eval cannot reach a loop. */

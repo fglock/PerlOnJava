@@ -267,6 +267,17 @@ public class BytecodeInterpreter {
         code.releaseRegisters();
     }
 
+    /**
+     * Result of a call whose non-local last/next/redo was consumed by an enclosing
+     * labeled block.  Control has left the block, so the marker must not stay in the
+     * call's result register: a sub whose last statement is that block returns the
+     * register as its value, and the caller would otherwise see an unmatched marker.
+     */
+    private static RuntimeBase consumedLoopControlResult(int context) {
+        return context == RuntimeContextType.SCALAR || context == RuntimeContextType.LVALUE
+                || context == RuntimeContextType.OBJECT ? new RuntimeScalar() : new RuntimeList();
+    }
+
     private static boolean matchesInterpreterControlBlock(RuntimeControlFlowList flow, String blockLabel) {
         boolean switchContinueBoundary = RuntimeControlFlowList.SWITCH_CONTINUE_BLOCK_LABEL.equals(blockLabel);
         if (flow.isSwitchContinue()) {
@@ -2086,6 +2097,7 @@ public class BytecodeInterpreter {
                                                 };
                                                 if (targetPc >= 0) {
                                                     pc = targetPc;
+                                                    registers[rd] = consumedLoopControlResult(context);
                                                     releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
                                                     handled = true;
                                                     break;
@@ -2103,6 +2115,7 @@ public class BytecodeInterpreter {
                                                 labeledBlockStack.removeLast();
                                             }
                                             pc = entry[1]; // jump to block exit
+                                            registers[rd] = consumedLoopControlResult(context);
                                             releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
                                             handled = true;
                                             break;
@@ -2263,6 +2276,7 @@ public class BytecodeInterpreter {
                                                 };
                                                 if (targetPc >= 0) {
                                                     pc = targetPc;
+                                                    registers[rd] = consumedLoopControlResult(context);
                                                     releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
                                                     handled = true;
                                                     break;
@@ -2279,6 +2293,7 @@ public class BytecodeInterpreter {
                                                 labeledBlockStack.removeLast();
                                             }
                                             pc = entry[1];
+                                            registers[rd] = consumedLoopControlResult(context);
                                             releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
                                             handled = true;
                                             break;

@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Suppress the `exiting` warning for a non-local `last SKIP` from `Test::More::skip()` and other callees that disable it lexically, and stop a labeled block that ends a sub from leaking an unmatched loop-control marker on the interpreter (#1482).
 - Stop reporting `mro::get_mro` as redefined when `mro` loads under `-w` (#1703).
 - Preserve blessed IO classes during `can()` checks so socket-specific methods remain discoverable.
 - Report native socketpair readiness from the descriptor instead of treating every event as ready.
