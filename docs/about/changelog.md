@@ -23,7 +23,7 @@ priorities and future plans.
 - Preserve bare carriage returns in quote-like strings and regex patterns read
   from Perl source files.
 - Keep version-control conflict-marker diagnostics out of quoted strings and
-  heredoc contents.
+  heredoc contents, including heredocs with punctuation in quoted labels.
 - Parse bare phaser-name forward declarations such as `END;` after heredocs.
 - Preserve diagnostics for malformed CSV rows, decode EUC-JP row-13 extension
   characters, accept open filehandles in `Tie::File`, and honor ZIP member
