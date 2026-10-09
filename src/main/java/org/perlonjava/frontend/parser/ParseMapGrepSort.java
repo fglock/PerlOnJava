@@ -214,7 +214,14 @@ public class ParseMapGrepSort {
     private static boolean startsSortListTerm(LexerToken token) {
         if (token.type == LexerTokenType.EOF || token.text.equals(",")
                 || token.text.equals(";") || token.text.equals(")")
-                || token.text.equals("}") || token.text.equals("->")) {
+                || token.text.equals("}") || token.text.equals("->")
+                // ParsePrimary leaves postfix subscripts for the enclosing
+                // expression parser. A `[` after `$name` therefore extends
+                // `$name[...]`; it does not begin the list following a scalar
+                // sort comparator. Treating it as a list term misparses
+                // `sort $array[0], ...` as a comparator and can lose the
+                // lexical aggregate binding under `strict vars`.
+                || token.text.equals("[")) {
             return false;
         }
         return !ParserTables.INFIX_OP.contains(token.text);
