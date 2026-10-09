@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Fix `Data::Util` loading by avoiding recursive shim evaluation during XS initialization (#1681).
 - Stop reporting `mro::get_mro` as redefined when `mro` loads under `-w` (#1703).
 - Preserve blessed IO classes during `can()` checks so socket-specific methods remain discoverable.
 - Report native socketpair readiness from the descriptor instead of treating every event as ready.
