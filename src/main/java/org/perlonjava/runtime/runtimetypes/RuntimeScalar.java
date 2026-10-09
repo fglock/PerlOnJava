@@ -2470,6 +2470,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     || (value.containerOwner instanceof RuntimeArray array
                         && array.transientListAssignmentRhs)
                     || value.containerOwner == RuntimeCode.getCurrentArgs());
+        // Re-assigning the anonymous IO glob this scalar already owns keeps its
+        // holder token. IPC::Open2 does this with `$_[0] = $$rdr_ref`; counting
+        // it as a new holder and releasing the old token would drop the glob's
+        // last counted holder while the handle is still live. A detached owner
+        // transfer still releases this scalar's old token, as before.
+        boolean reassignsOwnedIoGlob = ioOwner && !transferDetachedIoOwner
+                && type == GLOBREFERENCE && value.type == GLOBREFERENCE
+                && value.value instanceof RuntimeGlob
+                && value.value == this.value;
 
         // Track anonymous-glob aliases so the owning slot only releases the
         // descriptor when no copied scalar still points at that glob.
@@ -2478,10 +2487,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && hasLiveIo(newGlob)
                 && durableIoDestination
                 && (!assignedFromArgumentAlias || assignedFromAcceptedSocketArgument)
-                && !transferDetachedIoOwner) {
+                && !transferDetachedIoOwner
+                && !reassignsOwnedIoGlob) {
             newGlob.ioHolderCount++;
         }
         if (this.ioOwner
+                && !reassignsOwnedIoGlob
                 && this.type == GLOBREFERENCE && this.value instanceof RuntimeGlob oldGlob
                 && isUnstashedIoGlob(oldGlob)) {
             this.ioOwner = false;

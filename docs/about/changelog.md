@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Keep `open2`/`open3` pipe handles selectable when `IO::Select` loops copy them into lexicals, fixing a JVM hang in MIME-tools `x-gzip64` decoding (#1597).
 - Preserve blessed IO classes during `can()` checks so socket-specific methods remain discoverable.
 - Report native socketpair readiness from the descriptor instead of treating every event as ready.
 - Apply IO::Handle blocking mode changes to native descriptors so nonblocking socket writes can return EAGAIN.

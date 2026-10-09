@@ -171,6 +171,15 @@ file handles retain the established unregister-only behavior because ecosystem
 code such as Capture::Tiny relies on aliases that do not yet carry equivalent
 ownership metadata.
 
+The holder count is shared by every unstashed IO glob, so pipes are affected
+too. A scalar that already owns a glob and is reassigned that same glob keeps
+its token; it is neither released nor counted as a new holder. `IPC::Open2`
+relies on this when it copies the handles back with `$_[0] = $$rdr_ref`.
+Releasing the token there dropped the count to zero while the pipe was still
+live, and the next scope exit unregistered its fds, so `select()` stopped
+reporting them (#1597). A detached owner transfer still releases the
+scalar's previous token.
+
 ### Future Improvements
 
 If IO handle leaks become a practical problem, consider:
