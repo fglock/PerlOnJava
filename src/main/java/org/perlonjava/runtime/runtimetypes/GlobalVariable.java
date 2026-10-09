@@ -36,6 +36,16 @@ public class GlobalVariable {
     // Global variables and subroutines
     public static final Map<String, RuntimeScalar> globalVariables =
             new CurrentRuntimeMap<>(state -> state.scalarValues());
+
+    /**
+     * The package-scalar storage, keyed by fully qualified name. Code outside this
+     * class reaches the storage only through this accessor, so the storage can change
+     * behind one entry point (see dev/design/package-variable-binding.md, milestone 1).
+     */
+    public static Map<String, RuntimeScalar> scalarSlots() {
+        return globalVariables;
+    }
+
     public static final Map<String, RuntimeArray> globalArrays =
             new CurrentRuntimeMap<>(state -> state.arrayValues());
     public static final Map<String, RuntimeHash> globalHashes =
@@ -191,6 +201,34 @@ public class GlobalVariable {
 
     private static Map<String, RuntimeScalar> pinnedCodeRefs() {
         return globalState().pinnedCodeRefs();
+    }
+
+    private static Map<String, ScalarPin> attachedScalarPins() {
+        return globalState().attachedScalarPins();
+    }
+
+    /**
+     * Pin a compiled access to the package scalar {@code name}. Sites that resolve the same
+     * linked name share one pin. Deleting the name from its stash detaches the pin, so
+     * sites that already hold it keep their scalar (see {@link ScalarPin}).
+     */
+    public static ScalarPin pinScalar(String name) {
+        Map<String, ScalarPin> pins = attachedScalarPins();
+        ScalarPin pin = pins.get(name);
+        if (pin == null) {
+            getGlobalVariable(name); // vivify the scalar, as an ordinary access does
+            pin = new ScalarPin(name);
+            pins.put(name, pin);
+        }
+        return pin;
+    }
+
+    /** Called when {@code name} leaves its stash. Sites that already hold its pin keep {@code removed}. */
+    public static void detachScalarPin(String name, RuntimeScalar removed) {
+        ScalarPin pin = attachedScalarPins().remove(name);
+        if (pin != null) {
+            pin.detach(removed != null ? removed : new RuntimeScalar());
+        }
     }
 
     private static Set<String> deletedCodeRefPins() {
@@ -1400,6 +1438,18 @@ public class GlobalVariable {
         globalVariables.put(key, var);
         invalidatePackageRootSnapshot();
         return var;
+    }
+
+    /**
+     * Install a scalar container as a glob's scalar slot ({@code *name = \$scalar}).
+     * The glob shares the container itself, including its read-only state, so the
+     * read-only flag is one flag seen through every name (no read-only view is interposed).
+     */
+    public static void aliasGlobalScalarSlot(String key, RuntimeScalar var) {
+        clearForeachGlobalAlias(key);
+        markPackageGlobalRoot(var);
+        globalVariables.put(key, var);
+        invalidatePackageRootSnapshot();
     }
 
     public static void aliasGlobalVariable(String key, RuntimeScalar var) {

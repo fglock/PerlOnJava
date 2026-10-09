@@ -18,21 +18,26 @@ public final class RegexCallbackMutationSnapshot {
         }
         addAll(work, callback.capturedScalars);
         addAll(work, callback.capturedAggregates);
-        if (callback.ourVariableRegistry != null) {
-            for (Map.Entry<String, String> entry : callback.ourVariableRegistry.entrySet()) {
-                String name = entry.getKey();
-                String packageName = entry.getValue();
-                if (name == null || name.length() < 2 || packageName == null) continue;
-                String fullName = packageName + "::" + name.substring(1);
-                RuntimeBase cell = switch (name.charAt(0)) {
-                    case '@' -> GlobalVariable.getGlobalArray(fullName);
-                    case '%' -> GlobalVariable.getGlobalHash(fullName);
-                    default -> GlobalVariable.getGlobalVariable(fullName);
-                };
-                work.add(cell);
-            }
-        }
+        addOurVariables(work, callback.ourVariableRegistry);
+        addOurVariables(work, callback.declaredOurVariables);
         capture(work);
+    }
+
+    private static void addOurVariables(ArrayDeque<RuntimeBase> work,
+                                        Map<String, String> ourNames) {
+        if (ourNames == null) return;
+        for (Map.Entry<String, String> entry : ourNames.entrySet()) {
+            String name = entry.getKey();
+            String packageName = entry.getValue();
+            if (name == null || name.length() < 2 || packageName == null) continue;
+            String fullName = packageName + "::" + name.substring(1);
+            RuntimeBase cell = switch (name.charAt(0)) {
+                case '@' -> GlobalVariable.getGlobalArray(fullName);
+                case '%' -> GlobalVariable.getGlobalHash(fullName);
+                default -> GlobalVariable.getGlobalVariable(fullName);
+            };
+            work.add(cell);
+        }
     }
 
     public static RegexCallbackMutationSnapshot capture(RuntimeCode callback) {

@@ -1349,7 +1349,7 @@ public class Encode extends PerlModuleBase {
             return cached.name();
         }
 
-        RuntimeScalar aliasTarget = GlobalVariable.globalVariables.get(globalName);
+        RuntimeScalar aliasTarget = GlobalVariable.scalarSlots().get(globalName);
         if (aliasTarget != null && aliasTarget.getDefinedBoolean()) {
             String target = aliasTarget.toString();
             try {

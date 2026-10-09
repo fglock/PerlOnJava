@@ -297,7 +297,7 @@ public class Builtin extends PerlModuleBase {
                 if (unwrapped == null || unwrapped.type != REFERENCE || !(unwrapped.value instanceof RuntimeScalar target)) {
                     throw new PerlCompilerException("Expected SCALAR reference in export_lexically");
                 }
-                GlobalVariable.globalVariables.put(hiddenName, target);
+                GlobalVariable.scalarSlots().put(hiddenName, target);
             }
             case '@' -> {
                 if (unwrapped == null || unwrapped.type != ARRAYREFERENCE || !(unwrapped.value instanceof RuntimeArray target)) {
@@ -340,7 +340,7 @@ public class Builtin extends PerlModuleBase {
         String hiddenVarName = "__leximport_" + id + "_" + sanitizeIdentifier(subName);
         String hiddenFullName = currentPackage + "::" + hiddenVarName;
 
-        GlobalVariable.globalVariables.put(hiddenFullName, new RuntimeScalar(codeScalar));
+        GlobalVariable.scalarSlots().put(hiddenFullName, new RuntimeScalar(codeScalar));
         // Keep the backing scalar visible to nested closures.  The &name marker
         // below intentionally is not itself a captured value; generated calls
         // refer to this scalar through hiddenVarName, so it must participate in

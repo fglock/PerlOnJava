@@ -2094,8 +2094,14 @@ public class SubroutineParser {
                             usedVarSet, declaredVarSet, declaredOurVarMap);
             block.accept(collector);
             placeholder.lexicalVariableNames = declaredVarSet;
-            placeholder.ourVariableRegistry = declaredOurVarMap.isEmpty()
+            placeholder.declaredOurVariables = declaredOurVarMap.isEmpty()
                     ? null : declaredOurVarMap;
+            // `our` aliases visible where the sub is defined. The filtered snapshot
+            // below drops unused outer entries, so the definition-time symbol table
+            // is the only complete source for these.
+            Map<String, String> visibleOurs = parser.ctx.symbolTable.getVisibleOurRegistry();
+            placeholder.ourVariableRegistry = visibleOurs.isEmpty()
+                    ? null : new LinkedHashMap<>(visibleOurs);
             explicitlyUsedVars = usedVarSet;
             if (!collector.requiresAllRuntimeLexicals()) {
                 usedVars = usedVarSet;
@@ -2489,6 +2495,7 @@ public class SubroutineParser {
                     interpretedCode.isConstantCv = placeholder.isConstantCv;
                     interpretedCode.lexicalVariableNames = placeholder.lexicalVariableNames;
                     interpretedCode.ourVariableRegistry = placeholder.ourVariableRegistry;
+                    interpretedCode.declaredOurVariables = placeholder.declaredOurVariables;
                     interpretedCode.lexicalAliases = placeholder.lexicalAliases;
 
                     if (interpretedCode.isConstantCv) {
@@ -2547,6 +2554,7 @@ public class SubroutineParser {
                 interpretedCode.isConstantCv = placeholder.isConstantCv;
                 interpretedCode.lexicalVariableNames = placeholder.lexicalVariableNames;
                 interpretedCode.ourVariableRegistry = placeholder.ourVariableRegistry;
+                interpretedCode.declaredOurVariables = placeholder.declaredOurVariables;
                 interpretedCode.lexicalAliases = placeholder.lexicalAliases;
                 if (interpretedCode.isConstantCv) {
                     interpretedCode.cacheConstantCvValue();
@@ -3056,13 +3064,15 @@ public class SubroutineParser {
         if (prototype == null) {
             return false;
         }
-        int underscore = prototype.indexOf('_');
-        if (underscore < 0 || underscore + 1 == prototype.length()) {
+        // Whitespace is not part of a prototype's shape: `( _ ; $ )` is `_;$`.
+        String shape = prototype.replaceAll("\\s+", "");
+        int underscore = shape.indexOf('_');
+        if (underscore < 0 || underscore + 1 == shape.length()) {
             return false;
         }
         // `_@` and `_%` are valid list prototypes.  An underscore may also
         // be followed by `;`; every other continuation is malformed.
-        char following = prototype.charAt(underscore + 1);
+        char following = shape.charAt(underscore + 1);
         return following != ';' && following != '@' && following != '%';
     }
 
@@ -3086,30 +3096,63 @@ public class SubroutineParser {
                 break;
             }
         }
-        if (hasIllegal) {
-            String msg = "Illegal character in prototype for " + name + " : " + proto;
-            Warnings.emitCategoryWarning("illegalproto", msg);
-        }
-
         // Perl emits diagnostics in addition to the general illegal-character
-        // warning for the malformed prototype shapes below.
-        int at = proto.indexOf('@');
-        if (at >= 0 && at + 1 < proto.length() && proto.charAt(at + 1) != '%'
-                && proto.charAt(at + 1) != ']' && proto.charAt(at + 1) != ';') {
-            Warnings.emitCategoryWarning("illegalproto",
-                    "Prototype after '@' for " + name + " : " + proto);
+        // warning for the malformed prototype shapes below. Whitespace is not
+        // part of a prototype's shape, so check the compacted form. The
+        // after-@ diagnostic is reported before the illegal-character one.
+        String shape = proto.replaceAll("\\s+", "");
+        int at = shape.indexOf('@');
+        if (at >= 0 && at + 1 < shape.length() && shape.charAt(at + 1) != '%'
+                && shape.charAt(at + 1) != ']' && shape.charAt(at + 1) != ';') {
+            warnIllegalProto(parser, "Prototype after '@' for " + name + " : " + proto);
         }
-        for (int i = 0; i < proto.length(); i++) {
-            if (proto.charAt(i) == '_' && i + 1 < proto.length()
-                    && proto.charAt(i + 1) != ';') {
-                Warnings.emitCategoryWarning("illegalproto",
+        if (hasIllegal) {
+            warnIllegalProto(parser, "Illegal character in prototype for " + name + " : " + proto);
+        }
+        for (int i = 0; i < shape.length(); i++) {
+            if (shape.charAt(i) == '_' && i + 1 < shape.length()
+                    && shape.charAt(i + 1) != ';') {
+                warnIllegalProto(parser,
                         "Illegal character after '_' in prototype for " + name + " : " + proto);
                 break;
             }
         }
-        if (proto.indexOf('[') >= 0 && proto.indexOf(']', proto.indexOf('[') + 1) < 0) {
-            Warnings.emitCategoryWarning("illegalproto",
-                    "Missing ']' in prototype for " + name + " : " + proto);
+        if (shape.indexOf('[') >= 0 && shape.indexOf(']', shape.indexOf('[') + 1) < 0) {
+            warnIllegalProto(parser, "Missing ']' in prototype for " + name + " : " + proto);
+        }
+    }
+
+    /**
+     * Emits an "illegalproto" diagnostic under the lexical warning state of the
+     * code being compiled, so an eval STRING's own {@code use warnings} or
+     * {@code no warnings} decides it rather than the running caller's bits.
+     * Honors FATAL warnings for the category.
+     */
+    private static void warnIllegalProto(Parser parser, String message) {
+        ScopedSymbolTable symbols = parser.ctx.symbolTable;
+        // The compile-time lexical state is authoritative. The category's
+        // bit position in ScopedSymbolTable is not the one used by the
+        // bits string, so consult the bits string for the category itself.
+        // With no lexical warnings in scope, Perl falls back to $^W (-w).
+        Set<String> disabled = symbols.getDisabledWarningCategories();
+        boolean standardWarnings = symbols.warningFlagsStack.peek().isEmpty() && disabled.isEmpty();
+        String bits = symbols.getWarningBitsString();
+        if (!WarningFlags.areWarningsForcedOn()
+                && (disabled.contains("all") || disabled.contains("illegalproto"))) {
+            return;
+        }
+        boolean enabled = WarningFlags.areWarningsForcedOn()
+                || (standardWarnings
+                        ? WarningFlags.isGlobalWarningVariableEnabled()
+                        : WarningFlags.isEnabledInBits(bits, "illegalproto"));
+        if (WarningFlags.areWarningsForcedOff() || !enabled) return;
+        RuntimeScalar text = new RuntimeScalar(message);
+        RuntimeScalar location = new RuntimeScalar(
+                parser.ctx.errorUtil.warningLocation(parser.tokenIndex));
+        if (!standardWarnings && WarningFlags.isFatalInBits(bits, "illegalproto")) {
+            WarnDie.die(text, location);
+        } else {
+            WarnDie.warn(text, location);
         }
     }
 

@@ -55,6 +55,8 @@ public final class GlobalRuntimeState {
     private final Map<String, List<HashSpecialVariable.StashEntryName>> stashEntryCache =
             new HashMap<>();
     private final Map<String, Boolean> packageExistsCache = new HashMap<>();
+    /** The pin that currently reads each linked package scalar; detached pins are removed. */
+    private final Map<String, ScalarPin> attachedScalarPins = new HashMap<>();
     private final Set<String> declaredGlobalVariables = new HashSet<>();
     private final Set<String> declaredGlobalArrays = new HashSet<>();
     private final Set<String> declaredGlobalHashes = new HashSet<>();
@@ -184,6 +186,10 @@ public final class GlobalRuntimeState {
 
     Map<String, List<HashSpecialVariable.StashEntryName>> stashEntryCache() {
         return stashEntryCache;
+    }
+
+    Map<String, ScalarPin> attachedScalarPins() {
+        return attachedScalarPins;
     }
 
     Map<String, Boolean> packageExistsCache() {

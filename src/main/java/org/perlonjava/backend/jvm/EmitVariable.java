@@ -214,6 +214,41 @@ public class EmitVariable {
      * @param tokenIndex        the token index for error reporting
      * @throws PerlCompilerException if strict vars is enabled and the variable is not allowed
      */
+    /**
+     * Load the package scalar {@code var} through this class's pin for it (see
+     * {@code ScalarPin}). The pin is held in a static field that is filled in on first use,
+     * so the class keeps its binding across calls, as compiled Perl code does.
+     */
+    private static void emitScalarPinLoad(EmitterContext ctx, String var) {
+        final String pinDescriptor = "Lorg/perlonjava/runtime/runtimetypes/ScalarPin;";
+        String owner = ctx.javaClassInfo.javaClassName;
+        String field = ctx.javaClassInfo.scalarPinField(var);
+        if (field == null) {
+            field = ctx.javaClassInfo.registerScalarPinField(var);
+            ctx.cw.visitField(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, field, pinDescriptor, null, null).visitEnd();
+        }
+        MethodVisitor mv = ctx.mv;
+        Label bound = new Label();
+        mv.visitFieldInsn(Opcodes.GETSTATIC, owner, field, pinDescriptor);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitJumpInsn(Opcodes.IFNONNULL, bound);
+        mv.visitInsn(Opcodes.POP);
+        mv.visitLdcInsn(var);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                "pinScalar",
+                "(Ljava/lang/String;)" + pinDescriptor,
+                false);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitFieldInsn(Opcodes.PUTSTATIC, owner, field, pinDescriptor);
+        mv.visitLabel(bound);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/runtimetypes/ScalarPin",
+                "scalar",
+                "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
+    }
+
     private static void fetchGlobalVariable(EmitterContext ctx, boolean createIfNotExists, String sigil, String varName, int tokenIndex) {
 
         // `%::` is the main stash.  Keep this parser-level spelling distinct
@@ -236,6 +271,11 @@ public class EmitVariable {
             } else if (sigil.equals("%") && !isStash) {
                 GlobalVariable.getGlobalHash(var);
             }
+        }
+
+        if (sigil.equals("$") && createIfNotExists && ctx.cw != null && ctx.javaClassInfo != null) {
+            emitScalarPinLoad(ctx, var);
+            return;
         }
 
         if (sigil.equals("$") && createIfNotExists) {

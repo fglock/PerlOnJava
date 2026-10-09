@@ -1643,6 +1643,10 @@ public class BytecodeCompiler implements Visitor {
         code.tracksRuntimeRegexLexicals = this.tracksRuntimeRegexLexicals;
         // Attach the `our` registry so eval STRING can inherit caller's `our` aliases
         code.ourVariableRegistry = ourVariableRegistry.isEmpty() ? null : ourVariableRegistry;
+        // The unit's own `our` declarations, for PadWalker::peek_our. They are kept
+        // out of ourVariableRegistry because that map seeds eval STRING aliases.
+        Map<String, String> declaredOurVariables = VariableCollectorVisitor.declaredOurVariables(node);
+        code.declaredOurVariables = declaredOurVariables.isEmpty() ? null : declaredOurVariables;
         // Store goto label map for dynamic goto support (goto $variable)
         if (!this.gotoLabelPcs.isEmpty()) {
             code.gotoLabelPcs = new HashMap<>(this.gotoLabelPcs);
