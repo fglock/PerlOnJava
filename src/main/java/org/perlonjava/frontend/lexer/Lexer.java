@@ -43,7 +43,7 @@ import java.util.regex.Pattern;
  */
 public class Lexer {
     private static final Pattern HEREDOC_START = Pattern.compile(
-            "(?<!<)<<(?!<)[-~]?\\s*(['\"]?)([A-Za-z_][A-Za-z_0-9]*)\\1");
+            "(?<!<)<<(?!<)[-~]?\\s*(?:'([^']*)'|\"([^\"]*)\"|([A-Za-z_][A-Za-z_0-9]*))");
     // End of File character constant
     public static final String EOF = Character.toString((char) -1);
     // Array to mark operator characters
@@ -288,7 +288,8 @@ public class Lexer {
                 if (quote == 0 && !inComment) {
                     Matcher matcher = HEREDOC_START.matcher(input.substring(lineStart, lineEnd));
                     if (matcher.find()) {
-                        heredoc = matcher.group(2);
+                        heredoc = matcher.group(1) != null ? matcher.group(1)
+                                : matcher.group(2) != null ? matcher.group(2) : matcher.group(3);
                     }
                 }
             }
