@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Parse `return` with imported subroutines followed by `map` expressions (#1584).
 - Report file-scope and enclosing `our` variables from `PadWalker::peek_our`
   on both backends, including `our` assignments in subs (#1669).
 - Report `ref()` of a reference to a read-only scalar as `SCALAR`, or `REF`
