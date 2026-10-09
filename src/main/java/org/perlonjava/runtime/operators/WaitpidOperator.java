@@ -166,10 +166,12 @@ public class WaitpidOperator {
      * Process.exitValue() exposes POSIX signal termination as 128 + signal.
      * Convert that convention back to Perl's wait(2) status layout. Java's
      * Process API cannot distinguish this from a program that exits with the
-     * same value, so values in the POSIX signal range follow that convention.
+     * same value. Preserve exit 129 because it is a valid program exit status
+     * and System::Command relies on reporting it unchanged; higher values in
+     * the POSIX signal range continue to follow the signal convention.
      */
     private static int toPerlWaitStatus(int exitCode) {
-        if (!IS_WINDOWS && exitCode >= 129 && exitCode <= 192) {
+        if (!IS_WINDOWS && exitCode >= 130 && exitCode <= 192) {
             return exitCode - 128;
         }
         return exitCode << 8;
