@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Parse `return` with imported subroutines followed by `map` expressions (#1584).
 - Fix `Data::Util` loading by avoiding recursive shim evaluation during XS initialization (#1681).
 - Stop reporting `mro::get_mro` as redefined when `mro` loads under `-w` (#1703).
 - Preserve blessed IO classes during `can()` checks so socket-specific methods remain discoverable.

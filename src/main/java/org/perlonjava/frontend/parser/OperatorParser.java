@@ -1910,7 +1910,13 @@ public class OperatorParser {
                 // A core operator can validly consume a map expression, such as
                 // `return sort map { ... } LIST`. Only an ordinary bareword
                 // before map is an attempted indirect argument to return.
-                || ParserTables.CORE_PROTOTYPES.containsKey(parser.tokens.get(nameIndex).text)) {
+                || ParserTables.CORE_PROTOTYPES.containsKey(parser.tokens.get(nameIndex).text)
+                // An imported or locally declared subroutine also consumes
+                // the following map expression as its argument list, e.g.
+                // `return sum map { ... } LIST`.
+                || GlobalVariable.isGlobalCodeRefDefined(
+                        parser.ctx.symbolTable.getCurrentPackage() + "::"
+                                + parser.tokens.get(nameIndex).text)) {
             return;
         }
         int mapIndex = Whitespace.skipWhitespace(parser, nameIndex + 1, parser.tokens);
