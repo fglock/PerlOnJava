@@ -702,14 +702,15 @@ sub all_objects {
     CPAN::HandleConfig->load unless $CPAN::Config_loaded++;
     CPAN->debug("mgr[$mgr] class[$class]") if $CPAN::DEBUG;
     CPAN::Index->reload;
-    values %{ $META->{readwrite}{$class} }; # unsafe meta access, ok
+    my $readwrite = $META->{readwrite}{$class} ||= {}; # unsafe meta access, ok
     # Metadata caches can contain hundreds of thousands of entries.  Keep
     # startup cheap by creating their mutable session wrappers only when a
     # command really asks to enumerate the whole class.
     for my $id (keys %{ $META->{readonly}{$class} || {} }) {
-        $META->{readwrite}{$class}{$id} ||=
+        $readwrite->{$id} ||=
             $class->new(ID => $id, RO => $META->{readonly}{$class}{$id});
     }
+    return values %{$readwrite}; # unsafe meta access, ok
 }
 
 # Called by shell, not in batch mode. In batch mode I see no risk in

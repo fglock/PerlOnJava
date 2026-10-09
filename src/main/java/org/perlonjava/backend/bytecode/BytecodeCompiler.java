@@ -1099,6 +1099,7 @@ public class BytecodeCompiler implements Visitor {
             emit(preserveImplicitReturn
                     ? Opcodes.RETURN_SCOPE_CLEANUP_ARRAY : Opcodes.SCOPE_EXIT_CLEANUP_ARRAY);
             emitReg(reg);
+            if (preserveImplicitReturn) emitReg(lastResultReg);
         }
 
         // Pop mark and flush only entries added since the mark.
@@ -7551,6 +7552,15 @@ public class BytecodeCompiler implements Visitor {
         code.cvStartLine = loc.lineNumber();
         if (loc.fileName() != null && !loc.fileName().isEmpty()) {
             code.cvStartFile = loc.fileName();
+        }
+        int endLocationToken = node.block instanceof BlockNode block
+                && block.elements != null && !block.elements.isEmpty()
+                ? block.elements.get(block.elements.size() - 1).getIndex()
+                : node.sourceEndTokenIndex > 2 ? node.sourceEndTokenIndex - 3 : -1;
+        if (endLocationToken >= 0) {
+            var endLoc = errorUtil.getSourceLocationAccurate(endLocationToken);
+            code.cvEndFile = endLoc.fileName();
+            code.cvEndLine = endLoc.lineNumber();
         }
         // Eval strings intentionally retain their historical DUMMY fallback
         // for source that cannot be mapped back to a file.  File-backed

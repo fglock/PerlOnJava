@@ -2494,7 +2494,7 @@ public class Opcodes {
     /**
      * Explicit-return cleanup for a my-array register.
      * Walks array values for tracked references but keeps the register readable by RETURN.
-     * Format: RETURN_SCOPE_CLEANUP_ARRAY reg
+     * Format: RETURN_SCOPE_CLEANUP_ARRAY reg returnReg
      */
     public static final short RETURN_SCOPE_CLEANUP_ARRAY = 496;
 

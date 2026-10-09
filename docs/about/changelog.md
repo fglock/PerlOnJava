@@ -81,6 +81,10 @@ priorities and future plans.
   generated-module include paths.
 - Implement `Bit::Vector::Chunk_Store` used by Thrift's 64-bit protocol.
 - Preserve binary HTTP response bytes so CPAN downloads remain extractable.
+- Keep array-size proxies usable while strong references to returned arrays
+  remain in flight, preserving DBIx::Class nested-query bind records.
+- Release weakly observed objects after their exited, unreachable closure pads
+  stop owning them.
 - Make strict test runs fail when a child process exits nonzero after complete TAP.
 - Preserve Unix executable permissions when extracting ZIP archive entries.
 - Accept Perl's valid `\@;@` prototype without an `illegalproto` warning.

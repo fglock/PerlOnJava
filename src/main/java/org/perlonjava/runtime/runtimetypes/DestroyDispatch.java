@@ -578,7 +578,10 @@ public class DestroyDispatch {
             // This triggers rescue detection because the old value ($source->{schema},
             // a weak ref to Schema) is being replaced by a strong ref to Schema.
             if (state.destroyTargetRescued) {
-                warnIfResurrectedDuringGlobalDestruction(referent, className);
+                if ("DESTRUCT".equals(GlobalVariable.getGlobalVariable(
+                        GlobalContext.GLOBAL_PHASE).toString())) {
+                    warnIfResurrectedDuringGlobalDestruction(referent, className);
+                }
                 // Object was rescued by DESTROY (e.g., Schema::DESTROY self-save).
                 //
                 // refCount has been set to 1 by setLargeRefCounted during rescue
