@@ -1930,8 +1930,11 @@ public class SubroutineParser {
                 String newDisplay = prototype == null ? "none" : "(" + prototype + ")";
                 if (!prototypesMatch(oldPrototype, prototype)) {
                     String msg = "Prototype mismatch: sub " + fullName + oldDisplay + " vs " + newDisplay + location;
-                    org.perlonjava.runtime.operators.WarnDie.warnWithCategoryByDefault(
-                            new RuntimeScalar(msg), new RuntimeScalar(""), "syntax::prototype");
+                    if (parser.ctx.symbolTable == null
+                            || !parser.ctx.symbolTable.isWarningCategoryDisabled("syntax::prototype")) {
+                        org.perlonjava.runtime.operators.WarnDie.warnWithCategoryByDefault(
+                                new RuntimeScalar(msg), new RuntimeScalar(""), "syntax::prototype");
+                    }
                 }
             }
 
