@@ -1930,8 +1930,8 @@ public class SubroutineParser {
                 String newDisplay = prototype == null ? "none" : "(" + prototype + ")";
                 if (!prototypesMatch(oldPrototype, prototype)) {
                     String msg = "Prototype mismatch: sub " + fullName + oldDisplay + " vs " + newDisplay + location;
-                    org.perlonjava.runtime.operators.WarnDie.warn(
-                            new RuntimeScalar(msg), new RuntimeScalar(""));
+                    org.perlonjava.runtime.operators.WarnDie.warnWithCategoryByDefault(
+                            new RuntimeScalar(msg), new RuntimeScalar(""), "syntax::prototype");
                 }
             }
 
