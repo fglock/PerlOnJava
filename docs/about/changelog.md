@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Keep `use strict` inside a module loaded during `BEGIN` or `use_ok` from leaking into the caller's compilation scope (#1684).
 - Suppress the `exiting` warning for a non-local `last SKIP` from `Test::More::skip()` and other callees that disable it lexically, and stop a labeled block that ends a sub from leaking an unmatched loop-control marker on the interpreter (#1482).
 - Parse `return` with imported subroutines followed by `map` expressions (#1584).
 - Report file-scope and enclosing `our` variables from `PadWalker::peek_our`
