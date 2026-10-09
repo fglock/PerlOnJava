@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Support legacy Object::Pad `has` declarations and scalar `:accessor` fields
+  with generated read/write methods (#1177).
 - Keep `use strict` inside a module loaded during `BEGIN` or `use_ok` from leaking into the caller's compilation scope (#1684).
 - Preserve a normal child exit status of 129 when reaping `IPC::Open3` processes, so `System::Command` reports it instead of treating it as SIGHUP (#1715).
 - Parse indexed scalar expressions as sort-list items rather than scalar comparators, fixing Class::MethodMaker `hash.t` under `strict vars` (#1680).

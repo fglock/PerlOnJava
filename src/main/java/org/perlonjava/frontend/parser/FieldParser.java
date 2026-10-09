@@ -41,8 +41,13 @@ public class FieldParser {
      */
     public static Node parseFieldDeclaration(Parser parser) {
         int index = parser.tokenIndex;
-        // Consume 'field' keyword
-        TokenUtils.consume(parser, LexerTokenType.IDENTIFIER, "field");
+        // Object::Pad 0.66 also accepted the legacy `has` spelling for fields.
+        LexerToken keyword = TokenUtils.peek(parser);
+        if (!"field".equals(keyword.text) && !"has".equals(keyword.text)) {
+            throw new PerlCompilerException(parser.tokenIndex,
+                    "Expected 'field' or 'has' keyword", parser.ctx.errorUtil);
+        }
+        TokenUtils.consume(parser, LexerTokenType.IDENTIFIER, keyword.text);
 
         // Emit experimental warning for 'field' if warnings are enabled
         if (parser.ctx.symbolTable.isWarningCategoryEnabled("experimental::class")) {

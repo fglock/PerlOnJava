@@ -247,7 +247,7 @@ public class StatementResolver {
                     yield null;
                 }
 
-                case "field" -> {
+                case "field", "has" -> {
                     if (parser.ctx.symbolTable.isFeatureCategoryEnabled("class")) {
                         yield FieldParser.parseFieldDeclaration(parser);
                     }

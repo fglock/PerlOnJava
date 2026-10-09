@@ -192,6 +192,22 @@ public class ClassTransformer {
                 block.elements.add(writer);
                 deferredAccessors.add(writer);
             }
+
+            if (field.getAnnotation("attr:accessor") != null) {
+                if (!"$".equals(field.getAnnotation("sigil"))) {
+                    throw PerlCompilerException.withSourceLocation(field.getIndex(),
+                            "Cannot apply a :accessor attribute to a non-scalar field",
+                            parser.ctx.errorUtil);
+                }
+                String accessorName = (String) field.getAnnotation("attr:accessor");
+                if (accessorName == null || accessorName.isEmpty()) {
+                    accessorName = defaultAccessorName((String) field.getAnnotation("name"));
+                }
+                validateGeneratedMethodName(parser, field, accessorName);
+                SubroutineNode accessor = generateCombinedAccessorMethod(field, className, parser, accessorName);
+                block.elements.add(accessor);
+                deferredAccessors.add(accessor);
+            }
         }
         if (!deferredAccessors.isEmpty()) {
             block.setAnnotation("deferredAccessors", deferredAccessors);
@@ -900,6 +916,43 @@ public class ClassTransformer {
         );
 
         return writer;
+    }
+
+    /** Generate Object::Pad's combined reader/writer accessor for a scalar field. */
+    private static SubroutineNode generateCombinedAccessorMethod(
+            OperatorNode field, String className, Parser parser, String accessorName) {
+        String name = (String) field.getAnnotation("name");
+        BlockNode body = new BlockNode(new ArrayList<>(), 0);
+
+        // A combined accessor accepts zero or one value argument.
+        Node count = new OperatorNode("scalar", ParserNodeUtils.atUnderscore(parser), 0);
+        Node tooMany = new BinaryOperatorNode(">", count, new NumberNode("2", 0), 0);
+        Node got = new OperatorNode("scalar", ParserNodeUtils.atUnderscore(parser), 0);
+        Node message = new BinaryOperatorNode(".",
+                new BinaryOperatorNode(".",
+                        new StringNode("Too many arguments for subroutine '" + className + "::" + accessorName
+                                + "' (got ", 0), got, 0),
+                new StringNode("; expected 0 or 1)", 0), 0);
+        Node fail = OperatorParser.dieWarnNode(parser, "die", new ListNode(List.of(message), 0), 0);
+        body.elements.add(new BinaryOperatorNode("&&", tooMany, fail, 0));
+
+        Node self = new BinaryOperatorNode("[", ParserNodeUtils.atUnderscore(parser),
+                new ArrayLiteralNode(List.of(new NumberNode("0", 0)), 0), 0);
+        Node fieldAccess = new BinaryOperatorNode("->", self,
+                new HashLiteralNode(List.of(new IdentifierNode(name, 0)), 0), 0);
+        Node value = new BinaryOperatorNode("[", ParserNodeUtils.atUnderscore(parser),
+                new ArrayLiteralNode(List.of(new NumberNode("1", 0)), 0), 0);
+        Node hasValue = new BinaryOperatorNode(">", new OperatorNode("scalar",
+                ParserNodeUtils.atUnderscore(parser), 0), new NumberNode("1", 0), 0);
+        body.elements.add(new BinaryOperatorNode("&&", hasValue,
+                new BinaryOperatorNode("=", fieldAccess, value, 0), 0));
+
+        Node returnSelf = new BinaryOperatorNode("[", ParserNodeUtils.atUnderscore(parser),
+                new ArrayLiteralNode(List.of(new NumberNode("0", 0)), 0), 0);
+        Node returnField = new BinaryOperatorNode("->", returnSelf,
+                new HashLiteralNode(List.of(new IdentifierNode(name, 0)), 0), 0);
+        body.elements.add(returnField);
+        return new SubroutineNode(accessorName, null, null, body, false, 0);
     }
 
     private static Node accessorArityCheck(Parser parser, String name, int expected) {
