@@ -110,7 +110,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
     public void dynamicSaveState() {
         Stack<SavedGlobalState> localizedStack = localizedStack();
         // Save the current global reference
-        var originalVariable = GlobalVariable.globalVariables.get(fullName);
+        var originalVariable = GlobalVariable.scalarSlots().get(fullName);
 
         // Tied scalars need special handling: the tie magic must stay in
         // place for the duration of the localized scope, so that an
@@ -167,7 +167,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                 fullName, originalVariable, null, newLocal, savedRuntimeWarningBits));
 
         // Replace this variable in the global symbol table with the new one
-        GlobalVariable.globalVariables.put(fullName, newLocal);
+        GlobalVariable.scalarSlots().put(fullName, newLocal);
 
         // Also update all glob aliases to point to the new local variable.
         // This implements Perl 5 semantics where after `*verbose = *Verbose`,
@@ -175,7 +175,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         java.util.List<String> aliasGroup = GlobalVariable.getGlobAliasGroup(fullName);
         for (String alias : aliasGroup) {
             if (!alias.equals(fullName)) {
-                GlobalVariable.globalVariables.put(alias, newLocal);
+                GlobalVariable.scalarSlots().put(alias, newLocal);
             }
         }
     }
@@ -238,7 +238,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                 }
 
                 // Restore the original variable in the global symbol table
-                GlobalVariable.globalVariables.put(saved.fullName, saved.originalVariable);
+                GlobalVariable.scalarSlots().put(saved.fullName, saved.originalVariable);
 
                 if (saved.fullName.equals(GlobalContext.WARNING_SCOPE)) {
                     WarningBitsRegistry.setRuntimeWarningBits(saved.savedRuntimeWarningBits);
@@ -248,7 +248,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                 java.util.List<String> aliasGroup = GlobalVariable.getGlobAliasGroup(saved.fullName);
                 for (String alias : aliasGroup) {
                     if (!alias.equals(saved.fullName)) {
-                        GlobalVariable.globalVariables.put(alias, saved.originalVariable);
+                        GlobalVariable.scalarSlots().put(alias, saved.originalVariable);
                     }
                 }
 

@@ -1107,19 +1107,16 @@ public class BytecodeInterpreter {
                             // =================================================================
 
                             case Opcodes.LOAD_GLOBAL_SCALAR -> {
-                                // Load global scalar: rd = GlobalVariable.getGlobalVariable(name)
+                                // Load global scalar through this code's pin for the name
                                 int rd = bytecode[pc++];
                                 int nameIdx = bytecode[pc++];
-                                String name = code.stringPool[nameIdx];
-                                // Uses SAME GlobalVariable as compiled code
-                                registers[rd] = GlobalVariable.getGlobalVariable(name);
+                                registers[rd] = code.scalarPin(nameIdx).scalar();
                             }
 
                             case Opcodes.STORE_GLOBAL_SCALAR -> {
-                                // Store global scalar: GlobalVariable.getGlobalVariable(name).set(rs)
+                                // Store global scalar through this code's pin for the name
                                 int nameIdx = bytecode[pc++];
                                 int srcReg = bytecode[pc++];
-                                String name = code.stringPool[nameIdx];
 
                                 // Convert to scalar if needed
                                 RuntimeBase value = registers[srcReg];
@@ -1129,7 +1126,7 @@ public class BytecodeInterpreter {
                                         ? (RuntimeScalar) value
                                         : value.scalar();
 
-                                GlobalVariable.getGlobalVariable(name).set(scalarValue);
+                                code.scalarPin(nameIdx).scalar().set(scalarValue);
                             }
 
                             case Opcodes.LOCAL_SCALAR_SAVE_LEVEL -> {

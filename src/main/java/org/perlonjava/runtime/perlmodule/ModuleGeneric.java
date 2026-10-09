@@ -76,7 +76,7 @@ public class ModuleGeneric extends PerlModuleBase {
         RuntimeHash inc = GlobalVariable.getGlobalHash("main::INC");
         if (inc.exists(modulePath).getBoolean()) return scalarTrue.getList();
 
-        RuntimeScalar version = GlobalVariable.globalVariables.get(name + "::VERSION");
+        RuntimeScalar version = GlobalVariable.scalarSlots().get(name + "::VERSION");
         if (version != null && version.getDefinedBoolean()) return scalarTrue.getList();
 
         RuntimeArray isa = GlobalVariable.globalArrays.get(name + "::ISA");
@@ -148,9 +148,9 @@ public class ModuleGeneric extends PerlModuleBase {
 
         String className = self.toString();
         RuntimeHash result = new RuntimeHash();
-        RuntimeScalar debug = GlobalVariable.globalVariables.get(className + "::DEBUG");
-        RuntimeScalar verbose = GlobalVariable.globalVariables.get(className + "::VERBOSE");
-        RuntimeScalar error = GlobalVariable.globalVariables.get(className + "::ERROR");
+        RuntimeScalar debug = GlobalVariable.scalarSlots().get(className + "::DEBUG");
+        RuntimeScalar verbose = GlobalVariable.scalarSlots().get(className + "::VERBOSE");
+        RuntimeScalar error = GlobalVariable.scalarSlots().get(className + "::ERROR");
         result.put("debug", debug == null ? new RuntimeScalar(0) : new RuntimeScalar(debug));
         result.put("verbose", verbose == null ? new RuntimeScalar(0) : new RuntimeScalar(verbose));
         result.put("error", error == null ? new RuntimeScalar(0) : new RuntimeScalar(error));

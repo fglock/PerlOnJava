@@ -56,6 +56,21 @@ public class JavaClassInfo {
      */
     public String javaClassName;
 
+    /** Static fields holding this class's package-scalar pins, keyed by the pinned name. */
+    private final Map<String, String> scalarPinFields = new LinkedHashMap<>();
+
+    /** The pin field already declared for {@code name} in this class, or null. */
+    public String scalarPinField(String name) {
+        return scalarPinFields.get(name);
+    }
+
+    /** Reserve a pin field for {@code name} in this class and return its name. */
+    public String registerScalarPinField(String name) {
+        String field = "scalarPin$" + scalarPinFields.size();
+        scalarPinFields.put(name, field);
+        return field;
+    }
+
     /**
      * Whether executing this generated Perl body can create a JVM CODE object
      * whose captures need the invocation-scoped cleanup frame.

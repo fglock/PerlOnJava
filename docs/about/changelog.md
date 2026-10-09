@@ -6,6 +6,21 @@ priorities and future plans.
 
 ## Work in progress
 
+- Report file-scope and enclosing `our` variables from `PadWalker::peek_our`
+  on both backends, including `our` assignments in subs (#1669).
+- Report `ref()` of a reference to a read-only scalar as `SCALAR`, or `REF`
+  when the scalar holds a reference.
+- Report `ref($Pkg::{name})` as `""` for a constant sub or a forward declaration
+  outside `main::`, matching blead; constant.pm proxies stay `SCALAR`.
+- Report the call-site package in `caller()` for code compiled by eval STRING
+  on the interpreter backend, so a callee in another package no longer changes
+  the package reported for its caller.
+- Parse `@{ NAME->... }` and similar braced dereferences of a constant or sub
+  call as expressions instead of variable names.
+- Keep a read-only package scalar shared when it is aliased by glob assignment,
+  so `Scalar::Readonly` unlocks it through the alias.
+- Ignore whitespace inside prototypes when checking them, and report
+  prototype diagnostics under the lexical warning state of eval STRING code.
 - Fix `Data::Util` loading by avoiding recursive shim evaluation during XS initialization (#1681).
 - Stop reporting `mro::get_mro` as redefined when `mro` loads under `-w` (#1703).
 - Preserve blessed IO classes during `can()` checks so socket-specific methods remain discoverable.

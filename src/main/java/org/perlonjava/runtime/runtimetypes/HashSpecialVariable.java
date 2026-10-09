@@ -131,7 +131,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
         } else if (this.mode == Id.STASH) {
             String prefix = stashGlobNameFor(String.valueOf(key));
             // System.out.println("Get Key " + prefix);
-            if (containsNamespace(GlobalVariable.globalVariables, prefix) ||
+            if (containsNamespace(GlobalVariable.scalarSlots(), prefix) ||
                     containsNamespace(GlobalVariable.globalArrays, prefix) ||
                     containsNamespace(GlobalVariable.globalHashes, prefix) ||
                     containsVisibleCodeWithPrefix(prefix) ||
@@ -230,7 +230,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
         // scalar registry, but a fresh Perl process does not expose them as
         // ordinary entries in %::.  Enumerating them produces writable-looking
         // typeglobs whose scalar slots are deliberately read-only.
-        for (Map.Entry<String, RuntimeScalar> scalarEntry : GlobalVariable.globalVariables.entrySet()) {
+        for (Map.Entry<String, RuntimeScalar> scalarEntry : GlobalVariable.scalarSlots().entrySet()) {
             if (!(scalarEntry.getValue() instanceof ScalarSpecialVariable)) {
                 addCachedStashEntryFromGlobalKey(
                         namespace, scalarEntry.getKey(), uniqueKeys, entries);
@@ -276,7 +276,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
         // hash slot (for example @' alongside the read-only $').  Apply the
         // visibility rule to the glob as a whole, not only while walking the
         // scalar map.
-        RuntimeScalar scalarSlot = GlobalVariable.globalVariables.get(key);
+        RuntimeScalar scalarSlot = GlobalVariable.scalarSlots().get(key);
         if (scalarSlot instanceof ScalarSpecialVariable
                 || scalarSlot instanceof RuntimeScalarReadOnly) {
             return;
@@ -387,7 +387,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             String fullKey = namespace + key;
 
             // Check if the glob exists
-            boolean exists = containsNamespace(GlobalVariable.globalVariables, fullKey) ||
+            boolean exists = containsNamespace(GlobalVariable.scalarSlots(), fullKey) ||
                     containsNamespace(GlobalVariable.globalArrays, fullKey) ||
                     containsNamespace(GlobalVariable.globalHashes, fullKey) ||
                     containsNamespace(GlobalVariable.globalCodeRefs, fullKey) ||
@@ -403,7 +403,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             // the deletion and create an undefined slot.
             RuntimeScalar code = GlobalVariable.removeGlobalCodeRefForStashDelete(fullKey);
             GlobalVariable.clearGlobalPseudoConstant(fullKey);
-            RuntimeScalar scalar = GlobalVariable.globalVariables.remove(fullKey);
+            RuntimeScalar scalar = GlobalVariable.scalarSlots().remove(fullKey);
             RuntimeArray array = GlobalVariable.globalArrays.remove(fullKey);
             RuntimeHash hash = GlobalVariable.globalHashes.remove(fullKey);
             RuntimeGlob io = GlobalVariable.getExistingGlobalIO(fullKey);
@@ -430,7 +430,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             String prefix = namespace;
 
             GlobalVariable.clearGlobalPseudoConstantsForNamespace(prefix);
-            GlobalVariable.globalVariables.keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.scalarSlots().keySet().removeIf(k -> k.startsWith(prefix));
             GlobalVariable.globalArrays.keySet().removeIf(k -> k.startsWith(prefix));
             GlobalVariable.globalHashes.keySet().removeIf(k -> k.startsWith(prefix));
             GlobalVariable.globalCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
@@ -493,7 +493,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     }
 
     private boolean containsAnySlotWithPrefix(String prefix) {
-        return containsNamespace(GlobalVariable.globalVariables, prefix) ||
+        return containsNamespace(GlobalVariable.scalarSlots(), prefix) ||
                 containsNamespace(GlobalVariable.globalArrays, prefix) ||
                 containsNamespace(GlobalVariable.globalHashes, prefix) ||
                 containsVisibleCodeWithPrefix(prefix) ||

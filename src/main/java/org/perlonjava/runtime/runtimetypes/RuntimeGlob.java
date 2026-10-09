@@ -227,7 +227,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
         copy.codeSlot = new RuntimeScalar(visibleCode != null
                 ? visibleCode : GlobalVariable.getGlobalCodeRef(this.globName));
-        copy.scalarSlot = GlobalVariable.globalVariables.get(this.globName);
+        copy.scalarSlot = GlobalVariable.scalarSlots().get(this.globName);
         if (copy.scalarSlot == null) {
             copy.scalarSlot = new RuntimeScalar();
         }
@@ -492,8 +492,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             return RuntimeScalarCache.scalarTrue;
         }
         // Check scalar slot - must have defined value
-        if (GlobalVariable.globalVariables.containsKey(this.globName)) {
-            RuntimeScalar scalar = GlobalVariable.globalVariables.get(this.globName);
+        if (GlobalVariable.scalarSlots().containsKey(this.globName)) {
+            RuntimeScalar scalar = GlobalVariable.scalarSlots().get(this.globName);
             if (scalar != null && scalar.getDefinedBoolean()) {
                 return RuntimeScalarCache.scalarTrue;
             }
@@ -544,7 +544,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // must not turn the stash hash view back into a scalar proxy.
                 boolean destinationAlreadyPromoted =
                         GlobalVariable.globalCodeRefs.containsKey(codeSlotName)
-                                || GlobalVariable.globalVariables.containsKey(codeSlotName)
+                                || GlobalVariable.scalarSlots().containsKey(codeSlotName)
                                 || GlobalVariable.globalArrays.containsKey(codeSlotName)
                                 || GlobalVariable.globalHashes.containsKey(codeSlotName)
                                 || GlobalVariable.globalFormatRefs.containsKey(codeSlotName);
@@ -877,10 +877,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     // (which makes A and B share their SCALAR slot) keeps both
                     // names pointing at the new aliased scalar after `*A = \$x`.
                     for (String aliasedName : GlobalVariable.getGlobAliasGroup(this.globName)) {
-                        GlobalVariable.aliasGlobalVariable(aliasedName, (RuntimeScalar) value.value);
+                        GlobalVariable.aliasGlobalScalarSlot(aliasedName, (RuntimeScalar) value.value);
                     }
-                    // Mark as explicitly declared for strict vars (e.g., Exporter imports)
-                    GlobalVariable.declareGlobalVariable(this.globName);
+                    // Perl imports the slot (for strict vars) only when the assignment comes
+                    // from another package, e.g. Exporter's `*{"caller::NAME"} = \$x`.
+                    if (assignmentImportsScalar()) {
+                        GlobalVariable.declareGlobalVariable(this.globName);
+                    }
                 }
                 return value;
             case UNDEF:
@@ -984,6 +987,19 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     public static RuntimeScalar scalarAssignmentResult(RuntimeGlob glob, RuntimeScalar value) {
         RuntimeScalar assigned = glob.set(value);
         return value.type == RuntimeScalarType.CODE ? glob : assigned;
+    }
+
+    /**
+     * Perl imports a glob's scalar slot (for strict vars) when the assignment comes from a
+     * package other than the glob's own. The running package is the active sub's package,
+     * or main at file scope.
+     */
+    private boolean assignmentImportsScalar() {
+        String current = RuntimeCode.getActivePackageName();
+        if (current == null || current.isEmpty()) current = "main";
+        int sep = this.globName == null ? -1 : this.globName.lastIndexOf("::");
+        String globPackage = sep > 0 ? this.globName.substring(0, sep) : "main";
+        return !globPackage.equals(current);
     }
 
     /**
@@ -1250,7 +1266,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 ? value.getGlobScalarSlot()
                 : GlobalVariable.getGlobalVariable(globName);
         GlobalVariable.markPackageGlobalRoot(sourceScalar);
-        GlobalVariable.globalVariables.put(this.globName, sourceScalar);
+        GlobalVariable.scalarSlots().put(this.globName, sourceScalar);
+        // A whole-glob import from another package makes the slot visible to strict vars
+        // (e.g. Exporter's *CWD).
+        if (assignmentImportsScalar()) {
+            GlobalVariable.declareGlobalVariable(this.globName);
+        }
         GlobalVariable.invalidatePackageRootSnapshot();
 
         // Alias the FORMAT slot: both names point to the same RuntimeFormat object
@@ -1890,7 +1911,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             // Just clear the symbol table contents.
             String prefix = this.globName;
             GlobalVariable.clearStashAlias(prefix);
-            GlobalVariable.globalVariables.keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.scalarSlots().keySet().removeIf(k -> k.startsWith(prefix));
             GlobalVariable.globalArrays.keySet().removeIf(k -> k.startsWith(prefix));
             GlobalVariable.globalHashes.keySet().removeIf(k -> k.startsWith(prefix));
             GlobalVariable.globalCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
@@ -1937,7 +1958,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // A scalar that Perl code has taken a reference to must keep its value:
         // the referent outlives the typeglob, so re-installing the saved
         // reference restores the original value (Symbol::Util::delete_glob).
-        RuntimeScalar oldScalar = GlobalVariable.globalVariables.get(this.globName);
+        RuntimeScalar oldScalar = GlobalVariable.scalarSlots().get(this.globName);
         if (oldScalar instanceof ScalarSpecialVariable special
                 && special.variableId == ScalarSpecialVariable.Id.HINTS) {
             HintHashRegistry.clearCurrentHintHash();
@@ -2019,7 +2040,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // (rather than leaving an empty placeholder behind that would make
         // `defined *glob{ARRAY|HASH}` lie after `local(*glob) = $val`).
         // Use direct map access so we don't auto-vivify the slot here.
-        RuntimeScalar savedScalar = GlobalVariable.globalVariables.get(this.globName);
+        RuntimeScalar savedScalar = GlobalVariable.scalarSlots().get(this.globName);
         RuntimeArray savedArray = GlobalVariable.globalArrays.get(this.globName);
         RuntimeHash savedHash = GlobalVariable.globalHashes.get(this.globName);
         RuntimeScalar savedCode = GlobalVariable.globalCodeRefs.get(this.globName);
@@ -2075,7 +2096,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // unconditionally install a fresh RuntimeScalar for the local scope.
         // Otherwise `local *X; $X = 5` would mutate the canonical $X and the
         // change would survive the scope exit.
-        GlobalVariable.globalVariables.put(this.globName, GlobalVariable.markPackageGlobalRoot(new RuntimeScalar()));
+        GlobalVariable.scalarSlots().put(this.globName, GlobalVariable.markPackageGlobalRoot(new RuntimeScalar()));
         GlobalVariable.invalidatePackageRootSnapshot();
         if (savedArray != null) {
             RuntimeArray localizedArray = GlobalVariable.markPackageGlobalRoot(new RuntimeArray());
@@ -2199,7 +2220,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // A null saved value means the slot did not exist before the local
         // scope; remove the placeholder we may have lazily created during the
         // scope so that `defined *glob{SLOT}` reports false again.
-        RuntimeScalar displacedScalar = GlobalVariable.globalVariables.get(snap.globName);
+        RuntimeScalar displacedScalar = GlobalVariable.scalarSlots().get(snap.globName);
         if (displacedScalar != null
                 && displacedScalar != snap.scalar
                 && displacedScalar.value instanceof RuntimeBase displacedBase
@@ -2212,9 +2233,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
         if (snap.scalar != null) {
             GlobalVariable.markPackageGlobalRoot(snap.scalar);
-            GlobalVariable.globalVariables.put(snap.globName, snap.scalar);
+            GlobalVariable.scalarSlots().put(snap.globName, snap.scalar);
         } else {
-            GlobalVariable.globalVariables.remove(snap.globName);
+            GlobalVariable.scalarSlots().remove(snap.globName);
         }
         if (snap.hash != null) {
             GlobalVariable.markPackageGlobalRoot(snap.hash);

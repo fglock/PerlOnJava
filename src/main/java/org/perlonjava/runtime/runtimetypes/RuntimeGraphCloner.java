@@ -282,6 +282,7 @@ public class RuntimeGraphCloner {
         }
         clones.put(source, target);
         target.ourVariableRegistry = source.ourVariableRegistry;
+        target.declaredOurVariables = source.declaredOurVariables;
         target.usesLocalization = source.usesLocalization;
         target.futureAsyncAwaitSub = source.futureAsyncAwaitSub;
         target.futureAsyncAwaitFutureClass = source.futureAsyncAwaitFutureClass;
@@ -399,6 +400,8 @@ public class RuntimeGraphCloner {
                 ? null : new java.util.LinkedHashSet<>(source.lexicalVariableNames);
         target.ourVariableRegistry = source.ourVariableRegistry == null
                 ? null : new java.util.LinkedHashMap<>(source.ourVariableRegistry);
+        target.declaredOurVariables = source.declaredOurVariables == null
+                ? null : new java.util.LinkedHashMap<>(source.declaredOurVariables);
         target.stateVariableInitialized = new java.util.HashMap<>(source.stateVariableInitialized);
         target.stateVariable = cloneScalarMap(source.stateVariable);
         target.stateArray = cloneArrayMap(source.stateArray);

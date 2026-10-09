@@ -201,7 +201,7 @@ public class RuntimeStash extends RuntimeHash {
 
         // Check if the glob exists
         boolean exists = GlobalVariable.globalCodeRefs.containsKey(fullKey) ||
-                GlobalVariable.globalVariables.containsKey(fullKey) ||
+                GlobalVariable.scalarSlots().containsKey(fullKey) ||
                 GlobalVariable.globalArrays.containsKey(fullKey) ||
                 GlobalVariable.globalHashes.containsKey(fullKey) ||
                 GlobalVariable.isVisibleGlobalIORef(fullKey) ||
@@ -213,7 +213,7 @@ public class RuntimeStash extends RuntimeHash {
 
         // Save all slot values BEFORE deleting so they can be accessed
         // on the returned glob (e.g., *{$old}{SCALAR} in namespace::clean)
-        RuntimeScalar savedScalar = GlobalVariable.globalVariables.get(fullKey);
+        RuntimeScalar savedScalar = GlobalVariable.scalarSlots().get(fullKey);
         RuntimeArray savedArray = GlobalVariable.globalArrays.get(fullKey);
         RuntimeHash savedHash = GlobalVariable.globalHashes.get(fullKey);
         RuntimeGlob savedIO = GlobalVariable.getExistingGlobalIO(fullKey);
@@ -224,7 +224,8 @@ public class RuntimeStash extends RuntimeHash {
         // previously compiled call sites.
         GlobalVariable.removeGlobalCodeRefForStashDelete(fullKey);
         GlobalVariable.clearGlobalPseudoConstant(fullKey);
-        GlobalVariable.globalVariables.remove(fullKey);
+        GlobalVariable.scalarSlots().remove(fullKey);
+        GlobalVariable.detachScalarPin(fullKey, savedScalar);
         GlobalVariable.globalArrays.remove(fullKey);
         GlobalVariable.globalHashes.remove(fullKey);
         if (savedIO != null) {
@@ -285,7 +286,7 @@ public class RuntimeStash extends RuntimeHash {
         String mainQualifiedChildPrefix = childPrefix.startsWith("main::")
                 ? childPrefix : "main::" + childPrefix;
 
-        Map<String, RuntimeScalar> movedScalars = snapshotNamespace(GlobalVariable.globalVariables, childPrefix);
+        Map<String, RuntimeScalar> movedScalars = snapshotNamespace(GlobalVariable.scalarSlots(), childPrefix);
         Map<String, RuntimeArray> movedArrays = snapshotNamespace(GlobalVariable.globalArrays, childPrefix);
         Map<String, RuntimeHash> movedHashes = snapshotNamespace(GlobalVariable.globalHashes, childPrefix);
         Map<String, RuntimeScalar> movedCodes = snapshotNamespace(GlobalVariable.globalCodeRefs, childPrefix);
@@ -295,8 +296,8 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.globalCodeRefs.keySet().removeIf(key -> key.startsWith(mainQualifiedChildPrefix));
         GlobalVariable.clearGlobalPseudoConstantsForNamespace(childPrefix);
         GlobalVariable.clearGlobalPseudoConstantsForNamespace(mainQualifiedChildPrefix);
-        GlobalVariable.globalVariables.keySet().removeIf(key -> key.startsWith(childPrefix));
-        GlobalVariable.globalVariables.keySet().removeIf(key -> key.startsWith(mainQualifiedChildPrefix));
+        GlobalVariable.scalarSlots().keySet().removeIf(key -> key.startsWith(childPrefix));
+        GlobalVariable.scalarSlots().keySet().removeIf(key -> key.startsWith(mainQualifiedChildPrefix));
         GlobalVariable.globalArrays.keySet().removeIf(key -> key.startsWith(childPrefix));
         GlobalVariable.globalArrays.keySet().removeIf(key -> key.startsWith(mainQualifiedChildPrefix));
         GlobalVariable.globalHashes.keySet().removeIf(key -> key.startsWith(childPrefix));
@@ -516,7 +517,7 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.clearStashAlias(prefix);
 
         GlobalVariable.clearGlobalPseudoConstantsForNamespace(prefix);
-        GlobalVariable.globalVariables.keySet().removeIf(k -> k.startsWith(prefix));
+        GlobalVariable.scalarSlots().keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.globalArrays.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.globalHashes.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.globalCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
@@ -562,7 +563,7 @@ public class RuntimeStash extends RuntimeHash {
         org.perlonjava.runtime.perlmodule.Mro.resetPackageGeneration(packageName);
         GlobalVariable.clearStashAlias(prefix);
         GlobalVariable.clearGlobalPseudoConstantsForNamespace(prefix);
-        GlobalVariable.globalVariables.keySet().removeIf(k -> k.startsWith(prefix));
+        GlobalVariable.scalarSlots().keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.globalArrays.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.globalHashes.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.globalCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
