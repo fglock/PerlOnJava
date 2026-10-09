@@ -21,6 +21,8 @@ priorities and future plans.
   so `Scalar::Readonly` unlocks it through the alias.
 - Ignore whitespace inside prototypes when checking them, and report
   prototype diagnostics under the lexical warning state of eval STRING code.
+- Fix `Data::Util` loading by avoiding recursive shim evaluation during XS initialization (#1681).
+- Stop reporting `mro::get_mro` as redefined when `mro` loads under `-w` (#1703).
 - Preserve blessed IO classes during `can()` checks so socket-specific methods remain discoverable.
 - Report native socketpair readiness from the descriptor instead of treating every event as ready.
 - Apply IO::Handle blocking mode changes to native descriptors so nonblocking socket writes can return EAGAIN.
@@ -38,7 +40,7 @@ priorities and future plans.
 - Preserve bare carriage returns in quote-like strings and regex patterns read
   from Perl source files.
 - Keep version-control conflict-marker diagnostics out of quoted strings and
-  heredoc contents.
+  heredoc contents, including heredocs with punctuation in quoted labels.
 - Parse bare phaser-name forward declarations such as `END;` after heredocs.
 - Preserve diagnostics for malformed CSV rows, decode EUC-JP row-13 extension
   characters, accept open filehandles in `Tie::File`, and honor ZIP member

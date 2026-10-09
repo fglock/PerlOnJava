@@ -4,6 +4,7 @@ import org.perlonjava.runtime.mro.C3;
 import org.perlonjava.runtime.mro.DFS;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.mro.InheritanceResolver.MROAlgorithm;
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.*;
@@ -14,6 +15,9 @@ import java.util.*;
  * utilities for introspecting the inheritance hierarchy.
  */
 public class Mro extends PerlModuleBase {
+
+    /** The native mro::get_mro CV registered by the most recent initialize() run. */
+    private static RuntimeCode nativeGetMro;
 
     /**
      * Constructor for Mro.
@@ -35,14 +39,20 @@ public class Mro extends PerlModuleBase {
             // Register mro methods
             mro.registerMethod("get_linear_isa", "$;$");
             mro.registerMethod("set_mro", "$$");
+            // initialize() runs at startup and again from mro.pm's XSLoader
+            // bootstrap.  The second run re-registers this same native CV, so
+            // only a different definition counts as a redefinition (#1703).
             RuntimeScalar previousGetMro = GlobalVariable.globalCodeRefs.get("mro::get_mro");
             if (previousGetMro != null && previousGetMro.value instanceof RuntimeCode oldCode
-                    && oldCode.defined()) {
-                org.perlonjava.runtime.operators.WarnDie.warnWithCategory(
-                        new RuntimeScalar("Subroutine mro::get_mro redefined at "),
+                    && oldCode.defined() && oldCode != nativeGetMro) {
+                WarnDie.warnWithCategory(
+                        new RuntimeScalar("Subroutine mro::get_mro redefined"),
                         new RuntimeScalar(), "redefine");
             }
             mro.registerMethod("get_mro", "$");
+            RuntimeScalar installedGetMro = GlobalVariable.globalCodeRefs.get("mro::get_mro");
+            nativeGetMro = installedGetMro != null && installedGetMro.value instanceof RuntimeCode code
+                    ? code : null;
             mro.registerMethod("get_isarev", "$");
             mro.registerMethod("is_universal", "$");
             mro.registerMethod("invalidate_all_method_caches", "");

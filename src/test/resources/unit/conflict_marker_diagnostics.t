@@ -22,6 +22,7 @@ for my $marker (map { $_ x 7 } qw(< = >)) {
 
     for my $source (
         "my \$text = <<'END';\n$marker\nEND\n",
+        "my \$text = << 'END;';\n$marker\nEND;\n",
         "my \$text = \"before\n$marker\nafter\";\n",
         "my \$text = '$marker';\n",
         "my \$text = \"$marker\";\n",
