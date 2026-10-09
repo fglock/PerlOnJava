@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Suppress the `exiting` warning for a non-local `last SKIP` from `Test::More::skip()` and other callees that disable it lexically, and stop a labeled block that ends a sub from leaking an unmatched loop-control marker on the interpreter (#1482).
 - Parse `return` with imported subroutines followed by `map` expressions (#1584).
 - Report file-scope and enclosing `our` variables from `PadWalker::peek_our`
   on both backends, including `our` assignments in subs (#1669).

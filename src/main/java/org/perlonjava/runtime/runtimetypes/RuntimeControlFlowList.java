@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.perlmodule.Warnings;
 
 /**
@@ -32,6 +33,22 @@ public class RuntimeControlFlowList extends RuntimeList {
      * the caller dispatches the marker.
      */
     private final boolean suppressEscapingLoopControlWarning;
+    /**
+     * Lexical warning bits in effect at the {@code last}/{@code next}/{@code redo}
+     * statement.  Perl reports {@code Exiting subroutine via last} from the
+     * warnings of that statement, not from the subroutine boundary it crosses,
+     * so a callee's {@code no warnings 'exiting'} must win over the caller's
+     * {@code use warnings}.  Captured while the marker is created, because the
+     * callee's runtime bits are restored before the caller dispatches the marker.
+     */
+    private final String warningBitsAtSite;
+    /**
+     * Whether the statement explicitly disabled the {@code exiting} category with
+     * {@code no warnings}.  Kept apart from the bits because an all-clear mask
+     * cannot tell {@code no warnings} from code with no warnings pragma at all;
+     * an explicit disable overrides {@code $^W}, as it does in Perl.
+     */
+    private final boolean exitingWarningDisabledAtSite;
 
     /**
      * Constructor for control flow (last/next/redo/goto).
@@ -59,6 +76,10 @@ public class RuntimeControlFlowList extends RuntimeList {
         this.returnValue = null;
         this.suppressEscapingLoopControlWarning = Warnings.isWarnFlagLocalized()
                 && !Warnings.isWarnFlagSet();
+        this.warningBitsAtSite = WarningBitsRegistry.getRuntimeWarningBits();
+        this.exitingWarningDisabledAtSite = WarningFlags.hasRuntimeWarningScope()
+                ? WarningFlags.isWarningSuppressedAtRuntime("exiting")
+                : WarningBitsRegistry.isRuntimeWarningCategoryDisabled("exiting");
         if (DEBUG_TAILCALL) {
             System.err.println("[DEBUG-0a] RuntimeControlFlowList constructor (type,label): type=" + type +
                     ", label=" + label + " @ " + fileName + ":" + lineNumber);
@@ -103,6 +124,8 @@ public class RuntimeControlFlowList extends RuntimeList {
                 namedTarget, evalScope);
         this.returnValue = null;
         this.suppressEscapingLoopControlWarning = false;
+        this.warningBitsAtSite = null;
+        this.exitingWarningDisabledAtSite = false;
         if (DEBUG_TAILCALL) {
             System.err.println("[DEBUG-0b] RuntimeControlFlowList constructor (codeRef,args): codeRef=" + codeRef +
                     ", args.size=" + (args != null ? args.size() : "null") +
@@ -130,6 +153,8 @@ public class RuntimeControlFlowList extends RuntimeList {
         this.marker = new ControlFlowMarker(ControlFlowType.RETURN, null, fileName, lineNumber);
         this.returnValue = returnValue;
         this.suppressEscapingLoopControlWarning = false;
+        this.warningBitsAtSite = null;
+        this.exitingWarningDisabledAtSite = false;
     }
 
     /**
@@ -151,6 +176,16 @@ public class RuntimeControlFlowList extends RuntimeList {
 
     public boolean suppressEscapingLoopControlWarning() {
         return suppressEscapingLoopControlWarning;
+    }
+
+    /** Lexical warning bits of the loop-control statement, or null when none were recorded. */
+    public String warningBitsAtSite() {
+        return warningBitsAtSite;
+    }
+
+    /** Whether the loop-control statement explicitly disabled the exiting warning. */
+    public boolean exitingWarningDisabledAtSite() {
+        return exitingWarningDisabledAtSite;
     }
 
     /** Switch controls cannot escape an eval or subroutine as ordinary loop controls can. */

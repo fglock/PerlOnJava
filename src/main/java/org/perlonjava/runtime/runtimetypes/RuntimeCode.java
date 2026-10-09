@@ -7536,7 +7536,28 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (flow.suppressEscapingLoopControlWarning()) {
             return;
         }
-        if (!Warnings.warningManager.isWarningEnabled("exiting")) {
+        // The loop-control statement's own lexical warnings decide, as in Perl:
+        // a lexical `no warnings 'exiting'` there suppresses the warning even
+        // under -w.  Without any lexical warnings at that statement, $^W decides.
+        if (WarningFlags.areWarningsForcedOff()) {
+            return;
+        }
+        String warningBits = flow.warningBitsAtSite();
+        boolean enabled = WarningFlags.areWarningsForcedOn();
+        if (!enabled && !flow.exitingWarningDisabledAtSite()) {
+            if (warningBits == null) {
+                // The statement's bits were never installed at runtime (for example a
+                // class ADJUST block run by the generated constructor), so there is no
+                // site decision to make: keep the boundary check used before the site
+                // was captured.
+                enabled = Warnings.warningManager.isWarningEnabled("exiting");
+            } else if (hasAnyWarningBitSet(warningBits)) {
+                enabled = WarningFlags.isEnabledInBits(warningBits, "exiting");
+            } else {
+                enabled = Warnings.isWarnFlagSet();
+            }
+        }
+        if (!enabled) {
             return;
         }
         String operation = flow.getControlFlowType().name().toLowerCase();
@@ -7546,6 +7567,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         WarnDie.warn(new RuntimeScalar("Exiting " + scope + " via " + operation),
                 new RuntimeScalar(" at " + flow.marker.fileName + " line "
                         + flow.marker.lineNumber));
+    }
+
+    private static boolean hasAnyWarningBitSet(String warningBits) {
+        for (int i = 0; i < warningBits.length(); i++) {
+            if (warningBits.charAt(i) != 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Error assigned to {@code $@} when loop control from eval cannot reach a loop. */
