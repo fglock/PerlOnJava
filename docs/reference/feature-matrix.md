@@ -502,7 +502,11 @@ in this capability matrix.
 - ✅  **`exit`**: `exit` is supported.
 - ✅  **`kill`**: `kill` is supported.
 - 🟡 **`waitpid`**: Supported for managed child processes; this is not a
-  general replacement for native process waiting.
+  general replacement for native process waiting. Perl preserves the
+  distinction between a child that exits with status 129 and one terminated
+  by SIGHUP. Java's `Process` API exposes both as status 129, so PerlOnJava
+  reports either case as a normal exit 129 on its managed-child path. This
+  also affects `IPC::Open3` consumers such as `System::Command` (#1715).
 - ✅  **`utime`**: `utime` is supported.
 - ✅  **`umask`**: `umask` is supported.
 - ✅  **`chown`**: `chown` is supported.
