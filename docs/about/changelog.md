@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Parse indexed scalar expressions as sort-list items rather than scalar comparators, fixing Class::MethodMaker `hash.t` under `strict vars` (#1680).
 - Suppress the `exiting` warning for a non-local `last SKIP` from `Test::More::skip()` and other callees that disable it lexically, and stop a labeled block that ends a sub from leaking an unmatched loop-control marker on the interpreter (#1482).
 - Parse `return` with imported subroutines followed by `map` expressions (#1584).
 - Report file-scope and enclosing `our` variables from `PadWalker::peek_our`
