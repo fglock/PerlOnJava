@@ -1218,13 +1218,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public static void popArgs() {
         Deque<RuntimeArray> stack = argsStack();
+        RuntimeArray exitedArgs = null;
         if (!stack.isEmpty()) {
-            stack.pop();
+            exitedArgs = stack.pop();
         }
         Deque<java.util.List<RuntimeScalar>> pStack = pristineArgsStack();
         if (!pStack.isEmpty()) {
             pStack.pop();
         }
+        cleanupOwnedArgumentAliases(exitedArgs);
         drainDeferredArgumentAggregateCleanup();
         Deque<Boolean> haStack = hasArgsStack();
         if (!haStack.isEmpty()) {
@@ -1237,6 +1239,35 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Deque<String> pendingPackages = PerlRuntime.current().executionState().pendingCallerPackages;
         if (!pendingPackages.isEmpty()) {
             pendingPackages.pop();
+        }
+    }
+
+    /**
+     * Release temporary scalar wrappers created when a RuntimeCode is passed
+     * through an aliased argument array. Ordinary scalar arguments alias their
+     * caller's slot and must remain untouched when the callee returns.
+     */
+    private static void cleanupOwnedArgumentAliases(RuntimeArray args) {
+        if (args == null || args.ownedAliasElements == null
+                || args.ownedAliasElements.isEmpty()) return;
+        RuntimeScalar[] owned = args.ownedAliasElements.toArray(new RuntimeScalar[0]);
+        for (RuntimeScalar scalar : owned) {
+            RuntimeScalar.scopeExitCleanup(scalar);
+            if (scalar.type == RuntimeScalarType.CODE
+                    && scalar.value instanceof RuntimeCode code
+                    && (code.capturedScalars != null || code.capturedAggregates != null)
+                    && code.refCount > 0
+                    && !isActiveCode(code)
+                    && !ReachabilityWalker.isReachableFromRoots(code)) {
+                // A closure may have reached @_ after its lexical scope had
+                // already ended. In that case the scalar's original cleanup
+                // ran while it still appeared to be held by an alias array,
+                // leaving a positive manual CV count. Once this argument
+                // frame is gone, release its captures only if no Perl root
+                // can still reach the CV.
+                code.releaseCaptures();
+            }
+            args.forgetOwnedAliasElement(scalar);
         }
     }
 
@@ -9457,7 +9488,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     // Get the Scalar alias into an Array
     public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
-        arr.elements.add(new RuntimeScalar(this));
+        arr.elementsAliased = true;
+        RuntimeScalar alias = new RuntimeScalar(this);
+        arr.elements.add(alias);
+        arr.markOwnedAliasElement(alias);
         return arr;
     }
 

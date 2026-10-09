@@ -709,7 +709,12 @@ public class DestroyDispatch {
         if (referent.activeOwners == null) {
             return referent.refCount > 0;
         }
-        return referent.activeOwnerCount() > 0 || referent.hasSemanticCaptureOwner();
+        // A DESTROY frame can still leave refCountOwned call-frame aliases in
+        // activeOwners after the Perl-visible owner has gone away. Those are
+        // bookkeeping remnants, not resurrection. Count only slots the root
+        // walker can still reach; otherwise a DBH with dead CachedKids can be
+        // marked needsReDestroy and skip its aggregate cleanup permanently.
+        return referent.reachableOwnerCount() > 0 || referent.hasSemanticCaptureOwner();
     }
 
     /**
