@@ -1677,8 +1677,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     // Get the Scalar alias into an Array
     public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
-        arr.elements.add(this);
         arr.elementsAliased = true;
+        arr.elements.add(this);
+        if (type == RuntimeScalarType.CODE && value instanceof RuntimeCode code
+                && !isPackageGlobalRoot && !localBindingExists
+                && (code.refCount == 0 || scopeExited)
+                && (code.capturedScalars != null || code.capturedAggregates != null)) {
+            arr.markOwnedAliasElement(this);
+        }
         return arr;
     }
 

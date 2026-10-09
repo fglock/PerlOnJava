@@ -3,6 +3,7 @@ package org.perlonjava.runtime.io;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
+import org.perlonjava.runtime.runtimetypes.ErrnoVariable;
 import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.nativ.ffm.FFMPosixInterface;
 
@@ -661,7 +662,7 @@ public class CustomFileChannel implements IOHandle {
                                     ? fileChannel.tryLock(0, Long.MAX_VALUE, true)
                                     : fileChannel.lock(0, Long.MAX_VALUE, true);
                             if (lock == null) {
-                                getGlobalVariable("main::!").set(11); // EAGAIN/EWOULDBLOCK
+                                getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
                                 return RuntimeScalarCache.scalarFalse;
                             }
                             SharedLockState newState = new SharedLockState();
@@ -678,7 +679,7 @@ public class CustomFileChannel implements IOHandle {
                             // Same JVM already holds a lock on this region that
                             // wasn't registered (e.g. a prior EXCLUSIVE lock from
                             // a different channel). Fall through to EAGAIN.
-                            getGlobalVariable("main::!").set(11);
+                            getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
                             return RuntimeScalarCache.scalarFalse;
                         }
                     }
@@ -689,7 +690,7 @@ public class CustomFileChannel implements IOHandle {
                 if (nonBlocking) {
                     currentLock = fileChannel.tryLock(0, Long.MAX_VALUE, isShared);
                     if (currentLock == null) {
-                        getGlobalVariable("main::!").set(11); // EAGAIN/EWOULDBLOCK
+                        getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
                         return RuntimeScalarCache.scalarFalse;
                     }
                 } else {
@@ -725,7 +726,7 @@ public class CustomFileChannel implements IOHandle {
 
         } catch (OverlappingFileLockException e) {
             // This happens when trying to lock a region already locked by this JVM
-            getGlobalVariable("main::!").set(11); // EAGAIN
+            getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
             return RuntimeScalarCache.scalarFalse;
         } catch (IOException e) {
             return handleIOException(e, "flock failed");

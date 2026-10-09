@@ -137,20 +137,36 @@ public class MortalList {
 
     static boolean temporaryRootDirectlyReferences(RuntimeBase target) {
         for (RuntimeBase root : state().temporaryRoots) {
-            if (root == target) return true;
-            if (root instanceof RuntimeScalar scalar
-                    && !WeakRefRegistry.isweak(scalar)
-                    && scalar.value == target) {
-                return true;
+            if (directlyReferences(root, target)) return true;
+        }
+        return false;
+    }
+
+    private static boolean directlyReferences(RuntimeBase value, RuntimeBase target) {
+        return directlyReferences(value, target, new IdentityHashMap<>());
+    }
+
+    private static boolean directlyReferences(RuntimeBase value, RuntimeBase target,
+                                              IdentityHashMap<RuntimeBase, Boolean> visited) {
+        if (value == target) return true;
+        if (value == null || visited.put(value, Boolean.TRUE) != null) return false;
+        if (value instanceof RuntimeScalar scalar
+                && !WeakRefRegistry.isweak(scalar)
+                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && scalar.value instanceof RuntimeBase referent) {
+            return directlyReferences(referent, target, visited);
+        }
+        if (value instanceof RuntimeList list) {
+            for (RuntimeBase element : list.elements) {
+                if (directlyReferences(element, target, visited)) return true;
             }
-            if (root instanceof RuntimeList list) {
-                for (RuntimeBase value : list.elements) {
-                    if (value instanceof RuntimeScalar scalar
-                            && !WeakRefRegistry.isweak(scalar)
-                            && scalar.value == target) {
-                        return true;
-                    }
-                }
+        } else if (value instanceof RuntimeArray array) {
+            for (RuntimeScalar element : array.elements) {
+                if (directlyReferences(element, target, visited)) return true;
+            }
+        } else if (value instanceof RuntimeHash hash) {
+            for (RuntimeScalar element : hash.elements.values()) {
+                if (directlyReferences(element, target, visited)) return true;
             }
         }
         return false;
@@ -398,9 +414,9 @@ public class MortalList {
      */
     public static void flushDeferredCapturesBeforeEnd() {
         LifecycleRuntimeState state = state();
-        if (state.deferredCaptures.isEmpty()) return;
-
         Set<RuntimeBase> endReachable = ReachabilityWalker.walkEndBlockRoots();
+        ReachabilityWalker.releaseUnreachableScopeExitedCaptureOwners(
+                WeakRefRegistry.snapshotWeakRefReferents(), endReachable);
         boolean found = false;
         for (int i = state.deferredCaptures.size() - 1; i >= 0; i--) {
             RuntimeScalar scalar = state.deferredCaptures.get(i);
@@ -663,7 +679,8 @@ public class MortalList {
             return;
         }
         // Alias arrays such as @_ do not own their original element slots.
-        if (arr.refCount > 0 || temporaryRootDirectlyReferences(arr)) return;
+        if (arr.refCount > 0 || temporaryRootDirectlyReferences(arr)
+                || directlyReferences(returned, arr)) return;
         // \$#array creates a scalar proxy, not an array reference.  Once the
         // lexical AV exits, that proxy becomes an orphaned undef lvalue; it
         // must not retain this Java RuntimeArray merely through its backing
@@ -1811,7 +1828,8 @@ public class MortalList {
      * captures) or borrowed caller arguments. Restrict the drain to the
      * marker's ownership-only alias carrier.
      */
-    public static void drainPendingTailCallArgs(RuntimeArray args, Object argumentFrame) {
+    public static void drainPendingTailCallArgs(
+            RuntimeArray args, Object argumentFrame, RuntimeBase returnedResult) {
         if (!isActive() || args == null) return;
         java.util.Set<RuntimeScalar> owners =
                 java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
@@ -1833,6 +1851,14 @@ public class MortalList {
                         && "bless mortal temporary".equals(state.pendingTransientOwnerKinds.get(i))
                         && args.elements.stream().anyMatch(argument -> argument != null
                                 && argument.value == pending);
+                // A CORE::GLOBAL wrapper can tail-call the bless override with
+                // a newly blessed argument and return that same reference.
+                // Its bless temporary is the return value's only owner until
+                // the caller materializes the result, so keep the pending
+                // decrement queued for the caller's normal scope cleanup.
+                if (abandonedBirthTemporary && directlyReferences(returnedResult, pending)) {
+                    continue;
+                }
                 if ((!directOwner && !frameCopy && !abandonedBirthTemporary)
                         || (owner == null && !abandonedBirthTemporary)) continue;
                 RuntimeBase.PendingOwnerRelease ownerRelease =

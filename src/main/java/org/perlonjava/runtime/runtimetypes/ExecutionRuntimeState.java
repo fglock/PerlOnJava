@@ -64,6 +64,10 @@ public final class ExecutionRuntimeState {
     public final ArrayDeque<ArrayList<String>> syntheticCallerFrames = new ArrayDeque<>();
     public final Deque<RuntimeArray> argsStack = new ArrayDeque<>();
     public final Deque<RuntimeCode> activeCodeStack = new ArrayDeque<>();
+    /** Perl source callsites aligned with the active Perl code frames. */
+    public final Deque<CallerStack.CallerInfo> activeCodeCallSites = new ArrayDeque<>();
+    /** Source location supplied by the generated direct call entering next. */
+    public final Deque<CallerStack.CallerInfo> pendingDirectCallSites = new ArrayDeque<>();
     /** Self references of active JVM-generated Perl methods. */
     public final Deque<RuntimeScalar> activeJvmSelfReferences = new ArrayDeque<>();
     /** Sort pseudo-block state for active JVM-generated Perl methods. */

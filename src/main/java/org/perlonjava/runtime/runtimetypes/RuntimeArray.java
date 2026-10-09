@@ -2183,7 +2183,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     /** Clears argument aliases whose source array slot was removed meanwhile. */
     public void clearStaleLocalArrayAliases() {
         for (RuntimeScalar element : elements) {
-            if (element == null || element.localArrayOwner == null) continue;
+            // The synthetic @_ scalar passed to DESTROY is the canonical
+            // original invocation argument used by caller() and @DB::args.
+            // DESTROY commonly shifts it into a lexical, but that must not
+            // erase the pristine argument snapshot while a warning handler is
+            // inspecting the stack (DBIx::Class's reinvoked-DESTROY guard).
+            if (element == null || element.destroySelfArgument
+                    || element.localArrayOwner == null) continue;
             RuntimeArray owner = element.localArrayOwner;
             int index = element.localArrayIndex;
             if (index < 0 || index >= owner.elements.size()

@@ -638,6 +638,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         copy.deferredConstAttribute = this.deferredConstAttribute;
         copy.cvStartFile = this.cvStartFile;
         copy.cvStartLine = this.cvStartLine;
+        copy.cvEndFile = this.cvEndFile;
+        copy.cvEndLine = this.cvEndLine;
         copy.setLexicalDisabledWarningCategories(
                 this.getLexicalDisabledWarningCategories());
         copy.deparseSourceText = this.deparseSourceText;

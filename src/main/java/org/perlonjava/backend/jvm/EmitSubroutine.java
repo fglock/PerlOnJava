@@ -482,6 +482,23 @@ public class EmitSubroutine {
                     "makeCodeObject",
                     "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;IIII)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
+            int endLocationToken = node.block instanceof BlockNode block
+                    && block.elements != null && !block.elements.isEmpty()
+                    ? block.elements.get(block.elements.size() - 1).getIndex()
+                    : node.sourceEndTokenIndex > 2 ? node.sourceEndTokenIndex - 3 : -1;
+            if (ctx.errorUtil != null && endLocationToken >= 0) {
+                var endLocation = ctx.errorUtil.getSourceLocationAccurate(endLocationToken);
+                if (endLocation.fileName() != null && endLocation.lineNumber() > 0) {
+                    mv.visitLdcInsn(endLocation.fileName());
+                    mv.visitLdcInsn(endLocation.lineNumber());
+                    mv.visitMethodInsn(
+                            Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                            "setCvEndLocation",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                            false);
+                }
+            }
             mv.visitInsn(subCtx.javaClassInfo.jvmClosureFrameRequired
                     ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
             mv.visitMethodInsn(

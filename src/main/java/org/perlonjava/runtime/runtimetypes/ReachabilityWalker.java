@@ -39,6 +39,9 @@ import java.lang.ref.WeakReference;
  */
 public class ReachabilityWalker {
 
+    private static final String WALKER_TRACE_CLASS =
+            System.getenv("JPERL_WALKER_TRACE_CLASS");
+
     private Set<RuntimeBase> weakWitnessTargets;
     private final IdentityHashMap<RuntimeBase, RuntimeCode> weakWitnessCaptureRoots =
             new IdentityHashMap<>();
@@ -2475,11 +2478,11 @@ public class ReachabilityWalker {
             DestroyDispatch.clearRescuedWeakRefs();
         }
         LifecycleRuntimeState runtimeState = PerlRuntime.current().lifecycleState;
-        ArrayList<RuntimeBase> weakWitnessCandidates = null;
+        ArrayList<RuntimeBase> weakWitnessCandidates =
+                new ArrayList<>(WeakRefRegistry.snapshotWeakRefReferents());
+        releaseUnreachableScopeExitedCaptureOwners(weakWitnessCandidates, null);
         ArrayList<RuntimeBase> destroyableWitnessCandidates = null;
         if (quiet) {
-            weakWitnessCandidates =
-                    new ArrayList<>(WeakRefRegistry.snapshotWeakRefReferents());
             destroyableWitnessCandidates = DestroyDispatch.snapshotDestroyableObjects();
             if (tryWitnessQuietSweep(quiet, forceJvmGc, releasedTargets,
                     releasedSweepResult, weakWitnessCandidates,
@@ -2520,6 +2523,7 @@ public class ReachabilityWalker {
                 : releasedSweepResult.countedStrongOwners();
         for (RuntimeBase referent : WeakRefRegistry.snapshotWeakRefReferents()) {
             boolean liveReferent = live.contains(referent);
+            traceWeakReferent(referent, liveReferent, strongCycleProtected.contains(referent));
             // Semantic closure ownership is an explicit Perl edge.  It is not
             // necessarily visible to this conservative graph walk because
             // generated closure fields and metadata are intentionally opaque.
@@ -2657,6 +2661,71 @@ public class ReachabilityWalker {
             runtimeState.weakSweepLiveReferents = previousSweepLiveReferents;
         }
         return new WeakSweepPass(cleared, graphChanged);
+    }
+
+    /**
+     * Drop semantic capture slots whose declaring pad has exited and is no
+     * longer reachable from Perl roots. A stale closure can otherwise keep
+     * its referent in {@code positiveOwnerReferents}; the sweep then mistakes
+     * that bookkeeping root for a live Perl owner and never clears weak refs.
+     */
+    static void releaseUnreachableScopeExitedCaptureOwners(
+            List<RuntimeBase> weakReferents, Set<RuntimeBase> endReachable) {
+        Set<RuntimeBase> retainedByEnd = endReachable;
+        for (RuntimeBase referent : weakReferents) {
+            for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
+                RuntimeScalar padCell = slot.padCell();
+                if (padCell == null || !padCell.scopeExited || slot.referent() != referent) {
+                    continue;
+                }
+                if (retainedByEnd == null) retainedByEnd = walkEndBlockRoots();
+                if (retainedByEnd.contains(padCell) || retainedByEnd.contains(referent)
+                        || isScalarReachable(padCell)) continue;
+                if (WALKER_TRACE_CLASS != null && !WALKER_TRACE_CLASS.isEmpty()) {
+                    String className = NameNormalizer.getBlessStr(referent.blessId);
+                    if (className != null && className.contains(WALKER_TRACE_CLASS)) {
+                        System.err.println("[WALKER_CAPTURE_RELEASE] target=" + className + "@"
+                                + System.identityHashCode(referent)
+                                + " slot=" + slot.identity()
+                                + " pad=" + System.identityHashCode(padCell)
+                                + " captureCount=" + padCell.captureCount
+                                + " legacyCaptures=" + slot.legacyCaptureCount());
+                    }
+                }
+                padCell.releaseUnreachableSemanticCaptureOwner();
+            }
+        }
+    }
+
+    private static void traceWeakReferent(
+            RuntimeBase referent, boolean live, boolean cycleProtected) {
+        String filter = WALKER_TRACE_CLASS;
+        if (filter == null || filter.isEmpty() || referent.blessId == 0) return;
+        String className = NameNormalizer.getBlessStr(referent.blessId);
+        if (className == null || !className.contains(filter)) return;
+        List<String> path = live ? findPathTo(referent) : null;
+        String pathText = !live ? "<unreachable>"
+                : path == null ? "<path-not-found>"
+                : path.isEmpty() ? "<empty-path>" : String.join(" -> ", path);
+        ArrayList<String> ownerSlots = new ArrayList<>();
+        for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
+            RuntimeScalar padCell = slot.padCell();
+            ownerSlots.add(slot.identity()
+                    + ":native=" + slot.isNativeCaptureOwner()
+                    + ":legacy=" + slot.legacyCaptureCount()
+                    + ":pad=" + (padCell == null ? "none" : System.identityHashCode(padCell))
+                    + ":padLive=" + (padCell != null && isScalarReachable(padCell)));
+        }
+        System.err.println("[WALKER_TRACE] target=" + className + "@"
+                + System.identityHashCode(referent)
+                + " refCount=" + referent.refCount
+                + " live=" + live
+                + " cycleProtected=" + cycleProtected
+                + " activeOwners=" + referent.activeOwnerCount()
+                + " ownerSlots=" + referent.ownerSlotSnapshot().size()
+                + " ownerSlotDetails=" + ownerSlots
+                + " semanticCapture=" + referent.hasSemanticCaptureOwner()
+                + " path=" + pathText);
     }
 
     /**

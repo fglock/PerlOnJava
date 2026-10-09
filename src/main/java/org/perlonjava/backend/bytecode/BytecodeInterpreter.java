@@ -663,9 +663,10 @@ public class BytecodeInterpreter {
 
                             case Opcodes.RETURN_SCOPE_CLEANUP_ARRAY -> {
                                 int reg = bytecode[pc++];
+                                int returnReg = bytecode[pc++];
                                 RuntimeBase slot = registers[reg];
                                 if (slot instanceof RuntimeArray ra) {
-                                    MortalList.scopeExitCleanupArray(ra);
+                                    MortalList.scopeExitCleanupArray(ra, registers[returnReg]);
                                 }
                             }
 

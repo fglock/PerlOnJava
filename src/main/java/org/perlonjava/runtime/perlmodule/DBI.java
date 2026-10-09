@@ -9,6 +9,7 @@ import org.sqlite.Function;
 import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.util.Enumeration;
+import java.util.Map;
 import java.util.Properties;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
@@ -230,8 +231,24 @@ public class DBI extends PerlModuleBase {
             if (attr.type != RuntimeScalarType.HASHREFERENCE) {
                 attr = new RuntimeHash().createReference();
             }
-            // add attributes from dbh and attr: RaiseError, PrintError, FetchHashKeyName
-            sth.setFromList(new RuntimeList(sth, dbh, attr.hashDeref()));
+            // DBI statement handles inherit a defined set of attributes from
+            // their parent database handle. Do not copy the whole dbh hash:
+            // it contains CachedKids, which would make each cached statement
+            // retain the cache (and every sibling statement) after disconnect.
+            for (String key : new String[] {
+                    "RaiseError", "PrintError", "RaiseWarn", "PrintWarn",
+                    "HandleError", "HandleSetErr", "Warn", "LongTruncOk",
+                    "ChopBlanks", "AutoCommit", "ReadOnly",
+                    "ShowErrorStatement", "FetchHashKeyName", "LongReadLen",
+                    "CompatMode", "Taint", "TaintIn", "TaintOut", "RootClass"
+            }) {
+                if (dbh.containsKey(key)) {
+                    sth.put(key, dbh.get(key));
+                }
+            }
+            for (Map.Entry<String, RuntimeScalar> entry : attr.hashDeref().elements.entrySet()) {
+                sth.put(entry.getKey(), entry.getValue());
+            }
 
             // sth starts inactive — Active becomes true only after execute() with results.
             // The setFromList above copies dbh's Active=true, which is wrong for sth.
@@ -285,7 +302,8 @@ public class DBI extends PerlModuleBase {
             sth.put("NUM_OF_PARAMS", new RuntimeScalar(numParams));
 
             // Create blessed reference for statement handle
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(
+                    sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
 
             // Store only the JDBC statement (not the full sth ref) for last_insert_id fallback.
             // Storing sthRef here would create a circular reference (dbh.sth → sth, sth.Database → dbh)
@@ -1166,7 +1184,7 @@ public class DBI extends PerlModuleBase {
 
             // Create statement handle for results
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = metadataStatementReference(sth);
             return sthRef.getList();
         }, dbh, "table_info");
     }
@@ -1199,7 +1217,7 @@ public class DBI extends PerlModuleBase {
             ResultSet rs = metaData.getColumns(catalog, schema, table, column);
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = metadataStatementReference(sth);
             return sthRef.getList();
         }, dbh, "column_info");
     }
@@ -1288,7 +1306,7 @@ public class DBI extends PerlModuleBase {
         result.put("has_resultset", scalarTrue);
         sth.put("execute_result", result.createReference());
 
-        RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
+        RuntimeScalar sthRef = metadataStatementReference(sth);
         return sthRef.getList();
     }
 
@@ -1338,7 +1356,7 @@ public class DBI extends PerlModuleBase {
             ResultSet rs = metaData.getPrimaryKeys(catalog, schema, table);
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = metadataStatementReference(sth);
             return sthRef.getList();
         }, dbh, "primary_key_info");
     }
@@ -1398,7 +1416,7 @@ public class DBI extends PerlModuleBase {
                     fkCatalog, fkSchema, fkTable);
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = metadataStatementReference(sth);
             return sthRef.getList();
         }, dbh, "foreign_key_info");
     }
@@ -1412,7 +1430,7 @@ public class DBI extends PerlModuleBase {
             ResultSet rs = metaData.getTypeInfo();
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = metadataStatementReference(sth);
             return sthRef.getList();
         }, dbh, "type_info");
     }
@@ -1466,6 +1484,22 @@ public class DBI extends PerlModuleBase {
 
         // Bless into DBI so method calls like $sth->fetchrow_hashref() work
         return sth;
+    }
+
+    /**
+     * Build a metadata statement handle with a weak parent reference.
+     * DBI metadata statements outlive the Perl DBH wrapper while their JDBC
+     * result set remains usable. The ordinary DBI::prepare wrapper applies
+     * this weakening in Perl; metadata methods return Java-created handles
+     * directly and must do it here after tracked slots have been registered.
+     */
+    private static RuntimeScalar metadataStatementReference(RuntimeHash sth) {
+        RuntimeScalar statementRef = sth.createReferenceWithTrackedElements();
+        RuntimeScalar databaseRef = sth.get("Database");
+        if (databaseRef != null && RuntimeScalarType.isReference(databaseRef)) {
+            WeakRefRegistry.weaken(databaseRef);
+        }
+        return ReferenceOperators.bless(statementRef, new RuntimeScalar("DBI::st"));
     }
 
     public static RuntimeList ping(RuntimeArray args, int ctx) {
