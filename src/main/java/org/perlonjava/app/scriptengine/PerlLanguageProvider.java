@@ -321,6 +321,10 @@ public class PerlLanguageProvider {
             // fire at the end of parsing, before top-level runtime statements.
             BHooksEndOfScope.beginFileLoad(ctx.compilerOptions.fileName);
         }
+        // A file required while a BEGIN/use callback is active gets its own
+        // compile-time pragma target. Without this boundary, use strict inside
+        // the nested file can copy strict-vars into the caller's source scope.
+        SpecialBlockParser.pushCompileTimeMutationScope(ctx.symbolTable);
         try {
             try {
                 ast = parser.parse(); // Generate the abstract syntax tree (AST)
@@ -357,6 +361,7 @@ public class PerlLanguageProvider {
             if (isTopLevelScript) {
                 CallerStack.pop();
             }
+            SpecialBlockParser.popCompileTimeMutationScope();
         }
 
         // BEGIN blocks can enable the Perl debugger by setting $^P.  This is

@@ -72,6 +72,28 @@ public class SpecialBlockParser {
         return scopes.isEmpty() ? symbolTable : scopes.peek();
     }
 
+    /**
+     * Establish the symbol table owned by a compilation unit as the target for
+     * compile-time pragma mutations. Nested files can be compiled while an
+     * enclosing BEGIN/use callback is active; their pragmas must stay in the
+     * nested file instead of propagating into the caller's compilation.
+     */
+    public static void pushCompileTimeMutationScope(ScopedSymbolTable scope) {
+        compileTimeMutationScopes.get().push(scope);
+    }
+
+    /** Remove the compilation-unit boundary established by {@link #pushCompileTimeMutationScope}. */
+    public static void popCompileTimeMutationScope() {
+        Deque<ScopedSymbolTable> scopes = compileTimeMutationScopes.get();
+        if (scopes.isEmpty()) {
+            throw new IllegalStateException("No compile-time mutation scope to pop");
+        }
+        scopes.pop();
+        if (scopes.isEmpty()) {
+            compileTimeMutationScopes.remove();
+        }
+    }
+
     public static void setCurrentScope(ScopedSymbolTable st) {
         symbolTable = st;
     }
