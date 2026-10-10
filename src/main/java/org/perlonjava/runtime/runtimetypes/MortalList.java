@@ -1134,6 +1134,7 @@ public class MortalList {
                 state.deferCaptureReachabilityToBoundarySweep;
         state.deferCaptureReachabilityToBoundarySweep =
                 previousCaptureSweepDeferral || canDeferCapturedTargetCheckToBoundarySweep(state);
+        state.reachabilityDrainDepth++;
         try {
             int pendingIdx = pendingStartIdx;
             int tiedReleaseIdx = tiedReleaseStartIdx;
@@ -1159,6 +1160,7 @@ public class MortalList {
                 }
             }
         } finally {
+            state.reachabilityDrainDepth--;
             state.deferCaptureReachabilityToBoundarySweep = previousCaptureSweepDeferral;
         }
     }
@@ -1423,6 +1425,29 @@ public class MortalList {
             state.fullRootSnapshot = ReachabilityWalker.reachableFromRootsSnapshotWithStatus();
         }
         return state.fullRootSnapshot.isReachable(base);
+    }
+
+    /**
+     * Check an owner scalar through its containing aggregate using the shared
+     * drain snapshot. Owner scalars nested below package roots are otherwise
+     * verified by a separate full root walk for every deferred referent.
+     */
+    static boolean isScalarReachableThroughRootedContainer(RuntimeScalar scalar) {
+        LifecycleRuntimeState state = state();
+        if ((!state.flushing && state.reachabilityDrainDepth == 0)
+                || scalar == null || WeakRefRegistry.isweak(scalar)) {
+            return false;
+        }
+        RuntimeBase container = scalar.containerOwner;
+        boolean containsScalar;
+        if (container instanceof RuntimeHash hash) {
+            containsScalar = hash.elements.containsValue(scalar);
+        } else if (container instanceof RuntimeArray array) {
+            containsScalar = array.elements.contains(scalar);
+        } else {
+            containsScalar = false;
+        }
+        return containsScalar && isReachableFromFullRootSnapshot(container);
     }
 
     static void invalidateLiveRootSnapshot() {
@@ -1798,6 +1823,7 @@ public class MortalList {
         LifecycleRuntimeState state = state();
         if (startIdx >= state.pending.size()) return;
         invalidateDrainReachabilityCaches();
+        state.reachabilityDrainDepth++;
         // Loop because DESTROY may add further entries
         int i = startIdx;
         try {
@@ -1808,6 +1834,7 @@ public class MortalList {
                 i++;
             }
         } finally {
+            state.reachabilityDrainDepth--;
             invalidateDrainReachabilityCaches();
         }
         // Truncate the pending list back to startIdx to mark these entries

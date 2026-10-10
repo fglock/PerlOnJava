@@ -118,6 +118,8 @@ priorities and future plans.
 - Release weakly observed objects after their exited, unreachable closure pads
   stop owning them.
 - Make strict test runs fail when a child process exits nonzero after complete TAP.
+- Reuse one root snapshot when validating deferred owner scalars in a cleanup
+  drain, avoiding repeated Catalyst-scale reachability walks (#1642).
 - Preserve Unix executable permissions when extracting ZIP archive entries.
 - Accept Perl's valid `\@;@` prototype without an `illegalproto` warning.
 - Match current blead's fatal checks for differing in-scope `use VERSION`

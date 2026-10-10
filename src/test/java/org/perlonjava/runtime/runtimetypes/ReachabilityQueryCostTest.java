@@ -132,4 +132,56 @@ class ReachabilityQueryCostTest {
             }
         }
     }
+
+    @Test
+    void deferredOwnerChecksShareOneRootSnapshotPerDrain() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray global = new RuntimeArray();
+            RuntimeArray nestedOwners = new RuntimeArray();
+            global.elements.add(nestedOwners.createReference());
+            for (int i = 0; i < 256; i++) {
+                global.elements.add(new RuntimeHash().createReference());
+            }
+            String globalName = "ReachabilityQueryCostTest::nestedOwnerGlobal";
+            GlobalVariable.globalArrays.put(globalName, global);
+
+            try {
+                MortalList.pushMark();
+                RuntimeHash[] targets = new RuntimeHash[3];
+                for (int i = 0; i < targets.length; i++) {
+                    RuntimeHash target = new RuntimeHash();
+                    target.activateOwnerTracking();
+                    RuntimeScalar owner = target.createAnonymousReference();
+                    RuntimeScalar.incrementRefCountForContainerStore(owner);
+                    nestedOwners.elements.add(owner);
+                    RuntimeScalar weak = target.createAnonymousReference();
+                    WeakRefRegistry.weaken(weak);
+                    targets[i] = target;
+                    MortalList.deferDecrement(target);
+                }
+
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    MortalList.popAndFlush();
+
+                    ReachabilityQueryStats stats = measurement.stats();
+                    assertEquals(3, stats.deferredBasesProcessed);
+                    assertEquals(3, stats.scalarReachabilityQueries,
+                            "each deferred referent still validates its counted owner");
+                    assertEquals(0, stats.scalarReachabilityRootWalks,
+                            "owner scalars below one package root reuse the drain snapshot");
+                    assertEquals(1, stats.snapshotsBuilt,
+                            "the first nested owner builds one snapshot for the whole drain");
+                    for (RuntimeHash target : targets) {
+                        assertEquals(1, target.refCount,
+                                "a strong package-root path preserves the weak target");
+                    }
+                }
+            } finally {
+                GlobalVariable.globalArrays.remove(globalName);
+                MortalList.invalidateAllRootSnapshots();
+            }
+        }
+    }
 }

@@ -1350,6 +1350,8 @@ public class ReachabilityWalker {
      */
     public static boolean isScalarReachable(RuntimeScalar target) {
         if (target == null) return false;
+        ReachabilityQueryStats stats = MortalList.activeReachabilityQueryStats();
+        if (stats != null) stats.scalarReachabilityQueries++;
 
         // Most calls come from reference assignment's weak-owner guard. Avoid
         // rebuilding and traversing the complete package-root graph when the
@@ -1376,6 +1378,10 @@ public class ReachabilityWalker {
                     || GlobalVariable.globalCodeRefs.containsValue(target))) {
             return true;
         }
+        if (MortalList.isScalarReachableThroughRootedContainer(target)) {
+            return true;
+        }
+        if (stats != null) stats.scalarReachabilityRootWalks++;
         final int MAX_VISITS = 50_000;
 
         Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());

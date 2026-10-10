@@ -40,6 +40,7 @@ final class LifecycleRuntimeState {
     final ArrayList<Integer> tiedReleaseMarks = new ArrayList<>();
     final ArrayList<Integer> ioReleaseMarks = new ArrayList<>();
     boolean flushing;
+    int reachabilityDrainDepth;
     int topLevelFlushDepth;
     // Start within the configured quiet-sweep throttle window. A zero value
     // would trigger a full root walk at the first statement boundary, often
@@ -118,6 +119,7 @@ final class LifecycleRuntimeState {
         tiedReleaseMarks.clear();
         ioReleaseMarks.clear();
         flushing = false;
+        reachabilityDrainDepth = 0;
         topLevelFlushDepth = 0;
         lastAutoSweepNanos = System.nanoTime();
         inAutoSweep = false;
