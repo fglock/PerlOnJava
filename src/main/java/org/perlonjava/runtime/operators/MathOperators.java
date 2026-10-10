@@ -1302,8 +1302,10 @@ public class MathOperators {
             throw new PerlCompilerException("Illegal modulus zero");
         }
 
-        // `use integer` keeps the native remainder sign (the dividend),
-        // unlike Perl's ordinary `%`, whose result follows the divisor.
+        // `use integer` follows the signed integer remainder operation: the
+        // result has the dividend's sign.  The regular `%` operator adjusts
+        // the remainder to the divisor's sign, which is a different Perl
+        // behavior for negative divisors.
         return integerResult(dividend.remainder(divisor));
     }
 

@@ -6,22 +6,26 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve the caller's `DATA` handle when a compile-time required module ends with `__END__` (#1244).
+- Bound captured subprocess output while continuing to drain child streams, and report output-reader errors (#1723).
 - Match Perl's dividend-sign remainder for `%` under `use integer`.
 - Preserve default prototype warnings when compile-time code locally sets `$^W` to false.
 - Keep eval-created regex callback captures alive while their `qr//` values remain in scope.
 - Avoid false experimental `@_` warnings for ordinary named calls inside signatured subroutines (#1422).
 - Respect lexical `syntax::prototype` warning controls for prototype mismatch
-  diagnostics, including Math::Complex's intentional overrides (#1655).
+  diagnostics while preserving default-enabled prototype warnings under
+  `local $^W = 0`, including Math::Complex's intentional overrides (#1655).
 - Support legacy Object::Pad `has` declarations and scalar `:accessor` fields
   with generated read/write methods (#1177).
 - Keep `IO::Select` process pipe handles registered while polling, so gzip
   filters and similar child processes receive input and drain output without
   hanging (#1597).
-- Match Perl's truncation toward zero for negative division under `use integer`, fixing DateTime subtraction across midnight by one nanosecond (#1720).
+- Match Perl's signed remainder and truncation toward zero for negative arithmetic under `use integer`, fixing `op/int.t` and DateTime subtraction across midnight by one nanosecond (#1720).
 - Keep `use strict` inside a module loaded during `BEGIN` or `use_ok` from leaking into the caller's compilation scope (#1684).
 - Preserve a normal child exit status of 129 when reaping `IPC::Open3` processes, so `System::Command` reports it instead of treating it as SIGHUP (#1715).
 - Parse indexed scalar expressions as sort-list items rather than scalar comparators, fixing Class::MethodMaker `hash.t` under `strict vars` (#1680).
 - Suppress the `exiting` warning for a non-local `last SKIP` from `Test::More::skip()` and other callees that disable it lexically, and stop a labeled block that ends a sub from leaking an unmatched loop-control marker on the interpreter (#1482).
+- Propagate non-local `last`, `next`, and `redo` through `map` and `grep` blocks on both execution backends (#1707).
 - Parse `return` with imported subroutines followed by `map` expressions (#1584).
 - Report file-scope and enclosing `our` variables from `PadWalker::peek_our`
   on both backends, including `our` assignments in subs (#1669).

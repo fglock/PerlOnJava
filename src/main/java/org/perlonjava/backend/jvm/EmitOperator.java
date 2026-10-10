@@ -97,6 +97,14 @@ public class EmitOperator {
             );
         }
 
+        // A non-local loop-control marker can be returned by a sub called from
+        // inside a map/grep block.  The list operator must hand that marker to
+        // the enclosing Perl loop before scalar/void context conversion can
+        // treat it as an ordinary empty list.
+        if (operator.equals("map") || operator.equals("grep")) {
+            EmitSubroutine.emitTaggedControlFlowHandling(emitterVisitor);
+        }
+
         // Handle context
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             handleVoidContext(emitterVisitor);
