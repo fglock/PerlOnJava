@@ -30,6 +30,8 @@ final class LifecycleRuntimeState {
     final ArrayList<RuntimeScalar> pendingIoReleases = new ArrayList<>();
     final ArrayList<RuntimeScalar> deferredCaptures = new ArrayList<>();
     final IdentityHashMap<RuntimeScalar, Integer> deferredCapturesSet = new IdentityHashMap<>();
+    final Set<RuntimeScalar> deferredScopeExitCaptureCandidates =
+            Collections.newSetFromMap(new IdentityHashMap<>());
     // Strong semantic referents retained by explicit Perl owner slots. Counts
     // are per referent because several independent pad slots can own one base.
     final IdentityHashMap<RuntimeBase, Integer> positiveOwnerReferents = new IdentityHashMap<>();
@@ -109,6 +111,7 @@ final class LifecycleRuntimeState {
         pendingIoReleases.clear();
         deferredCaptures.clear();
         deferredCapturesSet.clear();
+        deferredScopeExitCaptureCandidates.clear();
         synchronized (this) {
             positiveOwnerReferents.clear();
         }

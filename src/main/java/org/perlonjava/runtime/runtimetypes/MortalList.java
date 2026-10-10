@@ -303,9 +303,74 @@ public class MortalList {
         markBoundaryWork(state);
         state.deferredCaptures.add(scalar);
         state.deferredCapturesSet.merge(scalar, 1, Integer::sum);
+        noteDeferredScopeExitCaptureCandidate(state, scalar);
         if (scalar.captureCount == 0 && scalar.scopeExited) {
             state.deferredCapturesMayBeReady = true;
         }
+    }
+
+    public static void noteDeferredScopeExitCaptureCandidate(RuntimeScalar scalar) {
+        if (scalar == null || !scalar.scopeExited
+                || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                || !(scalar.value instanceof RuntimeBase base)
+                || !isDeferredScopeExitCandidate(base)) return;
+        noteDeferredScopeExitCaptureCandidate(state(), scalar);
+    }
+
+    private static void noteDeferredScopeExitCaptureCandidate(
+            LifecycleRuntimeState state, RuntimeScalar scalar) {
+        if (scalar.value instanceof RuntimeBase base && isDeferredScopeExitCandidate(base)) {
+            state.deferredScopeExitCaptureCandidates.add(scalar);
+        }
+    }
+
+    private static boolean isDeferredScopeExitCandidate(RuntimeBase base) {
+        if (base == null || base.blessId == 0) return false;
+        if (WeakRefRegistry.hasWeakRefsTo(base)) return true;
+        String className = NameNormalizer.getBlessStr(base.blessId);
+        return className != null && DestroyDispatch.classHasDestroy(base.blessId, className);
+    }
+
+    /**
+     * Release eval STRING over-captures whose declaring scope just exited and
+     * which cannot be reached by live code or an END block. Reachability sweeps
+     * also perform this check, but waiting for their cadence can keep request
+     * objects alive across unrelated calls (and defer their cleanup until
+     * global destruction).
+     */
+    private static void processUnreachableScopeExitCaptureCandidates(
+            LifecycleRuntimeState state) {
+        if (state.deferredScopeExitCaptureCandidates.isEmpty()) return;
+
+        Set<RuntimeBase> endReachable = ReachabilityWalker.walkEndBlockRoots();
+        Set<RuntimeBase> cycleProtected = ReachabilityWalker.strongCycleProtectedReferents();
+        boolean found = false;
+        for (RuntimeScalar scalar : new ArrayList<>(state.deferredScopeExitCaptureCandidates)) {
+            if (!scalar.scopeExited) continue;
+            RuntimeBase base = scalar.value instanceof RuntimeBase value ? value : null;
+            boolean scalarReachable = ReachabilityWalker.isScalarReachable(scalar);
+            boolean retained = endReachable.contains(scalar)
+                    || (base != null && endReachable.contains(base))
+                    || (base != null && cycleProtected.contains(base))
+                    || scalarReachable;
+            if (retained) continue;
+
+            scalar.releaseUnreachableSemanticCaptureOwner();
+            Integer deferredCount = state.deferredCapturesSet.get(scalar);
+            if (deferredCount != null) {
+                for (int i = state.deferredCaptures.size() - 1; i >= 0; i--) {
+                    if (state.deferredCaptures.get(i) != scalar) continue;
+                    deferDecrementIfTracked(scalar);
+                    state.deferredCaptures.remove(i);
+                    removeFromDeferredSet(scalar);
+                }
+            } else if (base != null) {
+                requestTargetedWeakSweep(base);
+            }
+            found = true;
+        }
+        state.deferredScopeExitCaptureCandidates.clear();
+        if (found) flushAboveMark();
     }
 
     static void noteDeferredCaptureMayBeReady() {
@@ -1960,6 +2025,7 @@ public class MortalList {
         if (state.pending.isEmpty() && state.pendingTiedReleases.isEmpty()
                 && state.pendingIoReleases.isEmpty()) {
             processReadyDeferredCaptures(state);
+            processUnreachableScopeExitCaptureCandidates(state);
             maybeAutoSweepAtStatementBoundary(state, topLevel);
             refreshBoundaryWork(state);
             return;
@@ -1970,6 +2036,7 @@ public class MortalList {
         if (state.pending.size() <= mark && state.pendingTiedReleases.size() <= tiedMark
                 && state.pendingIoReleases.size() <= ioMark) {
             processReadyDeferredCaptures(state);
+            processUnreachableScopeExitCaptureCandidates(state);
             maybeAutoSweepAtStatementBoundary(state, topLevel);
             refreshBoundaryWork(state);
             return;
@@ -1998,6 +2065,7 @@ public class MortalList {
             invalidateDrainReachabilityCaches();
         }
         processReadyDeferredCaptures(state);
+        processUnreachableScopeExitCaptureCandidates(state);
         maybeAutoSweepAtStatementBoundary(state, topLevel);
         refreshBoundaryWork(state);
     }
@@ -2030,6 +2098,7 @@ public class MortalList {
             // that may have become ready (captureCount reached 0) during
             // scope cleanup.
             processReadyDeferredCaptures(state);
+            processUnreachableScopeExitCaptureCandidates(state);
             maybeSweepStatementBoundaryDestroyables();
             maybeAutoSweepIfRequested(state);
             finalizeDeferredCaptureSweepCandidates(state);
@@ -2055,6 +2124,7 @@ public class MortalList {
         // After processing mortals (which may have triggered releaseCaptures
         // via callDestroy), check if any deferred captures are now ready.
         processReadyDeferredCaptures(state);
+        processUnreachableScopeExitCaptureCandidates(state);
         maybeSweepStatementBoundaryDestroyables();
         maybeAutoSweepIfRequested(state);
         finalizeDeferredCaptureSweepCandidates(state);

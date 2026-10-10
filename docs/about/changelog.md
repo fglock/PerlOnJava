@@ -24,6 +24,10 @@ priorities and future plans.
   on both backends, including `our` assignments in subs (#1669).
 - Report `ref()` of a reference to a read-only scalar as `SCALAR`, or `REF`
   when the scalar holds a reference.
+- Preserve regex references when dereferencing a scalar that contains `qr//`, so
+  object dumpers can traverse regex-bearing values.
+- Release unreachable captured objects with `DESTROY` at scope boundaries, so
+  request resources are cleaned up promptly.
 - Report `ref($Pkg::{name})` as `""` for a constant sub or a forward declaration
   outside `main::`, matching blead; constant.pm proxies stay `SCALAR`.
 - Report the call-site package in `caller()` for code compiled by eval STRING
