@@ -14,6 +14,7 @@ priorities and future plans.
 - Keep `IO::Select` process pipe handles registered while polling, so gzip
   filters and similar child processes receive input and drain output without
   hanging (#1597).
+- Match Perl's truncation toward zero for negative division under `use integer`, fixing DateTime subtraction across midnight by one nanosecond (#1720).
 - Keep `use strict` inside a module loaded during `BEGIN` or `use_ok` from leaking into the caller's compilation scope (#1684).
 - Preserve a normal child exit status of 129 when reaping `IPC::Open3` processes, so `System::Command` reports it instead of treating it as SIGHUP (#1715).
 - Parse indexed scalar expressions as sort-list items rather than scalar comparators, fixing Class::MethodMaker `hash.t` under `strict vars` (#1680).
