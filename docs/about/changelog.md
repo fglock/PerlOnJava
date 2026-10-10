@@ -8,6 +8,9 @@ priorities and future plans.
 
 - Preserve the caller's `DATA` handle when a compile-time required module ends with `__END__` (#1244).
 - Bound captured subprocess output while continuing to drain child streams, and report output-reader errors (#1723).
+- Match Perl's dividend-sign remainder for `%` under `use integer`.
+- Preserve default prototype warnings when compile-time code locally sets `$^W` to false.
+- Keep eval-created regex callback captures alive while their `qr//` values remain in scope.
 - Avoid false experimental `@_` warnings for ordinary named calls inside signatured subroutines (#1422).
 - Respect lexical `syntax::prototype` warning controls for prototype mismatch
   diagnostics while preserving default-enabled prototype warnings under
