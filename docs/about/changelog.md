@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Avoid false experimental `@_` warnings for ordinary named calls inside signatured subroutines (#1422).
 - Respect lexical `syntax::prototype` warning controls for prototype mismatch
   diagnostics, including Math::Complex's intentional overrides (#1655).
 - Support legacy Object::Pad `has` declarations and scalar `:accessor` fields
