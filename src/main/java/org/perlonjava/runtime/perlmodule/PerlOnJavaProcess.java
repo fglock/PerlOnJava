@@ -9,11 +9,8 @@ import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -22,6 +19,7 @@ import java.util.concurrent.TimeUnit;
 
 /** JVM-backed argv-safe process execution for PerlOnJava tooling. */
 public class PerlOnJavaProcess extends PerlModuleBase {
+    static final int MAX_CAPTURE_BYTES_PER_STREAM = 1024 * 1024;
 
     public PerlOnJavaProcess() {
         super("PerlOnJava::Process", false);
@@ -51,8 +49,8 @@ public class PerlOnJavaProcess extends PerlModuleBase {
 
         RuntimeHash result = new RuntimeHash();
         Process process = null;
-        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
-        ByteArrayOutputStream stderr = new ByteArrayOutputStream();
+        ProcessOutputCapture stdout = new ProcessOutputCapture(MAX_CAPTURE_BYTES_PER_STREAM);
+        ProcessOutputCapture stderr = new ProcessOutputCapture(MAX_CAPTURE_BYTES_PER_STREAM);
         Thread stdoutReader = null;
         Thread stderrReader = null;
         boolean timedOut = false;
@@ -73,13 +71,17 @@ public class PerlOnJavaProcess extends PerlModuleBase {
             PerlRuntime runtime = PerlRuntime.current();
             stdoutReader = new Thread(() -> {
                 try (PerlRuntime.Binding ignored = runtime.bind()) {
-                    copyOutput(activeProcess.getInputStream(), stdout, tee, false);
+                    stdout.copy(activeProcess.getInputStream(), tee
+                            ? (buffer, length) -> SystemOperator.writeToPerlStdoutBytes(buffer, length)
+                            : null);
                 }
             },
                 "perlonjava-process-stdout");
             stderrReader = new Thread(() -> {
                 try (PerlRuntime.Binding ignored = runtime.bind()) {
-                    copyOutput(activeProcess.getErrorStream(), stderr, tee, true);
+                    stderr.copy(activeProcess.getErrorStream(), tee
+                            ? (buffer, length) -> SystemOperator.writeToPerlStderrBytes(buffer, length)
+                            : null);
                 }
             },
                 "perlonjava-process-stderr");
@@ -111,8 +113,10 @@ public class PerlOnJavaProcess extends PerlModuleBase {
             joinReader(stderrReader);
         }
 
-        String stdoutText = stdout.toString(StandardCharsets.UTF_8);
-        String stderrText = stderr.toString(StandardCharsets.UTF_8);
+        String stdoutText = stdout.text();
+        String stderrText = stderr.text();
+        if (!stdout.error().isEmpty()) error = appendError(error, "stdout reader: " + stdout.error());
+        if (!stderr.error().isEmpty()) error = appendError(error, "stderr reader: " + stderr.error());
         result.put("exit_code", new RuntimeScalar(exitCode));
         result.put("stdout", new RuntimeScalar(stdoutText));
         result.put("stderr", new RuntimeScalar(stderrText));
@@ -121,7 +125,13 @@ public class PerlOnJavaProcess extends PerlModuleBase {
         result.put("output", new RuntimeScalar(stdoutText + stderrText));
         result.put("timed_out", new RuntimeScalar(timedOut ? 1 : 0));
         result.put("error", new RuntimeScalar(error));
+        result.put("output_truncated", new RuntimeScalar(
+                stdout.truncated() || stderr.truncated() ? 1 : 0));
         return result.createReference().getList();
+    }
+
+    private static String appendError(String current, String additional) {
+        return current.isEmpty() ? additional : current + "; " + additional;
     }
 
     static List<String> resolveChildCommand(List<String> argv) {
@@ -152,28 +162,6 @@ public class PerlOnJavaProcess extends PerlModuleBase {
         for (Map.Entry<String, RuntimeScalar> entry
                 : GlobalVariable.getGlobalHash("main::ENV").elements.entrySet()) {
             environment.put(entry.getKey(), entry.getValue().toString());
-        }
-    }
-
-    private static void copyOutput(InputStream input, ByteArrayOutputStream output,
-            boolean tee, boolean errorStream) {
-        try (input) {
-            byte[] buffer = new byte[8192];
-            int read;
-            while ((read = input.read(buffer)) != -1) {
-                synchronized (output) {
-                    output.write(buffer, 0, read);
-                }
-                if (tee) {
-                    if (errorStream) {
-                        SystemOperator.writeToPerlStderrBytes(buffer, read);
-                    } else {
-                        SystemOperator.writeToPerlStdoutBytes(buffer, read);
-                    }
-                }
-            }
-        } catch (IOException ignored) {
-            // Process termination closes the stream.
         }
     }
 
