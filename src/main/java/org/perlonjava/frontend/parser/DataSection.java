@@ -368,11 +368,15 @@ public class DataSection {
         }
 
         if (token.text.equals("__DATA__") || token.text.equals("__END__")) {
-            state.processedPackages.add(handleName);
-
             // __END__ should always stop parsing, but only top-level scripts (and __DATA__) should
             // populate the DATA handle content.
             boolean populateData = token.text.equals("__DATA__") || parser.isTopLevelScript;
+            // A required file's __END__ only terminates that file. Its parser can still be in
+            // the caller's package when the marker is reached, so recording that package here
+            // would make the caller's later __DATA__ look like it had already been processed.
+            if (populateData) {
+                state.processedPackages.add(handleName);
+            }
 
             tokenIndex++;
 
