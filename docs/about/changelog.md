@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Bound captured subprocess output while continuing to drain child streams, and report output-reader errors (#1723).
 - Avoid false experimental `@_` warnings for ordinary named calls inside signatured subroutines (#1422).
 - Respect lexical `syntax::prototype` warning controls for prototype mismatch
   diagnostics, including Math::Complex's intentional overrides (#1655).
