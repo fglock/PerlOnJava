@@ -2895,6 +2895,11 @@ public class ReachabilityWalker {
             if (referent == null || referent.currentlyDestroying) {
                 continue;
             }
+            // Native closure-pad slots are explicit Perl owners, even when the
+            // conservative root walk cannot see the generated closure fields.
+            // Match sweepWeakRefs() above: a targeted release of another edge
+            // must not destroy an aggregate still captured by a live closure.
+            if (referent.hasSemanticCaptureOwner()) continue;
             // A targeted release only means that one explicit owner went
             // away. Other counted owners can still hold the referent through
             // local aggregate slots that are not represented in the lexical

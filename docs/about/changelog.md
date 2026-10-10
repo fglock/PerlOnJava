@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Load the `Errno` Perl bootstrap when `use Errno` follows `%!` access, and
+  preserve captured aggregate caches during targeted weak-reference sweeps so
+  Pod::HtmlEasy can import errno constants and load its regex patterns (#1662).
 - Preserve the caller's `DATA` handle when a compile-time required module ends with `__END__` (#1244).
 - Bound captured subprocess output while continuing to drain child streams, and report output-reader errors (#1723).
 - Match Perl's dividend-sign remainder for `%` under `use integer`.
