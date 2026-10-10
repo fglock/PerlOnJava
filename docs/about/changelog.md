@@ -22,12 +22,17 @@ priorities and future plans.
 - Preserve a normal child exit status of 129 when reaping `IPC::Open3` processes, so `System::Command` reports it instead of treating it as SIGHUP (#1715).
 - Parse indexed scalar expressions as sort-list items rather than scalar comparators, fixing Class::MethodMaker `hash.t` under `strict vars` (#1680).
 - Suppress the `exiting` warning for a non-local `last SKIP` from `Test::More::skip()` and other callees that disable it lexically, and stop a labeled block that ends a sub from leaking an unmatched loop-control marker on the interpreter (#1482).
+- Propagate non-local `last`, `next`, and `redo` through `map` and `grep` blocks on both execution backends (#1707).
 - Return an empty list when a non-local `last LABEL` exits a labeled block at the end of a subroutine on the JVM (#1708).
 - Parse `return` with imported subroutines followed by `map` expressions (#1584).
 - Report file-scope and enclosing `our` variables from `PadWalker::peek_our`
   on both backends, including `our` assignments in subs (#1669).
 - Report `ref()` of a reference to a read-only scalar as `SCALAR`, or `REF`
   when the scalar holds a reference.
+- Preserve regex references when dereferencing a scalar that contains `qr//`, so
+  object dumpers can traverse regex-bearing values.
+- Release unreachable captured objects with `DESTROY` at scope boundaries, so
+  request resources are cleaned up promptly.
 - Report `ref($Pkg::{name})` as `""` for a constant sub or a forward declaration
   outside `main::`, matching blead; constant.pm proxies stay `SCALAR`.
 - Report the call-site package in `caller()` for code compiled by eval STRING
@@ -122,6 +127,8 @@ priorities and future plans.
 - Release weakly observed objects after their exited, unreachable closure pads
   stop owning them.
 - Make strict test runs fail when a child process exits nonzero after complete TAP.
+- Reuse one root snapshot when validating deferred owner scalars in a cleanup
+  drain, avoiding repeated Catalyst-scale reachability walks (#1642).
 - Preserve Unix executable permissions when extracting ZIP archive entries.
 - Accept Perl's valid `\@;@` prototype without an `illegalproto` warning.
 - Match current blead's fatal checks for differing in-scope `use VERSION`

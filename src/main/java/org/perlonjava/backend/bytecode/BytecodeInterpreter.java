@@ -286,6 +286,55 @@ public class BytecodeInterpreter {
         return !switchContinueBoundary && flow.matchesLabel(blockLabel);
     }
 
+    /**
+     * Dispatches loop-control markers returned by map/grep in the current
+     * interpreted frame.  Returns the target PC, or {@code -1} when this frame
+     * does not own the target and the marker must propagate to its caller.
+     */
+    private static int dispatchListOperatorLoopControl(
+            RuntimeControlFlowList flow, InterpretedCode code, int context, int resultReg,
+            RuntimeBase[] registers, ArrayList<int[]> controlBlockStack,
+            ArrayList<int[]> labeledBlockStack) {
+        if (flow.getControlFlowType() != ControlFlowType.LAST
+                && flow.getControlFlowType() != ControlFlowType.NEXT
+                && flow.getControlFlowType() != ControlFlowType.REDO) {
+            return -1;
+        }
+
+        for (int i = controlBlockStack.size() - 1; i >= 0; i--) {
+            int[] entry = controlBlockStack.get(i);
+            String blockLabel = code.stringPool[entry[0]];
+            if (matchesInterpreterControlBlock(flow, blockLabel)) {
+                while (controlBlockStack.size() > i + 1) {
+                    controlBlockStack.removeLast();
+                }
+                int targetPc = switch (flow.getControlFlowType()) {
+                    case LAST -> entry[1];
+                    case NEXT -> entry[2];
+                    case REDO -> entry[3];
+                    default -> -1;
+                };
+                if (targetPc >= 0) {
+                    registers[resultReg] = consumedLoopControlResult(context);
+                    return targetPc;
+                }
+            }
+        }
+
+        for (int i = labeledBlockStack.size() - 1; i >= 0; i--) {
+            int[] entry = labeledBlockStack.get(i);
+            String blockLabel = code.stringPool[entry[0]];
+            if (matchesInterpreterControlBlock(flow, blockLabel)) {
+                while (labeledBlockStack.size() > i) {
+                    labeledBlockStack.removeLast();
+                }
+                registers[resultReg] = consumedLoopControlResult(context);
+                return entry[1];
+            }
+        }
+        return -1;
+    }
+
     private static RuntimeList execute(SuspendedInterpreterFrame frame) {
         InterpretedCode code = frame.code;
         int callContext = frame.callContext;
@@ -2988,11 +3037,35 @@ public class BytecodeInterpreter {
                             }
 
                             case Opcodes.MAP -> {
+                                int resultReg = bytecode[pc];
+                                int context = bytecode[pc + 3];
+                                if (context == RuntimeContextType.RUNTIME) {
+                                    context = ((RuntimeScalar) registers[2]).getInt();
+                                }
                                 pc = InlineOpcodeHandler.executeMap(bytecode, pc, registers);
+                                if (registers[resultReg] instanceof RuntimeControlFlowList flow) {
+                                    int targetPc = dispatchListOperatorLoopControl(flow, code, context,
+                                            resultReg, registers, controlBlockStack,
+                                            labeledBlockStack);
+                                    if (targetPc < 0) return flow;
+                                    pc = targetPc;
+                                }
                             }
 
                             case Opcodes.GREP -> {
+                                int resultReg = bytecode[pc];
+                                int context = bytecode[pc + 3];
+                                if (context == RuntimeContextType.RUNTIME) {
+                                    context = ((RuntimeScalar) registers[2]).getInt();
+                                }
                                 pc = InlineOpcodeHandler.executeGrep(bytecode, pc, registers);
+                                if (registers[resultReg] instanceof RuntimeControlFlowList flow) {
+                                    int targetPc = dispatchListOperatorLoopControl(flow, code, context,
+                                            resultReg, registers, controlBlockStack,
+                                            labeledBlockStack);
+                                    if (targetPc < 0) return flow;
+                                    pc = targetPc;
+                                }
                             }
 
                             case Opcodes.SORT -> {

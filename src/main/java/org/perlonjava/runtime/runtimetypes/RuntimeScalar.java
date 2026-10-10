@@ -3706,8 +3706,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     int regexBlessId = referent.blessId != 0 ? referent.blessId
                             : this.blessId != 0 ? this.blessId
                             : blessedId(this) != 0 ? blessedId(this) : regex.blessId;
-                    if (regexBlessId != 0) regex.setBlessId(regexBlessId);
-                    yield new RegexScalarLvalue(regex, regexBlessId).propagateTaint(referent);
+                    if (regexBlessId != 0) {
+                        regex.setBlessId(regexBlessId);
+                        yield new RegexScalarLvalue(regex, regexBlessId).propagateTaint(referent);
+                    }
                 }
                 yield referent;
             }
@@ -4820,6 +4822,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // Mark that this variable's scope has exited. When releaseCaptures
             // later decrements captureCount to 0, it will know the scope is gone.
             scalar.scopeExited = true;
+            if (scalar.type != RuntimeScalarType.CODE) {
+                MortalList.noteDeferredScopeExitCaptureCandidate(scalar);
+            }
             // For CODE refs: still decrement the VALUE's refCount so the RuntimeCode
             // is eventually destroyed and its releaseCaptures fires (decrementing
             // captureCount on all the variables IT captured). This is critical for

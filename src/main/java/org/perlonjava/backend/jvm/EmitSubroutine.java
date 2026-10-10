@@ -1633,7 +1633,7 @@ public class EmitSubroutine {
     }
 
     /** Emits the ordinary tagged-return dispatcher for a result on the stack. */
-    private static void emitTaggedControlFlowHandling(EmitterVisitor emitterVisitor) {
+    static void emitTaggedControlFlowHandling(EmitterVisitor emitterVisitor) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         if (!ENABLE_CONTROL_FLOW_CHECKS
                 || emitterVisitor.ctx.javaClassInfo.returnLabel == null

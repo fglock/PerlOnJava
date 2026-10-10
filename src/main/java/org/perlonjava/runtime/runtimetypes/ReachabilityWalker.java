@@ -1,5 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.runtime.regex.RuntimeRegex;
+
 import java.util.ArrayList;
 import java.util.AbstractSet;
 import java.util.Collections;
@@ -399,6 +401,12 @@ public class ReachabilityWalker {
                     for (RuntimeBase aggregate : code.capturedAggregates) {
                         addReachable(aggregate, todo);
                     }
+                }
+            } else if (cur instanceof RuntimeRegex regex) {
+                for (RuntimeCode callback : regex.executableCallbackCodes()) {
+                    addReachable(callback, todo);
+                    visitCodeStateVariables(callback, todo);
+                    visitCodeCaptures(callback, todo);
                 }
             } else if (cur instanceof RuntimeScalar s) {
                 visitScalar(s, todo);
@@ -940,6 +948,11 @@ public class ReachabilityWalker {
                     // capturedScalars / capturedVars metadata above.
                 }
             }
+        } else if (cur instanceof RuntimeRegex regex) {
+            for (RuntimeCode callback : regex.executableCallbackCodes()) {
+                if (callback == target) return true;
+                if (seen.add(callback)) todo.addLast(callback);
+            }
         } else if (cur instanceof RuntimeScalar s) {
             return enqueueStrongScalar(s, target, seen, todo);
         }
@@ -1350,6 +1363,8 @@ public class ReachabilityWalker {
      */
     public static boolean isScalarReachable(RuntimeScalar target) {
         if (target == null) return false;
+        ReachabilityQueryStats stats = MortalList.activeReachabilityQueryStats();
+        if (stats != null) stats.scalarReachabilityQueries++;
 
         // Most calls come from reference assignment's weak-owner guard. Avoid
         // rebuilding and traversing the complete package-root graph when the
@@ -1376,6 +1391,10 @@ public class ReachabilityWalker {
                     || GlobalVariable.globalCodeRefs.containsValue(target))) {
             return true;
         }
+        if (MortalList.isScalarReachableThroughRootedContainer(target)) {
+            return true;
+        }
+        if (stats != null) stats.scalarReachabilityRootWalks++;
         final int MAX_VISITS = 50_000;
 
         Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -1512,6 +1531,10 @@ public class ReachabilityWalker {
                         todo.addLast(base);
                     }
                 });
+            } else if (cur instanceof RuntimeRegex regex) {
+                for (RuntimeCode callback : regex.executableCallbackCodes()) {
+                    if (seen.add(callback)) todo.addLast(callback);
+                }
             }
         }
         return false;
@@ -2960,6 +2983,10 @@ public class ReachabilityWalker {
             }
         }
         return protectedSet;
+    }
+
+    static Set<RuntimeBase> strongCycleProtectedReferents() {
+        return collectStrongCycleProtected(Collections.emptySet());
     }
 
     private static void collectStrongReachable(RuntimeBase root, Set<RuntimeBase> seen) {

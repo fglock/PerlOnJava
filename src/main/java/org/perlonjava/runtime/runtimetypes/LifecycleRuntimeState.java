@@ -30,6 +30,8 @@ final class LifecycleRuntimeState {
     final ArrayList<RuntimeScalar> pendingIoReleases = new ArrayList<>();
     final ArrayList<RuntimeScalar> deferredCaptures = new ArrayList<>();
     final IdentityHashMap<RuntimeScalar, Integer> deferredCapturesSet = new IdentityHashMap<>();
+    final Set<RuntimeScalar> deferredScopeExitCaptureCandidates =
+            Collections.newSetFromMap(new IdentityHashMap<>());
     // Strong semantic referents retained by explicit Perl owner slots. Counts
     // are per referent because several independent pad slots can own one base.
     final IdentityHashMap<RuntimeBase, Integer> positiveOwnerReferents = new IdentityHashMap<>();
@@ -40,6 +42,7 @@ final class LifecycleRuntimeState {
     final ArrayList<Integer> tiedReleaseMarks = new ArrayList<>();
     final ArrayList<Integer> ioReleaseMarks = new ArrayList<>();
     boolean flushing;
+    int reachabilityDrainDepth;
     int topLevelFlushDepth;
     // Start within the configured quiet-sweep throttle window. A zero value
     // would trigger a full root walk at the first statement boundary, often
@@ -108,6 +111,7 @@ final class LifecycleRuntimeState {
         pendingIoReleases.clear();
         deferredCaptures.clear();
         deferredCapturesSet.clear();
+        deferredScopeExitCaptureCandidates.clear();
         synchronized (this) {
             positiveOwnerReferents.clear();
         }
@@ -118,6 +122,7 @@ final class LifecycleRuntimeState {
         tiedReleaseMarks.clear();
         ioReleaseMarks.clear();
         flushing = false;
+        reachabilityDrainDepth = 0;
         topLevelFlushDepth = 0;
         lastAutoSweepNanos = System.nanoTime();
         inAutoSweep = false;
