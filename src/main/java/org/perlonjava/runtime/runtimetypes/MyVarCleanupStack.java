@@ -79,6 +79,11 @@ public class MyVarCleanupStack {
         return new java.util.ArrayList<>(liveCounts().keySet());
     }
 
+    /** Snapshot registered lexical slots without requiring weak-ref tracking. */
+    public static java.util.List<Object> snapshotRegisteredVars() {
+        return new java.util.ArrayList<>(stack());
+    }
+
     /**
      * Called at subroutine entry (in {@code RuntimeCode.apply()}).
      * Returns a mark position for later {@link #popMark(int)} or

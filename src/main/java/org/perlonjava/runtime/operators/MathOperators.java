@@ -1302,7 +1302,9 @@ public class MathOperators {
             throw new PerlCompilerException("Illegal modulus zero");
         }
 
-        return modulusFromBigIntegers(dividend, divisor);
+        // `use integer` keeps the native remainder sign (the dividend),
+        // unlike Perl's ordinary `%`, whose result follows the divisor.
+        return integerResult(dividend.remainder(divisor));
     }
 
     private static RuntimeScalar modulusFromBigIntegers(BigInteger dividend, BigInteger divisor) {

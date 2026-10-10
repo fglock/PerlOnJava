@@ -571,7 +571,7 @@ public class WarnDie {
         // Perl-core helpers use `local $^W = 0` to suppress warnings while
         // deliberately probing numeric/string behavior. That dynamic override
         // takes precedence over an interpreter caller's lexical warning bits.
-        if (Warnings.isWarnFlagLocalized() && !Warnings.isWarnFlagSet()) {
+        if (Warnings.isWarnFlagLocalized() && !Warnings.isWarnFlagSet() && !enabledByDefault) {
             return new RuntimeScalar();
         }
 

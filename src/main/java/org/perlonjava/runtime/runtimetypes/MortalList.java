@@ -348,7 +348,8 @@ public class MortalList {
         for (RuntimeScalar scalar : new ArrayList<>(state.deferredScopeExitCaptureCandidates)) {
             if (!scalar.scopeExited) continue;
             RuntimeBase base = scalar.value instanceof RuntimeBase value ? value : null;
-            boolean scalarReachable = ReachabilityWalker.isScalarReachable(scalar);
+            boolean scalarReachable = ReachabilityWalker.isScalarReachable(scalar)
+                    || ReachabilityWalker.isReachableFromRoots(scalar);
             boolean retained = endReachable.contains(scalar)
                     || (base != null && endReachable.contains(base))
                     || (base != null && cycleProtected.contains(base))

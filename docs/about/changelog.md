@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Match Perl's dividend-sign remainder for `%` under `use integer`.
+- Preserve default prototype warnings when compile-time code locally sets `$^W` to false.
+- Keep eval-created regex callback captures alive while their `qr//` values remain in scope.
 - Avoid false experimental `@_` warnings for ordinary named calls inside signatured subroutines (#1422).
 - Respect lexical `syntax::prototype` warning controls for prototype mismatch
   diagnostics, including Math::Complex's intentional overrides (#1655).

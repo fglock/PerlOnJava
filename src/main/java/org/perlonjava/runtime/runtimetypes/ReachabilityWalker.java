@@ -1207,6 +1207,14 @@ public class ReachabilityWalker {
                 todo.addLast(base);
             }
         }
+        for (Object registeredVar : MyVarCleanupStack.snapshotRegisteredVars()) {
+            if (registeredVar instanceof RuntimeScalar scalar
+                    && scalar.type == RuntimeScalarType.REGEX
+                    && !scalar.scopeExited
+                    && !WeakRefRegistry.isweak(scalar)) {
+                seedTarget(scalar, null, seen, todo);
+            }
+        }
         for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
             if (seen.add(rescued)) todo.addLast(rescued);
         }
@@ -1229,6 +1237,10 @@ public class ReachabilityWalker {
             } else if (cur instanceof RuntimeArray array) {
                 for (RuntimeScalar value : array.elements) {
                     followScalar(value, null, seen, todo);
+                }
+            } else if (cur instanceof RuntimeRegex regex) {
+                for (RuntimeCode callback : regex.executableCallbackCodes()) {
+                    followGlobalCodeCaptures(callback, null, seen, todo);
                 }
             }
         }
@@ -1661,6 +1673,19 @@ public class ReachabilityWalker {
                     }
                 }
             }
+            // Live regex lexicals own executable callback captures even when
+            // weak-ref tracking has not populated the optimized live-count
+            // snapshot. Seed only regex scalars from the actual cleanup stack
+            // so callback captures remain reachable without widening ordinary
+            // lexical reachability for the refcount walk.
+            for (Object registeredVar : MyVarCleanupStack.snapshotRegisteredVars()) {
+                if (!(registeredVar instanceof RuntimeScalar scalar)
+                        || scalar.type != RuntimeScalarType.REGEX
+                        || scalar.scopeExited
+                        || WeakRefRegistry.isweak(scalar)) continue;
+                seedTarget(scalar, target, seen, todo, stats);
+                if (seen.contains(target)) return true;
+            }
         }
         // Seed: rescued objects.
         for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
@@ -1699,6 +1724,23 @@ public class ReachabilityWalker {
                 for (RuntimeScalar v : a.elements) {
                     if (stats != null) stats.edgesInspected++;
                     if (followScalar(v, target, seen, todo)) return true;
+                }
+            } else if (cur instanceof RuntimeRegex regex) {
+                // Executable regex callbacks are strong owners of their
+                // lexical captures while a qr// scalar remains live. Follow
+                // only these callback capture edges; ordinary closure edges
+                // remain opaque to this refcount reachability query.
+                for (RuntimeCode callback : regex.executableCallbackCodes()) {
+                    if (callback.capturedScalars != null) {
+                        for (RuntimeScalar captured : callback.capturedScalars) {
+                            if (captured == target) return true;
+                        }
+                    }
+                    if (callback.closedOverVariables != null
+                            && callback.closedOverVariables.containsValue(target)) {
+                        return true;
+                    }
+                    if (followGlobalCodeCaptures(callback, target, seen, todo)) return true;
                 }
             }
             // Note: we deliberately don't follow RuntimeCode.capturedScalars
