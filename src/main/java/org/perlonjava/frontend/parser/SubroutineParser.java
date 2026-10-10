@@ -1438,15 +1438,18 @@ public class SubroutineParser {
                     && op.operand == null) {
                 emitSignatureArgsWarning(parser, op.operator, node.getIndex(), true);
             }
-            if ("goto".equals(op.operator) || ("&".equals(op.operator)
-                    && !"\\".equals(parentOperator))) {
-                emitSignatureArgsWarning(parser, "goto".equals(op.operator)
-                        ? "goto" : "subroutine entry", node.getIndex());
+            if ("goto".equals(op.operator)) {
+                emitSignatureArgsWarning(parser, "goto", node.getIndex());
             }
             warnForSignatureArgs(parser, op.operand, op.operator);
             return;
         }
         if (node instanceof BinaryOperatorNode binary) {
+            if ("(".equals(binary.operator)
+                    && binary.getBooleanAnnotation("shareCallerArgs")) {
+                emitSignatureArgsWarning(parser, "subroutine entry", binary.getIndex(), true);
+                return;
+            }
             warnForSignatureArgs(parser, binary.left, binary.operator);
             warnForSignatureArgs(parser, binary.right, binary.operator);
             return;
@@ -1930,8 +1933,11 @@ public class SubroutineParser {
                 String newDisplay = prototype == null ? "none" : "(" + prototype + ")";
                 if (!prototypesMatch(oldPrototype, prototype)) {
                     String msg = "Prototype mismatch: sub " + fullName + oldDisplay + " vs " + newDisplay + location;
-                    org.perlonjava.runtime.operators.WarnDie.warn(
-                            new RuntimeScalar(msg), new RuntimeScalar(""));
+                    if (parser.ctx.symbolTable == null
+                            || !parser.ctx.symbolTable.isWarningCategoryDisabled("syntax::prototype")) {
+                        org.perlonjava.runtime.operators.WarnDie.warnWithCategoryByDefault(
+                                new RuntimeScalar(msg), new RuntimeScalar(""), "syntax::prototype");
+                    }
                 }
             }
 
