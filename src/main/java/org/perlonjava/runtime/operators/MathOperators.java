@@ -1302,7 +1302,11 @@ public class MathOperators {
             throw new PerlCompilerException("Illegal modulus zero");
         }
 
-        return modulusFromBigIntegers(dividend, divisor);
+        // `use integer` follows the signed integer remainder operation: the
+        // result has the dividend's sign.  The regular `%` operator adjusts
+        // the remainder to the divisor's sign, which is a different Perl
+        // behavior for negative divisors.
+        return integerResult(dividend.remainder(divisor));
     }
 
     private static RuntimeScalar modulusFromBigIntegers(BigInteger dividend, BigInteger divisor) {
