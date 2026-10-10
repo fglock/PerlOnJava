@@ -28,6 +28,8 @@ for my $module (@modules) {
 }
 like($tester_text, qr/'strict-exit'\s*=>\s*\\\$strict_exit/,
     'tester exposes strict exit mode');
+like($tester_text, qr/'Catalyst'\s*=>\s*7200/,
+    'Catalyst receives a two-hour test timeout');
 like($tester_text, qr/Strict target failures:/,
     'tester reports strict target failures');
 like($tester_text, qr/NOT TESTED \(already installed\/up to date\)/,
