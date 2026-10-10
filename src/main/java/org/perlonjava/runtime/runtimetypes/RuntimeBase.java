@@ -237,6 +237,16 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     /** Retain one aggregate pad capture through an explicit owner slot. */
     public PerlOwnerSlot retainClosureCaptureOwner() {
+        // A closure-pad slot is a semantic Perl owner even though it does not
+        // contribute to the legacy selective refcount. A targeted weak sweep
+        // can therefore leave an unblessed aggregate's legacy count at the
+        // destroyed sentinel while other native capture slots still own it.
+        // Reconcile that stale bridge state before adding another owner; a
+        // blessed or already-destroyed object must never be revived here.
+        if (refCount == Integer.MIN_VALUE && blessId == 0 && !destroyFired
+                && captureCount > 0 && hasSemanticCaptureOwner()) {
+            refCount = 0;
+        }
         PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
         ownerSlot.acquireCapture(this);
         retainClosureCapture();

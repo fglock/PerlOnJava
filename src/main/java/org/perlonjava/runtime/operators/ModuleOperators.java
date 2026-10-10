@@ -1067,10 +1067,20 @@ public class ModuleOperators {
                         "Attempt to reload " + fileName + " aborted.\n"
                                 + "Compilation failed in require");
             }
-            // module was already loaded successfully - always return exactly 1
-            RuntimeScalar loaded = getScalarInt(1);
-            runRequireAfterHooks(postAction, fileName);
-            return loaded;
+            // %! is implemented by ErrnoHash without running Errno.pm, so it
+            // records a lightweight "builtin" marker in %INC. A later
+            // `use Errno` still needs the Perl bootstrap to install
+            // Errno::import and the exported constant subs. Upgrade that
+            // marker by loading Errno.pm normally instead of treating it as a
+            // completed require.
+            if ("Errno.pm".equals(fileName) && "builtin".equals(incEntry.toString())) {
+                incHash.elements.remove(fileName);
+            } else {
+                // module was already loaded successfully - always return exactly 1
+                RuntimeScalar loaded = getScalarInt(1);
+                runRequireAfterHooks(postAction, fileName);
+                return loaded;
+            }
         }
 
         // Call doFile with require-specific behavior - set %INC optimistically
