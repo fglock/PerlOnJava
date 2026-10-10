@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Respect lexical `syntax::prototype` warning controls for prototype mismatch
+  diagnostics, including Math::Complex's intentional overrides (#1655).
 - Support legacy Object::Pad `has` declarations and scalar `:accessor` fields
   with generated read/write methods (#1177).
 - Keep `IO::Select` process pipe handles registered while polling, so gzip
