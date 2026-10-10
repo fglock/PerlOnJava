@@ -722,6 +722,7 @@ public class EmitStatement {
                         || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE
                         || emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME);
             int resultReg = -1;
+            int nonLocalLastResultSlot = -1;
 
             if (node.useNewScope) {
                 // Register next/redo/last labels
@@ -740,6 +741,15 @@ public class EmitStatement {
                         true,
                         true);
                 LoopLabels loopLabels = emitterVisitor.ctx.javaClassInfo.getInnermostLoopLabels();
+                if (node.isSimpleBlock && node.labelName != null) {
+                    // A matched non-local last must override the ordinary value
+                    // produced by the block exit. Keep this separate so ordinary
+                    // labeled-block completion keeps its existing behavior.
+                    nonLocalLastResultSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                    mv.visitInsn(Opcodes.ACONST_NULL);
+                    mv.visitVarInsn(Opcodes.ASTORE, nonLocalLastResultSlot);
+                    loopLabels.nonLocalLastResultSlot = nonLocalLastResultSlot;
+                }
                 loopLabels.regexStateRestoreLocal = regexStateLocal;
                 loopLabels.cleanupScopeIndex = scopeIndex + 1;
                 loopLabels.lastCleanupScopeIndex = scopeIndex + 1;
@@ -832,7 +842,19 @@ public class EmitStatement {
                 // Load the false condition value (or undef if 'last' was used)
                 mv.visitVarInsn(Opcodes.ALOAD, conditionResultReg);
             } else if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
-                EmitOperator.emitUndef(emitterVisitor.ctx.mv);
+                if (nonLocalLastResultSlot >= 0) {
+                    Label ordinaryBlockResult = new Label();
+                    Label blockResultReady = new Label();
+                    mv.visitVarInsn(Opcodes.ALOAD, nonLocalLastResultSlot);
+                    mv.visitJumpInsn(Opcodes.IFNULL, ordinaryBlockResult);
+                    mv.visitVarInsn(Opcodes.ALOAD, nonLocalLastResultSlot);
+                    mv.visitJumpInsn(Opcodes.GOTO, blockResultReady);
+                    mv.visitLabel(ordinaryBlockResult);
+                    EmitOperator.emitUndef(mv);
+                    mv.visitLabel(blockResultReady);
+                } else {
+                    EmitOperator.emitUndef(emitterVisitor.ctx.mv);
+                }
             }
 
             if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("FOR end");
