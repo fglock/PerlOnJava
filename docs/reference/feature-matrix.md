@@ -884,9 +884,10 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅ **Future::AsyncAwait**: native suspension, resumption, cancellation,
   signatures, `defer`, and `CANCEL` blocks. The documented upstream gate covers
   52 files and 221 assertions; see [Recently Completed](../about/roadmap.md#recently-completed).
-- 🟡 **Object::Pad**: core class, field, method, parameter, and inheritance
-  syntax is handled by PerlOnJava's native class compiler; Object::Pad-specific
-  MOP extensions are not implemented.
+- 🟡 **Object::Pad**: core class, field (including legacy `has`), method,
+  parameter, and inheritance syntax plus scalar `:accessor` fields are handled
+  by PerlOnJava's native class compiler; Object::Pad-specific MOP extensions
+  are not implemented.
 - ✅  **JSON::DWIW**: relaxed JSON conversion implemented over the bundled
   pure-Perl `JSON::PP` backend.
 - ✅  **Class::MethodMaker**: upstream 2.25 pure-Perl accessor generator with

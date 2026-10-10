@@ -7,6 +7,13 @@ priorities and future plans.
 ## Work in progress
 
 - Avoid false experimental `@_` warnings for ordinary named calls inside signatured subroutines (#1422).
+- Respect lexical `syntax::prototype` warning controls for prototype mismatch
+  diagnostics, including Math::Complex's intentional overrides (#1655).
+- Support legacy Object::Pad `has` declarations and scalar `:accessor` fields
+  with generated read/write methods (#1177).
+- Keep `IO::Select` process pipe handles registered while polling, so gzip
+  filters and similar child processes receive input and drain output without
+  hanging (#1597).
 - Keep `use strict` inside a module loaded during `BEGIN` or `use_ok` from leaking into the caller's compilation scope (#1684).
 - Preserve a normal child exit status of 129 when reaping `IPC::Open3` processes, so `System::Command` reports it instead of treating it as SIGHUP (#1715).
 - Parse indexed scalar expressions as sort-list items rather than scalar comparators, fixing Class::MethodMaker `hash.t` under `strict vars` (#1680).
