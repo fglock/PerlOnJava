@@ -353,6 +353,14 @@ public class ListOperators {
                         throw new PerlNonLocalReturnException(cfList.getReturnValue());
                     }
 
+                    // Preserve non-local loop control returned by a sub called
+                    // from the grep block.  The caller dispatches this marker
+                    // at the list-operator call site, just as it does for a
+                    // marker returned by a directly called subroutine.
+                    if (result instanceof RuntimeControlFlowList) {
+                        return result;
+                    }
+
                     // Check the result of the filter subroutine
                     if (result.getFirst().getBoolean()) {
                         // Perl semantics: grep returns aliases to the original
