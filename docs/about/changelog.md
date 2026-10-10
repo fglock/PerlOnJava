@@ -27,6 +27,10 @@ priorities and future plans.
   on both backends, including `our` assignments in subs (#1669).
 - Report `ref()` of a reference to a read-only scalar as `SCALAR`, or `REF`
   when the scalar holds a reference.
+- Preserve regex references when dereferencing a scalar that contains `qr//`, so
+  object dumpers can traverse regex-bearing values.
+- Release unreachable captured objects with `DESTROY` at scope boundaries, so
+  request resources are cleaned up promptly.
 - Report `ref($Pkg::{name})` as `""` for a constant sub or a forward declaration
   outside `main::`, matching blead; constant.pm proxies stay `SCALAR`.
 - Report the call-site package in `caller()` for code compiled by eval STRING
@@ -121,6 +125,8 @@ priorities and future plans.
 - Release weakly observed objects after their exited, unreachable closure pads
   stop owning them.
 - Make strict test runs fail when a child process exits nonzero after complete TAP.
+- Reuse one root snapshot when validating deferred owner scalars in a cleanup
+  drain, avoiding repeated Catalyst-scale reachability walks (#1642).
 - Preserve Unix executable permissions when extracting ZIP archive entries.
 - Accept Perl's valid `\@;@` prototype without an `illegalproto` warning.
 - Match current blead's fatal checks for differing in-scope `use VERSION`

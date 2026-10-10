@@ -321,6 +321,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         for (RuntimeRegexCallback callback : executableCallbacks) callback.releaseOwner();
     }
 
+    /** Strong Perl references held by this qr//'s executable callbacks. */
+    public List<RuntimeCode> executableCallbackCodes() {
+        if (executableCallbacksReleased || executableCallbacks.isEmpty()) return List.of();
+        List<RuntimeCode> codes = new ArrayList<>(executableCallbacks.size());
+        for (RuntimeRegexCallback callback : executableCallbacks) {
+            if (callback.code != null) codes.add(callback.code);
+        }
+        return List.copyOf(codes);
+    }
+
     /**
      * Create a backend-neutral matcher for callers that implement Perl
      * operations around regex matches (for example {@code split}).
