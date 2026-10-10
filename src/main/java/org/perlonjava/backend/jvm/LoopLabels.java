@@ -64,6 +64,9 @@ public class LoopLabels {
     /** Context of the local result associated with this loop target. */
     public int resultRegisterContext = -1;
 
+    /** Local containing an empty result when a non-local last exits this labeled block. */
+    public int nonLocalLastResultSlot = -1;
+
     /**
      * The context type in which this loop operates
      */

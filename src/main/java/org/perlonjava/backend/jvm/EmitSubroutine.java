@@ -1784,6 +1784,13 @@ public class EmitSubroutine {
             if (loopLabels.lastLabel == emitterVisitor.ctx.javaClassInfo.returnLabel) {
                 mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
             } else {
+                if (loopLabels.nonLocalLastResultSlot >= 0) {
+                    mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeList");
+                    mv.visitInsn(Opcodes.DUP);
+                    mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeList", "<init>", "()V", false);
+                    mv.visitVarInsn(Opcodes.ASTORE, loopLabels.nonLocalLastResultSlot);
+                }
                 if (loopLabels.context != RuntimeContextType.VOID) {
                     EmitOperator.emitUndef(mv);
                 }
