@@ -9,6 +9,38 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class UnblessedAggregateReachabilitySnapshotTest {
     @Test
+    void initialWeakParentRegistrationPreservesAnUntrackedRootedAggregate() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray global = new RuntimeArray();
+            String globalName = "UnblessedAggregateReachabilitySnapshotTest::weakParentRoot";
+            GlobalVariable.globalArrays.put(globalName, global);
+            RuntimeArray target = new RuntimeArray();
+            RuntimeScalar strong = target.createAnonymousReference();
+            target.refCount = -1;
+            global.elements.add(strong);
+            RuntimeScalar weak = target.createAnonymousReference();
+            target.refCount = -1;
+
+            try (MortalList.ReachabilityQueryMeasurement measurement =
+                         MortalList.measureReachabilityQueries()) {
+                try {
+                    WeakRefRegistry.weaken(weak);
+                    assertTrue(WeakRefRegistry.isweak(weak));
+                    assertEquals(1, target.refCount,
+                            "the root proof protects an untracked aggregate before its first weak edge");
+                    assertEquals(1, measurement.stats().rootQueries,
+                            "the initial weak-parent transition checks the current live root");
+                } finally {
+                    WeakRefRegistry.unweaken(weak);
+                    GlobalVariable.globalArrays.remove(globalName);
+                    MortalList.invalidateAllRootSnapshots();
+                }
+            }
+        }
+    }
+
+    @Test
     void liveWeaklyObservedAggregatesSurviveOneSharedRootSnapshotPerDrain() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {

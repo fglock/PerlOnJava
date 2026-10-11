@@ -233,8 +233,18 @@ public class WeakRefRegistry {
             // (which use weaken() for back-references) and cascades to break
             // Moo's accessor inlining (51 test failures). See §15.
             ref.refCountOwned = false;
-            base.refCount = WEAKLY_TRACKED;
-            MortalList.requestImmediateWeakSweep();
+            if (base.blessId == 0
+                    && (base instanceof RuntimeArray || base instanceof RuntimeHash)
+                    && ReachabilityWalker.isReachableFromRoots(base)) {
+                // An untracked aggregate may already be owned by a live tree
+                // before its first weak parent edge is installed. Keep it
+                // through this transition; a later full sweep can clear the
+                // observer after that Perl root actually leaves scope.
+                base.refCount = 1;
+            } else {
+                base.refCount = WEAKLY_TRACKED;
+                MortalList.requestImmediateWeakSweep();
+            }
         }
         // A live lexical can be the final Perl-visible strong owner even when
         // selective refCount remains inflated by earlier argument/temporary
