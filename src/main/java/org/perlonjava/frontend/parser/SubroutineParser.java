@@ -3109,7 +3109,16 @@ public class SubroutineParser {
         // part of a prototype's shape, so check the compacted form. The
         // after-@ diagnostic is reported before the illegal-character one.
         String shape = proto.replaceAll("\\s+", "");
-        int at = shape.indexOf('@');
+        int at = -1;
+        for (int i = 0; i < shape.length(); i++) {
+            if (shape.charAt(i) != '@') continue;
+            int backslashes = 0;
+            for (int j = i - 1; j >= 0 && shape.charAt(j) == '\\'; j--) backslashes++;
+            if (backslashes % 2 == 0) {
+                at = i;
+                break;
+            }
+        }
         if (at >= 0 && at + 1 < shape.length() && shape.charAt(at + 1) != '%'
                 && shape.charAt(at + 1) != ']' && shape.charAt(at + 1) != ';') {
             warnIllegalProto(parser, "Prototype after '@' for " + name + " : " + proto);

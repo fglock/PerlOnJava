@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Avoid false `illegalproto` warnings for valid escaped array prototypes such as `\@@` and `\@$` (#1615).
 - Load the `Errno` Perl bootstrap when `use Errno` follows `%!` access, and
   preserve captured aggregate caches during targeted weak-reference sweeps so
   Pod::HtmlEasy can import errno constants and load its regex patterns (#1662).
