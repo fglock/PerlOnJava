@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use Test::More;
-use Issue1642::Utf8Importer;
+use Issue1642::Utf8Importer -strict;
 
 my $subject = "☃x";
 ok(utf8::is_utf8($subject), 'indirect utf8 import decodes later source literals');
