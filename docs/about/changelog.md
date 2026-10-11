@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Support DBI class-level tracing, pure-Perl driver `data_sources`, and inherited pure-Perl driver connections (#1340, #1616, #1637).
 - Parse postfix `unless` after eval heredocs, imported calls inside exception blocks, and `qq'...'` arguments to bareword functions (#1625, #1640, #1663).
 - Preserve scalar context for `caller()` when used as a method invocant on the interpreter (#1744).
 

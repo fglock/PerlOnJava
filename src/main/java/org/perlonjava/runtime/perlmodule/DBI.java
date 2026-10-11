@@ -65,7 +65,7 @@ public class DBI extends PerlModuleBase {
             dbi.registerMethod("type_info", null);
             dbi.registerMethod("ping", null);
             dbi.registerMethod("available_drivers", null);
-            dbi.registerMethod("data_sources", null);
+            dbi.registerMethod("_jdbc_data_sources", "data_sources", null);
             dbi.registerMethod("get_info", null);
             dbi.registerMethod("_handle_owned_by_current_runtime", null);
 
@@ -1527,7 +1527,11 @@ public class DBI extends PerlModuleBase {
 
     public static RuntimeList data_sources(RuntimeArray args, int ctx) {
         RuntimeArray sources = new RuntimeArray();
-        String driverClass = !args.isEmpty() ? args.get(0).toString() : null;
+        String driverClass = null;
+        if (!args.isEmpty()) {
+            int driverIndex = args.get(0).toString().equals("DBI") && args.size() > 1 ? 1 : 0;
+            driverClass = args.get(driverIndex).toString();
+        }
 
         try {
             if (driverClass != null) {
