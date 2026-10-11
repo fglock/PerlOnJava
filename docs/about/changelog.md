@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Parse postfix `unless` after eval heredocs, imported calls inside exception blocks, and `qq'...'` arguments to bareword functions (#1625, #1640, #1663).
 - Preserve scalar context for `caller()` when used as a method invocant on the interpreter (#1744).
 - Route compile-time `eval STRING` warnings through `$SIG{__WARN__}` (#1740).
 - Keep Dancer2 upload tempfiles alive for the request lifetime and clean multipart parser tempdirs after parsing (#1741).
