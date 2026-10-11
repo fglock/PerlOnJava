@@ -491,10 +491,14 @@ sub untaint {
 }
 
 # DESTROY method - called when handle is being destroyed
-# In PerlOnJava, this is called by JVM garbage collector
+# In PerlOnJava, deterministic DESTROY dispatch handles the lexical lifetime.
 sub DESTROY {
-    # Empty DESTROY is fine - the actual cleanup happens in Java
-    # This just needs to exist so FileHandle can import it
+    my $fh = shift;
+    # RuntimeIO keeps open descriptors registered, so JVM garbage collection
+    # alone cannot close a blessed IO::Handle when its Perl owner goes away.
+    # Close here to preserve Perl's scope-exit behavior for IO::Socket objects
+    # and other handles whose IO slot lives on the blessed glob.
+    close($fh) if defined fileno($fh);
 }
 
 1;

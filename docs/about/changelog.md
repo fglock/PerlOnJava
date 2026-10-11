@@ -7,6 +7,10 @@ priorities and future plans.
 ## Work in progress
 
 - Preserve scalar context for `caller()` when used as a method invocant on the interpreter (#1744).
+
+- Close IO::Handle descriptors at Perl object destruction so scoped AnyEvent
+  listeners release their ports and accept watchers can bind correctly.
+
 - Route compile-time `eval STRING` warnings through `$SIG{__WARN__}` (#1740).
 - Keep Dancer2 upload tempfiles alive for the request lifetime and clean multipart parser tempdirs after parsing (#1741).
 - Preserve the response object when immediately calling a coderef returned by a method, and retain UTF-8 source flags across imported pragmas (#1738, #1739).
