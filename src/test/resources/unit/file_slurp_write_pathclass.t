@@ -1,9 +1,16 @@
 use strict;
 use warnings;
-use Test::More tests => 5;
+use Test::More;
 use File::Temp qw(tempdir);
-use File::Slurp qw(read_file write_file);
-use Path::Class qw(file);
+
+BEGIN {
+    eval { require File::Slurp; require Path::Class; 1 }
+        or plan skip_all => 'File::Slurp and Path::Class are not installed';
+    File::Slurp->import(qw(read_file write_file));
+    Path::Class->import(qw(file));
+}
+
+plan tests => 5;
 
 my $dir = tempdir(CLEANUP => 1);
 my $path = file($dir, 'payload.txt');
