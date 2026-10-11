@@ -1614,6 +1614,18 @@ public class MortalList {
                 // the selective count dip to zero, but the tied handler's
                 // array slot remains a strong owner.  Destroying here clears
                 // that weak parent and corrupts the context tree.
+            } else if (base.blessId == 0
+                    && hasWeakRefs
+                    && (base instanceof RuntimeArray || base instanceof RuntimeHash)
+                    && isReachableFromFullRootSnapshot(base)) {
+                // Unblessed aggregates can be under construction when their
+                // weak parent edge is installed. A temporary parser reference
+                // can make the selective count reach zero even though an
+                // enclosing live aggregate already owns the node. Consult the
+                // shared drain snapshot before clearing those weak parent
+                // links. The next cleanup boundary can still reclaim a tree
+                // after its Perl root goes away.
+                base.refCount = 1;
             } else if (hasWeakRefs
                     && base.possiblyStoredInTiedHandler
                     && isReachableThroughTiedHashCached(base)) {
