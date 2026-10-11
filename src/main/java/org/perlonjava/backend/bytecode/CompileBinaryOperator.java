@@ -217,6 +217,14 @@ public class CompileBinaryOperator {
             // Code reference call: $code->() or $code->(@args)
             // right is ListNode with arguments
             else if (node.right instanceof ListNode) {
+                if (node.left instanceof BinaryOperatorNode methodResult
+                        && "->".equals(methodResult.operator)
+                        && methodResult.left instanceof OperatorNode invocant
+                        && "shift".equals(invocant.operator)
+                        && methodResult.right instanceof BinaryOperatorNode methodCall
+                        && "(".equals(methodCall.operator)) {
+                    methodResult.setAnnotation("bindMethodCoderef", true);
+                }
                 // Special case: eval { ... }->() is parsed as BinaryOperatorNode("->", SubroutineNode[useTryCatch], ListNode)
                 // The interpreter compiles eval blocks inline (EVAL_TRY/END), so we should NOT emit CALL_SUB
                 if (node.left instanceof SubroutineNode sn && sn.useTryCatch) {
@@ -360,6 +368,8 @@ public class CompileBinaryOperator {
                     bytecodeCompiler.emitReg(argsReg);
                     bytecodeCompiler.emit(node.getBooleanAnnotation("wantedObjectContext")
                             ? RuntimeContextType.OBJECT
+                            : node.getBooleanAnnotation("bindMethodCoderef")
+                            ? RuntimeContextType.METHOD_CODEREF
                             : node.getBooleanAnnotation("inheritRawCallContext")
                             ? RuntimeContextType.INHERITED
                             : bytecodeCompiler.currentCallContext);
@@ -905,6 +915,7 @@ public class CompileBinaryOperator {
 
         bytecodeCompiler.lastResultReg = rd;
     }
+
 
     private static final List<String> CHAIN_COMPARISON_OPS =
             Arrays.asList("<", ">", "<=", ">=", "lt", "gt", "le", "ge");

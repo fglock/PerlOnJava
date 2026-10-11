@@ -67,6 +67,9 @@ public class RuntimeContextType {
     /** Preserve the enclosing Perl subroutine's raw parent-op context. */
     public static final int INHERITED = 7;
 
+    /** Method result is being immediately invoked as a coderef; retain its invocant. */
+    public static final int METHOD_CODEREF = 8;
+
     public static boolean isListLike(int context) {
         return context == LIST || context == LVALUE_LIST;
     }
