@@ -359,7 +359,6 @@ sub chdir_init {
     }
     else {
 	my $wd = cwd();
-	$wd = Win32::GetFullPathName($wd) if $^O eq 'MSWin32';
 	$ENV{'PWD'} = $wd;
     }
     # Strip an automounter prefix (where /tmp_mnt/foo/bar == /foo/bar)
@@ -383,11 +382,6 @@ sub chdir {
       $newdir =~ s|///*|/|g;
     }
     chdir_init() unless $chdir_init;
-    my $newpwd;
-    if ($^O eq 'MSWin32') {
-	# get the full path name *before* the chdir()
-	$newpwd = Win32::GetFullPathName($newdir);
-    }
 
     return 0 unless CORE::chdir $newdir;
 
@@ -395,7 +389,7 @@ sub chdir {
 	return $ENV{'PWD'} = $ENV{'DEFAULT'}
     }
     elsif ($^O eq 'MSWin32') {
-	$ENV{'PWD'} = $newpwd;
+	$ENV{'PWD'} = cwd();
 	return 1;
     }
 
