@@ -1,10 +1,40 @@
 use strict;
 use warnings;
 
-use Test::More tests => 4;
+use Test::More tests => 5;
 use threads;
 use Hash::Util::FieldHash qw(fieldhash);
 use Scalar::Util qw(weaken);
+
+{
+    package Local::FieldHashId;
+    use Hash::FieldHash qw(fieldhashes);
+    use Sub::Name qw(subname);
+
+    sub import {
+        my $caller = caller;
+        for my $method (qw(object_id)) {
+            my $name = "$caller\::$method";
+            no strict 'refs';
+            *$name = subname($name, \&$method);
+        }
+    }
+
+    {
+        fieldhashes \my(%IDs, %UUIDs);
+        my $Last_ID = 'a';
+        sub object_id {
+            my ($self) = @_;
+            return $IDs{$self} if exists $IDs{$self};
+            return $IDs{$self} = ++$Last_ID;
+        }
+    }
+}
+
+{
+    package Local::FieldHashObject;
+    Local::FieldHashId->import();
+}
 
 fieldhash my %object_ids;
 
@@ -63,16 +93,21 @@ fieldhash my %object_ids;
 
 my $object = bless {}, 'Local::Object';
 $object_ids{$object} = 'stable-id';
+my $fieldhash_object = bless {}, 'Local::FieldHashObject';
+my $fieldhash_id = $fieldhash_object->object_id;
 my $deferred = Local::Deferred::make('deferred-result');
 
 my $worker = threads->create(sub {
-    return [ $object_ids{$object}, Local::Deferred::quoted_from($deferred),
+    return [ $object_ids{$object}, $fieldhash_object->object_id,
+        Local::Deferred::quoted_from($deferred),
         $deferred->() ];
 });
 my $result = $worker->join;
 
 is $result->[0], 'stable-id', 'fieldhash value follows object into child thread';
-is $result->[1], 'deferred-result', 'quoted metadata is restored by CLONE';
-is $result->[2], 'deferred-result', 'deferred sub remains callable after clone';
+is $result->[1], $fieldhash_id,
+    'renamed method keeps its lexical fieldhash value in child thread';
+is $result->[2], 'deferred-result', 'quoted metadata is restored by CLONE';
+is $result->[3], 'deferred-result', 'deferred sub remains callable after clone';
 is $deferred->(), 'deferred-result',
     'parent deferred sub remains usable after child clone';
