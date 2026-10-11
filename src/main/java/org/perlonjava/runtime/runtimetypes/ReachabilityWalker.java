@@ -1177,34 +1177,41 @@ public class ReachabilityWalker {
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
 
         for (RuntimeScalar codeRef : GlobalVariable.globalCodeRefValuesView()) {
-            seedTarget(codeRef, null, seen, todo);
+            seedTarget(codeRef, null, seen, todo, stats);
             if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
                 followGlobalCodeCaptures(code, null, seen, todo);
             }
         }
         for (RuntimeScalar scalar : GlobalVariable.globalVariableValuesView()) {
-            seedTarget(scalar, null, seen, todo);
+            seedTarget(scalar, null, seen, todo, stats);
         }
         for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrayEntriesView()) {
             if (!isNonOwningDebugArgsArray(e.getKey()) && e.getValue() != null) {
-                if (seen.add(e.getValue())) todo.addLast(e.getValue());
+                if (seen.add(e.getValue())) {
+                    todo.addLast(e.getValue());
+                    if (stats != null) stats.rootsSeeded++;
+                }
             }
         }
         for (RuntimeHash hash : GlobalVariable.globalHashValuesView()) {
-            if (hash != null && seen.add(hash)) todo.addLast(hash);
+            if (hash != null && seen.add(hash)) {
+                todo.addLast(hash);
+                if (stats != null) stats.rootsSeeded++;
+            }
         }
         for (RuntimeScalar scalar : ScalarRefRegistry.snapshot()) {
             if (scalar == null || scalar.captureCount > 0 || WeakRefRegistry.isweak(scalar)
                     || (!MyVarCleanupStack.isLive(scalar) && !scalar.refCountOwned)
                     || scalar.scopeExited) continue;
-            seedTarget(scalar, null, seen, todo);
+            seedTarget(scalar, null, seen, todo, stats);
         }
         for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
             if (liveVar instanceof RuntimeScalar scalar) {
-                seen.add(scalar);
-                seedTarget(scalar, null, seen, todo);
+                if (seen.add(scalar) && stats != null) stats.rootsSeeded++;
+                seedTarget(scalar, null, seen, todo, stats);
             } else if (liveVar instanceof RuntimeBase base && seen.add(base)) {
                 todo.addLast(base);
+                if (stats != null) stats.rootsSeeded++;
             }
         }
         for (Object registeredVar : MyVarCleanupStack.snapshotRegisteredVars()) {
@@ -1212,34 +1219,45 @@ public class ReachabilityWalker {
                     && scalar.type == RuntimeScalarType.REGEX
                     && !scalar.scopeExited
                     && !WeakRefRegistry.isweak(scalar)) {
-                seedTarget(scalar, null, seen, todo);
+                seedTarget(scalar, null, seen, todo, stats);
             }
         }
         for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
-            if (seen.add(rescued)) todo.addLast(rescued);
+            if (seen.add(rescued)) {
+                todo.addLast(rescued);
+                if (stats != null) stats.rootsSeeded++;
+            }
         }
         for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotReferents()) {
-            if (seen.add(ownerReferent)) todo.addLast(ownerReferent);
+            if (seen.add(ownerReferent)) {
+                todo.addLast(ownerReferent);
+                if (stats != null) stats.rootsSeeded++;
+            }
         }
 
         int visits = 0;
         while (!todo.isEmpty() && visits < maxVisits) {
             visits++;
             RuntimeBase cur = todo.removeFirst();
+            if (stats != null) stats.nodesVisited++;
             if (cur instanceof RuntimeStash) continue;
             if (cur instanceof RuntimeHash hash) {
                 if (hash.elements instanceof TieHash tieHash) {
+                    if (stats != null) stats.edgesInspected++;
                     followScalar(tieHash.getSelf(), null, seen, todo);
                 }
                 for (RuntimeScalar value : hash.elements.values()) {
+                    if (stats != null) stats.edgesInspected++;
                     followScalar(value, null, seen, todo);
                 }
             } else if (cur instanceof RuntimeArray array) {
                 for (RuntimeScalar value : array.elements) {
+                    if (stats != null) stats.edgesInspected++;
                     followScalar(value, null, seen, todo);
                 }
             } else if (cur instanceof RuntimeRegex regex) {
                 for (RuntimeCode callback : regex.executableCallbackCodes()) {
+                    if (stats != null) stats.edgesInspected++;
                     followGlobalCodeCaptures(callback, null, seen, todo);
                 }
             }
