@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Support DBI class-level tracing, pure-Perl driver `data_sources`, and inherited pure-Perl driver connections (#1340, #1616, #1637).
 - Preserve scalar context for `caller()` when used as a method invocant on the interpreter (#1744).
 - Route compile-time `eval STRING` warnings through `$SIG{__WARN__}` (#1740).
 - Keep Dancer2 upload tempfiles alive for the request lifetime and clean multipart parser tempdirs after parsing (#1741).
