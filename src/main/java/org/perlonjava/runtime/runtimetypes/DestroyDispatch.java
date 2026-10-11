@@ -703,7 +703,14 @@ public class DestroyDispatch {
                                                 Set<PerlOwnerSlot> ownerSlotsAtStart) {
         if (checkingGlobalOwnerDelta) {
             for (RuntimeScalar owner : referent.activeOwnerSnapshot()) {
-                if (!activeOwnersAtStart.contains(owner)) return true;
+                // DESTROY commonly creates short-lived aliases while it calls
+                // methods on $self. They are new ledger entries, but they do
+                // not resurrect the object if their Perl slots are gone by the
+                // time the destructor returns. During global teardown, package
+                // roots are still available to the reachability walker, so
+                // require a new scalar owner to remain rooted before warning.
+                if (!activeOwnersAtStart.contains(owner)
+                        && ReachabilityWalker.isScalarReachable(owner)) return true;
             }
             for (PerlOwnerSlot ownerSlot : referent.ownerSlotSnapshot()) {
                 if (!ownerSlotsAtStart.contains(ownerSlot)) return true;

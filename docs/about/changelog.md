@@ -7,6 +7,7 @@ priorities and future plans.
 ## Work in progress
 
 - Route compile-time `eval STRING` warnings through `$SIG{__WARN__}` (#1740).
+- Keep Dancer2 upload tempfiles alive for the request lifetime and clean multipart parser tempdirs after parsing (#1741).
 - Load the `Errno` Perl bootstrap when `use Errno` follows `%!` access, and
   preserve captured aggregate caches during targeted weak-reference sweeps so
   Pod::HtmlEasy can import errno constants and load its regex patterns (#1662).
