@@ -33,6 +33,9 @@ public class Whitespace {
 
                 case NEWLINE:
                     if (!parser.getHeredocNodes().isEmpty()) {
+                        if (parser.deferHeredocProcessing) {
+                            return tokenIndex;
+                        }
                         // parseHeredocAfterNewline reads parser.tokenIndex as the newline position.
                         // This loop advances local tokenIndex across WHITESPACE without syncing the parser,
                         // so align before processing pending heredocs.

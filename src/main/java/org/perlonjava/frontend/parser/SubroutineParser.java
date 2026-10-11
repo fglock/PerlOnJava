@@ -320,7 +320,7 @@ public class SubroutineParser {
                 && isValidIndirectMethod(sourceSubName, parser)
                 && !prototypeHasGlob) {
             int currentIndex2 = parser.tokenIndex;
-            String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
+            String packageName = IdentifierParser.parseSubroutineIdentifier(parser, true);
             // System.out.println("maybe indirect object: " + packageName + "->" + subName);
 
             // PERL RULE: Indirect object syntax requires identifier to be a package
