@@ -63,6 +63,9 @@ final class LifecycleRuntimeState {
     ReachabilityWalker.ExternalRootSnapshot externalRootSnapshot;
     ReachabilityWalker.LiveRootSnapshot liveRootSnapshot;
     ReachabilityWalker.ScalarRootReachabilitySnapshot scalarRootSnapshot;
+    final Set<RuntimeBase> unblessedAggregateDrainRoots =
+            Collections.newSetFromMap(new IdentityHashMap<>());
+    boolean unblessedAggregateDrainSnapshotIncomplete;
     Set<RuntimeBase> weakSweepLiveReferents;
 
     ReachabilityWalker.RootReachabilitySnapshot fullRootSnapshot;
@@ -143,6 +146,8 @@ final class LifecycleRuntimeState {
         externalRootSnapshot = null;
         liveRootSnapshot = null;
         scalarRootSnapshot = null;
+        unblessedAggregateDrainRoots.clear();
+        unblessedAggregateDrainSnapshotIncomplete = false;
         weakSweepLiveReferents = null;
         weakScalars.clear();
         referentToWeakRefs.clear();

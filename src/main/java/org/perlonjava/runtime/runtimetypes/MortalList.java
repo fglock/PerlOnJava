@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * trigger DESTROY at statement end, not immediately during delete.
  */
 public class MortalList {
+    private static final int MAX_UNBLESSED_AGGREGATE_DRAIN_ROOTS = 50_000;
     private static final AtomicInteger runtimesWithBoundaryWork = new AtomicInteger();
 
     static final class ReachabilityQueryMeasurement implements AutoCloseable {
@@ -1495,6 +1496,53 @@ public class MortalList {
         return state.fullRootSnapshot.isReachable(base);
     }
 
+    static boolean isUnblessedAggregateReachableDuringDrain(RuntimeBase base) {
+        LifecycleRuntimeState state = state();
+        boolean drainActive = state.flushing || state.reachabilityDrainDepth > 0;
+        if (drainActive && state.unblessedAggregateDrainSnapshotIncomplete) return true;
+        if (drainActive && state.unblessedAggregateDrainRoots.contains(base)) return true;
+        if (state.fullRootSnapshot != null) {
+            return recordUnblessedAggregateSnapshotResult(
+                    state, state.fullRootSnapshot, base, drainActive);
+        }
+        if (ReachabilityWalker.isReachableFromTemporaryRoots(base)) return true;
+        if (state.externalRootSnapshot != null
+                && state.externalRootSnapshot.isReachableFromNonLexicalRoot(base)) {
+            if (drainActive) state.unblessedAggregateDrainRoots.add(base);
+            return true;
+        }
+        if (state.liveRootSnapshot != null && state.liveRootSnapshot.isReachable(base)) {
+            if (drainActive) state.unblessedAggregateDrainRoots.add(base);
+            return true;
+        }
+        ReachabilityWalker.RootReachabilitySnapshot snapshot =
+                ReachabilityWalker.reachableFromRootsSnapshotWithStatus();
+        state.fullRootSnapshot = snapshot;
+        return recordUnblessedAggregateSnapshotResult(state, snapshot, base, drainActive);
+    }
+
+    private static boolean recordUnblessedAggregateSnapshotResult(
+            LifecycleRuntimeState state,
+            ReachabilityWalker.RootReachabilitySnapshot snapshot,
+            RuntimeBase base,
+            boolean drainActive) {
+        boolean reachable = snapshot.isReachable(base);
+        if (drainActive) {
+            if (!snapshot.complete()) {
+                state.unblessedAggregateDrainSnapshotIncomplete = true;
+                state.unblessedAggregateDrainRoots.clear();
+            } else if (snapshot.reachable().size()
+                    > MAX_UNBLESSED_AGGREGATE_DRAIN_ROOTS
+                    - state.unblessedAggregateDrainRoots.size()) {
+                state.unblessedAggregateDrainSnapshotIncomplete = true;
+                state.unblessedAggregateDrainRoots.clear();
+            } else {
+                state.unblessedAggregateDrainRoots.addAll(snapshot.reachable());
+            }
+        }
+        return reachable;
+    }
+
     /**
      * Check an owner scalar through its containing aggregate using the shared
      * drain snapshot. Owner scalars nested below package roots are otherwise
@@ -1544,6 +1592,10 @@ public class MortalList {
         state.flushReachableCache = null;
         state.flushTiedReachableCache = null;
         invalidateLiveRootSnapshot();
+        if (!state.flushing && state.reachabilityDrainDepth == 0) {
+            state.unblessedAggregateDrainRoots.clear();
+            state.unblessedAggregateDrainSnapshotIncomplete = false;
+        }
     }
 
     private static boolean isReachableThroughTiedHashCached(RuntimeBase base) {
@@ -1633,7 +1685,7 @@ public class MortalList {
                 // that weak parent and corrupts the context tree.
             } else if (base.blessId == 0
                     && (base instanceof RuntimeArray || base instanceof RuntimeHash)
-                    && isReachableFromFullRootSnapshot(base)) {
+                    && isUnblessedAggregateReachableDuringDrain(base)) {
                 // Unblessed aggregates can reach zero while a parser is
                 // assembling a tree, before it installs the first weak parent
                 // edge. A temporary reference can make the selective count

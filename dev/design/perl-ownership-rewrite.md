@@ -331,9 +331,20 @@ and first path establish implementation cost.
   content and incremental parser cases still retain two and three elements at
   the immediate release assertion on both PerlOnJava backends; Perl 5.44 passes
   all cases. The new parser lifecycle reproducer records this open failure.
-- The Dancer2-Plugin-DBIx-Class teardown workload from #1642 now passes. The
-  local CPAN cache now also has `B::Hooks::EndOfScope` 0.28; Moose is supplied
-  by the PerlOnJava provider. `jperl -MCatalyst` loads Catalyst-Runtime 5.90132.
+- The Dancer2-Plugin-DBIx-Class `t/01_both_using_rsnames.t` workload now passes
+  all six assertions and exits on both backends. The interpreter first exposed
+  a `caller->isa` scalar-context bug, fixed in this follow-up, then exceeded a
+  360-second teardown bound. Its 120-second JFR profile attributed 9.25% of
+  samples to full-root snapshot building and 28.53% to `WeakHashMap.put`.
+  Retaining positive aggregate-root proofs across nested invalidations now
+  lets the focused test exit within the same bound. The deterministic regression
+  verifies reuse after a root removal and reset at the drain boundary. Artifacts
+  are `/tmp/issue1642-dancer-interpreter-teardown-after-caller-fix.jfr`,
+  `/tmp/issue1642-dancer-interpreter-teardown-after-shortcut.jfr`,
+  `/tmp/issue1642-dancer-interpreter-after-drain-positive-snapshot.log`, and
+  `/tmp/issue1642-dancer-jvm-after-drain-positive-snapshot.log`. The local CPAN
+  cache now also has `B::Hooks::EndOfScope` 0.28; Moose is supplied by the
+  PerlOnJava provider. `jperl -MCatalyst` loads Catalyst-Runtime 5.90132.
   Its checked-in distropref patches only `t/live_fork.t` to skip the six
   process-fork assertions on PerlOnJava; the `system` and backtick assertions
   and all other distribution tests remain enabled. A direct run from the
@@ -345,9 +356,8 @@ and first path establish implementation cost.
   The full attempt therefore remains incomplete and did not produce a cleanup
   profile. A post-change Dancer2 `jcpan -t` run reported
   `t/01_both_using_rsnames.t` ok, then exceeded the 240-second command deadline
-  later in the distribution suite; the earlier direct six-assertion run
-  remains the clean integration result. The Catalyst owner-slot delta workload
-  and cleanup profile are still open.
+  later in the distribution suite. The Catalyst owner-slot delta workload and
+  full cleanup acceptance are still open.
 - `RuntimeBase.refCount` still combines selective counts with legacy lifecycle
   sentinels and triggers cleanup for mixed-owner referents. The new explicit
   lifecycle prevents repeat dispatch and records destruction/resurrection, but
