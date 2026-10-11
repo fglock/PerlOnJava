@@ -38,6 +38,8 @@ require CPAN::Distribution;
     sub success { 1 }
 }
 
+# File::Temp's automatic cleanup calls Cwd::abs_path, which is not portable on
+# Windows in PerlOnJava; remove the fixture explicitly after restoring cwd.
 my $root = tempdir(CLEANUP => 0);
 our $ORIGINAL_DIR = Internals::getcwd();
 my $target = "$root/Target-Dist";
