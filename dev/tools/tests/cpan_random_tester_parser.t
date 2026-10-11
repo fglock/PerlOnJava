@@ -40,6 +40,33 @@ is_deeply(
     'historical archive-name report entries migrate to the indexed module name',
 );
 
+my %renamed_module_pass = (
+    'Algorithm::BellmanFord' => { status => 'PASS', date => '2026-09-20' },
+);
+normalize_report_module_aliases(
+    \%renamed_module_pass,
+    { BellmanFord => 'R/RO/ROHANK/Algorithm-BellmanFord-0.03.tar.gz' },
+    { 'Algorithm-BellmanFord-0.03' => 'BellmanFord' },
+);
+is_deeply(
+    \%renamed_module_pass,
+    { BellmanFord => { status => 'PASS', date => '2026-09-20' } },
+    'stale report module names migrate through their unique indexed distribution',
+);
+
+is(
+    canonical_module_for_report_name(
+        'Algorithm::BellmanFord',
+        { BellmanFord => 'R/RO/ROHANK/Algorithm-BellmanFord-0.03.tar.gz' },
+        {
+            'Algorithm-BellmanFord-0.03' => 'BellmanFord',
+            'Algorithm-BellmanFord-1.00' => 'Other::BellmanFord',
+        },
+    ),
+    undef,
+    'ambiguous distribution matches do not rewrite report module names',
+);
+
 my $unresolved_text = <<'LOG';
 >(error): Could not expand [EasyDB.0.5b2]. Check the module name.
 >(error): Skipping EasyDB.0.5b2 because I couldn't find a matching namespace.
