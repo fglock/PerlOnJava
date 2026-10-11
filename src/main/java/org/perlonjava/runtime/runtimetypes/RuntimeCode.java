@@ -5952,6 +5952,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (ctx == RuntimeContextType.SCALAR || ctx == RuntimeContextType.OBJECT) {
                 String pkg = locationFrameInfo.getFirst();
                 RuntimeCode reportedCode = activeCodeAtCallerFrame(trackedActiveCodeFrame);
+                if (isEvalClosureSandboxPackage(pkg)) {
+                    CallerStack.CallerInfo compileSite = CallerStack.peek(0);
+                    if (compileSite != null && compileSite.packageName() != null
+                            && !compileSite.packageName().isEmpty()
+                            && !isEvalClosureSandboxPackage(compileSite.packageName())) {
+                        pkg = compileSite.packageName();
+                    }
+                }
                 boolean carpTrustedFrame = isCarpStackActive() && reportedCode != null
                         && isCarpTrustedCallerPackage(reportedCode.packageName);
                 if ((reportedCode != null && "DESTROY".equals(reportedCode.subName))
@@ -5967,6 +5975,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 String pkg = locationFrameInfo.get(0);
                 String callSitePackage = getCallerPackageAtCallerFrame(trackedActiveCodeFrame);
                 RuntimeCode reportedCode = activeCodeAtCallerFrame(trackedActiveCodeFrame);
+                if (isEvalClosureSandboxPackage(pkg)) {
+                    CallerStack.CallerInfo compileSite = CallerStack.peek(0);
+                    if (compileSite != null && compileSite.packageName() != null
+                            && !compileSite.packageName().isEmpty()
+                            && !isEvalClosureSandboxPackage(compileSite.packageName())) {
+                        pkg = compileSite.packageName();
+                    }
+                }
                 if (reportedCode != null && "DESTROY".equals(reportedCode.subName)
                         && callSitePackage != null && !callSitePackage.isEmpty()) {
                     pkg = callSitePackage;
@@ -6985,6 +7001,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (packageName == null || packageName.isEmpty()) return "main";
         return NameNormalizer.isAnonymizedPackage(packageName)
                 || GlobalVariable.isAnonymousStashPackage(packageName) ? "__ANON__" : packageName;
+    }
+
+    private static boolean isEvalClosureSandboxPackage(String packageName) {
+        return packageName != null && packageName.matches("Eval::Closure::Sandbox_[0-9]+");
     }
 
     private static String normalizeCallerSubName(String subName) {
