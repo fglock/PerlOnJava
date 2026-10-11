@@ -1119,8 +1119,15 @@ public class StatementResolver {
 
                 case "unless" -> {
                     TokenUtils.consume(parser);
-                    Node modifierExpression = parser.parseExpression(0);
-                    parseStatementTerminator(parser);
+                    boolean wasDeferringHeredocs = parser.deferHeredocProcessing;
+                    Node modifierExpression;
+                    try {
+                        parser.deferHeredocProcessing = true;
+                        modifierExpression = parser.parseExpression(0);
+                        parseStatementTerminator(parser);
+                    } finally {
+                        parser.deferHeredocProcessing = wasDeferringHeredocs;
+                    }
                     // Handle "my $x = EXPR unless COND" - must declare variable even when condition is true
                     yield handleStatementModifierWithMy(expression, modifierExpression, "||", parser.tokenIndex);
                 }
@@ -1728,6 +1735,14 @@ public class StatementResolver {
 
     public static void parseStatementTerminator(Parser parser) {
         LexerToken token = peek(parser);
+        if (token.type == LexerTokenType.NEWLINE
+                && parser.deferHeredocProcessing
+                && !parser.getHeredocNodes().isEmpty()) {
+            // A heredoc body starts at this physical newline. Leave it for
+            // the next statement's normal whitespace pass after the postfix
+            // condition has finished parsing.
+            return;
+        }
         if (token.type != LexerTokenType.EOF && !token.text.equals("}") && !token.text.equals(";")) {
             // If the next token starts on a new line, an incomplete expression
             // on the preceding line is the actual syntax error location.

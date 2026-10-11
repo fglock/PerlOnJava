@@ -7,7 +7,12 @@ priorities and future plans.
 ## Work in progress
 
 - Preserve byte strings in Template Toolkit filters and UTF-8 values assembled from byte-mode regex captures; retain the newline after unterminated script tags (#1182, #1183, #1184).
+- Parse postfix `unless` after eval heredocs, imported calls inside exception blocks, and `qq'...'` arguments to bareword functions (#1625, #1640, #1663).
 - Preserve scalar context for `caller()` when used as a method invocant on the interpreter (#1744).
+
+- Close IO::Handle descriptors at Perl object destruction so scoped AnyEvent
+  listeners release their ports and accept watchers can bind correctly.
+
 - Route compile-time `eval STRING` warnings through `$SIG{__WARN__}` (#1740).
 - Keep Dancer2 upload tempfiles alive for the request lifetime and clean multipart parser tempdirs after parsing (#1741).
 - Preserve the response object when immediately calling a coderef returned by a method, and retain UTF-8 source flags across imported pragmas (#1738, #1739).
@@ -35,6 +40,7 @@ priorities and future plans.
   filters and similar child processes receive input and drain output without
   hanging (#1597).
 - Match Perl's signed remainder and truncation toward zero for negative arithmetic under `use integer`, fixing `op/int.t` and DateTime subtraction across midnight by one nanosecond (#1720).
+- Report the source package from `caller()` inside eval-closure `BEGIN` imports instead of the synthetic sandbox package (#1753).
 - Keep `use strict` inside a module loaded during `BEGIN` or `use_ok` from leaking into the caller's compilation scope (#1684).
 - Preserve a normal child exit status of 129 when reaping `IPC::Open3` processes, so `System::Command` reports it instead of treating it as SIGHUP (#1715).
 - Parse indexed scalar expressions as sort-list items rather than scalar comparators, fixing Class::MethodMaker `hash.t` under `strict vars` (#1680).
