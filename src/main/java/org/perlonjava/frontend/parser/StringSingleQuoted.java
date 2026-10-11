@@ -18,7 +18,7 @@ public class StringSingleQuoted {
      *               including the buffer, start delimiter, end delimiter, and the token index.
      * @return A {@link StringNode} containing the parsed string and its token index.
      */
-    static Node parseSingleQuotedString(StringParser.ParsedString rawStr) {
+    static Node parseSingleQuotedString(StringParser.ParsedString rawStr, boolean forceByteString) {
         // Retrieve the first buffer from the parsed string object
         String input = rawStr.buffers.getFirst();
 
@@ -70,6 +70,6 @@ public class StringSingleQuoted {
         }
 
         // Return a new StringNode with the parsed string and the token index
-        return new StringNode(str.toString(), tokenIndex);
+        return new StringNode(str.toString(), false, forceByteString, tokenIndex);
     }
 }

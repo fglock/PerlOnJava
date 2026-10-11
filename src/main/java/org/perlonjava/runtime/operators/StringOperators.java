@@ -68,6 +68,7 @@ public class StringOperators {
     }
 
     private static RuntimeScalar lengthBytesUnpropagated(RuntimeScalar runtimeScalar) {
+        runtimeScalar = stringifyForStringContext(resolveTiedStringOperand(runtimeScalar));
         // If the scalar is undefined, return undef
         if (!runtimeScalar.getDefinedBoolean()) {
             return RuntimeScalarCache.scalarUndef;
@@ -101,6 +102,7 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} containing the byte-level string
      */
     public static RuntimeScalar toBytesString(RuntimeScalar runtimeScalar) {
+        runtimeScalar = stringifyForStringContext(resolveTiedStringOperand(runtimeScalar));
         String str = runtimeScalar.toString();
         // An SvUTF8-off value already exposes one Java character per byte.
         // An SvUTF8-on value must be encoded even when every code point fits
@@ -664,7 +666,7 @@ public class StringOperators {
         String aStr = aResolved.toString();
 
         if (bytesHintActive()) {
-            return propagateTaint(stringConcatBytes(aStr, bStr), aResolved, bResolved);
+            return propagateTaint(stringConcatBytes(aStr, aResolved, bStr, bResolved), aResolved, bResolved);
         }
 
         // In Perl, concatenation produces a UTF-8 string only if at least one
@@ -762,7 +764,7 @@ public class StringOperators {
         String bStr = bResolved.toString();
 
         if (bytesHintActive()) {
-            return propagateTaint(stringConcatBytes(aStr, bStr), aResolved, bResolved);
+            return propagateTaint(stringConcatBytes(aStr, aResolved, bStr, bResolved), aResolved, bResolved);
         }
 
         // Match stringConcat(): the UTF-8 flag propagates only from an
@@ -1236,7 +1238,7 @@ public class StringOperators {
         String bStr = bResolved.toStringNoOverload();
 
         if (bytesHintActive()) {
-            return propagateTaint(stringConcatBytes(aStr, bStr), aResolved, bResolved);
+            return propagateTaint(stringConcatBytes(aStr, aResolved, bStr, bResolved), aResolved, bResolved);
         }
 
         if (aResolved.type == RuntimeScalarType.STRING || bResolved.type == RuntimeScalarType.STRING) {
@@ -1278,9 +1280,12 @@ public class StringOperators {
         return propagateTaint(new RuntimeScalar(aStr + bStr), aResolved, bResolved);
     }
 
-    private static RuntimeScalar stringConcatBytes(String a, String b) {
-        byte[] aBytes = stringBytesForBytesPragma(a);
-        byte[] bBytes = stringBytesForBytesPragma(b);
+    private static RuntimeScalar stringConcatBytes(String aStr, RuntimeScalar a,
+                                                  String bStr, RuntimeScalar b) {
+        byte[] aBytes = a.type == RuntimeScalarType.STRING
+                ? aStr.getBytes(StandardCharsets.UTF_8) : stringBytesForBytesPragma(aStr);
+        byte[] bBytes = b.type == RuntimeScalarType.STRING
+                ? bStr.getBytes(StandardCharsets.UTF_8) : stringBytesForBytesPragma(bStr);
         byte[] out = new byte[aBytes.length + bBytes.length];
         System.arraycopy(aBytes, 0, out, 0, aBytes.length);
         System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
