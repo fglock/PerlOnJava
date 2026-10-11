@@ -62,6 +62,7 @@ final class LifecycleRuntimeState {
     Set<RuntimeBase> flushTiedReachableCache;
     ReachabilityWalker.ExternalRootSnapshot externalRootSnapshot;
     ReachabilityWalker.LiveRootSnapshot liveRootSnapshot;
+    ReachabilityWalker.ScalarRootReachabilitySnapshot scalarRootSnapshot;
     Set<RuntimeBase> weakSweepLiveReferents;
 
     ReachabilityWalker.RootReachabilitySnapshot fullRootSnapshot;
@@ -141,6 +142,7 @@ final class LifecycleRuntimeState {
         flushTiedReachableCache = null;
         externalRootSnapshot = null;
         liveRootSnapshot = null;
+        scalarRootSnapshot = null;
         weakSweepLiveReferents = null;
         weakScalars.clear();
         referentToWeakRefs.clear();

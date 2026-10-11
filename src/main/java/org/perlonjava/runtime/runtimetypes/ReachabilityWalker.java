@@ -1424,6 +1424,9 @@ public class ReachabilityWalker {
         if (MortalList.isScalarReachableThroughRootedContainer(target)) {
             return true;
         }
+        Boolean drainSnapshotResult =
+                MortalList.isScalarReachableFromDrainSnapshot(target);
+        if (drainSnapshotResult != null) return drainSnapshotResult;
         if (stats != null) stats.scalarReachabilityRootWalks++;
         final int MAX_VISITS = 50_000;
 
@@ -1568,6 +1571,152 @@ public class ReachabilityWalker {
             }
         }
         return false;
+    }
+
+    /**
+     * Identity set for scalar reachability queries during one cleanup drain.
+     * It follows the same package and active-lexical roots and strong edges as
+     * {@link #isScalarReachable(RuntimeScalar)}, allowing owner scalars to be
+     * checked against one bounded traversal.
+     */
+    static final class ScalarRootReachabilitySnapshot {
+        private final Set<RuntimeScalar> reachable;
+
+        private ScalarRootReachabilitySnapshot(Set<RuntimeScalar> reachable) {
+            this.reachable = reachable;
+        }
+
+        boolean isReachable(RuntimeScalar target) {
+            // A capped traversal is not evidence that a node outside the
+            // visited prefix is reachable; match the legacy target query.
+            return target != null && reachable.contains(target);
+        }
+    }
+
+    static ScalarRootReachabilitySnapshot scalarReachabilitySnapshot() {
+        ReachabilityQueryStats stats = MortalList.activeReachabilityQueryStats();
+        if (stats != null) {
+            stats.snapshotsBuilt++;
+            stats.scalarReachabilityRootWalks++;
+        }
+        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>(512));
+        Set<RuntimeScalar> reachableScalars =
+                Collections.newSetFromMap(new IdentityHashMap<>(512));
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+
+        for (RuntimeScalar scalar : GlobalVariable.globalCodeRefValuesView()) {
+            addScalarReachabilityRoot(scalar, seen, reachableScalars, todo, stats);
+        }
+        for (RuntimeScalar scalar : GlobalVariable.globalVariableValuesView()) {
+            addScalarReachabilityRoot(scalar, seen, reachableScalars, todo, stats);
+        }
+        for (Map.Entry<String, RuntimeArray> entry : GlobalVariable.globalArrayEntriesView()) {
+            if (isNonOwningDebugArgsArray(entry.getKey())) continue;
+            addScalarReachabilityRoot(entry.getValue(), seen, reachableScalars, todo, stats);
+        }
+        for (RuntimeHash hash : GlobalVariable.globalHashValuesView()) {
+            addScalarReachabilityRoot(hash, seen, reachableScalars, todo, stats);
+        }
+        for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
+            if (liveVar instanceof RuntimeBase base) {
+                addScalarReachabilityRoot(base, seen, reachableScalars, todo, stats);
+            }
+        }
+
+        final int maxVisits = 50_000;
+        int visits = 0;
+        while (!todo.isEmpty() && visits < maxVisits) {
+            RuntimeBase current = todo.removeFirst();
+            visits++;
+            if (stats != null) stats.nodesVisited++;
+            if (current instanceof RuntimeStash) {
+                continue;
+            } else if (current instanceof RuntimeHash hash) {
+                if (hash.elements instanceof HashSpecialVariable) continue;
+                if (hash.elements instanceof TieHash tieHash) {
+                    addScalarReachabilityEdge(tieHash.getSelf(), seen,
+                            reachableScalars, todo, stats, true, true);
+                }
+                for (RuntimeScalar value : hash.elements.values()) {
+                    addScalarReachabilityEdge(value, seen,
+                            reachableScalars, todo, stats, true, false);
+                }
+            } else if (current instanceof RuntimeArray array) {
+                for (RuntimeScalar value : array.elements) {
+                    addScalarReachabilityEdge(value, seen,
+                            reachableScalars, todo, stats, true, false);
+                }
+            } else if (current instanceof RuntimeScalar scalar) {
+                if (stats != null) stats.edgesInspected++;
+                if (!WeakRefRegistry.isweak(scalar)
+                        && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && scalar.value instanceof RuntimeBase base) {
+                    if (base instanceof RuntimeScalar referencedScalar) {
+                        reachableScalars.add(referencedScalar);
+                    }
+                    if (seen.add(base)) todo.addLast(base);
+                }
+            } else if (current instanceof RuntimeCode code) {
+                if (code.closedOverVariables != null) {
+                    for (RuntimeBase captured : code.closedOverVariables.values()) {
+                        if (stats != null) stats.edgesInspected++;
+                        if (captured instanceof RuntimeScalar scalar
+                                && WeakRefRegistry.isweak(scalar)) continue;
+                        addScalarReachabilityEdge(captured, seen,
+                                reachableScalars, todo, null, true, false);
+                    }
+                }
+                if (code.capturedScalars != null) {
+                    for (RuntimeScalar captured : code.capturedScalars) {
+                        addScalarReachabilityEdge(captured, seen,
+                                reachableScalars, todo, stats, true, false);
+                    }
+                }
+                if (code.capturedAggregates != null) {
+                    for (RuntimeBase captured : code.capturedAggregates) {
+                        addScalarReachabilityEdge(captured, seen,
+                                reachableScalars, todo, stats, true, true);
+                    }
+                }
+                visitReflectiveCodeScalars(code, captured ->
+                        addScalarReachabilityEdge(captured, seen,
+                                reachableScalars, todo, stats, true, false));
+                visitReflectiveCodeBases(code, captured ->
+                        addScalarReachabilityEdge(captured, seen,
+                                reachableScalars, todo, stats, false, false));
+            } else if (current instanceof RuntimeRegex regex) {
+                for (RuntimeCode callback : regex.executableCallbackCodes()) {
+                    addScalarReachabilityEdge(callback, seen,
+                            reachableScalars, todo, stats, false, false);
+                }
+            }
+        }
+        return new ScalarRootReachabilitySnapshot(reachableScalars);
+    }
+
+    private static void addScalarReachabilityRoot(
+            RuntimeBase base, Set<RuntimeBase> seen, Set<RuntimeScalar> reachableScalars,
+            java.util.ArrayDeque<RuntimeBase> todo, ReachabilityQueryStats stats) {
+        if (base != null && seen.add(base)) {
+            todo.addLast(base);
+            if (stats != null) stats.rootsSeeded++;
+        }
+        if (base instanceof RuntimeScalar scalar) reachableScalars.add(scalar);
+    }
+
+    private static void addScalarReachabilityEdge(
+            RuntimeBase base, Set<RuntimeBase> seen, Set<RuntimeScalar> reachableScalars,
+            java.util.ArrayDeque<RuntimeBase> todo, ReachabilityQueryStats stats,
+            boolean trackScalarIdentity, boolean includeWeakIdentity) {
+        if (stats != null) stats.edgesInspected++;
+        if (base instanceof RuntimeScalar scalar) {
+            boolean weak = WeakRefRegistry.isweak(scalar);
+            if (trackScalarIdentity && (!weak || includeWeakIdentity)) {
+                reachableScalars.add(scalar);
+            }
+            if (weak) return;
+        }
+        if (base != null && seen.add(base)) todo.addLast(base);
     }
 
     /**

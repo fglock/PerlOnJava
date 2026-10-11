@@ -1479,6 +1479,7 @@ public class MortalList {
     static void invalidateExternalRootSnapshot() {
         state().externalRootSnapshot = null;
         state().fullRootSnapshot = null;
+        state().scalarRootSnapshot = null;
     }
 
     static void invalidateAllRootSnapshots() {
@@ -1520,6 +1521,22 @@ public class MortalList {
     static void invalidateLiveRootSnapshot() {
         state().liveRootSnapshot = null;
         state().fullRootSnapshot = null;
+        state().scalarRootSnapshot = null;
+    }
+
+    /**
+     * Reuse scalar-owner reachability across one cleanup drain. Return
+     * {@code null} outside a drain so callers retain the target-specific walk
+     * and its original lifetime semantics.
+     */
+    static Boolean isScalarReachableFromDrainSnapshot(RuntimeScalar scalar) {
+        LifecycleRuntimeState state = state();
+        if (!state.flushing && state.reachabilityDrainDepth == 0) return null;
+        if (state.scalarRootSnapshot == null) {
+            state.scalarRootSnapshot =
+                    ReachabilityWalker.scalarReachabilitySnapshot();
+        }
+        return state.scalarRootSnapshot.isReachable(scalar);
     }
 
     private static void invalidateDrainReachabilityCaches() {

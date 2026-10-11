@@ -151,4 +151,60 @@ class UnblessedAggregateReachabilitySnapshotTest {
             }
         }
     }
+
+    @Test
+    void repeatedOwnerScalarChecksShareOneRootSnapshotPerDrain() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray global = new RuntimeArray();
+            String globalName =
+                    "UnblessedAggregateReachabilitySnapshotTest::scalarOwners";
+            GlobalVariable.globalArrays.put(globalName, global);
+            RuntimeHash target = new RuntimeHash();
+            target.activateOwnerTracking();
+            RuntimeScalar[] owners = new RuntimeScalar[3];
+            RuntimeScalar weak = null;
+            try {
+                for (int i = 0; i < 256; i++) {
+                    global.elements.add(new RuntimeHash().createReference());
+                }
+                for (int i = 0; i < owners.length; i++) {
+                    RuntimeScalar owner = target.createAnonymousReference();
+                    RuntimeScalar.incrementRefCountForContainerStore(owner);
+                    global.elements.add(owner);
+                    // Exercise the graph fallback instead of the direct
+                    // package-array/container-owner shortcut.
+                    owner.containerOwner = null;
+                    owners[i] = owner;
+                }
+                weak = target.createAnonymousReference();
+                WeakRefRegistry.weaken(weak);
+
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    for (int i = 0; i < owners.length; i++) {
+                        MortalList.deferDecrement(target);
+                    }
+                    MortalList.flush();
+
+                    ReachabilityQueryStats stats = measurement.stats();
+                    assertEquals(3, stats.scalarReachabilityQueries,
+                            "all active owner scalars are checked at the zero transition");
+                    assertEquals(1, stats.scalarReachabilityRootWalks,
+                            "the package/live root graph is traversed once per drain");
+                    assertEquals(1, stats.snapshotsBuilt,
+                            "subsequent owner checks reuse the same identity snapshot");
+                    assertTrue(stats.rootsSeeded > 0);
+                    assertTrue(stats.edgesInspected >= 259);
+                    assertTrue(stats.nodesVisited >= 260);
+                    assertEquals(3, target.refCount,
+                            "all three package-rooted owners restore the referent count");
+                }
+            } finally {
+                if (weak != null) WeakRefRegistry.unweaken(weak);
+                GlobalVariable.globalArrays.remove(globalName);
+                MortalList.invalidateAllRootSnapshots();
+            }
+        }
+    }
 }
