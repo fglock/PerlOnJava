@@ -8,6 +8,12 @@ priorities and future plans.
 
 - Route compile-time `eval STRING` warnings through `$SIG{__WARN__}` (#1740).
 - Keep Dancer2 upload tempfiles alive for the request lifetime and clean multipart parser tempdirs after parsing (#1741).
+- Include built test prerequisite libraries in CPAN distribution test `PERL5LIB`
+  (#1736).
+- Keep Cwd's Windows `chdir` path working without requiring the Win32 module.
+- Add `HTTP::Cookies->clear()` and retain `Expires` and extension attributes
+  such as `SameSite` when extracting cookies (#1742, #1743).
+- Avoid false `illegalproto` warnings for valid escaped array prototypes such as `\@@` and `\@$` (#1615).
 - Load the `Errno` Perl bootstrap when `use Errno` follows `%!` access, and
   preserve captured aggregate caches during targeted weak-reference sweeps so
   Pod::HtmlEasy can import errno constants and load its regex patterns (#1662).
