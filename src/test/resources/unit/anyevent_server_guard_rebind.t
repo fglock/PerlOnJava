@@ -1,6 +1,5 @@
 use strict;
 use warnings;
-use IO::Socket::INET;
 use Test::More;
 
 unless (eval { require AnyEvent; require AnyEvent::Socket; 1 }) {
@@ -8,22 +7,13 @@ unless (eval { require AnyEvent; require AnyEvent::Socket; 1 }) {
 }
 
 plan tests => 2;
-
-sub temporary_listener_port {
-    my $probe = IO::Socket::INET->new(
-        LocalAddr => '127.0.0.1',
-        LocalPort => 0,
-        Listen => 5,
-        ReuseAddr => 1,
-        Proto => 'tcp',
-    ) or die "cannot allocate loopback port: $!";
-    return $probe->sockport;
-}
-
-my $port = temporary_listener_port();
+my $port;
 {
-    my $server = AnyEvent::Socket::tcp_server(undef, $port, sub {});
-    ok($server, 'first AnyEvent server binds the port');
+    my $server = AnyEvent::Socket::tcp_server(undef, 0, sub {}, sub {
+        $port = $_[2];
+        return 128;
+    });
+    ok($server && $port, 'first AnyEvent server binds an ephemeral port');
 }
 
 my $rebound = eval {
