@@ -12,6 +12,8 @@ priorities and future plans.
 
 - Close IO::Handle descriptors at Perl object destruction so scoped AnyEvent
   listeners release their ports and accept watchers can bind correctly.
+- Close AnyEvent's listening socket when its server guard is dropped, allowing
+  the same port to be rebound after the accept watcher leaves scope (#1757).
 
 - Route compile-time `eval STRING` warnings through `$SIG{__WARN__}` (#1740).
 - Keep Dancer2 upload tempfiles alive for the request lifetime and clean multipart parser tempdirs after parsing (#1741).
