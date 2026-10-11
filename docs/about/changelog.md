@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Add `HTTP::Cookies->clear()` and retain `Expires` and extension attributes
+  such as `SameSite` when extracting cookies (#1742, #1743).
 - Load the `Errno` Perl bootstrap when `use Errno` follows `%!` access, and
   preserve captured aggregate caches during targeted weak-reference sweeps so
   Pod::HtmlEasy can import errno constants and load its regex patterns (#1662).
