@@ -5910,7 +5910,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             int trackedActiveCodeFrame = activeCodeFrameForCaller(
                     result.firstFrameFromInterpreter() ? originalFrame : trackedOriginalFrame);
             // Runtime stack trace
-            if (ctx == RuntimeContextType.SCALAR) {
+            if (ctx == RuntimeContextType.SCALAR || ctx == RuntimeContextType.OBJECT) {
                 String pkg = locationFrameInfo.getFirst();
                 RuntimeCode reportedCode = activeCodeAtCallerFrame(trackedActiveCodeFrame);
                 boolean carpTrustedFrame = isCarpStackActive() && reportedCode != null

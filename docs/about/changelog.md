@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve scalar context for `caller()` when used as a method invocant on the interpreter (#1744).
 - Include built test prerequisite libraries in CPAN distribution test `PERL5LIB`
   (#1736).
 - Keep Cwd's Windows `chdir` path working without requiring the Win32 module.
