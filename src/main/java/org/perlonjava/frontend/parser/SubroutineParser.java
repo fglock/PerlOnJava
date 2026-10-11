@@ -1413,7 +1413,7 @@ public class SubroutineParser {
         if (node instanceof OperatorNode op) {
             if ("@".equals(op.operator) && op.operand instanceof IdentifierNode id
                     && "_".equals(id.name)) {
-                String operation = switch (parentOperator) {
+                String operation = switch (parentOperator == null ? "" : parentOperator) {
                     case "shift" -> "shift";
                     case "pop" -> "pop";
                     case "[", "{" -> "array element";
@@ -1424,7 +1424,7 @@ public class SubroutineParser {
                     case "values" -> "values on array";
                     case "each" -> "each on array";
                     case "print" -> "print";
-                    default -> "subroutine entry";
+                    default -> parentOperator == null ? "line sequence" : "subroutine entry";
                 };
                 emitSignatureArgsWarning(parser, operation, node.getIndex());
                 return;
