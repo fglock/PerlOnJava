@@ -49,6 +49,8 @@ final class LifecycleRuntimeState {
     // between callbacks that are expected to dispatch together.
     long lastAutoSweepNanos = System.nanoTime();
     boolean inAutoSweep;
+    /** Suppress sweeps while clone hooks and the first child entry build Perl roots. */
+    int weakSweepSuppressionDepth;
     boolean immediateWeakSweepRequested;
     boolean deferCaptureReachabilityToBoundarySweep;
     final ArrayList<RuntimeBase> deferredCaptureSweepCandidates = new ArrayList<>();

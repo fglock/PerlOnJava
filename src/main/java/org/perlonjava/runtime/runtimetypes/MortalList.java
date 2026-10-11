@@ -1785,6 +1785,7 @@ public class MortalList {
             LifecycleRuntimeState state,
             Set<RuntimeBase> releasedTargets,
             ReachabilityWalker.ReleasedWeakSweepResult releasedSweepResult) {
+        if (state.weakSweepSuppressionDepth > 0) return;
         if (AUTO_GC_DISABLED) return;
         if (state.inAutoSweep) return;
         boolean immediateSweep = state.immediateWeakSweepRequested;
@@ -1838,6 +1839,7 @@ public class MortalList {
 
     private static void maybeAutoSweepAtStatementBoundary(
             LifecycleRuntimeState state, boolean topLevel) {
+        if (state.weakSweepSuppressionDepth > 0) return;
         Set<RuntimeBase> releasedTargets = Collections.emptySet();
         ReachabilityWalker.ReleasedWeakSweepResult releasedSweepResult = null;
         if (!state.targetedWeakSweepReferents.isEmpty() && state.temporaryRoots.isEmpty()) {

@@ -82,14 +82,43 @@ use strict;
 use warnings;
 use Scalar::Util ();
 
+our @TIES;
+
 sub TIEHASH {
     my ($class) = @_;
-    return bless {
+    my $self = bless {
         values => {},
         refs   => {},
         order  => [],
         iter   => [],
     }, $class;
+    push @TIES, $self;
+    Scalar::Util::weaken($TIES[-1]);
+    return $self;
+}
+
+# Numeric keys are refaddrs, which change when ithreads clone their referents.
+# Re-key each live fieldhash entry against the cloned weak key during CLONE.
+sub CLONE {
+    my @live;
+    for my $tie (grep { defined } @TIES) {
+        my (%values, %refs);
+        for my $old_id (keys %{ $tie->{refs} }) {
+            my $key = $tie->{refs}{$old_id};
+            next unless defined $key;
+            my $new_id = Scalar::Util::refaddr($key);
+            $refs{$new_id} = $key;
+            $values{$new_id} = $tie->{values}{$old_id}
+                if exists $tie->{values}{$old_id};
+        }
+        $tie->{refs} = \%refs;
+        $tie->{values} = \%values;
+        @{ $tie->{order} } = keys %refs;
+        @{ $tie->{iter} } = ();
+        push @live, $tie;
+    }
+    @TIES = @live;
+    Scalar::Util::weaken($_) for @TIES;
 }
 
 sub _id_for_key {
