@@ -5883,6 +5883,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public static RuntimeList callerWithSub(RuntimeList args, int ctx, RuntimeScalar currentSub) {
         RuntimeList res = new RuntimeList();
+        boolean scalarContext = ctx == RuntimeContextType.SCALAR
+                || ctx == RuntimeContextType.OBJECT;
         int frame = 0;
         boolean hasExplicitExpr = !args.isEmpty();
         if (hasExplicitExpr) {
@@ -5995,7 +5997,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             int trackedActiveCodeFrame = activeCodeFrameForCaller(
                     result.firstFrameFromInterpreter() ? originalFrame : trackedOriginalFrame);
             // Runtime stack trace
-            if (ctx == RuntimeContextType.SCALAR || ctx == RuntimeContextType.OBJECT) {
+            if (scalarContext) {
                 String pkg = locationFrameInfo.getFirst();
                 RuntimeCode reportedCode = activeCodeAtCallerFrame(trackedActiveCodeFrame);
                 if (isEvalClosureSandboxPackage(pkg)) {
@@ -6436,7 +6438,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     && (hasExplicitlyRenamedActiveCode() || missingInterpreterDieFrame)
                     && activeSubName != null && !activeSubName.isEmpty()) {
                 String pkg = normalizeCallerPackage(activeCode.packageName);
-                if (ctx == RuntimeContextType.SCALAR) {
+                if (scalarContext) {
                     res.add(new RuntimeScalar(pkg));
                 } else {
                     String activeFile = activeCode.cvStartFile != null
@@ -6490,7 +6492,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             CallerStack.CallerInfo info = CallerStack.peek(callerStackFrame);
             if (info != null) {
                 String pkg = normalizeCallerPackage(info.packageName());
-                if (ctx == RuntimeContextType.SCALAR) {
+                if (scalarContext) {
                     res.add(new RuntimeScalar(pkg));
                 } else {
                     res.add(new RuntimeScalar(pkg));
