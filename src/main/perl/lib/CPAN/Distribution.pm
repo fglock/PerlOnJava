@@ -4310,6 +4310,11 @@ sub test {
         return;
     }
 
+    # satisfy_test_requires may have built and tested additional prerequisite
+    # distributions. Refresh the environment so their blib paths are recorded
+    # in the manifest consumed by the target's generated test command.
+    $CPAN::META->set_perl5lib;
+
     if ($CPAN::Signal) {
         delete $self->{force_update};
         $self->post_test();

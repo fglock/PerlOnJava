@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Include built test prerequisite libraries in CPAN distribution test `PERL5LIB`
+  (#1736).
+- Keep Cwd's Windows `chdir` path working without requiring the Win32 module.
 - Add `HTTP::Cookies->clear()` and retain `Expires` and extension attributes
   such as `SameSite` when extracting cookies (#1742, #1743).
 - Avoid false `illegalproto` warnings for valid escaped array prototypes such as `\@@` and `\@$` (#1615).
