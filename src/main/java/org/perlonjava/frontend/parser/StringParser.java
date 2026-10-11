@@ -801,7 +801,8 @@ public class StringParser {
         } else {
             // handle single quoted string
             rawStr.buffers.removeFirst();   // consume the first buffer
-            replace = StringSingleQuoted.parseSingleQuotedString(rawStr);
+            replace = StringSingleQuoted.parseSingleQuotedString(
+                    rawStr, ctx.compilerOptions.isByteStringSource);
         }
 
         if (modifierStr.chars().filter(c -> c == 'e').count() >= 2) {
@@ -1448,7 +1449,8 @@ public class StringParser {
             }
             case "'":
             case "q": {
-                Node value = StringSingleQuoted.parseSingleQuotedString(rawStr);
+                Node value = StringSingleQuoted.parseSingleQuotedString(
+                        rawStr, parser.ctx.compilerOptions.isByteStringSource);
                 if (value instanceof StringNode stringNode) {
                     return ConstantOverloadParser.wrapStringConstant(parser, stringNode,
                             rawStr.buffers.getFirst(), rawStr.index, "q", "q",
