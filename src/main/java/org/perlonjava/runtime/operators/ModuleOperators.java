@@ -3,6 +3,7 @@ package org.perlonjava.runtime.operators;
 import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.backend.bytecode.InterpreterState;
+import org.perlonjava.backend.bytecode.EvalStringHandler;
 import org.perlonjava.core.Configuration;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.HintHashRegistry;
@@ -29,6 +30,7 @@ import java.util.Set;
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.perlonjava.runtime.runtimetypes.ExceptionFormatter.findInnermostCause;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalHash;
@@ -69,6 +71,8 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
  * @see <a href="https://perldoc.perl.org/functions/require">perldoc require</a>
  */
 public class ModuleOperators {
+    private static final Set<String> APPLIED_RUNTIME_OVERRIDES = ConcurrentHashMap.newKeySet();
+
     private record CachedTiedIncEntry(RuntimeScalar tiedScalar, RuntimeScalar value) { }
 
     /** Entries actually consulted by the current require search, in order. */
@@ -935,6 +939,22 @@ public class ModuleOperators {
                 return new RuntimeList();
             } else {
                 return scalarUndef;
+            }
+        }
+
+        if (isRequire && fileName.equals("HTTP/Entity/Parser/MultiPart.pm")
+                && APPLIED_RUNTIME_OVERRIDES.add(fileName)) {
+            String overridePath = "/lib/PerlOnJava/RuntimeOverrides/HTTP/Entity/Parser/MultiPart.pm";
+            try (InputStream overrideStream = ModuleOperators.class.getResourceAsStream(overridePath)) {
+                if (overrideStream != null) {
+                    String overrideCode = new String(
+                            overrideStream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                    EvalStringHandler.evalString(overrideCode, new RuntimeBase[0],
+                            "jar:PERL5LIB/PerlOnJava/RuntimeOverrides/HTTP/Entity/Parser/MultiPart.pm", 1);
+                }
+            } catch (IOException e) {
+                APPLIED_RUNTIME_OVERRIDES.remove(fileName);
+                throw new IllegalStateException("Unable to load bundled multipart parser override", e);
             }
         }
 

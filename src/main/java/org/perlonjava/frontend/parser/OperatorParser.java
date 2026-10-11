@@ -621,9 +621,10 @@ public class OperatorParser {
                     // For 'my'/'local', warn if redeclared in the same scope (warnings 'shadow')
                     if (WarningFlags.ckWarnForScope(ctx.symbolTable, "shadow")
                             && ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
-                        System.err.println(
-                                ctx.errorUtil.errorMessage(node.getIndex(),
-                                        "\"" + operator + "\" variable " + var + " masks earlier declaration in same scope"));
+                        WarnDie.warn(new RuntimeScalar(
+                                        "\"" + operator + "\" variable " + var
+                                                + " masks earlier declaration in same scope"),
+                                new RuntimeScalar(ctx.errorUtil.warningLocation(node.getIndex())));
                     }
                 }
                 
