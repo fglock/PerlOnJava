@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve the response object when immediately calling a coderef returned by a method, and retain UTF-8 source flags across imported pragmas (#1738, #1739).
 - Include built test prerequisite libraries in CPAN distribution test `PERL5LIB`
   (#1736).
 - Keep Cwd's Windows `chdir` path working without requiring the Win32 module.

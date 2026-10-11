@@ -918,6 +918,15 @@ public class Dereference {
 
         if (node.right instanceof ListNode) { // ->()
 
+            if (node.left instanceof BinaryOperatorNode methodResult
+                    && "->".equals(methodResult.operator)
+                    && methodResult.left instanceof OperatorNode invocant
+                    && "shift".equals(invocant.operator)
+                    && methodResult.right instanceof BinaryOperatorNode methodCall
+                    && "(".equals(methodCall.operator)) {
+                methodResult.setAnnotation("bindMethodCoderef", true);
+            }
+
             BinaryOperatorNode applyNode = new BinaryOperatorNode("(", node.left, node.right, node.tokenIndex);
             Object callerLineOverride = node.getAnnotation("callerLineTokenOverride");
             if (callerLineOverride instanceof Integer token && token > 0) {
@@ -1092,6 +1101,8 @@ public class Dereference {
             mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
             if (node.getBooleanAnnotation("wantedObjectContext")) {
                 mv.visitLdcInsn(RuntimeContextType.OBJECT);
+            } else if (node.getBooleanAnnotation("bindMethodCoderef")) {
+                mv.visitLdcInsn(RuntimeContextType.METHOD_CODEREF);
             } else if (node.getBooleanAnnotation("inheritRawCallContext")) {
                 mv.visitMethodInsn(
                         Opcodes.INVOKESTATIC,
@@ -1288,6 +1299,7 @@ public class Dereference {
             }
         }
     }
+
 
     public static void handleArrowArrayDeref(EmitterVisitor emitterVisitor, BinaryOperatorNode node, String arrayOperation) {
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) ->[] ");

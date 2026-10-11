@@ -17,7 +17,12 @@ public class Strict extends PerlModuleBase {
     private static void propagatePragmaFlags(ScopedSymbolTable source) {
         ScopedSymbolTable mutationScope = getCompileTimeMutationScope();
         if (source != null && mutationScope != null && mutationScope != source) {
+            boolean utf8Enabled = mutationScope.isStrictOptionEnabled(HINT_UTF8);
             mutationScope.copyFlagsFrom(source);
+            if (utf8Enabled != mutationScope.isStrictOptionEnabled(HINT_UTF8)) {
+                if (utf8Enabled) mutationScope.enableStrictOption(HINT_UTF8);
+                else mutationScope.disableStrictOption(HINT_UTF8);
+            }
         }
     }
 
