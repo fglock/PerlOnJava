@@ -46,7 +46,12 @@ public class Re extends PerlModuleBase {
     private static void propagatePragmaFlags(ScopedSymbolTable source) {
         ScopedSymbolTable mutationScope = getCompileTimeMutationScope();
         if (source != null && mutationScope != null && mutationScope != source) {
+            boolean utf8Enabled = mutationScope.isStrictOptionEnabled(Strict.HINT_UTF8);
             mutationScope.copyFlagsFrom(source);
+            if (utf8Enabled != mutationScope.isStrictOptionEnabled(Strict.HINT_UTF8)) {
+                if (utf8Enabled) mutationScope.enableStrictOption(Strict.HINT_UTF8);
+                else mutationScope.disableStrictOption(Strict.HINT_UTF8);
+            }
         }
     }
 
