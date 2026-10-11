@@ -205,13 +205,20 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                 RuntimeScalar localVar = saved.localizedVariable;
                 RuntimeBase displacedBase = null;
                 RuntimeScalar scalarReferenceContents = null;
-                // A localized package scalar can hold a blessed hash/array
-                // object (for example Test::Deep's local $CompareCache).
-                // Release container-owned values before the temporary scalar
-                // is discarded, just as lexical-scope cleanup does.
-                if (localVar != null && localVar.value instanceof RuntimeHash localHash) {
+                // Release container-owned values only when this localized
+                // scalar is dropping the container's last counted owner. A
+                // localized alias to a still-live request or cache must not
+                // release its fields while another Perl owner can still use
+                // them (Dancer2 uploads keep their File::Temp handle there).
+                boolean releasesLastContainerOwner = localVar != null
+                        && localVar.refCountOwned
+                        && (localVar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && localVar.value instanceof RuntimeBase localBase
+                        && localBase.refCount == 1
+                        && !localBase.localBindingExists;
+                if (releasesLastContainerOwner && localVar.value instanceof RuntimeHash localHash) {
                     MortalList.deferDestroyForContainerClear(localHash.elements.values());
-                } else if (localVar != null && localVar.value instanceof RuntimeArray localArray) {
+                } else if (releasesLastContainerOwner && localVar.value instanceof RuntimeArray localArray) {
                     MortalList.deferDestroyForContainerClear(localArray.elements);
                 }
                 if (localVar != null

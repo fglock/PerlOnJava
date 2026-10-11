@@ -7,6 +7,8 @@ priorities and future plans.
 ## Work in progress
 
 - Preserve scalar context for `caller()` when used as a method invocant on the interpreter (#1744).
+- Route compile-time `eval STRING` warnings through `$SIG{__WARN__}` (#1740).
+- Keep Dancer2 upload tempfiles alive for the request lifetime and clean multipart parser tempdirs after parsing (#1741).
 - Preserve the response object when immediately calling a coderef returned by a method, and retain UTF-8 source flags across imported pragmas (#1738, #1739).
 - Include built test prerequisite libraries in CPAN distribution test `PERL5LIB`
   (#1736).
