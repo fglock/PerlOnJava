@@ -1,16 +1,6 @@
 use strict;
 use warnings;
 use Test::More;
-
-BEGIN {
-    package Issue1642::Utf8Importer;
-    sub import {
-        require utf8;
-        utf8->import;
-    }
-    $INC{'Issue1642/Utf8Importer.pm'} = __FILE__;
-}
-
 use Issue1642::Utf8Importer;
 
 my $subject = "☃x";

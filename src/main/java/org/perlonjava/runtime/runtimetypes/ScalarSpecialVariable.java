@@ -121,7 +121,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
             int hints = value.getInt();
             // Update the symbol table's strict options directly
             // No need to store in lvalue since reading always uses the symbol table
-            ScopedSymbolTable symbolTable = SpecialBlockParser.getCurrentScope();
+            ScopedSymbolTable symbolTable = SpecialBlockParser.getCompileTimePragmaMutationScope();
             if (symbolTable != null) {
                 symbolTable.setStrictOptions(hints);
             }
@@ -159,7 +159,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     public RuntimeScalar undefine() {
         if (variableId == Id.HINTS) {
             HintHashRegistry.clearCurrentHintHash();
-            ScopedSymbolTable symbolTable = SpecialBlockParser.getCurrentScope();
+            ScopedSymbolTable symbolTable = SpecialBlockParser.getCompileTimePragmaMutationScope();
             if (symbolTable != null) {
                 symbolTable.setStrictOptions(0);
             }
@@ -302,7 +302,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                 case HINTS -> {
                     // $^H - Always read from the current scope's symbol table
                     // This ensures lexical scoping - each scope has its own $^H value
-                    ScopedSymbolTable symbolTable = SpecialBlockParser.getCurrentScope();
+                    ScopedSymbolTable symbolTable = SpecialBlockParser.getCompileTimePragmaMutationScope();
                     if (symbolTable != null) {
                         yield getScalarInt(symbolTable.getStrictOptions());
                     }

@@ -12,7 +12,7 @@ import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 
-import static org.perlonjava.frontend.parser.SpecialBlockParser.getCompileTimeMutationScope;
+import static org.perlonjava.frontend.parser.SpecialBlockParser.getCompileTimePragmaMutationScope;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.BYTE_STRING;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.STRING;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.TIED_SCALAR;
@@ -72,7 +72,7 @@ public class Utf8 extends PerlModuleBase {
      * @return A RuntimeList.
      */
     public static RuntimeList useUtf8(RuntimeArray args, int ctx) {
-        ScopedSymbolTable symbolTable = getCompileTimeMutationScope();
+        ScopedSymbolTable symbolTable = getCompileTimePragmaMutationScope();
         symbolTable.enableStrictOption(Strict.HINT_UTF8);
         return new RuntimeScalar().getList();
     }
@@ -85,7 +85,7 @@ public class Utf8 extends PerlModuleBase {
      * @return A RuntimeList.
      */
     public static RuntimeList noUtf8(RuntimeArray args, int ctx) {
-        ScopedSymbolTable symbolTable = getCompileTimeMutationScope();
+        ScopedSymbolTable symbolTable = getCompileTimePragmaMutationScope();
         symbolTable.disableStrictOption(Strict.HINT_UTF8);
         return new RuntimeScalar().getList();
     }
