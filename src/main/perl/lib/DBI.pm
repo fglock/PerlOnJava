@@ -7,7 +7,7 @@ use Exporter 'import';
 
 our $VERSION = '1.643';
 our $stderr = 2000000000;
-our ($err, $errstr, $state);
+our ($err, $errstr, $state, $TraceLevel, $TraceOutput);
 our ($ACTIVE_FETCH_FREETMPS_RUNNING, $DDL_CLEANUP_RUNNING);
 our %InstalledDrivers;
 our $SqlEngineStorePatched;
@@ -28,7 +28,7 @@ our %DriverPrefix = (
 our ($JDBC_CONNECT, $JDBC_PREPARE, $JDBC_EXECUTE, $JDBC_FINISH,
      $JDBC_DISCONNECT, $JDBC_PING, $JDBC_FETCHROW_ARRAYREF,
      $JDBC_FETCHROW_HASHREF, $JDBC_BEGIN_WORK, $JDBC_COMMIT,
-     $JDBC_ROLLBACK);
+     $JDBC_ROLLBACK, $JDBC_DATA_SOURCES);
 
 # SQL type constants exported on demand, e.g. `use DBI qw(SQL_BLOB SQL_VARCHAR)`
 # or via the :sql_types tag. Mirrors real DBI's export interface so modules
@@ -82,6 +82,18 @@ sub DBD::_::st::finish {
     return 1;
 }
 
+# Generic pure-Perl driver connection used by drivers that call
+# $drh->SUPER::connect(). The Java-backed DBI::connect entry point is a
+# class-level DSN dispatcher, so it cannot serve as the driver's parent method.
+sub DBD::_::dr::connect {
+    my ($drh, $dbname, $user, $auth, $attr) = @_;
+    my ($dbh) = DBI::_new_dbh($drh, {
+        Name => $dbname,
+        Username => $user,
+    });
+    return $dbh;
+}
+
 # Wrap Java DBI methods with HandleError support and DBI attribute tracking.
 # In real DBI, HandleError is called from C before RaiseError/die.
 # Since our Java methods just die with RaiseError, we wrap them in Perl
@@ -99,6 +111,7 @@ sub DBD::_::st::finish {
     $JDBC_ROLLBACK = \&DBI::_jdbc_rollback;
     $JDBC_FETCHROW_ARRAYREF = \&DBI::_jdbc_fetchrow_arrayref;
     $JDBC_FETCHROW_HASHREF = \&DBI::_jdbc_fetchrow_hashref;
+    $JDBC_DATA_SOURCES = \&DBI::_jdbc_data_sources;
 
     no warnings 'redefine';
 
@@ -1364,19 +1377,28 @@ sub trace {
     my ($dbh, $level, $output) = @_;
     $level ||= 0;
 
+    if (!ref($dbh)) {
+        my $old_level = $TraceLevel || 0;
+        $TraceLevel = $level;
+        $TraceOutput = $output if defined $output;
+        return $old_level;
+    }
+
+    my $old_level = defined $dbh->{TraceLevel} ? $dbh->{TraceLevel} : ($TraceLevel || 0);
     $dbh->{TraceLevel} = $level;
     $dbh->{TraceOutput} = $output if defined $output;
 
-    return $level;
+    return $old_level;
 }
 
 sub trace_msg {
     my ($dbh, $msg, $level) = @_;
     $level ||= 0;
 
-    my $current_level = $dbh->{TraceLevel} || 0;
+    my $current_level = ref($dbh) ? ($dbh->{TraceLevel} || 0) : ($TraceLevel || 0);
     if ($level <= $current_level) {
-        if ($dbh->{TraceOutput}) {
+        my $output = ref($dbh) ? $dbh->{TraceOutput} : $TraceOutput;
+        if ($output) {
             # TODO: Write to custom output
             print STDERR $msg;
         } else {
@@ -1384,6 +1406,24 @@ sub trace_msg {
         }
     }
     return 1;
+}
+
+sub data_sources {
+    my ($class, $driver, @args) = @_;
+    if (defined $driver && $driver =~ /^\w+$/) {
+        my $driver_class = "DBD::$driver";
+        my $loaded = eval { require $driver_class; 1 };
+        if ($loaded && $driver_class->can('driver')) {
+            my $drh = $class->install_driver($driver);
+            my $method = $drh->can('data_sources');
+            return $method->($drh, @args)
+                if $method
+                    && Scalar::Util::refaddr($method)
+                        != Scalar::Util::refaddr(\&DBI::data_sources);
+        }
+    }
+    return $JDBC_DATA_SOURCES->(@_) if $JDBC_DATA_SOURCES;
+    return ();
 }
 
 sub prepare_cached {
