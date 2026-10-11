@@ -1,8 +1,14 @@
 use strict;
 use warnings;
-use Test::More tests => 3;
+use Test::More;
 use Encode qw(encode_utf8 is_utf8);
-use Template;
+
+BEGIN {
+    eval { require Template; 1 }
+        or plan skip_all => 'Template Toolkit is not installed';
+}
+
+plan tests => 3;
 
 my @flags;
 my $tt = Template->new({
