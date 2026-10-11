@@ -2,7 +2,6 @@ use strict;
 use warnings;
 no warnings 'once';
 use Config;
-use Cwd qw(getcwd);
 use File::Path qw(make_path);
 use File::Temp qw(tempdir);
 use Test::More;
@@ -40,7 +39,7 @@ require CPAN::Distribution;
 }
 
 my $root = tempdir(CLEANUP => 1);
-our $ORIGINAL_DIR = getcwd();
+our $ORIGINAL_DIR = Internals::getcwd();
 my $target = "$root/Target-Dist";
 my $dependency = "$root/Test-Dependency";
 make_path("$target/blib", "$dependency/blib/lib", "$dependency/blib/arch");
