@@ -1270,7 +1270,10 @@ sub normalize_report_module_aliases {
     my ($records, $module_to_dist, $archive_to_canonical_module) = @_;
     for my $module (keys %$records) {
         next if exists $module_to_dist->{$module};
-        my $canonical = $archive_to_canonical_module->{$module};
+        my $canonical = $archive_to_canonical_module->{$module}
+            || canonical_module_for_report_name(
+                $module, $module_to_dist, $archive_to_canonical_module,
+            );
         next unless defined $canonical && length $canonical;
 
         if (!exists $records->{$canonical}
@@ -1279,6 +1282,23 @@ sub normalize_report_module_aliases {
         }
         delete $records->{$module};
     }
+}
+
+# A report can outlive a package rename within a distribution. If its old
+# module name is no longer in 02packages, use the conventional module-to-dist
+# spelling only when it identifies exactly one currently indexed archive.
+sub canonical_module_for_report_name {
+    my ($module, $module_to_dist, $archive_to_canonical_module) = @_;
+    return undef if exists $module_to_dist->{$module};
+    return undef unless defined $module && length $module;
+
+    my $dist_prefix = $module;
+    $dist_prefix =~ s/::/-/g;
+    my @matches = grep { /^\Q$dist_prefix\E-(?:v?\d)/ }
+        keys %$archive_to_canonical_module;
+    return undef unless @matches == 1;
+
+    return $archive_to_canonical_module->{$matches[0]};
 }
 
 # CPAN namespace resolution errors happen before any build or tests. Treat a
