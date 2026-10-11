@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Include built test prerequisite libraries in CPAN distribution test `PERL5LIB`
+  (#1736).
 - Load the `Errno` Perl bootstrap when `use Errno` follows `%!` access, and
   preserve captured aggregate caches during targeted weak-reference sweeps so
   Pod::HtmlEasy can import errno constants and load its regex patterns (#1662).
