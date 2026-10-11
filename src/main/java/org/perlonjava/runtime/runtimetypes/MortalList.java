@@ -1615,16 +1615,16 @@ public class MortalList {
                 // array slot remains a strong owner.  Destroying here clears
                 // that weak parent and corrupts the context tree.
             } else if (base.blessId == 0
-                    && hasWeakRefs
                     && (base instanceof RuntimeArray || base instanceof RuntimeHash)
                     && isReachableFromFullRootSnapshot(base)) {
-                // Unblessed aggregates can be under construction when their
-                // weak parent edge is installed. A temporary parser reference
-                // can make the selective count reach zero even though an
-                // enclosing live aggregate already owns the node. Consult the
-                // shared drain snapshot before clearing those weak parent
-                // links. The next cleanup boundary can still reclaim a tree
-                // after its Perl root goes away.
+                // Unblessed aggregates can reach zero while a parser is
+                // assembling a tree, before it installs the first weak parent
+                // edge. A temporary reference can make the selective count
+                // reach zero even though an enclosing live aggregate already
+                // owns the node. Consult the shared drain snapshot before a
+                // later weaken() sees a destroyed referent. The next cleanup
+                // boundary can still reclaim a tree after its Perl root goes
+                // away.
                 base.refCount = 1;
             } else if (hasWeakRefs
                     && base.possiblyStoredInTiedHandler
