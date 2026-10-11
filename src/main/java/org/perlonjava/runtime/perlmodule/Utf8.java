@@ -13,6 +13,7 @@ import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 
 import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
+import static org.perlonjava.frontend.parser.SpecialBlockParser.getCompileTimeMutationScope;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.BYTE_STRING;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.STRING;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.TIED_SCALAR;
@@ -21,6 +22,17 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.TIED_SCALAR;
  * The Utf8 class provides functionalities similar to the Perl utf8 pragma.
  */
 public class Utf8 extends PerlModuleBase {
+
+    private static void propagateUtf8Flag(boolean enabled) {
+        ScopedSymbolTable mutationScope = getCompileTimeMutationScope();
+        if (mutationScope != null && mutationScope != getCurrentScope()) {
+            if (enabled) {
+                mutationScope.enableStrictOption(Strict.HINT_UTF8);
+            } else {
+                mutationScope.disableStrictOption(Strict.HINT_UTF8);
+            }
+        }
+    }
 
     /**
      * Constructor for Utf8.
@@ -68,6 +80,7 @@ public class Utf8 extends PerlModuleBase {
     public static RuntimeList useUtf8(RuntimeArray args, int ctx) {
         ScopedSymbolTable symbolTable = getCurrentScope();
         symbolTable.enableStrictOption(Strict.HINT_UTF8);
+        propagateUtf8Flag(true);
         return new RuntimeScalar().getList();
     }
 
@@ -81,6 +94,7 @@ public class Utf8 extends PerlModuleBase {
     public static RuntimeList noUtf8(RuntimeArray args, int ctx) {
         ScopedSymbolTable symbolTable = getCurrentScope();
         symbolTable.disableStrictOption(Strict.HINT_UTF8);
+        propagateUtf8Flag(false);
         return new RuntimeScalar().getList();
     }
 

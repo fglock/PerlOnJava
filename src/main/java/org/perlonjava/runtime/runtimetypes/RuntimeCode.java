@@ -5293,7 +5293,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // causing blessed objects to leak (DESTROY never fires).
         int cleanupMark = MyVarCleanupStack.pushMark();
         try {
-        return callCachedInner(callsiteId, runtimeScalar, method, currentSub, args, callContext);
+        int calleeContext = callContext == RuntimeContextType.METHOD_CODEREF
+                ? RuntimeContextType.SCALAR : callContext;
+        RuntimeList result = callCachedInner(
+                callsiteId, runtimeScalar, method, currentSub, args, calleeContext);
+        return bindReturnedMethodCoderef(result, runtimeScalar, callContext);
         } catch (RuntimeException e) {
             if (!(e instanceof PerlExitException)) {
                 MyVarCleanupStack.unwindTo(cleanupMark);
@@ -5773,10 +5777,45 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // insert `this` into the parameter list
         args.elements.addFirst(runtimeScalar);
         try {
-            return dispatchPerlMethodAfterSelfInjected(runtimeScalar, method, currentSub, args, callContext);
+            int calleeContext = callContext == RuntimeContextType.METHOD_CODEREF
+                    ? RuntimeContextType.SCALAR : callContext;
+            RuntimeList result = dispatchPerlMethodAfterSelfInjected(
+                    runtimeScalar, method, currentSub, args, calleeContext);
+            return bindReturnedMethodCoderef(result, runtimeScalar, callContext);
         } finally {
             releaseMethodInvocantHold(invHold);
         }
+    }
+
+    private static RuntimeList bindReturnedMethodCoderef(
+            RuntimeList result, RuntimeScalar invocant, int callContext) {
+        if (callContext != RuntimeContextType.METHOD_CODEREF
+                || result == null || result.elements.size() != 1) {
+            return result;
+        }
+        RuntimeBase value = result.elements.getFirst();
+        if (!(value instanceof RuntimeScalar codeRef)
+                || codeRef.type != RuntimeScalarType.CODE
+                || !(codeRef.value instanceof RuntimeCode target)) {
+            return result;
+        }
+        RuntimeCode bound = new RuntimeCode((args, context) -> {
+            RuntimeArray boundArgs = new RuntimeArray(args.size() + 1);
+            boundArgs.elements.add(invocant);
+            for (RuntimeBase arg : args.elements) {
+                arg.setArrayOfAlias(boundArgs);
+            }
+            return target.apply(boundArgs, context);
+        }, target.prototype);
+        bound.packageName = target.packageName;
+        bound.subName = target.subName;
+        bound.refCount = 0;
+        bound.capturedScalars = new RuntimeScalar[] { new RuntimeScalar(codeRef), invocant };
+        for (RuntimeScalar captured : bound.capturedScalars) {
+            captured.retainClosureCapture();
+        }
+        registerJvmClosure(bound);
+        return new RuntimeScalar(bound).getList();
     }
 
 
