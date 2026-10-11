@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 4;
+use Test::More tests => 6;
 
 {
     use integer;
@@ -17,4 +17,14 @@ use Test::More tests => 4;
 
     is($seconds, -1, 'subtracting one nanosecond borrows one second');
     is($nanoseconds, 999_999_999, 'negative nanoseconds normalize into the previous second');
+
+    ($seconds, $nanoseconds) = (0, -123_456);
+    if ($nanoseconds < 0) {
+        my $overflow = 1 + $nanoseconds / 1_000_000_000;
+        $nanoseconds += $overflow * 1_000_000_000;
+        $seconds -= $overflow;
+    }
+
+    is($seconds, -1, 'fractional nanosecond subtraction borrows one second');
+    is($nanoseconds, 999_876_544, 'fractional nanoseconds normalize into the previous second');
 }
