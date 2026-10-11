@@ -4774,7 +4774,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             if (scalar.type == RuntimeScalarType.CODE
                     && scalar.value instanceof RuntimeCode code
                     && code.capturedScalars != null
-                    && code.refCount == 0) {
+                    && code.refCount == 0
+                    && !GlobalVariable.installedGlobalCodeRefsView().contains(code)) {
                 code.releaseCaptures();
             }
             return;

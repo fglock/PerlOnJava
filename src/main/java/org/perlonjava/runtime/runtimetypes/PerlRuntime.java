@@ -618,14 +618,27 @@ public final class PerlRuntime implements AutoCloseable {
     }
 
     private void runCloneHooks() {
-        for (String fqn : new TreeSet<>(globalState.codeRefs().keySet())) {
-            if (!fqn.endsWith("::CLONE") || fqn.endsWith("::CLONE_SKIP")) continue;
-            RuntimeScalar hook = globalState.codeRefs().get(fqn);
-            if (hook == null || !(hook.value instanceof RuntimeCode code) || !code.defined()) continue;
-            String packageName = fqn.substring(0, fqn.length() - "::CLONE".length());
-            RuntimeCode.apply(hook, new RuntimeArray(new RuntimeScalar(packageName)),
-                    RuntimeContextType.VOID);
+        lifecycleState.weakSweepSuppressionDepth++;
+        try {
+            for (String fqn : new TreeSet<>(globalState.codeRefs().keySet())) {
+                if (!fqn.endsWith("::CLONE") || fqn.endsWith("::CLONE_SKIP")) continue;
+                RuntimeScalar hook = globalState.codeRefs().get(fqn);
+                if (hook == null || !(hook.value instanceof RuntimeCode code) || !code.defined()) continue;
+                String packageName = fqn.substring(0, fqn.length() - "::CLONE".length());
+                RuntimeCode.apply(hook, new RuntimeArray(new RuntimeScalar(packageName)),
+                        RuntimeContextType.VOID);
+            }
+        } finally {
+            lifecycleState.weakSweepSuppressionDepth--;
         }
+    }
+
+    void beginThreadEntrySnapshotGrace() {
+        lifecycleState.weakSweepSuppressionDepth++;
+    }
+
+    void endThreadEntrySnapshotGrace() {
+        lifecycleState.weakSweepSuppressionDepth--;
     }
 
     /** Release runtime-owned I/O, alarms, signals, and lifecycle registries. */
