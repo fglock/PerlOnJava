@@ -22,6 +22,27 @@ sub load { return 1 }
 
 sub save { return 1 }
 
+sub clear {
+    my $self = shift;
+    if (@_ == 0) {
+        $self->{COOKIES} = {};
+    }
+    elsif (@_ == 1) {
+        delete $self->{COOKIES}{$_[0]};
+    }
+    elsif (@_ == 2) {
+        delete $self->{COOKIES}{$_[0]}{$_[1]};
+    }
+    elsif (@_ == 3) {
+        delete $self->{COOKIES}{$_[0]}{$_[1]}{$_[2]};
+    }
+    else {
+        require Carp;
+        Carp::carp('Usage: $c->clear([domain [,path [,key]]])');
+    }
+    return $self;
+}
+
 sub add_cookie_header {
     my ($self, $request) = @_;
     return unless $request;
@@ -90,7 +111,7 @@ sub add_cookie_header {
 
 sub set_cookie {
     my ($self, $version, $key, $val, $path, $domain, $port,
-        $path_spec, $secure, $maxage, $discard) = @_;
+        $path_spec, $secure, $maxage, $discard, $rest) = @_;
     $domain = defined($domain) && length($domain) ? $domain : '.local';
     $path = defined($path) && length($path) ? $path : '/';
     if (defined($maxage) && $maxage <= 0) {
@@ -99,7 +120,8 @@ sub set_cookie {
     }
     my $expires = defined($maxage) ? time + $maxage : undef;
     $self->{COOKIES}{$domain}{$path}{$key} = [
-        $version, $val, $port, $path_spec, $secure, $expires, $discard
+        $version, $val, $port, $path_spec, $secure, $expires, $discard,
+        $rest && %$rest ? { %$rest } : undef,
     ];
     return $self;
 }
@@ -111,9 +133,10 @@ sub scan {
         for my $path (sort keys %{ $self->{COOKIES}{$domain} }) {
             for my $key (sort keys %{ $self->{COOKIES}{$domain}{$path} }) {
                 my $cookie = $self->{COOKIES}{$domain}{$path}{$key};
-                my ($version, $val, $port, $path_spec, $secure, $expires, $discard) = @$cookie;
+                my ($version, $val, $port, $path_spec, $secure, $expires,
+                    $discard, $rest) = @$cookie;
                 $callback->($version, $key, $val, $path, $domain, $port,
-                    $path_spec, $secure, $expires, $discard, {});
+                    $path_spec, $secure, $expires, $discard, $rest || {});
             }
         }
     }
@@ -189,18 +212,30 @@ sub extract_cookies {
         for my $part (@parts) {
             my ($name, $attr_value) = split /=/, $part, 2;
             next unless defined $name;
-            $attr{lc $name} = defined $attr_value ? $attr_value : 1;
+            my $lower_name = lc $name;
+            my $attr_name = $lower_name =~ /\A(?:domain|expires|max-age|path|secure)\z/
+                ? $lower_name : $name;
+            $attr{$attr_name} = defined $attr_value ? $attr_value : 1;
         }
 
         my $domain = defined $attr{domain} && length $attr{domain}
             ? lc $attr{domain} : $host;
         my $path = defined $attr{path} && length $attr{path}
             ? $attr{path} : '/';
+        my $maxage = $attr{'max-age'};
+        if (!defined($maxage) && defined($attr{expires})) {
+            my $expires = HTTP::Date::str2time($attr{expires});
+            $maxage = $expires - time if defined $expires;
+        }
+        my %rest = map { $_ => $attr{$_} }
+            grep { $_ !~ /\A(?:domain|expires|max-age|path|secure)\z/i }
+            keys %attr;
+
         $self->set_cookie(
             0, $key, $value, $path, $domain, undef,
             exists($attr{path}) ? 1 : 0,
             exists($attr{secure}) ? 1 : 0,
-            $attr{'max-age'}, 1,
+            $maxage, 1, \%rest,
         );
     }
 

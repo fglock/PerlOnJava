@@ -7,6 +7,12 @@ priorities and future plans.
 ## Work in progress
 
 - Preserve the response object when immediately calling a coderef returned by a method, and retain UTF-8 source flags across imported pragmas (#1738, #1739).
+- Include built test prerequisite libraries in CPAN distribution test `PERL5LIB`
+  (#1736).
+- Keep Cwd's Windows `chdir` path working without requiring the Win32 module.
+- Add `HTTP::Cookies->clear()` and retain `Expires` and extension attributes
+  such as `SameSite` when extracting cookies (#1742, #1743).
+- Avoid false `illegalproto` warnings for valid escaped array prototypes such as `\@@` and `\@$` (#1615).
 - Load the `Errno` Perl bootstrap when `use Errno` follows `%!` access, and
   preserve captured aggregate caches during targeted weak-reference sweeps so
   Pod::HtmlEasy can import errno constants and load its regex patterns (#1662).
