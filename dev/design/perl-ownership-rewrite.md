@@ -383,3 +383,13 @@ and first path establish implementation cost.
   it does not yet replace sentinel checks at every legacy boundary. Scalar/
   proxy and array/hash migration belongs to Phase 2 under issue #1649's current
   plan.
+- On the 2026-10-12 rebase of #1642 onto `32472699a`, `nice -n 19 make` passes
+  in 7m42s. Catalyst-Runtime
+  `t/aggregate/live_component_controller_action_chained2.t` passes 9/9 on JVM
+  and interpreter; Mojolicious `t/mojo/dom.t` passes 132 subtests / 1,418
+  assertions on both backends. The labeled-SKIP parser regression passes 2/2
+  on system Perl and both backends, and `make check-links` passes. The obsolete
+  `TestMoreHelper` macro hook remains removed after rebasing onto master. The
+  fresh-home release acceptance and current-candidate Catalyst cleanup profile
+  remain open; targeted tests do not establish the full gate or the total cost
+  of root walking.
