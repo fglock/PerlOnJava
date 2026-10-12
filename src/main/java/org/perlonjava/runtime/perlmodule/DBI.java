@@ -663,6 +663,13 @@ public class DBI extends PerlModuleBase {
         // byte-string fallback for invalid UTF-8. Locale::Unicode::Data selects
         // it after connecting to read its bundled CLDR database.
         RuntimeScalar stringMode = dbh.get("sqlite_string_mode");
+        if (stringMode != null
+                && "DBD::SQLite::Constants::DBD_SQLITE_STRING_MODE_UNICODE_FALLBACK"
+                        .equals(stringMode.toString())) {
+            // The bundled constant sub can reach a hash assignment as its
+            // fully qualified name on the interpreter/JVM Perl frontend.
+            return true;
+        }
         return stringMode != null && stringMode.getInt() == 5;
     }
 
