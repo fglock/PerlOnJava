@@ -3,27 +3,39 @@ use warnings;
 use Test::More;
 
 {
-    package SymbolTableWalk;
-    sub named_target { 'found' }
+    package Bar1;
+    sub bar { 'found' }
 }
 
-my @named_code;
-{
+package Aspect::Pointcut;
+sub named_code {
     no strict 'refs';
-    my $root = *{'::'};
+    my @named_code;
     my $package_stash;
-    while (my ($package, $entry) = each %$root) {
-        if ($package eq 'SymbolTableWalk::') {
-            $package_stash = *{$package};
+    my ($key, $entry);
+    while (($key, $entry) = each %{*{'::'}}) {
+        next unless defined $entry;
+        local (*ENTRY) = $entry;
+        next unless defined *ENTRY{HASH};
+        if ($key eq 'Bar1::') {
+            $package_stash = 1;
             last;
         }
     }
-    while (my ($name, $entry) = each %$package_stash) {
-        push @named_code, $name if defined *{$entry}{CODE};
+    return unless $package_stash;
+    while (($key, $entry) = each %{*{'Bar1::'}}) {
+        next unless defined $entry;
+        local (*ENTRY) = $entry;
+        push @named_code, $key if defined *ENTRY{CODE};
     }
+    return @named_code;
 }
-ok(grep($_ eq 'named_target', @named_code),
-    'root and package stash iteration expose named subroutine CODE entries');
+
+package main;
+
+my @named_code = Aspect::Pointcut::named_code();
+ok(grep($_ eq 'bar', @named_code),
+    'root stash iteration finds named subroutines from another package');
 
 {
     package DeletedMethod;
