@@ -1471,6 +1471,13 @@ public class MortalList {
         if (state.externalRootSnapshot.isReachableFromNonLexicalRoot(base)) {
             return true;
         }
+        if (!state.externalRootSnapshot.complete()) {
+            // An incomplete external-root walk cannot prove this target has
+            // no other owner. Keep it alive without rebuilding the broader
+            // full-root graph, which also cannot preserve this query's
+            // direct-lexical exclusion semantics.
+            return true;
+        }
         if (state.liveRootSnapshot == null) {
             state.liveRootSnapshot = new ReachabilityWalker.LiveRootSnapshot();
         }

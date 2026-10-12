@@ -1188,6 +1188,7 @@ public class ReachabilityWalker {
     }
 
     static final int MAX_ROOT_SNAPSHOT_EDGES = 50_000;
+    static final int MAX_ROOT_SNAPSHOT_VISITS = 50_000;
 
     static Set<RuntimeBase> reachableFromRootsSnapshot() {
         return reachableFromRootsSnapshotWithStatus().reachable();
@@ -1196,7 +1197,7 @@ public class ReachabilityWalker {
     static RootReachabilitySnapshot reachableFromRootsSnapshotWithStatus() {
         ReachabilityQueryStats stats = MortalList.activeReachabilityQueryStats();
         if (stats != null) stats.snapshotsBuilt++;
-        final int maxVisits = 50_000;
+        final int maxVisits = MAX_ROOT_SNAPSHOT_VISITS;
         RootWalkBudget budget = new RootWalkBudget(MAX_ROOT_SNAPSHOT_EDGES);
         Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>(512));
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
@@ -1389,7 +1390,7 @@ public class ReachabilityWalker {
     static boolean isReachableFromLiveScalarRegistry(RuntimeBase target,
                                                      java.util.List<RuntimeScalar> roots) {
         if (target == null) return false;
-        final int MAX_VISITS = 50_000;
+        final int MAX_VISITS = MAX_ROOT_SNAPSHOT_VISITS;
 
         Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
@@ -1422,7 +1423,7 @@ public class ReachabilityWalker {
                 }
             }
         }
-        return false;
+        return !todo.isEmpty();
     }
 
     /**
@@ -1473,7 +1474,7 @@ public class ReachabilityWalker {
                 MortalList.isScalarReachableFromDrainSnapshot(target);
         if (drainSnapshotResult != null) return drainSnapshotResult;
         if (stats != null) stats.scalarReachabilityRootWalks++;
-        final int MAX_VISITS = 50_000;
+        final int MAX_VISITS = MAX_ROOT_SNAPSHOT_VISITS;
 
         Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
@@ -1615,7 +1616,7 @@ public class ReachabilityWalker {
                 }
             }
         }
-        return false;
+        return !todo.isEmpty();
     }
 
     /**
@@ -1626,15 +1627,22 @@ public class ReachabilityWalker {
      */
     static final class ScalarRootReachabilitySnapshot {
         private final Set<RuntimeScalar> reachable;
+        private final boolean complete;
 
-        private ScalarRootReachabilitySnapshot(Set<RuntimeScalar> reachable) {
+        private ScalarRootReachabilitySnapshot(Set<RuntimeScalar> reachable,
+                                               boolean complete) {
             this.reachable = reachable;
+            this.complete = complete;
         }
 
         boolean isReachable(RuntimeScalar target) {
-            // A capped traversal is not evidence that a node outside the
-            // visited prefix is reachable; match the legacy target query.
-            return target != null && reachable.contains(target);
+            // A capped traversal cannot prove that an unvisited owner scalar
+            // is unreachable. Preserve it until a complete boundary scan.
+            return target != null && (!complete || reachable.contains(target));
+        }
+
+        boolean complete() {
+            return complete;
         }
     }
 
@@ -1668,7 +1676,7 @@ public class ReachabilityWalker {
             }
         }
 
-        final int maxVisits = 50_000;
+        final int maxVisits = MAX_ROOT_SNAPSHOT_VISITS;
         int visits = 0;
         while (!todo.isEmpty() && visits < maxVisits) {
             RuntimeBase current = todo.removeFirst();
@@ -1736,7 +1744,7 @@ public class ReachabilityWalker {
                 }
             }
         }
-        return new ScalarRootReachabilitySnapshot(reachableScalars);
+        return new ScalarRootReachabilitySnapshot(reachableScalars, todo.isEmpty());
     }
 
     private static void addScalarReachabilityRoot(
@@ -1788,7 +1796,7 @@ public class ReachabilityWalker {
         // Hard cap to prevent pathological worst-case walks. Class::MOP
         // bootstrap touches ~thousands of nodes; pick a generous limit
         // that still bounds cost.
-        final int MAX_VISITS = 50_000;
+        final int MAX_VISITS = MAX_ROOT_SNAPSHOT_VISITS;
 
         Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
@@ -1967,7 +1975,8 @@ public class ReachabilityWalker {
             // the Moose bootstrap), we don't need closure-capture walking
             // because %METAS is declared `our %METAS` (package global) so
             // it appears directly in GlobalVariable.globalHashes.
-        }        return false;
+        }
+        return !todo.isEmpty();
     }
 
     /**
@@ -2009,11 +2018,13 @@ public class ReachabilityWalker {
     /**
      * Return the objects reached after crossing a tied hash handler from a
      * live Perl root. A mortal drain can ask this question for many weak
-     * referents, so collecting the complete bounded snapshot once avoids an
-     * O(targets x roots) traversal and its corresponding temporary objects.
+     * referents, so collecting one bounded snapshot avoids an O(targets x
+     * roots) traversal and its corresponding temporary objects. If the visit
+     * budget truncates the walk, unresolved targets are conservatively treated
+     * as reachable.
      */
-    static Set<RuntimeBase> reachableThroughTiedHashes() {
-        final int maxVisits = 50_000;
+    static TiedHashReachabilitySnapshot reachableThroughTiedHashes() {
+        final int maxVisits = MAX_ROOT_SNAPSHOT_VISITS;
         Set<RuntimeBase> seenPlain = Collections.newSetFromMap(new IdentityHashMap<>());
         Set<RuntimeBase> seenTied = Collections.newSetFromMap(new IdentityHashMap<>());
         Set<RuntimeBase> reachableTied = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -2063,7 +2074,26 @@ public class ReachabilityWalker {
                         seenPlain, seenTied, todo);
             }
         }
-        return reachableTied;
+        return new TiedHashReachabilitySnapshot(reachableTied, todo.isEmpty());
+    }
+
+    static final class TiedHashReachabilitySnapshot {
+        private final Set<RuntimeBase> reachable;
+        private final boolean complete;
+
+        TiedHashReachabilitySnapshot(Set<RuntimeBase> reachable,
+                                     boolean complete) {
+            this.reachable = reachable;
+            this.complete = complete;
+        }
+
+        boolean contains(RuntimeBase target) {
+            return target != null && (!complete || reachable.contains(target));
+        }
+
+        boolean complete() {
+            return complete;
+        }
     }
 
     private static void addTiedPathScalar(
@@ -2099,7 +2129,7 @@ public class ReachabilityWalker {
      */
     public static boolean isReachableFromExternalRootExcludingDirectLexical(RuntimeBase target) {
         if (target == null) return false;
-        final int MAX_VISITS = 50_000;
+        final int MAX_VISITS = MAX_ROOT_SNAPSHOT_VISITS;
 
         Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
@@ -2169,7 +2199,7 @@ public class ReachabilityWalker {
                 if (followScalar(sc, target, seen, todo)) return true;
             }
         }
-        return false;
+        return !todo.isEmpty();
     }
 
     /**
@@ -2180,12 +2210,11 @@ public class ReachabilityWalker {
      * scope registrations change without forcing a package-root rebuild.
      */
     public static final class ExternalRootSnapshot {
-        private static final int MAX_VISITS = 50_000;
-
         private final Set<RuntimeBase> nonLexicalReachable =
                 Collections.newSetFromMap(new IdentityHashMap<>(512));
         private final ReachabilityQueryStats queryStats =
                 MortalList.activeReachabilityQueryStats();
+        private boolean complete = true;
 
         public ExternalRootSnapshot() {
             this(true);
@@ -2199,9 +2228,20 @@ public class ReachabilityWalker {
         public boolean isReachable(RuntimeBase target) {
             if (target == null) return false;
             if (nonLexicalReachable.contains(target)) return true;
+            if (!complete) return true;
             return new LiveRootSnapshot().isReachable(target);
         }
 
+        /** Whether the visit budget drained the complete queued root graph. */
+        boolean complete() {
+            return complete;
+        }
+
+        /**
+         * Positive proof only. A false result can mean the snapshot hit its
+         * visit budget before reaching the target; callers must consult
+         * {@link #complete()} before treating absence as unreachable.
+         */
         public boolean isReachableFromNonLexicalRoot(RuntimeBase target) {
             return target != null && nonLexicalReachable.contains(target);
         }
@@ -2238,12 +2278,13 @@ public class ReachabilityWalker {
             }
 
             int visits = 0;
-            while (!todo.isEmpty() && visits < MAX_VISITS) {
+            while (!todo.isEmpty() && visits < MAX_ROOT_SNAPSHOT_VISITS) {
                 RuntimeBase cur = todo.removeFirst();
                 visits++;
                 if (queryStats != null) queryStats.externalRootSnapshotNodesVisited++;
                 walkSnapshotNode(cur, todo);
             }
+            complete = todo.isEmpty();
         }
 
         private void walkSnapshotNode(RuntimeBase cur,
@@ -2306,13 +2347,13 @@ public class ReachabilityWalker {
      * count as an external root for itself.
      */
     public static final class LiveRootSnapshot {
-        private static final int MAX_VISITS = 50_000;
         private static final Object MIXED_DIRECT_LEXICAL_ORIGIN = new Object();
 
         private final Set<RuntimeBase> directLexicalRoots =
                 Collections.newSetFromMap(new IdentityHashMap<>(512));
         private final IdentityHashMap<RuntimeBase, Object> directLexicalOrigins =
                 new IdentityHashMap<>(512);
+        private boolean complete = true;
 
         public LiveRootSnapshot() {
             build();
@@ -2320,10 +2361,16 @@ public class ReachabilityWalker {
 
         public boolean isReachable(RuntimeBase target) {
             if (target == null) return false;
+            if (!complete) return true;
             Object origin = directLexicalOrigins.get(target);
             if (origin == null) return false;
             if (!directLexicalRoots.contains(target)) return true;
             return origin != target;
+        }
+
+        /** Whether the visit budget drained the complete queued lexical graph. */
+        boolean complete() {
+            return complete;
         }
 
         private void build() {
@@ -2340,11 +2387,12 @@ public class ReachabilityWalker {
             }
 
             int visits = 0;
-            while (!todo.isEmpty() && visits < MAX_VISITS) {
+            while (!todo.isEmpty() && visits < MAX_ROOT_SNAPSHOT_VISITS) {
                 DirectRootStep step = todo.removeFirst();
                 visits++;
                 walkLiveNode(step.base, todo, step.origin);
             }
+            complete = todo.isEmpty();
         }
 
         private void walkLiveNode(RuntimeBase cur,
