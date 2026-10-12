@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Parse indirect-object method calls with whitespace-separated arguments, compact arithmetic after `$$`, and recursive block-prototype calls from nested closures (#1429, #1329, #1763).
 - Preserve fieldhash values and quoted/deferred subroutine metadata across Perl threads (#1413, #1420).
 - Preserve blessed hash class tags through YAML::Any and localize dynamically named scalars without assignment on the interpreter (#1713).
 - Keep regression coverage for JSONY null callback values (#1228).

@@ -297,7 +297,7 @@ public class SubroutineParser {
         // still being compiled.  Perl does not apply the just-declared
         // prototype to that initial recursive call.
         if (!isMethod && !prototypeWasPredeclared
-                && fullName.equals(parser.ctx.symbolTable.getCurrentSubroutine())) {
+                && parser.compilingSubroutineBodies.contains(fullName)) {
             prototype = null;
         }
         boolean prototypeHasGlob = prototype != null && prototype.contains("*");
@@ -608,21 +608,46 @@ public class SubroutineParser {
                             && !nextTok.text.equals("when")))
                     && !nextTok.text.equals("->")
                     && !nextTok.text.equals("=>")) {
-                // Check if this looks like indirect object syntax: method $object, args
-                // In Perl, "release $ctx, V" means ($ctx->release(), "V") - a list of two elements
-                // NOT $ctx->release("V") - we don't pass additional args to the method
+                // Check if this looks like indirect object syntax: method $object args.
+                // A comma immediately after the invocant ends the method call in
+                // forms such as `release $ctx, V`; whitespace-separated values
+                // after the invocant are the method's own arguments.
                 if (nextTok.text.equals("$")) {
-                    // This might be indirect object syntax - only consume the object
+                    // First consume only the invocant so the following token can
+                    // distinguish method arguments from an outer comma list.
                     ListNode objectArg = consumeArgsWithPrototype(parser, "$");
                     if (objectArg.elements.size() > 0) {
                         Node firstArg = objectArg.elements.get(0);
-                        if (firstArg instanceof OperatorNode opNode && opNode.operator.equals("$")) {
-                            Node object = firstArg;
-                            // Create method call: object->method()
-                            // The remaining args (after comma) are left for the outer context
+                        List<Node> leadingMethodArguments = new ArrayList<>();
+                        Node object = firstArg;
+                        // A leading `+` on a whitespace-separated method
+                        // argument is parsed as infix addition while the
+                        // scalar prototype consumes the invocant. Recover
+                        // the invocant and that argument for forms such as
+                        // `union $set +[1, 2]`.
+                        if (firstArg instanceof BinaryOperatorNode addition
+                                && addition.operator.equals("+")
+                                && addition.left instanceof OperatorNode leftScalar
+                                && leftScalar.operator.equals("$")) {
+                            object = addition.left;
+                            leadingMethodArguments.add(addition.right);
+                        }
+                        if (object instanceof OperatorNode opNode && opNode.operator.equals("$")) {
+                            LexerToken afterObject = peek(parser);
+                            boolean noMethodArguments = afterObject.type == LexerTokenType.EOF
+                                    || afterObject.text.equals(",")
+                                    || afterObject.text.equals(";")
+                                    || afterObject.text.equals("=>")
+                                    || afterObject.text.equals("->")
+                                    || ParserTables.LIST_TERMINATORS.contains(afterObject.text);
+                            if (!noMethodArguments) {
+                                leadingMethodArguments.addAll(
+                                        consumeArgsWithPrototype(parser, "@").elements);
+                            }
+                            ListNode methodArguments = new ListNode(leadingMethodArguments, currentIndex);
                             Node methodCall = new BinaryOperatorNode("(",
                                     new OperatorNode("&", nameNode, currentIndex),
-                                    new ListNode(currentIndex),
+                                    methodArguments,
                                     currentIndex);
                             return new BinaryOperatorNode("->", object, methodCall, currentIndex);
                         }
@@ -1272,6 +1297,9 @@ public class SubroutineParser {
         String qualifiedSubName = subName != null
                 ? NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage())
                 : "";
+        if (subName != null) {
+            parser.compilingSubroutineBodies.push(qualifiedSubName);
+        }
         parser.ctx.symbolTable.setCurrentSubroutine(qualifiedSubName);
         // We are now parsing inside a subroutine body (named or anonymous)
         parser.ctx.symbolTable.setInSubroutineBody(true);
@@ -1393,6 +1421,9 @@ public class SubroutineParser {
             parser.parsingFutureAsyncAwaitSub = previousFutureAsyncAwaitSub;
             parser.parsingSignaturedSubroutine = previousParsingSignaturedSubroutine;
             parser.lexicalSubWarningFrames.remove(lexicalSubWarningFrame);
+            if (subName != null) {
+                parser.compilingSubroutineBodies.pop();
+            }
         }
     }
 

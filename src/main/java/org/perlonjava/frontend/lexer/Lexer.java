@@ -377,7 +377,12 @@ public class Lexer {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "$#");
                     }
-                    if (position + 2 <= input.length() && input.charAt(position + 1) == '*') {
+                    // In `$$*...`, the second dollar is Perl's $$ special
+                    // variable followed by multiplication. Do not combine it
+                    // with `*` as the obsolete `$*` variable; Perl resolves
+                    // this adjacent spelling as `$$ * ...`.
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '*'
+                            && (position == 0 || input.charAt(position - 1) != '$')) {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "$*");
                     }
