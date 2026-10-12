@@ -362,8 +362,13 @@ public class WarnDie {
         // resulting text already ends in a newline.  Looking at only the
         // first list item incorrectly appends a source location to
         // `warn "foo", "bar\n"`.
-        RuntimeBase messageValue = message instanceof RuntimeList list && list.size() > 1
-                ? new RuntimeScalar(list.toString()) : message.getFirst();
+        RuntimeBase messageValue = message instanceof RuntimeList list
+                ? list.size() == 1 && !(list.elements.getFirst() instanceof RuntimeArray)
+                        ? list.getFirst()
+                        : new RuntimeScalar(warnListToString(list))
+                : message instanceof RuntimeArray array
+                        ? new RuntimeScalar(warnArrayToString(array))
+                        : message.getFirst();
         if (messageValue instanceof RuntimeScalar scalar
                 && scalar.type == RuntimeScalarType.TIED_SCALAR) {
             messageValue = scalar.tiedFetch();
@@ -516,6 +521,30 @@ public class WarnDie {
         writeWarningToStderr(warningText);
 
         return new RuntimeScalar(1);  // Perl's warn() always returns 1
+    }
+
+    /** Concatenate list arguments that survived list context as a single item. */
+    private static String warnListToString(RuntimeList list) {
+        StringBuilder text = new StringBuilder();
+        for (int i = 0; i < list.size(); i++) {
+            RuntimeBase value = list.elements.get(i);
+            if (value instanceof RuntimeArray array) {
+                text.append(warnArrayToString(array));
+            } else if (value instanceof RuntimeList nested) {
+                text.append(warnListToString(nested));
+            } else {
+                text.append(value.toString());
+            }
+        }
+        return text.toString();
+    }
+
+    private static String warnArrayToString(RuntimeArray array) {
+        StringBuilder text = new StringBuilder();
+        for (int i = 0; i < array.size(); i++) {
+            text.append(array.get(i).toString());
+        }
+        return text.toString();
     }
 
     private static boolean containsWideCharacter(String text) {

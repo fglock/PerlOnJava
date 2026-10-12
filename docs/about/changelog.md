@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve tied scalar lvalues returned by `AUTOLOAD` during increment and compound assignment, honor fatal recursion warnings on the interpreter, and accept legacy whitespace-padded module versions and numeric overloads used by Valiemon (#1207, #1222, #1419).
+- Preserve all arguments when `warn` forwards an array in list context.
 - Preserve Unicode text fetched from SQLite in Unicode string modes, normalize
   common `Encode` canonical charset names to Perl's spellings, and cover Unicode
   `tr///` deletion of U+00B4.
