@@ -192,6 +192,14 @@ public class ScalarUtils {
         } else if (t == READONLY_SCALAR) {
             return looksLikeNumber((RuntimeScalar) runtimeScalar.value);
         }
+        if ((t & RuntimeScalarType.REFERENCE_BIT) != 0
+                && OverloadContext.hasDirectOverload(runtimeScalar, "(0+")) {
+            // Scalar::Util::looks_like_number honors numeric overloading.  Do
+            // not stringify the reference: overload numification may produce
+            // either a number or a numeric string, and the source scalar must
+            // remain unchanged.
+            return looksLikeNumber(Overload.numify(runtimeScalar));
+        }
         return false;
     }
 

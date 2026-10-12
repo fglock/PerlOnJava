@@ -63,7 +63,11 @@ public class VersionHelper {
             case INTEGER:
                 return normalizeVersionToDecimalForRequire(versionScalar.toString());
             default:
-                return normalizeVersionToDecimalForRequire(versionScalar.toString());
+                // Several long-standing CPAN modules build $VERSION with
+                // sprintf " %d.%03d" and include a leading space. Perl's
+                // VERSION check accepts that scalar, so normalize surrounding
+                // whitespace before validating or comparing it.
+                return normalizeVersionToDecimalForRequire(versionScalar.toString().trim());
         }
     }
 
@@ -261,7 +265,7 @@ public class VersionHelper {
     private static boolean isValidVersion(RuntimeScalar version) {
         return switch (version.type) {
             case INTEGER, DOUBLE, VSTRING -> true;
-            default -> version.toString().matches("v?\\d+(?:\\.\\d+)*(?:_\\d+)?");
+            default -> version.toString().trim().matches("v?\\d+(?:\\.\\d+)*(?:_\\d+)?");
         };
     }
 
