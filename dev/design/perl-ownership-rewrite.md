@@ -301,9 +301,10 @@ and first path establish implementation cost.
 1. Extend the ownership path through scalar proxies and ordinary array/hash
    slots in Phase 2, then resolve the HTML::Tree teardown failures and verify
    unchanged `t/refloop.t`.
-2. Continue the #1642 Catalyst cleanup profile as an integration follow-up.
-   The full suite remains enabled except for Catalyst's six unsupported fork
-   assertions; the broad test attempt and cleanup profile are incomplete.
+2. Resolve the strict target failures in the fresh-home CPAN release
+   acceptance, then rerun that gate on the final candidate. The current run
+   distinguishes prerequisite/setup timeouts and missing dependencies from
+   runtime assertions; those outcomes do not yet satisfy #1642's acceptance.
 3. Rerun Moo and DBIx::Class after their separate tracked fixes land; classify
    the two DBIx::Class assertions independently.
 4. Run each repository gate from an immutable commit and record before/after
@@ -313,10 +314,20 @@ and first path establish implementation cost.
 
 - The aggregate scope-unregister walk and repeated deferred-release snapshot
   builds now have separate deterministic counters. The synthetic deferred
-  test observes one external-root snapshot per flush. Reproduction of the
-  Catalyst workload from #1642 remains open so its object and flush pattern can
-  be matched to these paths; it is tracked as integration follow-up beyond the
-  selected Phase 1 closure-pad path.
+  test observes one external-root snapshot per flush. The #1642 Catalyst
+  `t/aggregate/live_component_controller_action_chained2.t` workload passes
+  9/9 on the candidate. In 60-second JFR profiles, full-root snapshot method
+  samples fell from 575/2,718 on `ec429b23e` to 2/1,259 on `2826bd35c`; these
+  recordings had different durations and are sample shares, not throughput
+  measurements. The full cached Catalyst-Runtime suite completed 200 programs
+  and 3,820 assertions; its five UTF-8 assertions in `t/arg_constraints.t` and
+  `t/query_constraints.t` reproduce on current master and pass on system Perl.
+  Unchanged Mojolicious 9.49 `t/mojo/dom.t` passes 132 top-level subtests / 1,418
+  assertions on the candidate. The fresh-home release acceptance remains open:
+  Image::ExifTool and Mojolicious were not tested, DBIx::Class had one program
+  failure with zero failed assertions, and DateTime and Catalyst hit setup
+  timeouts. Resolve or classify those strict target failures before closing
+  #1642.
 - END CVs have queued and active lifetime tests, including aggregate captures,
   nested `exit`, `die`, and callback failure. UNITCHECK/CHECK/INIT lexical-pad
   lifetime is covered separately; the corresponding phaser ownership path is
