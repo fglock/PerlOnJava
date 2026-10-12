@@ -1087,8 +1087,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             return value.scalar();
         }
 
-        // Register glob alias so future slot assignments affect both globs
-        GlobalVariable.setGlobAlias(this.globName, value.globName);
+        // A whole-glob assignment inside `local *name` fills the temporary
+        // GV installed for that name. It must not change the stable identity
+        // followed by aliases to the outer GV (for example, a saved alias to
+        // STDERR must not start following a localized tied replacement).
+        if (!isLocalizedGlob(this.globName)) {
+            GlobalVariable.setGlobAlias(this.globName, value.globName);
+        }
 
         // Retrieve the RuntimeScalar value associated with the provided RuntimeGlob.
         RuntimeScalar result = value.scalar();
@@ -1163,7 +1168,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             oldRuntimeIO = rio;
         }
 
-        this.IO = ioSource;
+        if (!isLocalizedGlob(this.globName)) {
+            this.IO = ioSource;
+        }
         targetIO.IO = ioSource;
 
         // Update selectedHandle if the old IO was the currently selected output handle
@@ -2036,6 +2043,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
     @Override
     public void dynamicSaveState() {
+        // A whole-glob alias names the GV identity current at assignment
+        // time. Preserve aliases that target this canonical name before the
+        // localized binding is replaced with a temporary glob.
+        String preservedGlobIdentity =
+                GlobalVariable.detachAliasedGlobForLocalization(this.globName);
         // Capture pre-existence so we can faithfully restore an absent slot
         // (rather than leaving an empty placeholder behind that would make
         // `defined *glob{ARRAY|HASH}` lie after `local(*glob) = $val`).
@@ -2057,7 +2069,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // `local *name = *other` installs a temporary whole-glob alias. Keep
         // the direct relation so a subsequent named declaration does not keep
         // resolving through `other` after this scope has unwound.
-        String savedGlobAliasTarget = GlobalVariable.globAliases.get(this.globName);
+        String savedGlobAliasTarget = preservedGlobIdentity != null
+                ? preservedGlobIdentity
+                : GlobalVariable.globAliases.get(this.globName);
         // Save the current IO object reference (not its state) so we can restore it later.
         // This allows captured glob references to keep the "local" IO even after restore.
         RuntimeScalar savedIO = this.IO;
@@ -2194,6 +2208,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
         // Restore the saved IO object reference on this (old) glob.
         this.IO = snap.io;
+        if (this.IO != null && this.IO.value instanceof RuntimeIO runtimeIO) {
+            runtimeIO.globName = snap.globName;
+        }
 
         // Put this (old) glob back in globalIORefs, replacing the local scope's glob.
         // Any references captured during the local scope still point to the local glob,

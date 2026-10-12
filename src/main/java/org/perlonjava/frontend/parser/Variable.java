@@ -475,8 +475,8 @@ public class Variable {
                 || varName.equals("ENV") || varName.equals("INC") || varName.equals("SIG")
                 || varName.equals("STDIN") || varName.equals("STDOUT") || varName.equals("STDERR"))) return;
 
-        // Built-in special container vars (%ENV, %SIG, @ARGV, @INC, etc.)
-        if (sigil.equals("%") && (varName.equals("SIG") || varName.equals("ENV")
+        // Built-in special container vars (%ARGV, %ENV, %SIG, @ARGV, @INC, etc.)
+        if (sigil.equals("%") && (varName.equals("ARGV") || varName.equals("SIG") || varName.equals("ENV")
                 || varName.equals("INC") || varName.equals("+") || varName.equals("-")
                 || varName.equals("_"))) return;
         if (sigil.equals("@") && (varName.equals("ARGV") || varName.equals("INC")

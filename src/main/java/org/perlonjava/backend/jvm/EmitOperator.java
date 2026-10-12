@@ -1740,7 +1740,12 @@ public class EmitOperator {
     static void handleUnaryDefaultCase(OperatorNode node, String operator,
                                        EmitterVisitor emitterVisitor) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
-        node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        int operandContext = switch (operator) {
+            case "preAutoIncrement", "postAutoIncrement", "preAutoDecrement", "postAutoDecrement" ->
+                    RuntimeContextType.LVALUE;
+            default -> RuntimeContextType.SCALAR;
+        };
+        node.operand.accept(emitterVisitor.with(operandContext));
         OperatorHandler operatorHandler = OperatorHandler.get(operator);
         if (operatorHandler != null) {
             emitOperatorWithKey(operator, node, emitterVisitor);

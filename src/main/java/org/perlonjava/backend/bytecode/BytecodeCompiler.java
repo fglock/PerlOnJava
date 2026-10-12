@@ -808,7 +808,7 @@ public class BytecodeCompiler implements Visitor {
 
     /**
      * Helper: Check if a variable is a built-in special container variable.
-     * Variables like %ENV, @ARGV, @INC are always allowed under strict.
+     * Variables like %ARGV, %ENV, @ARGV, @INC are always allowed under strict.
      * Mirrors logic from EmitVariable.java.
      */
     private static boolean isBuiltinSpecialContainerVar(String sigil, String name) {
@@ -816,7 +816,8 @@ public class BytecodeCompiler implements Visitor {
             return false;
         }
         if ("%".equals(sigil)) {
-            return name.equals("SIG")
+            return name.equals("ARGV")
+                    || name.equals("SIG")
                     || name.equals("ENV")
                     || name.equals("INC")
                     || name.equals("+")

@@ -6,10 +6,24 @@ priorities and future plans.
 
 ## Work in progress
 
+- Stage nested Module::Build modules and resolve compressed archive filenames
+  against Perl's working directory so release plugins can consume the archive
+  (#1432, #1514).
+- Preserve Perl numeric scalar flags through mixed arithmetic, classify large
+  finite floats as NVs, and retain zero padding during string autoincrement
+  (#1643, #1352, #1354).
+
+- Preserve tied scalar lvalues returned by `AUTOLOAD` during increment and compound assignment, honor fatal recursion warnings on the interpreter, and accept legacy whitespace-padded module versions and numeric overloads used by Valiemon (#1207, #1222, #1419).
+- Preserve all arguments when `warn` forwards an array in list context.
 - Preserve Unicode text fetched from SQLite in Unicode string modes, normalize
   common `Encode` canonical charset names to Perl's spellings, and cover Unicode
   `tr///` deletion of U+00B4.
+- Keep named CODE entries visible during stash traversal, invalidate method lookup after CODE-slot deletion, and preserve whole-glob alias identity across localized replacements (#1700, #1610, #1630).
+- Match Perl's read-only default for `sysopen` creation without access flags,
+  reject `truncate` on scalar-backed handles without changing the scalar, and
+  cover UTF-8 byte offsets after seeks (#1431, #1520).
 
+- Allow `%ARGV` under `strict vars`, matching system Perl (#1770).
 - Parse indirect-object method calls with whitespace-separated arguments, compact arithmetic after `$$`, and recursive block-prototype calls from nested closures (#1429, #1329, #1763).
 - Preserve fieldhash values and quoted/deferred subroutine metadata across Perl threads (#1413, #1420).
 - Preserve blessed hash class tags through YAML::Any and localize dynamically named scalars without assignment on the interpreter (#1713).

@@ -2269,8 +2269,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // Depth of active recursive calls to this subroutine, used by the
     // "Deep recursion on subroutine" warning. Incremented on entry and
     // decremented in a finally-block on exit.
-    // Depth threshold for the "Deep recursion on subroutine" warning.
-    // Matches Perl's default PERL_SUB_DEPTH_WARN value.
+    // Active-call depth at which Perl emits the "Deep recursion on
+    // subroutine" warning.  Perl's default PERL_SUB_DEPTH_WARN is 100.
     public static final int DEEP_RECURSION_WARN_DEPTH = 100;
     private static final int REGEX_CALLBACK_RECURSION_LIMIT = 64;
 
@@ -2310,17 +2310,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             callState.depth--;
             throw new StackOverflowError("Infinite recursion via empty pattern");
         }
-        if (depth > DEEP_RECURSION_WARN_DEPTH && !callState.warned) {
+        if (depth >= DEEP_RECURSION_WARN_DEPTH && !callState.warned) {
             callState.warned = true;
             String name = (lexicalSubDisplayName && subName != null)
                     ? subName
                     : (packageName != null && subName != null)
                     ? packageName + "::" + subName
                     : (subName != null ? subName : "__ANON__");
-            WarnDie.warnWithCategory(
+            WarnDie.warnWithCategoryFromCode(
                     new RuntimeScalar("Deep recursion on subroutine \"" + name + "\""),
                     RuntimeScalarCache.scalarEmptyString,
-                    "recursion");
+                    "recursion",
+                    WarningBitsRegistry.getCallSiteBits());
         }
     }
 
