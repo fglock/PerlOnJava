@@ -12,6 +12,9 @@ priorities and future plans.
 - Preserve Perl numeric scalar flags through mixed arithmetic, classify large
   finite floats as NVs, and retain zero padding during string autoincrement
   (#1643, #1352, #1354).
+- Preserve persistent scalar cells when assigning to `state` variables in the
+  interpreter, so Test::Mojo retains its application during server startup
+  (#1644).
 
 - Preserve tied scalar lvalues returned by `AUTOLOAD` during increment and compound assignment, honor fatal recursion warnings on the interpreter, and accept legacy whitespace-padded module versions and numeric overloads used by Valiemon (#1207, #1222, #1419).
 - Preserve all arguments when `warn` forwards an array in list context.

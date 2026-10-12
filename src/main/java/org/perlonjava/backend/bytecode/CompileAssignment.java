@@ -2834,9 +2834,12 @@ public class CompileAssignment {
 
                         if ((bytecodeCompiler.capturedVarIndices != null && bytecodeCompiler.capturedVarIndices.containsKey(varName))
                                 || bytecodeCompiler.closureCapturedVarNames.contains(varName)
-                                || bytecodeCompiler.isForeachAliasLexical(varName)) {
-                            // Captured variables and active foreach lexical aliases use
-                            // SET_SCALAR to preserve the existing RuntimeScalar identity.
+                                || bytecodeCompiler.isForeachAliasLexical(varName)
+                                || bytecodeCompiler.isStateVariable(varName)) {
+                            // Captured variables, active foreach aliases, and state
+                            // variables use SET_SCALAR to preserve the existing
+                            // RuntimeScalar identity. State variables must keep their
+                            // persistent cell so later calls observe assignments.
                             // LOAD_UNDEF would replace the register with a new RuntimeScalar,
                             // breaking the shared reference that closures and foreach
                             // element aliases depend on.
