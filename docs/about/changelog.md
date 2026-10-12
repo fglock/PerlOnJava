@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve Perl numeric scalar flags through mixed arithmetic, classify large
+  finite floats as NVs, and retain zero padding during string autoincrement
+  (#1643, #1352, #1354).
+
 - Preserve Unicode text fetched from SQLite in Unicode string modes, normalize
   common `Encode` canonical charset names to Perl's spellings, and cover Unicode
   `tr///` deletion of U+00B4.

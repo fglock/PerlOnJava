@@ -2,6 +2,8 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.frontend.parser.NumberParser;
 
+import java.math.BigInteger;
+
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 
 /**
@@ -202,6 +204,27 @@ public class ScalarUtils {
     public static RuntimeScalar stringIncrement(RuntimeScalar runtimeScalar) {
         // Retrieve the current value as a String
         String str = runtimeScalar.toString();
+        int originalType = runtimeScalar.type;
+
+        // Perl's magical increment preserves the width of zero-padded decimal
+        // strings until the incremented value needs an additional digit.
+        // Keep this ahead of the numeric path, which otherwise drops the
+        // leading zeroes (for example, "009" would become "10").
+        boolean zeroPaddedDecimal = str.length() > 1 && str.charAt(0) == '0';
+        for (int i = 1; zeroPaddedDecimal && i < str.length(); i++) {
+            char digit = str.charAt(i);
+            zeroPaddedDecimal = digit >= '0' && digit <= '9';
+        }
+        if (zeroPaddedDecimal) {
+            BigInteger incremented = new BigInteger(str).add(BigInteger.ONE);
+            String result = incremented.toString();
+            if (result.length() < str.length()) {
+                result = "0".repeat(str.length() - result.length()) + result;
+            }
+            runtimeScalar.type = originalType;
+            runtimeScalar.value = result;
+            return runtimeScalar;
+        }
 
         // Check if the string is empty
         if (str.isEmpty()) {
