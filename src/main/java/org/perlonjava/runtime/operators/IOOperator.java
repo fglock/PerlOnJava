@@ -1942,30 +1942,44 @@ public class IOOperator {
             }
             if (!existed) {
                 try {
-                    Set<StandardOpenOption> createOptions = new HashSet<>();
-                    createOptions.add(StandardOpenOption.CREATE_NEW);
                     if (baseMode == O_RDONLY) {
-                        createOptions.add(StandardOpenOption.READ);
-                    } else if (baseMode == O_WRONLY) {
-                        createOptions.add(StandardOpenOption.WRITE);
+                        // FileChannel cannot create a file opened only for
+                        // reading. Perl's O_RDONLY|O_CREAT does exactly that,
+                        // so create the directory entry atomically and then
+                        // reopen it with the requested read-only access.
+                        Files.createFile(file.toPath());
+                        if (!applyFilePermissions(file.toPath(), 0600)) {
+                            throw new IOException("Unable to make newly created file readable");
+                        }
+                        fh = RuntimeIO.openForSysopen(fileName, modeStr);
+                        if (fh == null) {
+                            return scalarUndef;
+                        }
+                        applyFilePermissions(file.toPath(), UmaskOperator.applyUmask(perms));
                     } else {
-                        createOptions.add(StandardOpenOption.READ);
-                        createOptions.add(StandardOpenOption.WRITE);
-                    }
+                        Set<StandardOpenOption> createOptions = new HashSet<>();
+                        createOptions.add(StandardOpenOption.CREATE_NEW);
+                        if (baseMode == O_WRONLY) {
+                            createOptions.add(StandardOpenOption.WRITE);
+                        } else {
+                            createOptions.add(StandardOpenOption.READ);
+                            createOptions.add(StandardOpenOption.WRITE);
+                        }
 
-                    CustomFileChannel channel = new CustomFileChannel(file.toPath(), createOptions);
-                    fh = new RuntimeIO(channel);
-                    fh.openedPath = file.toPath();
-                    RuntimeIO.addHandle(channel);
-                    // sysopen() is a descriptor-level open.  Unlike open(), it
-                    // must not install the platform text layer (:crlf on
-                    // Windows); PerlIO::get_layers reports only the base unix
-                    // layer until the caller explicitly applies another one.
-                    if (!fh.applySysopenLayers(modeStr)) {
-                        channel.close();
-                        return scalarUndef;
+                        CustomFileChannel channel = new CustomFileChannel(file.toPath(), createOptions);
+                        fh = new RuntimeIO(channel);
+                        fh.openedPath = file.toPath();
+                        RuntimeIO.addHandle(channel);
+                        // sysopen() is a descriptor-level open. Unlike open(), it
+                        // must not install the platform text layer (:crlf on
+                        // Windows); PerlIO::get_layers reports only the base unix
+                        // layer until the caller explicitly applies another one.
+                        if (!fh.applySysopenLayers(modeStr)) {
+                            channel.close();
+                            return scalarUndef;
+                        }
+                        applyFilePermissions(file.toPath(), UmaskOperator.applyUmask(perms));
                     }
-                    applyFilePermissions(file.toPath(), UmaskOperator.applyUmask(perms));
                 } catch (FileAlreadyExistsException e) {
                     // Another creator won the race after the existence check.
                     // O_CREAT without O_EXCL opens that file normally.
@@ -1975,6 +1989,9 @@ public class IOOperator {
                     }
                 } catch (IOException e) {
                     // Failed to create file
+                    if (fh != null) {
+                        fh.close();
+                    }
                     getGlobalVariable("main::!").set(e.getMessage());
                     return scalarUndef;
                 }
@@ -1982,7 +1999,7 @@ public class IOOperator {
         }
 
         if (fh == null) {
-            fh = RuntimeIO.open(fileName, modeStr);
+            fh = RuntimeIO.openForSysopen(fileName, modeStr);
         }
         if (fh == null) {
             return scalarUndef;
@@ -2970,6 +2987,10 @@ public class IOOperator {
             if (firstArg.scalar().getRuntimeIO() != null) {
                 // First argument is a filehandle
                 RuntimeIO fh = firstArg.scalar().getRuntimeIO();
+                if (getBaseHandle(fh.ioHandle) instanceof ScalarBackedIO) {
+                    getGlobalVariable("main::!").set("Bad file descriptor");
+                    return scalarUndef;
+                }
                 return fh.truncate(length);
             } else {
                 // First argument is a filename

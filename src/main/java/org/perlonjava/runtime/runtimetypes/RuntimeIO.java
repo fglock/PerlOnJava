@@ -955,6 +955,15 @@ public class RuntimeIO extends RuntimeScalar {
      * @return RuntimeIO handle for the opened file, or null on error
      */
     public static RuntimeIO open(String fileName, String mode) {
+        return open(fileName, mode, false);
+    }
+
+    /** Open from sysopen while applying only the lexical sysopen layers. */
+    public static RuntimeIO openForSysopen(String fileName, String mode) {
+        return open(fileName, mode, true);
+    }
+
+    private static RuntimeIO open(String fileName, String mode, boolean sysopen) {
         mode = normalizeOpenMode(mode);
         RuntimeIO fh = new RuntimeIO();
         try {
@@ -1065,7 +1074,7 @@ public class RuntimeIO extends RuntimeScalar {
             }
 
             // Apply any I/O layers
-            if (!fh.applyOpenLayers(ioLayers, mode)) {
+            if (sysopen ? !fh.applySysopenLayers(mode) : !fh.applyOpenLayers(ioLayers, mode)) {
                 return null;
             }
 
