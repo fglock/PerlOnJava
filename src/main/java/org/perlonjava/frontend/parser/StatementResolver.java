@@ -1022,7 +1022,7 @@ public class StatementResolver {
                 }
 
                 case "{" -> {
-                    if (!isHashLiteral(parser)) {
+                    if (label != null || !isHashLiteral(parser)) {
                         int scopeIndex = parser.ctx.symbolTable.enterScope();
                         HintHashRegistry.enterScope(); // Save compile-time %^H
 

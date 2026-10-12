@@ -15,6 +15,9 @@ priorities and future plans.
 - Preserve persistent scalar cells when assigning to `state` variables in the
   interpreter, so Test::Mojo retains its application during server startup
   (#1644).
+- Parse labeled blocks followed by postfix expressions in `grep` fallbacks, so
+  `Test::More::skip` can leave its `SKIP` block during DBIx::Class module scans
+  (#1646).
 
 - Preserve tied scalar lvalues returned by `AUTOLOAD` during increment and compound assignment, honor fatal recursion warnings on the interpreter, and accept legacy whitespace-padded module versions and numeric overloads used by Valiemon (#1207, #1222, #1419).
 - Preserve all arguments when `warn` forwards an array in list context.
