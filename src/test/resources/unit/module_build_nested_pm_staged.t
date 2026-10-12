@@ -3,8 +3,12 @@ use warnings;
 use Cwd qw(getcwd);
 use File::Path qw(make_path);
 use File::Temp qw(tempdir);
-use Module::Build;
 use Test::More;
+
+BEGIN {
+    plan skip_all => 'Module::Build is not installed in this test environment'
+        unless eval { require Module::Build; 1 };
+}
 
 # Regression for #1432: nested declared modules are included in blib.
 my $original_dir = getcwd();
