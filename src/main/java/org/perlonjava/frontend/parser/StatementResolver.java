@@ -1022,6 +1022,11 @@ public class StatementResolver {
                 }
 
                 case "{" -> {
+                    // A label makes a following brace a statement block even
+                    // when the block is immediately called as an expression
+                    // (for example, `SKIP: { ... } ()`). Do not let the
+                    // expression lookahead reinterpret the labeled block as
+                    // an anonymous hash constructor.
                     if (label != null || !isHashLiteral(parser)) {
                         int scopeIndex = parser.ctx.symbolTable.enterScope();
                         HintHashRegistry.enterScope(); // Save compile-time %^H
