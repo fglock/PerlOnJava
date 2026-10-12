@@ -13,6 +13,8 @@ priorities and future plans.
 - Match Perl's read-only default for `sysopen` creation without access flags,
   reject `truncate` on scalar-backed handles without changing the scalar, and
   cover UTF-8 byte offsets after seeks (#1431, #1520).
+
+- Allow `%ARGV` under `strict vars`, matching system Perl (#1770).
 - Parse indirect-object method calls with whitespace-separated arguments, compact arithmetic after `$$`, and recursive block-prototype calls from nested closures (#1429, #1329, #1763).
 - Preserve fieldhash values and quoted/deferred subroutine metadata across Perl threads (#1413, #1420).
 - Preserve blessed hash class tags through YAML::Any and localize dynamically named scalars without assignment on the interpreter (#1713).
