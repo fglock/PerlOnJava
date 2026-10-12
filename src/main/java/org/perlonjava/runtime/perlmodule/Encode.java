@@ -980,6 +980,9 @@ public class Encode extends PerlModuleBase {
         switch (javaName) {
             case "US-ASCII":  return "ascii";
             case "UTF-8":     return "utf-8-strict";
+            case "ISO-8859-1": return "iso-8859-1";
+            case "ISO-8859-15": return "iso-8859-15";
+            case "windows-1252": return "cp1252";
             default:          return javaName;
         }
     }

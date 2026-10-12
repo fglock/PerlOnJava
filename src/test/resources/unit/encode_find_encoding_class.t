@@ -18,4 +18,15 @@ is(refaddr(Encode::find_encoding($encoding)), refaddr($encoding),
 is($alias->decode("\xC3\xA9"), "é", 'UTF-8 subclass inherits decoding behavior');
 is($alias->encode("é"), "\xC3\xA9", 'UTF-8 subclass inherits encoding behavior');
 
+for my $case (
+    ['ISO-8859-15', 'iso-8859-15'],
+    ['windows-1252', 'cp1252'],
+    ['ISO-8859-1', 'iso-8859-1'],
+) {
+    my ($input, $expected) = @$case;
+    my $codec = Encode::find_encoding($input);
+    ok(defined($codec), "$input resolves to an encoding");
+    is($codec->name, $expected, "$input uses Perl's canonical encoding name");
+}
+
 done_testing;

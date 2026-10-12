@@ -597,6 +597,7 @@ public class DBI extends PerlModuleBase {
                 RuntimeArray row = new RuntimeArray();
                 ResultSetMetaData metaData = rs.getMetaData();
                 int colCount = metaData.getColumnCount();
+                boolean sqliteUnicode = dbh.get("sqlite_unicode").getBoolean();
                 // Convert each column value to string and add to row array.
                 // Perl 5's DBD::SQLite (without sqlite_unicode) returns byte strings
                 // (no UTF-8 flag). JDBC returns Java Strings which are decoded Unicode.
@@ -618,7 +619,7 @@ public class DBI extends PerlModuleBase {
                         val.type = RuntimeScalarType.BYTE_STRING;
                     } else {
                         val = RuntimeScalar.newScalarOrString(obj);
-                        if (val.type == RuntimeScalarType.STRING && val.value instanceof String s) {
+                        if (!sqliteUnicode && val.type == RuntimeScalarType.STRING && val.value instanceof String s) {
                             byte[] utf8Bytes = s.getBytes(StandardCharsets.UTF_8);
                             val.value = new String(utf8Bytes, StandardCharsets.ISO_8859_1);
                             val.type = RuntimeScalarType.BYTE_STRING;
@@ -728,6 +729,7 @@ public class DBI extends PerlModuleBase {
                     nameStyle = "NAME";
                 }
                 int colCount = metaData.getColumnCount();
+                boolean sqliteUnicode = dbh.get("sqlite_unicode").getBoolean();
                 RuntimeArray columnNames = columnNamesAttribute(sth, nameStyle);
                 if (columnNames == null || columnNames.size() < colCount) {
                     throw new IllegalStateException(
@@ -745,7 +747,7 @@ public class DBI extends PerlModuleBase {
                         val.type = RuntimeScalarType.BYTE_STRING;
                     } else {
                         val = RuntimeScalar.newScalarOrString(value);
-                        if (val.type == RuntimeScalarType.STRING && val.value instanceof String s) {
+                        if (!sqliteUnicode && val.type == RuntimeScalarType.STRING && val.value instanceof String s) {
                             byte[] utf8Bytes = s.getBytes(StandardCharsets.UTF_8);
                             val.value = new String(utf8Bytes, StandardCharsets.ISO_8859_1);
                             val.type = RuntimeScalarType.BYTE_STRING;

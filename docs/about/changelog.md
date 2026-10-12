@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve Unicode text fetched from SQLite with `sqlite_unicode`, normalize
+  common `Encode` canonical charset names to Perl's spellings, and cover
+  Unicode `tr///` deletion of U+00B4.
+
 - Parse indirect-object method calls with whitespace-separated arguments, compact arithmetic after `$$`, and recursive block-prototype calls from nested closures (#1429, #1329, #1763).
 - Preserve fieldhash values and quoted/deferred subroutine metadata across Perl threads (#1413, #1420).
 - Preserve blessed hash class tags through YAML::Any and localize dynamically named scalars without assignment on the interpreter (#1713).
