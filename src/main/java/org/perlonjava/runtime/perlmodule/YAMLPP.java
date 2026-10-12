@@ -7,7 +7,10 @@ import org.snakeyaml.engine.v2.api.Dump;
 import org.snakeyaml.engine.v2.api.DumpSettings;
 import org.snakeyaml.engine.v2.api.Load;
 import org.snakeyaml.engine.v2.api.LoadSettings;
+import org.snakeyaml.engine.v2.api.RepresentToNode;
 import org.snakeyaml.engine.v2.common.FlowStyle;
+import org.snakeyaml.engine.v2.nodes.Tag;
+import org.snakeyaml.engine.v2.representer.StandardRepresenter;
 import org.snakeyaml.engine.v2.schema.CoreSchema;
 import org.snakeyaml.engine.v2.schema.FailsafeSchema;
 import org.snakeyaml.engine.v2.schema.JsonSchema;
@@ -137,7 +140,8 @@ public class YAMLPP extends PerlModuleBase {
                 .setCodePointLimit(50 * 1024 * 1024)  // 50MB limit for large CPAN metadata files
                 .build();
 
-        instance.put("_dump", new RuntimeScalar(new Dump(dumpSettings)));
+        instance.put("_dump", new RuntimeScalar(new Dump(
+                dumpSettings, new PerlRepresenter(dumpSettings))));
         instance.put("_load", new RuntimeScalar(new Load(loadSettings)));
         instance.put("_options", new RuntimeScalar(options));
         instance.put("_cyclic_refs", new RuntimeScalar(cyclicRefs.name()));
@@ -385,7 +389,10 @@ public class YAMLPP extends PerlModuleBase {
 
         Object result = switch (scalar.type) {
             case HASHREFERENCE -> {
-                Map<String, Object> map = new LinkedHashMap<String, Object>();
+                RuntimeBase base = (RuntimeBase) scalar.value;
+                Map<String, Object> map = base.blessId == 0
+                        ? new LinkedHashMap<String, Object>()
+                        : new BlessedHash(NameNormalizer.getBlessStr(base.blessId));
                 seen.put(scalar.value, map);
                 RuntimeHash hash = (RuntimeHash) scalar.value;
                 hash.elements.forEach((key, value) ->
@@ -414,6 +421,28 @@ public class YAMLPP extends PerlModuleBase {
         };
 
         return result;
+    }
+
+    /** SnakeYAML representation of a Perl blessed hash reference. */
+    private static final class BlessedHash extends LinkedHashMap<String, Object> {
+        private final String className;
+
+        private BlessedHash(String className) {
+            this.className = className;
+        }
+    }
+
+    /** Emits Perl's class tag while retaining SnakeYAML's normal map handling. */
+    private static final class PerlRepresenter extends StandardRepresenter {
+        private PerlRepresenter(DumpSettings settings) {
+            super(settings);
+            RepresentToNode representBlessedHash = data -> {
+                BlessedHash hash = (BlessedHash) data;
+                return representMapping(new Tag("!perl/hash:" + hash.className),
+                        hash, FlowStyle.BLOCK);
+            };
+            representers.put(BlessedHash.class, representBlessedHash);
+        }
     }
 
     private enum CyclicRefsBehavior {

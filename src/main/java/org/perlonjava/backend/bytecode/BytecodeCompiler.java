@@ -5709,6 +5709,22 @@ public class BytecodeCompiler implements Visitor {
                 lastResultReg = rd;
                 return;
             }
+            // local $$name without an assignment still localizes the scalar
+            // named by the inner expression. The assignment form is emitted
+            // by CompileAssignment; keep the statement form on the same
+            // dynamic scalar localization opcode.
+            if (node.operand instanceof OperatorNode scalarSigil
+                    && scalarSigil.operator.equals("$")
+                    && !(scalarSigil.operand instanceof IdentifierNode)) {
+                compileNode(scalarSigil.operand, -1, RuntimeContextType.SCALAR);
+                int nameReg = lastResultReg;
+                int rd = allocateOutputRegister();
+                emitWithToken(Opcodes.LOCAL_SCALAR_DYNAMIC, node.getIndex());
+                emitReg(rd);
+                emitReg(nameReg);
+                lastResultReg = rd;
+                return;
+            }
             // local @{expr} / local %{expr} - localize a dynamic array/hash by name
             // Implemented by localizing the typeglob (covers the array/hash slot)
             if (node.operand instanceof OperatorNode sigilOp4
