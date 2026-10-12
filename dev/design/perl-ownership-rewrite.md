@@ -409,5 +409,21 @@ and first path establish implementation cost.
   populated root graph. `nice -n 19 make` passes in 8m48s; the new regression
   passes in the unit gate, and Catalyst-Runtime
   `t/aggregate/live_component_controller_action_chained2.t` passes 9/9 on JVM
-  and interpreter. `make check-links` passes. The current Catalyst profile and
-  fresh-home acceptance still need remeasurement after this change.
+  and interpreter. `make check-links` passes. A follow-up profile is recorded
+  below.
+- The cleanup-cost regression now drives three zero-count aggregates through
+  `MortalList` deferred release instead of calling its reachability helper
+  directly. After rebasing onto `2995d5a0a`, `nice -n 19 make` passes in 10m24s,
+  including the new test, and Catalyst-Runtime
+  `t/aggregate/live_component_controller_action_chained2.t` passes 9/9 on both
+  backends. The expensive release acceptance remains unrun per the user's
+  instruction to use focused CPAN files. A post-change 84-second JFR profile
+  of the focused Catalyst test contains 4,639 execution samples; the full root
+  walker appears in 1,790 sample stacks. The previous graph-sized copy is gone
+  from the aggregate result path: its only sampled result-helper stack performs
+  the target membership check, and the sole `AbstractCollection.addAll` sample
+  belongs to `RuntimeBase.ownerSlotSnapshot()`. Full-root traversal remains a
+  major cost across cleanup drains, so #1642 is not complete; the next
+  investigation is safe snapshot reuse across unchanged root sets or an
+  ownership path that removes the ordinary cleanup fallback. Full release
+  acceptance also remains required before closing the issue.
