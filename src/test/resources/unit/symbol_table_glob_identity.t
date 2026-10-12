@@ -46,6 +46,8 @@ is($before, 'code', 'method lookup finds the installed subroutine');
 my $after = eval { DeletedMethod->FOO };
 ok(!defined $after, 'method lookup no longer finds a deleted subroutine');
 is($DeletedMethod::FOO, 'scalar', 'CODE deletion retains the glob scalar slot');
+is(eval { &DeletedMethod::FOO }, 'code',
+    'compiled CODE remains callable after delete_sub removes its method entry');
 
 {
     package GlobAliasCapture;
@@ -65,8 +67,18 @@ is($DeletedMethod::FOO, 'scalar', 'CODE deletion retains the glob scalar slot');
         local *STDERR = *CAPTURE;
         is(tell ORIGINAL, 0,
             'whole-glob alias keeps original IO through localized replacement');
+        {
+            local *STDERR = *CAPTURE;
+            is(tell ORIGINAL, 0,
+                'saved alias remains bound through nested localization');
+            is(tell STDERR, 123,
+                'inner localized glob still uses its temporary tied IO');
+        }
+        is(tell STDERR, 123,
+            'outer localized glob is restored after nested localization');
     }
     ok(defined *STDERR{IO}, 'localized glob restores the original STDERR binding');
+    is(tell ORIGINAL, 0, 'saved alias retains its original IO after scope exit');
 }
 
 done_testing;
