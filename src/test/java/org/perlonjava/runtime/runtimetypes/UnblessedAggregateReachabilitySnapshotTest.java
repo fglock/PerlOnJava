@@ -4,10 +4,42 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
 class UnblessedAggregateReachabilitySnapshotTest {
+    @Test
+    void oversizedRootWalkStopsAtEdgeBudgetAndTreatsUnknownTargetsAsReachable() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash largeRoot = new RuntimeHash();
+            for (int i = 0; i <= ReachabilityWalker.MAX_ROOT_SNAPSHOT_EDGES; i++) {
+                largeRoot.elements.put("edge-" + i, new RuntimeScalar(i));
+            }
+            RuntimeArray global = new RuntimeArray();
+            global.elements.add(largeRoot.createReference());
+            String globalName =
+                    "UnblessedAggregateReachabilitySnapshotTest::largeRoot";
+            GlobalVariable.globalArrays.put(globalName, global);
+            RuntimeArray unresolved = new RuntimeArray();
+
+            try {
+                ReachabilityWalker.RootReachabilitySnapshot snapshot =
+                        ReachabilityWalker.reachableFromRootsSnapshotWithStatus();
+
+                assertEquals(ReachabilityWalker.MAX_ROOT_SNAPSHOT_EDGES,
+                        snapshot.edgesVisited(), "the full-root walk must stop at its edge budget");
+                assertFalse(snapshot.complete(), "a capped root walk cannot prove an object dead");
+                assertTrue(snapshot.isReachable(unresolved),
+                        "unknown targets remain protected when the root proof is incomplete");
+            } finally {
+                GlobalVariable.globalArrays.remove(globalName);
+                MortalList.invalidateAllRootSnapshots();
+            }
+        }
+    }
+
     @Test
     void initialWeakParentRegistrationPreservesAnUntrackedRootedAggregate() {
         PerlRuntime runtime = new PerlRuntime();
