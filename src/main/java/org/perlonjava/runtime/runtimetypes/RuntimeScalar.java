@@ -4244,12 +4244,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     throw new PerlCompilerException("Not a GLOB reference");
             default -> {
                 String symbolName = this.toString();
-                // `%::` names the main stash, but a symbolic glob lookup of
-                // the string "::" is relative to the current package.  Keep
-                // these two spellings distinct: after `%:: = ()`, `*{"::"}`
-                // is `*main::main::`, not the main stash glob itself.
+                // A symbolic glob lookup of `::` names the main stash,
+                // regardless of the package where the lookup runs.
                 String varName = symbolName.equals("::")
-                        ? packageName + "::main::"
+                        ? "main::"
                         : NameNormalizer.normalizeVariableName(symbolName, packageName);
                 // Use the canonical glob object for this symbol name.
                 // This ensures the IO slot is shared/visible across operations like:
