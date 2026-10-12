@@ -9,6 +9,9 @@ priorities and future plans.
 - Stage nested Module::Build modules and resolve compressed archive filenames
   against Perl's working directory so release plugins can consume the archive
   (#1432, #1514).
+- Preserve Perl numeric scalar flags through mixed arithmetic, classify large
+  finite floats as NVs, and retain zero padding during string autoincrement
+  (#1643, #1352, #1354).
 
 - Preserve Unicode text fetched from SQLite in Unicode string modes, normalize
   common `Encode` canonical charset names to Perl's spellings, and cover Unicode
