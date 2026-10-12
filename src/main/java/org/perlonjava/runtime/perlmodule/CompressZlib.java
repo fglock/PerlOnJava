@@ -863,7 +863,8 @@ public class CompressZlib extends PerlModuleBase {
                     }
                     fis = new BufferedInputStream(new RuntimeIOInputStream(fh, true));
                 } else {
-                    fis = new BufferedInputStream(new FileInputStream(filename));
+                    fis = new BufferedInputStream(new FileInputStream(
+                            RuntimeEnvironment.resolve(filename).toFile()));
                 }
                 fis.mark(2);
                 int b1 = fis.read();
@@ -890,7 +891,8 @@ public class CompressZlib extends PerlModuleBase {
                     }
                     fos = new RuntimeIOOutputStream(fh, true);
                 } else {
-                    fos = new FileOutputStream(filename, mode.startsWith("a"));
+                    fos = new FileOutputStream(
+                            RuntimeEnvironment.resolve(filename).toFile(), mode.startsWith("a"));
                 }
                 GZIPOutputStream gos = new GZIPOutputStream(fos);
                 self.put("_stream", new RuntimeScalar(gos));

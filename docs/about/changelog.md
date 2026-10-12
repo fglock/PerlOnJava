@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Stage nested Module::Build modules and resolve compressed archive filenames
+  against Perl's working directory so release plugins can consume the archive
+  (#1432, #1514).
+
 - Preserve Unicode text fetched from SQLite in Unicode string modes, normalize
   common `Encode` canonical charset names to Perl's spellings, and cover Unicode
   `tr///` deletion of U+00B4.
