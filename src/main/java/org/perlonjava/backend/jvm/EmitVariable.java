@@ -99,7 +99,8 @@ public class EmitVariable {
             return false;
         }
         if ("%".equals(sigil)) {
-            return name.equals("SIG")
+            return name.equals("ARGV")
+                    || name.equals("SIG")
                     || name.equals("ENV")
                     || name.equals("INC")
                     || name.equals("+")
