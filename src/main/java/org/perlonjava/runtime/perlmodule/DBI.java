@@ -597,7 +597,7 @@ public class DBI extends PerlModuleBase {
                 RuntimeArray row = new RuntimeArray();
                 ResultSetMetaData metaData = rs.getMetaData();
                 int colCount = metaData.getColumnCount();
-                boolean sqliteUnicode = dbh.get("sqlite_unicode").getBoolean();
+                boolean sqliteUnicode = usesSqliteUnicodeStrings(dbh);
                 // Convert each column value to string and add to row array.
                 // Perl 5's DBD::SQLite (without sqlite_unicode) returns byte strings
                 // (no UTF-8 flag). JDBC returns Java Strings which are decoded Unicode.
@@ -653,6 +653,19 @@ public class DBI extends PerlModuleBase {
     }
 
     /** Like Perl: {@code $sth->{$key} || $sth->{NAME}} for column label arrays. */
+    /** Whether SQLite text results should be returned as Perl character strings. */
+    private static boolean usesSqliteUnicodeStrings(RuntimeHash dbh) {
+        RuntimeScalar sqliteUnicode = dbh.get("sqlite_unicode");
+        if (sqliteUnicode != null && sqliteUnicode.getBoolean()) {
+            return true;
+        }
+        // DBD::SQLite 1.68+ uses this mode for valid UTF-8 text while retaining
+        // byte-string fallback for invalid UTF-8. Locale::Unicode::Data selects
+        // it after connecting to read its bundled CLDR database.
+        RuntimeScalar stringMode = dbh.get("sqlite_string_mode");
+        return stringMode != null && stringMode.getInt() == 5;
+    }
+
     private static RuntimeArray columnNamesAttribute(RuntimeHash sth, String key) {
         if (sth == null) {
             return null;
@@ -729,7 +742,7 @@ public class DBI extends PerlModuleBase {
                     nameStyle = "NAME";
                 }
                 int colCount = metaData.getColumnCount();
-                boolean sqliteUnicode = dbh.get("sqlite_unicode").getBoolean();
+                boolean sqliteUnicode = usesSqliteUnicodeStrings(dbh);
                 RuntimeArray columnNames = columnNamesAttribute(sth, nameStyle);
                 if (columnNames == null || columnNames.size() < colCount) {
                     throw new IllegalStateException(
