@@ -13,6 +13,7 @@ comment: |
 match:
   distribution: "^MLEHMANN/AnyEvent-7\\.17(?:\\.tar\\.gz)?$"
 patches:
+  - "AnyEvent/CloseSocketOnGuardDrop.patch"
   - "AnyEvent/UpdateClockBeforeTimer.patch"
 pl:
   commandline: 'jperl -MPerlOnJava::Distroprefs::AnyEvent -e "PerlOnJava::Distroprefs::AnyEvent::pl_phase()"'

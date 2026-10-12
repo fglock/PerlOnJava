@@ -1,0 +1,11 @@
+--- lib/AnyEvent/Socket.pm.orig
++++ lib/AnyEvent/Socket.pm
+@@ -1235,7 +1235,7 @@
+    $done->(\%state);
+ 
+    defined wantarray
+-      ? guard { %state = () } # clear fh, unlink
++      ? guard { close delete $state{fh}; %state = () } # close fh, clear state, unlink
+       : ()
+ }
+ 
