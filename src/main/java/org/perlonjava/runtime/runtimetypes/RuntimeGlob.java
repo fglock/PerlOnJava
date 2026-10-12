@@ -2075,6 +2075,14 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // Save the current IO object reference (not its state) so we can restore it later.
         // This allows captured glob references to keep the "local" IO even after restore.
         RuntimeScalar savedIO = this.IO;
+        String savedIOGlobName = savedIO != null && savedIO.value instanceof RuntimeIO runtimeIO
+                ? runtimeIO.globName : null;
+        // A saved IO can remain reachable through a glob alias while this name
+        // is localized. Keep it detached from the temporary binding so name
+        // based tie lookup cannot redirect operations on the saved IO.
+        if (savedIO != null && savedIO.value instanceof RuntimeIO runtimeIO) {
+            runtimeIO.globName = null;
+        }
         boolean savedIOVisible = GlobalVariable.isVisibleGlobalIORef(this.globName);
         // Save selectedHandle if this glob's IO is the currently selected handle.
         // This is needed for local(*STDOUT) to correctly restore selectedHandle
@@ -2091,7 +2099,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         globSlotStack().push(new GlobSlotSnapshot(this.globName,
                 savedScalar, savedArray, savedHash,
                 savedCode, savedAliasedCodes, savedGlobAliasTarget, savedIO, savedSelectedHandle, savedIOVisible,
-                savedPseudoConstant, savedCompactStashValue, RuntimeCode.argsStackDepth()));
+                savedIOGlobName, savedPseudoConstant, savedCompactStashValue,
+                RuntimeCode.argsStackDepth()));
 
         // Replace global table entries with NEW empty objects instead of mutating the
         // existing ones in-place. This is critical because the existing objects may be
@@ -2209,7 +2218,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // Restore the saved IO object reference on this (old) glob.
         this.IO = snap.io;
         if (this.IO != null && this.IO.value instanceof RuntimeIO runtimeIO) {
-            runtimeIO.globName = snap.globName;
+            String restoredIoGlobName = snap.globAliasTarget != null
+                    ? snap.globAliasTarget : snap.savedIOGlobName;
+            runtimeIO.globName = restoredIoGlobName != null
+                    ? restoredIoGlobName : snap.globName;
         }
 
         // Put this (old) glob back in globalIORefs, replacing the local scope's glob.
@@ -2356,6 +2368,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             RuntimeScalar io,
             RuntimeIO savedSelectedHandle,
             boolean ioWasVisible,
+            String savedIOGlobName,
             RuntimeScalar pseudoConstant,
             RuntimeScalar compactStashValue,
             int argsStackDepth) {
