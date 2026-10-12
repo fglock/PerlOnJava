@@ -1017,6 +1017,18 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     public RuntimeScalar set(RuntimeGlob value) {
         markGlobAsAssigned();
 
+        // A saved IO alias must remain attached to its old handle if this
+        // glob is rebound to a tied handle. Detach only for that IO-changing
+        // assignment; format-only glob localization also uses this method's
+        // surrounding save/restore machinery but must keep its IO metadata.
+        if (value.IO != null
+                && (value.IO.type == TIED_SCALAR || value.IO.value instanceof TieHandle)) {
+            RuntimeScalar displacedIO = localizedOriginalIO != null ? localizedOriginalIO : this.IO;
+            if (displacedIO != null && displacedIO.value instanceof RuntimeIO runtimeIO) {
+                runtimeIO.globName = null;
+            }
+        }
+
         // Anonymous globs (from "open my $fh, ...") have no global name.
         // Just copy the IO slot — no aliasing needed.
         // This matches Perl 5: *STDOUT = $lexical_fh only replaces the IO slot.
@@ -2077,12 +2089,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         RuntimeScalar savedIO = this.IO;
         String savedIOGlobName = savedIO != null && savedIO.value instanceof RuntimeIO runtimeIO
                 ? runtimeIO.globName : null;
-        // A saved IO can remain reachable through a glob alias while this name
-        // is localized. Keep it detached from the temporary binding so name
-        // based tie lookup cannot redirect operations on the saved IO.
-        if (savedIO != null && savedIO.value instanceof RuntimeIO runtimeIO) {
-            runtimeIO.globName = null;
-        }
         boolean savedIOVisible = GlobalVariable.isVisibleGlobalIORef(this.globName);
         // Save selectedHandle if this glob's IO is the currently selected handle.
         // This is needed for local(*STDOUT) to correctly restore selectedHandle
@@ -2218,8 +2224,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // Restore the saved IO object reference on this (old) glob.
         this.IO = snap.io;
         if (this.IO != null && this.IO.value instanceof RuntimeIO runtimeIO) {
-            String restoredIoGlobName = snap.globAliasTarget != null
-                    ? snap.globAliasTarget : snap.savedIOGlobName;
+            String restoredIoGlobName = snap.savedIOGlobName;
             runtimeIO.globName = restoredIoGlobName != null
                     ? restoredIoGlobName : snap.globName;
         }
