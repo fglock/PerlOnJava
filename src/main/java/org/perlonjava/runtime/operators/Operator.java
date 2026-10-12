@@ -76,20 +76,14 @@ public class Operator {
             }
             String path = resolved.toString();
 
-            boolean success;
-
-            if (isWindows) {
-                try {
-                    boolean readOnly = (mode & 0200) == 0;
-                    java.nio.file.Files.setAttribute(resolved, "dos:readonly", readOnly);
-                    Stat.rememberWindowsMode(resolved, mode);
-                    success = true;
-                } catch (Exception ex) {
-                    success = false;
-                }
-            } else {
-                int result = FFMPosix.get().chmod(path, mode);
-                success = (result == 0);
+            int result = FFMPosix.get().chmod(path, mode);
+            boolean success = result == 0;
+            if (success && isWindows) {
+                Stat.rememberWindowsMode(resolved, mode);
+            } else if (!success) {
+                // Keep Perl's $! in sync with the failed chmod operation.
+                // Callers rely on errno for why the path could not be changed.
+                getGlobalVariable("main::!").set(FFMPosix.get().errno());
             }
 
             if (success) {
