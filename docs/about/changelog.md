@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Parse indirect-object method calls with whitespace-separated arguments, compact arithmetic after `$$`, and recursive block-prototype calls from nested closures (#1429, #1329, #1763).
 - Preserve fieldhash values and quoted/deferred subroutine metadata across Perl threads (#1413, #1420).
 - Preserve byte strings in Template Toolkit filters and UTF-8 values assembled from byte-mode regex captures; retain the newline after unterminated script tags (#1182, #1183, #1184).
 - Support DBI class-level tracing, pure-Perl driver `data_sources`, and inherited pure-Perl driver connections (#1340, #1616, #1637).

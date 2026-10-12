@@ -270,6 +270,8 @@ public class Parser {
     public final Map<String, List<Node>> unitClassAdjustBlocks = new LinkedHashMap<>();
     /** Prototypes published by declaration headers while this source is parsed. */
     public final Map<String, String> declaredSubPrototypes = new LinkedHashMap<>();
+    /** Named subroutines whose bodies are currently being parsed, including closure ancestors. */
+    public final Deque<String> compilingSubroutineBodies = new ArrayDeque<>();
     // List to store heredoc nodes encountered during parsing.
     private List<OperatorNode> heredocNodes = new ArrayList<>();
     // When heredocs are processed before BEGIN blocks, this tracks where to skip to
