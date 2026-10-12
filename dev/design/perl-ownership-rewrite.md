@@ -369,11 +369,13 @@ and first path establish implementation cost.
   `t/01_both_using_rsnames.t` ok, then exceeded the 240-second command deadline
   later in the distribution suite. The Catalyst owner-slot delta workload and
   full cleanup acceptance are still open. On the 2026-10-12 rebased candidate,
-  the repository `make` gate passed in 7m05s. A local AnyEvent install then hit
-  its 30-minute timeout while the full-root snapshot walker was scanning a
-  large aggregate; the walker now caps inspected edges at 50,000 and marks a
-  capped snapshot incomplete, preserving conservative reachability. A focused
-  regression verifies the edge cap and unresolved-target behavior.
+  the repository `make` gate passed in 7m05s. The first local AnyEvent install
+  hit its 30-minute timeout while the full-root snapshot walker scanned a large
+  aggregate. The walker now caps inspected edges at 50,000 and marks a capped
+  snapshot incomplete, preserving conservative reachability. The final
+  implementation `make` passed in 7m03s, the focused edge-cap regression
+  passed, and retrying the AnyEvent install completed in 15 minutes with all 32
+  files installed; `anyevent_server_guard_rebind.t` passes 2/2.
 - `RuntimeBase.refCount` still combines selective counts with legacy lifecycle
   sentinels and triggers cleanup for mixed-owner referents. The new explicit
   lifecycle prevents repeat dispatch and records destruction/resurrection, but
