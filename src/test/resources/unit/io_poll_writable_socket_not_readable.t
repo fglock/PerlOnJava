@@ -5,6 +5,9 @@ use IO::Poll qw(POLLIN POLLOUT);
 use IO::Socket::UNIX;
 use Socket qw(PF_UNIX SOCK_STREAM);
 
+plan skip_all => 'Unix-domain socket readiness is unavailable on Windows'
+    if $^O eq 'MSWin32';
+
 my ($read_socket, $write_socket) = IO::Socket::UNIX->socketpair(
     PF_UNIX, SOCK_STREAM, 0,
 ) or plan skip_all => "socketpair unavailable: $!";
