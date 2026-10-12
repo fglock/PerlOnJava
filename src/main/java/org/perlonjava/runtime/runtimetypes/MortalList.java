@@ -1531,13 +1531,18 @@ public class MortalList {
             if (!snapshot.complete()) {
                 state.unblessedAggregateDrainSnapshotIncomplete = true;
                 state.unblessedAggregateDrainRoots.clear();
-            } else if (snapshot.reachable().size()
-                    > MAX_UNBLESSED_AGGREGATE_DRAIN_ROOTS
-                    - state.unblessedAggregateDrainRoots.size()) {
-                state.unblessedAggregateDrainSnapshotIncomplete = true;
-                state.unblessedAggregateDrainRoots.clear();
-            } else {
-                state.unblessedAggregateDrainRoots.addAll(snapshot.reachable());
+            } else if (reachable && !state.unblessedAggregateDrainRoots.contains(base)) {
+                if (state.unblessedAggregateDrainRoots.size()
+                        >= MAX_UNBLESSED_AGGREGATE_DRAIN_ROOTS) {
+                    state.unblessedAggregateDrainSnapshotIncomplete = true;
+                    state.unblessedAggregateDrainRoots.clear();
+                } else {
+                    state.unblessedAggregateDrainRoots.add(base);
+                    ReachabilityQueryStats stats = activeReachabilityQueryStats();
+                    if (stats != null) {
+                        stats.unblessedAggregateDrainPositiveProofsCached++;
+                    }
+                }
             }
         }
         return reachable;

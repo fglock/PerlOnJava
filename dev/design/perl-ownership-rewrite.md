@@ -401,3 +401,13 @@ and first path establish implementation cost.
   Catalyst chained action passes on both backends. The current JFR still samples
   `reachableFromRootsSnapshotWithStatus()` in 3,253 of 8,615 execution samples;
   further cleanup-cost work and the fresh-home acceptance remain open.
+- The same JFR shows `MortalList.recordUnblessedAggregateSnapshotResult()` in
+  stacks copying the entire reachable set into a second drain cache for each
+  unresolved aggregate. The drain cache now retains only targets with positive
+  proofs, while the full snapshot answers other targets directly. Added a
+  deterministic counter regression for repeated unreachable targets over a
+  populated root graph. `nice -n 19 make` passes in 8m48s; the new regression
+  passes in the unit gate, and Catalyst-Runtime
+  `t/aggregate/live_component_controller_action_chained2.t` passes 9/9 on JVM
+  and interpreter. `make check-links` passes. The current Catalyst profile and
+  fresh-home acceptance still need remeasurement after this change.

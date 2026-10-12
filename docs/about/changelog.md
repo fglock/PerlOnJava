@@ -52,7 +52,7 @@ priorities and future plans.
 - Allow `%ARGV` under `strict vars`, matching system Perl (#1770).
 - Parse indirect-object method calls with whitespace-separated arguments, compact arithmetic after `$$`, and recursive block-prototype calls from nested closures (#1429, #1329, #1763).
 - Resolve imported `length` subroutines ahead of the CORE builtin while keeping explicit `CORE::length` calls unchanged (#1239).
-- Preserve live unblessed aggregates when weak-parent links are installed and during cleanup, reusing positive root proofs across nested cleanup drains and bounding root snapshots by node and edge budgets; propagate indirect `utf8` imports in interpreter mode for Mojolicious selector parity; preserve scalar `caller()` results when used as method invocants in interpreter mode; parse labeled blocks as blocks when they are followed by a call expression (#1642).
+- Preserve live unblessed aggregates when weak-parent links are installed and during cleanup, cache only positive reachability proofs across nested cleanup drains, and bound root snapshots by node and edge budgets; propagate indirect `utf8` imports in interpreter mode for Mojolicious selector parity; preserve scalar `caller()` results when used as method invocants in interpreter mode; parse labeled blocks as blocks when they are followed by a call expression (#1642).
 - Preserve fieldhash values and quoted/deferred subroutine metadata across Perl threads (#1413, #1420).
 - Preserve blessed hash class tags through YAML::Any and localize dynamically named scalars without assignment on the interpreter (#1713).
 - Keep regression coverage for JSONY null callback values (#1228).
