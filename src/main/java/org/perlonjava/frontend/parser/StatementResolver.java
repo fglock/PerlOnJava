@@ -1059,11 +1059,6 @@ public class StatementResolver {
                         // Snapshot restored %^H for block boundary hint hash tracking
                         int postBlockHintHashId = HintHashRegistry.snapshotCurrentHintHash();
 
-                        if (label != null && label.equals("SKIP")) {
-                            // Use a macro to emulate Test::More SKIP blocks
-                            TestMoreHelper.handleSkipTest(parser, block);
-                        }
-
                         For3Node blockNode = new For3Node(label,
                                 true,
                                 null, null,

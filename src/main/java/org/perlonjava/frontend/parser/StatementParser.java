@@ -596,9 +596,6 @@ public class StatementParser {
             HintHashRegistry.exitScope(); // Restore compile-time %^H
         }
 
-        // Use a macro to emulate Test::More SKIP blocks
-        TestMoreHelper.handleSkipTest(parser, thenBranch);
-
         IfNode result = new IfNode(operator.text, condition, thenBranch, elseBranch, parser.tokenIndex);
         // An elsif is parsed as the previous if's else branch rather than as a
         // top-level block statement. Preserve its own COP start so calls in its
