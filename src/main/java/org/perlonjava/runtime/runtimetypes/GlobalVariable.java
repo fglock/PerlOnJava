@@ -15,6 +15,7 @@ import java.util.Set;
 import java.util.AbstractSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -28,6 +29,8 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
  * the existence of these global entities, initializing them as necessary.
  */
 public class GlobalVariable {
+    private static final AtomicLong globIdentitySequence = new AtomicLong();
+
     private static boolean isStashHashKey(String key) {
         // `main:::` is the storage name of `%:`; it is a plain hash. `main::`
         // remains the main symbol table used by `%::`.
@@ -1240,6 +1243,74 @@ public class GlobalVariable {
             globAliases.put(toGlob, canonical);
             invalidatePackageRootSnapshot();
         }
+    }
+
+    /**
+     * Preserve the current GV identity when localizing its canonical name.
+     * Aliases such as {@code *ORIGINAL = *STDERR} refer to the GV that
+     * {@code STDERR} names at assignment time. A localized replacement of
+     * {@code STDERR} must not make those aliases resolve to the replacement.
+     *
+     * @return the stable identity name to restore for {@code globName}, or
+     *         {@code null} when the name has no aliases that need preserving
+     */
+    public static String detachAliasedGlobForLocalization(String globName) {
+        if (globName == null || !globName.equals(resolveGlobAlias(globName))) {
+            return null;
+        }
+
+        List<String> aliases = new ArrayList<>();
+        for (String candidate : globAliases.keySet()) {
+            if (!candidate.equals(globName) && globName.equals(resolveGlobAlias(candidate))) {
+                aliases.add(candidate);
+            }
+        }
+        if (aliases.isEmpty()) {
+            return null;
+        }
+
+        String identity = "\u0000glob-identity-" + globIdentitySequence.incrementAndGet();
+        RuntimeScalar scalar = globalVariables.get(globName);
+        if (scalar != null) globalVariables.put(identity, scalar);
+        RuntimeArray array = globalArrays.get(globName);
+        if (array != null) globalArrays.put(identity, array);
+        RuntimeHash hash = globalHashes.get(globName);
+        if (hash != null) globalHashes.put(identity, hash);
+        RuntimeScalar code = getGlobalCodeRef(globName);
+        if (code != null) globalCodeRefs.put(identity, code);
+        RuntimeGlob io = peekGlobalIO(globName);
+        if (io != null) {
+            globalIORefs.put(identity, io);
+            // IO lookups use the named glob table directly. Keep each saved
+            // alias attached to the outer GV object as well as recording its
+            // stable alias identity, since local *name installs a different
+            // RuntimeGlob under the localized name.
+            for (String alias : aliases) {
+                globalIORefs.put(alias, io);
+            }
+            if (io.IO != null && io.IO.value instanceof RuntimeIO runtimeIO) {
+                // RuntimeIO consults this name when detecting a tie installed
+                // on the current named binding. Give the outer handle its
+                // stable GV name while the original name is localized.
+                runtimeIO.globName = identity;
+            }
+        }
+        RuntimeFormat format = globalFormatRefs.get(globName);
+        if (format != null) globalFormatRefs.put(identity, format);
+
+        RuntimeScalar pseudoConstant = getGlobalPseudoConstant(globName);
+        if (pseudoConstant != null) setGlobalPseudoConstant(identity, pseudoConstant);
+        RuntimeScalar compactValue = getGlobalCompactStashValue(globName);
+        if (compactValue != null) setGlobalCompactStashValue(identity, compactValue);
+
+        // Existing aliases keep the old GV. The localized name becomes a
+        // fresh binding and dynamicRestoreState reconnects it to this anchor.
+        for (String alias : aliases) {
+            globAliases.put(alias, identity);
+        }
+        globAliases.remove(globName);
+        invalidatePackageRootSnapshot();
+        return identity;
     }
 
     /**
