@@ -393,3 +393,11 @@ and first path establish implementation cost.
   fresh-home release acceptance and current-candidate Catalyst cleanup profile
   remain open; targeted tests do not establish the full gate or the total cost
   of root walking.
+- The full root snapshot now seeds all installed CODE slots but follows capture
+  fields only through `GlobalVariable.globalCodeRefEdgeRootsView()`, which
+  already caches the slots with walkable edges. A deterministic counter test
+  verifies one capture walk among 65 installed CODE slots while retaining the
+  captured aggregate. `nice -n 19 make` passes in 18m10s on this change, and the
+  Catalyst chained action passes on both backends. The current JFR still samples
+  `reachableFromRootsSnapshotWithStatus()` in 3,253 of 8,615 execution samples;
+  further cleanup-cost work and the fresh-home acceptance remain open.

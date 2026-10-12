@@ -11,6 +11,7 @@ final class ReachabilityQueryStats {
     long externalRootSnapshotsBuilt;
     long externalRootSnapshotEdgesInspected;
     long externalRootSnapshotNodesVisited;
+    long globalCodeCaptureRootsWalked;
     long scalarReachabilityQueries;
     long scalarReachabilityRootWalks;
 }

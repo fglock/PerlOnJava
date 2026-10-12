@@ -1205,7 +1205,10 @@ public class ReachabilityWalker {
             for (RuntimeScalar codeRef : GlobalVariable.globalCodeRefValuesView()) {
                 if (!budget.visitEdge()) break rootScan;
                 seedTarget(codeRef, null, seen, todo, stats);
+            }
+            for (RuntimeScalar codeRef : GlobalVariable.globalCodeRefEdgeRootsView()) {
                 if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
+                    if (stats != null) stats.globalCodeCaptureRootsWalked++;
                     followGlobalCodeCaptures(code, null, seen, todo, budget);
                     if (!budget.complete) break rootScan;
                 }
