@@ -1217,6 +1217,20 @@ public class StringParser {
         return new OperatorNode(operator, list, rawStr.index);
     }
 
+    private static String protectRawUnicodeCharacters(String value) {
+        StringBuilder escaped = new StringBuilder(value.length());
+        for (int i = 0; i < value.length();) {
+            int codePoint = value.codePointAt(i);
+            if (codePoint > 0x7f) {
+                escaped.append("\\x{").append(Integer.toHexString(codePoint)).append('}');
+            } else {
+                escaped.appendCodePoint(codePoint);
+            }
+            i += Character.charCount(codePoint);
+        }
+        return escaped.toString();
+    }
+
     public static OperatorNode parseTransliteration(EmitterContext ctx, ParsedString rawStr) {
         String operator = "tr";
 
@@ -1243,6 +1257,7 @@ public class StringParser {
             // by byte-oriented translation tables.
             searchNode = new StringNode(searchList, rawStr.index);
         } else {
+            searchList = protectRawUnicodeCharacters(searchList);
             ParsedString searchParsed = new ParsedString(
                     rawStr.index,
                     rawStr.next,
@@ -1261,6 +1276,7 @@ public class StringParser {
         } else if (containsEscapedDash(replacementList)) {
             replacementNode = new StringNode(replacementList, rawStr.index);
         } else {
+            replacementList = protectRawUnicodeCharacters(replacementList);
             ParsedString replaceParsed = new ParsedString(
                     rawStr.index,
                     rawStr.next,

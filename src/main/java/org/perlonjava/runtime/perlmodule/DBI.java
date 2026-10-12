@@ -597,6 +597,7 @@ public class DBI extends PerlModuleBase {
                 RuntimeArray row = new RuntimeArray();
                 ResultSetMetaData metaData = rs.getMetaData();
                 int colCount = metaData.getColumnCount();
+                boolean sqliteUnicode = usesSqliteUnicodeStrings(dbh);
                 // Convert each column value to string and add to row array.
                 // Perl 5's DBD::SQLite (without sqlite_unicode) returns byte strings
                 // (no UTF-8 flag). JDBC returns Java Strings which are decoded Unicode.
@@ -618,7 +619,7 @@ public class DBI extends PerlModuleBase {
                         val.type = RuntimeScalarType.BYTE_STRING;
                     } else {
                         val = RuntimeScalar.newScalarOrString(obj);
-                        if (val.type == RuntimeScalarType.STRING && val.value instanceof String s) {
+                        if (!sqliteUnicode && val.type == RuntimeScalarType.STRING && val.value instanceof String s) {
                             byte[] utf8Bytes = s.getBytes(StandardCharsets.UTF_8);
                             val.value = new String(utf8Bytes, StandardCharsets.ISO_8859_1);
                             val.type = RuntimeScalarType.BYTE_STRING;
@@ -652,6 +653,26 @@ public class DBI extends PerlModuleBase {
     }
 
     /** Like Perl: {@code $sth->{$key} || $sth->{NAME}} for column label arrays. */
+    /** Whether SQLite text results should be returned as Perl character strings. */
+    private static boolean usesSqliteUnicodeStrings(RuntimeHash dbh) {
+        RuntimeScalar sqliteUnicode = dbh.get("sqlite_unicode");
+        if (sqliteUnicode != null && sqliteUnicode.getBoolean()) {
+            return true;
+        }
+        // DBD::SQLite 1.68+ uses this mode for valid UTF-8 text while retaining
+        // byte-string fallback for invalid UTF-8. Locale::Unicode::Data selects
+        // it after connecting to read its bundled CLDR database.
+        RuntimeScalar stringMode = dbh.get("sqlite_string_mode");
+        if (stringMode != null
+                && "DBD::SQLite::Constants::DBD_SQLITE_STRING_MODE_UNICODE_FALLBACK"
+                        .equals(stringMode.toString())) {
+            // The bundled constant sub can reach a hash assignment as its
+            // fully qualified name on the interpreter/JVM Perl frontend.
+            return true;
+        }
+        return stringMode != null && stringMode.getInt() == 5;
+    }
+
     private static RuntimeArray columnNamesAttribute(RuntimeHash sth, String key) {
         if (sth == null) {
             return null;
@@ -728,6 +749,7 @@ public class DBI extends PerlModuleBase {
                     nameStyle = "NAME";
                 }
                 int colCount = metaData.getColumnCount();
+                boolean sqliteUnicode = usesSqliteUnicodeStrings(dbh);
                 RuntimeArray columnNames = columnNamesAttribute(sth, nameStyle);
                 if (columnNames == null || columnNames.size() < colCount) {
                     throw new IllegalStateException(
@@ -745,7 +767,7 @@ public class DBI extends PerlModuleBase {
                         val.type = RuntimeScalarType.BYTE_STRING;
                     } else {
                         val = RuntimeScalar.newScalarOrString(value);
-                        if (val.type == RuntimeScalarType.STRING && val.value instanceof String s) {
+                        if (!sqliteUnicode && val.type == RuntimeScalarType.STRING && val.value instanceof String s) {
                             byte[] utf8Bytes = s.getBytes(StandardCharsets.UTF_8);
                             val.value = new String(utf8Bytes, StandardCharsets.ISO_8859_1);
                             val.type = RuntimeScalarType.BYTE_STRING;

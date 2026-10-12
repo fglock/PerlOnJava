@@ -1,5 +1,6 @@
 use strict;
 use warnings;
+use utf8;
 use Test::More;
 
 my $named_sequence = eval q{tr/a/\N{KATAKANA LETTER AINU P}/; 1};
@@ -10,5 +11,9 @@ like($@, qr/\N\{KATAKANA LETTER AINU P\} must not be a named sequence in transli
 my $text = "A\x{ffff}B";
 $text =~ tr/\x{ffff}/\x{1ffff}/;
 is($text, "A\x{1ffff}B", 'tr preserves a supplementary replacement code point');
+
+my $filename = "Don´t Think";
+$filename =~ tr/'"\x{2019}`´//d;
+is($filename, 'Dont Think', 'tr deletes literal U+00B4 from a Unicode string');
 
 done_testing();
