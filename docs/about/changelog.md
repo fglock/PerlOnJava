@@ -66,6 +66,7 @@ priorities and future plans.
   from its underlying handle, and cover deletion of cookies with past
   `Expires` values (#1639, #1636, #1614).
 - Preserve default prototype warnings when compile-time code locally sets `$^W` to false.
+- Report the canonical root-stash glob name and expose `\R` start-class and skip optimization metadata.
 - Keep eval-created regex callback captures alive while their `qr//` values remain in scope.
 - Avoid false experimental `@_` warnings for ordinary named calls inside signatured subroutines, and classify bare `@_` in a line sequence without failing compilation (#1422).
 - Respect lexical `syntax::prototype` warning controls for prototype mismatch

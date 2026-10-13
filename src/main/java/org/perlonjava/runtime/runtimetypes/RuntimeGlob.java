@@ -1716,6 +1716,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     private String effectiveStringificationName() {
         String name = stringificationName != null ? stringificationName : globName;
         if (name == null) return null;
+        if ("main::".equals(name)) return "main::main::";
         int packageSeparator = name.lastIndexOf("::");
         if (packageSeparator <= 0) return name;
         String packageName = name.substring(0, packageSeparator);
