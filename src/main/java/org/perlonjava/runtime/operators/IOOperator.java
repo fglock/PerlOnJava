@@ -2988,10 +2988,11 @@ public class IOOperator {
                 // First argument is a filehandle
                 RuntimeIO fh = firstArg.scalar().getRuntimeIO();
                 if (getBaseHandle(fh.ioHandle) instanceof ScalarBackedIO) {
-                    getGlobalVariable("main::!").set("Bad file descriptor");
+                    getGlobalVariable("main::!").set(9); // EBADF
                     return scalarUndef;
                 }
-                return fh.truncate(length);
+                RuntimeScalar result = fh.truncate(length);
+                return result.getBoolean() ? result : scalarUndef;
             } else {
                 // First argument is a filename
                 String filename = firstArg.scalar().toString();
@@ -3002,14 +3003,14 @@ public class IOOperator {
                     channel.close();
                     return scalarTrue;
                 } catch (IOException e) {
-                    getGlobalVariable("main::!").set("Truncate failed: " + e.getMessage());
-                    return scalarFalse;
+                    RuntimeIO.handleIOException(e, "truncate failed");
+                    return scalarUndef;
                 }
             }
 
         } catch (Exception e) {
-            getGlobalVariable("main::!").set("Truncate failed: " + e.getMessage());
-            return scalarFalse;
+            RuntimeIO.handleIOException(e, "truncate failed");
+            return scalarUndef;
         }
     }
 
