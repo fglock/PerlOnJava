@@ -1793,30 +1793,34 @@ public class ReachabilityWalker {
         if (target == null) return false;
         ReachabilityQueryStats stats = MortalList.activeReachabilityQueryStats();
         if (stats != null) stats.rootQueries++;
-        // Hard cap to prevent pathological worst-case walks. Class::MOP
-        // bootstrap touches ~thousands of nodes; pick a generous limit
-        // that still bounds cost.
+        // Node and edge caps bound both graph traversal and root seeding. An
+        // incomplete proof conservatively retains an unresolved target.
         final int MAX_VISITS = MAX_ROOT_SNAPSHOT_VISITS;
+        RootWalkBudget budget = new RootWalkBudget(MAX_ROOT_SNAPSHOT_EDGES);
 
         Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
 
         // Seed: package globals (scalars, arrays, hashes, code refs).
         for (RuntimeScalar codeRef : GlobalVariable.globalCodeRefValuesView()) {
+            if (!budget.visitEdge()) return true;
             seedTarget(codeRef, target, seen, todo, stats);
             if (seen.contains(target)) return true;
             if (!globalOnly
                     && codeRef != null
                     && codeRef.value instanceof RuntimeCode code) {
-                if (followGlobalCodeCaptures(code, target, seen, todo)) return true;
+                if (followGlobalCodeCaptures(code, target, seen, todo, budget)) return true;
+                if (!budget.complete) return true;
             }
         }
         for (RuntimeScalar scalar : GlobalVariable.globalVariableValuesView()) {
+            if (!budget.visitEdge()) return true;
             seedTarget(scalar, target, seen, todo, stats);
             if (seen.contains(target)) return true;
         }
         for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrayEntriesView()) {
             if (isNonOwningDebugArgsArray(e.getKey())) continue;
+            if (!budget.visitEdge()) return true;
             if (e.getValue() == target) {
                 if (stats != null) stats.rootsSeeded++;
                 return true;
@@ -1827,6 +1831,7 @@ public class ReachabilityWalker {
             }
         }
         for (RuntimeHash hash : GlobalVariable.globalHashValuesView()) {
+            if (!budget.visitEdge()) return true;
             if (hash == target) {
                 if (stats != null) stats.rootsSeeded++;
                 return true;
@@ -1837,6 +1842,7 @@ public class ReachabilityWalker {
             }
         }
         for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotReferents()) {
+            if (!budget.visitEdge()) return true;
             if (ownerReferent == target) return true;
             if (ownerReferent != null && seen.add(ownerReferent)) {
                 todo.addLast(ownerReferent);
@@ -1855,6 +1861,7 @@ public class ReachabilityWalker {
         // through their own (scope-exited) scalars.
         if (!globalOnly) {
             for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
+                if (!budget.visitEdge()) return true;
                 if (sc == null) continue;
                 if (sc.captureCount > 0) continue;
                 if (WeakRefRegistry.isweak(sc)) continue;
@@ -1870,6 +1877,7 @@ public class ReachabilityWalker {
             // `our %METAS = ();` registers the RuntimeHash, and walking
             // its values surfaces the metaclass.
             for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
+                if (!budget.visitEdge()) return true;
                 // Order matters: RuntimeScalar IS a RuntimeBase, so the
                 // RuntimeScalar branch must come first to walk through its
                 // reference bit. Otherwise we'd add the scalar to todo but
@@ -1899,6 +1907,7 @@ public class ReachabilityWalker {
             // so callback captures remain reachable without widening ordinary
             // lexical reachability for the refcount walk.
             for (Object registeredVar : MyVarCleanupStack.snapshotRegisteredVars()) {
+                if (!budget.visitEdge()) return true;
                 if (!(registeredVar instanceof RuntimeScalar scalar)
                         || scalar.type != RuntimeScalarType.REGEX
                         || scalar.scopeExited
@@ -1909,6 +1918,7 @@ public class ReachabilityWalker {
         }
         // Seed: rescued objects.
         for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
+            if (!budget.visitEdge()) return true;
             if (rescued == target) {
                 if (stats != null) stats.rootsSeeded++;
                 return true;
@@ -1921,7 +1931,7 @@ public class ReachabilityWalker {
 
         // BFS, short-circuiting on target.
         int visits = 0;
-        while (!todo.isEmpty() && visits < MAX_VISITS) {
+        walk: while (!todo.isEmpty() && visits < MAX_VISITS) {
             RuntimeBase cur = todo.removeFirst();
             visits++;
             if (stats != null) stats.nodesVisited++;
@@ -1930,6 +1940,7 @@ public class ReachabilityWalker {
             if (cur instanceof RuntimeStash) continue;
             if (cur instanceof RuntimeHash h) {
                 if (h.elements instanceof TieHash) {
+                    if (!budget.visitEdge()) return true;
                     if (stats != null) stats.edgesInspected++;
                 }
                 if (h.elements instanceof TieHash tieHash
@@ -1937,11 +1948,13 @@ public class ReachabilityWalker {
                     return true;
                 }
                 for (RuntimeScalar v : h.elements.values()) {
+                    if (!budget.visitEdge()) break walk;
                     if (stats != null) stats.edgesInspected++;
                     if (followScalar(v, target, seen, todo)) return true;
                 }
             } else if (cur instanceof RuntimeArray a) {
                 for (RuntimeScalar v : a.elements) {
+                    if (!budget.visitEdge()) break walk;
                     if (stats != null) stats.edgesInspected++;
                     if (followScalar(v, target, seen, todo)) return true;
                 }
@@ -1951,16 +1964,9 @@ public class ReachabilityWalker {
                 // only these callback capture edges; ordinary closure edges
                 // remain opaque to this refcount reachability query.
                 for (RuntimeCode callback : regex.executableCallbackCodes()) {
-                    if (callback.capturedScalars != null) {
-                        for (RuntimeScalar captured : callback.capturedScalars) {
-                            if (captured == target) return true;
-                        }
-                    }
-                    if (callback.closedOverVariables != null
-                            && callback.closedOverVariables.containsValue(target)) {
-                        return true;
-                    }
-                    if (followGlobalCodeCaptures(callback, target, seen, todo)) return true;
+                    if (!budget.visitEdge()) break walk;
+                    if (followGlobalCodeCaptures(callback, target, seen, todo, budget)) return true;
+                    if (!budget.complete) break walk;
                 }
             }
             // Note: we deliberately don't follow RuntimeCode.capturedScalars
@@ -1976,7 +1982,7 @@ public class ReachabilityWalker {
             // because %METAS is declared `our %METAS` (package global) so
             // it appears directly in GlobalVariable.globalHashes.
         }
-        return !todo.isEmpty();
+        return !budget.complete || !todo.isEmpty();
     }
 
     /**

@@ -10,6 +10,39 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class ExternalRootSnapshotBudgetTest {
     @Test
+    void oversizedTargetRootWalkStopsAndRetainsUnknownTargets() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash largeRoot = new RuntimeHash();
+            for (int i = 0; i <= ReachabilityWalker.MAX_ROOT_SNAPSHOT_EDGES; i++) {
+                largeRoot.elements.put("edge-" + i, null);
+            }
+            RuntimeArray global = new RuntimeArray();
+            global.elements.add(largeRoot.createReference());
+            String globalName = "ExternalRootSnapshotBudgetTest::targetLargeRoot";
+            GlobalVariable.globalArrays.put(globalName, global);
+            RuntimeArray unresolved = new RuntimeArray();
+
+            try {
+                ReachabilityQueryStats stats;
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    assertTrue(ReachabilityWalker.isReachableFromRoots(unresolved),
+                            "an incomplete targeted walk cannot prove an object dead");
+                    stats = measurement.stats();
+                }
+
+                assertEquals(1, stats.rootQueries);
+                assertTrue(stats.edgesInspected <= ReachabilityWalker.MAX_ROOT_SNAPSHOT_EDGES,
+                        "the targeted root walk stays within its edge budget");
+            } finally {
+                GlobalVariable.globalArrays.remove(globalName);
+                MortalList.invalidateAllRootSnapshots();
+            }
+        }
+    }
+
+    @Test
     void oversizedExternalRootWalkStopsAtEdgeBudgetAndRetainsUnknownTargets() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
