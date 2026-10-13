@@ -23,6 +23,9 @@ priorities and future plans.
   comparator tailcalls rejected (#1646).
 - Skip Mojolicious 9.49's real-fork asset subtest when neither fork capability
   is available, while retaining the rest of its asset coverage (#1646).
+- Route bundled `utf8` pragma imports through the native lexical hint handler,
+  preserving UTF-8 source decoding when another pragma imports `utf8` on the
+  interpreter (#1646).
 
 - Preserve tied scalar lvalues returned by `AUTOLOAD` during increment and compound assignment, honor fatal recursion warnings on the interpreter, and accept legacy whitespace-padded module versions and numeric overloads used by Valiemon (#1207, #1222, #1419).
 - Preserve all arguments when `warn` forwards an array in list context.

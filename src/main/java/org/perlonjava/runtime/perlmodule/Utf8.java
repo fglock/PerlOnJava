@@ -55,6 +55,12 @@ public class Utf8 extends PerlModuleBase {
         try {
             utf8.registerMethod("import", "useUtf8", ";$");
             utf8.registerMethod("unimport", "noUtf8", ";$");
+            // utf8.pm supplies the public Perl wrappers. Keep a separate
+            // native entry point for those wrappers so an indirect
+            // utf8->import from another pragma can update the caller's
+            // compile-time mutation scope in interpreter mode.
+            utf8.registerMethod("_native_import", "useUtf8", ";$");
+            utf8.registerMethod("_native_unimport", "noUtf8", ";$");
             utf8.registerMethod("upgrade", null);
             utf8.registerMethod("downgrade", "$;$");
             utf8.registerMethod("encode", "$");
