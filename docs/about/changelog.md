@@ -12,6 +12,8 @@ priorities and future plans.
 - Parse escaped backslashes in transliteration lists once, inherit strict-vars
   settings in string eval, and ignore trailing shebang comments (#1783, #1454,
   #1524).
+- Refresh bundled Perl 5 core modules and documentation, retaining PerlOnJava
+  compatibility for CPAN enumeration and process pipe selection.
 - Stage nested Module::Build modules and resolve compressed archive filenames
   against Perl's working directory so release plugins can consume the archive
   (#1432, #1514).
@@ -62,10 +64,14 @@ priorities and future plans.
 - Preserve the caller's `DATA` handle when a compile-time required module ends with `__END__` (#1244).
 - Bound captured subprocess output while continuing to drain child streams, and report output-reader errors (#1723).
 - Match Perl's dividend-sign remainder for `%` under `use integer`.
+- Flatten very deep parenthesized numeric lists during parsing to reduce stack
+  and AST memory use, and preserve inherited `AUTOLOAD` dispatch for lexical
+  forward stubs.
 - Preserve `$!` when pathname `chmod` fails, report layered socket readiness
   from its underlying handle, and cover deletion of cookies with past
   `Expires` values (#1639, #1636, #1614).
 - Preserve default prototype warnings when compile-time code locally sets `$^W` to false.
+- Report the canonical root-stash glob name and expose `\R` start-class and skip optimization metadata.
 - Keep eval-created regex callback captures alive while their `qr//` values remain in scope.
 - Avoid false experimental `@_` warnings for ordinary named calls inside signatured subroutines, and classify bare `@_` in a line sequence without failing compilation (#1422).
 - Respect lexical `syntax::prototype` warning controls for prototype mismatch

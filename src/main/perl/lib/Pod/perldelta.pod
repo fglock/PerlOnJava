@@ -35,6 +35,16 @@ L</Selected Bug Fixes> section.
 
 [ List each security issue as a =head2 entry ]
 
+=head2 CVE-2026-107401 (title TBD)
+
+A regular expression performing a greedy match of a UTF8 character could
+have incorrectly failed if the first attempt at a match was unsuccessful.
+Instead of skipping over all consecutive instances of that I<character>
+associated with the first attempt, all consecutive characters that had
+the same first I<byte> were skipped.
+
+[GH #24916]
+
 =head1 Incompatible Changes
 
 XXX For a release on a stable branch, this section aspires to be:
@@ -94,6 +104,11 @@ excessive backtracking in some regexes which include quantifiers on
 variable-length sub-patterns, such as C<(a|bc)*> and C<(ab+){2,}>. This
 change may reduce the amount of backtracking that takes place, and may
 reduce the amount of temporary memory used for the cache.
+
+=item *
+
+C<substr()> now updates the UTF-8 position cache correctly, avoiding
+repeated scans when accessing the same part of a string. [GH #24531]
 
 =back
 
@@ -352,14 +367,6 @@ well.
 
 =item *
 
-During regex compilation, C<S_reg> will attempt to flatten nested BRANCH
-structures, in an attempt to give the TRIE optimizer more alternations
-to consider. The intent is that patterns that were previously compiled
-into two or more adjacent TRIE nodes might now get compiled into a single
-(or at least, fewer) TRIE node(s).
-
-=item *
-
 Locale thread-safety is now enabled by default for the next few v5.45
 development releases.
 
@@ -432,7 +439,31 @@ accuracy may follow within this development cycle.
 
 =item *
 
-XXX
+Regular expression compilation could have mistaken the width of a
+quantified subpattern (e.g. C<b{2}>) when a potentially infinite
+qualifier (e.g. C<+>) occured earlier in the pattern. This could lead to
+viable match candidates at the start of the target string being missed.
+
+[GH #24915]
+
+=item *
+
+Following an unsuccessful earlier non-greedy match, a regular expression
+intended to perform a separate I<greedy> match could have instead
+performed a I<non-greedy> match because of skipped flag clearance.
+
+[GH #24926]
+
+=item *
+
+An anchored regular expressions starting with a repeating character could
+have incorrectly skipped later instances of that character if the match
+contained a C<(*SKIP)> and was initially unsuccessful.
+
+=item *
+
+In some cases warnings that occurred while using unpack on an invalid
+UTF-8 marked string would result in an invalid free.  [GH #24913]
 
 =item *
 

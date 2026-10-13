@@ -1,6 +1,6 @@
 --- perl5/cpan/CPAN/lib/CPAN.pm
 +++ src/main/perl/lib/CPAN.pm
-@@ -705,0 +706,7 @@
+@@ -705,0 +706,8 @@
 +    # Metadata caches can contain hundreds of thousands of entries.  Keep
 +    # startup cheap by creating their mutable session wrappers only when a
 +    # command really asks to enumerate the whole class.
@@ -8,6 +8,7 @@
 +        $META->{readwrite}{$class}{$id} ||=
 +            $class->new(ID => $id, RO => $META->{readonly}{$class}{$id});
 +    }
++    return values %{ $META->{readwrite}{$class} };
 @@ -1323 +1330,3 @@
 -    $META->{readwrite}{$class}{$id} ||= $class->new(ID => $id);
 +    my $ro = $META->{readonly}{$class}{$id};

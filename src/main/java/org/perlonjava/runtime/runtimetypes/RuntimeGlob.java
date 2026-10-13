@@ -714,6 +714,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                         // so MRO sees the installed slot as the method stub;
                         // its package/sub name remains the glob's real name.
                         targetCode.lexicalForwardGlobPlaceholder = true;
+                        targetCode.lexicalForwardGlobAliasInstalled = true;
                         RuntimeGlob.attachCoderefToNamedGlob(targetCode, this.globName);
                         // The lexical storage is not a package CODE slot, so
                         // the normal alias group alone cannot make a later
@@ -1716,6 +1717,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     private String effectiveStringificationName() {
         String name = stringificationName != null ? stringificationName : globName;
         if (name == null) return null;
+        if ("main::".equals(name)) return "main::main::";
         int packageSeparator = name.lastIndexOf("::");
         if (packageSeparator <= 0) return name;
         String packageName = name.substring(0, packageSeparator);
