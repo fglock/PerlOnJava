@@ -1195,6 +1195,22 @@ public class ReachabilityWalker {
     }
 
     static RootReachabilitySnapshot reachableFromRootsSnapshotWithStatus() {
+        return reachableFromRootsSnapshotWithStatus(true);
+    }
+
+    /**
+     * Collect the bounded root graph needed to answer reachability for
+     * unblessed aggregates. Installed CODE slot identities cannot own an
+     * aggregate by themselves; their captured values are followed separately
+     * through the cached CODE roots with capture edges. Omitting terminal CODE
+     * slots avoids seeding every installed subroutine during aggregate cleanup.
+     */
+    static RootReachabilitySnapshot unblessedAggregateRootsSnapshotWithStatus() {
+        return reachableFromRootsSnapshotWithStatus(false);
+    }
+
+    private static RootReachabilitySnapshot reachableFromRootsSnapshotWithStatus(
+            boolean includeInstalledCodeSlots) {
         ReachabilityQueryStats stats = MortalList.activeReachabilityQueryStats();
         if (stats != null) stats.snapshotsBuilt++;
         final int maxVisits = MAX_ROOT_SNAPSHOT_VISITS;
@@ -1203,9 +1219,11 @@ public class ReachabilityWalker {
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
 
         rootScan: {
-            for (RuntimeScalar codeRef : GlobalVariable.globalCodeRefValuesView()) {
-                if (!budget.visitEdge()) break rootScan;
-                seedTarget(codeRef, null, seen, todo, stats);
+            if (includeInstalledCodeSlots) {
+                for (RuntimeScalar codeRef : GlobalVariable.globalCodeRefValuesView()) {
+                    if (!budget.visitEdge()) break rootScan;
+                    seedTarget(codeRef, null, seen, todo, stats);
+                }
             }
             for (RuntimeScalar codeRef : GlobalVariable.globalCodeRefEdgeRootsView()) {
                 if (codeRef != null && codeRef.value instanceof RuntimeCode code) {

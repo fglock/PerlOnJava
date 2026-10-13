@@ -1528,8 +1528,7 @@ public class MortalList {
             return true;
         }
         ReachabilityWalker.RootReachabilitySnapshot snapshot =
-                ReachabilityWalker.reachableFromRootsSnapshotWithStatus();
-        state.fullRootSnapshot = snapshot;
+                ReachabilityWalker.unblessedAggregateRootsSnapshotWithStatus();
         state.unblessedAggregateRootSnapshot = snapshot;
         return recordUnblessedAggregateSnapshotResult(state, snapshot, base, drainActive);
     }
