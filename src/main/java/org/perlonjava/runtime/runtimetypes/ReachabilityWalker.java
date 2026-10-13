@@ -2215,6 +2215,8 @@ public class ReachabilityWalker {
         private final ReachabilityQueryStats queryStats =
                 MortalList.activeReachabilityQueryStats();
         private boolean complete = true;
+        private final RootWalkBudget budget =
+                new RootWalkBudget(MAX_ROOT_SNAPSHOT_EDGES);
 
         public ExternalRootSnapshot() {
             this(true);
@@ -2232,7 +2234,7 @@ public class ReachabilityWalker {
             return new LiveRootSnapshot().isReachable(target);
         }
 
-        /** Whether the visit budget drained the complete queued root graph. */
+        /** Whether the node and edge budgets covered the complete root graph. */
         boolean complete() {
             return complete;
         }
@@ -2253,38 +2255,45 @@ public class ReachabilityWalker {
             // cached subset with capture/state edges needs reflective capture
             // traversal. Named subs with empty pads otherwise force this
             // sweep to inspect every generated implementation object.
-            for (RuntimeScalar codeRef : GlobalVariable.globalCodeRefValuesView()) {
-                seedNonLexicalScalar(codeRef, todo);
-            }
-            for (RuntimeScalar codeRef : GlobalVariable.globalCodeRefEdgeRootsView()) {
-                if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
-                    seedGlobalCodeCaptures(code, todo);
+            rootScan: {
+                for (RuntimeScalar codeRef : GlobalVariable.globalCodeRefValuesView()) {
+                    if (!seedNonLexicalScalar(codeRef, todo)) break rootScan;
                 }
-            }
-            for (RuntimeScalar scalar : GlobalVariable.globalVariableValuesView()) {
-                seedNonLexicalScalar(scalar, todo);
-            }
-            for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrayEntriesView()) {
-                if (isNonOwningDebugArgsArray(e.getKey())) continue;
-                addNonLexical(e.getValue(), todo);
-            }
-            for (RuntimeHash hash : GlobalVariable.globalHashValuesView()) {
-                addNonLexical(hash, todo);
-            }
-            if (includeRescued) {
-                for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
-                    addNonLexical(rescued, todo);
+                for (RuntimeScalar codeRef : GlobalVariable.globalCodeRefEdgeRootsView()) {
+                    if (!visitExternalEdge()) break rootScan;
+                    if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
+                        seedGlobalCodeCaptures(code, todo);
+                        if (!complete) break rootScan;
+                    }
+                }
+                for (RuntimeScalar scalar : GlobalVariable.globalVariableValuesView()) {
+                    if (!seedNonLexicalScalar(scalar, todo)) break rootScan;
+                }
+                for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrayEntriesView()) {
+                    if (isNonOwningDebugArgsArray(e.getKey())) continue;
+                    if (!visitExternalEdge()) break rootScan;
+                    addNonLexical(e.getValue(), todo);
+                }
+                for (RuntimeHash hash : GlobalVariable.globalHashValuesView()) {
+                    if (!visitExternalEdge()) break rootScan;
+                    addNonLexical(hash, todo);
+                }
+                if (includeRescued) {
+                    for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
+                        if (!visitExternalEdge()) break rootScan;
+                        addNonLexical(rescued, todo);
+                    }
                 }
             }
 
             int visits = 0;
-            while (!todo.isEmpty() && visits < MAX_ROOT_SNAPSHOT_VISITS) {
+            while (complete && !todo.isEmpty() && visits < MAX_ROOT_SNAPSHOT_VISITS) {
                 RuntimeBase cur = todo.removeFirst();
                 visits++;
                 if (queryStats != null) queryStats.externalRootSnapshotNodesVisited++;
                 walkSnapshotNode(cur, todo);
             }
-            complete = todo.isEmpty();
+            complete = complete && budget.complete && todo.isEmpty();
         }
 
         private void walkSnapshotNode(RuntimeBase cur,
@@ -2294,28 +2303,39 @@ public class ReachabilityWalker {
                 if (h.elements instanceof HashSpecialVariable) return;
                 if (h.elements instanceof TieHash tieHash) {
                     seedNonLexicalScalar(tieHash.getSelf(), nonLexicalTodo);
+                    if (!complete) return;
                 }
                 for (RuntimeScalar v : h.elements.values()) {
-                    seedNonLexicalScalar(v, nonLexicalTodo);
+                    if (!seedNonLexicalScalar(v, nonLexicalTodo)) return;
                 }
             } else if (cur instanceof RuntimeArray a) {
                 for (RuntimeScalar v : a.elements) {
-                    seedNonLexicalScalar(v, nonLexicalTodo);
+                    if (!seedNonLexicalScalar(v, nonLexicalTodo)) return;
                 }
             } else if (cur instanceof RuntimeScalar sc) {
                 seedNonLexicalScalar(sc, nonLexicalTodo);
             }
         }
 
-        private void seedNonLexicalScalar(RuntimeScalar s,
-                                          java.util.ArrayDeque<RuntimeBase> todo) {
-            if (s == null) return;
-            if (queryStats != null) queryStats.externalRootSnapshotEdgesInspected++;
-            if (WeakRefRegistry.isweak(s)) return;
+        private boolean seedNonLexicalScalar(RuntimeScalar s,
+                                             java.util.ArrayDeque<RuntimeBase> todo) {
+            if (!visitExternalEdge()) return false;
+            if (s == null) return true;
+            if (WeakRefRegistry.isweak(s)) return true;
             if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
                     && s.value instanceof RuntimeBase b) {
                 addNonLexical(b, todo);
             }
+            return true;
+        }
+
+        private boolean visitExternalEdge() {
+            if (!budget.visitEdge()) {
+                complete = false;
+                return false;
+            }
+            if (queryStats != null) queryStats.externalRootSnapshotEdgesInspected++;
+            return true;
         }
 
         private void seedGlobalCodeCaptures(RuntimeCode code,
@@ -2323,12 +2343,18 @@ public class ReachabilityWalker {
             if (code.capturedScalars != null) {
                 for (RuntimeScalar cap : code.capturedScalars) {
                     seedNonLexicalScalar(cap, todo);
+                    if (!complete) return;
                 }
             }
             if (code.capturedAggregates != null) {
-                for (RuntimeBase cap : code.capturedAggregates) addNonLexical(cap, todo);
+                for (RuntimeBase cap : code.capturedAggregates) {
+                    if (!visitExternalEdge()) return;
+                    addNonLexical(cap, todo);
+                }
             }
-            visitReflectiveCodeScalars(code, cap -> seedNonLexicalScalar(cap, todo));
+            visitReflectiveCodeScalars(code, cap -> {
+                if (complete) seedNonLexicalScalar(cap, todo);
+            });
         }
 
         private void addNonLexical(RuntimeBase b,
