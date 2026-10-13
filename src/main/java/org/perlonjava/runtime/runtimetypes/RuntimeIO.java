@@ -724,6 +724,8 @@ public class RuntimeIO extends RuntimeScalar {
         // Detect specific exception types
         if (e instanceof java.nio.file.AccessDeniedException) {
             errno = 13; // EACCES
+        } else if (e instanceof java.nio.channels.NonWritableChannelException) {
+            errno = 9; // EBADF
         } else if (e instanceof java.nio.file.NoSuchFileException) {
             errno = 2; // ENOENT
         } else if (e instanceof java.nio.file.FileAlreadyExistsException) {
