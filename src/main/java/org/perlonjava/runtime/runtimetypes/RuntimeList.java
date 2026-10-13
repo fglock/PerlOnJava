@@ -1037,9 +1037,17 @@ public class RuntimeList extends RuntimeBase {
          * in list context each hole is one undef value, not an absent element.
          */
         private static Iterator<RuntimeScalar> iteratorFor(RuntimeBase element) {
-            return element == null
-                    ? Collections.singletonList(new RuntimeScalar()).iterator()
-                    : element.iterator();
+            if (element == null) {
+                return Collections.singletonList(new RuntimeScalar()).iterator();
+            }
+            // A stash embedded in a list is being flattened as a value (for
+            // example `%copy = %Pkg::`). Its glob values must be detached from
+            // the source stash before a later assignment clears that stash.
+            // Keep RuntimeStash's own iterator live for `each` traversal.
+            if (element instanceof RuntimeStash stash) {
+                return stash.getList().iterator();
+            }
+            return element.iterator();
         }
 
         @Override
