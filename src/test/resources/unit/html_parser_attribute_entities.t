@@ -23,6 +23,16 @@ my $encoded = parsed_attributes(1);
 is($encoded->{content}, '0; url=&#39;result.html&#39;',
     'attr_encoded preserves character references in attribute values');
 
+SKIP: {
+    eval { require HTML::TokeParser; 1 }
+        or skip 'HTML::TokeParser is unavailable', 1;
+    my $html = q{<meta http-equiv="refresh" content="0; url=&#39;result.html&#39;" />};
+    my $toke_parser = HTML::TokeParser->new(\$html);
+    my $tag = $toke_parser->get_tag('meta');
+    is($tag->[1]{content}, "0; url='result.html'",
+        'HTML::TokeParser decodes numeric entities in attribute values');
+}
+
 my $source = "\n <p title=\"&#39;\">x</p>";
 my @position;
 my $position_parser = HTML::Parser->new(api_version => 3);
