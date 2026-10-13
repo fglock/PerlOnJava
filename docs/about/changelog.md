@@ -21,6 +21,8 @@ priorities and future plans.
 - Apply the generated subclass version fix to Exception-Class 1.46, and allow
   overloaded comparisons to tailcall through helper subs while keeping sort
   comparator tailcalls rejected (#1646).
+- Skip Mojolicious 9.49's real-fork asset subtest when neither fork capability
+  is available, while retaining the rest of its asset coverage (#1646).
 
 - Preserve tied scalar lvalues returned by `AUTOLOAD` during increment and compound assignment, honor fatal recursion warnings on the interpreter, and accept legacy whitespace-padded module versions and numeric overloads used by Valiemon (#1207, #1222, #1419).
 - Preserve all arguments when `warn` forwards an array in list context.

@@ -1,0 +1,11 @@
+---
+comment: |
+  PerlOnJava does not implement real or pseudo-fork. Mojolicious 9.49's
+  t/mojo/asset.t skips its fork subtest only when d_pseudofork is true, which
+  misses runtimes that truthfully advertise neither capability. Skip only
+  that subtest when both Config capabilities are absent; retain its ordinary
+  asset coverage and all other upstream tests.
+match:
+  distribution: "^SRI/Mojolicious-9\\.49(?:\\.tar\\.gz)?$"
+patches:
+  - "Mojolicious-9.49/SkipNoForkAssetTest.patch"
