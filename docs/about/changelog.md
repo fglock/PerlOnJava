@@ -18,6 +18,9 @@ priorities and future plans.
 - Parse labeled blocks followed by postfix expressions in `grep` fallbacks, so
   `Test::More::skip` can leave its `SKIP` block during DBIx::Class module scans
   (#1646).
+- Apply the generated subclass version fix to Exception-Class 1.46, and allow
+  overloaded comparisons to tailcall through helper subs while keeping sort
+  comparator tailcalls rejected (#1646).
 
 - Preserve tied scalar lvalues returned by `AUTOLOAD` during increment and compound assignment, honor fatal recursion warnings on the interpreter, and accept legacy whitespace-padded module versions and numeric overloads used by Valiemon (#1207, #1222, #1419).
 - Preserve all arguments when `warn` forwards an array in list context.

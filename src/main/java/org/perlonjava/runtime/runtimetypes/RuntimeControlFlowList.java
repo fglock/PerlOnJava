@@ -115,7 +115,7 @@ public class RuntimeControlFlowList extends RuntimeList {
     public RuntimeControlFlowList(RuntimeScalar codeRef, RuntimeArray args, String fileName, int lineNumber,
                                   String evalScope, String namedTarget) {
         super();
-        if (RuntimeCode.isInSortComparator()) {
+        if (RuntimeCode.shouldRejectSortTailCall()) {
             throw new PerlCompilerException(RuntimeCode.isCurrentSortComparatorBlock()
                     ? "Can't goto subroutine outside a subroutine"
                     : "Can't goto subroutine from a sort sub");

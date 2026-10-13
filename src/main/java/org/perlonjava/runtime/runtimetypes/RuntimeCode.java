@@ -937,19 +937,44 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /** Reject a tail call that would cross an active sort pseudo-block. */
     public static void checkSortTailCall() {
-        if (hasActiveSortComparator()) {
+        if (shouldRejectSortTailCall()) {
             throw sortTailCallError();
         }
     }
 
+    /**
+     * A sort callback is a pseudo-block, but a subroutine called by that
+     * callback has its own frame and may tailcall normally. Reject only when
+     * the active frame is the callback itself (or the direct sort block).
+     */
+    public static boolean shouldRejectSortTailCall() {
+        if (!hasActiveSortComparator()) return false;
+        RuntimeCode active = getActiveCodeAt(0);
+        if (active != null && active.isSortComparator) return true;
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        Integer entryDepth = state.sortComparatorFrameDepths.peek();
+        if (entryDepth == null) {
+            return Boolean.TRUE.equals(state.activeJvmSortComparators.peek());
+        }
+        int currentDepth = state.activeCodeStack.size() + state.activeJvmSortComparators.size();
+        // RuntimeCode.apply adds one dispatch frame around a comparator CV;
+        // that frame is still part of the sort callback. A nested Perl helper
+        // adds the next frame beyond it.
+        return currentDepth <= entryDepth + 2;
+    }
+
     /** Enter/leave the dynamic extent in which sort invokes its comparator. */
     public static void enterSortComparatorInvocation() {
-        PerlRuntime.current().executionState().activeSortComparatorInvocations++;
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        state.activeSortComparatorInvocations++;
+        state.sortComparatorFrameDepths.push(
+                state.activeCodeStack.size() + state.activeJvmSortComparators.size());
     }
 
     public static void exitSortComparatorInvocation() {
         ExecutionRuntimeState state = PerlRuntime.current().executionState();
         if (state.activeSortComparatorInvocations > 0) state.activeSortComparatorInvocations--;
+        if (!state.sortComparatorFrameDepths.isEmpty()) state.sortComparatorFrameDepths.pop();
     }
 
     /**
