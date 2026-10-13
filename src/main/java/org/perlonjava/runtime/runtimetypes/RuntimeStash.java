@@ -553,8 +553,15 @@ public class RuntimeStash extends RuntimeHash {
     @Override
     public RuntimeArray setFromList(RuntimeList value) {
         RuntimeArray materialized = new RuntimeArray();
-        for (RuntimeScalar element : value) {
-            materialized.elements.add(new RuntimeScalar(element));
+        Iterator<RuntimeScalar> source = value.iterator();
+        while (source.hasNext()) {
+            RuntimeScalar key = source.next();
+            materialized.elements.add(new RuntimeScalar(key));
+            if (!source.hasNext()) {
+                break;
+            }
+            RuntimeScalar entryValue = source.next();
+            materialized.elements.add(snapshotStashEntry(key.toString(), entryValue));
         }
 
         String prefix = namespace;
@@ -580,6 +587,27 @@ public class RuntimeStash extends RuntimeHash {
             put(materialized.elements.get(i).toString(), materialized.elements.get(i + 1));
         }
         return materialized;
+    }
+
+    /**
+     * Stash hash values are lazy glob views. When a stash is copied back into
+     * itself, retain each source glob's slots before the assignment clears the
+     * canonical maps; otherwise the values would resolve against the emptied
+     * destination when they are installed below.
+     */
+    private RuntimeScalar snapshotStashEntry(String key, RuntimeScalar value) {
+        if (key.endsWith("::") || !(value.value instanceof RuntimeStashEntry entry)) {
+            return new RuntimeScalar(value);
+        }
+
+        String sourceName = entry.globName;
+        RuntimeScalar scalar = GlobalVariable.scalarSlots().get(sourceName);
+        RuntimeArray array = GlobalVariable.globalArrays.get(sourceName);
+        RuntimeHash hash = GlobalVariable.globalHashes.get(sourceName);
+        RuntimeGlob io = GlobalVariable.peekGlobalIO(sourceName);
+        RuntimeScalar code = GlobalVariable.globalCodeRefs.get(sourceName);
+        RuntimeGlob snapshot = RuntimeGlob.createDetachedWithSlots(scalar, array, hash, io, code);
+        return new RuntimeScalar(snapshot);
     }
 
     /**
