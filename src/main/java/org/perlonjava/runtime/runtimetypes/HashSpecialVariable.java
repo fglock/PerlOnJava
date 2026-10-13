@@ -226,6 +226,15 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     private static List<StashEntryName> computeStashEntries(String namespace) {
         Set<String> uniqueKeys = new HashSet<>();
         List<StashEntryName> entries = new ArrayList<>();
+        // Perl's root stash contains a self-reference under the main:: key.
+        // Aspect::Pointcut walks %:: to discover package stashes, then recurses
+        // into main:: to find named subs compiled in package main. The runtime
+        // stores the root stash directly, so this entry has no ordinary global
+        // slot from which the scan below could infer it.
+        if ("main::".equals(namespace)) {
+            uniqueKeys.add("main::");
+            entries.add(new StashEntryName("main::", "main::"));
+        }
         // Runtime-only magic cells such as $&, $`, and $' share the global
         // scalar registry, but a fresh Perl process does not expose them as
         // ordinary entries in %::.  Enumerating them produces writable-looking
