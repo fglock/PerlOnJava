@@ -16,7 +16,6 @@ sub find_main_named_code {
         next unless defined *ENTRY{HASH};
         if ($key eq 'main::') {
             $main_stash = 1;
-            last;
         }
     }
     return unless $main_stash;
