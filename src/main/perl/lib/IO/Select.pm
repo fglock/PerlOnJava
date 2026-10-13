@@ -9,6 +9,7 @@ package IO::Select;
 use     strict;
 use warnings::register;
 require Exporter;
+use Scalar::Util qw(refaddr);
 
 our $VERSION = "1.57";
 
@@ -17,6 +18,47 @@ our @ISA = qw(Exporter); # This is only so we can do version checking
 sub VEC_BITS () {0}
 sub FD_COUNT () {1}
 sub FIRST_FD () {2}
+
+# Anonymous process handles can lose their runtime descriptor during the
+# temporary `fileno` call in _update. Keep a strong Perl owner for every
+# handle retained by this selector until it is removed or the selector dies.
+my @SELECTED_HANDLE_VALUES;
+my @FREE_SELECTED_HANDLE_SLOTS;
+my %SELECTED_HANDLE_SLOTS;
+my $NEXT_PENDING_HANDLE = 0;
+
+sub _selected_handle_key
+{
+ my ($selector_id, $handle_id) = @_;
+ "$selector_id:$handle_id";
+}
+
+sub _retain_selected_handle
+{
+ my ($key, $handle) = @_;
+ my $slot = @FREE_SELECTED_HANDLE_SLOTS
+    ? pop @FREE_SELECTED_HANDLE_SLOTS
+    : scalar @SELECTED_HANDLE_VALUES;
+ $SELECTED_HANDLE_VALUES[$slot] = $handle;
+ $SELECTED_HANDLE_SLOTS{$key} = $slot;
+}
+
+sub _release_selected_handle
+{
+ my ($key) = @_;
+ return unless exists $SELECTED_HANDLE_SLOTS{$key};
+ my $slot = delete $SELECTED_HANDLE_SLOTS{$key};
+ $SELECTED_HANDLE_VALUES[$slot] = undef;
+ push @FREE_SELECTED_HANDLE_SLOTS, $slot;
+}
+
+sub _move_selected_handle
+{
+ my ($from, $to) = @_;
+ return unless exists $SELECTED_HANDLE_SLOTS{$from};
+ _release_selected_handle($to);
+ $SELECTED_HANDLE_SLOTS{$to} = delete $SELECTED_HANDLE_SLOTS{$from};
+}
 
 sub new
 {
@@ -84,19 +126,36 @@ sub _update
 
  my $count = 0;
  my $f;
+ my $selector_id = refaddr($vec);
  foreach $f (@_)
   {
+   my $pending_key;
+   if ($add) {
+     $pending_key = _selected_handle_key($selector_id,
+         'pending:' . ++$NEXT_PENDING_HANDLE);
+     _retain_selected_handle($pending_key, $f);
+   }
    my $fn = $vec->_fileno($f);
    if ($add) {
-     next unless defined $fn;
-     my $i = $fn + FIRST_FD;
-     if (defined $vec->[$i]) {
+     if (defined $fn) {
+       my $i = $fn + FIRST_FD;
+       if (defined $vec->[$i]) {
 	 $vec->[$i] = $f;  # if array rest might be different, so we update
-	 next;
+         _move_selected_handle($pending_key,
+             _selected_handle_key($selector_id, $fn));
+         next;
+       }
+       else {
+	 $vec->[FD_COUNT]++;
+	 vec($bits, $fn, 1) = 1;
+	 $vec->[$i] = $f;
+       }
+       _move_selected_handle($pending_key,
+           _selected_handle_key($selector_id, $fn));
      }
-     $vec->[FD_COUNT]++;
-     vec($bits, $fn, 1) = 1;
-     $vec->[$i] = $f;
+     else {
+       _release_selected_handle($pending_key);
+     }
    } else {      # remove
      if ( ! defined $fn ) { # remove if fileno undef'd
        $fn = 0;
@@ -105,6 +164,7 @@ sub _update
 	   $vec->[FD_COUNT]--;
 	   $fe = undef;
 	   vec($bits, $fn, 1) = 0;
+	   _release_selected_handle(_selected_handle_key($selector_id, $fn));
 	   last;
 	 }
 	 ++$fn;
@@ -116,12 +176,22 @@ sub _update
        $vec->[FD_COUNT]--;
        vec($bits, $fn, 1) = 0;
        $vec->[$i] = undef;
+       _release_selected_handle(_selected_handle_key($selector_id, $fn));
      }
    }
    $count++;
   }
  $vec->[VEC_BITS] = $vec->[FD_COUNT] ? $bits : undef;
  $count;
+}
+
+sub DESTROY
+{
+ my $selector_id = refaddr($_[0]);
+ my $prefix = "$selector_id:";
+ for my $key (keys %SELECTED_HANDLE_SLOTS) {
+   _release_selected_handle($key) if index($key, $prefix) == 0;
+ }
 }
 
 sub can_read

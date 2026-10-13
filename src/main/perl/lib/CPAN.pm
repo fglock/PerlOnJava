@@ -710,6 +710,7 @@ sub all_objects {
         $META->{readwrite}{$class}{$id} ||=
             $class->new(ID => $id, RO => $META->{readonly}{$class}{$id});
     }
+    return values %{ $META->{readwrite}{$class} };
 }
 
 # Called by shell, not in batch mode. In batch mode I see no risk in

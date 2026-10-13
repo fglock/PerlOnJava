@@ -740,6 +740,7 @@ imports:
   # IO::Select - OO interface to select() (required by TAP::Parser::Multiplexer)
   - source: perl5/dist/IO/lib/IO/Select.pm
     target: src/main/perl/lib/IO/Select.pm
+    patch: IO-Select.pm.patch
 
   # Phase 2: IO::Zlib - Compressed I/O (for Archive::Tar)
   - source: perl5/cpan/IO-Zlib/Zlib.pm
