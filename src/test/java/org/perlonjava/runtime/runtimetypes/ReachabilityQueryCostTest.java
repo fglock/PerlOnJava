@@ -134,6 +134,74 @@ class ReachabilityQueryCostTest {
     }
 
     @Test
+    void unchangedPackageRootsReuseExternalSnapshotAcrossDrains() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray global = new RuntimeArray();
+            String globalName =
+                    "ReachabilityQueryCostTest::stableDeferredGlobal";
+            GlobalVariable.globalArrays.put(globalName, global);
+            RuntimeHash[] targets = new RuntimeHash[4];
+            RuntimeScalar[] weakRefs = new RuntimeScalar[targets.length];
+
+            try {
+                for (int i = 0; i < 3; i++) {
+                    targets[i] = new RuntimeHash();
+                    targets[i].blessId = NameNormalizer.getBlessId(
+                            "Issue1642::StableDeferredRootTarget");
+                    global.elements.add(targets[i].createAnonymousReference());
+                    weakRefs[i] = targets[i].createAnonymousReference();
+                    WeakRefRegistry.weaken(weakRefs[i]);
+                    targets[i].refCount = 1;
+                }
+                MortalList.invalidateAllRootSnapshots();
+
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    for (int i = 0; i < 3; i++) {
+                        MortalList.deferDecrement(targets[i]);
+                        MortalList.flush();
+
+                        assertEquals(1, targets[i].refCount,
+                                "a stable package-root edge protects each target");
+                    }
+
+                    ReachabilityQueryStats stats = measurement.stats();
+                    assertEquals(3, stats.deferredBasesProcessed);
+                    assertEquals(1, stats.externalRootSnapshotsBuilt,
+                            "separate drains reuse the external-root snapshot while roots stay unchanged");
+                    long edgesBeforeMutation = stats.externalRootSnapshotEdgesInspected;
+
+                    targets[3] = new RuntimeHash();
+                    targets[3].blessId = NameNormalizer.getBlessId(
+                            "Issue1642::StableDeferredRootTarget");
+                    weakRefs[3] = targets[3].createAnonymousReference();
+                    WeakRefRegistry.weaken(weakRefs[3]);
+                    targets[3].refCount = 1;
+                    global.elements.add(targets[3].createAnonymousReference());
+
+                    MortalList.deferDecrement(targets[3]);
+                    MortalList.flush();
+
+                    assertEquals(1, targets[3].refCount,
+                            "a new package-root edge protects the target after invalidation");
+                    assertEquals(4, stats.deferredBasesProcessed);
+                    assertEquals(2, stats.externalRootSnapshotsBuilt,
+                            "a package-root mutation invalidates the reused snapshot");
+                    assertTrue(stats.externalRootSnapshotEdgesInspected > edgesBeforeMutation,
+                            "the rebuilt snapshot inspects the changed root graph");
+                }
+            } finally {
+                for (RuntimeScalar weakRef : weakRefs) {
+                    if (weakRef != null) WeakRefRegistry.unweaken(weakRef);
+                }
+                GlobalVariable.globalArrays.remove(globalName);
+                MortalList.invalidateAllRootSnapshots();
+            }
+        }
+    }
+
+    @Test
     void deferredOwnerChecksShareOneRootSnapshotPerDrain() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
