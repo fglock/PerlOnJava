@@ -175,8 +175,7 @@ sub blocking {
     my $sock = shift;
 
     return $sock->SUPER::blocking(@_)
-        if ($^O ne 'MSWin32' && $^O ne 'VMS')
-            || defined &Internals::jperl_refstate_str;
+        if $^O ne 'MSWin32' && $^O ne 'VMS';
 
     # Windows handles blocking differently
     #
