@@ -1965,6 +1965,20 @@ public class ReachabilityWalker {
                 // remain opaque to this refcount reachability query.
                 for (RuntimeCode callback : regex.executableCallbackCodes()) {
                     if (!budget.visitEdge()) break walk;
+                    if (callback.capturedScalars != null) {
+                        for (RuntimeScalar captured : callback.capturedScalars) {
+                            if (!budget.visitEdge()) break walk;
+                            if (stats != null) stats.edgesInspected++;
+                            if (captured == target) return true;
+                        }
+                    }
+                    if (callback.closedOverVariables != null) {
+                        for (RuntimeBase captured : callback.closedOverVariables.values()) {
+                            if (!budget.visitEdge()) break walk;
+                            if (stats != null) stats.edgesInspected++;
+                            if (captured == target) return true;
+                        }
+                    }
                     if (followGlobalCodeCaptures(callback, target, seen, todo, budget)) return true;
                     if (!budget.complete) break walk;
                 }
