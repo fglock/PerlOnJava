@@ -2727,6 +2727,13 @@ public class ReachabilityWalker {
 
     private static final int MAX_WITNESS_SWEEP_TARGETS = 64;
     private static final int MAX_WITNESS_CYCLE_EDGES = 256;
+    private static final int MAX_WEAK_BACKREF_CAPTURE_VISITS = 10_000;
+
+    private record WeakBackrefCaptureSnapshot(Set<RuntimeBase> captured, boolean complete) {
+        boolean protects(RuntimeBase target) {
+            return !complete || captured.contains(target);
+        }
+    }
 
     private static boolean tryWitnessQuietSweep(
             boolean quiet, boolean forceJvmGc,
@@ -2927,6 +2934,8 @@ public class ReachabilityWalker {
         Set<RuntimeBase> countedStrongOwners = releasedSweepResult == null
                 ? Collections.emptySet()
                 : releasedSweepResult.countedStrongOwners();
+        WeakBackrefCaptureSnapshot weakBackrefCaptures = quiet
+                ? weakBackrefCaptureSnapshot() : null;
         for (RuntimeBase referent : WeakRefRegistry.snapshotWeakRefReferents()) {
             boolean liveReferent = live.contains(referent);
             traceWeakReferent(referent, liveReferent, strongCycleProtected.contains(referent));
@@ -2987,7 +2996,7 @@ public class ReachabilityWalker {
                 if (quiet
                         && referent.blessId == 0
                         && (referent instanceof RuntimeHash || referent instanceof RuntimeArray)
-                        && isCapturedByWeakBackrefCode(referent)) {
+                        && weakBackrefCaptures.protects(referent)) {
                     continue;
                 }
                 // Quiet auto-sweeps run at statement boundaries. Do not clear
@@ -3392,44 +3401,51 @@ public class ReachabilityWalker {
         }
     }
 
-    private static boolean isCapturedByWeakBackrefCode(RuntimeBase target) {
-        for (RuntimeBase referent : WeakRefRegistry.snapshotWeakRefReferents()) {
-            if (referent instanceof RuntimeCode code
-                    && WeakRefRegistry.hasWeakRefsTo(code)
-                    && isReachableThroughCodeCaptures(code, target)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean isReachableThroughCodeCaptures(RuntimeCode code, RuntimeBase target) {
+    private static WeakBackrefCaptureSnapshot weakBackrefCaptureSnapshot() {
+        ReachabilityQueryStats stats = MortalList.activeReachabilityQueryStats();
+        if (stats != null) stats.weakBackrefCaptureSnapshotsBuilt++;
         Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
-        if (followGlobalCodeCaptures(code, target, seen, todo)) return true;
-
+        RootWalkBudget budget = new RootWalkBudget(MAX_ROOT_SNAPSHOT_EDGES);
+        for (RuntimeBase referent : WeakRefRegistry.snapshotWeakRefReferents()) {
+            if (referent instanceof RuntimeCode code
+                    && WeakRefRegistry.hasWeakRefsTo(code)) {
+                if (stats != null) stats.weakBackrefCaptureRootsWalked++;
+                followGlobalCodeCaptures(code, null, seen, todo, budget);
+                if (!budget.complete) break;
+            }
+        }
         int visits = 0;
-        final int MAX_VISITS = 10_000;
-        while (!todo.isEmpty() && visits++ < MAX_VISITS) {
+        while (!todo.isEmpty() && visits < MAX_WEAK_BACKREF_CAPTURE_VISITS) {
             RuntimeBase cur = todo.removeFirst();
-            if (cur == target) return true;
+            visits++;
+            if (stats != null) stats.weakBackrefCaptureNodesVisited++;
             if (cur instanceof RuntimeStash) {
                 continue;
             } else if (cur instanceof RuntimeHash h) {
                 if (h.elements instanceof HashSpecialVariable) continue;
                 for (RuntimeScalar v : h.elements.values()) {
-                    if (followScalar(v, target, seen, todo)) return true;
+                    if (!budget.visitEdge()) break;
+                    if (stats != null) stats.weakBackrefCaptureEdgesInspected++;
+                    followScalar(v, null, seen, todo);
                 }
             } else if (cur instanceof RuntimeArray a) {
                 for (RuntimeScalar v : a.elements) {
-                    if (followScalar(v, target, seen, todo)) return true;
+                    if (!budget.visitEdge()) break;
+                    if (stats != null) stats.weakBackrefCaptureEdgesInspected++;
+                    followScalar(v, null, seen, todo);
                 }
             } else if (cur instanceof RuntimeCode nestedCode) {
-                if (followGlobalCodeCaptures(nestedCode, target, seen, todo)) return true;
+                followGlobalCodeCaptures(nestedCode, null, seen, todo, budget);
             } else if (cur instanceof RuntimeScalar s) {
-                if (followScalar(s, target, seen, todo)) return true;
+                if (!budget.visitEdge()) break;
+                if (stats != null) stats.weakBackrefCaptureEdgesInspected++;
+                followScalar(s, null, seen, todo);
             }
+            if (!budget.complete) break;
         }
-        return false;
+        boolean complete = budget.complete
+                && todo.isEmpty() && visits < MAX_WEAK_BACKREF_CAPTURE_VISITS;
+        return new WeakBackrefCaptureSnapshot(seen, complete);
     }
 }
