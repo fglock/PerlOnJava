@@ -7,7 +7,9 @@ priorities and future plans.
 ## Work in progress
 
 - Fix DBI `do()` overrides, DBD::Sponge initialization, and SQLite generated ID lookup.
-
+- Parse escaped backslashes in transliteration lists once, inherit strict-vars
+  settings in string eval, and ignore trailing shebang comments (#1783, #1454,
+  #1524).
 - Stage nested Module::Build modules and resolve compressed archive filenames
   against Perl's working directory so release plugins can consume the archive
   (#1432, #1514).
