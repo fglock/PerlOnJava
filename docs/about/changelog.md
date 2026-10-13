@@ -18,7 +18,7 @@ priorities and future plans.
 - Preserve Unicode text fetched from SQLite in Unicode string modes, normalize
   common `Encode` canonical charset names to Perl's spellings, and cover Unicode
   `tr///` deletion of U+00B4.
-- Keep named CODE entries visible during stash traversal, invalidate method lookup after CODE-slot deletion, and preserve whole-glob alias identity across localized replacements (#1700, #1610, #1630).
+- Keep named CODE entries visible during stash traversal, invalidate method lookup after CODE-slot deletion, preserve whole-glob and saved IO alias identity across repeated localized replacements, and resolve forward CODE aliases after later definitions (#1700, #1610, #1630).
 - Match Perl's read-only default for `sysopen` creation without access flags,
   reject `truncate` on scalar-backed handles without changing the scalar, and
   cover UTF-8 byte offsets after seeks (#1431, #1520).

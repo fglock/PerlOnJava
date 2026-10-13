@@ -528,6 +528,16 @@ public class EvalStringHandler {
                 symbolTable.warningFlagsStack.pop();
                 symbolTable.warningFlagsStack.push((java.util.BitSet) currentCode.warningFlags.clone());
                 WarningFlags.setWarningBitsFromString(symbolTable, siteWarningBits);
+                // Eval runs as a separate interpreted-code frame, so its entry
+                // clears the dynamic warning-scope local from the caller. Seed
+                // parsing from that active scope so inherited `no warnings`
+                // categories remain attached to the eval code; pragmas in the
+                // eval can still override them as normal.
+                int warningScope = GlobalVariable.getGlobalVariable(
+                        GlobalContext.WARNING_SCOPE).getInt();
+                for (String category : WarningFlags.getDisabledWarningsInScope(warningScope)) {
+                    symbolTable.disableWarningCategory(category);
+                }
             }
             symbolTable.setEnhancedXxEnabled(siteEnhancedXx);
             int effectiveRegexDebugFlags = siteRegexDebugFlags;

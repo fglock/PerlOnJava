@@ -2997,14 +2997,35 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         RuntimeScalar resolved = GlobalVariable.globalCodeRefs.get(code.packageName + "::" + code.subName);
-        if (resolved == null
-                || resolved.type != RuntimeScalarType.CODE
-                || !(resolved.value instanceof RuntimeCode resolvedCode)
-                || resolvedCode == code
-                || !resolvedCode.defined()) {
-            return null;
+        if (resolved != null
+                && resolved.type == RuntimeScalarType.CODE
+                && resolved.value instanceof RuntimeCode resolvedCode
+                && resolvedCode != code
+                && resolvedCode.defined()) {
+            return resolved;
         }
-        return resolved;
+
+        // The interpreter can retain a second placeholder CV for the named
+        // destination of a forward glob alias. If the source slot has since
+        // been defined, resolve through the explicitly marked alias group.
+        if (code.requiresForwardGlobAliasGroup) {
+            for (RuntimeCode alias : code.forwardGlobAliases) {
+                if (alias == code || alias.packageName == null
+                        || alias.subName == null || alias.subName.isEmpty()) {
+                    continue;
+                }
+                RuntimeScalar aliasSlot = GlobalVariable.globalCodeRefs.get(
+                        alias.packageName + "::" + alias.subName);
+                if (aliasSlot != null
+                        && aliasSlot.type == RuntimeScalarType.CODE
+                        && aliasSlot.value instanceof RuntimeCode aliasCode
+                        && aliasCode != code
+                        && aliasCode.defined()) {
+                    return aliasSlot;
+                }
+            }
+        }
+        return null;
     }
 
     /**

@@ -665,6 +665,12 @@ public class WarningFlags {
         }
         return false;
     }
+
+    /** Return the categories disabled by a previously registered lexical scope. */
+    public static Set<String> getDisabledWarningsInScope(int scopeId) {
+        Set<String> disabled = state().scopeDisabledWarnings.get(scopeId);
+        return disabled == null ? java.util.Collections.emptySet() : Set.copyOf(disabled);
+    }
     
     /**
      * Checks if a warning category is suppressed at runtime via ${^WARNING_SCOPE}.
