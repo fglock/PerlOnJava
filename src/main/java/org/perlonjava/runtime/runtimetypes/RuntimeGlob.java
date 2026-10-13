@@ -624,6 +624,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                                 GlobalVariable.getGlobalCodeRefForFreshLookup(sourceName);
                         if (sourceContainer.value instanceof RuntimeCode sourceCode) {
                             sourceCode.hasForwardGlobAlias = true;
+                            if (aliasedCode.requiresForwardGlobAliasGroup) {
+                                sourceCode.requiresForwardGlobAliasGroup = true;
+                            }
                             value = sourceContainer;
                         } else {
                             aliasedCode.hasForwardGlobAlias = true;
@@ -701,6 +704,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     }
                     for (RuntimeCode alias : aliasGroup) {
                         alias.hasForwardGlobAlias = true;
+                        alias.requiresForwardGlobAliasGroup = true;
                         alias.forwardGlobAliases = aliasGroup;
                     }
                     if (sourceCode.lexicalForwardGlobPlaceholder) {
