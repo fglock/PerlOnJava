@@ -12,6 +12,6 @@ comment: |
   Keep only the generated-class version patch. Dependency tests are governed
   by CPAN's phase-aware queue; direct tests must report their real result.
 match:
-  distribution: "^DROLSKY/Exception-Class-"
+  distribution: "^DROLSKY/Exception-Class-1\\.45(?:\\.tar\\.gz)?$"
 patches:
   - "Exception-Class/GeneratedSubclassVersion.patch"

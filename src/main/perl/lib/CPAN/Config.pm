@@ -47,6 +47,7 @@ sub _bootstrap_prefs {
         'ExtUtils-ParseXS.yml'       => 'PerlOnJava/CpanDistroprefs/ExtUtils-ParseXS.yml',
         'Class-Trait.yml'            => 'PerlOnJava/CpanDistroprefs/Class-Trait.yml',
         'Exception-Class.yml'        => 'PerlOnJava/CpanDistroprefs/Exception-Class.yml',
+        'Exception-Class-1.46.yml'   => 'PerlOnJava/CpanDistroprefs/Exception-Class-1.46.yml',
         'Module-Pluggable-Ordered.yml' => 'PerlOnJava/CpanDistroprefs/Module-Pluggable-Ordered.yml',
         'Logger-Simple.yml'        => 'PerlOnJava/CpanDistroprefs/Logger-Simple.yml',
         'Test-Block.yml'             => 'PerlOnJava/CpanDistroprefs/Test-Block.yml',
@@ -264,6 +265,8 @@ sub _bootstrap_patches {
     my @bundled = (
         [ 'Exception-Class/GeneratedSubclassVersion.patch',
           'PerlOnJava/CpanPatches/Exception-Class-1.45/GeneratedSubclassVersion.patch' ],
+        [ 'Exception-Class-1.46/GeneratedSubclassVersion.patch',
+          'PerlOnJava/CpanPatches/Exception-Class-1.46/GeneratedSubclassVersion.patch' ],
         [ 'Net-Server/SkipForkTests.patch',
           'PerlOnJava/CpanPatches/Net-Server-2.018/SkipForkTests.patch' ],
         [ 'Catalyst-Runtime/SkipLiveForkTest.patch',
