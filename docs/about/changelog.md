@@ -62,6 +62,9 @@ priorities and future plans.
 - Preserve the caller's `DATA` handle when a compile-time required module ends with `__END__` (#1244).
 - Bound captured subprocess output while continuing to drain child streams, and report output-reader errors (#1723).
 - Match Perl's dividend-sign remainder for `%` under `use integer`.
+- Flatten very deep parenthesized numeric lists during parsing to reduce stack
+  and AST memory use, and preserve inherited `AUTOLOAD` dispatch for lexical
+  forward stubs.
 - Preserve `$!` when pathname `chmod` fails, report layered socket readiness
   from its underlying handle, and cover deletion of cookies with past
   `Expires` values (#1639, #1636, #1614).

@@ -439,6 +439,10 @@ public class ParsePrimary {
         switch (token.text) {
             case "(":
                 // Parentheses create a list context and group expressions
+                ListNode deeplyNestedList = ListParser.parseDeepParenthesizedNumericList(parser);
+                if (deeplyNestedList != null) {
+                    return deeplyNestedList;
+                }
                 ListNode parenthesizedList = new ListNode(
                         ListParser.parseList(parser, ")", 0), parser.tokenIndex);
                 parenthesizedList.parenthesized = true;

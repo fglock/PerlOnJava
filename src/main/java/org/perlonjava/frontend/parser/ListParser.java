@@ -4,11 +4,13 @@ import org.perlonjava.app.cli.CompilerOptions;
 
 import org.perlonjava.frontend.astnode.ListNode;
 import org.perlonjava.frontend.astnode.Node;
+import org.perlonjava.frontend.astnode.NumberNode;
 import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -20,6 +22,72 @@ import static org.perlonjava.frontend.parser.TokenUtils.peek;
  * parsing lists with or without parentheses and handles optional arguments.
  */
 public class ListParser {
+
+    /**
+     * Parse very deep parenthesized numeric lists without using one Java stack
+     * frame per level. A parenthesized list on the right side of a comma is
+     * flattened into the surrounding Perl list, so this simple literal chain
+     * has the same value as a flat list.
+     *
+     * This path is limited to numeric literal chains. Other expressions keep
+     * using the normal parser and its existing diagnostics.
+     */
+    static ListNode parseDeepParenthesizedNumericList(Parser parser) {
+        int cursor = parser.tokenIndex;
+        int firstIndex = cursor;
+        int depth = 1;
+        final int minimumDepth = 128;
+
+        while (cursor + 1 < parser.tokens.size()) {
+            LexerToken head = parser.tokens.get(cursor);
+            if (head.type != LexerTokenType.NUMBER
+                    || !parser.tokens.get(cursor + 1).text.equals(",")) {
+                return null;
+            }
+            cursor += 2;
+
+            if (cursor < parser.tokens.size()
+                    && parser.tokens.get(cursor).type == LexerTokenType.OPERATOR
+                    && parser.tokens.get(cursor).text.equals("(")) {
+                depth++;
+                cursor++;
+                continue;
+            }
+
+            if (cursor >= parser.tokens.size()
+                    || parser.tokens.get(cursor).type != LexerTokenType.NUMBER) {
+                return null;
+            }
+            cursor++;
+            for (int i = 0; i < depth; i++) {
+                if (cursor >= parser.tokens.size()
+                        || parser.tokens.get(cursor).type != LexerTokenType.OPERATOR
+                        || !parser.tokens.get(cursor).text.equals(")")) {
+                    return null;
+                }
+                cursor++;
+            }
+            if (depth < minimumDepth) {
+                return null;
+            }
+
+            List<Node> elements = new ArrayList<>(depth + 1);
+            int tokenIndex = firstIndex;
+            for (int i = 0; i < depth; i++) {
+                elements.add(new NumberNode(parser.tokens.get(tokenIndex).text, tokenIndex));
+                if (i < depth - 1) {
+                    tokenIndex += 3;
+                }
+            }
+            int finalIndex = tokenIndex + 2;
+            elements.add(new NumberNode(parser.tokens.get(finalIndex).text, finalIndex));
+            parser.tokenIndex = cursor;
+            ListNode list = new ListNode(elements, cursor);
+            list.parenthesized = true;
+            return list;
+        }
+        return null;
+    }
 
     /**
      * Parses a list with zero or one optional argument. The list can be enclosed
