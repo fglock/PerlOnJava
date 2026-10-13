@@ -396,6 +396,13 @@ public class ArgumentParser {
                 Pattern.CASE_INSENSITIVE).matcher(shebangLine);
         if (perlWord.find()) {
             String relevantPart = shebangLine.substring(perlWord.end()).trim();
+            // Perl treats the remainder of a shebang line as a comment. This
+            // also keeps annotations such as "## no critic (...)" out of the
+            // switch and argument list.
+            int commentStart = relevantPart.indexOf('#');
+            if (commentStart >= 0) {
+                relevantPart = relevantPart.substring(0, commentStart).trim();
+            }
             // Strip emacs mode line marker (e.g. "-*- mode: cperl -*-") which real
             // perl tolerates in #! lines but not on the command line.
             int emacsStart = relevantPart.indexOf("-*-");
