@@ -149,6 +149,15 @@ public class HTMLParser extends PerlModuleBase {
         pstate.put("_pending_end_tag", new RuntimeScalar(""));
         pstate.put("_bool_attr_val", scalarUndef);
         pstate.put("_in_cdata", scalarFalse);
+        pstate.put("_position_source", new RuntimeScalar(""));
+        pstate.put("_position_cursor", new RuntimeScalar(0));
+        pstate.put("_position_base_offset", new RuntimeScalar(0));
+        pstate.put("_position_base_line", new RuntimeScalar(1));
+        pstate.put("_position_base_column", new RuntimeScalar(0));
+        pstate.put("_event_offset", new RuntimeScalar(0));
+        pstate.put("_event_offset_end", new RuntimeScalar(0));
+        pstate.put("_event_line", new RuntimeScalar(1));
+        pstate.put("_event_column", new RuntimeScalar(1));
 
         // Store in self
         selfHash.put("_hparser_xs_state", pstate.createReference());
@@ -176,6 +185,11 @@ public class HTMLParser extends PerlModuleBase {
                 RuntimeScalar chunk = args.get(1);
                 if (chunk.getDefinedBoolean()) {
                     if (!pstate.get("_started").getBoolean()) {
+                        pstate.put("_position_source", new RuntimeScalar(""));
+                        pstate.put("_position_cursor", new RuntimeScalar(0));
+                        pstate.put("_position_base_offset", new RuntimeScalar(0));
+                        pstate.put("_position_base_line", new RuntimeScalar(1));
+                        pstate.put("_position_base_column", new RuntimeScalar(0));
                         pstate.put("_started", scalarTrue);
                         fireEvent(self, selfHash, pstate, "start_document");
                     }
@@ -208,8 +222,12 @@ public class HTMLParser extends PerlModuleBase {
 
                     pstate.put("_input_is_byte_string", inputIsByteString ? scalarTrue : scalarFalse);
                     String html = buffered.toString() + chunkStr;
+                    pstate.put("_position_source", new RuntimeScalar(html));
+                    pstate.put("_position_cursor", new RuntimeScalar(0));
                     pstate.put("_buf", parsedScalar(pstate, ""));
                     parseHtml(self, selfHash, pstate, html);
+                    int consumed = Math.max(0, html.length() - pstate.get("_buf").toString().length());
+                    advancePositionBase(pstate, html, consumed, inputIsByteString);
                 }
             }
         } finally {
@@ -241,6 +259,9 @@ public class HTMLParser extends PerlModuleBase {
                     pstate.put("_started", scalarTrue);
                     fireEvent(self, selfHash, pstate, "start_document");
                 }
+                String buffered = pstate.get("_buf").toString();
+                pstate.put("_position_source", new RuntimeScalar(buffered));
+                pstate.put("_position_cursor", new RuntimeScalar(0));
                 flushBufferedAtEof(self, selfHash, pstate);
                 // Fire end_document event
                 fireEvent(self, selfHash, pstate, "end_document");
@@ -479,6 +500,7 @@ public class HTMLParser extends PerlModuleBase {
      * @param eventArgs the event-specific arguments
      */
     private static void fireEvent(RuntimeScalar self, RuntimeHash selfHash, RuntimeHash pstate, String eventName, RuntimeScalar... eventArgs) {
+        updateEventPosition(pstate, eventName, eventArgs);
         RuntimeScalar pendingEndTag = pstate.get("_pending_end_tag");
         if (pendingEndTag != null && pendingEndTag.getDefinedBoolean()
                 && !pendingEndTag.toString().isEmpty()
@@ -709,8 +731,8 @@ public class HTMLParser extends PerlModuleBase {
 
                 case "offset":
                 case "offset_end":
-                    // Offset tracking not implemented yet
-                    RuntimeArray.push(result, new RuntimeScalar(0));
+                    RuntimeArray.push(result, "offset_end".equals(token)
+                            ? pstate.get("_event_offset_end") : pstate.get("_event_offset"));
                     break;
 
                 case "length":
@@ -731,9 +753,10 @@ public class HTMLParser extends PerlModuleBase {
                     break;
 
                 case "line":
+                    RuntimeArray.push(result, pstate.get("_event_line"));
+                    break;
                 case "column":
-                    // Line/column tracking not implemented yet
-                    RuntimeArray.push(result, new RuntimeScalar(0));
+                    RuntimeArray.push(result, pstate.get("_event_column"));
                     break;
 
                 case "token0":
@@ -824,6 +847,79 @@ public class HTMLParser extends PerlModuleBase {
         }
 
         return result;
+    }
+
+    /** Locate each callback's original source span for HTML::Parser positions. */
+    private static void updateEventPosition(RuntimeHash pstate, String eventName, RuntimeScalar[] eventArgs) {
+        String source = pstate.get("_position_source").toString();
+        int cursor = (int) pstate.get("_position_cursor").getInt();
+        String fragment = null;
+        if ("start".equals(eventName) && eventArgs.length > 3) {
+            fragment = eventArgs[3].toString();
+        } else if ("end".equals(eventName) && eventArgs.length > 1) {
+            fragment = eventArgs[1].toString();
+        } else if (("text".equals(eventName) || "declaration".equals(eventName)
+                || "process".equals(eventName)) && eventArgs.length > 0) {
+            fragment = eventArgs[0].toString();
+        } else if ("comment".equals(eventName) && eventArgs.length > 0) {
+            fragment = "<!--" + eventArgs[0].toString() + "-->";
+        }
+
+        int start = cursor;
+        int end = cursor;
+        if (fragment != null && !fragment.isEmpty()) {
+            int found = source.indexOf(fragment, Math.min(cursor, source.length()));
+            if (found >= 0) {
+                start = found;
+                end = found + fragment.length();
+                pstate.put("_position_cursor", new RuntimeScalar(end));
+            }
+        }
+
+        int line = pstate.get("_position_base_line").getInt();
+        int column = pstate.get("_position_base_column").getInt();
+        for (int i = 0; i < start && i < source.length(); i++) {
+            if (source.charAt(i) == '\n') {
+                line++;
+                column = 0;
+            } else {
+                column++;
+            }
+        }
+        boolean byteInput = pstate.get("_input_is_byte_string").getBoolean();
+        int baseOffset = pstate.get("_position_base_offset").getInt();
+        int offset = baseOffset + sourceOffset(source, start, byteInput);
+        int offsetEnd = baseOffset + sourceOffset(source, end, byteInput);
+        pstate.put("_event_offset", new RuntimeScalar(offset));
+        pstate.put("_event_offset_end", new RuntimeScalar(offsetEnd));
+        pstate.put("_event_line", new RuntimeScalar(line));
+        pstate.put("_event_column", new RuntimeScalar(column));
+    }
+
+    private static int sourceOffset(String source, int index, boolean byteInput) {
+        String prefix = source.substring(0, Math.min(index, source.length()));
+        return byteInput ? prefix.length()
+                : prefix.getBytes(StandardCharsets.UTF_8).length;
+    }
+
+    /** Advance absolute document positions while retaining only unparsed input. */
+    private static void advancePositionBase(RuntimeHash pstate, String source, int consumed,
+            boolean byteInput) {
+        String prefix = source.substring(0, Math.min(consumed, source.length()));
+        int line = pstate.get("_position_base_line").getInt();
+        int column = pstate.get("_position_base_column").getInt();
+        for (int i = 0; i < prefix.length(); i++) {
+            if (prefix.charAt(i) == '\n') {
+                line++;
+                column = 0;
+            } else {
+                column++;
+            }
+        }
+        pstate.put("_position_base_offset", new RuntimeScalar(
+                pstate.get("_position_base_offset").getInt() + sourceOffset(prefix, prefix.length(), byteInput)));
+        pstate.put("_position_base_line", new RuntimeScalar(line));
+        pstate.put("_position_base_column", new RuntimeScalar(column));
     }
 
     /**
@@ -1124,7 +1220,16 @@ public class HTMLParser extends PerlModuleBase {
                                 }
                             }
                         }
-                        attrs.put(attrName, new RuntimeScalar(attrValue));
+                        // HTML::Parser decodes character references in
+                        // attribute values unless attr_encoded is enabled.
+                        // Consumers such as HTML::TokeParser rely on this for
+                        // URLs and other values containing numeric entities.
+                        String storedAttrValue = attrValue;
+                        if (!pstate.get("attr_encoded").getBoolean()) {
+                            RuntimeHash entity2char = GlobalVariable.getGlobalHash("HTML::Entities::entity2char");
+                            storedAttrValue = decodeEntitiesString(attrValue, entity2char, false);
+                        }
+                        attrs.put(attrName, new RuntimeScalar(storedAttrValue));
                     }
 
                     // Handle self-closing />

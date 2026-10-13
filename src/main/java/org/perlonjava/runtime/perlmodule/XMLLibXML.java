@@ -4,6 +4,9 @@ import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 import org.perlonjava.runtime.runtimetypes.PerlDieException;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Entities;
+import org.jsoup.parser.Parser;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 
@@ -1342,14 +1345,15 @@ public class XMLLibXML extends PerlModuleBase {
             return WarnDie.die(new RuntimeScalar("Empty String\n"), new RuntimeScalar("\n")).getList();
         }
         String html = strArg.toString();
-        // Self-close HTML void elements that are not already self-closed
-        String[] voidElements = {"area","base","br","col","embed","hr","img",
-                                  "input","link","meta","param","source","track","wbr"};
-        for (String tag : voidElements) {
-            // Replace <tag ...> (not already self-closed) with <tag .../>
-            html = html.replaceAll("(?i)<(" + tag + ")(\\s[^>]*)?>", "<$1$2/>");
-            html = html.replaceAll("(?i)<(" + tag + ")>", "<$1/>");
-        }
+        // HTML::LibXML parses HTML with libxml2's recovery parser. Use Jsoup's
+        // HTML5 tree builder for the same recovery step, then serialize as
+        // well-formed XML for the existing W3C DOM bridge.
+        org.jsoup.nodes.Document htmlDocument = Jsoup.parse(html, "", Parser.htmlParser());
+        htmlDocument.outputSettings()
+                .syntax(org.jsoup.nodes.Document.OutputSettings.Syntax.xml)
+                .escapeMode(Entities.EscapeMode.xhtml)
+                .prettyPrint(false);
+        html = htmlDocument.outerHtml();
         RuntimeArray newArgs = new RuntimeArray();
         RuntimeArray.push(newArgs, self);
         RuntimeArray.push(newArgs, new RuntimeScalar(html));
