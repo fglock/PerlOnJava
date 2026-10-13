@@ -39,7 +39,8 @@ priorities and future plans.
 - Parse postfix `unless` after eval heredocs, imported calls inside exception blocks, and `qq'...'` arguments to bareword functions (#1625, #1640, #1663).
 - Preserve scalar context for `caller()` when used as a method invocant on the interpreter (#1744).
 
-- Close IO::Handle descriptors at Perl object destruction so scoped AnyEvent
+- Keep blessed lexical filehandle aliases alive through helper calls, then
+  close their descriptors at Perl object destruction so scoped AnyEvent
   listeners release their ports and accept watchers can bind correctly.
 - Close AnyEvent's listening socket when its server guard is dropped, allowing
   the same port to be rebound after the accept watcher leaves scope (#1757).

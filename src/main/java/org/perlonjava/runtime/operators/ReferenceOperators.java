@@ -45,8 +45,8 @@ public class ReferenceOperators {
         runtimeScalar = RuntimeScalar.fetchTiedOnce(runtimeScalar);
         // *FH{IO} may pass through scalar assignment as a GLOB-typed
         // RuntimeIO rather than the GLOBREFERENCE wrapper returned directly
-        // by the glob-slot accessor.  Perl treats that PVIO as a blessable
-        // reference, so normalize only this representation before checking.
+        // by the glob-slot accessor. Perl treats that PVIO as a blessable
+        // reference, so normalize this representation before checking.
         if (runtimeScalar.type == RuntimeScalarType.GLOB
                 && runtimeScalar.value instanceof RuntimeIO) {
             runtimeScalar.type = RuntimeScalarType.GLOBREFERENCE;
@@ -265,6 +265,9 @@ public class ReferenceOperators {
                 }
                 // Activate the mortal mechanism
                 MortalList.setActive(true);
+            }
+            if (referent instanceof RuntimeGlob glob) {
+                MyVarCleanupStack.retainBlessedGlobAliases(glob, referent);
             }
             DestroyDispatch.registerIfDestroyable(referent, newBlessId);
             // A reference stored in a shared scalar publishes its class to
