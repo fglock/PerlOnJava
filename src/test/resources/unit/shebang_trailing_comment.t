@@ -6,9 +6,11 @@ use Test::More;
 my $tmpdir = File::Spec->tmpdir;
 my $script = File::Spec->catfile($tmpdir, "perlonjava-shebang-comment-$$.pl");
 my $output = File::Spec->catfile($tmpdir, "perlonjava-shebang-comment-$$.out");
+my $output_for_script = $output;
+$output_for_script =~ s/\\/\\\\/g;
 open my $fh, '>', $script or die "open $script: $!";
 print {$fh} "#!perl -w ## no critic (RequireVersionVar)\n";
-print {$fh} 'open my $out, ">", "' . $output . '" or die $!;' . "\n";
+print {$fh} 'open my $out, ">", "' . $output_for_script . '" or die $!;' . "\n";
 print {$fh} 'print {$out} join("|", @ARGV), "\n";' . "\n";
 close $fh or die "close $script: $!";
 
