@@ -81,6 +81,14 @@ use strict;
 # (defined(&DBD::JDBC::db::do) returns NO even with \&... working), so
 # we install via glob aliasing to an explicitly-named helper.
 sub _do_impl {
+    # DBI applications can replace DBI::db::do to intercept driver-specific
+    # SQL (for example, MySQL SET SESSION statements on a SQLite test handle).
+    # This driver has its own cleanup-aware do() implementation, so forward a
+    # replacement before applying the JDBC default.
+    my $dbi_db_do = *DBI::db::do{CODE};
+    return $dbi_db_do->(@_) if $DBI::DBI_DB_DO
+        && $dbi_db_do && $dbi_db_do != $DBI::DBI_DB_DO;
+
     my ($dbh, $statement, $attr, @params) = @_;
     return "0E0" if DBI::_is_comment_only_sql($statement);
     DBI::_cleanup_before_ddl($statement);

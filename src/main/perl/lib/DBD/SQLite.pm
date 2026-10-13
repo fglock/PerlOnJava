@@ -55,6 +55,15 @@ our @ISA = ('DBD::JDBC');
 {
     package DBD::SQLite::db;
     our @ISA = ('DBD::JDBC::db');
+
+    # Data::ObjectDriver's SQLite adapter uses DBI's func() dispatch to read
+    # the connection-local auto-generated key after an insert.  DBD::SQLite
+    # exposes this SQLite function as a driver method; provide the same method
+    # through our JDBC-backed shim.
+    sub last_insert_rowid {
+        my ($dbh) = @_;
+        return $dbh->selectrow_array('SELECT last_insert_rowid()');
+    }
 }
 
 {
