@@ -30,6 +30,8 @@ public class ControlFlowMarker {
     public final Object argumentFrame;
     public final String namedTarget;
     public final String evalScope;
+    /** Whether the tail call itself was issued by the active sort comparator. */
+    public final boolean tailCallFromSortComparator;
     /** Original switch-only spelling (continue/break), when normalization used NEXT/LAST. */
     public final String switchControlOperator;
 
@@ -76,6 +78,7 @@ public class ControlFlowMarker {
         this.argumentFrame = null;
         this.namedTarget = null;
         this.evalScope = evalScope;
+        this.tailCallFromSortComparator = false;
         this.switchControlOperator = switchControlOperator;
     }
 
@@ -104,6 +107,7 @@ public class ControlFlowMarker {
                 ? RuntimeCode.currentArgumentAliasFrame(args.elements.get(0)) : null;
         this.namedTarget = namedTarget;
         this.evalScope = evalScope;
+        this.tailCallFromSortComparator = RuntimeCode.isCurrentSortComparatorBlock();
         this.switchControlOperator = null;
     }
 

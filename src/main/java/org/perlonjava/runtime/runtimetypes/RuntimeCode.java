@@ -69,15 +69,24 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /** Nesting of comparator invocations currently owned by sort(). */
     private static final ThreadLocal<Integer> sortComparatorDepth = ThreadLocal.withInitial(() -> 0);
+    private record SortComparatorFrame(RuntimeCode comparator, int entryDepth) {}
+    private static final ThreadLocal<ArrayDeque<SortComparatorFrame>> sortComparatorFrames =
+            ThreadLocal.withInitial(ArrayDeque::new);
 
-    public static void enterSortComparator() {
+    public static void enterSortComparator(RuntimeScalar comparator) {
         sortComparatorDepth.set(sortComparatorDepth.get() + 1);
+        RuntimeCode comparatorCode = comparator != null && comparator.value instanceof RuntimeCode code
+                ? code : null;
+        sortComparatorFrames.get().push(new SortComparatorFrame(comparatorCode, activeCodeStack().size()));
     }
 
     public static void leaveSortComparator() {
         int depth = sortComparatorDepth.get() - 1;
         if (depth <= 0) sortComparatorDepth.remove();
         else sortComparatorDepth.set(depth);
+        ArrayDeque<SortComparatorFrame> frames = sortComparatorFrames.get();
+        if (!frames.isEmpty()) frames.pop();
+        if (frames.isEmpty()) sortComparatorFrames.remove();
     }
 
     public static boolean isInSortComparator() {
@@ -86,7 +95,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public static boolean isCurrentSortComparatorBlock() {
         RuntimeCode active = getActiveCodeAt(0);
-        return active != null && active.isSortComparator;
+        if (active != null && active.isSortComparator) return true;
+        ArrayDeque<SortComparatorFrame> frames = sortComparatorFrames.get();
+        if (!frames.isEmpty()) {
+            SortComparatorFrame frame = frames.peek();
+            // A nested named subroutine (including AUTOLOAD) may tail-call
+            // while the comparator is on the stack. Reject only a tail call
+            // made by the comparator frame itself, not one from that helper.
+            return active == frame.comparator
+                    || activeCodeStack().size() <= frame.entryDepth + 1;
+        }
+        return Boolean.TRUE.equals(
+                PerlRuntime.current().executionState().activeJvmSortComparators.peek());
     }
     private static final String INDIRECT_BLOCK_METHOD_PREFIX = "\uFDD0indirect-block:";
     private static final String FIRST_ARGUMENT_METHOD_PREFIX = "\uFDD1first-argument:";
@@ -935,9 +955,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return new PerlCompilerException("Can't goto subroutine outside a subroutine");
     }
 
-    /** Reject a tail call that would cross an active sort pseudo-block. */
+    /** Reject a tail call written directly in an active sort pseudo-block. */
     public static void checkSortTailCall() {
-        if (hasActiveSortComparator()) {
+        if (isCurrentSortComparatorBlock()) {
             throw sortTailCallError();
         }
     }
@@ -7382,7 +7402,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Cast the value to RuntimeCode and call apply()
                 RuntimeList result = code.apply(argsForCall, callContext);
                 if (code.isSortComparator && result instanceof RuntimeControlFlowList flow) {
-                    if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
+                    if (flow.getControlFlowType() == ControlFlowType.TAILCALL
+                            && flow.marker.tailCallFromSortComparator) {
                         throw sortTailCallError();
                     }
                     String message = flow.getControlFlowType() == ControlFlowType.GOTO
@@ -8301,7 +8322,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             }
             try {
-                if (hasActiveSortComparator()) {
+                if (isCurrentSortComparatorBlock()
+                        && cfList.marker.tailCallFromSortComparator) {
                     throw sortTailCallError();
                 }
                 if (cfList.marker.evalScope != null) {

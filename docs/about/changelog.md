@@ -6,7 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
-- Recover malformed HTML through Jsoup in `XML::LibXML`, decode HTML attribute entities by default, and report `HTML::Parser` source positions (#1416, #1457, #1634).
+- Recover malformed HTML through Jsoup in `XML::LibXML`, decode HTML attribute entities by default, report `HTML::Parser` source positions, and allow nested `AUTOLOAD` tail calls from sort comparators (#1416, #1457, #1634).
 - Fix DBI `do()` overrides, DBD::Sponge initialization, and SQLite generated ID lookup.
 
 - Stage nested Module::Build modules and resolve compressed archive filenames
