@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Fix DBI `do()` overrides, DBD::Sponge initialization, and SQLite generated ID lookup.
+
 - Stage nested Module::Build modules and resolve compressed archive filenames
   against Perl's working directory so release plugins can consume the archive
   (#1432, #1514).

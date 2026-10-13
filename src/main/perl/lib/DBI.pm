@@ -9,6 +9,7 @@ our $VERSION = '1.643';
 our $stderr = 2000000000;
 our ($err, $errstr, $state, $TraceLevel, $TraceOutput);
 our ($ACTIVE_FETCH_FREETMPS_RUNNING, $DDL_CLEANUP_RUNNING);
+our $DBI_DB_DO;
 our %InstalledDrivers;
 our $SqlEngineStorePatched;
 our $AnyDataDestroyPatched;
@@ -283,7 +284,7 @@ sub DBD::_::dr::connect {
     no warnings 'redefine';
 
     for my $method (qw(
-        prepare disconnect last_insert_id begin_work commit rollback
+        prepare do disconnect last_insert_id begin_work commit rollback
         table_info column_info primary_key_info primary_key foreign_key_info
         type_info ping get_info
     )) {
@@ -679,11 +680,20 @@ sub _populate_statement_metadata {
 }
 
 sub install_method {
+    my ($implementor_class, @methods) = @_;
+    no strict 'refs';
+    no warnings 'redefine';
+    for my $method (@methods) {
+        *{"DBI::db::$method"} = sub {
+            my $handle = shift;
+            return _dispatch_implementor_method($handle, $method, @_);
+        };
+    }
     return 1;
 }
 
 sub _install_method {
-    return 1;
+    return install_method(@_);
 }
 
 sub func {
@@ -935,6 +945,12 @@ sub _is_comment_only_sql {
 }
 
 sub do {
+    # A DBI application or driver can replace DBI::db::do to intercept SQL.
+    # Method lookup may already have cached this inherited implementation, so
+    # consult the live concrete CODE slot before preparing the statement.
+    my $db_do = *DBI::db::do{CODE};
+    return $db_do->(@_) if $DBI_DB_DO && $db_do && $db_do != $DBI_DB_DO;
+
     my ($dbh, $statement, $attr, @params) = @_;
     return "0E0" if _is_comment_only_sql($statement);
     _cleanup_before_ddl($statement) if _is_jdbc_handle($dbh);
@@ -944,6 +960,7 @@ sub do {
     $sth->finish();  # Close JDBC statement to release locks
     ($rows == 0) ? "0E0" : $rows;
 }
+$DBI_DB_DO = \&do;
 
 sub finish {
     my ($sth) = @_;

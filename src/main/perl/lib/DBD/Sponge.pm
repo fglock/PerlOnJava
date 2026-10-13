@@ -149,6 +149,12 @@ use warnings;
         return $dbh->SUPER::STORE($attrib, $value);
     }
 
+    sub disconnect {
+        my ($dbh) = @_;
+        $dbh->{Active} = 0;
+        return;
+    }
+
     sub sponge_test_installed_method {
 	my ($dbh, @args) = @_;
 	return $dbh->set_err(42, "not enough parameters") unless @args >= 2;
