@@ -11,6 +11,7 @@ use Test::More;
 {
     no strict 'refs';
     my %saved = %{"Issue1523::CopyTarget::"};
+    %{"Issue1523::CopyTarget::"} = ();
     %{"Issue1523::CopyTarget::"} = %saved;
 }
 

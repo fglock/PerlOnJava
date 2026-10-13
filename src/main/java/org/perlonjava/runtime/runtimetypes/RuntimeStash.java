@@ -62,7 +62,7 @@ public class RuntimeStash extends RuntimeHash {
         List<RuntimeScalar> elements = array.elements;
         for (Map.Entry<String, RuntimeScalar> entry : this.elements.entrySet()) {
             elements.add(new RuntimeScalar(entry.getKey()));
-            elements.add(new RuntimeScalar(entry.getValue()));
+            elements.add(snapshotStashEntry(entry.getKey(), entry.getValue()));
         }
     }
 
@@ -74,6 +74,21 @@ public class RuntimeStash extends RuntimeHash {
      */
     public RuntimeScalar addToScalar(RuntimeScalar scalar) {
         return scalar.set(this.scalar());
+    }
+
+    /**
+     * Flattening a stash into a list copies its glob values. Preserve the
+     * slots at that point so a later clear of the source stash cannot change
+     * the values held by an ordinary hash copy.
+     */
+    @Override
+    public RuntimeList getList() {
+        RuntimeList result = new RuntimeList();
+        for (Map.Entry<String, RuntimeScalar> entry : this.elements.entrySet()) {
+            result.elements.add(new RuntimeScalar(entry.getKey()));
+            result.elements.add(snapshotStashEntry(entry.getKey(), entry.getValue()));
+        }
+        return result;
     }
 
     /**
@@ -595,7 +610,7 @@ public class RuntimeStash extends RuntimeHash {
      * canonical maps; otherwise the values would resolve against the emptied
      * destination when they are installed below.
      */
-    private RuntimeScalar snapshotStashEntry(String key, RuntimeScalar value) {
+    private static RuntimeScalar snapshotStashEntry(String key, RuntimeScalar value) {
         if (key.endsWith("::") || !(value.value instanceof RuntimeStashEntry entry)) {
             return new RuntimeScalar(value);
         }
