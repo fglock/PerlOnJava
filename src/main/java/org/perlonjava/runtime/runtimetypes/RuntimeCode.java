@@ -6237,8 +6237,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // refs in @kept while the @DB::args slots remain aliases. Required
                 // for DBIC's Devel::StackTrace-resurrection test (txn_scope_guard
                 // test 18).
+                RuntimeArray dbArgs = calledFromDB
+                        ? GlobalVariable.getGlobalArray("DB::args") : null;
                 if (calledFromDB) {
-                    RuntimeArray dbArgs = GlobalVariable.getGlobalArray("DB::args");
                     // Debugger arguments are borrowed slots, not an ordinary
                     // array assignment. Perl rejects a tie rather than calling
                     // its CLEAR/STORE methods while inspecting the stack.
@@ -6291,6 +6292,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Fall back to the name-based heuristic for frames outside our tracking
                 // (e.g., top-level code, eval frames).
                 Boolean hasArgsFromStack = getHasArgsAt(trackedOriginalFrame);
+                if (calledFromDB && (hasArgsFromStack == null || !hasArgsFromStack)
+                        && previousFrameSubName != null
+                        && previousFrameSubName.endsWith("::__ANON__")
+                        && dbArgs != null && !dbArgs.elements.isEmpty()) {
+                    // Java stack formatting can represent a glob-installed
+                    // anonymous callback twice: once as its defining frame and
+                    // again as the caller frame. @DB::args is still captured
+                    // from that callback, but the second formatted frame is
+                    // one slot beyond the callback's hasargs entry.
+                    hasArgsFromStack = true;
+                }
                 if (WarnDie.isInsideUnhandledDieHandler() && syntheticOwnSubFramesBefore > 0) {
                     Boolean activeHasArgs = getHasArgsAt(trackedActiveCodeFrame);
                     if (activeHasArgs != null) {
@@ -6516,6 +6528,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private static String callerSubNameForCode(RuntimeCode code) {
+        // Installing an anonymous CV in a named glob does not turn it into a
+        // named subroutine in Perl.  Keep the stash slot name available for
+        // method dispatch, but expose the anonymous identity through caller().
+        if (code != null && code.installedViaAnonGlobAssign
+                && !code.explicitlyRenamed && !code.explicitlyMaterializedGlob) {
+            return normalizeCallerPackage(code.packageName) + "::__ANON__";
+        }
         if (code == null || code.subName == null || code.subName.isEmpty()
                 || code.subName.startsWith("(")) {
             if (code != null) {

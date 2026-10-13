@@ -8,6 +8,7 @@ import org.perlonjava.runtime.runtimetypes.ErrorMessageUtil;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1100,6 +1101,21 @@ public class CompileBinaryOperator {
     }
 
     private static int callerLineCallSiteToken(BinaryOperatorNode node, int statementTokenIndex) {
+        if (node.left instanceof OperatorNode operatorNode
+                && operatorNode.operator.equals("&")
+                && operatorNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef
+                && codeRef.type == RuntimeScalarType.CODE
+                && codeRef.value instanceof RuntimeCode code
+                && ("@".equals(code.prototype)
+                        || code.installedViaAnonGlobAssign && !code.explicitlyRenamed)
+                && node.right != null) {
+            ListNode args = ListNode.makeList(node.right);
+            if (!args.elements.isEmpty()
+                    && args.elements.getLast() instanceof SubroutineNode anonymous
+                    && anonymous.name == null) {
+                return anonymous.getIndex();
+            }
+        }
         // Match Perl's call-statement COP: anonymous code arguments do not
         // shift the line reported by caller() to the argument's line.
         return statementTokenIndex > 0 ? statementTokenIndex : expressionStartIndex(node);
