@@ -728,6 +728,7 @@ imports:
   # Phase 2: IO::Socket - OO socket interface
   - source: perl5/dist/IO/lib/IO/Socket.pm
     target: src/main/perl/lib/IO/Socket.pm
+    patch: IO-Socket.pm.patch
 
   - source: perl5/dist/IO/lib/IO/Socket
     target: src/main/perl/lib/IO/Socket
