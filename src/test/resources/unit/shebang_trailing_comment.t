@@ -3,8 +3,9 @@ use warnings;
 use File::Spec;
 use Test::More;
 
-my $script = File::Spec->catfile('/tmp', "perlonjava-shebang-comment-$$.pl");
-my $output = File::Spec->catfile('/tmp', "perlonjava-shebang-comment-$$.out");
+my $tmpdir = File::Spec->tmpdir;
+my $script = File::Spec->catfile($tmpdir, "perlonjava-shebang-comment-$$.pl");
+my $output = File::Spec->catfile($tmpdir, "perlonjava-shebang-comment-$$.out");
 open my $fh, '>', $script or die "open $script: $!";
 print {$fh} "#!perl -w ## no critic (RequireVersionVar)\n";
 print {$fh} 'open my $out, ">", "' . $output . '" or die $!;' . "\n";
