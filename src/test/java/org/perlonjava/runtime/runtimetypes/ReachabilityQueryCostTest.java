@@ -202,6 +202,69 @@ class ReachabilityQueryCostTest {
     }
 
     @Test
+    void unchangedRootsReuseFullSnapshotAcrossDeferredDrains() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray global = new RuntimeArray();
+            RuntimeArray lexicalRoot = new RuntimeArray();
+            RuntimeScalar weakProbe = new RuntimeHash().createAnonymousReference();
+            String globalName =
+                    "ReachabilityQueryCostTest::stableFullSnapshotGlobal";
+            GlobalVariable.globalArrays.put(globalName, global);
+            MyVarCleanupStack.register(lexicalRoot);
+            WeakRefRegistry.weaken(weakProbe);
+            try {
+                for (int i = 0; i < 256; i++) {
+                    global.elements.add(new RuntimeHash().createReference());
+                }
+                MortalList.invalidateAllRootSnapshots();
+
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    for (int i = 0; i < 3; i++) {
+                        RuntimeArray target = new RuntimeArray();
+                        target.refCount = 1;
+                        target.localBindingExists = false;
+                        target.clearedOwnedAggregateElement = true;
+
+                        MortalList.deferDecrement(target);
+                        MortalList.flush();
+
+                        assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED,
+                                target.perlLifecycleState(),
+                                "an unrooted aggregate should be reclaimed");
+                    }
+
+                    ReachabilityQueryStats stats = measurement.stats();
+                    assertEquals(3, stats.deferredBasesProcessed);
+                    assertEquals(1, stats.snapshotsBuilt,
+                            "unchanged full roots should be walked once across separate drains");
+                    assertTrue(stats.nodesVisited >= 257,
+                            "the shared full-root snapshot must account for its graph walk");
+
+                    lexicalRoot.elements.add(new RuntimeHash().createReference());
+                    RuntimeArray nextTarget = new RuntimeArray();
+                    nextTarget.refCount = 1;
+                    nextTarget.localBindingExists = false;
+                    nextTarget.clearedOwnedAggregateElement = true;
+                    MortalList.deferDecrement(nextTarget);
+                    MortalList.flush();
+
+                    assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED,
+                            nextTarget.perlLifecycleState());
+                    assertEquals(2, stats.snapshotsBuilt,
+                            "mutating a lexical root's reachable graph invalidates the full snapshot");
+                }
+            } finally {
+                WeakRefRegistry.unweaken(weakProbe);
+                MyVarCleanupStack.unregister(lexicalRoot);
+                GlobalVariable.globalArrays.remove(globalName);
+                MortalList.invalidateAllRootSnapshots();
+            }
+        }
+    }
+
+    @Test
     void deferredOwnerChecksShareOneRootSnapshotPerDrain() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {

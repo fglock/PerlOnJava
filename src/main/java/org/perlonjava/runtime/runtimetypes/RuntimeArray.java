@@ -369,24 +369,32 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     private void notePackageRootMutation(RuntimeScalar oldValue, RuntimeScalar newValue) {
         if (isPackageGlobalRoot && (rootEdge(oldValue) || rootEdge(newValue))) {
             MortalList.invalidateExternalRootSnapshot();
+        } else {
+            MortalList.invalidateFullRootSnapshotIfReachable(this);
         }
     }
 
     private void notePackageRootMutationIf(boolean invalidates) {
         if (invalidates) {
             MortalList.invalidateExternalRootSnapshot();
+        } else {
+            MortalList.invalidateFullRootSnapshotIfReachable(this);
         }
     }
 
     private void notePackageRootClear(java.util.Collection<? extends RuntimeScalar> values) {
         if (hasRootEdge(values)) {
             MortalList.invalidateExternalRootSnapshot();
+        } else {
+            MortalList.invalidateFullRootSnapshotIfReachable(this);
         }
     }
 
     void notePackageRootMutation() {
         if (isPackageGlobalRoot) {
             MortalList.invalidateExternalRootSnapshot();
+        } else {
+            MortalList.invalidateFullRootSnapshotIfReachable(this);
         }
     }
 

@@ -1487,6 +1487,7 @@ public class MortalList {
     static void invalidateExternalRootSnapshot() {
         state().externalRootSnapshot = null;
         state().fullRootSnapshot = null;
+        state().unblessedAggregateRootSnapshot = null;
         state().scalarRootSnapshot = null;
     }
 
@@ -1512,6 +1513,10 @@ public class MortalList {
             return recordUnblessedAggregateSnapshotResult(
                     state, state.fullRootSnapshot, base, drainActive);
         }
+        if (state.unblessedAggregateRootSnapshot != null) {
+            return recordUnblessedAggregateSnapshotResult(
+                    state, state.unblessedAggregateRootSnapshot, base, drainActive);
+        }
         if (ReachabilityWalker.isReachableFromTemporaryRoots(base)) return true;
         if (state.externalRootSnapshot != null
                 && state.externalRootSnapshot.isReachableFromNonLexicalRoot(base)) {
@@ -1525,6 +1530,7 @@ public class MortalList {
         ReachabilityWalker.RootReachabilitySnapshot snapshot =
                 ReachabilityWalker.reachableFromRootsSnapshotWithStatus();
         state.fullRootSnapshot = snapshot;
+        state.unblessedAggregateRootSnapshot = snapshot;
         return recordUnblessedAggregateSnapshotResult(state, snapshot, base, drainActive);
     }
 
@@ -1581,7 +1587,34 @@ public class MortalList {
     static void invalidateLiveRootSnapshot() {
         state().liveRootSnapshot = null;
         state().fullRootSnapshot = null;
+        state().unblessedAggregateRootSnapshot = null;
         state().scalarRootSnapshot = null;
+    }
+
+    static void invalidateFullRootSnapshotIfReachable(RuntimeBase changedNode) {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime == null) return;
+        LifecycleRuntimeState state = runtime.lifecycleState;
+        ReachabilityWalker.RootReachabilitySnapshot snapshot = state.fullRootSnapshot;
+        boolean fullReachable = snapshot != null && snapshot.isReachable(changedNode);
+        ReachabilityWalker.RootReachabilitySnapshot unblessedSnapshot =
+                state.unblessedAggregateRootSnapshot;
+        boolean unblessedReachable = unblessedSnapshot != null
+                && unblessedSnapshot.isReachable(changedNode);
+        if ((snapshot != null && (!snapshot.complete() || fullReachable))
+                || (unblessedSnapshot != null
+                    && (!unblessedSnapshot.complete() || unblessedReachable))) {
+            state.fullRootSnapshot = null;
+            state.unblessedAggregateRootSnapshot = null;
+        }
+    }
+
+    static void invalidateFullRootSnapshotForScalarClear() {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime != null) {
+            runtime.lifecycleState.fullRootSnapshot = null;
+            runtime.lifecycleState.unblessedAggregateRootSnapshot = null;
+        }
     }
 
     /**
@@ -1603,7 +1636,9 @@ public class MortalList {
         LifecycleRuntimeState state = state();
         state.flushReachableCache = null;
         state.flushTiedReachableCache = null;
-        invalidateLiveRootSnapshot();
+        state.liveRootSnapshot = null;
+        state.scalarRootSnapshot = null;
+        state.fullRootSnapshot = null;
         if (!state.flushing && state.reachabilityDrainDepth == 0) {
             state.unblessedAggregateDrainRoots.clear();
             state.unblessedAggregateDrainSnapshotIncomplete = false;

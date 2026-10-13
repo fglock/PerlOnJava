@@ -260,28 +260,36 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     private void notePackageRootMutation(RuntimeScalar oldValue, RuntimeScalar newValue) {
         if (isPackageRootedHash() && (rootEdge(oldValue) || rootEdge(newValue))) {
             MortalList.invalidateExternalRootSnapshot();
+        } else {
+            MortalList.invalidateFullRootSnapshotIfReachable(this);
         }
     }
 
     private void notePackageRootMutationIf(boolean invalidates) {
         if (invalidates) {
             MortalList.invalidateExternalRootSnapshot();
+        } else {
+            MortalList.invalidateFullRootSnapshotIfReachable(this);
         }
     }
 
     private void notePackageRootClear(Collection<RuntimeScalar> values) {
-        if (!isPackageRootedHash()) return;
-        for (RuntimeScalar value : values) {
-            if (rootEdge(value)) {
-                MortalList.invalidateExternalRootSnapshot();
-                return;
+        if (isPackageRootedHash()) {
+            for (RuntimeScalar value : values) {
+                if (rootEdge(value)) {
+                    MortalList.invalidateExternalRootSnapshot();
+                    return;
+                }
             }
         }
+        MortalList.invalidateFullRootSnapshotIfReachable(this);
     }
 
     void notePackageRootMutation() {
         if (isPackageRootedHash()) {
             MortalList.invalidateExternalRootSnapshot();
+        } else {
+            MortalList.invalidateFullRootSnapshotIfReachable(this);
         }
     }
 

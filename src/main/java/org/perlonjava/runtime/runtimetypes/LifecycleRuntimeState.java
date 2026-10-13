@@ -69,6 +69,7 @@ final class LifecycleRuntimeState {
     Set<RuntimeBase> weakSweepLiveReferents;
 
     ReachabilityWalker.RootReachabilitySnapshot fullRootSnapshot;
+    ReachabilityWalker.RootReachabilitySnapshot unblessedAggregateRootSnapshot;
     final IdentityHashMap<RuntimeBase, ReachabilityWalker.WeakRootWitness>
             weakSweepRootWitnesses = new IdentityHashMap<>();
     ReachabilityQueryStats activeReachabilityQueryStats;
@@ -133,6 +134,7 @@ final class LifecycleRuntimeState {
         lastAutoSweepNanos = System.nanoTime();
         inAutoSweep = false;
         fullRootSnapshot = null;
+        unblessedAggregateRootSnapshot = null;
         weakSweepRootWitnesses.clear();
         activeReachabilityQueryStats = null;
         immediateWeakSweepRequested = false;
