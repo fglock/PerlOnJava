@@ -701,9 +701,15 @@ public class SubroutineParser {
                     // with the outer exception call and passes the callback's
                     // argument to exception itself.
                     if (subExists) {
+                        int callbackHintHashId = HintHashRegistry.snapshotCurrentHintHash();
+                        CompilerFlagNode callbackDefinitionFlags =
+                                StatementParser.callbackDefinitionFlags(parser, callbackHintHashId);
                         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
                         Node callbackBody = ParseBlock.parseBlock(parser);
                         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+                        if (callbackDefinitionFlags != null && callbackBody instanceof BlockNode block) {
+                            block.elements.add(0, callbackDefinitionFlags);
+                        }
                         Node callback = new SubroutineNode(null, null, null,
                                 callbackBody, false, currentIndex);
                         ListNode arguments = new ListNode(List.of(callback), currentIndex);

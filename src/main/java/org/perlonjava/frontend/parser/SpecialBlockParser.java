@@ -598,6 +598,19 @@ public class SpecialBlockParser {
             // Re-throw so it propagates to the CLI (Main.main()) which will call System.exit()
             throw e;
         } catch (Throwable t) {
+            // JVM invocation wrappers can wrap exit() thrown by a dynamically
+            // compiled BEGIN block. Preserve process termination through the
+            // parser boundary just as we do for an unwrapped PerlExitException.
+            Throwable exitCause = t;
+            while (exitCause != null) {
+                if (exitCause instanceof PerlExitException exit) {
+                    throw exit;
+                }
+                Throwable next = exitCause.getCause();
+                if (next == exitCause) break;
+                exitCause = next;
+            }
+
             if (parsedArgs.debugEnabled) {
                 // Print full JVM stack
                 t.printStackTrace();

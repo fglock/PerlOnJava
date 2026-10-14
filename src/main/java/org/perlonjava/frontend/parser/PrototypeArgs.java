@@ -4,6 +4,7 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
+import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 
@@ -1020,6 +1021,9 @@ public class PrototypeArgs {
         }
 
         if (TokenUtils.peek(parser).text.equals("{")) {
+            int callbackHintHashId = HintHashRegistry.snapshotCurrentHintHash();
+            CompilerFlagNode callbackDefinitionFlags =
+                    StatementParser.callbackDefinitionFlags(parser, callbackHintHashId);
             TokenUtils.consume(parser);
             
             // Save and set subroutine body context so that shift/pop default to @_ instead of @ARGV
@@ -1027,7 +1031,12 @@ public class PrototypeArgs {
             parser.ctx.symbolTable.setInSubroutineBody(true);
             
             try {
-                Node block = new SubroutineNode(null, null, null, ParseBlock.parseBlock(parser), false, parser.tokenIndex);
+                Node callbackBody = ParseBlock.parseBlock(parser);
+                if (callbackDefinitionFlags != null && callbackBody instanceof BlockNode blockBody) {
+                    blockBody.elements.add(0, callbackDefinitionFlags);
+                }
+                Node block = new SubroutineNode(null, null, null,
+                        callbackBody, false, parser.tokenIndex);
                 if (isListUtilCallback(parser.ctx.symbolTable.getCurrentSubroutine())) {
                     block.setAnnotation("isMapGrepBlock", true);
                 }
