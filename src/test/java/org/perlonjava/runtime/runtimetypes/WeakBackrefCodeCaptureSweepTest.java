@@ -31,12 +31,14 @@ class WeakBackrefCodeCaptureSweepTest {
             RuntimeScalar weakCode = new RuntimeScalar(code);
             WeakRefRegistry.weaken(weakCode);
 
+            runtime.lifecycleState.sweepPendingAfterOuterDestroy = true;
             try {
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
-                    // Exercise the same quiet weak-reference pass reached from
-                    // teardown auto-sweeps, without depending on flush cadence.
-                    ReachabilityWalker.sweepWeakRefs(true, false);
+                    // Drive the same quiet sweep through the lifecycle flush
+                    // used after an outer DESTROY, without depending on cadence.
+                    MortalList.requestImmediateWeakSweep();
+                    MortalList.flush();
 
                     ReachabilityQueryStats stats = measurement.stats();
                     assertEquals(1, stats.weakBackrefCaptureRootsWalked,
@@ -52,6 +54,7 @@ class WeakBackrefCodeCaptureSweepTest {
                     }
                 }
             } finally {
+                runtime.lifecycleState.sweepPendingAfterOuterDestroy = false;
                 WeakRefRegistry.unweaken(weakCode);
                 for (RuntimeScalar weakTarget : weakTargets) {
                     WeakRefRegistry.unweaken(weakTarget);
