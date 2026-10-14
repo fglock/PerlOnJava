@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.runtime.mro.InheritanceResolver;
+import org.perlonjava.runtime.operators.SprintfOperator;
 
 /**
  * TieHandle provides support for Perl's tie mechanism for filehandle variables.
@@ -76,6 +77,9 @@ public class TieHandle extends RuntimeIO {
      * Prints data to a tied filehandle (delegates to PRINT).
      */
     public static RuntimeScalar tiedPrint(TieHandle tieHandle, RuntimeList args) {
+        if (tieHandle.hasUndefinedSelf()) {
+            return tieHandle.printToPreviousHandle(args);
+        }
         return tieHandle.tieCall("PRINT", args);
     }
 
@@ -83,6 +87,9 @@ public class TieHandle extends RuntimeIO {
      * Prints formatted data to a tied filehandle (delegates to PRINTF).
      */
     public static RuntimeScalar tiedPrintf(TieHandle tieHandle, RuntimeList args) {
+        if (tieHandle.hasUndefinedSelf()) {
+            return tieHandle.printfToPreviousHandle(args);
+        }
         return tieHandle.tieCall("PRINTF", args);
     }
 
@@ -144,6 +151,14 @@ public class TieHandle extends RuntimeIO {
      * Closes a tied filehandle (delegates to CLOSE).
      */
     public static RuntimeScalar tiedClose(TieHandle tieHandle) {
+        if (tieHandle.hasUndefinedSelf()) {
+            RuntimeIO previous = tieHandle.previousDefinedHandle();
+            if (previous == null) {
+                return RuntimeScalarCache.scalarUndef;
+            }
+            return previous instanceof TieHandle previousTie
+                    ? tiedClose(previousTie) : previous.close();
+        }
         return tieHandle.tieCall("CLOSE");
     }
 
@@ -183,6 +198,20 @@ public class TieHandle extends RuntimeIO {
     @Override
     public RuntimeScalar write(String data) {
         RuntimeIO.setLastWrittenHandle(this);
+        // TIEHANDLE is allowed to return undef. In that case Perl keeps the
+        // handle's underlying IO active, so writes pass through to the handle
+        // that was present before tie(). Tie::Restore relies on this when it
+        // restores an originally untied handle.
+        if (self == null || self.type == RuntimeScalarType.UNDEF) {
+            RuntimeIO previous = previousDefinedHandle();
+            if (previous == null) {
+                return RuntimeScalarCache.scalarUndef;
+            }
+            if (previous instanceof TieHandle previousTie) {
+                return tiedPrint(previousTie, new RuntimeList(new RuntimeScalar(data)));
+            }
+            return previous.write(data);
+        }
         RuntimeList args = new RuntimeList(new RuntimeScalar(data));
         return tiedPrint(this, args);
     }
@@ -208,6 +237,70 @@ public class TieHandle extends RuntimeIO {
         );
         TiedVariableBase.rejectEscapedControlFlow(result);
         return result.getFirst();
+    }
+
+    private boolean hasUndefinedSelf() {
+        return self == null || self.type == RuntimeScalarType.UNDEF;
+    }
+
+    private RuntimeScalar printToPreviousHandle(RuntimeList args) {
+        RuntimeIO previous = previousDefinedHandle();
+        if (previous == null) {
+            return RuntimeScalarCache.scalarUndef;
+        }
+        if (previous instanceof TieHandle previousTie) {
+            return tiedPrint(previousTie, args);
+        }
+        StringBuilder output = new StringBuilder();
+        boolean first = true;
+        for (RuntimeBase element : args.elements) {
+            if (!first) {
+                output.append(OutputFieldSeparator.getInternalOFS());
+            }
+            output.append(element.toString());
+            first = false;
+        }
+        output.append(OutputRecordSeparator.getInternalORS());
+        return previous.write(output.toString());
+    }
+
+    private RuntimeScalar printfToPreviousHandle(RuntimeList args) {
+        RuntimeIO previous = previousDefinedHandle();
+        if (previous == null) {
+            return RuntimeScalarCache.scalarUndef;
+        }
+        if (previous instanceof TieHandle previousTie) {
+            return tiedPrintf(previousTie, args);
+        }
+        RuntimeList flatArgs = new RuntimeList();
+        for (RuntimeBase element : args.elements) {
+            if (element instanceof RuntimeArray array) {
+                for (int index = 0; index < array.size(); index++) {
+                    flatArgs.add(array.get(index));
+                }
+            } else {
+                flatArgs.add(element);
+            }
+        }
+        if (flatArgs.elements.isEmpty()) {
+            return RuntimeScalarCache.scalarTrue;
+        }
+        RuntimeScalar format = (RuntimeScalar) flatArgs.elements.removeFirst();
+        return previous.write(SprintfOperator.sprintf(format, flatArgs).toString());
+    }
+
+    private RuntimeIO previousDefinedHandle() {
+        RuntimeIO previous = previousValue;
+        java.util.Set<RuntimeIO> seen = java.util.Collections.newSetFromMap(
+                new java.util.IdentityHashMap<>());
+        seen.add(this);
+        while (previous instanceof TieHandle previousTie && previousTie.hasUndefinedSelf()) {
+            if (!seen.add(previous)) {
+                return null;
+            }
+            previous = previousTie.previousValue;
+        }
+        return previous;
     }
 
     /**

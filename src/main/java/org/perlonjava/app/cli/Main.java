@@ -234,7 +234,9 @@ public class Main {
             // particular, `close STDERR; die` must remain silent; writing to
             // Java's process stderr bypasses Perl-level handle state.
             RuntimeIO stderr = GlobalVariable.getGlobalIO("main::STDERR").getRuntimeIO();
-            WarnDie.writeFatalDiagnostic(stderr, errorMessage);
+            if (!PerlRuntime.current().executionState().fatalDiagnosticWritten) {
+                WarnDie.writeFatalDiagnostic(stderr, errorMessage);
+            }
             RuntimeRegex.emitPendingFailedCompileDebugFreeTraces();
 
             // Match system perl behavior for unhandled die:

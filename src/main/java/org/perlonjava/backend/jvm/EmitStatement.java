@@ -871,6 +871,13 @@ public class EmitStatement {
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("DO-WHILE start");
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
+        // Perl's do-while body and trailing condition share match variables
+        // with the surrounding scope. Unlike a while/for loop, a successful
+        // match in the condition remains visible after the loop.
+        if (node.body != null) {
+            node.body.setAnnotation("skipRegexSaveRestore", true);
+        }
+
         // Enter a new scope in the symbol table
         int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
 
@@ -879,19 +886,6 @@ public class EmitStatement {
         Label continueLabel = new Label();
         Label endLabel = new Label();
         Label redoLabel = new Label();
-
-        int regexStateLocal = -1;
-        if (RegexUsageDetector.containsRegexOperation(node)) {
-            regexStateLocal = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RegexState");
-            mv.visitInsn(Opcodes.DUP);
-            mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
-                    "org/perlonjava/runtime/runtimetypes/RegexState", "<init>", "()V", false);
-            mv.visitVarInsn(Opcodes.ASTORE, regexStateLocal);
-            if (node.body != null) {
-                node.body.setAnnotation("skipRegexSaveRestore", true);
-            }
-        }
 
         // Register loop labels as pseudo-loop (isTrueLoop = false)
         // This allows us to throw proper compile errors for last/next/redo in do-while
@@ -902,7 +896,6 @@ public class EmitStatement {
                 endLabel,
                 RuntimeContextType.VOID,
                 false); // isTrueLoop = false (do-while is not a true loop)
-        emitterVisitor.ctx.javaClassInfo.getInnermostLoopLabels().regexStateRestoreLocal = regexStateLocal;
 
         // Start of the loop body
         mv.visitLabel(redoLabel);
@@ -923,7 +916,6 @@ public class EmitStatement {
                 endLabel,
                 RuntimeContextType.VOID,
                 false);
-        loopLabels.regexStateRestoreLocal = regexStateLocal;
         emitRegistryCheck(mv, loopLabels, redoLabel, continueLabel, endLabel);
 
         // Continue label (for next iteration)
@@ -949,12 +941,6 @@ public class EmitStatement {
 
         // End of loop
         mv.visitLabel(endLabel);
-
-        if (regexStateLocal >= 0) {
-            mv.visitVarInsn(Opcodes.ALOAD, regexStateLocal);
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/runtimetypes/RegexState", "restore", "()V", false);
-        }
 
         // Pop loop labels
         emitterVisitor.ctx.javaClassInfo.popLoopLabels();
