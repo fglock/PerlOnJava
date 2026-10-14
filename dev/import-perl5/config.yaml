@@ -728,6 +728,7 @@ imports:
   # Phase 2: IO::Socket - OO socket interface
   - source: perl5/dist/IO/lib/IO/Socket.pm
     target: src/main/perl/lib/IO/Socket.pm
+    patch: IO-Socket.pm.patch
 
   - source: perl5/dist/IO/lib/IO/Socket
     target: src/main/perl/lib/IO/Socket
@@ -740,6 +741,7 @@ imports:
   # IO::Select - OO interface to select() (required by TAP::Parser::Multiplexer)
   - source: perl5/dist/IO/lib/IO/Select.pm
     target: src/main/perl/lib/IO/Select.pm
+    patch: IO-Select.pm.patch
 
   # Phase 2: IO::Zlib - Compressed I/O (for Archive::Tar)
   - source: perl5/cpan/IO-Zlib/Zlib.pm

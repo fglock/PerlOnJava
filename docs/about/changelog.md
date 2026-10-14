@@ -6,6 +6,14 @@ priorities and future plans.
 
 ## Work in progress
 
+- Recover malformed HTML through Jsoup in `XML::LibXML`, decode HTML attribute entities by default, report `HTML::Parser` source positions, and allow nested `AUTOLOAD` tail calls from sort comparators (#1416, #1457, #1634).
+- Preserve anonymous caller identities after glob installation and report the final initializer line for multiline imported DSL declarations (#1548, #1620).
+- Fix DBI `do()` overrides, DBD::Sponge initialization, and SQLite generated ID lookup.
+- Parse escaped backslashes in transliteration lists once, inherit strict-vars
+  settings in string eval, and ignore trailing shebang comments (#1783, #1454,
+  #1524).
+- Refresh bundled Perl 5 core modules and documentation, retaining PerlOnJava
+  compatibility for CPAN enumeration and process pipe selection.
 - Stage nested Module::Build modules and resolve compressed archive filenames
   against Perl's working directory so release plugins can consume the archive
   (#1432, #1514).
@@ -28,17 +36,20 @@ priorities and future plans.
   interpreter (#1646).
 
 - Preserve tied scalar lvalues returned by `AUTOLOAD` during increment and compound assignment, honor fatal recursion warnings on the interpreter, and accept legacy whitespace-padded module versions and numeric overloads used by Valiemon (#1207, #1222, #1419).
+- Return Perl-compatible `undef` and errno on failed `truncate`, and cover append-mode scalar handles, bareword pipe methods, and scalar-reference output from filehandle input (#1415, #1314, #1216).
 - Preserve all arguments when `warn` forwards an array in list context.
 - Preserve Unicode text fetched from SQLite in Unicode string modes, normalize
   common `Encode` canonical charset names to Perl's spellings, and cover Unicode
   `tr///` deletion of U+00B4.
-- Keep named CODE entries visible during stash traversal, invalidate method lookup after CODE-slot deletion, and preserve whole-glob alias identity across localized replacements (#1700, #1610, #1630).
+- Keep named CODE entries visible during stash traversal, invalidate method lookup after CODE-slot deletion, preserve whole-glob and saved IO alias identity across repeated localized replacements, and resolve forward CODE aliases after later definitions (#1700, #1610, #1630).
+- Snapshot package stash glob slots before clearing them during stash-copy assignment, preserving methods for later dispatch; cover IO::File subclass `can` lookup and named-sub stash traversal (#1523, #1253, #1700).
 - Match Perl's read-only default for `sysopen` creation without access flags,
   reject `truncate` on scalar-backed handles without changing the scalar, and
   cover UTF-8 byte offsets after seeks (#1431, #1520).
 
 - Allow `%ARGV` under `strict vars`, matching system Perl (#1770).
 - Parse indirect-object method calls with whitespace-separated arguments, compact arithmetic after `$$`, and recursive block-prototype calls from nested closures (#1429, #1329, #1763).
+- Resolve imported `length` subroutines ahead of the CORE builtin while keeping explicit `CORE::length` calls unchanged (#1239).
 - Preserve fieldhash values and quoted/deferred subroutine metadata across Perl threads (#1413, #1420).
 - Preserve blessed hash class tags through YAML::Any and localize dynamically named scalars without assignment on the interpreter (#1713).
 - Keep regression coverage for JSONY null callback values (#1228).
@@ -68,7 +79,14 @@ priorities and future plans.
 - Preserve the caller's `DATA` handle when a compile-time required module ends with `__END__` (#1244).
 - Bound captured subprocess output while continuing to drain child streams, and report output-reader errors (#1723).
 - Match Perl's dividend-sign remainder for `%` under `use integer`.
+- Flatten very deep parenthesized numeric lists during parsing to reduce stack
+  and AST memory use, and preserve inherited `AUTOLOAD` dispatch for lexical
+  forward stubs.
+- Preserve `$!` when pathname `chmod` fails, report layered socket readiness
+  from its underlying handle, and cover deletion of cookies with past
+  `Expires` values (#1639, #1636, #1614).
 - Preserve default prototype warnings when compile-time code locally sets `$^W` to false.
+- Report the canonical root-stash glob name and expose `\R` start-class and skip optimization metadata.
 - Keep eval-created regex callback captures alive while their `qr//` values remain in scope.
 - Avoid false experimental `@_` warnings for ordinary named calls inside signatured subroutines, and classify bare `@_` in a line sequence without failing compilation (#1422).
 - Respect lexical `syntax::prototype` warning controls for prototype mismatch

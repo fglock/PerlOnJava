@@ -261,7 +261,7 @@ public class ListOperators {
                     // execution, while the runtime-state marker also covers
                     // tail calls made by subroutines invoked from sort.
                     try {
-                        RuntimeCode.enterSortComparator();
+                        RuntimeCode.enterSortComparator(finalComparator);
                         RuntimeCode.enterSortComparatorInvocation();
                         RuntimeList result;
                         try {

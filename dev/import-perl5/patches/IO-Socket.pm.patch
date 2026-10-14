@@ -1,0 +1,12 @@
+--- perl5/dist/IO/lib/IO/Socket.pm
++++ src/main/perl/lib/IO/Socket.pm
+@@ -175,7 +175,8 @@
+ sub blocking {
+     my $sock = shift;
+
+     return $sock->SUPER::blocking(@_)
+-        if $^O ne 'MSWin32' && $^O ne 'VMS';
++        if ($^O ne 'MSWin32' && $^O ne 'VMS')
++            || defined &Internals::jperl_refstate_str;
+
+     # Windows handles blocking differently

@@ -69,15 +69,24 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /** Nesting of comparator invocations currently owned by sort(). */
     private static final ThreadLocal<Integer> sortComparatorDepth = ThreadLocal.withInitial(() -> 0);
+    private record SortComparatorFrame(RuntimeCode comparator, int entryDepth) {}
+    private static final ThreadLocal<ArrayDeque<SortComparatorFrame>> sortComparatorFrames =
+            ThreadLocal.withInitial(ArrayDeque::new);
 
-    public static void enterSortComparator() {
+    public static void enterSortComparator(RuntimeScalar comparator) {
         sortComparatorDepth.set(sortComparatorDepth.get() + 1);
+        RuntimeCode comparatorCode = comparator != null && comparator.value instanceof RuntimeCode code
+                ? code : null;
+        sortComparatorFrames.get().push(new SortComparatorFrame(comparatorCode, activeCodeStack().size()));
     }
 
     public static void leaveSortComparator() {
         int depth = sortComparatorDepth.get() - 1;
         if (depth <= 0) sortComparatorDepth.remove();
         else sortComparatorDepth.set(depth);
+        ArrayDeque<SortComparatorFrame> frames = sortComparatorFrames.get();
+        if (!frames.isEmpty()) frames.pop();
+        if (frames.isEmpty()) sortComparatorFrames.remove();
     }
 
     public static boolean isInSortComparator() {
@@ -86,7 +95,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public static boolean isCurrentSortComparatorBlock() {
         RuntimeCode active = getActiveCodeAt(0);
-        return active != null && active.isSortComparator;
+        if (active != null && active.isSortComparator) return true;
+        ArrayDeque<SortComparatorFrame> frames = sortComparatorFrames.get();
+        if (!frames.isEmpty()) {
+            SortComparatorFrame frame = frames.peek();
+            // A nested named subroutine (including AUTOLOAD) may tail-call
+            // while the comparator is on the stack. Reject only a tail call
+            // made by the comparator frame itself, not one from that helper.
+            return active == frame.comparator
+                    || activeCodeStack().size() <= frame.entryDepth + 1;
+        }
+        return Boolean.TRUE.equals(
+                PerlRuntime.current().executionState().activeJvmSortComparators.peek());
     }
     private static final String INDIRECT_BLOCK_METHOD_PREFIX = "\uFDD0indirect-block:";
     private static final String FIRST_ARGUMENT_METHOD_PREFIX = "\uFDD1first-argument:";
@@ -935,32 +955,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return new PerlCompilerException("Can't goto subroutine outside a subroutine");
     }
 
-    /** Reject a tail call that would cross an active sort pseudo-block. */
+    /** Reject a tail call written directly in an active sort pseudo-block. */
     public static void checkSortTailCall() {
-        if (shouldRejectSortTailCall()) {
+        if (isCurrentSortComparatorBlock()) {
             throw sortTailCallError();
         }
-    }
-
-    /**
-     * A sort callback is a pseudo-block, but a subroutine called by that
-     * callback has its own frame and may tailcall normally. Reject only when
-     * the active frame is the callback itself (or the direct sort block).
-     */
-    public static boolean shouldRejectSortTailCall() {
-        if (!hasActiveSortComparator()) return false;
-        RuntimeCode active = getActiveCodeAt(0);
-        if (active != null && active.isSortComparator) return true;
-        ExecutionRuntimeState state = PerlRuntime.current().executionState();
-        Integer entryDepth = state.sortComparatorFrameDepths.peek();
-        if (entryDepth == null) {
-            return Boolean.TRUE.equals(state.activeJvmSortComparators.peek());
-        }
-        int currentDepth = state.activeCodeStack.size() + state.activeJvmSortComparators.size();
-        // RuntimeCode.apply adds one dispatch frame around a comparator CV;
-        // that frame is still part of the sort callback. A nested Perl helper
-        // adds the next frame beyond it.
-        return currentDepth <= entryDepth + 2;
     }
 
     /** Enter/leave the dynamic extent in which sort invokes its comparator. */
@@ -3022,14 +3021,35 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         RuntimeScalar resolved = GlobalVariable.globalCodeRefs.get(code.packageName + "::" + code.subName);
-        if (resolved == null
-                || resolved.type != RuntimeScalarType.CODE
-                || !(resolved.value instanceof RuntimeCode resolvedCode)
-                || resolvedCode == code
-                || !resolvedCode.defined()) {
-            return null;
+        if (resolved != null
+                && resolved.type == RuntimeScalarType.CODE
+                && resolved.value instanceof RuntimeCode resolvedCode
+                && resolvedCode != code
+                && resolvedCode.defined()) {
+            return resolved;
         }
-        return resolved;
+
+        // The interpreter can retain a second placeholder CV for the named
+        // destination of a forward glob alias. If the source slot has since
+        // been defined, resolve through the explicitly marked alias group.
+        if (code.requiresForwardGlobAliasGroup) {
+            for (RuntimeCode alias : code.forwardGlobAliases) {
+                if (alias == code || alias.packageName == null
+                        || alias.subName == null || alias.subName.isEmpty()) {
+                    continue;
+                }
+                RuntimeScalar aliasSlot = GlobalVariable.globalCodeRefs.get(
+                        alias.packageName + "::" + alias.subName);
+                if (aliasSlot != null
+                        && aliasSlot.type == RuntimeScalarType.CODE
+                        && aliasSlot.value instanceof RuntimeCode aliasCode
+                        && aliasCode != code
+                        && aliasCode.defined()) {
+                    return aliasSlot;
+                }
+            }
+        }
+        return null;
     }
 
     /**
@@ -6221,8 +6241,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // refs in @kept while the @DB::args slots remain aliases. Required
                 // for DBIC's Devel::StackTrace-resurrection test (txn_scope_guard
                 // test 18).
+                RuntimeArray dbArgs = calledFromDB
+                        ? GlobalVariable.getGlobalArray("DB::args") : null;
                 if (calledFromDB) {
-                    RuntimeArray dbArgs = GlobalVariable.getGlobalArray("DB::args");
                     // Debugger arguments are borrowed slots, not an ordinary
                     // array assignment. Perl rejects a tie rather than calling
                     // its CLEAR/STORE methods while inspecting the stack.
@@ -6275,6 +6296,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Fall back to the name-based heuristic for frames outside our tracking
                 // (e.g., top-level code, eval frames).
                 Boolean hasArgsFromStack = getHasArgsAt(trackedOriginalFrame);
+                if (calledFromDB && (hasArgsFromStack == null || !hasArgsFromStack)
+                        && previousFrameSubName != null
+                        && previousFrameSubName.endsWith("::__ANON__")
+                        && dbArgs != null && !dbArgs.elements.isEmpty()) {
+                    // Java stack formatting can represent a glob-installed
+                    // anonymous callback twice: once as its defining frame and
+                    // again as the caller frame. @DB::args is still captured
+                    // from that callback, but the second formatted frame is
+                    // one slot beyond the callback's hasargs entry.
+                    hasArgsFromStack = true;
+                }
                 if (WarnDie.isInsideUnhandledDieHandler() && syntheticOwnSubFramesBefore > 0) {
                     Boolean activeHasArgs = getHasArgsAt(trackedActiveCodeFrame);
                     if (activeHasArgs != null) {
@@ -6500,6 +6532,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private static String callerSubNameForCode(RuntimeCode code) {
+        // Installing an anonymous CV in a named glob does not turn it into a
+        // named subroutine in Perl.  Keep the stash slot name available for
+        // method dispatch, but expose the anonymous identity through caller().
+        if (code != null && code.installedViaAnonGlobAssign
+                && !code.explicitlyRenamed && !code.explicitlyMaterializedGlob) {
+            return normalizeCallerPackage(code.packageName) + "::__ANON__";
+        }
         if (code == null || code.subName == null || code.subName.isEmpty()
                 || code.subName.startsWith("(")) {
             if (code != null) {
@@ -7386,7 +7425,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Cast the value to RuntimeCode and call apply()
                 RuntimeList result = code.apply(argsForCall, callContext);
                 if (code.isSortComparator && result instanceof RuntimeControlFlowList flow) {
-                    if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
+                    if (flow.getControlFlowType() == ControlFlowType.TAILCALL
+                            && flow.marker.tailCallFromSortComparator) {
                         throw sortTailCallError();
                     }
                     String message = flow.getControlFlowType() == ControlFlowType.GOTO
@@ -8305,7 +8345,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             }
             try {
-                if (hasActiveSortComparator()) {
+                if (isCurrentSortComparatorBlock()
+                        && cfList.marker.tailCallFromSortComparator) {
                     throw sortTailCallError();
                 }
                 if (cfList.marker.evalScope != null) {

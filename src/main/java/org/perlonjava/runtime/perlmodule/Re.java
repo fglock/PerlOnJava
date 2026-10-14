@@ -353,6 +353,18 @@ public class Re extends PerlModuleBase {
         if (info.startClass() != null) {
             result.put("stclass", new RuntimeScalar(info.startClass()));
         }
+        // Joni parses Perl's \R as an atomic CRLF-or-line-break expression,
+        // which does not leave a character map in its generic optimization
+        // summary. Perl's optimizer reports this leading class explicitly.
+        // Preserve that Perl-visible fact for a literal leading \R, including
+        // the repeated form where Joni can skip to the next line break.
+        String sourcePattern = regex.sourcePattern();
+        if (sourcePattern.startsWith("\\R")) {
+            result.put("stclass", new RuntimeScalar("LNBREAK"));
+            if (sourcePattern.startsWith("\\R+") && info.alternativeExact() != null) {
+                result.put("skip", perlBoolean(true));
+            }
+        }
 
         String exact = info.exact();
         if (exact == null) {

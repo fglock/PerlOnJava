@@ -1242,51 +1242,18 @@ public class StringParser {
         rejectNamedSequencesInTransliteration(searchList);
         rejectNamedSequencesInTransliteration(replacementList);
 
-        Node searchNode;
-        Node replacementNode;
+        // Run the quoted-string escape validator so malformed escapes keep
+        // their parser diagnostic, but discard its decoded value. The runtime
+        // must receive the raw list and perform the one actual expansion.
+        validateTransliterationEscapes(ctx, rawStr, searchList,
+                rawStr.startDelim, rawStr.endDelim);
+        validateTransliterationEscapes(ctx, rawStr, replacementList,
+                rawStr.secondBufferStartDelim, rawStr.secondBufferEndDelim);
 
-        // If single quote delimiter, only process \\ escapes
-        if (rawStr.startDelim == '\'') {
-            // For single quotes, only remove \ from pairs of \\
-            searchList = searchList.replace("\\\\", "\\");
-            searchNode = new StringNode(searchList, rawStr.index);
-        } else if (containsEscapedDash(searchList)) {
-            // Preserve escapes that produce a dash until RuntimeTransliterate
-            // expands the list; decoding one here would make it a range
-            // operator. This includes hexadecimal escapes such as \x2d, used
-            // by byte-oriented translation tables.
-            searchNode = new StringNode(searchList, rawStr.index);
-        } else {
-            searchList = protectRawUnicodeCharacters(searchList);
-            ParsedString searchParsed = new ParsedString(
-                    rawStr.index,
-                    rawStr.next,
-                    new ArrayList<>(List.of(searchList)),
-                    rawStr.startDelim,
-                    rawStr.endDelim,
-                    ' ', ' '
-            );
-            searchNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, searchParsed, true, false, false);
-        }
-
-        // Same logic for replacement list
-        if (rawStr.secondBufferStartDelim == '\'') {
-            replacementList = replacementList.replace("\\\\", "\\");
-            replacementNode = new StringNode(replacementList, rawStr.index);
-        } else if (containsEscapedDash(replacementList)) {
-            replacementNode = new StringNode(replacementList, rawStr.index);
-        } else {
-            replacementList = protectRawUnicodeCharacters(replacementList);
-            ParsedString replaceParsed = new ParsedString(
-                    rawStr.index,
-                    rawStr.next,
-                    new ArrayList<>(List.of(replacementList)),
-                    rawStr.secondBufferStartDelim,
-                    rawStr.secondBufferEndDelim,
-                    ' ', ' '
-            );
-            replacementNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, replaceParsed, true, false, false);
-        }
+        // Keep the lists raw here. RuntimeTransliterate expands their escapes;
+        // decoding them first would process a backslash twice.
+        Node searchNode = new StringNode(searchList, rawStr.index);
+        Node replacementNode = new StringNode(replacementList, rawStr.index);
 
         Node modifierNode = new StringNode(modifiers, rawStr.index);
 
@@ -1299,58 +1266,17 @@ public class StringParser {
         return new OperatorNode(operator, list, rawStr.index);
     }
 
-    /** Returns true when an escape in a transliteration list denotes a dash. */
-    private static boolean containsEscapedDash(String list) {
-        for (int i = 0; i + 1 < list.length(); i++) {
-            if (list.charAt(i) != '\\') continue;
-            char escape = list.charAt(++i);
-            if (escape == '-') return true;
-            if (escape == 'x') {
-                int start = i + 1;
-                int end;
-                if (start < list.length() && list.charAt(start) == '{') {
-                    end = list.indexOf('}', start + 1);
-                    if (end < 0) continue;
-                    start++;
-                } else {
-                    end = start;
-                    while (end < list.length() && end - start < 2
-                            && Character.digit(list.charAt(end), 16) >= 0) end++;
-                    if (end == start) continue;
-                    end--;
-                }
-                if (end >= start) {
-                    try {
-                        if (Integer.parseInt(list.substring(start, end + 1), 16) == '-') return true;
-                    } catch (NumberFormatException ignored) {
-                        // Let the normal string parser report malformed escapes.
-                    }
-                }
-                i = end;
-            } else if (escape >= '0' && escape <= '7') {
-                int start = i;
-                int end = i + 1;
-                while (end < list.length() && end - start < 3
-                        && list.charAt(end) >= '0' && list.charAt(end) <= '7') end++;
-                try {
-                    if (Integer.parseInt(list.substring(start, end), 8) == '-') return true;
-                } catch (NumberFormatException ignored) {
-                    // Let the normal string parser report malformed escapes.
-                }
-                i = end - 1;
-            } else if (escape == 'N' && i + 1 < list.length() && list.charAt(i + 1) == '{') {
-                int end = list.indexOf('}', i + 2);
-                if (end < 0) continue;
-                try {
-                    if (org.perlonjava.runtime.regex.UnicodeResolver
-                            .getCodePointFromName(list.substring(i + 2, end).trim()) == '-') return true;
-                } catch (IllegalArgumentException ignored) {
-                    // Let transliteration parsing report the invalid character name.
-                }
-                i = end;
-            }
-        }
-        return false;
+    private static void validateTransliterationEscapes(EmitterContext ctx, ParsedString rawStr,
+            String list, char startDelimiter, char endDelimiter) {
+        String protectedList = protectRawUnicodeCharacters(list);
+        ParsedString validationInput = new ParsedString(
+                rawStr.index,
+                rawStr.next,
+                new ArrayList<>(List.of(protectedList)),
+                startDelimiter,
+                endDelimiter,
+                ' ', ' ');
+        StringDoubleQuoted.parseDoubleQuotedString(ctx, validationInput, true, false, false);
     }
 
     /** Perl rejects Unicode named sequences in either side of tr/// before

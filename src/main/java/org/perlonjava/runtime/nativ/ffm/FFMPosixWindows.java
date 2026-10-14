@@ -9,6 +9,7 @@ import java.lang.foreign.SymbolLookup;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.DosFileAttributes;
@@ -820,6 +821,7 @@ public class FFMPosixWindows implements FFMPosixInterface {
      * Map Java exceptions to errno values.
      */
     private int getErrnoForException(Exception e) {
+        if (e instanceof NoSuchFileException) return 2; // ENOENT
         String msg = e.getMessage();
         if (msg == null) return 5; // EIO
         msg = msg.toLowerCase();

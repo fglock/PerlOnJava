@@ -115,10 +115,8 @@ public class RuntimeControlFlowList extends RuntimeList {
     public RuntimeControlFlowList(RuntimeScalar codeRef, RuntimeArray args, String fileName, int lineNumber,
                                   String evalScope, String namedTarget) {
         super();
-        if (RuntimeCode.shouldRejectSortTailCall()) {
-            throw new PerlCompilerException(RuntimeCode.isCurrentSortComparatorBlock()
-                    ? "Can't goto subroutine outside a subroutine"
-                    : "Can't goto subroutine from a sort sub");
+        if (RuntimeCode.isCurrentSortComparatorBlock()) {
+            throw RuntimeCode.sortTailCallError();
         }
         this.marker = new ControlFlowMarker(retainTailCallCodeRef(codeRef), args, fileName, lineNumber,
                 namedTarget, evalScope);

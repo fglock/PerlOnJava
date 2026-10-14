@@ -20,6 +20,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
 import java.util.Arrays;
 import java.util.ArrayList;
@@ -1486,6 +1487,25 @@ public class EmitSubroutine {
     }
 
     private static int callerLineCallSiteIndex(BinaryOperatorNode node, int statementTokenIndex) {
+        // List prototypes consume the complete argument list as one operation.
+        // When the final argument is an anonymous declaration callback, Perl's
+        // caller metadata records that callback's line (as used by DSLs such as
+        // Resource::Silo), rather than the start of the enclosing statement.
+        if (node.left instanceof OperatorNode operatorNode
+                && operatorNode.operator.equals("&")
+                && operatorNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef
+                && codeRef.type == RuntimeScalarType.CODE
+                && codeRef.value instanceof RuntimeCode code
+                && ("@".equals(code.prototype)
+                        || code.installedViaAnonGlobAssign && !code.explicitlyRenamed)
+                && node.right != null) {
+            ListNode args = ListNode.makeList(node.right);
+            if (!args.elements.isEmpty()
+                    && args.elements.getLast() instanceof SubroutineNode anonymous
+                    && anonymous.name == null) {
+                return anonymous.getIndex();
+            }
+        }
         // Perl's COP records the start of the call statement. An anonymous
         // subroutine argument must not move caller() to the argument's line.
         return statementTokenIndex > 0 ? statementTokenIndex : expressionStartIndex(node);
