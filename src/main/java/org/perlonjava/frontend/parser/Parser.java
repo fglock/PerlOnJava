@@ -263,6 +263,9 @@ public class Parser {
     public boolean insideBlockOperatorArgument = false;
     // List to store ADJUST blocks for the current class
     public List<Node> classAdjustBlocks = new ArrayList<>();
+
+    // Object::Pad BUILD blocks run after generated field initialization.
+    public List<Node> classBuildBlocks = new ArrayList<>();
     // Fields declared after a unit-class declaration (`class Name;`).  Unlike
     // a braced class, those declarations arrive as subsequent statements.
     public final Map<String, List<OperatorNode>> unitClassFields = new LinkedHashMap<>();
