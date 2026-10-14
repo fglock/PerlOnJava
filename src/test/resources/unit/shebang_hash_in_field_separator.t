@@ -34,7 +34,7 @@ close $fh or die "close $script: $!";
 my $output = qx{"$^X" "$script" 2>&1};
 my $status = $? >> 8;
 is($status, 0, 'alternate -F delimiters containing # run successfully');
-like($output, qr/ok 4 - use of alternate delimiter \(apostrophe\) in -F\n\z/,
+like($output, qr/ok 4 - use of alternate delimiter \(apostrophe\) in -F\r?\n\z/,
     'the shebang split pattern is not truncated at #');
 
 unlink $script;
