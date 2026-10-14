@@ -109,6 +109,8 @@ public final class ExecutionRuntimeState {
     public boolean insideUnhandledDieHandler;
     /** True while a Perl $SIG{__DIE__} callback is executing. */
     public boolean insideDieHandler;
+    /** True when an uncaught die diagnostic was delivered before END blocks. */
+    public boolean fatalDiagnosticWritten;
     /** __WARN__ snapshot retained until an uncaught die reaches the ithread boundary. */
     public RuntimeScalar pendingThreadWarningHandler;
     ControlFlowMarker controlFlowMarker;

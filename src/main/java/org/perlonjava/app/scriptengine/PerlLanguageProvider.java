@@ -701,6 +701,9 @@ public class PerlLanguageProvider {
     }
 
     private static RuntimeList executeCodeImpl(RuntimeCode runtimeCode, Node ast, EmitterContext ctx, boolean isMainProgram, int callerContext) throws Exception {
+        if (isMainProgram) {
+            PerlRuntime.current().executionState().fatalDiagnosticWritten = false;
+        }
         try {
             runUnitcheckBlocks(ctx.unitcheckBlocks);
             if (isMainProgram) {
@@ -882,6 +885,15 @@ public class PerlLanguageProvider {
             result = e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
         } catch (Throwable t) {
             if (isMainProgram) {
+                // Perl sets $? to 255 before running END blocks after an
+                // uncaught die. Libraries such as CGI::Cache inspect this
+                // status there to avoid caching output from a failed script.
+                if (t instanceof PerlDieException) {
+                    GlobalVariable.getGlobalVariable("main::?").set(255);
+                    RuntimeIO stderr = GlobalVariable.getGlobalIO("main::STDERR").getRuntimeIO();
+                    WarnDie.writeFatalDiagnostic(stderr, ErrorMessageUtil.stringifyException(t));
+                    PerlRuntime.current().executionState().fatalDiagnosticWritten = true;
+                }
                 MortalList.flush();  // Flush file-scoped lexical cleanup before END
                 MortalList.flushDeferredCapturesBeforeEnd();
                 CallerStack.push("main", ctx.compilerOptions.fileName, 0);

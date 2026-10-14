@@ -8552,13 +8552,18 @@ public class BytecodeCompiler implements Visitor {
         // Keep one snapshot for the whole loop. A redo re-enters the body
         // directly and bypasses the body's normal teardown, so a per-body
         // snapshot would otherwise accumulate and leak its match variables.
-        if (node.useNewScope && RegexUsageDetector.containsRegexOperation(node)) {
+        if (node.useNewScope && !node.isDoWhile
+                && RegexUsageDetector.containsRegexOperation(node)) {
             loopRegexSaveReg = allocateScopeStateRegister();
             emit(Opcodes.SAVE_REGEX_STATE);
             emitReg(loopRegexSaveReg);
             if (node.body != null) {
                 node.body.setAnnotation("skipRegexSaveRestore", true);
             }
+        } else if (node.isDoWhile && node.body != null) {
+            // In Perl, do-while bodies and their trailing conditions do not
+            // localize match variables away from the surrounding scope.
+            node.body.setAnnotation("skipRegexSaveRestore", true);
         }
 
         // Step 1: Execute initialization (for C-style loops only)
