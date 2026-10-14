@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Allow additional quiet time for `local::lib` CPAN tests that repeatedly launch PerlOnJava while checking activation under a restricted `PATH` (#1787).
 - Recover malformed HTML through Jsoup in `XML::LibXML`, decode HTML attribute entities by default, report `HTML::Parser` source positions, and allow nested `AUTOLOAD` tail calls from sort comparators (#1416, #1457, #1634).
 - Preserve anonymous caller identities after glob installation and report the final initializer line for multiline imported DSL declarations (#1548, #1620).
 - Fix DBI `do()` overrides, DBD::Sponge initialization, and SQLite generated ID lookup.

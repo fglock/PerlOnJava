@@ -349,6 +349,7 @@ is(pass_percentage(0, 0), '0.0', 'empty pass/fail denominator is stable');
 my %slow = (
     'Excel::Writer::XLSX' => 7200,
     'Image::ExifTool' => 3600,
+    'local::lib' => 300,
 );
 is_deeply(
     [effective_timeout_limits('Excel::Writer::XLSX', 120, 600, 300, \%slow)],
@@ -369,6 +370,11 @@ is_deeply(
     [effective_timeout_limits('Image::ExifTool', 120, 600, 0, \%slow)],
     [3600, 0],
     'disabled hard cap remains disabled for known-slow targets',
+);
+is_deeply(
+    [effective_timeout_limits('local::lib', 120, 600, 300, \%slow)],
+    [300, 900],
+    'local::lib has enough quiet time for its nested-launch shell checks',
 );
 is_deeply(
     [effective_oracle_timeout_limits(600, 300)],

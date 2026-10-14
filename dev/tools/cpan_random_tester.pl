@@ -88,6 +88,10 @@ my %MODULE_TIMEOUT_SECONDS = (
     'DBIx::Class'        => 3600,
     'Excel::Writer::XLSX' => 7200,
     'Image::ExifTool'    => 3600,
+    # local::lib's shell.t launches PerlOnJava repeatedly while testing
+    # activation under PATH=/; it passes, but exceeds the normal no-output
+    # window because each nested launcher starts a JVM.
+    'local::lib'         => 300,
 );
 
 # CPAN package index
