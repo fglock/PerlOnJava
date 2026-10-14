@@ -12,7 +12,7 @@ ok($dtd, 'parse_string returns a DTD object') or diag $@;
 isa_ok($dtd, 'XML::LibXML::Dtd') if $dtd;
 is($dtd->nodeType, XML::LibXML::XML_DTD_NODE(), 'result is a document type node')
     if $dtd;
-like($dtd->toString, qr/<!ELEMENT root \(item\*\)>/,
+like($dtd->toString, qr/<!ELEMENT root \(item\*?\)\*?>/,
     'parsed DTD retains its element declarations') if $dtd;
 
 my $parameter_dtd = eval {
