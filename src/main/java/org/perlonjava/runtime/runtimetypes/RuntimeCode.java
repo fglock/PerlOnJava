@@ -4103,6 +4103,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 runUnitcheckBlocks(evalCtx.unitcheckBlocks);
                 compiledSuccessfully = true;
             } catch (Throwable e) {
+                // A BEGIN block in an eval STRING can call exit() while the
+                // string is being compiled (for example, Test::More's
+                // dynamically loaded skip_all plan).  Compilation failures
+                // belong in $@, but process exit must cross the eval boundary.
+                Throwable current = e;
+                while (current != null) {
+                    if (current instanceof PerlExitException exit) {
+                        throw exit;
+                    }
+                    Throwable next = current.getCause();
+                    if (next == current) break;
+                    current = next;
+                }
                 // Compilation error in eval-string
 
                 // Set the global error variable "$@"
@@ -4113,15 +4126,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // converting it through Throwable.getMessage(), which uses
                 // the Java object's identity string.
                 PerlDieException die = null;
-                Throwable current = e;
-                while (current != null) {
-                    if (current instanceof PerlDieException pde) {
+                Throwable dieCause = e;
+                while (dieCause != null) {
+                    if (dieCause instanceof PerlDieException pde) {
                         die = pde;
                         break;
                     }
-                    Throwable next = current.getCause();
-                    if (next == current) break;
-                    current = next;
+                    Throwable next = dieCause.getCause();
+                    if (next == dieCause) break;
+                    dieCause = next;
                 }
                 if (die != null && die.getPayload() != null) {
                     RuntimeScalar payload = die.getPayload().getFirst();
@@ -4780,6 +4793,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 sourceLinesStored = true;
 
             } catch (Throwable e) {
+                // Dynamic `use Test::More skip_all => ...` executes its
+                // import while this eval string is parsed. Preserve exit()
+                // through the interpreter eval compiler instead of recording
+                // it as a normal $@ compilation failure.
+                Throwable exitCause = e;
+                while (exitCause != null) {
+                    if (exitCause instanceof PerlExitException exit) {
+                        throw exit;
+                    }
+                    Throwable next = exitCause.getCause();
+                    if (next == exitCause) break;
+                    exitCause = next;
+                }
                 // Compilation error in eval-string
                 // Set the global error variable "$@"
                 RuntimeScalar err = GlobalVariable.getGlobalVariable("main::@");

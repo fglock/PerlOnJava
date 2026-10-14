@@ -1,0 +1,9 @@
+comment: |
+  Pod::HtmlEasy's t/bugs.t and t/options.t use IPC::Run in two stdio
+  assertions. IPC::Run requires fork() for this mode, which PerlOnJava does
+  not implement. Skip only those individual assertions on PerlOnJava so the
+  remaining HTML generation tests still run.
+match:
+  distribution: "^GLEACH/Pod-HtmlEasy-"
+patches:
+  - "Pod-HtmlEasy/SkipForkIpcRun.patch"
