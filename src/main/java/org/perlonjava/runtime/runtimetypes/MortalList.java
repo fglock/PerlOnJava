@@ -518,7 +518,8 @@ public class MortalList {
     public static void deferDecrementIfTracked(RuntimeScalar scalar) {
         if (!isActive() || scalar == null) return;
         if (!scalar.refCountOwned) return;
-        if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+        if (((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                || scalar.type == RuntimeScalarType.GLOB)
                 && scalar.value instanceof RuntimeBase base) {
             if (base.refCount > 0) {
                 scalar.refCountOwned = false;

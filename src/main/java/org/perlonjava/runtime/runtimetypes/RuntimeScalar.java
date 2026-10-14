@@ -2545,13 +2545,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             releaseClosureOwnerSlot();
         }
 
-        // Increment new value's refCount for tracked stores. RuntimeHash/RuntimeArray
-        // at refCount==-1 are promoted to 0 here (aligned with
+        // Increment new value's refCount for tracked stores, including a GLOB
+        // whose open handle has already been blessed into an object. Hashes and
+        // arrays at refCount==-1 are promoted to 0 here (aligned with
         // incrementRefCountForContainerStore) so hash/array slots and
         // `%hash=()`/`deferDestroyForContainerClear` balance. Other referents at -1
         // stay untracked (e.g. named \@x via local slot).
         boolean newOwned = false;
-        if ((value.type & RuntimeScalarType.REFERENCE_BIT) != 0 && value.value != null) {
+        if (((value.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                || value.type == RuntimeScalarType.GLOB)
+                && value.value != null) {
             RuntimeBase nb = (RuntimeBase) value.value;
             if (nb.refCount < 0
                     && (nb instanceof RuntimeHash || nb instanceof RuntimeArray)) {
@@ -4845,7 +4848,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // may legitimately keep the object alive), but after the main
                 // script finishes ALL scopes have exited, so it's safe.
                 if (scalar.refCountOwned
-                        && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                            || scalar.type == RuntimeScalarType.GLOB)
                         && scalar.value instanceof RuntimeBase rb
                         && rb.blessId != 0) {
                     MortalList.addDeferredCapture(scalar);

@@ -964,12 +964,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /** Enter/leave the dynamic extent in which sort invokes its comparator. */
     public static void enterSortComparatorInvocation() {
-        PerlRuntime.current().executionState().activeSortComparatorInvocations++;
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        state.activeSortComparatorInvocations++;
+        state.sortComparatorFrameDepths.push(
+                state.activeCodeStack.size() + state.activeJvmSortComparators.size());
     }
 
     public static void exitSortComparatorInvocation() {
         ExecutionRuntimeState state = PerlRuntime.current().executionState();
         if (state.activeSortComparatorInvocations > 0) state.activeSortComparatorInvocations--;
+        if (!state.sortComparatorFrameDepths.isEmpty()) state.sortComparatorFrameDepths.pop();
     }
 
     /**

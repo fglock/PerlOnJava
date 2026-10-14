@@ -434,9 +434,9 @@ for my $module (@selected) {
         if $perl_oracle eq 'failures';
 
     if ($strict_exit) {
-        my ($target_result) = grep {
-            ($_->{module} // '') eq $module
-        } @all_results;
+        my $target_result = target_result_for_module(
+            $module, \@all_results, \%module_to_dist,
+        );
         if (!$target_result || ($target_result->{status} // '') ne 'PASS') {
             my $status = $target_result ? ($target_result->{status} // 'UNKNOWN') : 'NOT TESTED';
             my $error = $target_result && ($target_result->{error} // '');
@@ -646,6 +646,22 @@ sub run_standard_perl_module_probe {
 #     catches modules that never reached the test phase.
 # ══════════════════════════════════════════════════════════════════════
 
+sub target_result_for_module {
+    my ($module, $results, $module_to_dist) = @_;
+    my ($exact) = grep { ($_->{module} // '') eq $module } @$results;
+    return $exact if $exact;
+
+    # CPAN's index can list an alias as the first package in a distribution,
+    # so parsed results may use that name even when another package selected
+    # the same distribution as the requested target.
+    my $archive = $module_to_dist->{$module} // '';
+    $archive =~ s{.*/}{};
+    $archive =~ s/\.(?:tar\.gz|tgz)$//;
+    return unless length $archive;
+    my ($by_dist) = grep { ($_->{dist} // '') eq $archive } @$results;
+    return $by_dist;
+}
+
 sub parse_all_module_results {
     my ($output, $canonical_modules) = @_;
     my @results;
@@ -727,6 +743,7 @@ sub parse_all_module_results {
 
         my %r = (
             module     => $mod,
+            dist       => $dist,
             status     => 'UNKNOWN',
             tests      => undef,
             pass_count => undef,
@@ -1102,6 +1119,7 @@ sub finish_streamed_test_block {
 
     my %r = (
         module     => $mod,
+        dist       => $dist,
         status     => 'UNKNOWN',
         tests      => undef,
         pass_count => undef,

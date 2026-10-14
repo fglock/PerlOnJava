@@ -304,4 +304,46 @@ public class MyVarCleanupStack {
             }
         }
     }
+
+    /**
+     * Count every currently-live lexical alias when an open glob is blessed.
+     * Open handles can enter as {@code GLOB} scalars, which ordinary reference
+     * assignment tracking does not count. Blessing makes their shared glob a
+     * DESTROY-bearing referent, so each lexical alias must keep that referent
+     * alive until its own scope cleanup.
+     */
+    public static void retainBlessedGlobAliases(RuntimeGlob glob, RuntimeBase referent) {
+        if (glob == null || referent == null) return;
+        IdentityHashMap<RuntimeScalar, Boolean> seen = new IdentityHashMap<>();
+        for (Object var : stack()) {
+            if (var instanceof RuntimeScalar scalar
+                    && (scalar.type == RuntimeScalarType.GLOB
+                        || scalar.type == RuntimeScalarType.GLOBREFERENCE)
+                    && scalar.value == glob
+                    && !scalar.refCountOwned
+                    && seen.put(scalar, Boolean.TRUE) == null) {
+                scalar.refCountOwned = true;
+                referent.recordOwner(scalar, "blessed glob lexical alias");
+                referent.recordActiveOwner(scalar);
+                referent.traceRefCount(+1, "MyVarCleanupStack.retainBlessedGlobAliases");
+                referent.refCount++;
+                referent.hadCountedReference = true;
+            }
+        }
+        for (RuntimeScalar scalar : GlobalVariable.scalarSlots().values()) {
+            if (scalar != null
+                    && (scalar.type == RuntimeScalarType.GLOB
+                    || scalar.type == RuntimeScalarType.GLOBREFERENCE)
+                    && scalar.value == glob
+                    && !scalar.refCountOwned
+                    && seen.put(scalar, Boolean.TRUE) == null) {
+                scalar.refCountOwned = true;
+                referent.recordOwner(scalar, "blessed glob package alias");
+                referent.recordActiveOwner(scalar);
+                referent.traceRefCount(+1, "MyVarCleanupStack.retainBlessedGlobAliases");
+                referent.refCount++;
+                referent.hadCountedReference = true;
+            }
+        }
+    }
 }

@@ -1,0 +1,11 @@
+comment: |
+  PerlOnJava distroprefs for Exception::Class 1.46.
+
+  Exception::Class is pure Perl and is needed by Params::ValidationCompiler.
+  Its t/ignore.t suite has one PerlOnJava stack-frame-filter mismatch. This
+  version changed the generated class declaration to use ||=, so use the
+  release-specific patch that aligns its generated version with the module.
+match:
+  distribution: "^DROLSKY/Exception-Class-1\\.46(?:\\.tar\\.gz)?$"
+patches:
+  - "Exception-Class-1.46/GeneratedSubclassVersion.patch"

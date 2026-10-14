@@ -20,6 +20,20 @@ priorities and future plans.
 - Preserve Perl numeric scalar flags through mixed arithmetic, classify large
   finite floats as NVs, and retain zero padding during string autoincrement
   (#1643, #1352, #1354).
+- Preserve persistent scalar cells when assigning to `state` variables in the
+  interpreter, so Test::Mojo retains its application during server startup
+  (#1644).
+- Parse labeled blocks followed by postfix expressions in `grep` fallbacks, so
+  `Test::More::skip` can leave its `SKIP` block during DBIx::Class module scans
+  (#1646).
+- Apply the generated subclass version fix to Exception-Class 1.46, and allow
+  overloaded comparisons to tailcall through helper subs while keeping sort
+  comparator tailcalls rejected (#1646).
+- Skip Mojolicious 9.49's real-fork asset subtest when neither fork capability
+  is available, while retaining the rest of its asset coverage (#1646).
+- Route bundled `utf8` pragma imports through the native lexical hint handler,
+  preserving UTF-8 source decoding when another pragma imports `utf8` on the
+  interpreter (#1646).
 
 - Preserve tied scalar lvalues returned by `AUTOLOAD` during increment and compound assignment, honor fatal recursion warnings on the interpreter, and accept legacy whitespace-padded module versions and numeric overloads used by Valiemon (#1207, #1222, #1419).
 - Return Perl-compatible `undef` and errno on failed `truncate`, and cover append-mode scalar handles, bareword pipe methods, and scalar-reference output from filehandle input (#1415, #1314, #1216).
@@ -44,7 +58,8 @@ priorities and future plans.
 - Parse postfix `unless` after eval heredocs, imported calls inside exception blocks, and `qq'...'` arguments to bareword functions (#1625, #1640, #1663).
 - Preserve scalar context for `caller()` when used as a method invocant on the interpreter (#1744).
 
-- Close IO::Handle descriptors at Perl object destruction so scoped AnyEvent
+- Keep blessed lexical filehandle aliases alive through helper calls, then
+  close their descriptors at Perl object destruction so scoped AnyEvent
   listeners release their ports and accept watchers can bind correctly.
 - Close AnyEvent's listening socket when its server guard is dropped, allowing
   the same port to be rebound after the accept watcher leaves scope (#1757).

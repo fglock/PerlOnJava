@@ -1,0 +1,10 @@
+--- t/mojo/asset.t.orig
++++ t/mojo/asset.t
+@@ -281,7 +281,7 @@ subtest 'Incomplete write' => sub {
+ 
+ subtest 'Forked process' => sub {
+-  plan skip_all => 'Real fork is required!' if $Config{d_pseudofork};
++  plan skip_all => 'Real fork is required!' unless $Config{d_fork} || $Config{d_pseudofork};
+   my $file = Mojo::Asset::File->new->add_chunk('Fork test!');
+   my $path = $file->path;
+   ok -e $path, 'file exists';

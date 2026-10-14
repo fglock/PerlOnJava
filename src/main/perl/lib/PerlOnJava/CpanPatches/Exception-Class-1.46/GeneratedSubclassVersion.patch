@@ -1,0 +1,12 @@
+--- lib/Exception/Class.pm.orig
++++ lib/Exception/Class.pm
+@@ -141,7 +141,7 @@ package $subclass;
+ 
+ use base qw($isa);
+ 
+-our \$$version_name ||= '1.1';
++our \$$version_name ||= '$VERSION';
+ 
+ 1;
+ 
+---

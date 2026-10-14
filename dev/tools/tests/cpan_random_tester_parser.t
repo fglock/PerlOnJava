@@ -21,6 +21,18 @@ ok(defined $parser_source, 'extracted the CPAN result parser');
 eval $parser_source;
 die "cannot load CPAN result parser: $@" if $@;
 
+my ($target_result_source) = $source =~ /(sub target_result_for_module \{.*?)(?=\nsub parse_all_module_results)/s;
+ok(defined $target_result_source, 'extracted strict target result matching');
+eval $target_result_source;
+die "cannot load strict target result matcher: $@" if $@;
+my $alias_target_result = target_result_for_module(
+    'Mojolicious',
+    [{ module => 'Mojo', dist => 'Mojolicious-9.49', status => 'PASS' }],
+    { Mojolicious => 'S/SR/SRI/Mojolicious-9.49.tar.gz' },
+);
+is($alias_target_result->{status}, 'PASS',
+    'strict target matching accepts the selected distribution under its canonical alias');
+
 my ($canonical_source) = $source =~ /(sub canonical_module_for_archive \{.*?)(?=\n# Parse --modules)/s;
 ok(defined $canonical_source, 'extracted archive canonical-module normalization');
 eval $canonical_source;
