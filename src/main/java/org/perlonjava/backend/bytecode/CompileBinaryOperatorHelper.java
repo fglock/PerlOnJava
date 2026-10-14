@@ -282,52 +282,20 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emitReg(rs2);
             }
             case "lt", "gt", "le", "ge" -> {
-                // String comparisons using COMPARE_STR (like cmp)
-                // cmp returns: -1 if $a lt $b, 0 if equal, 1 if $a gt $b
-                int cmpReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.COMPARE_STR);
-                bytecodeCompiler.emitReg(cmpReg);
+                // Use the operator-specific runtime entry point so interpreter
+                // execution honors overloads such as a right-hand object's
+                // (ge method. COMPARE_STR via cmp loses that dispatch.
+                short opcode = switch (operator) {
+                    case "lt" -> Opcodes.LT;
+                    case "gt" -> Opcodes.GT;
+                    case "le" -> Opcodes.LE;
+                    case "ge" -> Opcodes.GE;
+                    default -> throw new IllegalStateException("Unexpected string comparison: " + operator);
+                };
+                bytecodeCompiler.emit(opcode);
+                bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
-
-                // Compare result to 0
-                int zeroReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.LOAD_INT);
-                bytecodeCompiler.emitReg(zeroReg);
-                bytecodeCompiler.emitInt(0);
-
-                // Emit appropriate comparison
-                switch (operator) {
-                    case "lt" -> bytecodeCompiler.emit(Opcodes.LT_NUM);  // cmp < 0
-                    case "gt" -> bytecodeCompiler.emit(Opcodes.GT_NUM);  // cmp > 0
-                    case "le" -> {
-                        // le: cmp <= 0, which is !(cmp > 0)
-                        int gtReg = bytecodeCompiler.allocateRegister();
-                        bytecodeCompiler.emit(Opcodes.GT_NUM);
-                        bytecodeCompiler.emitReg(gtReg);
-                        bytecodeCompiler.emitReg(cmpReg);
-                        bytecodeCompiler.emitReg(zeroReg);
-                        bytecodeCompiler.emit(Opcodes.NOT);
-                        bytecodeCompiler.emitReg(rd);
-                        bytecodeCompiler.emitReg(gtReg);
-                        return rd;
-                    }
-                    case "ge" -> {
-                        // ge: cmp >= 0, which is !(cmp < 0)
-                        int ltReg = bytecodeCompiler.allocateRegister();
-                        bytecodeCompiler.emit(Opcodes.LT_NUM);
-                        bytecodeCompiler.emitReg(ltReg);
-                        bytecodeCompiler.emitReg(cmpReg);
-                        bytecodeCompiler.emitReg(zeroReg);
-                        bytecodeCompiler.emit(Opcodes.NOT);
-                        bytecodeCompiler.emitReg(rd);
-                        bytecodeCompiler.emitReg(ltReg);
-                        return rd;
-                    }
-                }
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(cmpReg);
-                bytecodeCompiler.emitReg(zeroReg);
             }
             case "(", "()" -> {
                 // Apply operator: $coderef->(args) or &subname(args) or foo(args)

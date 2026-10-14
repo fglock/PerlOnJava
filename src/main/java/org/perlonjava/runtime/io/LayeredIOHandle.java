@@ -86,6 +86,8 @@ public class LayeredIOHandle implements IOHandle {
      * Maintained for proper cleanup and reset operations.
      */
     public final List<IOLayer> activeLayers = new ArrayList<>();
+    /** Full layer stack, including built-in layers represented as flags. */
+    private final List<String> layerStack = new ArrayList<>();
     /**
      * The underlying IO handle that performs actual read/write operations.
      * This could be a file handle, socket handle, or any other IOHandle implementation.
@@ -391,6 +393,13 @@ public class LayeredIOHandle implements IOHandle {
      */
     public RuntimeScalar binmode(String modeStr) {
         try {
+            // :pop operates on the existing PerlIO stack.  It is a stack
+            // operation, unlike other binmode layer specifications, so do
+            // not reset the stack before interpreting it.
+            if (modeStr != null && (modeStr.trim().equals(":pop") || modeStr.trim().equals("pop"))) {
+                popTopLayer();
+                return new RuntimeScalar(1);
+            }
             resetLayerState(true);
 
             // Parse and apply new layers
@@ -425,6 +434,49 @@ public class LayeredIOHandle implements IOHandle {
         resetLayerState(false);
     }
 
+    private void popTopLayer() {
+        decodedCharBuffer.setLength(0);
+        perlioWriteBuffer.setLength(0);
+        if (!layerStack.isEmpty()) {
+            String poppedSpec = layerStack.remove(layerStack.size() - 1);
+            if (poppedSpec.equals("crlf")) {
+                removeLastLayer(CrlfLayer.class);
+            } else if (poppedSpec.equals("utf8") || poppedSpec.equals("utf8_strict")
+                    || poppedSpec.startsWith("encoding(")) {
+                removeLastLayer(EncodingLayer.class);
+            } else if (poppedSpec.startsWith("via(") && poppedSpec.endsWith(")")) {
+                removeLastLayer(ViaLayer.class);
+            }
+        }
+
+        inputPipeline = Function.identity();
+        outputPipeline = Function.identity();
+        for (IOLayer layer : activeLayers) {
+            if (layer instanceof CrlfLayer crlfLayer) {
+                inputPipeline = inputPipeline.andThen(crlfLayer::processInput);
+                outputPipeline = outputPipeline.andThen(crlfLayer::processOutput);
+            } else if (layer instanceof EncodingLayer encodingLayer) {
+                inputPipeline = inputPipeline.andThen(encodingLayer::processInput);
+                outputPipeline = outputPipeline.andThen(encodingLayer::processOutput);
+            }
+        }
+        // The compact runtime models :stdio and :perlio as buffering state
+        // rather than IOLayer objects, so recompute it from the remaining
+        // stack (a :pop above :crlf must leave :crlf in place).
+        perlioBuffering = layerStack.stream().anyMatch(
+                layer -> layer.equals("stdio") || layer.equals("perlio"));
+    }
+
+    private void removeLastLayer(Class<? extends IOLayer> layerType) {
+        for (int i = activeLayers.size() - 1; i >= 0; i--) {
+            IOLayer layer = activeLayers.get(i);
+            if (layerType.isInstance(layer)) {
+                activeLayers.remove(i).onPopped();
+                return;
+            }
+        }
+    }
+
     private void resetLayerState(boolean notifyPopped) {
         inputPipeline = Function.identity();
         outputPipeline = Function.identity();
@@ -441,6 +493,7 @@ public class LayeredIOHandle implements IOHandle {
             layer.reset();
         }
         activeLayers.clear();
+        layerStack.clear();
     }
 
     /**
@@ -464,6 +517,7 @@ public class LayeredIOHandle implements IOHandle {
             layer = normalizeLayerSpec(layer);
             if (layer.isEmpty()) continue;
             addLayer(layer);
+            layerStack.add(layer);
         }
     }
 
