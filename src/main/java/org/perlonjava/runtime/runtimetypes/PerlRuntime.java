@@ -205,6 +205,7 @@ public final class PerlRuntime implements AutoCloseable {
         synchronized (state) {
             state.positiveOwnerReferents.merge(referent, 1, Integer::sum);
         }
+        MortalList.invalidateAllRootSnapshots();
         return state;
     }
 
@@ -217,6 +218,7 @@ public final class PerlRuntime implements AutoCloseable {
             if (count <= 1) state.positiveOwnerReferents.remove(referent);
             else state.positiveOwnerReferents.put(referent, count - 1);
         }
+        MortalList.invalidateAllRootSnapshots();
     }
 
     int positiveOwnerSlotReferentCount(RuntimeBase referent) {

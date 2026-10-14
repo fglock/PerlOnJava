@@ -596,9 +596,6 @@ public class StatementParser {
             HintHashRegistry.exitScope(); // Restore compile-time %^H
         }
 
-        // Use a macro to emulate Test::More SKIP blocks
-        TestMoreHelper.handleSkipTest(parser, thenBranch);
-
         IfNode result = new IfNode(operator.text, condition, thenBranch, elseBranch, parser.tokenIndex);
         // An elsif is parsed as the previous if's else branch rather than as a
         // top-level block statement. Preserve its own COP start so calls in its
@@ -1602,23 +1599,29 @@ public class StatementParser {
                             // `use Module` executes at compile time, but under
                             // -d it is still an ordinary Perl subroutine entry
                             // and must be visible to DB::sub.
-                            RuntimeList res = DebugHooks.dispatchSubroutine(
-                                    code, importArgs, RuntimeContextType.SCALAR);
-                            if (res == null) {
-                                res = RuntimeCode.apply(code, importArgs, RuntimeContextType.SCALAR);
-                            }
-
-                            // Handle TAILCALL with trampoline loop (for goto &sub in import methods)
-                            // This is needed for Moo::Role which does: goto &Role::Tiny::import
-                            while (res.isNonLocalGoto()) {
-                                RuntimeControlFlowList flow = (RuntimeControlFlowList) res;
-                                if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
-                                    RuntimeScalar codeRef = flow.getTailCallCodeRef();
-                                    RuntimeArray callArgs = flow.getTailCallArgs();
-                                    res = RuntimeCode.apply(codeRef, "tailcall", callArgs, RuntimeContextType.SCALAR);
-                                } else {
-                                    break;
+                            SpecialBlockParser.pushCompileTimePragmaMutationScope(
+                                    parser.ctx.symbolTable);
+                            try {
+                                RuntimeList res = DebugHooks.dispatchSubroutine(
+                                        code, importArgs, RuntimeContextType.SCALAR);
+                                if (res == null) {
+                                    res = RuntimeCode.apply(code, importArgs, RuntimeContextType.SCALAR);
                                 }
+
+                                // Handle TAILCALL with trampoline loop (for goto &sub in import methods)
+                                // This is needed for Moo::Role which does: goto &Role::Tiny::import
+                                while (res.isNonLocalGoto()) {
+                                    RuntimeControlFlowList flow = (RuntimeControlFlowList) res;
+                                    if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
+                                        RuntimeScalar codeRef = flow.getTailCallCodeRef();
+                                        RuntimeArray callArgs = flow.getTailCallArgs();
+                                        res = RuntimeCode.apply(codeRef, "tailcall", callArgs, RuntimeContextType.SCALAR);
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            } finally {
+                                SpecialBlockParser.popCompileTimePragmaMutationScope();
                             }
 
                             // overloading.pm stores HINT_NO_AMAGIC in $^H. Its

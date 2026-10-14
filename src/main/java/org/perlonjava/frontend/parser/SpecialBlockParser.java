@@ -43,6 +43,8 @@ public class SpecialBlockParser {
      */
     private static final ThreadLocal<Deque<ScopedSymbolTable>> compileTimeMutationScopes =
             ThreadLocal.withInitial(ArrayDeque::new);
+    private static final ThreadLocal<Deque<ScopedSymbolTable>> compileTimePragmaMutationScopes =
+            ThreadLocal.withInitial(ArrayDeque::new);
 
     private static Stack<BitSet> cloneBitSetStack(Stack<BitSet> source) {
         Stack<BitSet> copy = new Stack<>();
@@ -70,6 +72,29 @@ public class SpecialBlockParser {
     public static ScopedSymbolTable getCompileTimeMutationScope() {
         Deque<ScopedSymbolTable> scopes = compileTimeMutationScopes.get();
         return scopes.isEmpty() ? symbolTable : scopes.peek();
+    }
+
+    /** Return the lexical source scope targeted by an active module import. */
+    public static ScopedSymbolTable getCompileTimePragmaMutationScope() {
+        Deque<ScopedSymbolTable> scopes = compileTimePragmaMutationScopes.get();
+        return scopes.isEmpty() ? symbolTable : scopes.peek();
+    }
+
+    /** Route pragma writes made inside an import method to the importing scope. */
+    public static void pushCompileTimePragmaMutationScope(ScopedSymbolTable scope) {
+        compileTimePragmaMutationScopes.get().push(scope);
+    }
+
+    /** End the import-site pragma mutation boundary. */
+    public static void popCompileTimePragmaMutationScope() {
+        Deque<ScopedSymbolTable> scopes = compileTimePragmaMutationScopes.get();
+        if (scopes.isEmpty()) {
+            throw new IllegalStateException("No compile-time pragma mutation scope to pop");
+        }
+        scopes.pop();
+        if (scopes.isEmpty()) {
+            compileTimePragmaMutationScopes.remove();
+        }
     }
 
     /**
@@ -102,6 +127,7 @@ public class SpecialBlockParser {
     public static void resetTopLevelState() {
         symbolTable = new ScopedSymbolTable();
         compileTimeMutationScopes.remove();
+        compileTimePragmaMutationScopes.remove();
     }
 
     /**

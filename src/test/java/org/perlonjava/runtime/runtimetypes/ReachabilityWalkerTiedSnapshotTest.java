@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -40,7 +39,7 @@ class ReachabilityWalkerTiedSnapshotTest {
             String globalName = "RegexImplementationA178::replacement";
             GlobalVariable.globalHashes.put(globalName, tied);
             try {
-                Set<RuntimeBase> reachable =
+                ReachabilityWalker.TiedHashReachabilitySnapshot reachable =
                         ReachabilityWalker.reachableThroughTiedHashes();
                 assertTrue(reachable.contains(replacement));
                 assertTrue(reachable.contains(nestedTarget));
@@ -77,7 +76,7 @@ class ReachabilityWalkerTiedSnapshotTest {
                     .contains(targets.getFirst()));
             GlobalVariable.globalHashes.put(globalName, tied);
             try {
-                Set<RuntimeBase> reachable =
+                ReachabilityWalker.TiedHashReachabilitySnapshot reachable =
                         ReachabilityWalker.reachableThroughTiedHashes();
                 assertTrue(reachable.contains(handler));
                 for (RuntimeHash target : targets) {

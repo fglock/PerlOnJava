@@ -93,6 +93,10 @@ public class WeakRefRegistry {
         LifecycleRuntimeState state = state();
         if (state.weakScalars.contains(ref)) return;  // already weak
 
+        // Weakness changes the strong root graph even though the scalar's
+        // referent field is unchanged.
+        MortalList.invalidateAllRootSnapshots();
+
         // If referent was already destroyed, immediately undef the weak ref.
         // CODE refs are an exception: Sub::Quote compiles named, no-install
         // subs under a localized glob and returns the CODE ref after restoring
@@ -233,8 +237,18 @@ public class WeakRefRegistry {
             // (which use weaken() for back-references) and cascades to break
             // Moo's accessor inlining (51 test failures). See §15.
             ref.refCountOwned = false;
-            base.refCount = WEAKLY_TRACKED;
-            MortalList.requestImmediateWeakSweep();
+            if (base.blessId == 0
+                    && (base instanceof RuntimeArray || base instanceof RuntimeHash)
+                    && ReachabilityWalker.isReachableFromRoots(base)) {
+                // An untracked aggregate may already be owned by a live tree
+                // before its first weak parent edge is installed. Keep it
+                // through this transition; a later full sweep can clear the
+                // observer after that Perl root actually leaves scope.
+                base.refCount = 1;
+            } else {
+                base.refCount = WEAKLY_TRACKED;
+                MortalList.requestImmediateWeakSweep();
+            }
         }
         // A live lexical can be the final Perl-visible strong owner even when
         // selective refCount remains inflated by earlier argument/temporary
@@ -292,6 +306,8 @@ public class WeakRefRegistry {
      */
     public static void unweaken(RuntimeScalar ref) {
         LifecycleRuntimeState state = state();
+        if (!state.weakScalars.contains(ref)) return;
+        MortalList.invalidateAllRootSnapshots();
         if (!state.weakScalars.remove(ref)) return;
         if (ref.value instanceof RuntimeBase base) {
             Set<RuntimeScalar> weakRefs = state.referentToWeakRefs.get(base);
@@ -318,6 +334,8 @@ public class WeakRefRegistry {
      */
     public static boolean removeWeakRef(RuntimeScalar ref, RuntimeBase oldReferent) {
         LifecycleRuntimeState state = state();
+        if (!state.weakScalars.contains(ref)) return false;
+        MortalList.invalidateAllRootSnapshots();
         if (!state.weakScalars.remove(ref)) return false;
         if (System.getenv("PJ_WEAKCLEAR_TRACE") != null) {
             System.err.println("[WEAKREMOVE] ref=" + System.identityHashCode(ref)

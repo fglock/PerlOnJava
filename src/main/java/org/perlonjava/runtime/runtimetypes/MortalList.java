@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * trigger DESTROY at statement end, not immediately during delete.
  */
 public class MortalList {
+    private static final int MAX_UNBLESSED_AGGREGATE_DRAIN_ROOTS = 50_000;
     private static final AtomicInteger runtimesWithBoundaryWork = new AtomicInteger();
 
     static final class ReachabilityQueryMeasurement implements AutoCloseable {
@@ -1401,6 +1402,13 @@ public class MortalList {
             RuntimeBase current = work.removeFirst();
             if (!visited.add(current)) continue;
 
+            // A stash is a symbol-table view, not an owned aggregate. Walking
+            // its dynamic HashSpecialVariable map enumerates package globals
+            // on every scope exit (Catalyst creates many short-lived
+            // containers), repeatedly traversing the whole program graph.
+            // Its values are roots already handled by the normal weak sweep.
+            if (current instanceof RuntimeStash) continue;
+
             Iterable<RuntimeScalar> values;
             if (current instanceof RuntimeArray array) {
                 values = array.elements;
@@ -1436,7 +1444,11 @@ public class MortalList {
                 || !WeakRefRegistry.hasWeakRefsTo(base)) {
             return;
         }
-        if (ReachabilityWalker.isReachableFromRoots(base)) {
+        // This check runs at individual lexical scope exits, often many times
+        // while a package is loading. Keep package-root traversal cached
+        // across those exits; the live lexical snapshot is independently
+        // invalidated as each lexical leaves scope.
+        if (isReachableFromExternalRootCached(base)) {
             return;
         }
         base.refCount = Integer.MIN_VALUE;
@@ -1459,15 +1471,26 @@ public class MortalList {
         return state.flushReachableCache.contains(base);
     }
 
-    private static boolean isReachableFromExternalRootCached(RuntimeBase base) {
+    static boolean isReachableFromExternalRootCached(RuntimeBase base) {
         if (ReachabilityWalker.isReachableFromTemporaryRoots(base)) {
             return true;
         }
+        return isReachableFromPersistentRootCached(base);
+    }
+
+    static boolean isReachableFromPersistentRootCached(RuntimeBase base) {
         LifecycleRuntimeState state = state();
         if (state.externalRootSnapshot == null) {
             state.externalRootSnapshot = new ReachabilityWalker.ExternalRootSnapshot();
         }
         if (state.externalRootSnapshot.isReachableFromNonLexicalRoot(base)) {
+            return true;
+        }
+        if (!state.externalRootSnapshot.complete()) {
+            // An incomplete external-root walk cannot prove this target has
+            // no other owner. Keep it alive without rebuilding the broader
+            // full-root graph, which also cannot preserve this query's
+            // direct-lexical exclusion semantics.
             return true;
         }
         if (state.liveRootSnapshot == null) {
@@ -1479,6 +1502,8 @@ public class MortalList {
     static void invalidateExternalRootSnapshot() {
         state().externalRootSnapshot = null;
         state().fullRootSnapshot = null;
+        state().unblessedAggregateRootSnapshot = null;
+        state().scalarRootSnapshot = null;
     }
 
     static void invalidateAllRootSnapshots() {
@@ -1492,6 +1517,87 @@ public class MortalList {
             state.fullRootSnapshot = ReachabilityWalker.reachableFromRootsSnapshotWithStatus();
         }
         return state.fullRootSnapshot.isReachable(base);
+    }
+
+    static boolean isUnblessedAggregateReachableDuringDrain(RuntimeBase base) {
+        LifecycleRuntimeState state = state();
+        boolean drainActive = state.flushing || state.reachabilityDrainDepth > 0;
+        if (drainActive && state.unblessedAggregateDrainSnapshotIncomplete) return true;
+        if (drainActive && state.unblessedAggregateDrainRoots.contains(base)) return true;
+        if (state.fullRootSnapshot != null) {
+            return recordUnblessedAggregateSnapshotResult(
+                    state, state.fullRootSnapshot, base, drainActive);
+        }
+        if (state.unblessedAggregateRootSnapshot != null) {
+            return recordUnblessedAggregateSnapshotResult(
+                    state, state.unblessedAggregateRootSnapshot, base, drainActive);
+        }
+        if (ReachabilityWalker.isReachableFromTemporaryRoots(base)) return true;
+        if (state.externalRootSnapshot != null
+                && state.externalRootSnapshot.isReachableFromNonLexicalRoot(base)) {
+            if (drainActive) state.unblessedAggregateDrainRoots.add(base);
+            return true;
+        }
+        if (state.liveRootSnapshot != null && state.liveRootSnapshot.isReachable(base)) {
+            if (drainActive) state.unblessedAggregateDrainRoots.add(base);
+            return true;
+        }
+        // The package-root and live-lexical snapshots cover the same strong
+        // roots without tying their lifetimes together. Scope exits invalidate
+        // the lexical view frequently, while package roots often stay stable;
+        // rebuilding a combined graph here repeats the full package walk for
+        // each cleanup batch during module loading and request handling.
+        boolean reachable = isReachableFromExternalRootCached(base);
+        if (drainActive) {
+            boolean incomplete = state.externalRootSnapshot == null
+                    || !state.externalRootSnapshot.complete()
+                    || (state.liveRootSnapshot != null
+                        && !state.liveRootSnapshot.complete());
+            if (incomplete) {
+                state.unblessedAggregateDrainSnapshotIncomplete = true;
+                state.unblessedAggregateDrainRoots.clear();
+            } else if (reachable && !state.unblessedAggregateDrainRoots.contains(base)) {
+                if (state.unblessedAggregateDrainRoots.size()
+                        >= MAX_UNBLESSED_AGGREGATE_DRAIN_ROOTS) {
+                    state.unblessedAggregateDrainSnapshotIncomplete = true;
+                    state.unblessedAggregateDrainRoots.clear();
+                } else {
+                    state.unblessedAggregateDrainRoots.add(base);
+                    ReachabilityQueryStats stats = activeReachabilityQueryStats();
+                    if (stats != null) {
+                        stats.unblessedAggregateDrainPositiveProofsCached++;
+                    }
+                }
+            }
+        }
+        return reachable;
+    }
+
+    private static boolean recordUnblessedAggregateSnapshotResult(
+            LifecycleRuntimeState state,
+            ReachabilityWalker.RootReachabilitySnapshot snapshot,
+            RuntimeBase base,
+            boolean drainActive) {
+        boolean reachable = snapshot.isReachable(base);
+        if (drainActive) {
+            if (!snapshot.complete()) {
+                state.unblessedAggregateDrainSnapshotIncomplete = true;
+                state.unblessedAggregateDrainRoots.clear();
+            } else if (reachable && !state.unblessedAggregateDrainRoots.contains(base)) {
+                if (state.unblessedAggregateDrainRoots.size()
+                        >= MAX_UNBLESSED_AGGREGATE_DRAIN_ROOTS) {
+                    state.unblessedAggregateDrainSnapshotIncomplete = true;
+                    state.unblessedAggregateDrainRoots.clear();
+                } else {
+                    state.unblessedAggregateDrainRoots.add(base);
+                    ReachabilityQueryStats stats = activeReachabilityQueryStats();
+                    if (stats != null) {
+                        stats.unblessedAggregateDrainPositiveProofsCached++;
+                    }
+                }
+            }
+        }
+        return reachable;
     }
 
     /**
@@ -1520,13 +1626,65 @@ public class MortalList {
     static void invalidateLiveRootSnapshot() {
         state().liveRootSnapshot = null;
         state().fullRootSnapshot = null;
+        state().unblessedAggregateRootSnapshot = null;
+        state().scalarRootSnapshot = null;
+    }
+
+    static void invalidateFullRootSnapshotIfReachable(RuntimeBase changedNode) {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime == null) return;
+        LifecycleRuntimeState state = runtime.lifecycleState;
+        ReachabilityWalker.LiveRootSnapshot liveSnapshot = state.liveRootSnapshot;
+        boolean liveReachable = liveSnapshot != null && liveSnapshot.mayContain(changedNode);
+        ReachabilityWalker.RootReachabilitySnapshot snapshot = state.fullRootSnapshot;
+        boolean fullReachable = snapshot != null && snapshot.isReachable(changedNode);
+        ReachabilityWalker.RootReachabilitySnapshot unblessedSnapshot =
+                state.unblessedAggregateRootSnapshot;
+        boolean unblessedReachable = unblessedSnapshot != null
+                && unblessedSnapshot.isReachable(changedNode);
+        if ((snapshot != null && (!snapshot.complete() || fullReachable))
+                || (unblessedSnapshot != null
+                    && (!unblessedSnapshot.complete() || unblessedReachable))) {
+            state.fullRootSnapshot = null;
+            state.unblessedAggregateRootSnapshot = null;
+        }
+        if (liveReachable) state.liveRootSnapshot = null;
+    }
+
+    static void invalidateFullRootSnapshotForScalarClear() {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime != null) {
+            runtime.lifecycleState.fullRootSnapshot = null;
+            runtime.lifecycleState.unblessedAggregateRootSnapshot = null;
+        }
+    }
+
+    /**
+     * Reuse scalar-owner reachability across one cleanup drain. Return
+     * {@code null} outside a drain so callers retain the target-specific walk
+     * and its original lifetime semantics.
+     */
+    static Boolean isScalarReachableFromDrainSnapshot(RuntimeScalar scalar) {
+        LifecycleRuntimeState state = state();
+        if (!state.flushing && state.reachabilityDrainDepth == 0) return null;
+        if (state.scalarRootSnapshot == null) {
+            state.scalarRootSnapshot =
+                    ReachabilityWalker.scalarReachabilitySnapshot();
+        }
+        return state.scalarRootSnapshot.isReachable(scalar);
     }
 
     private static void invalidateDrainReachabilityCaches() {
         LifecycleRuntimeState state = state();
         state.flushReachableCache = null;
         state.flushTiedReachableCache = null;
-        invalidateLiveRootSnapshot();
+        state.liveRootSnapshot = null;
+        state.scalarRootSnapshot = null;
+        state.fullRootSnapshot = null;
+        if (!state.flushing && state.reachabilityDrainDepth == 0) {
+            state.unblessedAggregateDrainRoots.clear();
+            state.unblessedAggregateDrainSnapshotIncomplete = false;
+        }
     }
 
     private static boolean isReachableThroughTiedHashCached(RuntimeBase base) {
@@ -1614,6 +1772,18 @@ public class MortalList {
                 // the selective count dip to zero, but the tied handler's
                 // array slot remains a strong owner.  Destroying here clears
                 // that weak parent and corrupts the context tree.
+            } else if (base.blessId == 0
+                    && (base instanceof RuntimeArray || base instanceof RuntimeHash)
+                    && isUnblessedAggregateReachableDuringDrain(base)) {
+                // Unblessed aggregates can reach zero while a parser is
+                // assembling a tree, before it installs the first weak parent
+                // edge. A temporary reference can make the selective count
+                // reach zero even though an enclosing live aggregate already
+                // owns the node. Consult the shared drain snapshot before a
+                // later weaken() sees a destroyed referent. The next cleanup
+                // boundary can still reclaim a tree after its Perl root goes
+                // away.
+                base.refCount = 1;
             } else if (hasWeakRefs
                     && base.possiblyStoredInTiedHandler
                     && isReachableThroughTiedHashCached(base)) {

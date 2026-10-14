@@ -3,11 +3,98 @@ package org.perlonjava.runtime.runtimetypes;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
 class WeakCodeRefAggregateRootTest {
+    @Test
+    void fullRootSnapshotReflectsOnlyCodeSlotsWithCaptureEdges() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash capturedTarget = new RuntimeHash();
+            RuntimeScalar capturedScalar = new RuntimeScalar();
+            capturedScalar.type = RuntimeScalarType.REFERENCE;
+            capturedScalar.value = capturedTarget;
+            RuntimeCode capturedCode = new RuntimeCode(null, java.util.List.of());
+            capturedCode.capturedScalars = new RuntimeScalar[] { capturedScalar };
+            capturedCode.captureFieldsRecorded = true;
+            String capturedName =
+                    "WeakCodeRefAggregateRootTest::snapshot_capture_holder";
+            GlobalVariable.globalCodeRefs.put(capturedName, new RuntimeScalar(capturedCode));
+
+            java.util.List<String> terminalNames = new java.util.ArrayList<>();
+            for (int i = 0; i < 64; i++) {
+                String name = "WeakCodeRefAggregateRootTest::terminal_" + i;
+                terminalNames.add(name);
+                GlobalVariable.globalCodeRefs.put(name, new RuntimeScalar(
+                        new RuntimeCode(null, java.util.List.of())));
+            }
+
+            try {
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    ReachabilityWalker.RootReachabilitySnapshot snapshot =
+                            ReachabilityWalker.reachableFromRootsSnapshotWithStatus();
+
+                    assertTrue(snapshot.isReachable(capturedTarget));
+                    assertEquals(1, measurement.stats().globalCodeCaptureRootsWalked,
+                            "terminal installed CODE slots do not trigger reflective capture walks");
+                }
+            } finally {
+                GlobalVariable.globalCodeRefs.remove(capturedName);
+                for (String name : terminalNames) GlobalVariable.globalCodeRefs.remove(name);
+            }
+        }
+    }
+
+    @Test
+    void unblessedAggregateSnapshotSkipsTerminalCodeSlotsButFollowsCaptures() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash capturedTarget = new RuntimeHash();
+            RuntimeScalar capturedScalar = new RuntimeScalar();
+            capturedScalar.type = RuntimeScalarType.REFERENCE;
+            capturedScalar.value = capturedTarget;
+            RuntimeCode capturedCode = new RuntimeCode(null, java.util.List.of());
+            capturedCode.capturedScalars = new RuntimeScalar[] { capturedScalar };
+            capturedCode.captureFieldsRecorded = true;
+            String capturedName =
+                    "WeakCodeRefAggregateRootTest::aggregate_snapshot_capture_holder";
+            GlobalVariable.globalCodeRefs.put(capturedName, new RuntimeScalar(capturedCode));
+
+            java.util.List<String> terminalNames = new java.util.ArrayList<>();
+            java.util.List<RuntimeCode> terminalCodes = new java.util.ArrayList<>();
+            for (int i = 0; i < 128; i++) {
+                String name = "WeakCodeRefAggregateRootTest::aggregate_terminal_" + i;
+                terminalNames.add(name);
+                RuntimeCode terminal = new RuntimeCode(null, java.util.List.of());
+                terminalCodes.add(terminal);
+                GlobalVariable.globalCodeRefs.put(name, new RuntimeScalar(terminal));
+            }
+
+            try {
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    ReachabilityWalker.RootReachabilitySnapshot snapshot =
+                            ReachabilityWalker.unblessedAggregateRootsSnapshotWithStatus();
+
+                    assertTrue(snapshot.isReachable(capturedTarget),
+                            "installed code capture edges still retain unblessed aggregates");
+                    assertEquals(1, measurement.stats().globalCodeCaptureRootsWalked);
+                    for (RuntimeCode terminal : terminalCodes) {
+                        assertFalse(snapshot.reachable().contains(terminal),
+                                "terminal installed code identities are irrelevant to aggregate reachability");
+                    }
+                }
+            } finally {
+                GlobalVariable.globalCodeRefs.remove(capturedName);
+                for (String name : terminalNames) GlobalVariable.globalCodeRefs.remove(name);
+            }
+        }
+    }
+
     @Test
     void fullRootSnapshotKeepsCodeRefHeldByPackageArray() {
         PerlRuntime runtime = new PerlRuntime();

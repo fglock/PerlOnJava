@@ -301,9 +301,10 @@ and first path establish implementation cost.
 1. Extend the ownership path through scalar proxies and ordinary array/hash
    slots in Phase 2, then resolve the HTML::Tree teardown failures and verify
    unchanged `t/refloop.t`.
-2. Continue the #1642 Catalyst cleanup profile as an integration follow-up.
-   The full suite remains enabled except for Catalyst's six unsupported fork
-   assertions; the broad test attempt and cleanup profile are incomplete.
+2. Resolve the strict target failures in the fresh-home CPAN release
+   acceptance, then rerun that gate on the final candidate. The current run
+   distinguishes prerequisite/setup timeouts and missing dependencies from
+   runtime assertions; those outcomes do not yet satisfy #1642's acceptance.
 3. Rerun Moo and DBIx::Class after their separate tracked fixes land; classify
    the two DBIx::Class assertions independently.
 4. Run each repository gate from an immutable commit and record before/after
@@ -312,11 +313,22 @@ and first path establish implementation cost.
 ### Open questions and blockers
 
 - The aggregate scope-unregister walk and repeated deferred-release snapshot
-  builds now have separate deterministic counters. The synthetic deferred
-  test observes one external-root snapshot per flush. Reproduction of the
-  Catalyst workload from #1642 remains open so its object and flush pattern can
-  be matched to these paths; it is tracked as integration follow-up beyond the
-  selected Phase 1 closure-pad path.
+  builds have separate deterministic counters. The synthetic deferred test
+  observes one external-root snapshot per flush. On rebased PR #1746 head
+  `8fd9f830f`, Catalyst-Runtime `t/aggregate/live_component_controller_action_chained2.t`
+  passes 9/9, `t/arg_constraints.t` passes 69/69, and `t/query_constraints.t`
+  passes 18/18. The latter two files had five UTF-8 failures in an earlier
+  candidate. Mojolicious 9.49 `t/mojo/dom.t` passes 132 top-level subtests /
+  1,418 assertions; DBIx::Class `t/55namespaces_cleaned.t` passes 14,931
+  assertions; DateTime 1.67 `t/00load.t` and `t/01sanity.t` pass 1/1 and 16/16;
+  Image::ExifTool 13.55 `t/Unknown.t` passes 3/3. The Catalyst chained action
+  and Dancer2-Plugin-DBIx-Class shutdown tests pass on both backends. PR CI is
+  green on Ubuntu and Windows. The fresh-home `make test-cpan-release-acceptance`
+  gate has not been completed on this final candidate. The earlier run hit
+  DateTime and Catalyst setup timeouts and Mojolicious had 99/109 programs fail
+  to load because its isolated home lacked `IO::Compress::Gzip`; these are
+  historical run outcomes, not final-candidate suite results. The full gate remains a required final qualification; targeted-file results do
+  not substitute for it.
 - END CVs have queued and active lifetime tests, including aggregate captures,
   nested `exit`, `die`, and callback failure. UNITCHECK/CHECK/INIT lexical-pad
   lifetime is covered separately; the corresponding phaser ownership path is
@@ -331,9 +343,20 @@ and first path establish implementation cost.
   content and incremental parser cases still retain two and three elements at
   the immediate release assertion on both PerlOnJava backends; Perl 5.44 passes
   all cases. The new parser lifecycle reproducer records this open failure.
-- The Dancer2-Plugin-DBIx-Class teardown workload from #1642 now passes. The
-  local CPAN cache now also has `B::Hooks::EndOfScope` 0.28; Moose is supplied
-  by the PerlOnJava provider. `jperl -MCatalyst` loads Catalyst-Runtime 5.90132.
+- The Dancer2-Plugin-DBIx-Class `t/01_both_using_rsnames.t` workload now passes
+  all six assertions and exits on both backends. The interpreter first exposed
+  a `caller->isa` scalar-context bug, fixed in this follow-up, then exceeded a
+  360-second teardown bound. Its 120-second JFR profile attributed 9.25% of
+  samples to full-root snapshot building and 28.53% to `WeakHashMap.put`.
+  Retaining positive aggregate-root proofs across nested invalidations now
+  lets the focused test exit within the same bound. The deterministic regression
+  verifies reuse after a root removal and reset at the drain boundary. Artifacts
+  are `/tmp/issue1642-dancer-interpreter-teardown-after-caller-fix.jfr`,
+  `/tmp/issue1642-dancer-interpreter-teardown-after-shortcut.jfr`,
+  `/tmp/issue1642-dancer-interpreter-after-drain-positive-snapshot.log`, and
+  `/tmp/issue1642-dancer-jvm-after-drain-positive-snapshot.log`. The local CPAN
+  cache now also has `B::Hooks::EndOfScope` 0.28; Moose is supplied by the
+  PerlOnJava provider. `jperl -MCatalyst` loads Catalyst-Runtime 5.90132.
   Its checked-in distropref patches only `t/live_fork.t` to skip the six
   process-fork assertions on PerlOnJava; the `system` and backtick assertions
   and all other distribution tests remain enabled. A direct run from the
@@ -345,12 +368,62 @@ and first path establish implementation cost.
   The full attempt therefore remains incomplete and did not produce a cleanup
   profile. A post-change Dancer2 `jcpan -t` run reported
   `t/01_both_using_rsnames.t` ok, then exceeded the 240-second command deadline
-  later in the distribution suite; the earlier direct six-assertion run
-  remains the clean integration result. The Catalyst owner-slot delta workload
-  and cleanup profile are still open.
+  later in the distribution suite. The Catalyst owner-slot delta workload and
+  full cleanup acceptance are still open. On the 2026-10-12 rebased candidate,
+  the repository `make` gate passed in 7m05s. The first local AnyEvent install
+  hit its 30-minute timeout while the full-root snapshot walker scanned a large
+  aggregate. The walker now caps inspected edges at 50,000 and marks a capped
+  snapshot incomplete, preserving conservative reachability. The final
+  implementation `make` passed in 7m03s, the focused edge-cap regression
+  passed, and retrying the AnyEvent install completed in 15 minutes with all 32
+  files installed; `anyevent_server_guard_rebind.t` passes 2/2.
 - `RuntimeBase.refCount` still combines selective counts with legacy lifecycle
   sentinels and triggers cleanup for mixed-owner referents. The new explicit
   lifecycle prevents repeat dispatch and records destruction/resurrection, but
   it does not yet replace sentinel checks at every legacy boundary. Scalar/
   proxy and array/hash migration belongs to Phase 2 under issue #1649's current
   plan.
+- On the 2026-10-12 rebase of #1642 onto `32472699a`, `nice -n 19 make` passes
+  in 7m42s. Catalyst-Runtime
+  `t/aggregate/live_component_controller_action_chained2.t` passes 9/9 on JVM
+  and interpreter; Mojolicious `t/mojo/dom.t` passes 132 subtests / 1,418
+  assertions on both backends. The labeled-SKIP parser regression passes 2/2
+  on system Perl and both backends, and `make check-links` passes. The obsolete
+  `TestMoreHelper` macro hook remains removed after rebasing onto master. The
+  fresh-home release acceptance and current-candidate Catalyst cleanup profile
+  remain open; targeted tests do not establish the full gate or the total cost
+  of root walking.
+- The full root snapshot now seeds all installed CODE slots but follows capture
+  fields only through `GlobalVariable.globalCodeRefEdgeRootsView()`, which
+  already caches the slots with walkable edges. A deterministic counter test
+  verifies one capture walk among 65 installed CODE slots while retaining the
+  captured aggregate. `nice -n 19 make` passes in 18m10s on this change, and the
+  Catalyst chained action passes on both backends. The current JFR still samples
+  `reachableFromRootsSnapshotWithStatus()` in 3,253 of 8,615 execution samples;
+  further cleanup-cost work and the fresh-home acceptance remain open.
+- The same JFR shows `MortalList.recordUnblessedAggregateSnapshotResult()` in
+  stacks copying the entire reachable set into a second drain cache for each
+  unresolved aggregate. The drain cache now retains only targets with positive
+  proofs, while the full snapshot answers other targets directly. Added a
+  deterministic counter regression for repeated unreachable targets over a
+  populated root graph. `nice -n 19 make` passes in 8m48s; the new regression
+  passes in the unit gate, and Catalyst-Runtime
+  `t/aggregate/live_component_controller_action_chained2.t` passes 9/9 on JVM
+  and interpreter. `make check-links` passes. A follow-up profile is recorded
+  below.
+- The cleanup-cost regression now drives three zero-count aggregates through
+  `MortalList` deferred release instead of calling its reachability helper
+  directly. After rebasing onto `2995d5a0a`, `nice -n 19 make` passes in 10m24s,
+  including the new test, and Catalyst-Runtime
+  `t/aggregate/live_component_controller_action_chained2.t` passes 9/9 on both
+  backends. The expensive release acceptance remains unrun per the user's
+  instruction to use focused CPAN files. A post-change 84-second JFR profile
+  of the focused Catalyst test contains 4,639 execution samples; the full root
+  walker appears in 1,790 sample stacks. The previous graph-sized copy is gone
+  from the aggregate result path: its only sampled result-helper stack performs
+  the target membership check, and the sole `AbstractCollection.addAll` sample
+  belongs to `RuntimeBase.ownerSlotSnapshot()`. Full-root traversal remains a
+  major cost across cleanup drains, so #1642 is not complete; the next
+  investigation is safe snapshot reuse across unchanged root sets or an
+  ownership path that removes the ordinary cleanup fallback. Full release
+  acceptance also remains required before closing the issue.

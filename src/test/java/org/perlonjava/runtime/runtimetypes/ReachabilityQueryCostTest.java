@@ -3,11 +3,190 @@ package org.perlonjava.runtime.runtimetypes;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+import java.util.AbstractMap;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Set;
+import java.util.ArrayList;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
 class ReachabilityQueryCostTest {
+    private static final class CountingStashMap extends AbstractMap<String, RuntimeScalar> {
+        private int valuesCalls;
+
+        @Override
+        public Set<Entry<String, RuntimeScalar>> entrySet() {
+            return Collections.emptySet();
+        }
+
+        @Override
+        public Collection<RuntimeScalar> values() {
+            valuesCalls++;
+            return Collections.emptyList();
+        }
+    }
+
+    @Test
+    void repeatedContainerScopeCleanupDoesNotEnumerateNestedStashRoots() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeStash stash = new RuntimeStash("ReachabilityQueryCostTest::");
+            CountingStashMap stashView = new CountingStashMap();
+            stash.elements = stashView;
+            ((RuntimeHash) stash).elements = stashView;
+
+            for (int i = 0; i < 3; i++) {
+                RuntimeArray container = new RuntimeArray();
+                container.elements.add(stash.createReference());
+
+                assertFalse(MortalList.requestWeakSweepsForDestroyedContainer(container));
+            }
+
+            assertEquals(0, stashView.valuesCalls,
+                    "scope cleanup must not enumerate dynamic stash entries on each container walk");
+        }
+    }
+
+    @Test
+    void scopeExitedCaptureOwnersShareOneScalarRootSnapshot() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            ArrayList<RuntimeBase> candidates = new ArrayList<>();
+            for (int i = 0; i < 8; i++) {
+                RuntimeHash referent = new RuntimeHash();
+                RuntimeScalar padCell = referent.createReference();
+                padCell.retainClosureCapture();
+                padCell.scopeExited = true;
+                candidates.add(referent);
+            }
+
+            try (MortalList.ReachabilityQueryMeasurement measurement =
+                         MortalList.measureReachabilityQueries()) {
+                ReachabilityWalker.releaseUnreachableScopeExitedCaptureOwners(
+                        candidates, null);
+
+                ReachabilityQueryStats stats = measurement.stats();
+                assertEquals(1, stats.scalarReachabilityRootWalks,
+                        "one scalar-root walk should cover all stale capture owners");
+                assertEquals(1, stats.snapshotsBuilt);
+            }
+        }
+    }
+
+    @Test
+    void targetedWeakReleaseSkipsFullWalkerForSnapshotRootedTargets() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray global = new RuntimeArray();
+            String globalName =
+                    "ReachabilityQueryCostTest::targetedWeakReleaseSnapshot";
+            GlobalVariable.globalArrays.put(globalName, global);
+
+            RuntimeHash[] targets = new RuntimeHash[8];
+            RuntimeScalar[] weakRefs = new RuntimeScalar[targets.length];
+            Set<RuntimeBase> released = Collections.newSetFromMap(
+                    new java.util.IdentityHashMap<>());
+            for (int i = 0; i < targets.length; i++) {
+                RuntimeHash target = new RuntimeHash();
+                RuntimeScalar strong = target.createReference();
+                RuntimeScalar weak = target.createReference();
+                WeakRefRegistry.weaken(weak);
+                global.elements.add(strong);
+                target.refCount = 0;
+                targets[i] = target;
+                weakRefs[i] = weak;
+                released.add(target);
+            }
+
+            try {
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    ReachabilityWalker.sweepReleasedWeakReferents(released);
+
+                    ReachabilityQueryStats stats = measurement.stats();
+                    assertEquals(0, stats.snapshotsBuilt,
+                            "positive package-root proofs should avoid the full weak sweep walker");
+                    assertEquals(1, stats.externalRootSnapshotsBuilt,
+                            "the package-root graph is snapshotted once for the whole batch");
+                    for (int i = 0; i < targets.length; i++) {
+                        assertTrue(WeakRefRegistry.isweak(weakRefs[i]));
+                        assertTrue(targets[i].refCount != Integer.MIN_VALUE);
+                    }
+                }
+            } finally {
+                for (RuntimeScalar weak : weakRefs) {
+                    if (weak != null) WeakRefRegistry.unweaken(weak);
+                }
+                GlobalVariable.globalArrays.remove(globalName);
+                MortalList.invalidateAllRootSnapshots();
+            }
+        }
+    }
+
+    @Test
+    void targetedWeakReleaseDoesNotTreatTemporaryRootsAsPersistentOwners() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray target = new RuntimeArray();
+            RuntimeScalar weak = target.createReference();
+            WeakRefRegistry.weaken(weak);
+            target.refCount = 0;
+            target.localBindingExists = false;
+            MortalList.pushTemporaryRoot(target);
+
+            try {
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    ReachabilityWalker.sweepReleasedWeakReferents(
+                            Collections.singleton(target));
+
+                    assertEquals(RuntimeScalarType.UNDEF, weak.type,
+                            "temporary roots do not keep a released weak referent alive");
+                    assertEquals(1, measurement.stats().externalRootSnapshotsBuilt,
+                            "the temporary-only target must miss the persistent-root snapshot proof");
+                }
+            } finally {
+                MortalList.popTemporaryRoot(target);
+                WeakRefRegistry.unweaken(weak);
+            }
+        }
+    }
+
+    @Test
+    void scalarOnlyMutationReusesTheAggregateRootSnapshot() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray global = new RuntimeArray();
+            RuntimeHash first = new RuntimeHash();
+            RuntimeHash second = new RuntimeHash();
+            global.elements.add(first.createReference());
+            global.elements.add(second.createReference());
+            global.elements.add(new RuntimeScalar("before"));
+            String globalName = "ReachabilityQueryCostTest::scalarOnlyMutation";
+            GlobalVariable.globalArrays.put(globalName, global);
+
+            try {
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    assertTrue(MortalList.isUnblessedAggregateReachableDuringDrain(first));
+                    global.elements.set(2, new RuntimeScalar("after"));
+                    assertTrue(MortalList.isUnblessedAggregateReachableDuringDrain(second));
+
+                    assertEquals(1, measurement.stats().externalRootSnapshotsBuilt,
+                            "changing a scalar leaf does not change the aggregate root graph");
+                }
+            } finally {
+                GlobalVariable.globalArrays.remove(globalName);
+                MortalList.invalidateAllRootSnapshots();
+            }
+        }
+    }
+
     @Test
     void capturedAggregateOwnerReleaseDoesNotScanUnrelatedRoots() {
         PerlRuntime runtime = new PerlRuntime();
@@ -45,7 +224,7 @@ class ReachabilityQueryCostTest {
     }
 
     @Test
-    void repeatedAggregateScopeCleanupCountsActualRootWalkWork() {
+    void repeatedAggregateScopeCleanupSharesExternalRootSnapshot() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeArray global = new RuntimeArray();
@@ -55,16 +234,23 @@ class ReachabilityQueryCostTest {
             String globalName = "ReachabilityQueryCostTest::global";
             GlobalVariable.globalArrays.put(globalName, global);
 
+            RuntimeHash[] targets = new RuntimeHash[3];
+            RuntimeScalar[] weakRefs = new RuntimeScalar[targets.length];
+            for (int i = 0; i < targets.length; i++) {
+                RuntimeHash target = new RuntimeHash();
+                MyVarCleanupStack.register(target);
+                RuntimeScalar weak = target.createReference();
+                WeakRefRegistry.weaken(weak);
+                target.refCount = 0;
+                target.clearedOwnedAggregateElement = true;
+                targets[i] = target;
+                weakRefs[i] = weak;
+            }
+            MortalList.invalidateAllRootSnapshots();
+
             try (MortalList.ReachabilityQueryMeasurement measurement =
                          MortalList.measureReachabilityQueries()) {
-                for (int i = 0; i < 3; i++) {
-                    RuntimeHash target = new RuntimeHash();
-                    MyVarCleanupStack.register(target);
-                    RuntimeScalar weak = target.createReference();
-                    WeakRefRegistry.weaken(weak);
-                    target.refCount = 0;
-                    target.clearedOwnedAggregateElement = true;
-
+                for (RuntimeHash target : targets) {
                     MyVarCleanupStack.unregister(target);
 
                     assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED,
@@ -72,17 +258,20 @@ class ReachabilityQueryCostTest {
                 }
 
                 ReachabilityQueryStats stats = measurement.stats();
-                assertEquals(3, stats.rootQueries,
-                        "scope cleanup must exercise one real root query per referent");
-                assertTrue(stats.rootsSeeded > 0);
-                assertTrue(stats.edgesInspected >= 3 * 256,
-                        "each cleanup query inspects the unrelated root array edges");
-                assertTrue(stats.nodesVisited >= 3 * 257,
-                        "each cleanup query revisits the root array and its children");
-                assertEquals(0, stats.snapshotsBuilt,
-                        "this fallback performs separate targeted walks, not a shared snapshot");
+                assertEquals(0, stats.rootQueries,
+                        "scope cleanup should use the cached package-root snapshot");
+                assertEquals(1, stats.externalRootSnapshotsBuilt,
+                        "unchanged package roots should be traversed once across scope exits");
+                assertTrue(stats.externalRootSnapshotEdgesInspected >= 256,
+                        "the shared snapshot must account for the unrelated root array edges");
+                assertTrue(stats.externalRootSnapshotNodesVisited >= 257,
+                        "the shared snapshot visits the root array and its children once");
             } finally {
+                for (RuntimeScalar weak : weakRefs) {
+                    if (weak != null) WeakRefRegistry.unweaken(weak);
+                }
                 GlobalVariable.globalArrays.remove(globalName);
+                MortalList.invalidateAllRootSnapshots();
             }
         }
     }
@@ -129,6 +318,128 @@ class ReachabilityQueryCostTest {
                 }
             } finally {
                 GlobalVariable.globalArrays.remove(globalName);
+            }
+        }
+    }
+
+    @Test
+    void unchangedPackageRootsReuseExternalSnapshotAcrossDrains() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray global = new RuntimeArray();
+            String globalName =
+                    "ReachabilityQueryCostTest::stableDeferredGlobal";
+            GlobalVariable.globalArrays.put(globalName, global);
+            RuntimeHash[] targets = new RuntimeHash[4];
+            RuntimeScalar[] weakRefs = new RuntimeScalar[targets.length];
+
+            try {
+                for (int i = 0; i < 3; i++) {
+                    targets[i] = new RuntimeHash();
+                    targets[i].blessId = NameNormalizer.getBlessId(
+                            "Issue1642::StableDeferredRootTarget");
+                    global.elements.add(targets[i].createAnonymousReference());
+                    weakRefs[i] = targets[i].createAnonymousReference();
+                    WeakRefRegistry.weaken(weakRefs[i]);
+                    targets[i].refCount = 1;
+                }
+                MortalList.invalidateAllRootSnapshots();
+
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    for (int i = 0; i < 3; i++) {
+                        MortalList.deferDecrement(targets[i]);
+                        MortalList.flush();
+
+                        assertEquals(1, targets[i].refCount,
+                                "a stable package-root edge protects each target");
+                    }
+
+                    ReachabilityQueryStats stats = measurement.stats();
+                    assertEquals(3, stats.deferredBasesProcessed);
+                    assertEquals(1, stats.externalRootSnapshotsBuilt,
+                            "separate drains reuse the external-root snapshot while roots stay unchanged");
+                    long edgesBeforeMutation = stats.externalRootSnapshotEdgesInspected;
+
+                    targets[3] = new RuntimeHash();
+                    targets[3].blessId = NameNormalizer.getBlessId(
+                            "Issue1642::StableDeferredRootTarget");
+                    weakRefs[3] = targets[3].createAnonymousReference();
+                    WeakRefRegistry.weaken(weakRefs[3]);
+                    targets[3].refCount = 1;
+                    global.elements.add(targets[3].createAnonymousReference());
+
+                    MortalList.deferDecrement(targets[3]);
+                    MortalList.flush();
+
+                    assertEquals(1, targets[3].refCount,
+                            "a new package-root edge protects the target after invalidation");
+                    assertEquals(4, stats.deferredBasesProcessed);
+                    assertEquals(2, stats.externalRootSnapshotsBuilt,
+                            "a package-root mutation invalidates the reused snapshot");
+                    assertTrue(stats.externalRootSnapshotEdgesInspected > edgesBeforeMutation,
+                            "the rebuilt snapshot inspects the changed root graph");
+                }
+            } finally {
+                for (RuntimeScalar weakRef : weakRefs) {
+                    if (weakRef != null) WeakRefRegistry.unweaken(weakRef);
+                }
+                GlobalVariable.globalArrays.remove(globalName);
+                MortalList.invalidateAllRootSnapshots();
+            }
+        }
+    }
+
+    @Test
+    void unchangedPackageRootsReuseSnapshotAndLexicalMutationRefreshesLiveRoots() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray global = new RuntimeArray();
+            RuntimeArray lexicalRoot = new RuntimeArray();
+            RuntimeScalar weakProbe = new RuntimeHash().createAnonymousReference();
+            String globalName =
+                    "ReachabilityQueryCostTest::stableFullSnapshotGlobal";
+            GlobalVariable.globalArrays.put(globalName, global);
+            MyVarCleanupStack.register(lexicalRoot);
+            WeakRefRegistry.weaken(weakProbe);
+            try {
+                for (int i = 0; i < 256; i++) {
+                    global.elements.add(new RuntimeHash().createReference());
+                }
+                MortalList.invalidateAllRootSnapshots();
+
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    for (int i = 0; i < 3; i++) {
+                        RuntimeArray target = new RuntimeArray();
+                        target.refCount = 1;
+                        target.localBindingExists = false;
+                        target.clearedOwnedAggregateElement = true;
+
+                        MortalList.deferDecrement(target);
+                        MortalList.flush();
+
+                        assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED,
+                                target.perlLifecycleState(),
+                                "an unrooted aggregate should be reclaimed");
+                    }
+
+                    ReachabilityQueryStats stats = measurement.stats();
+                    assertEquals(3, stats.deferredBasesProcessed);
+                    RuntimeArray nextTarget = new RuntimeArray();
+                    lexicalRoot.elements.add(nextTarget.createReference());
+                    assertTrue(MortalList.isReachableFromExternalRootCached(nextTarget),
+                            "a lexical edge mutation must refresh the live-root snapshot");
+                    assertEquals(1, stats.externalRootSnapshotsBuilt,
+                            "unchanged package roots should share one snapshot across drains");
+                    assertTrue(stats.externalRootSnapshotNodesVisited >= 257,
+                            "the shared package-root snapshot must account for its graph walk");
+                }
+            } finally {
+                WeakRefRegistry.unweaken(weakProbe);
+                MyVarCleanupStack.unregister(lexicalRoot);
+                GlobalVariable.globalArrays.remove(globalName);
+                MortalList.invalidateAllRootSnapshots();
             }
         }
     }

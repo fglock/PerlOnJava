@@ -2368,6 +2368,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (isPackageGlobalRoot) {
             MortalList.invalidateExternalRootSnapshot();
         }
+        if (this.value != value.value) {
+            MortalList.invalidateFullRootSnapshotIfReachable(this);
+            if (containerOwner != null) {
+                MortalList.invalidateFullRootSnapshotIfReachable(containerOwner);
+            }
+        }
         noteClearedAggregateElement(value);
         // Fast path for untracked references (refCount == -1).
         // Most reference assignments involve untracked objects (named variables,
@@ -2724,6 +2730,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // slot holds a strong reference not counted in refCount.
                     // Don't call callDestroy — the container is still alive.
                     // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
+                } else if (oldBase.blessId == 0
+                        && (oldBase instanceof RuntimeArray || oldBase instanceof RuntimeHash)
+                        && WeakRefRegistry.hasWeakRefsTo(oldBase)
+                        && RuntimeCode.argsStackDepth() > 1
+                        && !oldBase.clearedOwnedAggregateElement) {
+                    // A parser can walk weak parent links through a temporary
+                    // alias while the owning tree still keeps an unblessed
+                    // aggregate alive. Defer clearing until the statement
+                    // boundary so the shared root snapshot can distinguish a
+                    // live ancestor from one whose final owner has gone away.
+                    MortalList.requestTargetedWeakSweep(oldBase);
                 } else if (oldBase.blessId != 0
                         && WeakRefRegistry.hasWeakRefsTo(oldBase)
                         && !blessedClassHasDestroy(oldBase)
@@ -4466,6 +4483,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeScalar undefine() {
         if (isPackageGlobalRoot) {
             MortalList.invalidateExternalRootSnapshot();
+        }
+        if ((type & REFERENCE_BIT) != 0 && value != null) {
+            MortalList.invalidateFullRootSnapshotForScalarClear();
         }
         // Special handling for CODE type - don't set the ref to undef,
         // just clear the code from the global symbol table.

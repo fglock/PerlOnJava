@@ -359,7 +359,6 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     private boolean hasRootEdge(java.util.Collection<? extends RuntimeScalar> values) {
-        if (!isPackageGlobalRoot) return false;
         for (RuntimeScalar value : values) {
             if (rootEdge(value)) return true;
         }
@@ -367,26 +366,27 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     private void notePackageRootMutation(RuntimeScalar oldValue, RuntimeScalar newValue) {
-        if (isPackageGlobalRoot && (rootEdge(oldValue) || rootEdge(newValue))) {
-            MortalList.invalidateExternalRootSnapshot();
-        }
+        notePackageRootMutationIf(rootEdge(oldValue) || rootEdge(newValue));
     }
 
-    private void notePackageRootMutationIf(boolean invalidates) {
-        if (invalidates) {
+    private void notePackageRootMutationIf(boolean hasReferenceEdge) {
+        if (!hasReferenceEdge) return;
+        if (isPackageGlobalRoot) {
             MortalList.invalidateExternalRootSnapshot();
+        } else {
+            MortalList.invalidateFullRootSnapshotIfReachable(this);
         }
     }
 
     private void notePackageRootClear(java.util.Collection<? extends RuntimeScalar> values) {
-        if (hasRootEdge(values)) {
-            MortalList.invalidateExternalRootSnapshot();
-        }
+        notePackageRootMutationIf(hasRootEdge(values));
     }
 
     void notePackageRootMutation() {
         if (isPackageGlobalRoot) {
             MortalList.invalidateExternalRootSnapshot();
+        } else {
+            MortalList.invalidateFullRootSnapshotIfReachable(this);
         }
     }
 

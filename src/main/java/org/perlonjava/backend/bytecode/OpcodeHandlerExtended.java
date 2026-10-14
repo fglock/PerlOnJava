@@ -1281,11 +1281,17 @@ public class OpcodeHandlerExtended {
     public static int executeBinaryAndAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
-        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+        ScalarSpecialVariable specialTarget = registers[rd]
+                instanceof ScalarSpecialVariable special ? special : null;
+        if (specialTarget == null
+                && BytecodeInterpreter.isImmutableProxy(registers[rd])) {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
+        RuntimeScalar leftValue = specialTarget == null
+                ? (RuntimeScalar) registers[rd]
+                : specialTarget.getValueAsScalar();
         RuntimeScalar result = BitwiseOperators.bitwiseAndBinary(
-                (RuntimeScalar) registers[rd],
+                leftValue,
                 (RuntimeScalar) registers[rs]
         );
         ((RuntimeScalar) registers[rd]).set(result);
@@ -1299,11 +1305,17 @@ public class OpcodeHandlerExtended {
     public static int executeBinaryOrAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
-        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+        ScalarSpecialVariable specialTarget = registers[rd]
+                instanceof ScalarSpecialVariable special ? special : null;
+        if (specialTarget == null
+                && BytecodeInterpreter.isImmutableProxy(registers[rd])) {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
+        RuntimeScalar leftValue = specialTarget == null
+                ? (RuntimeScalar) registers[rd]
+                : specialTarget.getValueAsScalar();
         RuntimeScalar result = BitwiseOperators.bitwiseOrBinary(
-                (RuntimeScalar) registers[rd],
+                leftValue,
                 (RuntimeScalar) registers[rs]
         );
         ((RuntimeScalar) registers[rd]).set(result);
@@ -1317,11 +1329,17 @@ public class OpcodeHandlerExtended {
     public static int executeBinaryXorAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
-        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+        ScalarSpecialVariable specialTarget = registers[rd]
+                instanceof ScalarSpecialVariable special ? special : null;
+        if (specialTarget == null
+                && BytecodeInterpreter.isImmutableProxy(registers[rd])) {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
+        RuntimeScalar leftValue = specialTarget == null
+                ? (RuntimeScalar) registers[rd]
+                : specialTarget.getValueAsScalar();
         RuntimeScalar result = BitwiseOperators.bitwiseXorBinary(
-                (RuntimeScalar) registers[rd],
+                leftValue,
                 (RuntimeScalar) registers[rs]
         );
         ((RuntimeScalar) registers[rd]).set(result);

@@ -59,12 +59,17 @@ final class LifecycleRuntimeState {
     final Set<RuntimeBase> targetedWeakSweepReferents =
             Collections.newSetFromMap(new IdentityHashMap<>());
     Set<RuntimeBase> flushReachableCache;
-    Set<RuntimeBase> flushTiedReachableCache;
+    ReachabilityWalker.TiedHashReachabilitySnapshot flushTiedReachableCache;
     ReachabilityWalker.ExternalRootSnapshot externalRootSnapshot;
     ReachabilityWalker.LiveRootSnapshot liveRootSnapshot;
+    ReachabilityWalker.ScalarRootReachabilitySnapshot scalarRootSnapshot;
+    final Set<RuntimeBase> unblessedAggregateDrainRoots =
+            Collections.newSetFromMap(new IdentityHashMap<>());
+    boolean unblessedAggregateDrainSnapshotIncomplete;
     Set<RuntimeBase> weakSweepLiveReferents;
 
     ReachabilityWalker.RootReachabilitySnapshot fullRootSnapshot;
+    ReachabilityWalker.RootReachabilitySnapshot unblessedAggregateRootSnapshot;
     final IdentityHashMap<RuntimeBase, ReachabilityWalker.WeakRootWitness>
             weakSweepRootWitnesses = new IdentityHashMap<>();
     ReachabilityQueryStats activeReachabilityQueryStats;
@@ -129,6 +134,7 @@ final class LifecycleRuntimeState {
         lastAutoSweepNanos = System.nanoTime();
         inAutoSweep = false;
         fullRootSnapshot = null;
+        unblessedAggregateRootSnapshot = null;
         weakSweepRootWitnesses.clear();
         activeReachabilityQueryStats = null;
         immediateWeakSweepRequested = false;
@@ -141,6 +147,9 @@ final class LifecycleRuntimeState {
         flushTiedReachableCache = null;
         externalRootSnapshot = null;
         liveRootSnapshot = null;
+        scalarRootSnapshot = null;
+        unblessedAggregateDrainRoots.clear();
+        unblessedAggregateDrainSnapshotIncomplete = false;
         weakSweepLiveReferents = null;
         weakScalars.clear();
         referentToWeakRefs.clear();

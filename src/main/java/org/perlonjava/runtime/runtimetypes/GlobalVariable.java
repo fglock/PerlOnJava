@@ -560,6 +560,7 @@ public class GlobalVariable {
     /** Invalidate the cached CODE-root edge list after capture/state metadata changes. */
     public static void invalidateGlobalCodeRefGraphRoots() {
         globalState().invalidateCodeRefGraphRoots();
+        MortalList.invalidateExternalRootSnapshot();
     }
 
     /** Read-only backing-map views for reachability walks; bypass map facade entries. */
