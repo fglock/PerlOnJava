@@ -6186,7 +6186,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 code.packageName + "::__ANON__");
                         if (anonGlob != null && anonGlob.nameOverride != null
                                 && !anonGlob.nameOverride.isEmpty()) {
-                            subName = code.packageName + "::" + anonGlob.nameOverride;
+                            subName = qualifiedAnonName(code.packageName, anonGlob.nameOverride);
                         }
                     }
                 }
@@ -7052,10 +7052,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     anonPkg + "::__ANON__");
             if (anonGlob != null && anonGlob.nameOverride != null
                     && !anonGlob.nameOverride.isEmpty()) {
-                return anonPkg + "::" + anonGlob.nameOverride;
+                return qualifiedAnonName(anonPkg, anonGlob.nameOverride);
             }
         }
         return subName;
+    }
+
+    private static String qualifiedAnonName(String packageName, String override) {
+        return override.contains("::") ? override : packageName + "::" + override;
     }
 
     private static String normalizeCallerPackage(String packageName) {
