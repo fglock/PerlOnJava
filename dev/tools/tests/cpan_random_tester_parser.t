@@ -347,6 +347,8 @@ is(pass_percentage(8833, 8277), '51.6',
 is(pass_percentage(0, 0), '0.0', 'empty pass/fail denominator is stable');
 
 my %slow = (
+    'Syntax::Kamelon' => 4800,
+    'DateTime::Event::Holiday::US' => 420,
     'Excel::Writer::XLSX' => 7200,
     'Image::ExifTool' => 3600,
     'local::lib' => 300,
@@ -375,6 +377,16 @@ is_deeply(
     [effective_timeout_limits('local::lib', 120, 600, 300, \%slow)],
     [300, 900],
     'local::lib has enough quiet time for its nested-launch shell checks',
+);
+is_deeply(
+    [effective_timeout_limits('Syntax::Kamelon', 120, 600, 300, \%slow)],
+    [4800, 5400],
+    'Syntax::Kamelon has enough quiet time for its full syntax test suite',
+);
+is_deeply(
+    [effective_timeout_limits('DateTime::Event::Holiday::US', 120, 600, 300, \%slow)],
+    [420, 1020],
+    'DateTime holiday recurrence construction gets its measured runtime budget',
 );
 is_deeply(
     [effective_oracle_timeout_limits(600, 300)],
