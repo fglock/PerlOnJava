@@ -68,6 +68,15 @@ public class ArgumentParserTest {
     }
 
     @Test
+    void windowsPerlExeShebangRunsInCurrentRuntime() {
+        CompilerOptions options = new CompilerOptions();
+
+        assertTrue(ArgumentParser.applyPerlShebangSwitches(
+                "#!D:\\perl\\5.8.2\\bin\\perl.exe\nprint qq(ok\\n);\n", options));
+        assertTrue(options.perlShebangProcessed);
+    }
+
+    @Test
     void malformedPerlShebangDoesNotConsumeAttachedSwitches() {
         CompilerOptions options = new CompilerOptions();
 

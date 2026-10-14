@@ -28,6 +28,8 @@ import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Java XS implementation of XML::LibXML.
@@ -1129,6 +1131,7 @@ public class XMLLibXML extends PerlModuleBase {
                 new RuntimeScalar("\n")).getList();
         }
         String dtdText = args.get(1).toString();
+        dtdText = expandInternalParameterEntityReferences(dtdText);
         String xml = "<!DOCTYPE _jperl_dtd [" + dtdText + "]><_jperl_dtd/>";
         try {
             DocumentBuilder db = newBuilder(new ParserOptions());
@@ -1142,6 +1145,35 @@ public class XMLLibXML extends PerlModuleBase {
             return WarnDie.die(new RuntimeScalar("XML::LibXML::Dtd::parse_string: " + e.getMessage() + "\n"),
                 new RuntimeScalar("\n")).getList();
         }
+    }
+
+    /**
+     * Xerces rejects parameter entity references inside declarations in an
+     * internal subset, although XML::LibXML's DTD parser accepts this common
+     * external-DTD syntax. Expand only internally declared parameter entities
+     * before wrapping the subset; external entities remain subject to the
+     * parser's normal resolver policy.
+     */
+    private static String expandInternalParameterEntityReferences(String dtdText) {
+        Pattern declaration = Pattern.compile(
+                "(?s)<!ENTITY\\s+%\\s*([A-Za-z_:][A-Za-z0-9_.:-]*)\\s+(['\"])(.*?)\\2");
+        Matcher matcher = declaration.matcher(dtdText);
+        Map<String, String> entities = new LinkedHashMap<>();
+        while (matcher.find()) {
+            entities.put(matcher.group(1), matcher.group(3));
+        }
+        String expanded = dtdText;
+        for (int pass = 0; pass < 16; pass++) {
+            String before = expanded;
+            for (Map.Entry<String, String> entity : entities.entrySet()) {
+                Pattern reference = Pattern.compile("%\\s*"
+                        + Pattern.quote(entity.getKey()) + "\\s*;");
+                expanded = reference.matcher(expanded)
+                        .replaceAll(Matcher.quoteReplacement(entity.getValue()));
+            }
+            if (expanded.equals(before)) break;
+        }
+        return expanded;
     }
 
     private static boolean hasBinaryXmlBom(byte[] b) {
@@ -1373,13 +1405,9 @@ public class XMLLibXML extends PerlModuleBase {
     }
 
     public static RuntimeList _parse_html_string(RuntimeArray args, int ctx) {
-        // Try to parse as XML first; if that fails due to unclosed void HTML
-        // elements, self-close them and retry.
-        try {
-            return _parse_string(args, ctx);
-        } catch (Exception e) {
-            // Fall through to HTML-aware fallback
-        }
+        // HTML parsing must go through the HTML5 tree builder even when the
+        // input happens to be well-formed XML: HTML element names are
+        // case-insensitive and libxml2 normalizes them to lowercase.
         RuntimeScalar self   = args.get(0);
         RuntimeScalar strArg = args.size() > 1 ? args.get(1) : scalarUndef;
         if (strArg.type == RuntimeScalarType.UNDEF) {
@@ -1390,6 +1418,13 @@ public class XMLLibXML extends PerlModuleBase {
         // HTML5 tree builder for the same recovery step, then serialize as
         // well-formed XML for the existing W3C DOM bridge.
         org.jsoup.nodes.Document htmlDocument = Jsoup.parse(html, "", Parser.htmlParser());
+        // libxml2's HTML parser reports HTML element names in lowercase even
+        // when the source used uppercase or mixed-case names. XPath matching
+        // is case-sensitive, so normalize Jsoup's preserved source casing to
+        // keep parse_html_string compatible with XML::LibXML.
+        for (org.jsoup.nodes.Element element : htmlDocument.getAllElements()) {
+            element.tagName(element.normalName());
+        }
         htmlDocument.outputSettings()
                 .syntax(org.jsoup.nodes.Document.OutputSettings.Syntax.xml)
                 .escapeMode(Entities.EscapeMode.xhtml)

@@ -15,4 +15,9 @@ is($paragraphs[0]->textContent, 'first', 'first paragraph text is preserved');
 is($paragraphs[1]->textContent, 'second & third <',
     'entity text and an invalid HTML token survive recovery');
 
+my $uppercase_doc = $parser->parse_html_string('<HTML><BODY><A href="/">link</A></BODY></HTML>');
+my @lowercase_matches = $uppercase_doc->findnodes('//a');
+is(scalar @lowercase_matches, 1,
+    'HTML XPath matches source elements regardless of source tag-name case');
+
 done_testing;

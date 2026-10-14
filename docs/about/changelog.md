@@ -12,6 +12,8 @@ priorities and future plans.
 - Preserve anonymous and eval caller metadata, retain source-relative require paths, and deparse folded closure expressions; report the final initializer line for multiline imported DSL declarations (#1548, #1620).
 - Preserve package-qualified anonymous caller names used by generated accessors (#1276).
 - Implement `XML::LibXML::Dtd->parse_string` with a wrapped DTD node that serializes using XML::LibXML's node type and DTD syntax (#1348).
+- Expand `HTML::Parser`'s `@attr` callback argspec, honor `empty_element_tags`, expose comment bodies through `tagname`, and suppress configured ignored elements for consumers such as HTML::Lint (#1416).
+- Normalize HTML tag names during `XML::LibXML` HTML parsing and accept Windows `perl.exe` shebangs in the current runtime (#1634).
 - Fix DBI `do()` overrides, DBD::Sponge initialization, and SQLite generated ID lookup.
 - Parse escaped backslashes in transliteration lists once, inherit strict-vars
   settings in string eval, and ignore trailing shebang comments (#1783, #1454,

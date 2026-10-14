@@ -392,7 +392,7 @@ public class ArgumentParser {
         // perlrun: parsing of #! switches starts at a *word* "perl" or "indir".
         // Substrings like "jperl" must NOT match (matches stock perl behavior).
         Matcher perlWord = Pattern.compile(
-                "\\b(?:perl(?:\\d+(?:\\.\\d+)*)?|indir)(?=\\s|$)",
+                "\\b(?:perl(?:\\d+(?:\\.\\d+)*)?(?:\\.exe)?|indir)(?=\\s|$)",
                 Pattern.CASE_INSENSITIVE).matcher(shebangLine);
         if (perlWord.find()) {
             String relevantPart = shebangLine.substring(perlWord.end()).trim();
@@ -433,7 +433,7 @@ public class ArgumentParser {
         // but the attached text is not a valid shebang switch list.  Recognize
         // it so the caller does not try to execute "perl-wT" as another program.
         Matcher malformedPerlWord = Pattern.compile(
-                "\\b(?:perl(?:\\d+(?:\\.\\d+)*)?|indir)-",
+                "\\b(?:perl(?:\\d+(?:\\.\\d+)*)?(?:\\.exe)?|indir)-",
                 Pattern.CASE_INSENSITIVE).matcher(shebangLine);
         if (malformedPerlWord.find()) {
             return true;

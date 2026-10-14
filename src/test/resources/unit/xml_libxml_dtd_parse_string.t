@@ -15,4 +15,12 @@ is($dtd->nodeType, XML::LibXML::XML_DTD_NODE(), 'result is a document type node'
 like($dtd->toString, qr/<!ELEMENT root \(item\*\)>/,
     'parsed DTD retains its element declarations') if $dtd;
 
+my $parameter_dtd = eval {
+    XML::LibXML::Dtd->parse_string(
+        '<!ENTITY % attr_type "CDATA"><!ELEMENT root EMPTY>'
+        . '<!ATTLIST root data %attr_type; #IMPLIED>')
+};
+ok($parameter_dtd,
+    'parse_string accepts internal parameter entities in declarations') or diag $@;
+
 done_testing;
