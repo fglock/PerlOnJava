@@ -6,7 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
-- Preserve `exit()` raised while compiling dynamic `eval` strings, including `Test::More`'s `skip_all` behavior, and skip only the two `IPC::Run` stdio assertions that require unsupported `fork()` in Pod::HtmlEasy (#1471, #1735).
+- Preserve `exit()` raised while compiling dynamic `eval` strings, including `Test::More`'s `skip_all` behavior; preserve lexical hints in prototype callback blocks so Test2 suppresses configured load diagnostics; and skip only Pod::HtmlEasy's two `IPC::Run` stdio assertions that require unsupported `fork()` (#1471, #1589, #1735).
 - Allow additional quiet time for `local::lib`, `Syntax::Kamelon`, and `DateTime::Event::Holiday::US` CPAN tests that exceed the default timeout during nested JVM launches, syntax highlighting, and recurrence-set construction (#1787, #1370, #1541).
 - Honor Perl's `-T` behavior by excluding `PERL5LIB` from `@INC` while preserving explicit `-I` paths (#1787).
 - Recover malformed HTML through Jsoup in `XML::LibXML`, decode HTML attribute entities by default, report `HTML::Parser` source positions, and allow nested `AUTOLOAD` tail calls from sort comparators (#1416, #1457, #1634).

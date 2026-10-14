@@ -1723,6 +1723,28 @@ public class StatementParser {
         symbolTable.setUseVersion(requested);
     }
 
+    /**
+     * Creates a prologue flag node for an anonymous callback block.  Such a
+     * block is a subroutine compiled at its lexical definition site, so its
+     * body needs the definition site's hint snapshot when it later runs from
+     * a helper such as Test2::API::intercept.
+     */
+    static CompilerFlagNode callbackDefinitionFlags(Parser parser, int hintHashSnapshotId) {
+        if (hintHashSnapshotId == 0) return null;
+        ScopedSymbolTable symbols = parser.ctx.symbolTable;
+        java.util.BitSet fatalFlags = (java.util.BitSet) symbols.warningFatalStack.peek().clone();
+        java.util.BitSet disabledFlags = (java.util.BitSet) symbols.warningDisabledStack.peek().clone();
+        return new CompilerFlagNode(
+                (java.util.BitSet) symbols.warningFlagsStack.peek().clone(),
+                fatalFlags,
+                disabledFlags,
+                symbols.featureFlagsStack.peek(),
+                symbols.strictOptionsStack.peek(),
+                0,
+                hintHashSnapshotId,
+                parser.tokenIndex);
+    }
+
     private static boolean versionAtLeast(String version, int major, int minor) {
         String[] parts = version.split("\\.");
         int actualMajor = Integer.parseInt(parts[0]);
