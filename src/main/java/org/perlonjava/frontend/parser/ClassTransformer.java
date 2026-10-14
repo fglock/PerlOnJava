@@ -238,6 +238,12 @@ public class ClassTransformer {
             }
         }
 
+        // Perl class declarations are successful declarations whose value is
+        // true. Keep a class at the end of a module from making require() fail
+        // when the interpreter treats the declarations in this block as
+        // compile-time-only statements.
+        block.elements.add(new NumberNode("1", parser.tokenIndex));
+
         return block;
     }
 

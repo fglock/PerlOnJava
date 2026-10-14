@@ -14,18 +14,20 @@ my $loaded = eval q{
             $value += 2;
         }
 
+        method first_argument { shift }
         method value { $value }
     }
-
-    1;
 };
 if (!$loaded && $@ =~ /Can't locate Object\/Pad\.pm/) {
     plan skip_all => 'Object::Pad is not installed in system Perl';
 }
 die $@ unless $loaded;
+ok($loaded, 'class declaration at the end of eval returns true');
 
 my $object = ObjectPadBuildBlock->new(value => 40);
 is($object->value, 42,
     'BUILD runs after :param field initialization and can update the field');
+is($object->first_argument('passed'), 'passed',
+    'bare shift in an Object::Pad method shifts its argument list');
 
 done_testing;

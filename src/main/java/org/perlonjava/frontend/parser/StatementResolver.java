@@ -373,9 +373,16 @@ public class StatementResolver {
                             // Full method definition with block
                             consume(parser, LexerTokenType.OPERATOR, "{");
                             boolean wasInMethod = parser.isInMethod;
+                            boolean wasInSubroutineBody = parser.ctx.symbolTable.isInSubroutineBody();
                             parser.isInMethod = true; // Set method context
-                            BlockNode block = ParseBlock.parseBlock(parser);
-                            parser.isInMethod = wasInMethod; // Restore previous context
+                            parser.ctx.symbolTable.setInSubroutineBody(true);
+                            BlockNode block;
+                            try {
+                                block = ParseBlock.parseBlock(parser);
+                            } finally {
+                                parser.isInMethod = wasInMethod;
+                                parser.ctx.symbolTable.setInSubroutineBody(wasInSubroutineBody);
+                            }
                             consume(parser, LexerTokenType.OPERATOR, "}");
 
                             // Create subroutine node
@@ -912,19 +919,24 @@ public class StatementResolver {
                             if (peek(parser).text.equals("{")) {
                                 consume(parser, LexerTokenType.OPERATOR, "{");
                                 boolean wasInMethod = parser.isInMethod;
+                                boolean wasInSubroutineBody = parser.ctx.symbolTable.isInSubroutineBody();
                                 parser.isInMethod = true; // Set method context for lexical method
+                                parser.ctx.symbolTable.setInSubroutineBody(true);
 
                                 // Parse the block contents (without creating another scope)
                                 List<Node> elements = new ArrayList<>();
-                                while (!peek(parser).text.equals("}")) {
-                                    Node stmt = StatementResolver.parseStatement(parser, null);
-                                    if (stmt != null) {
-                                        elements.add(stmt);
+                                try {
+                                    while (!peek(parser).text.equals("}")) {
+                                        Node stmt = StatementResolver.parseStatement(parser, null);
+                                        if (stmt != null) {
+                                            elements.add(stmt);
+                                        }
                                     }
+                                } finally {
+                                    parser.isInMethod = wasInMethod;
+                                    parser.ctx.symbolTable.setInSubroutineBody(wasInSubroutineBody);
                                 }
                                 block = new BlockNode(elements, parser.tokenIndex);
-
-                                parser.isInMethod = wasInMethod; // Restore previous context
                                 consume(parser, LexerTokenType.OPERATOR, "}");
                             } else if (peek(parser).text.equals(";")) {
                                 // Forward declaration
