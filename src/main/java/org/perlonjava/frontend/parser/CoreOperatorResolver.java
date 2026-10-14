@@ -381,12 +381,15 @@ public class CoreOperatorResolver {
 
             consume(parser, LexerTokenType.OPERATOR, "{");
             boolean wasInMethod = parser.isInMethod;
+            boolean wasInSubroutineBody = parser.ctx.symbolTable.isInSubroutineBody();
             BlockNode block;
             try {
                 parser.isInMethod = true;
+                parser.ctx.symbolTable.setInSubroutineBody(true);
                 block = ParseBlock.parseBlock(parser);
             } finally {
                 parser.isInMethod = wasInMethod;
+                parser.ctx.symbolTable.setInSubroutineBody(wasInSubroutineBody);
             }
             consume(parser, LexerTokenType.OPERATOR, "}");
             injectAnonymousMethodSelf(block, signatureAST, currentIndex);

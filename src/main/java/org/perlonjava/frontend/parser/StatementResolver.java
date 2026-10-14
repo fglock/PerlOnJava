@@ -68,11 +68,6 @@ public class StatementResolver {
      * brace tokens, brace depth desynchronizes, and {@code =>} inside a later
      * {@code map { sprintf "%s" => $_ }} is misread as a hash fat comma at depth 1.
      */
-    private static final Set<String> IDENTIFIER_BEFORE_BARE_STRING_ARG = Set.of(
-            "like", "unlike", "ok", "is", "isnt", "cmp_ok", "can_ok", "isa_ok",
-            "pass", "fail", "require", "diag", "note", "explain",
-            "skip", "warning_like", "warning_is", "warnings_like");
-
     private static final Set<String> CORE_QUALIFIED_CONTROL_STATEMENTS = Set.of(
             "if", "unless", "for", "foreach", "while", "until", "given",
             "when", "default");
@@ -114,10 +109,11 @@ public class StatementResolver {
 
         if (token.type == LexerTokenType.IDENTIFIER) {
             Node result = switch (token.text) {
-                case "CHECK", "INIT", "UNITCHECK", "BEGIN", "END", "ADJUST" -> {
+                case "CHECK", "INIT", "UNITCHECK", "BEGIN", "END", "ADJUST", "BUILD" -> {
                     // Check if next token is '{' - if not, this might be a lexical sub call
                     parser.tokenIndex++;
-                    if (!"ADJUST".equals(token.text) && peek(parser).text.equals(";")) {
+                    if (!"ADJUST".equals(token.text) && !"BUILD".equals(token.text)
+                            && peek(parser).text.equals(";")) {
                         // Perl accepts a phaser name by itself as a forward
                         // subroutine declaration (for example, `END;`).
                         // Leave it to the subroutine parser instead of
@@ -127,6 +123,10 @@ public class StatementResolver {
                     }
                     if (peek(parser).text.equals("{")
                             || (peek(parser).text.equals("(") && hasSpecialBlockPrototype(parser))) {
+                        if ("BUILD".equals(token.text) && !parser.isInClassBlock) {
+                            parser.tokenIndex = currentIndex;
+                            yield null;
+                        }
                         parser.tokenIndex = currentIndex;
                         yield SpecialBlockParser.parseSpecialBlock(parser);
                     }
@@ -134,7 +134,8 @@ public class StatementResolver {
                     // attempted declaration, not an ordinary subroutine call.
                     // Preserve Perl's dedicated diagnostic instead of allowing
                     // the diamond parser to report a generic syntax error.
-                    if (!"ADJUST".equals(token.text) && peek(parser).text.equals("<")) {
+                    if (!"ADJUST".equals(token.text) && !"BUILD".equals(token.text)
+                            && peek(parser).text.equals("<")) {
                         parser.throwCleanError(currentIndex,
                                 "Illegal declaration of subroutine " + token.text);
                     }
@@ -372,9 +373,16 @@ public class StatementResolver {
                             // Full method definition with block
                             consume(parser, LexerTokenType.OPERATOR, "{");
                             boolean wasInMethod = parser.isInMethod;
+                            boolean wasInSubroutineBody = parser.ctx.symbolTable.isInSubroutineBody();
                             parser.isInMethod = true; // Set method context
-                            BlockNode block = ParseBlock.parseBlock(parser);
-                            parser.isInMethod = wasInMethod; // Restore previous context
+                            parser.ctx.symbolTable.setInSubroutineBody(true);
+                            BlockNode block;
+                            try {
+                                block = ParseBlock.parseBlock(parser);
+                            } finally {
+                                parser.isInMethod = wasInMethod;
+                                parser.ctx.symbolTable.setInSubroutineBody(wasInSubroutineBody);
+                            }
                             consume(parser, LexerTokenType.OPERATOR, "}");
 
                             // Create subroutine node
@@ -911,19 +919,24 @@ public class StatementResolver {
                             if (peek(parser).text.equals("{")) {
                                 consume(parser, LexerTokenType.OPERATOR, "{");
                                 boolean wasInMethod = parser.isInMethod;
+                                boolean wasInSubroutineBody = parser.ctx.symbolTable.isInSubroutineBody();
                                 parser.isInMethod = true; // Set method context for lexical method
+                                parser.ctx.symbolTable.setInSubroutineBody(true);
 
                                 // Parse the block contents (without creating another scope)
                                 List<Node> elements = new ArrayList<>();
-                                while (!peek(parser).text.equals("}")) {
-                                    Node stmt = StatementResolver.parseStatement(parser, null);
-                                    if (stmt != null) {
-                                        elements.add(stmt);
+                                try {
+                                    while (!peek(parser).text.equals("}")) {
+                                        Node stmt = StatementResolver.parseStatement(parser, null);
+                                        if (stmt != null) {
+                                            elements.add(stmt);
+                                        }
                                     }
+                                } finally {
+                                    parser.isInMethod = wasInMethod;
+                                    parser.ctx.symbolTable.setInSubroutineBody(wasInSubroutineBody);
                                 }
                                 block = new BlockNode(elements, parser.tokenIndex);
-
-                                parser.isInMethod = wasInMethod; // Restore previous context
                                 consume(parser, LexerTokenType.OPERATOR, "}");
                             } else if (peek(parser).text.equals(";")) {
                                 // Forward declaration
@@ -1536,12 +1549,16 @@ public class StatementResolver {
                 // Only treat quote as opening when context suggests a string start.
                 // This avoids latching onto trailing quote tokens emitted after
                 // already-parsed quoted keys/values.
-                boolean isLikelyOpeningQuote =
-                        prevToken == null
-                                || (prevToken.type != LexerTokenType.IDENTIFIER
-                                && prevToken.type != LexerTokenType.NUMBER
-                                && prevToken.type != LexerTokenType.STRING)
-                                || IDENTIFIER_BEFORE_BARE_STRING_ARG.contains(prevToken.text);
+                // Any identifier can be a bareword call or operator before a
+                // string argument (`die "..."`, `eq '...'`, or an imported
+                // sub such as `check "..."`). Do not maintain a caller-name
+                // whitelist here: this scanner only needs to identify the
+                // quoted token boundary so punctuation inside its contents
+                // cannot affect brace balancing.
+                boolean isLikelyOpeningQuote = prevToken == null
+                        || prevToken.type == LexerTokenType.IDENTIFIER
+                        || (prevToken.type != LexerTokenType.NUMBER
+                        && prevToken.type != LexerTokenType.STRING);
                 if (!isLikelyOpeningQuote) {
                     continue;
                 }

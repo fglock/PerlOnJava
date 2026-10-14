@@ -78,6 +78,8 @@ public class ClassTransformer {
         // Get ADJUST blocks from parser (they were stored as anonymous subs by SpecialBlockParser)
         List<Node> adjustNodes = new ArrayList<>(parser.classAdjustBlocks);
         parser.classAdjustBlocks.clear(); // Clear for next class
+        List<Node> buildNodes = new ArrayList<>(parser.classBuildBlocks);
+        parser.classBuildBlocks.clear();
 
         SubroutineNode existingConstructor = null;
 
@@ -90,6 +92,8 @@ public class ClassTransformer {
                 if ("new".equals(subNode.name)) {
                     existingConstructor = subNode;
                     otherStatements.add(element); // Keep existing constructor
+                } else if (subNode.getBooleanAnnotation("classBuildBlock")) {
+                    // Included in the generated constructor below.
                 } else if (subNode.getBooleanAnnotation("isMethod")) {
                     methods.add(subNode);
                     // Don't add methods to otherStatements - they'll be transformed
@@ -161,7 +165,7 @@ public class ClassTransformer {
         // Generate constructor if not present
         if (existingConstructor == null) {
             FieldRegistry.registerGeneratedConstructor(className);
-            SubroutineNode constructor = generateConstructor(fields, className, adjustNodes);
+            SubroutineNode constructor = generateConstructor(fields, className, buildNodes, adjustNodes);
             block.elements.add(constructor);
             block.setAnnotation("deferredConstructor", constructor);
         } else {
@@ -234,6 +238,12 @@ public class ClassTransformer {
             }
         }
 
+        // Perl class declarations are successful declarations whose value is
+        // true. Keep a class at the end of a module from making require() fail
+        // when the interpreter treats the declarations in this block as
+        // compile-time-only statements.
+        block.elements.add(new NumberNode("1", parser.tokenIndex));
+
         return block;
     }
 
@@ -305,7 +315,7 @@ public class ClassTransformer {
 
     static SubroutineNode generateUnitClassConstructor(
             List<OperatorNode> fields, String className, List<Node> adjustNodes) {
-        return generateConstructor(fields, className, adjustNodes);
+        return generateConstructor(fields, className, List.of(), adjustNodes);
     }
 
     /** Apply the implicit receiver setup to a method declared in a unit class. */
@@ -313,7 +323,8 @@ public class ClassTransformer {
         transformMethod(method, List.of());
     }
 
-    private static SubroutineNode generateConstructor(List<OperatorNode> fields, String className, List<Node> adjustNodes) {
+    private static SubroutineNode generateConstructor(
+            List<OperatorNode> fields, String className, List<Node> buildNodes, List<Node> adjustNodes) {
         List<Node> bodyElements = new ArrayList<>();
         BlockNode body = new BlockNode(bodyElements, 0);
         body.setAnnotation("generatedClassConstructor", Boolean.TRUE);
@@ -452,6 +463,13 @@ public class ClassTransformer {
             if (fieldInit != null) {
                 body.elements.add(fieldInit);
             }
+        }
+
+        // Object::Pad BUILD blocks run after fields have been initialized.
+        for (Node buildNode : buildNodes) {
+            ListNode args = new ListNode(0);
+            args.elements.add(new OperatorNode("$", new IdentifierNode("self", 0), 0));
+            body.elements.add(new BinaryOperatorNode("->", buildNode, args, 0));
         }
 
         // Step 4: Run ADJUST blocks after field initialization

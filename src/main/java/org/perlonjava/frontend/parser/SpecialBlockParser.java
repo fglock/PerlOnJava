@@ -155,6 +155,7 @@ public class SpecialBlockParser {
         boolean unitClassAdjust = "ADJUST".equals(blockName)
                 && !parser.isInClassBlock
                 && parser.ctx.symbolTable.currentPackageIsClass();
+        boolean classBuild = "BUILD".equals(blockName) && parser.isInClassBlock;
 
         // ADJUST blocks are also valid after a unit-class declaration, where
         // the package itself remains in class context without a braced body.
@@ -169,7 +170,7 @@ public class SpecialBlockParser {
         // ADJUST blocks have implicit $self, so set isInMethod flag
         boolean wasInMethod = parser.isInMethod;
         int adjustScopeIndex = -1;
-        if ("ADJUST".equals(blockName) && (parser.isInClassBlock || unitClassAdjust)) {
+        if (("ADJUST".equals(blockName) && (parser.isInClassBlock || unitClassAdjust)) || classBuild) {
             parser.isInMethod = true;
             // Register $self in a scope so the parse-time strict vars check
             // can find it inside ADJUST block bodies.
@@ -227,7 +228,7 @@ public class SpecialBlockParser {
 
         // ADJUST blocks in class context are not executed at parse time
         // They are compiled as anonymous subs and stored for the constructor
-        if ("ADJUST".equals(blockName) && (parser.isInClassBlock || unitClassAdjust)) {
+        if (("ADJUST".equals(blockName) && (parser.isInClassBlock || unitClassAdjust)) || classBuild) {
 
             // Create an anonymous sub that captures lexical variables
             SubroutineNode adjustSub = new SubroutineNode(
@@ -237,8 +238,14 @@ public class SpecialBlockParser {
                     block,
                     false,
                     parser.tokenIndex);
-            adjustSub.setAnnotation("classAdjustBlock", Boolean.TRUE);
-            block.setAnnotation("classAdjustBlock", Boolean.TRUE);
+            String annotation = classBuild ? "classBuildBlock" : "classAdjustBlock";
+            adjustSub.setAnnotation(annotation, Boolean.TRUE);
+            block.setAnnotation(annotation, Boolean.TRUE);
+
+            if (classBuild) {
+                parser.classBuildBlocks.add(adjustSub);
+                return adjustSub;
+            }
 
             if (parser.isInClassBlock) {
                 // A braced class hasn't generated its constructor yet.
