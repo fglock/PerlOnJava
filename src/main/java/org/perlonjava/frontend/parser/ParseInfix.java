@@ -379,6 +379,34 @@ public class ParseInfix {
                     case "(":
                         TokenUtils.consume(parser);
                         right = new ListNode(ListParser.parseList(parser, ")", 0), parser.tokenIndex);
+                        // If a bareword has no compile-time CV, Perl parses
+                        // Foo::bar->(LIST) as a late-bound named call. A
+                        // defined bareword follows coderef semantics below.
+                        if (left instanceof IdentifierNode unresolvedName) {
+                            OperatorNode directCall = new OperatorNode("&", unresolvedName,
+                                    unresolvedName.getIndex());
+                            directCall.setAnnotation("directNamedCall", true);
+                            directCall.setAnnotation("parseTimeCodeRef",
+                                    GlobalVariable.getGlobalCodeRefForFreshLookup(unresolvedName.name));
+                            directCall.setAnnotation("subroutineKnownAtParseTime", false);
+                            return new BinaryOperatorNode("(", directCall, right, parser.tokenIndex);
+                        }
+                        // A sub name that was unresolved when this code was
+                        // compiled is a late-bound direct call in Perl's
+                        // Foo::bar->(LIST) syntax. If it was already defined,
+                        // preserve the ordinary coderef-returning call.
+                        if (left instanceof BinaryOperatorNode namedCall
+                                && "(".equals(namedCall.operator)
+                                && namedCall.right instanceof ListNode namedArgs
+                                && namedArgs.elements.isEmpty()
+                                && namedCall.left instanceof OperatorNode subRef
+                                && "&".equals(subRef.operator)
+                                && subRef.operand instanceof IdentifierNode
+                                && subRef.getBooleanAnnotation("directNamedCall")
+                                && Boolean.FALSE.equals(
+                                        subRef.getAnnotation("subroutineKnownAtParseTime"))) {
+                            return new BinaryOperatorNode("(", subRef, right, parser.tokenIndex);
+                        }
                         if (left instanceof OperatorNode op && isArrowReassociatingUnaryOperator(op.operator)) {
                             Node arrowLeft = coderefArrowLeft(op.operand);
                             BinaryOperatorNode arrowCall = new BinaryOperatorNode(token.text,

@@ -859,6 +859,10 @@ public class SubroutineParser {
                 parseTimeCodeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(fullName);
             }
             if (parseTimeCodeRef != null) {
+                Object target = parseTimeCodeRef.value;
+                boolean knownAtParseTime = target instanceof RuntimeCode runtimeCode
+                        && (runtimeCode.defined() || runtimeCode.isDeclared);
+                codeRefNode.setAnnotation("subroutineKnownAtParseTime", knownAtParseTime);
                 // The parser's class registry is intentionally compile-time
                 // state.  Preserve the declaring-class identity on this
                 // call site's CV now, before execution switches to its own
