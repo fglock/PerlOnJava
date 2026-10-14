@@ -219,6 +219,7 @@ sub _extract_source_visible_block {
     return if defined($source_offset) && $source_offset == -1
         && $body =~ /\A\{\s*use\s+(?:strict|warnings)\b/s;
     $body .= ';' if length($body) && $body !~ /[;}]\z/;
+    $body = _fold_simple_integer_expression($body);
     if ($flags) {
         my @lines;
         push @lines, 'use warnings;' if $flags & 2;
@@ -227,6 +228,18 @@ sub _extract_source_visible_block {
         return "{\n" . join('', map { "    $_\n" } @lines) . "}";
     }
     return "{ $body }";
+}
+
+sub _fold_simple_integer_expression {
+    my ($body) = @_;
+    return $body unless $body =~ /\A((?:(?:use\s+(?:strict|warnings)\s*;\s*)*))
+        (\d{1,9})\s*([+*-])\s*(\d{1,9})\s*;?\s*\z/x;
+
+    my ($prefix, $left, $operator, $right) = ($1, $2, $3, $4);
+    my $value = $operator eq '+' ? $left + $right
+        : $operator eq '-' ? $left - $right
+        : $left * $right;
+    return $prefix . $value . ';';
 }
 
 sub _looks_like_code_block_open {

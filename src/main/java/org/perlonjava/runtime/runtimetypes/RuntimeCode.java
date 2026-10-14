@@ -474,6 +474,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         EvalSourceFrame source = activeEvalSources().peek();
         return source == null ? null : source.text();
     }
+
     private static Map<String, Class<?>> evalCache() {
         return PerlRuntime.current().runtimeCodeState().evalCache;
     }
@@ -6091,7 +6092,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
                 // Synthetic frames such as eval blocks describe the frame itself,
                 // not the previous caller, so preserve their own subroutine name.
-                if ((syntheticOwnSubFrame || virtualEvalFrame && frameSubName != null && frameSubName.startsWith("("))) {
+                if ((syntheticOwnSubFrame || virtualEvalFrame
+                        && frameSubName != null && frameSubName.startsWith("("))) {
                     subName = frameSubName;
                 }
 
@@ -6337,8 +6339,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // element 6 belongs to the currently executing eval source.
                 // Therefore `(eval)` is the authoritative marker here rather
                 // than the reported filename (which can be the outer script).
-                String evalText = subName != null && subName.startsWith("(eval")
-                        ? currentActiveEvalText() : activeEvalText(filename);
+                // Element 6 describes eval STRING frames only. Eval STRING's
+                // implementation frame can sit immediately before the logical
+                // `(eval)` caller frame; eval BLOCK frames share the same name
+                // but have no such implementation frame of their own.
+                boolean evalStringSourceFrame = subName != null && subName.startsWith("(eval")
+                        && !virtualEvalFrame
+                        && (isEvalStringImplementationFrame(frameInfo)
+                        || frame > 0 && isEvalStringImplementationFrame(stackTrace.get(frame - 1)));
+                String evalText = evalStringSourceFrame ? currentActiveEvalText() : null;
                 res.add(evalText != null ? new RuntimeScalar(evalText)
                         : RuntimeScalarCache.scalarUndef);
 
@@ -7074,6 +7083,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     private static String normalizeCallerSubName(String subName) {
         if (subName == null) return null;
+        if (subName.matches("eval\\s+['\"].*['\"]")) return "(eval)";
         int separator = subName.lastIndexOf("::");
         if (separator <= 0) return subName;
         String packageName = subName.substring(0, separator);

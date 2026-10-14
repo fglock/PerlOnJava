@@ -7,7 +7,7 @@ priorities and future plans.
 ## Work in progress
 
 - Recover malformed HTML through Jsoup in `XML::LibXML`, decode HTML attribute entities by default, report `HTML::Parser` source positions, and allow nested `AUTOLOAD` tail calls from sort comparators (#1416, #1457, #1634).
-- Preserve anonymous caller identities after glob installation and report the final initializer line for multiline imported DSL declarations (#1548, #1620).
+- Preserve anonymous and eval caller metadata, retain source-relative require paths, and deparse folded closure expressions; report the final initializer line for multiline imported DSL declarations (#1548, #1620).
 - Preserve package-qualified anonymous caller names used by generated accessors (#1276).
 - Fix DBI `do()` overrides, DBD::Sponge initialization, and SQLite generated ID lookup.
 - Parse escaped backslashes in transliteration lists once, inherit strict-vars

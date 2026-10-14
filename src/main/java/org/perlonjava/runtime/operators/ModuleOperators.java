@@ -743,7 +743,7 @@ public class ModuleOperators {
                                 // (Perl 5 uses "lib/Foo.pm" not "/abs/path/lib/Foo.pm")
                                 // Strip trailing slash from dirName to avoid double slashes
                                 String cleanDir = displayIncDirectory(dirName);
-                                actualFileName = !isRequire && cleanDir.equals(".")
+                                actualFileName = cleanDir.equals(".")
                                         ? searchFileName + "c"
                                         : cleanDir + "/" + searchFileName + "c";
                                 break;
@@ -762,7 +762,7 @@ public class ModuleOperators {
                             // Preserve the @INC entry's relativity for display/error messages
                             // Strip trailing slash from dirName to avoid double slashes
                             String cleanDir = displayIncDirectory(dirName);
-                            actualFileName = !isRequire && cleanDir.equals(".")
+                            actualFileName = cleanDir.equals(".")
                                     ? searchFileName
                                     : cleanDir + "/" + searchFileName;
                             break;
