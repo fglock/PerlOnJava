@@ -86,8 +86,19 @@ my $MAX_CAPTURE_BYTES   = 1_000_000; # keep only this much child output in memor
 my %MODULE_TIMEOUT_SECONDS = (
     'Catalyst'           => 7200,
     'DBIx::Class'        => 3600,
+    # t/01-Kamelon.t enumerates 291 syntaxes and takes 136s on the JVM / 182s
+    # in the interpreter. The complete distribution suite also runs 225
+    # benchmark parses; it passed in 3481s on the JVM.
+    'Syntax::Kamelon'    => 4800,
+    # Holiday::US builds a combined recurrence set before emitting assertions;
+    # the focused test takes about 318s on the JVM.
+    'DateTime::Event::Holiday::US' => 420,
     'Excel::Writer::XLSX' => 7200,
     'Image::ExifTool'    => 3600,
+    # local::lib's shell.t launches PerlOnJava repeatedly while testing
+    # activation under PATH=/; it passes, but exceeds the normal no-output
+    # window because each nested launcher starts a JVM.
+    'local::lib'         => 300,
 );
 
 # CPAN package index

@@ -306,11 +306,16 @@ public class GlobalContext {
         List<RuntimeScalar> inc = GlobalVariable.getGlobalArray("main::INC").elements;
 
         inc.addAll(compilerOptions.inc.elements);   // add from `-I`
-        String[] directories = env.getOrDefault("PERL5LIB", new RuntimeScalar(""))
-                .toString().split(Pattern.quote(File.pathSeparator));
-        for (String directory : directories) {
-            if (!directory.isEmpty()) {
-                inc.add(new RuntimeScalar(directory)); // add from env PERL5LIB
+        // Perl ignores PERL5LIB in taint mode. Explicit -I paths remain
+        // available, but inheriting environment library paths would let a
+        // -T child process load modules from caller-controlled locations.
+        if (!compilerOptions.taintMode) {
+            String[] directories = env.getOrDefault("PERL5LIB", new RuntimeScalar(""))
+                    .toString().split(Pattern.quote(File.pathSeparator));
+            for (String directory : directories) {
+                if (!directory.isEmpty()) {
+                    inc.add(new RuntimeScalar(directory)); // add from env PERL5LIB
+                }
             }
         }
         // Keep the user installation path in @INC even before it exists. A
