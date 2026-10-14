@@ -37,6 +37,10 @@ jobs:
         timeout-minutes: 10
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Set up MSVC developer environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
       # Use Makefile's 'ci' target which handles platform differences
       # Both platforms build and run tests; Windows uses the non-daemon wrapper.
       - name: Build with Make (Windows)

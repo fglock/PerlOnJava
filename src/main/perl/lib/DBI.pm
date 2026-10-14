@@ -156,8 +156,22 @@ sub DBD::_::dr::connect {
 
     *DBI::execute = sub {
         if (!_is_jdbc_handle($_[0])) {
+            my $sth = $_[0];
+            my $dbh = $sth->{Database};
+            my $was_active = $sth->{Active} ? 1 : 0;
+            my $active_kids_before = $dbh ? ($dbh->{ActiveKids} || 0) : 0;
             my $result = _dispatch_implementor_method($_[0], 'execute', @_[1..$#_]);
-            _populate_statement_metadata($_[0]) if defined $result;
+            if (defined $result) {
+                _populate_statement_metadata($sth);
+                $dbh = $sth->{Database};
+                if ($dbh) {
+                    my $active = $result && ($sth->{NUM_OF_FIELDS} || 0) > 0;
+                    my $delta = ($active ? 1 : 0) - $was_active;
+                    my $active_kids = $active_kids_before + $delta;
+                    $dbh->{ActiveKids} = $active_kids > 0 ? $active_kids : 0;
+                    $sth->{Active} = $active ? 1 : 0;
+                }
+            }
             return $result;
         }
         my $result = eval { $JDBC_EXECUTE->(@_) };
@@ -611,6 +625,14 @@ sub _dispatch_implementor_method {
     my $impl = ref($handle) ? $handle->{ImplementorClass} : undef;
     die "No DBI implementor class for $method\n" unless $impl;
     my $code = $impl->can($method);
+    # A pure-Perl handle class can inherit DBI's public wrapper. Dispatching
+    # that wrapper back through the implementor class recurses indefinitely.
+    # Only driver implementations belong on this fallback path.
+    {
+        no strict 'refs';
+        my $dbi_wrapper = *{"DBI::$method"}{CODE};
+        $code = undef if $code && $dbi_wrapper && $code == $dbi_wrapper;
+    }
     die "Can't locate object method \"$method\" via package \"$impl\"\n"
         unless $code;
     return $code->($handle, @args);
@@ -1378,6 +1400,9 @@ sub selectcol_arrayref {
 
 sub bind_columns {
     my ($sth, @refs) = @_;
+    # DBI historically accepts an optional attribute argument before the
+    # column references. Drivers and consumers commonly pass undef here.
+    shift @refs if @refs && (!defined $refs[0] || ref($refs[0]) eq 'HASH');
     return 1 unless @refs;
 
     # Clear existing bound columns
