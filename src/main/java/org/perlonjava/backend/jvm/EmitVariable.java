@@ -110,6 +110,10 @@ public class EmitVariable {
         if ("@".equals(sigil)) {
             return name.equals("ARGV")
                     || name.equals("INC")
+                    // `@$` is Perl's compact dereference of the array slot
+                    // on the special glob named `$` (gv[*$]); it is not an
+                    // undeclared package array named `$`.
+                    || name.equals("$")
                     || name.equals("+")
                     || name.equals("-");
         }

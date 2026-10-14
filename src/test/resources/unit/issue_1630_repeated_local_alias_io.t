@@ -23,6 +23,13 @@ for my $iteration (1 .. 3) {
         local *STDERR = *CAPTURE;
         is(tell STDERR, 0,
             "saved glob alias keeps its IO through localization $iteration");
+        {
+            local *STDERR = *CAPTURE;
+            isnt(tell ORIGINAL, 123,
+                "saved glob alias does not dispatch to the replacement through nested localization $iteration");
+        }
+        isnt(tell ORIGINAL, 123,
+            "saved glob alias still avoids the replacement after nested localization $iteration");
     }
 }
 
