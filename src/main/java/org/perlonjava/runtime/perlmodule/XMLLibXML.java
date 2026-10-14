@@ -370,6 +370,9 @@ public class XMLLibXML extends PerlModuleBase {
             module.registerMethodInPackage("XML::LibXML::Attr", "serializeContent", "attrSerializeContent");
             module.registerMethodInPackage("XML::LibXML::Attr", "toString",         "attrToString");
 
+            // DTD constructor. XML::LibXML exposes this as a class method.
+            module.registerMethodInPackage("XML::LibXML::Dtd", "parse_string", "dtdParseString");
+
             // Text / CDATASection
             module.registerMethodInPackage("XML::LibXML::Text", "data",    "getData");
             module.registerMethodInPackage("XML::LibXML::Text", "setData", "setData");
@@ -814,6 +817,22 @@ public class XMLLibXML extends PerlModuleBase {
     }
 
     private static String serializeNode(Node node, boolean format, boolean withDecl) {
+        if (node instanceof DocumentType doctype) {
+            StringBuilder out = new StringBuilder("<!DOCTYPE ").append(doctype.getName());
+            String publicId = doctype.getPublicId();
+            String systemId = doctype.getSystemId();
+            if (publicId != null && !publicId.isEmpty()) {
+                out.append(" PUBLIC \"").append(publicId).append("\"");
+                if (systemId != null && !systemId.isEmpty()) {
+                    out.append(" \"").append(systemId).append("\"");
+                }
+            } else if (systemId != null && !systemId.isEmpty()) {
+                out.append(" SYSTEM \"").append(systemId).append("\"");
+            }
+            String subset = doctype.getInternalSubset();
+            if (subset != null && !subset.isEmpty()) out.append(" [").append(subset).append(']');
+            return out.append('>').toString();
+        }
         // Attr node: libxml2 serializes as ' name="value"' (with leading space)
         if (node.getNodeType() == Node.ATTRIBUTE_NODE) {
             Attr a = (Attr) node;
@@ -1099,6 +1118,28 @@ public class XMLLibXML extends PerlModuleBase {
                 new RuntimeScalar("\n")).getList();
         } catch (Exception e) {
             return WarnDie.die(new RuntimeScalar("XML::LibXML::parse_string: " + e.getMessage() + "\n"),
+                new RuntimeScalar("\n")).getList();
+        }
+    }
+
+    /** XML::LibXML::Dtd->parse_string($text) — parse an internal DTD subset. */
+    public static RuntimeList dtdParseString(RuntimeArray args, int ctx) {
+        if (args.size() < 2 || args.get(1).type == RuntimeScalarType.UNDEF) {
+            return WarnDie.die(new RuntimeScalar("Empty String\n"),
+                new RuntimeScalar("\n")).getList();
+        }
+        String dtdText = args.get(1).toString();
+        String xml = "<!DOCTYPE _jperl_dtd [" + dtdText + "]><_jperl_dtd/>";
+        try {
+            DocumentBuilder db = newBuilder(new ParserOptions());
+            Document doc = db.parse(xmlInputSource(xml));
+            return wrapNode(doc.getDoctype()).getList();
+        } catch (SAXParseException e) {
+            String msg = ":" + e.getLineNumber() + ": parser error : " + normalizeSaxError(e.getMessage());
+            return WarnDie.die(new RuntimeScalar("XML::LibXML::Dtd::parse_string: " + msg + "\n"),
+                new RuntimeScalar("\n")).getList();
+        } catch (Exception e) {
+            return WarnDie.die(new RuntimeScalar("XML::LibXML::Dtd::parse_string: " + e.getMessage() + "\n"),
                 new RuntimeScalar("\n")).getList();
         }
     }
@@ -1565,7 +1606,10 @@ public class XMLLibXML extends PerlModuleBase {
     }
 
     public static RuntimeList nodeType(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(getNode(args.get(0)).getNodeType()).getList();
+        short type = getNode(args.get(0)).getNodeType();
+        // org.w3c.dom.Node.DOCUMENT_TYPE_NODE is 10; XML::LibXML's
+        // libxml2-compatible XML_DTD_NODE constant is 14.
+        return new RuntimeScalar(type == Node.DOCUMENT_TYPE_NODE ? 14 : type).getList();
     }
 
     public static RuntimeList parentNode(RuntimeArray args, int ctx) {
