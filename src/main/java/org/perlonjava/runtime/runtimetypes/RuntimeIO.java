@@ -1755,6 +1755,16 @@ public class RuntimeIO extends RuntimeScalar {
             }
         }
 
+        // PerlIO :pop modifies the current stack in place.  The ordinary
+        // binmode path below intentionally unwraps and rebuilds the stack,
+        // which would discard the stack before :pop can remove its top layer.
+        if (ioLayer.trim().equals(":pop") || ioLayer.trim().equals("pop")) {
+            if (ioHandle instanceof LayeredIOHandle layered) {
+                return layered.binmode(ioLayer);
+            }
+            return scalarTrue;
+        }
+
         // Unwrap all layers to get to the base handle
         IOHandle originalHandle = ioHandle;
         IOHandle baseHandle = ioHandle;

@@ -7,6 +7,7 @@ priorities and future plans.
 ## Work in progress
 
 - Preserve `exit()` raised while compiling dynamic `eval` strings, including `Test::More`'s `skip_all` behavior; preserve lexical hints in prototype callback blocks so Test2 suppresses configured load diagnostics; and skip only Pod::HtmlEasy's two `IPC::Run` stdio assertions that require unsupported `fork()` (#1471, #1589, #1735).
+- Recognize `IO` as a parent of unblessed filehandle IO references, support `PerlIO :pop` on built-in layers, and cover negotiated TLS version metadata on a local TLS connection (#1782, #1607, #1435).
 - Allow additional quiet time for `local::lib`, `Syntax::Kamelon`, and `DateTime::Event::Holiday::US` CPAN tests that exceed the default timeout during nested JVM launches, syntax highlighting, and recurrence-set construction (#1787, #1370, #1541).
 - Honor Perl's `-T` behavior by excluding `PERL5LIB` from `@INC` while preserving explicit `-I` paths (#1787).
 - Recover malformed HTML through Jsoup in `XML::LibXML`, decode HTML attribute entities by default, report `HTML::Parser` source positions, and allow nested `AUTOLOAD` tail calls from sort comparators (#1416, #1457, #1634).
@@ -57,6 +58,7 @@ priorities and future plans.
 
 - Allow `%ARGV` under `strict vars`, matching system Perl (#1770).
 - Parse indirect-object method calls with whitespace-separated arguments, compact arithmetic after `$$`, and recursive block-prototype calls from nested closures (#1429, #1329, #1763).
+- Parse nested Language::BF callback-table dispatch and run Object::Pad `BUILD` blocks after field initialization (#1800, #1450).
 - Resolve imported `length` subroutines ahead of the CORE builtin while keeping explicit `CORE::length` calls unchanged (#1239).
 - Preserve live unblessed aggregates when weak-parent links are installed and during cleanup; reuse package-root and live-lexical snapshots across repeated cleanup and capture-owner checks; avoid full walks when targeted weak releases already have a positive root proof; skip dynamic stash views during scope cleanup; bound root snapshots by node and edge budgets, and treat capped root-walk results conservatively; propagate indirect `utf8` imports in interpreter mode for Mojolicious selector parity; preserve scalar `caller()` results when used as method invocants in interpreter mode; parse labeled blocks as blocks when they are followed by a call expression (#1642).
 - Preserve fieldhash values and quoted/deferred subroutine metadata across Perl threads (#1413, #1420).
