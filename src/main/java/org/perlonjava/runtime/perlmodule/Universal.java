@@ -370,7 +370,7 @@ public class Universal extends PerlModuleBase {
                     // An IO slot itself is an IO::Handle.  Keep this separate
                     // from a reference to the glob that owns the slot.
                     if (RuntimeIO.getRuntimeIO(object) != null) {
-                        return getScalarBoolean(argString.equals("IO::Handle")).getList();
+                        return getScalarBoolean(isIOHandleClass(argString)).getList();
                     }
                     // Perl 5 recognises both "Regexp" (ref() spelling) and "REGEXP"
                     // (internal SV type name) for isa() checks on unblessed regexes.
@@ -402,7 +402,7 @@ public class Universal extends PerlModuleBase {
                 RuntimeIO io = object.getRuntimeIO();
                 if (io != null) {
                     if (io.blessId == 0) {
-                        return getScalarBoolean(argString.equals("IO::Handle")).getList();
+                        return getScalarBoolean(isIOHandleClass(argString)).getList();
                     }
                     perlClassName = NameNormalizer.getBlessStr(io.blessId);
                     break;
@@ -516,6 +516,11 @@ public class Universal extends PerlModuleBase {
         }
 
         return new RuntimeScalar(false).getList();
+    }
+
+    /** Perl's unblessed filehandle IO references inherit from the IO class. */
+    private static boolean isIOHandleClass(String className) {
+        return className.equals("IO::Handle") || className.equals("IO");
     }
 
     private static boolean containsAliasEquivalentClass(List<String> classes, String target) {
