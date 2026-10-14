@@ -6001,6 +6001,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // `(eval)` as the called subroutine.
             ArrayList<String> frameInfo = stackTrace.get(frame);
             ArrayList<String> locationFrameInfo = interpreterFrameBeforeVirtualEval
+                    || interpreterFrameBeforeEvalString
                     ? stackTrace.get(frame + 1)
                     : frameInfo;
             int syntheticOwnSubFramesBefore = countSyntheticOwnSubFramesBefore(stackTrace, frame);
