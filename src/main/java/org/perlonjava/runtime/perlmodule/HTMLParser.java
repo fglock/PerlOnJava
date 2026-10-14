@@ -146,6 +146,8 @@ public class HTMLParser extends PerlModuleBase {
         // correctly interpret STRING as Unicode.
         pstate.put("_input_is_byte_string", scalarFalse);
         pstate.put("_literal_mode", new RuntimeScalar(""));
+        pstate.put("_ignore_current_element", scalarFalse);
+        pstate.put("_ignore_elements", new RuntimeArray().createReference());
         pstate.put("_pending_end_tag", new RuntimeScalar(""));
         pstate.put("_bool_attr_val", scalarUndef);
         pstate.put("_in_cdata", scalarFalse);
@@ -351,8 +353,27 @@ public class HTMLParser extends PerlModuleBase {
      * Tag list accessor (report_tags, ignore_tags, ignore_elements).
      */
     public static RuntimeList tagListAccessor(RuntimeArray args, int ctx) {
-        // Phase 1 stub - tag filtering not yet implemented
-        return new RuntimeList();
+        RuntimeHash selfHash = args.get(0).hashDeref();
+        RuntimeHash pstate = getPstate(selfHash);
+        RuntimeArray previous = pstate.get("_ignore_elements").arrayDeref();
+        RuntimeArray replacement = new RuntimeArray();
+        if (args.size() > 1) {
+            for (int i = 1; i < args.size(); i++) {
+                RuntimeScalar arg = args.get(i);
+                if (arg.type == RuntimeScalarType.ARRAYREFERENCE) {
+                    RuntimeArray values = arg.arrayDeref();
+                    for (int j = 0; j < values.size(); j++) {
+                        RuntimeArray.push(replacement, values.get(j));
+                    }
+                } else {
+                    RuntimeArray.push(replacement, arg);
+                }
+            }
+            pstate.put("_ignore_elements", replacement.createReference());
+        }
+        RuntimeList result = new RuntimeList();
+        for (int i = 0; i < previous.size(); i++) result.add(previous.get(i));
+        return result;
     }
 
     // ================================================================
@@ -641,9 +662,11 @@ public class HTMLParser extends PerlModuleBase {
                 case "tag":
                     // Only tag events have a tag name. Text and document
                     // events also carry a first internal argument, but it is
-                    // not a tag and Perl's HTML::Parser returns undef here.
+                    // not a tag. Comment events expose their body as tagname.
                     if (("start".equals(eventName) || "end".equals(eventName))
                             && eventArgs.length > 0) {
+                        RuntimeArray.push(result, eventArgs[0]);
+                    } else if ("comment".equals(eventName) && eventArgs.length > 0) {
                         RuntimeArray.push(result, eventArgs[0]);
                     } else {
                         RuntimeArray.push(result, scalarUndef);
@@ -666,6 +689,23 @@ public class HTMLParser extends PerlModuleBase {
                         RuntimeArray.push(result, eventArgs[2]);
                     } else {
                         RuntimeArray.push(result, new RuntimeArray().createReference());
+                    }
+                    break;
+
+                case "@attr":
+                    // HTML::Parser's @attr argspec expands the start-event
+                    // attributes into ordered name/value pairs.  Keeping the
+                    // source order matters to consumers that consume this as
+                    // a flat list (for example HTML::Lint).
+                    if ("start".equals(eventName) && eventArgs.length > 2) {
+                        RuntimeHash attrs = eventArgs[1].hashDeref();
+                        RuntimeArray attrSeq = eventArgs[2].arrayDeref();
+                        for (int i = 0; i < attrSeq.size(); i++) {
+                            RuntimeScalar name = attrSeq.get(i);
+                            RuntimeScalar value = attrs.get(name.toString());
+                            RuntimeArray.push(result, name);
+                            RuntimeArray.push(result, value != null ? value : scalarUndef);
+                        }
                     }
                     break;
 
@@ -987,6 +1027,7 @@ public class HTMLParser extends PerlModuleBase {
 
         String literalMode = pstate.get("_literal_mode").toString();
         if (!literalMode.isEmpty()) {
+            boolean ignoreLiteral = pstate.get("_ignore_current_element").getBoolean();
             int endIdx = findLiteralEnd(pstate, html, literalMode, 0);
             if (endIdx < 0) {
                 pstate.put("_buf", parsedScalar(pstate, html));
@@ -999,15 +1040,18 @@ public class HTMLParser extends PerlModuleBase {
                 return;
             }
 
-            if (endIdx > 0) {
+            if (endIdx > 0 && !ignoreLiteral) {
                 fireEvent(self, selfHash, pstate, "text",
                         parsedScalar(pstate, html.substring(0, endIdx)));
             }
             endTagEnd++;
-            fireEvent(self, selfHash, pstate, "end",
-                    new RuntimeScalar(literalMode),
-                    new RuntimeScalar(html.substring(endIdx, endTagEnd)));
+            if (!ignoreLiteral) {
+                fireEvent(self, selfHash, pstate, "end",
+                        new RuntimeScalar(literalMode),
+                        new RuntimeScalar(html.substring(endIdx, endTagEnd)));
+            }
             pstate.put("_literal_mode", new RuntimeScalar(""));
+            pstate.put("_ignore_current_element", scalarFalse);
             i = endTagEnd;
             textStart = i;
         }
@@ -1236,9 +1280,11 @@ public class HTMLParser extends PerlModuleBase {
                     boolean selfClosing = false;
                     if (i < len && html.charAt(i) == '/') {
                         selfClosing = true;
-                        // In non-XML mode, treat / as boolean attribute (matches Perl HTML::Parser)
+                        // In non-XML mode, Perl HTML::Parser exposes / as a
+                        // boolean attribute unless empty_element_tags is set.
                         boolean xmlMode = pstate.get("xml_mode").getBoolean();
-                        if (!xmlMode) {
+                        boolean emptyElementTags = pstate.get("empty_element_tags").getBoolean();
+                        if (!xmlMode && !emptyElementTags) {
                             attrs.put("/", new RuntimeScalar("/"));
                             RuntimeArray.push(attrSeq, new RuntimeScalar("/"));
                         }
@@ -1256,11 +1302,19 @@ public class HTMLParser extends PerlModuleBase {
 
                     String origText = html.substring(tagStart, i);
 
-                    fireEvent(self, selfHash, pstate, "start",
-                            new RuntimeScalar(tagName),
-                            attrs.createReference(),
-                            attrSeq.createReference(),
-                            new RuntimeScalar(origText));
+                    boolean ignoreElement = !selfClosing && isIgnoredElement(pstate, tagName);
+                    if (ignoreElement) {
+                        pstate.put("_literal_mode", new RuntimeScalar(tagName));
+                        pstate.put("_ignore_current_element", scalarTrue);
+                    }
+
+                    if (!ignoreElement) {
+                        fireEvent(self, selfHash, pstate, "start",
+                                new RuntimeScalar(tagName),
+                                attrs.createReference(),
+                                attrSeq.createReference(),
+                                new RuntimeScalar(origText));
+                    }
 
                     // In XML mode, self-closing tags emit an end event
                     // In non-XML mode, self-closing / is just a boolean attribute
@@ -1272,14 +1326,14 @@ public class HTMLParser extends PerlModuleBase {
 
                     // Raw text elements: <script>, <style>, <xmp>, <listing>, <plaintext>
                     // Content inside these elements is not parsed for tags
-                    if (!selfClosing && (tagName.equals("script") || tagName.equals("style")
+                    if (!selfClosing && (ignoreElement || tagName.equals("script") || tagName.equals("style")
                             || tagName.equals("xmp") || tagName.equals("listing")
                             || tagName.equals("plaintext") || tagName.equals("textarea")
                             || tagName.equals("title"))) {
                         int endIdx = findLiteralEnd(pstate, html, tagName, i);
                         if (endIdx >= 0) {
                             // Emit raw content as text
-                            if (endIdx > i) {
+                            if (endIdx > i && !ignoreElement) {
                                 fireEvent(self, selfHash, pstate, "text",
                                         new RuntimeScalar(html.substring(i, endIdx)));
                             }
@@ -1287,10 +1341,14 @@ public class HTMLParser extends PerlModuleBase {
                             int endTagEnd = html.indexOf('>', endIdx);
                             if (endTagEnd >= 0) {
                                 endTagEnd++;
-                                fireEvent(self, selfHash, pstate, "end",
-                                        new RuntimeScalar(tagName),
-                                        new RuntimeScalar(html.substring(endIdx, endTagEnd)));
+                                if (!ignoreElement) {
+                                    fireEvent(self, selfHash, pstate, "end",
+                                            new RuntimeScalar(tagName),
+                                            new RuntimeScalar(html.substring(endIdx, endTagEnd)));
+                                }
                                 i = endTagEnd;
+                                pstate.put("_literal_mode", new RuntimeScalar(""));
+                                pstate.put("_ignore_current_element", scalarFalse);
                             } else {
                                 // Incomplete end tag - buffer for next parse()
                                 pstate.put("_buf", parsedScalar(pstate, html.substring(endIdx)));
@@ -1391,12 +1449,24 @@ public class HTMLParser extends PerlModuleBase {
         return findCaseInsensitive(html, endTag, fromIndex);
     }
 
+    private static boolean isIgnoredElement(RuntimeHash pstate, String tagName) {
+        RuntimeScalar ignoredRef = pstate.get("_ignore_elements");
+        if (ignoredRef == null || ignoredRef.type != RuntimeScalarType.ARRAYREFERENCE) return false;
+        RuntimeArray ignored = ignoredRef.arrayDeref();
+        for (int i = 0; i < ignored.size(); i++) {
+            if (tagName.equalsIgnoreCase(ignored.get(i).toString())) return true;
+        }
+        return false;
+    }
+
     private static void flushBufferedAtEof(RuntimeScalar self, RuntimeHash selfHash, RuntimeHash pstate) {
         while (true) {
             String remaining = pstate.get("_buf").toString();
             String literalMode = pstate.get("_literal_mode").toString();
+            boolean ignoreLiteral = pstate.get("_ignore_current_element").getBoolean();
             pstate.put("_buf", parsedScalar(pstate, ""));
             pstate.put("_literal_mode", new RuntimeScalar(""));
+            pstate.put("_ignore_current_element", scalarFalse);
 
             if (literalMode.isEmpty()) {
                 if (remaining.isEmpty()) {
@@ -1416,6 +1486,9 @@ public class HTMLParser extends PerlModuleBase {
                         fireEvent(self, selfHash, pstate, "comment", parsedScalar(pstate, remaining));
                     }
                 }
+            } else if (ignoreLiteral) {
+                // ignore_elements suppresses both the unclosed element and
+                // its remaining content at EOF.
             } else if (literalMode.equals("script") || literalMode.equals("style")) {
                 fireEvent(self, selfHash, pstate, "end",
                         new RuntimeScalar(literalMode), new RuntimeScalar(""));

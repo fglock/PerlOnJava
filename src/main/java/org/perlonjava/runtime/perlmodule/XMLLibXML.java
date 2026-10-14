@@ -28,6 +28,8 @@ import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Java XS implementation of XML::LibXML.
@@ -369,6 +371,9 @@ public class XMLLibXML extends PerlModuleBase {
             module.registerMethodInPackage("XML::LibXML::Attr", "setNodeName",      "setNodeName");
             module.registerMethodInPackage("XML::LibXML::Attr", "serializeContent", "attrSerializeContent");
             module.registerMethodInPackage("XML::LibXML::Attr", "toString",         "attrToString");
+
+            // DTD constructor. XML::LibXML exposes this as a class method.
+            module.registerMethodInPackage("XML::LibXML::Dtd", "parse_string", "dtdParseString");
 
             // Text / CDATASection
             module.registerMethodInPackage("XML::LibXML::Text", "data",    "getData");
@@ -814,6 +819,22 @@ public class XMLLibXML extends PerlModuleBase {
     }
 
     private static String serializeNode(Node node, boolean format, boolean withDecl) {
+        if (node instanceof DocumentType doctype) {
+            StringBuilder out = new StringBuilder("<!DOCTYPE ").append(doctype.getName());
+            String publicId = doctype.getPublicId();
+            String systemId = doctype.getSystemId();
+            if (publicId != null && !publicId.isEmpty()) {
+                out.append(" PUBLIC \"").append(publicId).append("\"");
+                if (systemId != null && !systemId.isEmpty()) {
+                    out.append(" \"").append(systemId).append("\"");
+                }
+            } else if (systemId != null && !systemId.isEmpty()) {
+                out.append(" SYSTEM \"").append(systemId).append("\"");
+            }
+            String subset = doctype.getInternalSubset();
+            if (subset != null && !subset.isEmpty()) out.append(" [").append(subset).append(']');
+            return out.append('>').toString();
+        }
         // Attr node: libxml2 serializes as ' name="value"' (with leading space)
         if (node.getNodeType() == Node.ATTRIBUTE_NODE) {
             Attr a = (Attr) node;
@@ -1103,6 +1124,58 @@ public class XMLLibXML extends PerlModuleBase {
         }
     }
 
+    /** XML::LibXML::Dtd->parse_string($text) — parse an internal DTD subset. */
+    public static RuntimeList dtdParseString(RuntimeArray args, int ctx) {
+        if (args.size() < 2 || args.get(1).type == RuntimeScalarType.UNDEF) {
+            return WarnDie.die(new RuntimeScalar("Empty String\n"),
+                new RuntimeScalar("\n")).getList();
+        }
+        String dtdText = args.get(1).toString();
+        dtdText = expandInternalParameterEntityReferences(dtdText);
+        String xml = "<!DOCTYPE _jperl_dtd [" + dtdText + "]><_jperl_dtd/>";
+        try {
+            DocumentBuilder db = newBuilder(new ParserOptions());
+            Document doc = db.parse(xmlInputSource(xml));
+            return wrapNode(doc.getDoctype()).getList();
+        } catch (SAXParseException e) {
+            String msg = ":" + e.getLineNumber() + ": parser error : " + normalizeSaxError(e.getMessage());
+            return WarnDie.die(new RuntimeScalar("XML::LibXML::Dtd::parse_string: " + msg + "\n"),
+                new RuntimeScalar("\n")).getList();
+        } catch (Exception e) {
+            return WarnDie.die(new RuntimeScalar("XML::LibXML::Dtd::parse_string: " + e.getMessage() + "\n"),
+                new RuntimeScalar("\n")).getList();
+        }
+    }
+
+    /**
+     * Xerces rejects parameter entity references inside declarations in an
+     * internal subset, although XML::LibXML's DTD parser accepts this common
+     * external-DTD syntax. Expand only internally declared parameter entities
+     * before wrapping the subset; external entities remain subject to the
+     * parser's normal resolver policy.
+     */
+    private static String expandInternalParameterEntityReferences(String dtdText) {
+        Pattern declaration = Pattern.compile(
+                "(?s)<!ENTITY\\s+%\\s*([A-Za-z_:][A-Za-z0-9_.:-]*)\\s+(['\"])(.*?)\\2");
+        Matcher matcher = declaration.matcher(dtdText);
+        Map<String, String> entities = new LinkedHashMap<>();
+        while (matcher.find()) {
+            entities.put(matcher.group(1), matcher.group(3));
+        }
+        String expanded = dtdText;
+        for (int pass = 0; pass < 16; pass++) {
+            String before = expanded;
+            for (Map.Entry<String, String> entity : entities.entrySet()) {
+                Pattern reference = Pattern.compile("%\\s*"
+                        + Pattern.quote(entity.getKey()) + "\\s*;");
+                expanded = reference.matcher(expanded)
+                        .replaceAll(Matcher.quoteReplacement(entity.getValue()));
+            }
+            if (expanded.equals(before)) break;
+        }
+        return expanded;
+    }
+
     private static boolean hasBinaryXmlBom(byte[] b) {
         if (b.length < 2) return false;
         // UTF-8 BOM: parse byte strings as bytes so the XML parser consumes
@@ -1332,13 +1405,9 @@ public class XMLLibXML extends PerlModuleBase {
     }
 
     public static RuntimeList _parse_html_string(RuntimeArray args, int ctx) {
-        // Try to parse as XML first; if that fails due to unclosed void HTML
-        // elements, self-close them and retry.
-        try {
-            return _parse_string(args, ctx);
-        } catch (Exception e) {
-            // Fall through to HTML-aware fallback
-        }
+        // HTML parsing must go through the HTML5 tree builder even when the
+        // input happens to be well-formed XML: HTML element names are
+        // case-insensitive and libxml2 normalizes them to lowercase.
         RuntimeScalar self   = args.get(0);
         RuntimeScalar strArg = args.size() > 1 ? args.get(1) : scalarUndef;
         if (strArg.type == RuntimeScalarType.UNDEF) {
@@ -1349,6 +1418,13 @@ public class XMLLibXML extends PerlModuleBase {
         // HTML5 tree builder for the same recovery step, then serialize as
         // well-formed XML for the existing W3C DOM bridge.
         org.jsoup.nodes.Document htmlDocument = Jsoup.parse(html, "", Parser.htmlParser());
+        // libxml2's HTML parser reports HTML element names in lowercase even
+        // when the source used uppercase or mixed-case names. XPath matching
+        // is case-sensitive, so normalize Jsoup's preserved source casing to
+        // keep parse_html_string compatible with XML::LibXML.
+        for (org.jsoup.nodes.Element element : htmlDocument.getAllElements()) {
+            element.tagName(element.normalName());
+        }
         htmlDocument.outputSettings()
                 .syntax(org.jsoup.nodes.Document.OutputSettings.Syntax.xml)
                 .escapeMode(Entities.EscapeMode.xhtml)
@@ -1565,7 +1641,10 @@ public class XMLLibXML extends PerlModuleBase {
     }
 
     public static RuntimeList nodeType(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(getNode(args.get(0)).getNodeType()).getList();
+        short type = getNode(args.get(0)).getNodeType();
+        // org.w3c.dom.Node.DOCUMENT_TYPE_NODE is 10; XML::LibXML's
+        // libxml2-compatible XML_DTD_NODE constant is 14.
+        return new RuntimeScalar(type == Node.DOCUMENT_TYPE_NODE ? 14 : type).getList();
     }
 
     public static RuntimeList parentNode(RuntimeArray args, int ctx) {
