@@ -113,6 +113,8 @@ public final class ExecutionRuntimeState {
     public boolean insideDieHandler;
     /** True when an uncaught die diagnostic was delivered before END blocks. */
     public boolean fatalDiagnosticWritten;
+    /** Process status selected for an uncaught die before Perl sets $? to 255 for END blocks. */
+    public int uncaughtDieExitStatus = Integer.MIN_VALUE;
     /** __WARN__ snapshot retained until an uncaught die reaches the ithread boundary. */
     public RuntimeScalar pendingThreadWarningHandler;
     ControlFlowMarker controlFlowMarker;

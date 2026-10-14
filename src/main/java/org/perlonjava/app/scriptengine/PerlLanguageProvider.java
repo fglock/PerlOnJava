@@ -889,10 +889,15 @@ public class PerlLanguageProvider {
                 // uncaught die. Libraries such as CGI::Cache inspect this
                 // status there to avoid caching output from a failed script.
                 if (t instanceof PerlDieException) {
+                    ExecutionRuntimeState executionState = PerlRuntime.current().executionState();
+                    int bang = GlobalVariable.getGlobalVariable("main::!").getInt();
+                    int queryExit = GlobalVariable.getGlobalVariable("main::?").getInt() >> 8;
+                    executionState.uncaughtDieExitStatus = bang != 0 ? bang
+                            : queryExit != 0 ? queryExit : 255;
                     GlobalVariable.getGlobalVariable("main::?").set(255);
                     RuntimeIO stderr = GlobalVariable.getGlobalIO("main::STDERR").getRuntimeIO();
                     WarnDie.writeFatalDiagnostic(stderr, ErrorMessageUtil.stringifyException(t));
-                    PerlRuntime.current().executionState().fatalDiagnosticWritten = true;
+                    executionState.fatalDiagnosticWritten = true;
                 }
                 MortalList.flush();  // Flush file-scoped lexical cleanup before END
                 MortalList.flushDeferredCapturesBeforeEnd();

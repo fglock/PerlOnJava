@@ -8,6 +8,7 @@ priorities and future plans.
 
 - Recognize `IO` as a parent of unblessed filehandle IO references, support `PerlIO :pop` on built-in layers, and cover negotiated TLS version metadata on a local TLS connection (#1782, #1607, #1435).
 - Preserve whole-glob aliases across nested localization, support dynamic glob-reference localization, and accept Perl's `@$` glob dereference under strict vars (#1630, #1305, #1302).
+- Preserve `#` inside shebang `-F` patterns and retain the expected process status when `die` follows a prior child status.
 - Allow additional quiet time for `local::lib`, `Syntax::Kamelon`, and `DateTime::Event::Holiday::US` CPAN tests that exceed the default timeout during nested JVM launches, syntax highlighting, and recurrence-set construction (#1787, #1370, #1541).
 - Honor Perl's `-T` behavior by excluding `PERL5LIB` from `@INC` while preserving explicit `-I` paths (#1787).
 - Recover malformed HTML through Jsoup in `XML::LibXML`, decode HTML attribute entities by default, report `HTML::Parser` source positions, and allow nested `AUTOLOAD` tail calls from sort comparators (#1416, #1457, #1634).
