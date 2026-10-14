@@ -195,16 +195,14 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 }
                 return;
             }
-            boolean invalidates = false;
-            if (owner.isPackageRootedHash()) {
-                for (Map.Entry<? extends String, ? extends RuntimeScalar> e : m.entrySet()) {
-                    if (rootEdge(super.get(e.getKey())) || rootEdge(e.getValue())) {
-                        invalidates = true;
-                        break;
-                    }
+            boolean hasReferenceEdge = false;
+            for (Map.Entry<? extends String, ? extends RuntimeScalar> e : m.entrySet()) {
+                if (rootEdge(super.get(e.getKey())) || rootEdge(e.getValue())) {
+                    hasReferenceEdge = true;
+                    break;
                 }
             }
-            owner.notePackageRootMutationIf(invalidates);
+            owner.notePackageRootMutationIf(hasReferenceEdge);
             for (RuntimeScalar value : m.values()) {
                 if (owner.threadShared) SharedPerlStorage.publishBlessing(value);
                 if (value != null) {
@@ -258,15 +256,12 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     private void notePackageRootMutation(RuntimeScalar oldValue, RuntimeScalar newValue) {
-        if (isPackageRootedHash() && (rootEdge(oldValue) || rootEdge(newValue))) {
-            MortalList.invalidateExternalRootSnapshot();
-        } else {
-            MortalList.invalidateFullRootSnapshotIfReachable(this);
-        }
+        notePackageRootMutationIf(rootEdge(oldValue) || rootEdge(newValue));
     }
 
-    private void notePackageRootMutationIf(boolean invalidates) {
-        if (invalidates) {
+    private void notePackageRootMutationIf(boolean hasReferenceEdge) {
+        if (!hasReferenceEdge) return;
+        if (isPackageRootedHash()) {
             MortalList.invalidateExternalRootSnapshot();
         } else {
             MortalList.invalidateFullRootSnapshotIfReachable(this);
@@ -274,15 +269,14 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     private void notePackageRootClear(Collection<RuntimeScalar> values) {
-        if (isPackageRootedHash()) {
-            for (RuntimeScalar value : values) {
-                if (rootEdge(value)) {
-                    MortalList.invalidateExternalRootSnapshot();
-                    return;
-                }
+        boolean hasReferenceEdge = false;
+        for (RuntimeScalar value : values) {
+            if (rootEdge(value)) {
+                hasReferenceEdge = true;
+                break;
             }
         }
-        MortalList.invalidateFullRootSnapshotIfReachable(this);
+        notePackageRootMutationIf(hasReferenceEdge);
     }
 
     void notePackageRootMutation() {

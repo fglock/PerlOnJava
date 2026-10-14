@@ -101,14 +101,13 @@ class UnblessedAggregateReachabilitySnapshotTest {
 
                     ReachabilityQueryStats stats = measurement.stats();
                     assertEquals(3, stats.deferredBasesProcessed);
-                    assertEquals(1, stats.snapshotsBuilt,
-                            "live unblessed aggregates share one root snapshot per drain");
+                    assertEquals(1, stats.externalRootSnapshotsBuilt,
+                            "live unblessed aggregates share one package-root snapshot per drain");
                     assertEquals(0, stats.rootQueries,
                             "aggregate preservation must not launch one root query per target");
-                    assertTrue(stats.rootsSeeded > 0);
-                    assertTrue(stats.edgesInspected >= targets.length,
+                    assertTrue(stats.externalRootSnapshotEdgesInspected >= targets.length,
                             "the snapshot must inspect the rooted aggregate edges");
-                    assertTrue(stats.nodesVisited >= targets.length + 1,
+                    assertTrue(stats.externalRootSnapshotNodesVisited >= targets.length + 1,
                             "the snapshot must visit the global root and all targets");
                     for (RuntimeArray target : targets) {
                         assertEquals(1, target.refCount,

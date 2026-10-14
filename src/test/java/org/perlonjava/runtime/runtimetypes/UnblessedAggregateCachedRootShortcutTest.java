@@ -82,15 +82,15 @@ class UnblessedAggregateCachedRootShortcutTest {
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
                     assertTrue(MortalList.isUnblessedAggregateReachableDuringDrain(aggregate));
-                    assertEquals(1, measurement.stats().snapshotsBuilt);
+                    assertEquals(1, measurement.stats().externalRootSnapshotsBuilt);
 
                     global.elements.remove(strong);
                     MortalList.invalidateExternalRootSnapshot();
 
                     assertTrue(MortalList.isUnblessedAggregateReachableDuringDrain(aggregate),
                             "a positive proof is retained until this cleanup drain ends");
-                    assertEquals(1, measurement.stats().snapshotsBuilt,
-                            "root removal must not rebuild the full graph for this aggregate");
+                    assertEquals(1, measurement.stats().externalRootSnapshotsBuilt,
+                            "root removal must not rebuild package roots for this aggregate");
                 }
 
                 state.flushing = false;
@@ -103,8 +103,8 @@ class UnblessedAggregateCachedRootShortcutTest {
                             "the next drain must discard the previous drain's positive proof");
                     assertEquals(null, weak.value,
                             "the weak observer must be cleared after the aggregate becomes unreachable");
-                    assertEquals(1, measurement.stats().snapshotsBuilt,
-                            "the new drain must build a current root snapshot");
+                    assertEquals(1, measurement.stats().externalRootSnapshotsBuilt,
+                            "the new drain must build a current package-root snapshot");
                 }
             } finally {
                 state.flushing = false;

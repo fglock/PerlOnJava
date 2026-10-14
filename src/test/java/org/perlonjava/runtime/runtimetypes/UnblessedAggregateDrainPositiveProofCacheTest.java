@@ -35,10 +35,10 @@ class UnblessedAggregateDrainPositiveProofCacheTest {
                 MortalList.popAndFlush();
 
                 assertEquals(3, measurement.stats().deferredBasesProcessed);
-                assertTrue(measurement.stats().nodesVisited > 128,
-                        "the cleanup walk examines the populated package root");
-                assertEquals(1, measurement.stats().snapshotsBuilt,
-                        "all three cleanup targets reuse one full root snapshot");
+                assertTrue(measurement.stats().externalRootSnapshotNodesVisited > 128,
+                        "the cleanup snapshot examines the populated package root");
+                assertEquals(1, measurement.stats().externalRootSnapshotsBuilt,
+                        "all three cleanup targets reuse one package-root snapshot");
                 assertEquals(0,
                         measurement.stats().unblessedAggregateDrainPositiveProofsCached,
                         "unreachable cleanup targets create no positive drain proofs");

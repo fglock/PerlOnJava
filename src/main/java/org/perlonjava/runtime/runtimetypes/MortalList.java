@@ -1402,6 +1402,13 @@ public class MortalList {
             RuntimeBase current = work.removeFirst();
             if (!visited.add(current)) continue;
 
+            // A stash is a symbol-table view, not an owned aggregate. Walking
+            // its dynamic HashSpecialVariable map enumerates package globals
+            // on every scope exit (Catalyst creates many short-lived
+            // containers), repeatedly traversing the whole program graph.
+            // Its values are roots already handled by the normal weak sweep.
+            if (current instanceof RuntimeStash) continue;
+
             Iterable<RuntimeScalar> values;
             if (current instanceof RuntimeArray array) {
                 values = array.elements;
@@ -1437,7 +1444,11 @@ public class MortalList {
                 || !WeakRefRegistry.hasWeakRefsTo(base)) {
             return;
         }
-        if (ReachabilityWalker.isReachableFromRoots(base)) {
+        // This check runs at individual lexical scope exits, often many times
+        // while a package is loading. Keep package-root traversal cached
+        // across those exits; the live lexical snapshot is independently
+        // invalidated as each lexical leaves scope.
+        if (isReachableFromExternalRootCached(base)) {
             return;
         }
         base.refCount = Integer.MIN_VALUE;
@@ -1460,7 +1471,7 @@ public class MortalList {
         return state.flushReachableCache.contains(base);
     }
 
-    private static boolean isReachableFromExternalRootCached(RuntimeBase base) {
+    static boolean isReachableFromExternalRootCached(RuntimeBase base) {
         if (ReachabilityWalker.isReachableFromTemporaryRoots(base)) {
             return true;
         }
@@ -1527,10 +1538,35 @@ public class MortalList {
             if (drainActive) state.unblessedAggregateDrainRoots.add(base);
             return true;
         }
-        ReachabilityWalker.RootReachabilitySnapshot snapshot =
-                ReachabilityWalker.unblessedAggregateRootsSnapshotWithStatus();
-        state.unblessedAggregateRootSnapshot = snapshot;
-        return recordUnblessedAggregateSnapshotResult(state, snapshot, base, drainActive);
+        // The package-root and live-lexical snapshots cover the same strong
+        // roots without tying their lifetimes together. Scope exits invalidate
+        // the lexical view frequently, while package roots often stay stable;
+        // rebuilding a combined graph here repeats the full package walk for
+        // each cleanup batch during module loading and request handling.
+        boolean reachable = isReachableFromExternalRootCached(base);
+        if (drainActive) {
+            boolean incomplete = state.externalRootSnapshot == null
+                    || !state.externalRootSnapshot.complete()
+                    || (state.liveRootSnapshot != null
+                        && !state.liveRootSnapshot.complete());
+            if (incomplete) {
+                state.unblessedAggregateDrainSnapshotIncomplete = true;
+                state.unblessedAggregateDrainRoots.clear();
+            } else if (reachable && !state.unblessedAggregateDrainRoots.contains(base)) {
+                if (state.unblessedAggregateDrainRoots.size()
+                        >= MAX_UNBLESSED_AGGREGATE_DRAIN_ROOTS) {
+                    state.unblessedAggregateDrainSnapshotIncomplete = true;
+                    state.unblessedAggregateDrainRoots.clear();
+                } else {
+                    state.unblessedAggregateDrainRoots.add(base);
+                    ReachabilityQueryStats stats = activeReachabilityQueryStats();
+                    if (stats != null) {
+                        stats.unblessedAggregateDrainPositiveProofsCached++;
+                    }
+                }
+            }
+        }
+        return reachable;
     }
 
     private static boolean recordUnblessedAggregateSnapshotResult(
@@ -1594,6 +1630,8 @@ public class MortalList {
         PerlRuntime runtime = PerlRuntime.currentOrNull();
         if (runtime == null) return;
         LifecycleRuntimeState state = runtime.lifecycleState;
+        ReachabilityWalker.LiveRootSnapshot liveSnapshot = state.liveRootSnapshot;
+        boolean liveReachable = liveSnapshot != null && liveSnapshot.mayContain(changedNode);
         ReachabilityWalker.RootReachabilitySnapshot snapshot = state.fullRootSnapshot;
         boolean fullReachable = snapshot != null && snapshot.isReachable(changedNode);
         ReachabilityWalker.RootReachabilitySnapshot unblessedSnapshot =
@@ -1606,6 +1644,7 @@ public class MortalList {
             state.fullRootSnapshot = null;
             state.unblessedAggregateRootSnapshot = null;
         }
+        if (liveReachable) state.liveRootSnapshot = null;
     }
 
     static void invalidateFullRootSnapshotForScalarClear() {

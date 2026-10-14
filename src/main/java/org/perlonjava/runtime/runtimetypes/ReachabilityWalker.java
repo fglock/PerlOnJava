@@ -2432,6 +2432,11 @@ public class ReachabilityWalker {
             return origin != target;
         }
 
+        /** Whether this node is in the lexical graph and may need rewalking after mutation. */
+        boolean mayContain(RuntimeBase target) {
+            return !complete || directLexicalOrigins.containsKey(target);
+        }
+
         /** Whether the visit budget drained the complete queued lexical graph. */
         boolean complete() {
             return complete;
@@ -3087,6 +3092,7 @@ public class ReachabilityWalker {
     static void releaseUnreachableScopeExitedCaptureOwners(
             List<RuntimeBase> weakReferents, Set<RuntimeBase> endReachable) {
         Set<RuntimeBase> retainedByEnd = endReachable;
+        ScalarRootReachabilitySnapshot scalarRoots = null;
         for (RuntimeBase referent : weakReferents) {
             for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
                 RuntimeScalar padCell = slot.padCell();
@@ -3094,8 +3100,9 @@ public class ReachabilityWalker {
                     continue;
                 }
                 if (retainedByEnd == null) retainedByEnd = walkEndBlockRoots();
-                if (retainedByEnd.contains(padCell) || retainedByEnd.contains(referent)
-                        || isScalarReachable(padCell)) continue;
+                if (retainedByEnd.contains(padCell) || retainedByEnd.contains(referent)) continue;
+                if (scalarRoots == null) scalarRoots = scalarReachabilitySnapshot();
+                if (scalarRoots.isReachable(padCell)) continue;
                 if (WALKER_TRACE_CLASS != null && !WALKER_TRACE_CLASS.isEmpty()) {
                     String className = NameNormalizer.getBlessStr(referent.blessId);
                     if (className != null && className.contains(WALKER_TRACE_CLASS)) {
