@@ -1475,6 +1475,10 @@ public class MortalList {
         if (ReachabilityWalker.isReachableFromTemporaryRoots(base)) {
             return true;
         }
+        return isReachableFromPersistentRootCached(base);
+    }
+
+    static boolean isReachableFromPersistentRootCached(RuntimeBase base) {
         LifecycleRuntimeState state = state();
         if (state.externalRootSnapshot == null) {
             state.externalRootSnapshot = new ReachabilityWalker.ExternalRootSnapshot();

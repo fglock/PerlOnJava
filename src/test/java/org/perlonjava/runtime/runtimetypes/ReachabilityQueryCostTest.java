@@ -79,6 +79,85 @@ class ReachabilityQueryCostTest {
     }
 
     @Test
+    void targetedWeakReleaseSkipsFullWalkerForSnapshotRootedTargets() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray global = new RuntimeArray();
+            String globalName =
+                    "ReachabilityQueryCostTest::targetedWeakReleaseSnapshot";
+            GlobalVariable.globalArrays.put(globalName, global);
+
+            RuntimeHash[] targets = new RuntimeHash[8];
+            RuntimeScalar[] weakRefs = new RuntimeScalar[targets.length];
+            Set<RuntimeBase> released = Collections.newSetFromMap(
+                    new java.util.IdentityHashMap<>());
+            for (int i = 0; i < targets.length; i++) {
+                RuntimeHash target = new RuntimeHash();
+                RuntimeScalar strong = target.createReference();
+                RuntimeScalar weak = target.createReference();
+                WeakRefRegistry.weaken(weak);
+                global.elements.add(strong);
+                target.refCount = 0;
+                targets[i] = target;
+                weakRefs[i] = weak;
+                released.add(target);
+            }
+
+            try {
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    ReachabilityWalker.sweepReleasedWeakReferents(released);
+
+                    ReachabilityQueryStats stats = measurement.stats();
+                    assertEquals(0, stats.snapshotsBuilt,
+                            "positive package-root proofs should avoid the full weak sweep walker");
+                    assertEquals(1, stats.externalRootSnapshotsBuilt,
+                            "the package-root graph is snapshotted once for the whole batch");
+                    for (int i = 0; i < targets.length; i++) {
+                        assertTrue(WeakRefRegistry.isweak(weakRefs[i]));
+                        assertTrue(targets[i].refCount != Integer.MIN_VALUE);
+                    }
+                }
+            } finally {
+                for (RuntimeScalar weak : weakRefs) {
+                    if (weak != null) WeakRefRegistry.unweaken(weak);
+                }
+                GlobalVariable.globalArrays.remove(globalName);
+                MortalList.invalidateAllRootSnapshots();
+            }
+        }
+    }
+
+    @Test
+    void targetedWeakReleaseDoesNotTreatTemporaryRootsAsPersistentOwners() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray target = new RuntimeArray();
+            RuntimeScalar weak = target.createReference();
+            WeakRefRegistry.weaken(weak);
+            target.refCount = 0;
+            target.localBindingExists = false;
+            MortalList.pushTemporaryRoot(target);
+
+            try {
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    ReachabilityWalker.sweepReleasedWeakReferents(
+                            Collections.singleton(target));
+
+                    assertEquals(RuntimeScalarType.UNDEF, weak.type,
+                            "temporary roots do not keep a released weak referent alive");
+                    assertEquals(1, measurement.stats().externalRootSnapshotsBuilt,
+                            "the temporary-only target must miss the persistent-root snapshot proof");
+                }
+            } finally {
+                MortalList.popTemporaryRoot(target);
+                WeakRefRegistry.unweaken(weak);
+            }
+        }
+    }
+
+    @Test
     void scalarOnlyMutationReusesTheAggregateRootSnapshot() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {

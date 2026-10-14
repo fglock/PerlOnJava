@@ -3205,6 +3205,22 @@ public class ReachabilityWalker {
                     directlyOwned, 0);
         }
 
+        // A package or live lexical path is sufficient to retain a target in
+        // this targeted release sweep. Prove those common positive cases from
+        // the shared root snapshots before constructing a full walker; the
+        // remaining targets still use the conservative full-root analysis.
+        Set<RuntimeBase> snapshotReachable =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+        for (RuntimeBase referent : pending) {
+            if (MortalList.isReachableFromPersistentRootCached(referent)) {
+                snapshotReachable.add(referent);
+            }
+        }
+        if (snapshotReachable.containsAll(pending)) {
+            return new ReleasedWeakSweepResult(null, Collections.emptySet(),
+                    snapshotReachable, 0);
+        }
+
         // A single released target that forms its own strong cycle is known
         // alive by Perl's refcount semantics. The full weak sweep would keep
         // this referent through collectStrongCycleProtected() after traversing
