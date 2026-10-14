@@ -5943,13 +5943,33 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     && javaClassNames.get(frame) != null
                     && javaClassNames.get(frame).startsWith("interpreter:");
         }
+        RuntimeCode preSkipActiveCode = activeCodeAtCallerFrame(activeCodeFrameForCaller(originalFrame));
+        boolean currentEvalFrameHasPerlName = preSkipActiveCode != null
+                && preSkipActiveCode.explicitlyRenamed;
+        if (preSkipActiveCode != null && preSkipActiveCode.packageName != null) {
+            RuntimeGlob anonGlob = GlobalVariable.peekGlobalIO(preSkipActiveCode.packageName + "::__ANON__");
+            currentEvalFrameHasPerlName |= (preSkipActiveCode.subName == null
+                    || preSkipActiveCode.subName.isEmpty())
+                    && anonGlob != null
+                    && anonGlob.nameOverride != null && !anonGlob.nameOverride.isEmpty();
+        }
         boolean currentFrameIsVirtualEval = frame < stackTraceSize
                 && isVirtualEvalFrame(stackTrace.get(frame));
+        boolean currentFrameIsEvalString = currentFrameIsInterpreter
+                && !DebugState.isDebugMode()
+                && !currentEvalFrameHasPerlName
+                && frame < stackTraceSize
+                && isEvalStringImplementationFrame(stackTrace.get(frame));
         boolean interpreterFrameBeforeVirtualEval = currentFrameIsInterpreter
                 && frame + 1 < stackTraceSize
                 && isVirtualEvalFrame(stackTrace.get(frame + 1));
+        boolean interpreterFrameBeforeEvalString = currentFrameIsInterpreter
+                && !DebugState.isDebugMode()
+                && frame + 1 < stackTraceSize
+                && isEvalStringImplementationFrame(stackTrace.get(frame + 1));
         if (stackTraceSize > 0 && !result.firstFrameFromInterpreter()
-                && !currentFrameIsVirtualEval && !interpreterFrameBeforeVirtualEval) {
+                && !currentFrameIsVirtualEval && !currentFrameIsEvalString
+                && !interpreterFrameBeforeVirtualEval && !interpreterFrameBeforeEvalString) {
             frame++;
         }
 
@@ -6121,6 +6141,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // eval compiler wrappers can be one logical frame out of phase.
                 if (subName == null && currentFrameIsInterpreter) {
                     String interpreterSubName = interpreterFrameBeforeVirtualEval
+                            || interpreterFrameBeforeEvalString
                             ? frameSubName : previousFrameSubName;
                     RuntimeCode deletedActiveCode = deletedStashCodeForCallerName(interpreterSubName);
                     if (deletedActiveCode != null) {
@@ -6220,6 +6241,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // *__ANON__ glob currently has a name override active, swap
                 // it in. See dev/modules/anon_sub_naming.md.
                 subName = applyAnonNameOverride(subName);
+                if (currentFrameIsEvalString) {
+                    subName = "(eval)";
+                }
                 subName = normalizeCallerSubName(subName);
 
                 if (subName != null && !subName.isEmpty()) {
@@ -6343,11 +6367,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // implementation frame can sit immediately before the logical
                 // `(eval)` caller frame; eval BLOCK frames share the same name
                 // but have no such implementation frame of their own.
-                boolean evalStringSourceFrame = subName != null && subName.startsWith("(eval")
-                        && !virtualEvalFrame
+                boolean evalStringSourceFrame = !virtualEvalFrame
+                        && (currentFrameIsEvalString
+                        || subName != null && subName.startsWith("(eval")
                         && (isEvalStringImplementationFrame(frameInfo)
-                        || frame > 0 && isEvalStringImplementationFrame(stackTrace.get(frame - 1)));
-                String evalText = evalStringSourceFrame ? currentActiveEvalText() : null;
+                        || frame > 0 && isEvalStringImplementationFrame(stackTrace.get(frame - 1))));
+                String evalText = evalStringSourceFrame
+                        ? activeEvalText(filename) : null;
+                if (evalStringSourceFrame && evalText == null) {
+                    evalText = currentActiveEvalText();
+                }
                 res.add(evalText != null ? new RuntimeScalar(evalText)
                         : RuntimeScalarCache.scalarUndef);
 
