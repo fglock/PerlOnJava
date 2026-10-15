@@ -2750,6 +2750,9 @@ public class Opcodes {
     /** Refalias an aggregate field slot to an array/hash reference. Format: targetReg refReg isHash. */
     public static final short ALIAS_AGGREGATE_LVALUE_REFERENCE = 635;
 
+    /** Warned addition assigned directly into a simple lexical scalar cell. */
+    public static final short ADD_ASSIGN_SCALAR_WARN = 636;
+
     /** Create a LAST marker retaining loop-topicalizer break diagnostics. Format: rd labelIdx. */
     public static final short CREATE_SWITCH_BREAK_LOOP_TOPICALIZER = 620;
 

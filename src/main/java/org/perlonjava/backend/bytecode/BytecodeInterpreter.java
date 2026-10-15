@@ -1542,6 +1542,10 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeAddScalarWarn(bytecode, pc, registers);
                             }
 
+                            case Opcodes.ADD_ASSIGN_SCALAR_WARN -> {
+                                pc = InlineOpcodeHandler.executeAddScalarAssignWarn(bytecode, pc, registers);
+                            }
+
                             case Opcodes.SUB_SCALAR -> {
                                 pc = InlineOpcodeHandler.executeSubScalar(bytecode, pc, registers);
                             }

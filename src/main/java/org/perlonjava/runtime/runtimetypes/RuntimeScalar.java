@@ -2171,6 +2171,37 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return this;
     }
 
+    /** Whether a warned integer arithmetic result can update this lexical cell directly. */
+    public boolean canUpdateArithmeticIntegerInPlace() {
+        return getClass() == RuntimeScalar.class
+                && keysLvalueContainer == null
+                && !threadShared
+                && type < TIED_SCALAR;
+    }
+
+    /** Store an arithmetic IV result without allocating a temporary scalar. */
+    public RuntimeScalar setArithmeticIntegerResult(long result, boolean resultTainted) {
+        clearLastReadlineHandleIfGlobValue();
+        growingString = null;
+        transferableGrowingString = false;
+        setIntegerValue(result);
+        utf8UncheckedOctets = false;
+        utf8MalformedWarning = null;
+        tainted = resultTainted;
+        numericLiteralText = null;
+        numericContextSeen = false;
+        scalarStoredGlob = false;
+        firstClassRegexScalar = false;
+        firstClassRegexReferent = null;
+        firstClassRegexValue = null;
+        formatPictureTainted = false;
+        globalCodeRefFqn = null;
+        RuntimePosLvalue.invalidatePos(this);
+        refreshSubstrLvalues();
+        notifyModifiedWatchers();
+        return this;
+    }
+
     private RuntimeScalar setSlow(RuntimeScalar value) {
         if (keysLvalueContainer != null) {
             if (keysLvalueContainer instanceof RuntimeHash hash) {

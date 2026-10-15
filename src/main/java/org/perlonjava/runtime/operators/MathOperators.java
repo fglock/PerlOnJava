@@ -413,6 +413,35 @@ public class MathOperators {
                 .propagateTaint(arg1, arg2);
     }
 
+    /**
+     * Evaluate warned addition directly into a simple scalar assignment target
+     * when both operands are ordinary native integers.
+     */
+    public static RuntimeScalar addWarnInto(RuntimeScalar target,
+                                            RuntimeScalar arg1,
+                                            RuntimeScalar arg2) {
+        RuntimeScalar left = RuntimeScalar.fetchTiedOnce(arg1);
+        RuntimeScalar right = RuntimeScalar.fetchTiedOnce(arg2);
+        if (target.canUpdateArithmeticIntegerInPlace()
+                && left.type == INTEGER
+                && right.type == INTEGER
+                && RuntimeScalarType.blessedId(left) < 0
+                && RuntimeScalarType.blessedId(right) < 0
+                && !hasWideInteger(left, right)) {
+            long a = left.getLong();
+            long b = right.getLong();
+            try {
+                long sum = Math.addExact(a, b);
+                boolean resultTainted = GlobalContext.isTaintModeActive()
+                        && (left.isTainted() || right.isTainted());
+                return target.setArithmeticIntegerResult(sum, resultTainted);
+            } catch (ArithmeticException ignored) {
+                // Preserve the usual UV/NV promotion path on native-IV overflow.
+            }
+        }
+        return target.set(addWarn(left, right));
+    }
+
     private static RuntimeScalar addWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         arg1 = RuntimeScalar.fetchTiedOnce(arg1);
         arg2 = RuntimeScalar.fetchTiedOnce(arg2);
