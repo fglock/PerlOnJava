@@ -188,22 +188,25 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
         @Override
         public void putAll(Map<? extends String, ? extends RuntimeScalar> m) {
+            Map<String, RuntimeScalar> updates = new LinkedHashMap<>();
+            m.forEach(updates::put);
             if (owner.threadShared) {
-                for (Map.Entry<? extends String, ? extends RuntimeScalar> entry
-                        : new StableHashMap<>(m).entrySet()) {
+                for (Map.Entry<String, RuntimeScalar> entry : updates.entrySet()) {
                     put(entry.getKey(), entry.getValue());
                 }
                 return;
             }
+            Map<String, RuntimeScalar> previousValues = new HashMap<>();
             boolean hasReferenceEdge = false;
-            for (Map.Entry<? extends String, ? extends RuntimeScalar> e : m.entrySet()) {
+            for (Map.Entry<String, RuntimeScalar> e : updates.entrySet()) {
+                RuntimeScalar previous = super.get(e.getKey());
+                previousValues.put(e.getKey(), previous);
                 if (rootEdge(super.get(e.getKey())) || rootEdge(e.getValue())) {
                     hasReferenceEdge = true;
-                    break;
                 }
             }
             owner.notePackageRootMutationIf(hasReferenceEdge);
-            for (RuntimeScalar value : m.values()) {
+            for (RuntimeScalar value : updates.values()) {
                 if (owner.threadShared) SharedPerlStorage.publishBlessing(value);
                 if (value != null) {
                     value.markContainerOwner(owner);
@@ -213,7 +216,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 }
                 owner.markPackageRootedValue(value);
             }
-            super.putAll(m);
+            super.putAll(updates);
+            for (Map.Entry<String, RuntimeScalar> e : updates.entrySet()) {
+                updateReferentHashSlotOwnership(previousValues.get(e.getKey()), e.getValue());
+            }
         }
 
         @Override
@@ -224,6 +230,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     MortalList.deferDestroyForContainerClear(java.util.Collections.singletonList(previous));
                 }
                 owner.notePackageRootMutation(previous, null);
+                updateReferentHashSlotOwnership(previous, null);
             }
             return previous;
         }
@@ -235,6 +242,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     MortalList.deferDestroyForContainerClear(values());
                 }
                 owner.notePackageRootClear(values());
+                for (RuntimeScalar value : values()) {
+                    updateReferentHashSlotOwnership(value, null);
+                }
             }
             super.clear();
         }
