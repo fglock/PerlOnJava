@@ -653,25 +653,31 @@ sub next_generation_flat64 {
         $below_left, $below_right, $s1, $c1, $s2, $c2, $s3, $c3,
         $sum0, $c4, $cc1_sum, $cc1_carry, $cc2_sum, $cc2_carry,
         $sum1, $c5, $sum2, $c6);
-    for $row (0 .. $height - 1) {
+    $row = 0;
+    while ($row < $height) {
         $row_off = $row * $words_per_row;
         $above_off = ($row - 1) * $words_per_row;
         $below_off = ($row + 1) * $words_per_row;
-        for $word (0 .. $words_per_row - 1) {
+        $word = 0;
+        while ($word < $words_per_row) {
             $idx = $row_off + $word;
             $cell = $curr->[$idx];
             $left_w = $word > 0 ? $curr->[$idx - 1] : 0;
             $right_w = $word < $words_per_row - 1 ? $curr->[$idx + 1] : 0;
             $n_left = (($cell >> 1) & $low_63_mask) | (($left_w & $high_bit64) ? 1 : 0);
             $n_right = (($cell << 1) & $clear_low_bit_mask) | (($right_w & 1) ? $high_bit64 : 0);
-            ($above, $above_l, $above_r) = (0, 0, 0);
+            $above = 0;
+            $above_l = 0;
+            $above_r = 0;
             if ($row > 0) {
                 $i = $above_off + $word;
                 $above = $curr->[$i];
                 $above_l = $word > 0 ? $curr->[$i - 1] : 0;
                 $above_r = $word < $words_per_row - 1 ? $curr->[$i + 1] : 0;
             }
-            ($below, $below_l, $below_r) = (0, 0, 0);
+            $below = 0;
+            $below_l = 0;
+            $below_r = 0;
             if ($row < $height - 1) {
                 $i = $below_off + $word;
                 $below = $curr->[$i];
@@ -699,7 +705,9 @@ sub next_generation_flat64 {
             $sum2 = $cc1_carry ^ $cc2_carry ^ $c5;
             $c6 = ($cc1_carry & $cc2_carry) | ($cc2_carry & $c5) | ($cc1_carry & $c5);
             $next[$idx] = (~$c6) & (~$sum2) & $sum1 & ($sum0 | $cell);
+            ++$word;
         }
+        ++$row;
     }
     return \@next;
 }
