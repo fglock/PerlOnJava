@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 18;
+use Test::More tests => 19;
 use File::Temp qw(tempfile);
 
 # Regression tests for block-vs-hashref disambiguation inside `{ ... }`.
@@ -19,6 +19,10 @@ is(ref(sub { {"foo",1,"bar",2} }->()),    'HASH', '{"foo",1,"bar",2} is a hashre
 is(ref(sub { { a => 1 } }->()),           'HASH', 'fat-comma hash still works');
 is(ref(sub { +{"a","b"} }->()),           'HASH', 'explicit +{} still works');
 is(ref(sub { {} }->()),                   'HASH', 'empty {} still a hashref');
+
+my $continued_key = "{'a\\\n\\'b','foo'}";
+my $continued_hash = eval $continued_key;
+is(ref($continued_hash), 'HASH', 'eval hashref with escaped newline in key');
 
 # --- content is preserved ---
 
