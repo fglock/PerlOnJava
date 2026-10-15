@@ -67,6 +67,9 @@ Catalyst::Test->import('Issue1795OwnershipTest');
     no warnings qw(once redefine);
     *HTTP::Request::method = sub { $_[0]{method} }
         unless HTTP::Request->can('method');
+    *HTTP::Request::headers = sub {
+        bless {request => $_[0]}, 'HTTP::Request::_Headers';
+    } unless HTTP::Request->can('headers');
     *HTTP::Request::protocol = sub { 'HTTP/1.1' }
         unless HTTP::Request->can('protocol');
     *HTTP::Request::content = sub {
@@ -93,6 +96,23 @@ Catalyst::Test->import('Issue1795OwnershipTest');
     } unless HTTP::Request::_URI->can('default_port');
 }
 
+{
+    no strict 'refs';
+    no warnings qw(once redefine);
+    *HTTP::Request::_Headers::header_field_names = sub {
+        my ($self) = @_;
+        return map {
+            my $name = $_;
+            $name =~ s/(^|-)([a-z])/$1 . uc($2)/ge;
+            $name;
+        } keys %{$self->{request}{headers}};
+    } unless HTTP::Request::_Headers->can('header_field_names');
+    *HTTP::Request::_Headers::header = sub {
+        my ($self, @args) = @_;
+        return $self->{request}->header(@args);
+    } unless HTTP::Request::_Headers->can('header');
+}
+
 my $request = HTTP::Request->new(
     'PUT', 'http://localhost/dump_body',
 );
@@ -103,6 +123,9 @@ my $response = request($request);
 ok($response && $response->is_success, 'octet-stream request succeeds');
 unlike($response->content, qr/\*\{'null'\}/,
     'serialized tempfile handle retains its Perl glob name');
+unlike($response->content,
+    qr/^\# \*\{'File::Temp::\$fh'\} = \[\];$/m,
+    'serialization does not invent an ARRAY slot on the lexical tempfile glob');
 
 my $body;
 {
