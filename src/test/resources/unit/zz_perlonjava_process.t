@@ -8,9 +8,11 @@ use lib 'src/main/perl/lib';
 use PerlOnJava::Process qw(run_process);
 use CPAN::FindDependencies::MakeMaker qw(getreqs_from_mm);
 
+my $child_timeout = $^O eq 'MSWin32' ? 60 : 10;
+
 my $result = run_process(
     argv => [ $^X, '-e', 'print "out\\n"; warn "err\\n"' ],
-    timeout => 10,
+    timeout => $child_timeout,
 );
 is($result->{exit_code}, 0, 'argv process exits successfully');
 like($result->{output}, qr/out\n/, 'stdout is captured');
@@ -29,7 +31,7 @@ $result = run_process(
             . 'local $/; exit((<$fh> || "") =~ /live marker/ ? 0 : 8)',
         $tee_path,
     ],
-    timeout => 10,
+    timeout => $child_timeout,
     tee => 1,
 );
 open STDOUT, '>&', $saved_stdout or die "restore STDOUT: $!";
@@ -41,7 +43,7 @@ my $dir = tempdir(CLEANUP => 1);
 $result = run_process(
     argv => [ $^X, '-MCwd=getcwd', '-e', 'print getcwd()' ],
     cwd => $dir,
-    timeout => 10,
+    timeout => $child_timeout,
 );
 is(abs_path($result->{output}), abs_path($dir), 'working directory is explicit');
 
@@ -50,7 +52,7 @@ my $implicit_dir = tempdir(CLEANUP => 1);
 chdir $implicit_dir or die "chdir $implicit_dir: $!";
 $result = run_process(
     argv => [ $^X, '-MCwd=getcwd', '-e', 'print getcwd()' ],
-    timeout => 10,
+    timeout => $child_timeout,
 );
 chdir $original_dir or die "chdir $original_dir: $!";
 is(abs_path($result->{output}), abs_path($implicit_dir),

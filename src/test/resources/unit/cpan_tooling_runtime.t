@@ -83,9 +83,10 @@ require IO::File;
 use IPC::Cmd qw(run);
 {
     local $IPC::Cmd::USE_IPC_RUN = 1;
+    my $child_timeout = $^O eq 'MSWin32' ? 60 : 10;
     my ($ok, $error, $combined, $stdout, $stderr) = run(
         command => [$^X, '-e', 'print "out\\n"; warn "err\\n"'],
-        timeout => 10,
+        timeout => $child_timeout,
     );
     ok $ok, 'IPC::Cmd runs argv commands when IPC::Run is forced';
     is join('', @$stdout), "out\n", 'IPC::Cmd captures stdout separately';

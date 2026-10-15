@@ -117,5 +117,7 @@ jobs:
           path: |
             build/reports/tests/test/
             build/test-results/test/
+            build/reports/tests/testUnitShard*/
+            build/test-results/testUnitShard*/
             build/reports/threads/
             build/test-results/testThreadsWindows/
