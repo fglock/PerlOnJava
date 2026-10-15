@@ -243,13 +243,20 @@ public class Main {
             // Prefer $! (errno) if non-zero, else prefer ($? >> 8), else 255.
             int exitCode = 255;
             try {
-                int bang = GlobalVariable.getGlobalVariable("main::!").getInt();
-                int query = GlobalVariable.getGlobalVariable("main::?").getInt();
-                int queryExit = (query >> 8);
-                if (bang != 0) {
-                    exitCode = bang;
-                } else if (queryExit != 0) {
-                    exitCode = queryExit;
+                int capturedDieStatus = PerlRuntime.current().executionState().uncaughtDieExitStatus;
+                int finalQuery = GlobalVariable.getGlobalVariable("main::?").getInt();
+                if (capturedDieStatus != Integer.MIN_VALUE && finalQuery == 255) {
+                    // The uncaught-die path sets $? to 255 for END blocks, but
+                    // process exit still uses the values that were current at die.
+                    exitCode = capturedDieStatus;
+                } else {
+                    int bang = GlobalVariable.getGlobalVariable("main::!").getInt();
+                    int queryExit = (finalQuery >> 8);
+                    if (bang != 0) {
+                        exitCode = bang;
+                    } else if (queryExit != 0) {
+                        exitCode = queryExit;
+                    }
                 }
             } catch (Throwable ignored) {
                 // Last resort below

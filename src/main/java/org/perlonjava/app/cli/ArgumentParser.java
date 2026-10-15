@@ -399,7 +399,14 @@ public class ArgumentParser {
             // Perl treats the remainder of a shebang line as a comment. This
             // also keeps annotations such as "## no critic (...)" out of the
             // switch and argument list.
-            int commentStart = relevantPart.indexOf('#');
+            int commentStart = -1;
+            for (int index = 0; index < relevantPart.length(); index++) {
+                if (relevantPart.charAt(index) == '#'
+                        && (index == 0 || Character.isWhitespace(relevantPart.charAt(index - 1)))) {
+                    commentStart = index;
+                    break;
+                }
+            }
             if (commentStart >= 0) {
                 relevantPart = relevantPart.substring(0, commentStart).trim();
             }
