@@ -1442,10 +1442,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 }
                 // For anonymous globs (null globName), use local arraySlot
                 if (this.globName == null) {
-                    if (this.arraySlot == null) {
-                        this.arraySlot = new RuntimeArray();
-                    }
-                    yield this.arraySlot.createReference();
+                    // *glob{ARRAY} inspects an existing slot; it must not
+                    // materialize one as a side effect. Ordinary array
+                    // dereference uses getGlobArray(), which still vivifies
+                    // the anonymous slot when needed.
+                    yield this.arraySlot != null
+                            ? this.arraySlot.createReference()
+                            : new RuntimeScalar();
                 }
                 if (this.slotSnapshot) {
                     yield this.arraySlot != null
