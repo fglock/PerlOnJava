@@ -833,6 +833,13 @@ def homeIntegrationTask = tasks.register('testPerlOnJavaHomeIntegration', Test) 
     mustRunAfter tasks.named('testJoni')
 }
 
+// The final shard contains timing-sensitive event-loop regressions alongside
+// the heavier compiler fixtures. Run it after the regular shards so timer
+// callbacks are not starved by several concurrent Perl test workers.
+tasks.named(unitShardTasks.last()) {
+    mustRunAfter unitShardTasks.take(parallelShards - 1).collect { tasks.named(it) }
+}
+
 tasks.register('testUnitParallel') {
     group = 'verification'
     description = 'Runs unit tests in parallel across multiple JVMs. Usage: gradle testUnitParallel --parallel'

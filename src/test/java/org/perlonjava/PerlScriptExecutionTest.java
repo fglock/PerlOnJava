@@ -177,6 +177,7 @@ public class PerlScriptExecutionTest extends PerlRuntimeTestBase {
                         "unit/html_content_extractor_jsoup.t",
                         "unit/json_xs_compat.t",
                         "unit/jvm_eval_nested_compound_assignment.t",
+                        "unit/mojolicious_websocket_callback_lifetime.t",
                         "unit/unpack_short_string.t"
                     );
                     java.util.function.Predicate<String> isHeavy = s -> {
