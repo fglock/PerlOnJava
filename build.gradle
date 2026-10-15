@@ -81,8 +81,13 @@ tasks.register('compileSqliteTokenizerHelper', Exec) {
         File output = sqliteTokenizerLibrary.get().asFile
         output.parentFile.mkdirs()
         if (sqliteTokenizerMsvc) {
-            commandLine sqliteTokenizerCompiler, '/nologo', '/LD', '/I', sqliteTokenizerIncludeDir,
-                    sqliteTokenizerSource, '/link', "/OUT:${output.absolutePath}"
+            if (sqliteTokenizerWindows && !System.getenv('CC')) {
+                commandLine 'cmd', '/c', file('native/sqlite/build_tokenizer_helper.bat'),
+                        sqliteTokenizerSource, sqliteTokenizerIncludeDir, output
+            } else {
+                commandLine sqliteTokenizerCompiler, '/nologo', '/LD', '/I', sqliteTokenizerIncludeDir,
+                        sqliteTokenizerSource, '/link', "/OUT:${output.absolutePath}"
+            }
         } else if (sqliteTokenizerWindows) {
             commandLine sqliteTokenizerCompiler, '-shared', '-I', sqliteTokenizerIncludeDir,
                     sqliteTokenizerSource, '-o', output
