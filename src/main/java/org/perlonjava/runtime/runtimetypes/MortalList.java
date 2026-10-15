@@ -3,7 +3,6 @@ package org.perlonjava.runtime.runtimetypes;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Collection;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Set;
@@ -362,17 +361,7 @@ public class MortalList {
                     || (base != null && endReachable.contains(base))
                     || (base != null && cycleProtected.contains(base))
                     || scalarReachable;
-            if (retained) {
-                RuntimeScalar lexicalOwner = findLiveLexicalOwner(base, scalar);
-                if (lexicalOwner != null) {
-                    state.deferredScopeExitCaptureCandidatesByLexicalRoot
-                            .computeIfAbsent(lexicalOwner,
-                                    ignored -> Collections.newSetFromMap(new IdentityHashMap<>()))
-                            .add(scalar);
-                    state.deferredScopeExitCaptureCandidates.remove(scalar);
-                }
-                continue;
-            }
+            if (retained) continue;
 
             scalar.releaseUnreachableSemanticCaptureOwner();
             Integer deferredCount = state.deferredCapturesSet.get(scalar);
@@ -390,41 +379,6 @@ public class MortalList {
         }
         state.deferredScopeExitCaptureCandidates.clear();
         if (found) flushAboveMark();
-    }
-
-    private static RuntimeScalar findLiveLexicalOwner(RuntimeBase base, RuntimeScalar candidate) {
-        if (base == null) return null;
-        for (RuntimeScalar scalar : ScalarRefRegistry.snapshot()) {
-            if (scalar == candidate || scalar.scopeExited || scalar.captureCount > 0
-                    || WeakRefRegistry.isweak(scalar) || isDeferredCapture(scalar)
-                    || !MyVarCleanupStack.isLive(scalar)
-                    || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
-                    || scalar.value != base) continue;
-            return scalar;
-        }
-        for (Object variable : MyVarCleanupStack.snapshotLiveVars()) {
-            if (variable instanceof RuntimeScalar scalar && scalar != candidate
-                    && !scalar.scopeExited && scalar.captureCount == 0
-                    && !WeakRefRegistry.isweak(scalar) && !isDeferredCapture(scalar)
-                    && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                    && scalar.value == base) return scalar;
-        }
-        return null;
-    }
-
-    /** Recheck captures that were rooted by a lexical scope that has just exited. */
-    public static void processScopeExitCaptureCandidatesAfterLexicalExit(
-            Collection<RuntimeScalar> exitedLexicals) {
-        if (exitedLexicals == null || exitedLexicals.isEmpty()) return;
-        LifecycleRuntimeState state = state();
-        for (RuntimeScalar lexical : exitedLexicals) {
-            Set<RuntimeScalar> waiting =
-                    state.deferredScopeExitCaptureCandidatesByLexicalRoot.remove(lexical);
-            if (waiting != null) state.deferredScopeExitCaptureCandidates.addAll(waiting);
-        }
-        if (!state.deferredScopeExitCaptureCandidates.isEmpty()) {
-            processUnreachableScopeExitCaptureCandidates(state);
-        }
     }
 
     static void noteDeferredCaptureMayBeReady() {
@@ -2070,10 +2024,7 @@ public class MortalList {
             releasedSweepResult =
                     ReachabilityWalker.sweepReleasedWeakReferents(releasedTargets);
         }
-        boolean safeImmediateBoundary = state.immediateWeakSweepRequested
-                && RuntimeCode.argsStackDepth() <= 1
-                && state.temporaryRoots.isEmpty();
-        if (topLevel || safeImmediateBoundary) {
+        if (topLevel) {
             maybeAutoSweep(state, releasedTargets, releasedSweepResult);
             finalizeDeferredCaptureSweepCandidates(state);
         }
