@@ -54,8 +54,11 @@ destruction while a legacy owner still exists.
 
 This finding rules out treating a scalar-only migration as a fix for #1618.
 The reduced reproducer crosses closure pads and aggregate slots, so Phase 2
-must cover those boundaries before HTML::Tree can pass. `undef $sub` is a
-scalar slot overwrite, not the separate `undef &sub` CV-body operation.
+must cover those boundaries in the ownership model. The current branch now
+passes HTML::Tree's integration tests with the existing selective-count and
+reachability machinery; that result is useful compatibility evidence, but it
+does not prove the planned owner-slot migration. `undef $sub` is a scalar slot
+overwrite, not the separate `undef &sub` CV-body operation.
 
 The first verified fix is at the reachability boundary. The interpreter's
 `capturedVars` array is execution metadata and can still contain a pad after
@@ -299,8 +302,9 @@ and first path establish implementation cost.
 ### Next steps
 
 1. Extend the ownership path through scalar proxies and ordinary array/hash
-   slots in Phase 2, then resolve the HTML::Tree teardown failures and verify
-   unchanged `t/refloop.t`.
+   slots in Phase 2. Keep the newly passing HTML::Tree suite as an integration
+   guard, then verify its exact refcount/destruction assertions are supported by
+   explicit owner slots rather than cleanup reachability fallbacks.
 2. Resolve the strict target failures in the fresh-home CPAN release
    acceptance, then rerun that gate on the final candidate. The current run
    distinguishes prerequisite/setup timeouts and missing dependencies from
@@ -339,10 +343,14 @@ and first path establish implementation cost.
   `cpan/Scalar-List-Utils/lib` added to `@INC`; the checkout remains untouched.
   The prior Perl 5.44.0 build remains the oracle for historical HTML-Tree
   integration results.
-- The focused `new_from_lol` regression now passes, but HTML-Tree 5.07's
-  content and incremental parser cases still retain two and three elements at
-  the immediate release assertion on both PerlOnJava backends; Perl 5.44 passes
-  all cases. The new parser lifecycle reproducer records this open failure.
+- On commit `4cad02e3b`, the focused `new_from_lol` and content/incremental
+  parser lifecycle reproducers pass on system Perl, JVM, and interpreter. The
+  upstream `timeout 1800 ./jcpan -t HTML::Tree` run passes all 23 files and 989
+  tests, including `t/refloop.t`. This closes the observed HTML-Tree behavior
+  failure on this candidate, but does not complete Phase 2: owner slots still
+  cover closure pads only, and cleanup still relies on selective counts and
+  reachability walks. Revalidate the upstream suite after the scalar/proxy and
+  array/hash ownership path is migrated.
 - The Dancer2-Plugin-DBIx-Class `t/01_both_using_rsnames.t` workload now passes
   all six assertions and exits on both backends. The interpreter first exposed
   a `caller->isa` scalar-context bug, fixed in this follow-up, then exceeded a
