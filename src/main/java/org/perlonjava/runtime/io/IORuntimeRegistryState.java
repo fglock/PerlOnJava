@@ -6,6 +6,8 @@ import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import java.lang.ref.PhantomReference;
 import java.lang.ref.ReferenceQueue;
 import java.util.Map;
+import java.util.Set;
+import java.util.IdentityHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -21,6 +23,9 @@ public final class IORuntimeRegistryState {
     public final ReferenceQueue<RuntimeGlob> globGCQueue = new ReferenceQueue<>();
     public final ConcurrentHashMap<PhantomReference<RuntimeGlob>, RuntimeIO> phantomToIO =
             new ConcurrentHashMap<>();
+    /** Every glob slot that currently keeps an anonymous IO handle alive. */
+    public final Map<RuntimeIO, Set<PhantomReference<RuntimeGlob>>> globOwnersByIO =
+            new IdentityHashMap<>();
     public final AtomicInteger nextFd = new AtomicInteger(3);
     public final ConcurrentHashMap<Integer, IOHandle> fdToHandle = new ConcurrentHashMap<>();
     public final ConcurrentHashMap<Integer, Integer> handleToFd = new ConcurrentHashMap<>();
@@ -34,6 +39,9 @@ public final class IORuntimeRegistryState {
         ioToFileno.clear();
         recycledFds.clear();
         phantomToIO.clear();
+        synchronized (globOwnersByIO) {
+            globOwnersByIO.clear();
+        }
         nextFd.set(3);
         fdToHandle.clear();
         handleToFd.clear();
