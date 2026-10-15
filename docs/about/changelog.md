@@ -7,6 +7,7 @@ priorities and future plans.
 ## Work in progress
 
 - Add a reproducible, warmup-aware Perl versus PerlOnJava performance runner (#1196).
+- Reduce temporary list allocation in the flat64 Life inner loop (#1196).
 - Cover FormState session restoration across requests and HTTP response conversion from callback and streaming PSGI responses; refresh HTTP::Message and LWP compatibility status (#1650, #1651, #1652).
 - Preserve the awaited Future value when its source scalar or aggregate slot changes during suspension, covering PAGI::Server request-body receives (#1818).
 - Preserve escaped byte strings in interpreter closures and `bytes::substr`, honor requested CRLF output in `MIME::QuotedPrint`, and cover URI Basic Auth byte-string userinfo (#1275, #1313, #1341).

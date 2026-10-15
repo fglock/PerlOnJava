@@ -667,14 +667,18 @@ sub next_generation_flat64 {
             $right_w = $word < $words_per_row - 1 ? $curr->[$idx + 1] : 0;
             $n_left = (($cell >> 1) & $low_63_mask) | (($left_w & $high_bit64) ? 1 : 0);
             $n_right = (($cell << 1) & $clear_low_bit_mask) | (($right_w & 1) ? $high_bit64 : 0);
-            ($above, $above_l, $above_r) = (0, 0, 0);
+            $above = 0;
+            $above_l = 0;
+            $above_r = 0;
             if ($row > 0) {
                 $i = $above_off + $word;
                 $above = $curr->[$i];
                 $above_l = $word > 0 ? $curr->[$i - 1] : 0;
                 $above_r = $word < $words_per_row - 1 ? $curr->[$i + 1] : 0;
             }
-            ($below, $below_l, $below_r) = (0, 0, 0);
+            $below = 0;
+            $below_l = 0;
+            $below_r = 0;
             if ($row < $height - 1) {
                 $i = $below_off + $word;
                 $below = $curr->[$i];

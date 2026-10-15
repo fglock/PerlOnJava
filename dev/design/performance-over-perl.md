@@ -102,16 +102,40 @@ acceptance contract and required diagnostic matrix.
 - Added warmup stabilization, alternating process-pair order, checksum checks,
   paired ratios, confidence intervals, metadata, and atomic JSON output.
 - Added a load-only Life entry point that reuses the existing flat64 algorithm.
+- Established the flat64 Life anchor baseline and tested an allocation reduction
+  in its inner loop; detailed results are recorded below.
+
+### Life anchor baseline and first optimization
+
+On the reference macOS host, commit `5a46cff14` and JAR
+`830bf146ee68d8b6e3d99102b2d1042ba67fa954cef2cf4e94f5a16d38bd1c83` scored
+0.649x Perl (95% interval 0.627–0.670) across five stable, checksum-matched
+pairs. Two additional pairs did not stabilize under the host load. Replacing
+the two tuple resets per packed word in `next_generation_flat64` with direct
+scalar assignments scored 0.781x (95% interval 0.759–0.804) across seven
+stable, checksum-matched pairs on the same JAR. The intervals do not overlap;
+this reduces the measured gap, but does not meet the Life acceptance target.
+
+The raw JSON files retain all warmup and measurement windows, source and JAR
+hashes, checksums, host load, and engine metadata:
+
+- [flat64 master baseline](../bench/results/life-flat64-master-20261016.json)
+- [flat64 without tuple resets](../bench/results/life-flat64-no-list-reset-20261016.json)
+
+A 30-second JFR profile of the current-master JAR showed sample-weighted
+allocation attributed to `RuntimeScalar.addToArray` dropping from 18.9 GB to
+1.8 GB between the original and changed Life loop (about 14.3 MB to 1.6 MB per
+50-generation work unit). JFR allocation weights are sampled estimates; the
+paired throughput runs are the performance result.
 
 ### Next steps
 
-1. Run the smoke protocol on system Perl and both PerlOnJava backends.
-2. Add profiler summaries for allocation rate and GC time without profiling the
-   scored windows.
+1. Run the benchmark smoke protocol on the interpreter backend.
+2. Run the full seven-group, seven-pair protocol and store the raw portfolio
+   baseline.
 3. Collect Processor Trace instruction totals when the host enables tracing.
-4. Run the full seven-group, seven-pair protocol and store the raw baseline.
-5. Update this document with the baseline and hotspot attribution before
-   selecting another production optimization.
+4. Profile and optimize the remaining `RuntimeScalar.set`, bitwise-result, and
+   arithmetic costs while retaining the issue's acceptance contract.
 
 ### Open questions
 
