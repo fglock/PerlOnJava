@@ -52,16 +52,12 @@ public class BitwiseOperators {
         return new RuntimeScalar(magnitude);
     }
 
+    private static long integerValue(RuntimeScalar scalar) {
+        return ((Number) scalar.value).longValue();
+    }
+
     private static RuntimeScalar integerBitwiseResult(
-            RuntimeScalar left, RuntimeScalar right, char operator) {
-        long a = ((Number) left.value).longValue();
-        long b = ((Number) right.value).longValue();
-        long value = switch (operator) {
-            case '&' -> a & b;
-            case '|' -> a | b;
-            case '^' -> a ^ b;
-            default -> throw new IllegalArgumentException("unknown bitwise operator: " + operator);
-        };
+            RuntimeScalar left, RuntimeScalar right, long value) {
         return unsignedResult(value).propagateTaint(left, right);
     }
 
@@ -105,7 +101,8 @@ public class BitwiseOperators {
         int t2 = arg2.type;
         if (isNumericBitwiseOperand(t1) && isNumericBitwiseOperand(t2)) {
             if (isInteger(runtimeScalar) && isInteger(arg2)) {
-                return integerBitwiseResult(runtimeScalar, arg2, '&');
+                return integerBitwiseResult(runtimeScalar, arg2,
+                        integerValue(runtimeScalar) & integerValue(arg2));
             }
             return unsignedResult(unsignedValue(runtimeScalar).and(unsignedValue(arg2)))
                     .propagateTaint(runtimeScalar, arg2);
@@ -158,7 +155,8 @@ public class BitwiseOperators {
      */
     public static RuntimeScalar bitwiseAndBinary(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
         if (isInteger(runtimeScalar) && isInteger(arg2)) {
-            return integerBitwiseResult(runtimeScalar, arg2, '&');
+            return integerBitwiseResult(runtimeScalar, arg2,
+                    integerValue(runtimeScalar) & integerValue(arg2));
         }
         return unsignedResult(unsignedValue(runtimeScalar).and(unsignedValue(arg2)))
                 .propagateTaint(runtimeScalar, arg2);
@@ -188,7 +186,8 @@ public class BitwiseOperators {
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
             if (isInteger(runtimeScalar) && isInteger(arg2)) {
-                return integerBitwiseResult(runtimeScalar, arg2, '|');
+                return integerBitwiseResult(runtimeScalar, arg2,
+                        integerValue(runtimeScalar) | integerValue(arg2));
             }
             return unsignedResult(unsignedValue(runtimeScalar).or(unsignedValue(arg2)))
                     .propagateTaint(runtimeScalar, arg2);
@@ -233,7 +232,8 @@ public class BitwiseOperators {
      */
     public static RuntimeScalar bitwiseOrBinary(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
         if (isInteger(runtimeScalar) && isInteger(arg2)) {
-            return integerBitwiseResult(runtimeScalar, arg2, '|');
+            return integerBitwiseResult(runtimeScalar, arg2,
+                    integerValue(runtimeScalar) | integerValue(arg2));
         }
         return unsignedResult(unsignedValue(runtimeScalar).or(unsignedValue(arg2)))
                 .propagateTaint(runtimeScalar, arg2);
@@ -270,7 +270,8 @@ public class BitwiseOperators {
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
             if (isInteger(runtimeScalar) && isInteger(arg2)) {
-                return integerBitwiseResult(runtimeScalar, arg2, '^');
+                return integerBitwiseResult(runtimeScalar, arg2,
+                        integerValue(runtimeScalar) ^ integerValue(arg2));
             }
             return unsignedResult(unsignedValue(runtimeScalar).xor(unsignedValue(arg2)))
                     .propagateTaint(runtimeScalar, arg2);
@@ -321,7 +322,8 @@ public class BitwiseOperators {
      */
     public static RuntimeScalar bitwiseXorBinary(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
         if (isInteger(runtimeScalar) && isInteger(arg2)) {
-            return integerBitwiseResult(runtimeScalar, arg2, '^');
+            return integerBitwiseResult(runtimeScalar, arg2,
+                    integerValue(runtimeScalar) ^ integerValue(arg2));
         }
         return unsignedResult(unsignedValue(runtimeScalar).xor(unsignedValue(arg2)))
                 .propagateTaint(runtimeScalar, arg2);
