@@ -263,9 +263,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         if (!hasReferenceEdge) return;
         if (isPackageRootedHash()) {
             MortalList.invalidateExternalRootSnapshot();
-        } else {
-            MortalList.invalidateFullRootSnapshotIfReachable(this);
         }
+        MortalList.invalidateFullRootSnapshotIfReachable(this);
     }
 
     private void notePackageRootClear(Collection<RuntimeScalar> values) {
@@ -282,9 +281,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     void notePackageRootMutation() {
         if (isPackageRootedHash()) {
             MortalList.invalidateExternalRootSnapshot();
-        } else {
-            MortalList.invalidateFullRootSnapshotIfReachable(this);
         }
+        MortalList.invalidateFullRootSnapshotIfReachable(this);
     }
 
     void markPackageRootedValue(RuntimeScalar value) {

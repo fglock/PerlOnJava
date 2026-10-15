@@ -2413,6 +2413,9 @@ public class ReachabilityWalker {
     public static final class LiveRootSnapshot {
         private static final Object MIXED_DIRECT_LEXICAL_ORIGIN = new Object();
 
+        private final ReachabilityQueryStats queryStats =
+                MortalList.activeReachabilityQueryStats();
+
         private final Set<RuntimeBase> directLexicalRoots =
                 Collections.newSetFromMap(new IdentityHashMap<>(512));
         private final IdentityHashMap<RuntimeBase, Object> directLexicalOrigins =
@@ -2420,6 +2423,7 @@ public class ReachabilityWalker {
         private boolean complete = true;
 
         public LiveRootSnapshot() {
+            if (queryStats != null) queryStats.liveRootSnapshotsBuilt++;
             build();
         }
 
@@ -2459,6 +2463,7 @@ public class ReachabilityWalker {
             while (!todo.isEmpty() && visits < MAX_ROOT_SNAPSHOT_VISITS) {
                 DirectRootStep step = todo.removeFirst();
                 visits++;
+                if (queryStats != null) queryStats.liveRootSnapshotNodesVisited++;
                 walkLiveNode(step.base, todo, step.origin);
             }
             complete = todo.isEmpty();
