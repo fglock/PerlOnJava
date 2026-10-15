@@ -9,6 +9,7 @@ import org.perlonjava.runtime.io.NativeSocketIOHandle;
 import org.perlonjava.runtime.io.SocketIO;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.StringOperators;
+import org.perlonjava.runtime.operators.MathOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.regex.RuntimeRegex;
@@ -3535,6 +3536,96 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Method to implement `$v->[10]`
     public RuntimeScalar arrayDerefGet(RuntimeScalar index) {
         return this.arrayDeref().get(index);
+    }
+
+    /** Read an array element using a simple integer index adjustment without
+     * materializing the intermediate arithmetic result scalar. */
+    public RuntimeScalar arrayDerefGetAdjusted(RuntimeScalar index, int adjustment,
+                                               boolean subtract, boolean warnUninitialized,
+                                               boolean integerMode) {
+        if ((index.getClass() == RuntimeScalar.class
+                    || index.getClass() == RuntimeScalarReadOnly.class)
+                && index.type == INTEGER
+                && !(index.value instanceof BigInteger)) {
+            long nativeIndex = index.getLong();
+            if (integerMode) {
+                long adjusted = subtract ? nativeIndex - adjustment : nativeIndex + adjustment;
+                return arrayDeref().get((int) adjusted);
+            }
+            try {
+                long adjusted = subtract
+                        ? Math.subtractExact(nativeIndex, adjustment)
+                        : Math.addExact(nativeIndex, adjustment);
+                return arrayDeref().get((int) adjusted);
+            } catch (ArithmeticException ignored) {
+                // Preserve Perl's overflow promotion through the normal operator path.
+            }
+        }
+        RuntimeScalar adjustedIndex;
+        if (integerMode) {
+            RuntimeScalar offset = RuntimeScalarCache.getScalarInt(adjustment);
+            adjustedIndex = subtract
+                    ? warnUninitialized
+                        ? MathOperators.integerSubtractWarn(index, offset)
+                        : MathOperators.integerSubtract(index, offset)
+                    : warnUninitialized
+                        ? MathOperators.integerAddWarn(index, offset)
+                        : MathOperators.integerAdd(index, offset);
+        } else {
+            adjustedIndex = subtract
+                    ? warnUninitialized
+                        ? MathOperators.subtractWarn(index, adjustment)
+                        : MathOperators.subtract(index, adjustment)
+                    : warnUninitialized
+                        ? MathOperators.addWarn(index, adjustment)
+                        : MathOperators.add(index, adjustment);
+        }
+        return arrayDeref().get(adjustedIndex);
+    }
+
+    /** Non-strict-ref variant of {@link #arrayDerefGetAdjusted}. */
+    public RuntimeScalar arrayDerefGetAdjustedNonStrict(RuntimeScalar index, int adjustment,
+                                                        boolean subtract, boolean warnUninitialized,
+                                                        boolean integerMode,
+                                                        String packageName) {
+        if ((index.getClass() == RuntimeScalar.class
+                    || index.getClass() == RuntimeScalarReadOnly.class)
+                && index.type == INTEGER
+                && !(index.value instanceof BigInteger)) {
+            long nativeIndex = index.getLong();
+            if (integerMode) {
+                long adjusted = subtract ? nativeIndex - adjustment : nativeIndex + adjustment;
+                return arrayDerefNonStrict(packageName).get((int) adjusted);
+            }
+            try {
+                long adjusted = subtract
+                        ? Math.subtractExact(nativeIndex, adjustment)
+                        : Math.addExact(nativeIndex, adjustment);
+                return arrayDerefNonStrict(packageName).get((int) adjusted);
+            } catch (ArithmeticException ignored) {
+                // Preserve Perl's overflow promotion through the normal operator path.
+            }
+        }
+        RuntimeScalar adjustedIndex;
+        if (integerMode) {
+            RuntimeScalar offset = RuntimeScalarCache.getScalarInt(adjustment);
+            adjustedIndex = subtract
+                    ? warnUninitialized
+                        ? MathOperators.integerSubtractWarn(index, offset)
+                        : MathOperators.integerSubtract(index, offset)
+                    : warnUninitialized
+                        ? MathOperators.integerAddWarn(index, offset)
+                        : MathOperators.integerAdd(index, offset);
+        } else {
+            adjustedIndex = subtract
+                    ? warnUninitialized
+                        ? MathOperators.subtractWarn(index, adjustment)
+                        : MathOperators.subtract(index, adjustment)
+                    : warnUninitialized
+                        ? MathOperators.addWarn(index, adjustment)
+                        : MathOperators.add(index, adjustment);
+        }
+        return arrayDerefNonStrict(packageName).get(adjustedIndex);
     }
 
     // Method to implement `$v->[10]`, when "no strict refs" is in effect

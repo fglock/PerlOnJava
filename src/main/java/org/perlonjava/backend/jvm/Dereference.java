@@ -1303,6 +1303,7 @@ public class Dereference {
 
     public static void handleArrowArrayDeref(EmitterVisitor emitterVisitor, BinaryOperatorNode node, String arrayOperation) {
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) ->[] ");
+        MethodVisitor mv = emitterVisitor.ctx.mv;
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
 
@@ -1323,6 +1324,58 @@ public class Dereference {
         if (right.elements.size() == 1 && !isSingleRange) {
             // Single index: use get/delete/exists methods
             Node elem = right.elements.getFirst();
+            if (arrayOperation.equals("get")
+                    && elem instanceof BinaryOperatorNode adjustedIndex
+                    && (adjustedIndex.operator.equals("+") || adjustedIndex.operator.equals("-"))
+                    && adjustedIndex.right instanceof NumberNode literal
+                    && adjustedIndex.left != null) {
+                Integer adjustment = parseIntegerIndexAdjustment(literal.value);
+                if (adjustment != null) {
+                    adjustedIndex.left.accept(scalarVisitor);
+                    int indexBaseSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                    boolean pooledIndexBase = indexBaseSlot >= 0;
+                    if (!pooledIndexBase) {
+                        indexBaseSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                    }
+                    mv.visitVarInsn(Opcodes.ASTORE, indexBaseSlot);
+                    mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+                    mv.visitVarInsn(Opcodes.ALOAD, indexBaseSlot);
+                    mv.visitLdcInsn(adjustment);
+                    mv.visitInsn(adjustedIndex.operator.equals("-")
+                            ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+                    mv.visitInsn(emitterVisitor.ctx.symbolTable.isWarningCategoryEnabled("uninitialized")
+                            ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+                    Object useIntegerAnnotation = adjustedIndex.getAnnotation("useInteger");
+                    boolean integerMode = useIntegerAnnotation instanceof Boolean value
+                            ? value
+                            : emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER);
+                    mv.visitInsn(integerMode ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+                    boolean strictRefs = emitterVisitor.ctx.symbolTable
+                            .isStrictOptionEnabled(Strict.HINT_STRICT_REFS);
+                    if (strictRefs) {
+                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                                "arrayDerefGetAdjusted",
+                                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;IZZZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                false);
+                    } else {
+                        emitterVisitor.pushCurrentPackage();
+                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                                "arrayDerefGetAdjustedNonStrict",
+                                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;IZZZLjava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                false);
+                    }
+                    if (pooledIndexBase) {
+                        emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                    }
+                    if (pooledLeft) {
+                        emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                    }
+                    EmitOperator.handleVoidContextForTied(emitterVisitor);
+                    return;
+                }
+            }
             elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
 
             int indexSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
@@ -1420,6 +1473,14 @@ public class Dereference {
             }
         }
         // No handleVoidContextForTied here - slices already handle void context with POP above
+    }
+
+    private static Integer parseIntegerIndexAdjustment(String literal) {
+        try {
+            return Integer.valueOf(literal.replace("_", ""));
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     public static void handleArrowHashDeref(EmitterVisitor emitterVisitor, BinaryOperatorNode node, String hashOperation) {
