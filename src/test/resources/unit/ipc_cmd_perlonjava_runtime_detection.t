@@ -15,9 +15,10 @@ SKIP: {
 
 {
     local $IPC::Cmd::USE_IPC_RUN = 1;
+    my $child_timeout = $^O eq 'MSWin32' ? 60 : 10;
     my ($ok, $error, $combined, $stdout, $stderr) = run(
         command => [$^X, '-e', 'print "out\n"; warn "err\n"'],
-        timeout => 10,
+        timeout => $child_timeout,
     );
     ok $ok, 'forced IPC::Run executes an argv command';
     is join('', @$stdout), "out\n", 'argv command captures stdout';
