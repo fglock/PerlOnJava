@@ -2139,7 +2139,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && value != null
                 && value != this
                 && getClass() == RuntimeScalar.class
-                && value.getClass() == RuntimeScalar.class
+                && (value.getClass() == RuntimeScalar.class
+                    || value.getClass() == RuntimeScalarReadOnly.class)
                 && type < TIED_SCALAR
                 && value.type == INTEGER
                 && !value.transferableGrowingString) {
