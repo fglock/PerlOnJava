@@ -2146,7 +2146,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             value.transferableGrowingString = false;
         } else {
             if (value != null && value != this
-                    && (value.type == STRING || value.type == BYTE_STRING)) {
+                    && (value.type == STRING || value.type == BYTE_STRING)
+                    && value.growingString != null) {
                 value.materializeGrowingString();
             }
             if (value != this) {
