@@ -666,6 +666,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * refgen must still bind to a distinct mutable cell.</p>
      */
     public static RuntimeScalar materializeLexicalCell(RuntimeScalar scalar) {
+        // JVM lexical loads pass through this helper so skipped declarations
+        // can be materialized on demand.  Ordinary scalar cells need no
+        // transformation; keep their common case to a class and sentinel
+        // check before the proxy/null handling below.
+        if (scalar != null
+                && scalar.getClass() == RuntimeScalar.class
+                && scalar.refCount != Integer.MIN_VALUE) {
+            return scalar;
+        }
         // A foreach literal alias deliberately occupies a lexical slot.  It
         // is not an uninitialized declaration placeholder: retain its guard
         // so a mutation reports Perl's read-only-value error.
