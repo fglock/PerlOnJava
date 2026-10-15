@@ -18,12 +18,12 @@ BEGIN {
 
 package Issue1795OwnershipTest;
 use Catalyst;
+our ($original_body, $original_context, $original_request, $original_temp);
 __PACKAGE__->config(name => 'Issue1795OwnershipTest');
 
 package Issue1795OwnershipTest::Controller::Root;
 use base 'Catalyst::Controller';
 __PACKAGE__->config(namespace => '');
-our ($original_body, $original_context, $original_request, $original_temp);
 
 sub dump_body : Local {
     my ($self, $context) = @_;
@@ -58,7 +58,44 @@ __PACKAGE__->setup;
 package main;
 Catalyst::Test->import('Issue1795OwnershipTest');
 
-my $request = HTTP::Request->new('PUT', 'http://localhost/dump_body');
+# The unit-test HTTP::Request shim only implements the request fields these
+# tests need. Add the small HTTP::Message surface used by Catalyst::Test when
+# that shim is active; installed HTTP::Request distributions already provide
+# these methods.
+{
+    no strict 'refs';
+    no warnings qw(once redefine);
+    *HTTP::Request::method = sub { $_[0]{method} }
+        unless HTTP::Request->can('method');
+    *HTTP::Request::protocol = sub { 'HTTP/1.1' }
+        unless HTTP::Request->can('protocol');
+    *HTTP::Request::content = sub {
+        my ($self, $content) = @_;
+        $self->{content} = $content if @_ > 1;
+        return $self->{content} // '';
+    } unless HTTP::Request->can('content');
+    *HTTP::Request::content_length = sub {
+        $_[0]->header('Content-Length');
+    } unless HTTP::Request->can('content_length');
+    *HTTP::Request::_URI::clone = sub {
+        my %copy = %{$_[0]};
+        return bless \%copy, ref($_[0]);
+    } unless HTTP::Request::_URI->can('clone');
+    *HTTP::Request::_URI::query = sub { $_[0]{query} }
+        unless HTTP::Request::_URI->can('query');
+    *HTTP::Request::_URI::path_query = sub { $_[0]{path} }
+        unless HTTP::Request::_URI->can('path_query');
+    *HTTP::Request::_URI::host_port = sub {
+        $_[0]{host} . ':' . $_[0]{port};
+    } unless HTTP::Request::_URI->can('host_port');
+    *HTTP::Request::_URI::default_port = sub {
+        $_[0]{scheme} eq 'https' ? 443 : 80;
+    } unless HTTP::Request::_URI->can('default_port');
+}
+
+my $request = HTTP::Request->new(
+    'PUT', 'http://localhost/dump_body',
+);
 $request->header('Content-Type' => 'application/octet-stream');
 $request->header('Content-Length' => 9);
 $request->content('foobarbaz');
@@ -79,7 +116,6 @@ my $path = $body->body->filename;
 
 my $next_response = request(HTTP::Request->new('GET', 'http://localhost/index'));
 ok($next_response && $next_response->is_success, 'subsequent request succeeds');
-undef $body;
 ok(!defined($Issue1795OwnershipTest::original_context),
     'completed request context has no remaining strong owner');
 ok(!defined($Issue1795OwnershipTest::original_request),
