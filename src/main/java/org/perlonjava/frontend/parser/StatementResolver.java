@@ -1436,6 +1436,20 @@ public class StatementResolver {
         }
 
         while (braceCount > 0) {
+            // TokenUtils.consume() skips NEWLINE tokens. That is normally
+            // harmless while scanning a quoted string, but it changes the
+            // meaning of adjacent backslashes around a Perl line continuation:
+            // in `{'a\\\n\\'b', ...}`, the first backslash escapes the
+            // newline and the second escapes the quote. Preserve that newline
+            // for the quote escape state machine before consume() skips it.
+            if (inQuotedString && quoteEscapeNext
+                    && parser.tokenIndex < parser.tokens.size()
+                    && parser.tokens.get(parser.tokenIndex).type == LexerTokenType.NEWLINE) {
+                parser.tokenIndex++;
+                quoteEscapeNext = false;
+                continue;
+            }
+
             LexerToken token = consume(parser);
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral token: '" + token.text + "' type:" + token.type + " braceCount:" + braceCount);
 
