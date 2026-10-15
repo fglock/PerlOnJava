@@ -5,6 +5,8 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.astnode.BinaryOperatorNode;
 import org.perlonjava.frontend.astnode.Node;
+import org.perlonjava.frontend.astnode.NumberNode;
+import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 import java.util.ArrayList;
@@ -56,6 +58,10 @@ public class EmitOperatorChained {
         if (operators.size() == 1) {
             // Keep the common non-chain case compact; this path is used by
             // thousands of ordinary comparisons in large generated methods.
+            if (tryEmitAdjustedNumericComparison(emitterVisitor, node)) {
+                EmitOperator.handleVoidContext(emitterVisitor);
+                return;
+            }
             int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
             boolean pooledLeft = leftSlot >= 0;
             if (!pooledLeft) {
@@ -117,6 +123,58 @@ public class EmitOperatorChained {
         }
 
         EmitOperator.handleVoidContext(emitterVisitor);
+    }
+
+    private static boolean tryEmitAdjustedNumericComparison(
+            EmitterVisitor emitterVisitor, BinaryOperatorNode comparison) {
+        int comparisonCode = switch (comparison.operator) {
+            case "<" -> 0;
+            case ">" -> 1;
+            case "<=" -> 2;
+            case ">=" -> 3;
+            default -> -1;
+        };
+        if (comparisonCode < 0 || !(comparison.right instanceof BinaryOperatorNode arithmetic)
+                || !(arithmetic.operator.equals("+") || arithmetic.operator.equals("-"))
+                || !(arithmetic.right instanceof NumberNode literal)) {
+            return false;
+        }
+
+        Object integerAnnotation = arithmetic.getAnnotation("useInteger");
+        boolean integerMode = integerAnnotation instanceof Boolean value
+                ? value
+                : emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER);
+        if (integerMode) return false;
+
+        Integer adjustment = parseIntegerAdjustment(literal.value);
+        if (adjustment == null) return false;
+
+        EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
+        comparison.left.accept(scalarVisitor);
+        arithmetic.left.accept(scalarVisitor);
+        emitterVisitor.ctx.mv.visitLdcInsn(adjustment);
+        emitterVisitor.ctx.mv.visitInsn(arithmetic.operator.equals("-")
+                ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        emitterVisitor.ctx.mv.visitLdcInsn(comparisonCode);
+        boolean warnArithmetic = emitterVisitor.ctx.symbolTable.isWarningCategoryEnabled("uninitialized")
+                || emitterVisitor.ctx.compilerOptions.warnFlag;
+        emitterVisitor.ctx.mv.visitInsn(warnArithmetic ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/operators/CompareOperators",
+                "compareAfterIntAdjustment",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                        + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                        + "IZIZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
+        return true;
+    }
+
+    private static Integer parseIntegerAdjustment(String literal) {
+        try {
+            return Integer.valueOf(literal.replace("_", ""));
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     static boolean isComparisonOperator(String operator) {

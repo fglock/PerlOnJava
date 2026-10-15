@@ -51,6 +51,105 @@ public class CompareOperators {
     private static int compareIntegers(RuntimeScalar left, RuntimeScalar right) {
         return left.getBigint().compareTo(right.getBigint());
     }
+
+    /** Compare against an integer-adjusted numeric RHS without materializing its scalar. */
+    public static RuntimeScalar compareAfterIntAdjustment(
+            RuntimeScalar left, RuntimeScalar right, int adjustment,
+            boolean subtract, int comparison, boolean warnArithmetic) {
+        // Keep the common Life loop-bound case tiny enough for HotSpot to inline
+        // into generated subroutines. All unusual scalar kinds take the full path.
+        if (left.getClass() == RuntimeScalar.class
+                && left.type == RuntimeScalarType.INTEGER
+                && right.getClass() == RuntimeScalar.class
+                && right.type == RuntimeScalarType.DOUBLE) {
+            double adjusted = subtract
+                    ? right.getDouble() - adjustment
+                    : right.getDouble() + adjustment;
+            return getScalarBoolean(compare(left.getDouble(), adjusted, comparison));
+        }
+        return compareAfterIntAdjustmentSlow(
+                left, right, adjustment, subtract, comparison, warnArithmetic);
+    }
+
+    private static RuntimeScalar compareAfterIntAdjustmentSlow(
+            RuntimeScalar left, RuntimeScalar right, int adjustment,
+            boolean subtract, int comparison, boolean warnArithmetic) {
+        if (isPlainNumeric(left) && isPlainNumeric(right)) {
+            if (right.type == RuntimeScalarType.DOUBLE) {
+                double adjusted = subtract
+                        ? right.getDouble() - adjustment
+                        : right.getDouble() + adjustment;
+                return getScalarBoolean(compare(left.getDouble(), adjusted, comparison));
+            }
+            if (right.type == RuntimeScalarType.INTEGER
+                    && !(right.value instanceof java.math.BigInteger)) {
+                long adjusted;
+                try {
+                    adjusted = subtract
+                            ? Math.subtractExact(right.getLong(), adjustment)
+                            : Math.addExact(right.getLong(), adjustment);
+                } catch (ArithmeticException ignored) {
+                    return compareAfterIntAdjustmentFallback(
+                            left, right, adjustment, subtract, comparison, warnArithmetic);
+                }
+                if (left.type == RuntimeScalarType.DOUBLE) {
+                    return getScalarBoolean(compare(left.getDouble(), (double) adjusted, comparison));
+                }
+                if (left.type == RuntimeScalarType.INTEGER
+                        && !(left.value instanceof java.math.BigInteger)) {
+                    return getScalarBoolean(compare(left.getLong(), adjusted, comparison));
+                }
+            }
+        }
+        return compareAfterIntAdjustmentFallback(
+                left, right, adjustment, subtract, comparison, warnArithmetic);
+    }
+
+    private static boolean isPlainNumeric(RuntimeScalar value) {
+        return (value.getClass() == RuntimeScalar.class
+                    || value.getClass() == RuntimeScalarReadOnly.class)
+                && (value.type == RuntimeScalarType.INTEGER || value.type == RuntimeScalarType.DOUBLE);
+    }
+
+    private static boolean compare(double left, double right, int comparison) {
+        return switch (comparison) {
+            case 0 -> left < right;
+            case 1 -> left > right;
+            case 2 -> left <= right;
+            case 3 -> left >= right;
+            default -> throw new IllegalArgumentException("Unknown numeric comparison: " + comparison);
+        };
+    }
+
+    private static boolean compare(long left, long right, int comparison) {
+        return switch (comparison) {
+            case 0 -> left < right;
+            case 1 -> left > right;
+            case 2 -> left <= right;
+            case 3 -> left >= right;
+            default -> throw new IllegalArgumentException("Unknown numeric comparison: " + comparison);
+        };
+    }
+
+    private static RuntimeScalar compareAfterIntAdjustmentFallback(
+            RuntimeScalar left, RuntimeScalar right, int adjustment,
+            boolean subtract, int comparison, boolean warnArithmetic) {
+        RuntimeScalar adjusted = subtract
+                ? warnArithmetic
+                    ? MathOperators.subtractWarn(right, adjustment)
+                    : MathOperators.subtract(right, adjustment)
+                : warnArithmetic
+                    ? MathOperators.addWarn(right, adjustment)
+                    : MathOperators.add(right, adjustment);
+        return switch (comparison) {
+            case 0 -> lessThan(left, adjusted);
+            case 1 -> greaterThan(left, adjusted);
+            case 2 -> lessThanOrEqual(left, adjusted);
+            case 3 -> greaterThanOrEqual(left, adjusted);
+            default -> throw new IllegalArgumentException("Unknown numeric comparison: " + comparison);
+        };
+    }
+
     private static boolean bytesHintActive() {
         return (WarningBitsRegistry.getCallSiteHints() & Strict.HINT_BYTES) != 0;
     }
