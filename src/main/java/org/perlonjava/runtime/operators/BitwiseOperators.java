@@ -5,6 +5,7 @@ import org.perlonjava.frontend.parser.NumberParser;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.math.BigInteger;
+import java.util.concurrent.atomic.AtomicReferenceArray;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.blessedId;
 
@@ -15,8 +16,13 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.blessedId;
  */
 public class BitwiseOperators {
     private static final BigInteger UV_MASK = BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE);
+    private static final int UNSIGNED_WORD_CACHE_MASK = 4095;
+    private static final AtomicReferenceArray<UnsignedWordMagnitude> UNSIGNED_WORD_CACHE =
+            new AtomicReferenceArray<>(UNSIGNED_WORD_CACHE_MASK + 1);
     private static final ThreadLocal<Boolean> COMPOUND_BITWISE_ASSIGNMENT =
             ThreadLocal.withInitial(() -> false);
+
+    private record UnsignedWordMagnitude(long bits, BigInteger magnitude) {}
 
     private static void warnUninitializedBitwiseOperands(
             RuntimeScalar left, RuntimeScalar right, String operation, char symbol) {
@@ -47,9 +53,22 @@ public class BitwiseOperators {
     private static RuntimeScalar unsignedResult(long value) {
         if (value >= 0) return RuntimeScalarCache.getScalarInt(value);
         // Preserve Perl's unsigned 64-bit value without formatting and parsing
-        // its decimal representation on every negative native-word result.
-        BigInteger magnitude = BigInteger.valueOf(value & Long.MAX_VALUE).setBit(63);
+        // its decimal representation on every negative native-word result. Life
+        // and other bit-packed workloads repeatedly produce the same word masks,
+        // so retain a bounded set of immutable magnitudes for those words.
+        BigInteger magnitude = unsignedWordMagnitude(value);
         return new RuntimeScalar(magnitude);
+    }
+
+    private static BigInteger unsignedWordMagnitude(long bits) {
+        int index = (int) (bits ^ (bits >>> 33) ^ (bits >>> 17))
+                & UNSIGNED_WORD_CACHE_MASK;
+        UnsignedWordMagnitude cached = UNSIGNED_WORD_CACHE.get(index);
+        if (cached != null && cached.bits == bits) return cached.magnitude;
+
+        BigInteger magnitude = BigInteger.valueOf(bits & Long.MAX_VALUE).setBit(63);
+        UNSIGNED_WORD_CACHE.set(index, new UnsignedWordMagnitude(bits, magnitude));
+        return magnitude;
     }
 
     private static long integerValue(RuntimeScalar scalar) {
