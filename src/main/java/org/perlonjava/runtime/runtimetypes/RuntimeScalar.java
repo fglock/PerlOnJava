@@ -2130,10 +2130,48 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         MortalList.deferDecrement(inner);
     }
 
-    // Inlineable fast path for set(RuntimeScalar)
-    // Types < TIED_SCALAR (0-8) never have REFERENCE_BIT (0x8000), so no
-    // reference check is needed here — all reference types route to setLarge().
+    // Keep this entry point small so HotSpot can inline it into generated
+    // code. Less common scalar kinds retain the complete assignment path in
+    // setSlow(); the numeric loop case copies directly between plain cells.
     public RuntimeScalar set(RuntimeScalar value) {
+        if (keysLvalueContainer == null
+                && !threadShared
+                && value != null
+                && value != this
+                && getClass() == RuntimeScalar.class
+                && value.getClass() == RuntimeScalar.class
+                && type == INTEGER
+                && value.type == INTEGER
+                && !value.transferableGrowingString) {
+            return setPlainInteger(value);
+        }
+        return setSlow(value);
+    }
+
+    private RuntimeScalar setPlainInteger(RuntimeScalar value) {
+        clearLastReadlineHandleIfGlobValue();
+        growingString = null;
+        type = value.type;
+        this.value = value.value;
+        utf8UncheckedOctets = value.utf8UncheckedOctets;
+        utf8MalformedWarning = value.utf8MalformedWarning;
+        tainted = value.tainted;
+        numericLiteralText = value.numericLiteralText;
+        numericContextSeen = value.numericContextSeen;
+        scalarStoredGlob = value.scalarStoredGlob
+                || (value.type == GLOB && value.value instanceof RuntimeGlob);
+        firstClassRegexScalar = value.firstClassRegexScalar;
+        firstClassRegexReferent = value.firstClassRegexReferent;
+        firstClassRegexValue = value.firstClassRegexValue;
+        formatPictureTainted = value.formatPictureTainted;
+        globalCodeRefFqn = value.globalCodeRefFqn;
+        RuntimePosLvalue.invalidatePos(this);
+        refreshSubstrLvalues();
+        notifyModifiedWatchers();
+        return this;
+    }
+
+    private RuntimeScalar setSlow(RuntimeScalar value) {
         if (keysLvalueContainer != null) {
             if (keysLvalueContainer instanceof RuntimeHash hash) {
                 hash.preallocateCapacity(value.getInt());
