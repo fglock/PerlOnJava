@@ -199,7 +199,7 @@ public class Stat {
 
     public static RuntimeList stat(RuntimeScalar arg) {
         arg = dereferenceAndFetch(arg);
-        state().lastFileHandle.set(arg);
+        state().setLastFileHandle(arg);
         RuntimeList res = new RuntimeList();
 
         if (arg.type == RuntimeScalarType.GLOB || arg.type == RuntimeScalarType.GLOBREFERENCE) {
@@ -353,7 +353,7 @@ public class Stat {
 
     public static RuntimeList lstat(RuntimeScalar arg) {
         arg = dereferenceAndFetch(arg);
-        state().lastFileHandle.set(arg);
+        state().setLastFileHandle(arg);
         RuntimeList res = new RuntimeList();
 
         if (arg.type == RuntimeScalarType.GLOB || arg.type == RuntimeScalarType.GLOBREFERENCE) {
