@@ -71,6 +71,7 @@ def sqliteTokenizerResourceDir = layout.buildDirectory.dir('generated/resources/
 def sqliteTokenizerLibrary = sqliteTokenizerResourceDir.map { it.file("org/perlonjava/sqlite/${sqliteTokenizerLibraryName}") }
 def sqliteTokenizerSource = layout.projectDirectory.file('native/sqlite/tokenizer_enable.c').asFile
 def sqliteTokenizerIncludeDir = layout.projectDirectory.dir('native/sqlite').asFile
+def sqliteTokenizerWindowsCompilerScript = layout.projectDirectory.file('native/sqlite/build_tokenizer_helper.bat').asFile
 
 tasks.register('compileSqliteTokenizerHelper', Exec) {
     description = 'Builds the small SQLite extension that enables FTS3 Perl tokenizer registration'
@@ -82,7 +83,7 @@ tasks.register('compileSqliteTokenizerHelper', Exec) {
         output.parentFile.mkdirs()
         if (sqliteTokenizerMsvc) {
             if (sqliteTokenizerWindows && !System.getenv('CC')) {
-                commandLine 'cmd', '/c', file('native/sqlite/build_tokenizer_helper.bat'),
+                commandLine 'cmd', '/c', sqliteTokenizerWindowsCompilerScript,
                         sqliteTokenizerSource, sqliteTokenizerIncludeDir, output
             } else {
                 commandLine sqliteTokenizerCompiler, '/nologo', '/LD', '/I', sqliteTokenizerIncludeDir,
