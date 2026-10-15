@@ -346,7 +346,8 @@ and first path establish implementation cost.
 - On commit `4cad02e3b`, the focused `new_from_lol` and content/incremental
   parser lifecycle reproducers pass on system Perl, JVM, and interpreter. The
   upstream `timeout 1800 ./jcpan -t HTML::Tree` run passes all 23 files and 989
-  tests, including `t/refloop.t`. This closes the observed HTML-Tree behavior
+  tests, including `t/refloop.t`; standalone system Perl 5.42.2 passes the
+  unchanged `t/refloop.t` 8/8. This closes the observed HTML-Tree behavior
   failure on this candidate, but does not complete Phase 2: owner slots still
   cover closure pads only, and cleanup still relies on selective counts and
   reachability walks. Revalidate the upstream suite after the scalar/proxy and
