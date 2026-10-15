@@ -250,6 +250,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         && closure.refCount == 0
                         && closure.stashRefCount <= 0
                         && !closure.localBindingExists
+                        && !ReachabilityWalker.isReachableFromRoots(closure)
                         && (frame.returned == null || !frame.returned.containsKey(closure))) {
                     closure.releaseCaptures();
                 }
