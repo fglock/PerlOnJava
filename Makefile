@@ -124,9 +124,9 @@ perl5-sync-check:
 # CI build - optimized for CI/CD environments
 ci: check-java-gradle
 ifeq ($(OS),Windows_NT)
-	gradlew.bat $(GRADLE_LAUNCH_ARGS) build --stacktrace
+	gradlew.bat $(GRADLE_LAUNCH_ARGS) build -x test testUnitParallel --parallel --stacktrace
 else
-	./gradlew $(GRADLE_LAUNCH_ARGS) build --stacktrace
+	./gradlew $(GRADLE_LAUNCH_ARGS) build -x test testUnitParallel --parallel --stacktrace
 endif
 
 # Check Java/Gradle compatibility and fix if needed

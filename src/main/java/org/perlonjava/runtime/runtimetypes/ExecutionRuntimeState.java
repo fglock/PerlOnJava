@@ -15,6 +15,9 @@ import java.util.Set;
 
 /** Per-interpreter execution and dynamic-scope state migrated in Phase 5. */
 public final class ExecutionRuntimeState {
+    /** Set once the interpreter enters its global destruction phase. */
+    boolean globalDestruction;
+
     final List<Object> callerStack = new ArrayList<>();
     final Deque<DynamicState> dynamicVariableStack = new ArrayDeque<>();
     final Deque<DynamicVariableManager.FrameCapture> dynamicFrameCaptures = new ArrayDeque<>();

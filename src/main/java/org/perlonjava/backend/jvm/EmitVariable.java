@@ -2816,15 +2816,16 @@ public class EmitVariable {
                         }
                     }
                     
-                    Integer sourceOrderSlot = sigilNode.getAnnotation("sourceOrderLexicalSlot") instanceof Integer slot
-                            ? slot : null;
+                    Integer sourceOrderSlot = sigilNode.getAnnotation("emittedJvmLexicalSlot") instanceof Integer slot
+                            ? slot
+                            : sigilNode.getAnnotation("sourceOrderLexicalSlot") instanceof Integer slot
+                                    ? slot : null;
                     int varIndex;
                     if (sourceOrderSlot != null) {
-                        // A postfix modifier can parse a same-named lexical
-                        // after this declaration while lowering evaluates that
-                        // modifier first.  Keep this declaration in its
-                        // parser-assigned pad slot; the later declaration will
-                        // subsequently replace the live name binding.
+                        // Keep the declaration in its parser-assigned pad slot.
+                        // This also prevents code generation from allocating
+                        // fresh local slots after the emitter has reserved the
+                        // complete lexical pad.
                         emitterVisitor.ctx.symbolTable.addVariableWithIndex(var, sourceOrderSlot, operator);
                         varIndex = sourceOrderSlot;
                     } else {

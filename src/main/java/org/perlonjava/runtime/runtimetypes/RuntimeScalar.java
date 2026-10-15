@@ -614,6 +614,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public boolean destroySelfArgument;
 
+    /** True after this scalar has acquired per-runtime {@code pos()} cache state. */
+    volatile boolean posCacheEntryCreated;
+
     /**
      * True when this scalar owns a counted reference through a scalar
      * reference, e.g. the outer variable in {@code $x = \ bless {}, "X"}.
@@ -1915,10 +1918,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // use ordinary $_ there (op/ref.t's IO::Handle destructor does so),
         // while direct $_[0] assignment remains protected during normal
         // execution.
-        boolean globalDestruction = "DESTRUCT".equals(
-                GlobalVariable.getGlobalVariable(GlobalContext.GLOBAL_PHASE).toString());
-        if (target.destroySelfArgument && target != value && !globalDestruction) {
-            throw new PerlCompilerException("Modification of a read-only value attempted");
+        if (target.destroySelfArgument && target != value) {
+            PerlRuntime runtime = PerlRuntime.currentOrNull();
+            boolean globalDestruction = runtime != null
+                    && runtime.executionState.globalDestruction;
+            if (!globalDestruction) {
+                throw new PerlCompilerException("Modification of a read-only value attempted");
+            }
         }
         return value.addToScalar(target);
     }

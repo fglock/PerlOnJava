@@ -42,7 +42,7 @@ subtest 'Basic encoding and decoding' => sub {
 
 # Test line ending parameter
 subtest 'Line ending parameter' => sub {
-    plan tests => 5;
+    plan tests => 6;
     
     my $text = 'Hello, World!';
     
@@ -53,6 +53,8 @@ subtest 'Line ending parameter' => sub {
     # CRLF line ending
     my $crlf = encode_qp($text, "\015\012");
     is($crlf, "Hello, World!=\015\012", 'CRLF line ending is used for final soft break');
+    is(encode_qp("Hello\nWorld", "\015\012"),
+       "Hello\015\012World=\015\012", 'requested CRLF replaces input LF');
     
     # Unix line ending (explicit)
     my $unix = encode_qp($text, "\n");

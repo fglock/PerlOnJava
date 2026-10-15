@@ -25,6 +25,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -187,13 +188,17 @@ public class EmitSubroutine {
         // Create a new symbol table for the subroutine, but manually add only the filtered variables
         ScopedSymbolTable newSymbolTable = new ScopedSymbolTable();
         newSymbolTable.enterScope();
+        Map<Integer, Integer> sourceLexicalSlotMap = new HashMap<>();
 
         // Add only the filtered visible variables (excluding 'our sub' entries)
         // IMPORTANT: Use the 4-argument version to preserve the original perlPackage
         // This is critical for 'our' variables declared in BEGIN captures (PerlOnJava::_BEGIN_*)
         // which must retain their original package to work correctly with the 'local' fix
-        for (SymbolTable.SymbolEntry entry : visibleVariables.values()) {
-            newSymbolTable.addVariable(entry.name(), entry.decl(), entry.perlPackage(), entry.ast());
+        for (Map.Entry<Integer, SymbolTable.SymbolEntry> visibleEntry : visibleVariables.entrySet()) {
+            SymbolTable.SymbolEntry entry = visibleEntry.getValue();
+            int localIndex = newSymbolTable.addVariable(
+                    entry.name(), entry.decl(), entry.perlPackage(), entry.ast());
+            sourceLexicalSlotMap.put(visibleEntry.getKey(), localIndex);
         }
 
         // Copy package, subroutine, and flags from the current context
@@ -316,6 +321,7 @@ public class EmitSubroutine {
                         ctx.errorUtil, // Error message utility
                         ctx.compilerOptions,
                         null);
+        subCtx.sourceLexicalSlotMap = sourceLexicalSlotMap;
         
         int skipVariables = EmitterMethodCreator.skipVariables; // Skip (this, @_, wantarray)
         

@@ -650,51 +650,57 @@ sub next_generation_flat {
 sub next_generation_flat64 {
     my ($curr) = @_;
     my @next = (0) x ($height * $words_per_row);
-    for my $row (0 .. $height - 1) {
-        my $row_off = $row * $words_per_row;
-        my $above_off = ($row - 1) * $words_per_row;
-        my $below_off = ($row + 1) * $words_per_row;
-        for my $word (0 .. $words_per_row - 1) {
-            my $idx = $row_off + $word;
-            my $cell = $curr->[$idx];
-            my $left_w = $word > 0 ? $curr->[$idx - 1] : 0;
-            my $right_w = $word < $words_per_row - 1 ? $curr->[$idx + 1] : 0;
-            my $n_left = (($cell >> 1) & $low_63_mask) | (($left_w & $high_bit64) ? 1 : 0);
-            my $n_right = (($cell << 1) & $clear_low_bit_mask) | (($right_w & 1) ? $high_bit64 : 0);
-            my ($above, $above_l, $above_r) = (0, 0, 0);
+    my ($row, $row_off, $above_off, $below_off, $word, $idx, $cell,
+        $left_w, $right_w, $n_left, $n_right, $above, $above_l, $above_r,
+        $i, $below, $below_l, $below_r, $above_left, $above_right,
+        $below_left, $below_right, $s1, $c1, $s2, $c2, $s3, $c3,
+        $sum0, $c4, $cc1_sum, $cc1_carry, $cc2_sum, $cc2_carry,
+        $sum1, $c5, $sum2, $c6);
+    for $row (0 .. $height - 1) {
+        $row_off = $row * $words_per_row;
+        $above_off = ($row - 1) * $words_per_row;
+        $below_off = ($row + 1) * $words_per_row;
+        for $word (0 .. $words_per_row - 1) {
+            $idx = $row_off + $word;
+            $cell = $curr->[$idx];
+            $left_w = $word > 0 ? $curr->[$idx - 1] : 0;
+            $right_w = $word < $words_per_row - 1 ? $curr->[$idx + 1] : 0;
+            $n_left = (($cell >> 1) & $low_63_mask) | (($left_w & $high_bit64) ? 1 : 0);
+            $n_right = (($cell << 1) & $clear_low_bit_mask) | (($right_w & 1) ? $high_bit64 : 0);
+            ($above, $above_l, $above_r) = (0, 0, 0);
             if ($row > 0) {
-                my $i = $above_off + $word;
+                $i = $above_off + $word;
                 $above = $curr->[$i];
                 $above_l = $word > 0 ? $curr->[$i - 1] : 0;
                 $above_r = $word < $words_per_row - 1 ? $curr->[$i + 1] : 0;
             }
-            my ($below, $below_l, $below_r) = (0, 0, 0);
+            ($below, $below_l, $below_r) = (0, 0, 0);
             if ($row < $height - 1) {
-                my $i = $below_off + $word;
+                $i = $below_off + $word;
                 $below = $curr->[$i];
                 $below_l = $word > 0 ? $curr->[$i - 1] : 0;
                 $below_r = $word < $words_per_row - 1 ? $curr->[$i + 1] : 0;
             }
-            my $above_left = (($above >> 1) & $low_63_mask) | (($above_l & $high_bit64) ? 1 : 0);
-            my $above_right = (($above << 1) & $clear_low_bit_mask) | (($above_r & 1) ? $high_bit64 : 0);
-            my $below_left = (($below >> 1) & $low_63_mask) | (($below_l & $high_bit64) ? 1 : 0);
-            my $below_right = (($below << 1) & $clear_low_bit_mask) | (($below_r & 1) ? $high_bit64 : 0);
-            my $s1 = $above_left ^ $above ^ $above_right;
-            my $c1 = ($above_left & $above) | ($above & $above_right) | ($above_left & $above_right);
-            my $s2 = $n_left ^ $n_right ^ $below_left;
-            my $c2 = ($n_left & $n_right) | ($n_right & $below_left) | ($n_left & $below_left);
-            my $s3 = $s1 ^ $s2 ^ $below;
-            my $c3 = ($s1 & $s2) | ($s2 & $below) | ($s1 & $below);
-            my $sum0 = $s3 ^ $below_right;
-            my $c4 = $s3 & $below_right;
-            my $cc1_sum = $c1 ^ $c2;
-            my $cc1_carry = $c1 & $c2;
-            my $cc2_sum = $cc1_sum ^ $c3;
-            my $cc2_carry = $cc1_sum & $c3;
-            my $sum1 = $cc2_sum ^ $c4;
-            my $c5 = $cc2_sum & $c4;
-            my $sum2 = $cc1_carry ^ $cc2_carry ^ $c5;
-            my $c6 = ($cc1_carry & $cc2_carry) | ($cc2_carry & $c5) | ($cc1_carry & $c5);
+            $above_left = (($above >> 1) & $low_63_mask) | (($above_l & $high_bit64) ? 1 : 0);
+            $above_right = (($above << 1) & $clear_low_bit_mask) | (($above_r & 1) ? $high_bit64 : 0);
+            $below_left = (($below >> 1) & $low_63_mask) | (($below_l & $high_bit64) ? 1 : 0);
+            $below_right = (($below << 1) & $clear_low_bit_mask) | (($below_r & 1) ? $high_bit64 : 0);
+            $s1 = $above_left ^ $above ^ $above_right;
+            $c1 = ($above_left & $above) | ($above & $above_right) | ($above_left & $above_right);
+            $s2 = $n_left ^ $n_right ^ $below_left;
+            $c2 = ($n_left & $n_right) | ($n_right & $below_left) | ($n_left & $below_left);
+            $s3 = $s1 ^ $s2 ^ $below;
+            $c3 = ($s1 & $s2) | ($s2 & $below) | ($s1 & $below);
+            $sum0 = $s3 ^ $below_right;
+            $c4 = $s3 & $below_right;
+            $cc1_sum = $c1 ^ $c2;
+            $cc1_carry = $c1 & $c2;
+            $cc2_sum = $cc1_sum ^ $c3;
+            $cc2_carry = $cc1_sum & $c3;
+            $sum1 = $cc2_sum ^ $c4;
+            $c5 = $cc2_sum & $c4;
+            $sum2 = $cc1_carry ^ $cc2_carry ^ $c5;
+            $c6 = ($cc1_carry & $cc2_carry) | ($cc2_carry & $c5) | ($cc1_carry & $c5);
             $next[$idx] = (~$c6) & (~$sum2) & $sum1 & ($sum0 | $cell);
         }
     }

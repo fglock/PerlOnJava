@@ -620,7 +620,11 @@ public class EmitterMethodCreator implements Opcodes {
             }
 
             // IMPORTANT (JVM verifier): captured/lexical variables may live in *sparse* local slots,
-            // because their indices come from the symbol table (pad) and can include gaps.
+            // because their indices come from the symbol table (pad) and can include gaps. A
+            // closure's capturedEnv contains only captured variables, while the symbol table also
+            // contains locals declared in the closure. Reserve through the complete lexical pad,
+            // or temporaries can overlap locals and local declarations can read uninitialized
+            // slots. The latter produces VerifyError: Bad local variable type.
             //
             // During bytecode emission we also allocate temporary locals via
             // ctx.symbolTable.allocateLocalVariable(). If that allocator's current index is still
@@ -631,25 +635,61 @@ public class EmitterMethodCreator implements Opcodes {
             // That overlap can produce invalid stack frames such as: locals[n] == TOP at an ALOAD,
             // which the JVM rejects with VerifyError: Bad local variable type.
             //
-            // Ensure temporaries start *after* the captured variable range.
+            // Ensure temporaries start *after* the complete lexical variable range.
             //
             // NOTE: ctx.symbolTable.allocateLocalVariable() mutates the symbol table's internal
             // index counter. In eval-string compilation we may reuse the captured symbol table
             // instance across many eval invocations. If we don't reset the counter for each
             // generated method, the local slot numbers will grow without bound (eventually
             // producing invalid stack map frames / VerifyError).
-            ctx.symbolTable.resetLocalVariableIndex(env.length);
+            TempLocalCountVisitor tempCountVisitor = new TempLocalCountVisitor();
+            ast.accept(tempCountVisitor);
+            java.util.List<org.perlonjava.frontend.astnode.OperatorNode> lexicalDeclarations =
+                    new java.util.ArrayList<>(tempCountVisitor.getLexicalDeclarations());
+            int lexicalPadLength;
+            if (ctx.sourceLexicalSlotMap != null) {
+                // Captured variables may be compacted into env while body
+                // declarations retain parser pad slots. Assign declarations
+                // after the complete existing lexical range and extend the
+                // source map for references that were bound before emission.
+                int nextSlot = Math.max(env.length,
+                        ctx.symbolTable.getVariableNames().length);
+                lexicalDeclarations.sort(java.util.Comparator.comparingInt(declaration ->
+                        (Integer) declaration.getAnnotation("lexicalPadSlot")));
+                for (org.perlonjava.frontend.astnode.OperatorNode declaration
+                        : lexicalDeclarations) {
+                    if (declaration.getAnnotation("lexicalPadSlot") instanceof Integer sourceSlot) {
+                        declaration.setAnnotation("emittedJvmLexicalSlot", nextSlot);
+                        ctx.sourceLexicalSlotMap.put(sourceSlot, nextSlot++);
+                    }
+                }
+                lexicalPadLength = nextSlot;
+            } else {
+                lexicalPadLength = Math.max(env.length,
+                        ctx.symbolTable.getVariableNames().length);
+            }
+            ctx.symbolTable.resetLocalVariableIndex(lexicalPadLength);
 
             // Pre-initialize temporary local slots to avoid VerifyError
             // Temporaries are allocated dynamically during bytecode emission via
             // ctx.symbolTable.allocateLocalVariable(). We pre-initialize slots to ensure
             // they're not in TOP state when accessed. Use a visitor to estimate the
             // actual number needed based on AST structure rather than a fixed count.
-            int preInitTempLocalsStart = ctx.symbolTable.getCurrentLocalVariableIndex();
-            TempLocalCountVisitor tempCountVisitor =
-                    new TempLocalCountVisitor();
-            ast.accept(tempCountVisitor);
-            int preInitTempLocalsCount = tempCountVisitor.getMaxTempCount() + 32;  // Buffer for infrastructure + uncounted allocations
+            for (org.perlonjava.frontend.astnode.OperatorNode declaration : lexicalDeclarations) {
+                Integer slot = declaration.getAnnotation("emittedJvmLexicalSlot") instanceof Integer emitted
+                        ? emitted
+                        : declaration.getAnnotation("sourceOrderLexicalSlot") instanceof Integer source
+                                ? source : null;
+                if (slot != null) {
+                    mv.visitInsn(Opcodes.ACONST_NULL);
+                    mv.visitVarInsn(Opcodes.ASTORE, slot);
+                }
+            }
+
+            // Pre-initialize temporary slots after the complete lexical pad.
+            int preInitTempLocalsStart = lexicalPadLength;
+            int preInitTempLocalsCount = tempCountVisitor.getMaxTempCount()
+                    + TempLocalCountVisitor.LOCAL_SLOT_SAFETY_MARGIN;
             for (int i = preInitTempLocalsStart; i < preInitTempLocalsStart + preInitTempLocalsCount; i++) {
                 mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, i);

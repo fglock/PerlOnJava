@@ -426,12 +426,16 @@ class ReachabilityQueryCostTest {
 
                     ReachabilityQueryStats stats = measurement.stats();
                     assertEquals(3, stats.deferredBasesProcessed);
+                    assertEquals(1, stats.liveRootSnapshotsBuilt,
+                            "unchanged lexical roots should share one snapshot across drains");
                     RuntimeArray nextTarget = new RuntimeArray();
                     lexicalRoot.elements.add(nextTarget.createReference());
                     assertTrue(MortalList.isReachableFromExternalRootCached(nextTarget),
                             "a lexical edge mutation must refresh the live-root snapshot");
                     assertEquals(1, stats.externalRootSnapshotsBuilt,
                             "unchanged package roots should share one snapshot across drains");
+                    assertEquals(2, stats.liveRootSnapshotsBuilt,
+                            "a lexical edge mutation must build a fresh live-root snapshot");
                     assertTrue(stats.externalRootSnapshotNodesVisited >= 257,
                             "the shared package-root snapshot must account for its graph walk");
                 }

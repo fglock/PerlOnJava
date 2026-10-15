@@ -57,6 +57,55 @@ tasks.register('nativeJperlLauncher', Exec) {
     commandLine nativeLauncherCompiler, '-O2', '-o', file("$buildDir/../target/jperl-exec"), file('native/jperl-exec.c')
 }
 
+def sqliteTokenizerCompiler = System.getenv('CC') ?:
+        (org.gradle.internal.os.OperatingSystem.current().isWindows() ? 'cl' : 'cc')
+def sqliteTokenizerWindows = org.gradle.internal.os.OperatingSystem.current().isWindows()
+def sqliteTokenizerMacOs = org.gradle.internal.os.OperatingSystem.current().isMacOsX()
+def sqliteTokenizerCompilerName = new File(sqliteTokenizerCompiler).name.toLowerCase()
+def sqliteTokenizerMsvc = sqliteTokenizerWindows
+        && (sqliteTokenizerCompilerName in ['cl', 'cl.exe', 'clang-cl', 'clang-cl.exe'])
+def sqliteTokenizerLibraryName = sqliteTokenizerWindows
+        ? 'perlonjava_sqlite_tokenizer.dll'
+        : (sqliteTokenizerMacOs ? 'libperlonjava_sqlite_tokenizer.dylib' : 'libperlonjava_sqlite_tokenizer.so')
+def sqliteTokenizerResourceDir = layout.buildDirectory.dir('generated/resources/sqlite-tokenizer')
+def sqliteTokenizerLibrary = sqliteTokenizerResourceDir.map { it.file("org/perlonjava/sqlite/${sqliteTokenizerLibraryName}") }
+def sqliteTokenizerSource = layout.projectDirectory.file('native/sqlite/tokenizer_enable.c').asFile
+def sqliteTokenizerIncludeDir = layout.projectDirectory.dir('native/sqlite').asFile
+def sqliteTokenizerWindowsCompilerScript = layout.projectDirectory.file('native/sqlite/build_tokenizer_helper.bat').asFile
+
+tasks.register('compileSqliteTokenizerHelper', Exec) {
+    description = 'Builds the small SQLite extension that enables FTS3 Perl tokenizer registration'
+    inputs.files(sqliteTokenizerSource, new File(sqliteTokenizerIncludeDir, 'sqlite3.h'),
+            new File(sqliteTokenizerIncludeDir, 'sqlite3ext.h'))
+    outputs.file(sqliteTokenizerLibrary)
+    doFirst {
+        File output = sqliteTokenizerLibrary.get().asFile
+        output.parentFile.mkdirs()
+        if (sqliteTokenizerMsvc) {
+            if (sqliteTokenizerWindows && !System.getenv('CC')) {
+                commandLine 'cmd', '/c', sqliteTokenizerWindowsCompilerScript,
+                        sqliteTokenizerSource, sqliteTokenizerIncludeDir, output
+            } else {
+                commandLine sqliteTokenizerCompiler, '/nologo', '/LD', '/I', sqliteTokenizerIncludeDir,
+                        sqliteTokenizerSource, '/link', "/OUT:${output.absolutePath}"
+            }
+        } else if (sqliteTokenizerWindows) {
+            commandLine sqliteTokenizerCompiler, '-shared', '-I', sqliteTokenizerIncludeDir,
+                    sqliteTokenizerSource, '-o', output
+        } else if (sqliteTokenizerMacOs) {
+            commandLine sqliteTokenizerCompiler, '-dynamiclib', '-fPIC', '-I', sqliteTokenizerIncludeDir,
+                    sqliteTokenizerSource, '-o', output
+        } else {
+            commandLine sqliteTokenizerCompiler, '-shared', '-fPIC', '-I', sqliteTokenizerIncludeDir,
+                    sqliteTokenizerSource, '-o', output
+        }
+    }
+}
+
+tasks.named('processResources') {
+    dependsOn tasks.named('compileSqliteTokenizerHelper')
+}
+
 // Debian package build dependency
 tasks.buildDeb {
     dependsOn installDist
@@ -664,6 +713,9 @@ tasks.register('testJoni', Test) {
 
 // Resource processing configuration
 tasks.named('processResources', Copy) {
+    from(sqliteTokenizerResourceDir) {
+        include 'org/perlonjava/sqlite/*'
+    }
     from(sourceSets.main.resources.srcDirs) {
         include '**/*.pm'
         include '**/*.ph'

@@ -117,8 +117,13 @@ public class BytesPragma extends PerlModuleBase {
         RuntimeScalar length = args.size() > 2 ? args.get(2) : new RuntimeScalar();
         RuntimeScalar replacement = args.size() > 3 ? args.get(3) : null;
 
-        // Get the UTF-8 bytes of the string
-        byte[] bytes = str.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        // Perl stores unflagged octets as Latin-1 code units in RuntimeScalar;
+        // don't UTF-8-expand them. Flagged strings use their UTF-8 byte form.
+        java.nio.charset.Charset byteCharset = str.type == RuntimeScalarType.BYTE_STRING
+                || str.utf8UncheckedOctets
+                ? java.nio.charset.StandardCharsets.ISO_8859_1
+                : java.nio.charset.StandardCharsets.UTF_8;
+        byte[] bytes = str.toString().getBytes(byteCharset);
         int off = offset.getInt();
         int len = length.getDefinedBoolean() ? length.getInt() : bytes.length - off;
 
