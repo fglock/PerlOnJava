@@ -237,26 +237,6 @@ public final class PerlRuntime implements AutoCloseable {
         if (runtime == null) return java.util.List.of();
         LifecycleRuntimeState state = runtime.lifecycleState;
         synchronized (state) {
-            // The count map is an index, while the slot identities attached
-            // to each referent are authoritative. A closure can become
-            // unreachable without its RuntimeCode release hook running; in
-            // that case the stale index entry must not keep a request graph
-            // alive indefinitely.
-            java.util.Iterator<java.util.Map.Entry<RuntimeBase, Integer>> owners =
-                    state.positiveOwnerReferents.entrySet().iterator();
-            while (owners.hasNext()) {
-                java.util.Map.Entry<RuntimeBase, Integer> entry = owners.next();
-                RuntimeBase referent = entry.getKey();
-                int attachedSlots = 0;
-                for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
-                    if (slot.isRetainedBy(state, referent)) attachedSlots++;
-                }
-                if (attachedSlots == 0) {
-                    owners.remove();
-                } else if (attachedSlots != entry.getValue()) {
-                    entry.setValue(attachedSlots);
-                }
-            }
             return java.util.List.copyOf(state.positiveOwnerReferents.keySet());
         }
     }
