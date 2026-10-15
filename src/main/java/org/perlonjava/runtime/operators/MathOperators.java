@@ -107,21 +107,30 @@ public class MathOperators {
 
     private static RuntimeScalar exactIntegralProduct(RuntimeScalar left,
                                                        RuntimeScalar right) {
-        if (canMultiplyExactLong(left) && canMultiplyExactLong(right)) {
-            long leftValue = left.getLong();
-            long rightValue = right.getLong();
-            try {
-                return new RuntimeScalar(Math.multiplyExact(leftValue, rightValue));
-            } catch (ArithmeticException ignored) {
-                return integerResult(BigInteger.valueOf(leftValue)
-                        .multiply(BigInteger.valueOf(rightValue)));
-            }
-        }
+        RuntimeScalar nativeProduct = exactLongProductOrNull(left, right);
+        if (nativeProduct != null) return nativeProduct;
+        return exactIntegralProductWideOrNull(left, right);
+    }
+
+    private static RuntimeScalar exactIntegralProductWideOrNull(RuntimeScalar left,
+                                                                RuntimeScalar right) {
         BigInteger leftInteger = exactMultiplyInteger(left);
         if (leftInteger == null) return null;
         BigInteger rightInteger = exactMultiplyInteger(right);
         if (rightInteger == null) return null;
         return integerResult(leftInteger.multiply(rightInteger));
+    }
+
+    private static RuntimeScalar exactLongProductOrNull(RuntimeScalar left,
+                                                         RuntimeScalar right) {
+        if (!canMultiplyExactLong(left) || !canMultiplyExactLong(right)) return null;
+        long leftValue = left.getLong();
+        long rightValue = right.getLong();
+        try {
+            return new RuntimeScalar(Math.multiplyExact(leftValue, rightValue));
+        } catch (ArithmeticException ignored) {
+            return null;
+        }
     }
 
     private static boolean canMultiplyExactLong(RuntimeScalar scalar) {
