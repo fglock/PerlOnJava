@@ -6,6 +6,7 @@ import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
@@ -44,16 +45,58 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 public class FileTestOperator {
     public static final class State {
         final RuntimeScalar lastFileHandle = new RuntimeScalar();
+        WeakReference<RuntimeBase> lastFileHandleReferent;
+        int lastFileHandleType;
         final RuntimeScalar lastOverloadedFileTestSubject = new RuntimeScalar();
         boolean hasLastOverloadedFileTestSubject;
         String lastFileTestOperator;
         boolean lastStatOk;
         int lastStatErrno;
         final RuntimeScalar lastStatArg = new RuntimeScalar();
+        WeakReference<RuntimeBase> lastStatArgReferent;
+        int lastStatArgType;
+        boolean lastStatArgumentWasHandle;
         boolean lastStatWasLstat;
         BasicFileAttributes lastBasicAttr;
         PosixFileAttributes lastPosixAttr;
         Stat.NativeStatFields lastNativeStatFields;
+
+        void setLastFileHandle(RuntimeScalar arg) {
+            if (isStatHandle(arg)) {
+                lastFileHandle.set(new RuntimeScalar());
+                lastFileHandleType = arg.type;
+                lastFileHandleReferent = weakStatReferent(arg);
+            } else {
+                lastFileHandleReferent = null;
+                lastFileHandle.set(snapshotStatArgument(arg));
+            }
+        }
+
+        RuntimeScalar lastFileHandleValue() {
+            RuntimeBase referent = lastFileHandleReferent == null
+                    ? null : lastFileHandleReferent.get();
+            return referent != null ? statHandleSnapshot(lastFileHandleType, referent)
+                    : lastFileHandle;
+        }
+
+        void setLastStatArgument(RuntimeScalar arg) {
+            lastStatArgumentWasHandle = isStatHandle(arg);
+            if (lastStatArgumentWasHandle) {
+                lastStatArg.set(new RuntimeScalar());
+                lastStatArgType = arg.type;
+                lastStatArgReferent = weakStatReferent(arg);
+            } else {
+                lastStatArgReferent = null;
+                lastStatArg.set(snapshotStatArgument(arg));
+            }
+        }
+
+        RuntimeScalar lastStatArgumentValue() {
+            RuntimeBase referent = lastStatArgReferent == null
+                    ? null : lastStatArgReferent.get();
+            return referent != null ? statHandleSnapshot(lastStatArgType, referent)
+                    : lastStatArg;
+        }
     }
 
     static State state() {
@@ -62,7 +105,7 @@ public class FileTestOperator {
 
     static void updateLastStat(RuntimeScalar arg, boolean ok, int errno, boolean wasLstat) {
         State state = state();
-        state.lastStatArg.set(snapshotStatArgument(arg));
+        state.setLastStatArgument(arg);
         state.lastStatOk = ok;
         state.lastStatErrno = errno;
         state.lastStatWasLstat = wasLstat;
@@ -79,10 +122,23 @@ public class FileTestOperator {
     }
 
     private static RuntimeScalar snapshotStatArgument(RuntimeScalar arg) {
-        if (arg.type == RuntimeScalarType.GLOB || arg.type == RuntimeScalarType.GLOBREFERENCE) {
-            return arg;
-        }
         return new RuntimeScalar(arg.toString());
+    }
+
+    private static WeakReference<RuntimeBase> weakStatReferent(RuntimeScalar arg) {
+        return arg.value instanceof RuntimeBase base ? new WeakReference<>(base) : null;
+    }
+
+    private static RuntimeScalar statHandleSnapshot(int type, RuntimeBase referent) {
+        RuntimeScalar snapshot = new RuntimeScalar();
+        snapshot.type = type;
+        snapshot.value = referent;
+        return snapshot;
+    }
+
+    private static boolean isStatHandle(RuntimeScalar arg) {
+        return arg != null && (arg.type == RuntimeScalarType.GLOB
+                || arg.type == RuntimeScalarType.GLOBREFERENCE);
     }
 
     private static boolean warningsEnabled() {
@@ -180,12 +236,11 @@ public class FileTestOperator {
         // A fresh -e _ is a stat operation, not merely a query of an earlier
         // lstat buffer.  This matters to a following -l _: Perl reports that
         // the preceding operation was stat rather than lstat.
-        if (operator.equals("-e") && state.lastStatArg.type != RuntimeScalarType.GLOB
-                && state.lastStatArg.type != RuntimeScalarType.GLOBREFERENCE) {
+        if (operator.equals("-e") && !state.lastStatArgumentWasHandle) {
             try {
-                Path path = resolvePath(state.lastStatArg.toString());
+                Path path = resolvePath(state.lastStatArgumentValue().toString());
                 if (path != null) {
-                    statForFileTest(state.lastStatArg, path, false);
+                    statForFileTest(state.lastStatArgumentValue(), path, false);
                 }
             } catch (InvalidPathException ignored) {
                 // Preserve the existing cached failure below.
@@ -198,7 +253,7 @@ public class FileTestOperator {
 
         // If lastBasicAttr is null (e.g., after testing a JAR path), fall back to re-testing
         if (state.lastBasicAttr == null) {
-            return fileTest(operator, state.lastFileHandle);
+            return fileTest(operator, state.lastFileHandleValue());
         }
 
         return switch (operator) {
@@ -220,7 +275,7 @@ public class FileTestOperator {
                 // We need to resolve the path from the last stat argument and read file content
                 // without calling fileTest() which would overwrite the stat buffer.
                 try {
-                    String filename = state.lastStatArg.toString();
+                    String filename = state.lastStatArgumentValue().toString();
                     Path path = resolvePath(filename);
                     if (path == null || !Files.exists(path)) {
                         getGlobalVariable("main::!").set(2);
@@ -233,7 +288,7 @@ public class FileTestOperator {
                     yield scalarUndef;
                 }
             }
-            default -> fileTest(operator, state.lastFileHandle);
+            default -> fileTest(operator, state.lastFileHandleValue());
         };
     }
 
@@ -279,7 +334,7 @@ public class FileTestOperator {
         }
         fileHandle = RuntimeScalar.fetchTiedOnce(fileHandle);
         state().lastFileTestOperator = operator;
-        state().lastFileHandle.set(snapshotStatArgument(fileHandle));
+        state().setLastFileHandle(fileHandle);
 
         // File tests participate in Perl's unary operator overloading.  A
         // blessed object may provide a direct (-X method; otherwise the
@@ -306,7 +361,7 @@ public class FileTestOperator {
                     // object as its subject.  There is no native stat result
                     // to cache, but the bytecode stack form consumes the
                     // current file-test subject through the same cache slot.
-                    state().lastFileHandle.set(fileHandle);
+                    state().setLastFileHandle(fileHandle);
                     updateLastStat(fileHandle, true, 0);
                     state().lastOverloadedFileTestSubject.set(fileHandle);
                     state().hasLastOverloadedFileTestSubject = true;

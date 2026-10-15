@@ -665,12 +665,39 @@ public class ReachabilityWalker {
                 todo.add(rescued);
             }
         }
+        int ownerIdx = 0;
+        for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotReferents()) {
+            if (howReached.putIfAbsent(ownerReferent, "<owner-slot#" + (ownerIdx++) + ">") == null) {
+                todo.add(ownerReferent);
+            }
+        }
+        int suspendedIdx = 0;
+        for (RuntimeBase suspended : MortalList.snapshotSuspendedRoots()) {
+            if (howReached.putIfAbsent(suspended, "<suspended#" + (suspendedIdx++) + ">") == null) {
+                todo.add(suspended);
+            }
+        }
         // Phase I: seed from WarningBitsRegistry.callerHintHashStack —
         // %^H snapshots can preserve scalars from earlier scopes and are
         // NOT accounted for by Perl-level walker roots.
         int hhIdx = 0;
         for (RuntimeScalar sc : org.perlonjava.runtime.WarningBitsRegistry.snapshotHintHashStackScalars()) {
             seedPath(sc, "<hint-hash#" + (hhIdx++) + ">", howReached, todo);
+        }
+        int activeCodeIdx = 0;
+        for (RuntimeCode active : PerlRuntime.current().executionState().activeCodeStack) {
+            String label = "<active-code#" + (activeCodeIdx++) + ">";
+            if (howReached.putIfAbsent(active, label) == null) todo.add(active);
+        }
+        int activeArgsIdx = 0;
+        for (java.util.List<RuntimeScalar> args : RuntimeCode.snapshotPristineArgsStack()) {
+            int argIdx = 0;
+            for (RuntimeScalar arg : args) {
+                if (arg == null || WeakRefRegistry.isweak(arg)) continue;
+                seedPath(arg, "<active-args#" + activeArgsIdx + ">[" + argIdx++ + "]",
+                        howReached, todo);
+            }
+            activeArgsIdx++;
         }
         // Phase B1: seed from ScalarRefRegistry (same as walk()) so the
         // trace matches what sweepWeakRefs sees.
@@ -753,6 +780,18 @@ public class ReachabilityWalker {
                     String path = curPath + "<state " + state.getKey() + ">";
                     if (howReached.putIfAbsent(state.getValue(), path) == null) todo.add(state.getValue());
                 }
+                if (code.closedOverVariables != null) {
+                    int i = 0;
+                    for (RuntimeBase captured : code.closedOverVariables.values()) {
+                        String path = curPath + "<closed-over#" + (i++) + ">";
+                        if (captured instanceof RuntimeScalar scalar) {
+                            visitScalarPath(scalar, path, howReached, todo);
+                        } else if (captured != null
+                                && howReached.putIfAbsent(captured, path) == null) {
+                            todo.add(captured);
+                        }
+                    }
+                }
                 // Phase I: mirror the main walker — follow closure captures
                 // so findPathTo traces through the same graph as sweepWeakRefs.
                 if (code.capturedScalars != null) {
@@ -776,6 +815,12 @@ public class ReachabilityWalker {
                 visitReflectiveCodeScalars(code, cap ->
                         visitScalarPath(cap, curPath + "<closure " + name + "::" + sub
                                 + " field-cap#" + (reflectiveIdx[0]++) + ">", howReached, todo));
+                final int[] reflectiveBaseIdx = {0};
+                visitReflectiveCodeBases(code, captured -> {
+                    String path = curPath + "<closure " + name + "::" + sub
+                            + " field-base#" + (reflectiveBaseIdx[0]++) + ">";
+                    if (howReached.putIfAbsent(captured, path) == null) todo.add(captured);
+                });
             }
         }
         return null;

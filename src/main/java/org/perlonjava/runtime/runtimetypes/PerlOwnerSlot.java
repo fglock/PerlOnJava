@@ -93,6 +93,10 @@ public final class PerlOwnerSlot {
         return referent;
     }
 
+    synchronized boolean isRetainedBy(LifecycleRuntimeState state, RuntimeBase target) {
+        return referent == target && ownerRuntimeState == state;
+    }
+
     public synchronized boolean isActive() {
         return referent != null;
     }
