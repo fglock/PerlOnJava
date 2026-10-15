@@ -833,17 +833,36 @@ def homeIntegrationTask = tasks.register('testPerlOnJavaHomeIntegration', Test) 
     mustRunAfter tasks.named('testJoni')
 }
 
-// The final shard contains timing-sensitive event-loop regressions alongside
-// the heavier compiler fixtures. Run it after the regular shards so timer
-// callbacks are not starved by several concurrent Perl test workers.
-tasks.named(unitShardTasks.last()) {
-    mustRunAfter unitShardTasks.take(parallelShards - 1).collect { tasks.named(it) }
+def websocketLifetimeTask = tasks.register('testUnitWebsocketLifetime', Test) {
+    group = 'verification'
+    description = 'Runs the isolated Mojolicious WebSocket lifetime regression'
+
+    useJUnitPlatform {
+        includeTags 'unit'
+        excludeTags 'full'
+    }
+
+    systemProperty 'test.shard.index', parallelShards
+    systemProperty 'test.shard.total', parallelShards + 1
+
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include '**/PerlScriptExecutionTest.class'
+
+    mustRunAfter unitShardTasks.collect { tasks.named(it) }
+    onlyIf {
+        jperlTestShardProp.get().isEmpty() || jperlTestShardProp.get() == "$parallelShards"
+    }
+}
+
+homeIntegrationTask.configure {
+    mustRunAfter websocketLifetimeTask
 }
 
 tasks.register('testUnitParallel') {
     group = 'verification'
     description = 'Runs unit tests in parallel across multiple JVMs. Usage: gradle testUnitParallel --parallel'
-    dependsOn unitShardTasks
+    dependsOn unitShardTasks + [websocketLifetimeTask]
     dependsOn testJoni
     dependsOn verifyJoniPackaging
     dependsOn homeIntegrationTask
