@@ -122,6 +122,15 @@ hashes, checksums, host load, and engine metadata:
 - [flat64 master baseline](../bench/results/life-flat64-master-20261016.json)
 - [flat64 without tuple resets](../bench/results/life-flat64-no-list-reset-20261016.json)
 
+An additional 7-pair experiment ran the same no-list-reset source with the
+existing optimization-stack JAR built at `f345f1752`. It scored 1.053x Perl
+(95% interval 1.038–1.070), with all pairs stable and checksum-matched. That
+JAR predates the current `master` updates and comes from the stacked
+optimization branch, so this is not yet a current-master acceptance result;
+rebase and rebuild the stack before relying on it.
+
+- [combined optimization-stack experiment](../bench/results/life-flat64-stack-plus-no-list-experiment-20261016.json)
+
 A 30-second JFR profile of the current-master JAR showed sample-weighted
 allocation attributed to `RuntimeScalar.addToArray` dropping from 18.9 GB to
 1.8 GB between the original and changed Life loop (about 14.3 MB to 1.6 MB per
