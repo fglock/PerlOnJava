@@ -286,9 +286,19 @@ public class RuntimeIO extends RuntimeScalar {
      * @param io   the RuntimeIO whose fd should be freed when the glob is collected
      */
     public static void registerGlobForFdRecycling(RuntimeGlob glob, RuntimeIO io) {
+        if (glob == null || io == null) return;
         IORuntimeRegistryState registry = registry();
-        PhantomReference<RuntimeGlob> phantom = new PhantomReference<>(glob, registry.globGCQueue);
-        registry.phantomToIO.put(phantom, io);
+        synchronized (registry.globOwnersByIO) {
+            Set<PhantomReference<RuntimeGlob>> owners =
+                    registry.globOwnersByIO.computeIfAbsent(io, ignored -> new HashSet<>());
+            for (PhantomReference<RuntimeGlob> owner : owners) {
+                if (owner.get() == glob) return;
+            }
+            PhantomReference<RuntimeGlob> phantom =
+                    new PhantomReference<>(glob, registry.globGCQueue);
+            owners.add(phantom);
+            registry.phantomToIO.put(phantom, io);
+        }
     }
 
     /**
@@ -299,8 +309,23 @@ public class RuntimeIO extends RuntimeScalar {
         Reference<? extends RuntimeGlob> ref;
         IORuntimeRegistryState registry = registry();
         while ((ref = registry.globGCQueue.poll()) != null) {
-            RuntimeIO io = registry.phantomToIO.remove(ref);
-            if (io != null && !(io.ioHandle instanceof ClosedIOHandle)) {
+            RuntimeIO io = null;
+            boolean closeWhenUnowned = false;
+            synchronized (registry.globOwnersByIO) {
+                io = registry.phantomToIO.remove(ref);
+                if (io != null) {
+                    Set<PhantomReference<RuntimeGlob>> owners =
+                            registry.globOwnersByIO.get(io);
+                    if (owners != null) {
+                        owners.remove(ref);
+                        if (owners.isEmpty()) {
+                            registry.globOwnersByIO.remove(io);
+                            closeWhenUnowned = true;
+                        }
+                    }
+                }
+            }
+            if (closeWhenUnowned && !(io.ioHandle instanceof ClosedIOHandle)) {
                 io.close();
             }
         }
