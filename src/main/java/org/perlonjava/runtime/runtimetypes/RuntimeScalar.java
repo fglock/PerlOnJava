@@ -2140,7 +2140,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && value != this
                 && getClass() == RuntimeScalar.class
                 && value.getClass() == RuntimeScalar.class
-                && type == INTEGER
+                && type < TIED_SCALAR
                 && value.type == INTEGER
                 && !value.transferableGrowingString) {
             return setPlainInteger(value);
