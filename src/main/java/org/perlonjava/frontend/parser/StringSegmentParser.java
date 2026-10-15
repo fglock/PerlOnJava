@@ -83,6 +83,7 @@ public abstract class StringSegmentParser {
     protected final StringBuilder currentSegment;
     private boolean currentSegmentHasSourceNonAscii = false;
     private boolean currentSegmentForcesUnicode = false;
+    private boolean currentSegmentHasByteEscape = false;
     private boolean inRegexCharClass = false;
     private boolean regexCharClassFirst = false;
     private boolean regexCharClassEscape = false;
@@ -298,13 +299,27 @@ public abstract class StringSegmentParser {
                     || (isRegex && currentSegmentHasSourceNonAscii
                         && ctx.compilerOptions.isUnicodeSource);
             boolean forceByteString = !forceUnicodeString
-                    && shouldForceByteStringLiteral(value);
+                    && (shouldForceByteStringLiteral(value)
+                        || shouldForceByteEscapeLiteral(value));
             addStringSegment(new StringNode(value, false, forceByteString,
                     forceUnicodeString, tokenIndex));
             currentSegment.setLength(0);
             currentSegmentHasSourceNonAscii = false;
             currentSegmentForcesUnicode = false;
+            currentSegmentHasByteEscape = false;
         }
+    }
+
+    private boolean shouldForceByteEscapeLiteral(String value) {
+        if (!currentSegmentHasByteEscape || currentSegmentHasSourceNonAscii) {
+            return false;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            if (value.charAt(i) > 255) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean shouldForceByteStringLiteral(String value) {
@@ -1718,6 +1733,7 @@ public abstract class StringSegmentParser {
                 String hs = hexStr.toString();
                 BigInteger bi = new BigInteger(hs, 16);
                 long hexUv = checkedEscapeCodePoint(bi);
+                currentSegmentHasByteEscape |= hexUv <= 0xFFL;
                 if (Long.compareUnsigned(hexUv, 0x10FFFFL) > 0) {
                     appendToCurrentSegment(PerlUtfString.encodeBeyondUnicode(hexUv));
                 } else if (hexUv >= 0xD800L && hexUv <= 0xDFFFL) {
@@ -1798,6 +1814,7 @@ public abstract class StringSegmentParser {
         if (!octStr.isEmpty()) {
             try {
                 long octValue = checkedEscapeCodePoint(new BigInteger(octStr.toString(), 8));
+                currentSegmentHasByteEscape |= octValue <= 0xFFL;
                 var result = octValue <= 0xFFFF
                         ? String.valueOf((char) octValue)
                         : octValue > 0x10FFFFL

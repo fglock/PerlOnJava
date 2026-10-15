@@ -228,7 +228,8 @@ sub validate_contract {
                 block_lines($sbom->{with}{path});
     my $failure = first_step($steps, 'upload-failure');
     my @failure_paths = block_lines($failure->{with}{path});
-    for my $path (qw(build/reports/tests/test/ build/test-results/test/
+    for my $path (qw(build/reports/tests/testUnitShard*/
+            build/test-results/testUnitShard*/
             build/reports/threads/ build/test-results/testThreadsWindows/)) {
         push @error, "failure artifact omits $path"
             unless grep { $_ eq $path } @failure_paths;

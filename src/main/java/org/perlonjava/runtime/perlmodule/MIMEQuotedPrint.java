@@ -81,7 +81,7 @@ public class MIMEQuotedPrint extends PerlModuleBase {
                     }
                 }
                 // Output the line with the actual newline
-                output.append(currentLine).append("\n");
+                output.append(currentLine).append(eol);
                 currentLine = new StringBuilder();
                 currentLength = 0;
                 continue;
