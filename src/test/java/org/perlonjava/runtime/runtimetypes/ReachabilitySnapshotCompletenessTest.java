@@ -52,6 +52,12 @@ class ReachabilitySnapshotCompletenessTest {
                         "an incomplete lexical snapshot cannot prove a miss");
                 assertTrue(scalars.isReachable(chain.tailOwner()),
                         "an incomplete scalar snapshot cannot prove an owner miss");
+                ReachabilityWalker.ScalarRootReachabilitySnapshot completeScalars =
+                        ReachabilityWalker.completeScalarReachabilitySnapshot();
+                assertTrue(completeScalars.complete(),
+                        "capture cleanup can request a complete scalar-root walk");
+                assertTrue(completeScalars.isReachable(chain.tailOwner()),
+                        "the complete capture cleanup walk reaches a lexical beyond the bounded prefix");
                 state.scalarRootSnapshot = scalars;
                 state.reachabilityDrainDepth++;
                 try {
