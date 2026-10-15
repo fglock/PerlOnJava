@@ -107,11 +107,34 @@ public class MathOperators {
 
     private static RuntimeScalar exactIntegralProduct(RuntimeScalar left,
                                                        RuntimeScalar right) {
+        if (canMultiplyExactLong(left) && canMultiplyExactLong(right)) {
+            long leftValue = left.getLong();
+            long rightValue = right.getLong();
+            try {
+                return new RuntimeScalar(Math.multiplyExact(leftValue, rightValue));
+            } catch (ArithmeticException ignored) {
+                return integerResult(BigInteger.valueOf(leftValue)
+                        .multiply(BigInteger.valueOf(rightValue)));
+            }
+        }
         BigInteger leftInteger = exactMultiplyInteger(left);
         if (leftInteger == null) return null;
         BigInteger rightInteger = exactMultiplyInteger(right);
         if (rightInteger == null) return null;
         return integerResult(leftInteger.multiply(rightInteger));
+    }
+
+    private static boolean canMultiplyExactLong(RuntimeScalar scalar) {
+        if (scalar.type == INTEGER) {
+            return scalar.value instanceof Long || scalar.value instanceof Integer;
+        }
+        if (scalar.type != DOUBLE) return false;
+        double value = scalar.getDouble();
+        return Double.isFinite(value)
+                && value == Math.rint(value)
+                && value >= -0x1.0p63
+                && value < 0x1.0p63
+                && (double) (long) value == value;
     }
 
     /** Largest magnitude such that every integer in [-N, N] is exactly representable as double (2^53). */
