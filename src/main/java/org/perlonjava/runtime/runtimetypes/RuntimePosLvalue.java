@@ -67,6 +67,7 @@ public class RuntimePosLvalue {
             // Cache the new position with the current hash of the value
             cachedEntry = new CacheEntry(code, position);
             positionCache().put(perlVariable, cachedEntry);
+            perlVariable.posCacheEntryCreated = true;
         } else {
             // Use the cached position if the value has not changed
             position = cachedEntry.regexPosition;
@@ -198,10 +199,13 @@ public class RuntimePosLvalue {
      * @param perlVariable the scalar whose pos should be invalidated
      */
     public static void invalidatePos(RuntimeScalar perlVariable) {
-        if (perlVariable == null || PerlRuntime.currentOrNull() == null) {
+        if (perlVariable == null) {
             return;
         }
         perlVariable = perlVariable.posStorage();
+        if (!perlVariable.posCacheEntryCreated || PerlRuntime.currentOrNull() == null) {
+            return;
+        }
         // Reset the canonical pos lvalue in place. Removing the cache entry orphans the
         // PosLvalueScalar that matchRegexDirect may already hold (local posScalar), breaking
         // /g and \\G after (?{ }) or other mid-match assignments to the target scalar.
@@ -513,6 +517,7 @@ public class RuntimePosLvalue {
             cachedEntry = new CacheEntry(code, position);
             cachedEntry.hasUnicodeChars = result;
             positionCache().put(perlVariable, cachedEntry);
+            perlVariable.posCacheEntryCreated = true;
         }
         
         return result;

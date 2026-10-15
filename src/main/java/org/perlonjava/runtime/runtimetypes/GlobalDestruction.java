@@ -24,6 +24,7 @@ public class GlobalDestruction {
      */
     public static void runGlobalDestruction() {
         // Set ${^GLOBAL_PHASE} to "DESTRUCT"
+        PerlRuntime.current().executionState.globalDestruction = true;
         GlobalVariable.getGlobalVariable(GlobalContext.GLOBAL_PHASE).set("DESTRUCT");
         Set<RuntimeBase> visited =
                 Collections.newSetFromMap(new IdentityHashMap<>());

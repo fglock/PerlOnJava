@@ -628,7 +628,8 @@ public class OperatorParser {
                     }
                 }
                 
-                ctx.symbolTable.addVariable(var, operator, node);
+                int lexicalPadSlot = ctx.symbolTable.addVariable(var, operator, node);
+                node.setAnnotation("lexicalPadSlot", lexicalPadSlot);
                 // Perl materializes the corresponding typeglob as soon as an
                 // `our` declaration is compiled.  BEGIN blocks later in the
                 // same compilation unit can therefore observe (for example)
