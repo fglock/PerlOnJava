@@ -78,6 +78,12 @@ my $perl_oracle_log_dir = File::Spec->catdir($log_dir, 'perl-oracle');
 my $KILL_AFTER          = 10;   # seconds between SIGTERM and SIGKILL (used by run_with_timeout)
 my $DEFAULT_MAX_RUNTIME = 5400; # 90 minutes — hard cap per target (install or test)
 my $MAX_CAPTURE_BYTES   = 1_000_000; # keep only this much child output in memory
+my $interrupt_count    = 0;
+
+# Child commands run in their own process groups, so the terminal's Ctrl-C
+# reaches this supervisor but not the command being monitored. Defer cleanup
+# to run_with_timeout's main loop, where the complete process tree is known.
+$SIG{INT} = sub { $interrupt_count++ };
 
 # jcpan -t soft timeouts (seconds): distribution root module -> timeout.
 # Overrides --timeout for that target (heavy test suites).  The effective hard
@@ -369,6 +375,7 @@ my $record_pass_regressions = ($retest_age > 0 || $modules_arg ne '');
 my @strict_failures;
 
 for my $module (@selected) {
+    die "Interrupted by SIGINT\n" if $interrupt_count;
     $selected_index++;
     my ($skip_target, $skip_reason) = should_skip_selected_module($module);
     if ($skip_target) {
@@ -1460,9 +1467,23 @@ sub run_with_timeout {
     my $child_done    = 0;
     my $term_sent_at  = 0;
     my $kill_sent     = 0;
+    my $interrupted   = 0;
 
     while ($pipe_open || !$child_done) {
         my $now = time();
+
+        if ($interrupt_count && !$interrupted) {
+            $interrupted = 1;
+            $term_sent_at = $now;
+            note_run_processes($pid, $pipe, \%run_descendants);
+            terminate_process_group($pid, 'TERM');
+        }
+        if ($interrupt_count > 1 && $interrupted && !$kill_sent) {
+            note_run_processes($pid, $pipe, \%run_descendants);
+            terminate_process_group($pid, 'KILL');
+            cleanup_run_processes(\%run_descendants);
+            $kill_sent = 1;
+        }
 
         if (!$timed_out) {
             if ($hard_cap && ($now - $start) >= $hard_cap) {
@@ -1493,7 +1514,7 @@ sub run_with_timeout {
             }
         }
 
-        if ($timed_out && !$kill_sent
+        if (($timed_out || $interrupted) && !$kill_sent
             && $term_sent_at && (time() - $term_sent_at) >= $KILL_AFTER) {
             note_run_processes($pid, $pipe, \%run_descendants);
             terminate_process_group($pid, 'KILL');
@@ -1532,7 +1553,7 @@ sub run_with_timeout {
             }
         }
 
-        if (!$timed_out && $progress_interval && time() >= $next_progress) {
+        if (!$timed_out && !$interrupted && $progress_interval && time() >= $next_progress) {
             print_progress_line($start, $last_output, $secs);
             $next_progress += $progress_interval
                 while $next_progress && $next_progress <= time();
@@ -1540,13 +1561,13 @@ sub run_with_timeout {
 
         # A detached child can retain the pipe after its direct parent exits.
         # Never let that pipe turn a timeout monitor into a permanent hang.
-        if ($timed_out && $kill_sent
+        if (($timed_out || $interrupted) && $kill_sent
             && $term_sent_at && (time() - $term_sent_at) >= ($KILL_AFTER + 5)) {
             last;
         }
     }
 
-    if ($timed_out) {
+    if ($timed_out || $interrupted) {
         note_run_processes($pid, $pipe, \%run_descendants);
         cleanup_run_processes(\%run_descendants);
     }
@@ -1554,6 +1575,8 @@ sub run_with_timeout {
     close $pipe;    # always close to avoid FD leak
     close $log_fh if $log_fh;
     waitpid($pid, WNOHANG) unless $child_done;
+
+    die "Interrupted by SIGINT\n" if $interrupted;
 
     return ($output // '', $timed_out, $timeout_error);
 }
