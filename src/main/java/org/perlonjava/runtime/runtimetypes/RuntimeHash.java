@@ -120,6 +120,16 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     void restoreRegexMutationState(Object token) {
         if (!(token instanceof RegexMutationState state)) return;
         deferValuesAddedSince(state.elements.values());
+        // Release the current map's element ownership before building the
+        // restored map. The new map acquires one slot for each saved entry;
+        // replacing the map reference directly would leave both the old and
+        // new slot accounting attached to the referents.
+        suppressHintHashLifecycleCleanup = true;
+        try {
+            elements.clear();
+        } finally {
+            suppressHintHashLifecycleCleanup = false;
+        }
         elements = newElementMap(state.elements);
         byteKeys = state.byteKeys == null ? null : new HashSet<>(state.byteKeys);
         type = state.type;
