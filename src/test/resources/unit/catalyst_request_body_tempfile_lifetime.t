@@ -232,7 +232,7 @@ my @multipart_paths = map { $_->tempname } @decoded_uploads;
 is_deeply(\@multipart_paths,
     $Issue1795OwnershipTest::multipart_tempfile_paths,
     'serialized uploads retain their tempfile paths');
-ok(!grep { !$_ } @{$Issue1795OwnershipTest::multipart_tempfiles_exist_during_request},
+ok(!(grep { !$_ } @{$Issue1795OwnershipTest::multipart_tempfiles_exist_during_request}),
     'all multipart tempfiles remain available while handling the upload');
 my $after_upload_response = request(
     HTTP::Request->new('GET', 'http://localhost/index'));
@@ -244,7 +244,7 @@ ok(!defined($Issue1795OwnershipTest::multipart_request),
     'completed multipart Catalyst request has no remaining strong owner');
 ok(!defined($Issue1795OwnershipTest::multipart_body),
     'completed multipart request body has no remaining strong owner');
-ok(!grep { -e $_ } @multipart_paths,
+ok(!(grep { -e $_ } @multipart_paths),
     'all multipart upload tempfiles are removed after the request completes');
 
 done_testing;
