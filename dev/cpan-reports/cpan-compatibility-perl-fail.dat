@@ -1,5 +1,5 @@
 AAC::Pvoice	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-09	Perl failed	
-AEDesc	PERL_FAIL			Configure failed	2026-10-09	Perl failed	
+AEDesc	PERL_FAIL			Configure failed	2026-10-15	Perl failed	
 AFS::Monitor	PERL_FAIL			Configure failed	2026-10-08	Perl failed	
 AI::Classifier::Japanese	PERL_FAIL	7	1	6/7 subtests failed; 5/5 test programs failed	2026-10-14	Perl failed	
 AI::FANN::Evolving	PERL_FAIL	8	3	5/8 subtests failed; 4/7 test programs failed	2026-10-07	Perl failed	
@@ -32,7 +32,7 @@ Alien::Bazel	PERL_FAIL			Make failed	2026-09-23	Perl failed
 Alien::Bit	PERL_FAIL			Make failed	2026-09-27	Perl failed	
 Alien::Build::Plugin::Build::Premake5	PERL_FAIL	2	0	2/2 subtests failed; 1/2 test programs failed	2026-09-27	Perl failed	
 Alien::Cowl	PERL_FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-13	Perl failed	
-Alien::Libarchive	PERL_FAIL	1		3/3 test programs failed; 0/1 subtests failed	2026-10-12	Perl failed	
+Alien::Libarchive	PERL_FAIL	1		3/3 test programs failed; 0/1 subtests failed	2026-10-15	Perl failed	
 Alien::Libarchive3	PERL_FAIL			Make failed	2026-09-18	Perl failed	
 Alien::Libtensorflow	PERL_FAIL			Make failed	2026-09-23	Perl failed	
 Alien::MUSCLE	PERL_FAIL			Make failed	2026-10-08	Perl failed	
@@ -49,7 +49,7 @@ Alien::YAMLScript	PERL_FAIL			Make failed	2026-09-27	Perl failed
 Alien::autoconf	PERL_FAIL			Make failed	2026-10-13	Perl failed	
 Alien::automake	PERL_FAIL			Make failed	2026-09-18	Perl failed	
 Alien::curl	PERL_FAIL			Make failed	2026-09-29	Perl failed	
-Alien::libnewrelic	PERL_FAIL			Make failed	2026-09-22	Perl failed	
+Alien::libnewrelic	PERL_FAIL			Make failed	2026-10-15	Perl failed	
 Alien::libpcre	PERL_FAIL	1		1/2 test programs failed; 0/1 subtests failed	2026-10-12	Perl failed	
 Alien::libpq	PERL_FAIL			Make failed	2026-10-04	Perl failed	
 Alien::libvterm	PERL_FAIL				2026-10-13	Perl failed	
@@ -66,14 +66,14 @@ Amon2	PERL_FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-09-26	Perl fa
 AnnoCPAN	PERL_FAIL			Make failed	2026-09-18	Perl failed	
 Anticaptcha	PERL_FAIL			No parseable output	2026-10-09	Perl failed	
 AnyEvent::Collect	PERL_FAIL			1/4 test programs failed; 0/0 subtests failed	2026-10-08	Perl failed	
-AnyEvent::Curl::Multi	PERL_FAIL	1		1 subtests failed in test files	2026-09-22	Perl failed	
+AnyEvent::Curl::Multi	PERL_FAIL	1		1 subtests failed in test files	2026-10-14	Perl failed	
 AnyEvent::DBI::Abstract::Limit	PERL_FAIL	1	0	1/1 subtests failed; 2/2 test programs failed	2026-09-20	Perl failed	
 AnyEvent::Discord::Client	PERL_FAIL	1		1 subtests failed in test files	2026-10-04	Perl failed	
 AnyEvent::Inotify::EventReceiver	PERL_FAIL	1	0	1/1 subtests failed; 3/3 test programs failed	2026-10-09	Perl failed	
 AnyEvent::Inotify::Simple	PERL_FAIL	1	0	1/1 subtests failed; 3/3 test programs failed	2026-09-17	Perl failed	
 AnyEvent::LeapMotion	PERL_FAIL			TIMEOUT (runtime >300s; last output 9s ago)	2026-10-13	Perl failed	
 AnyEvent::MQTT	PERL_FAIL	174	172	2/174 subtests failed; 2/25 test programs failed	2026-09-13	Perl failed	
-AnyEvent::MessagePack	PERL_FAIL	1		1 subtests failed in test files	2026-09-19	Perl failed	
+AnyEvent::MessagePack	PERL_FAIL	1		1 subtests failed in test files	2026-10-14	Perl failed	
 AnyEvent::Pg	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-08	Perl failed	
 AnyEvent::Pg::Pool::Multiserver	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-19	Perl failed	
 AnyEvent::Processor	PERL_FAIL	5	3	2/5 subtests failed; 1/1 test programs failed	2026-09-19	Perl failed	
@@ -131,9 +131,9 @@ Apache::MONITOR	PERL_FAIL			Missing: DB_File.pm	2026-09-19	Perl failed
 Apache::MVC	PERL_FAIL			Unknown test outcome	2026-10-09	Perl failed	
 Apache::PrettyPerl	PERL_FAIL			Unknown test outcome	2026-10-08	Perl failed	
 Apache::Reload	PERL_FAIL			1/2 test programs failed; 0/0 subtests failed	2026-09-30	Perl failed	
-Apache::RewritingProxy	PERL_FAIL			Configure failed	2026-09-23	Perl failed	
+Apache::RewritingProxy	PERL_FAIL			Configure failed	2026-10-15	Perl failed	
 Apache::Scoreboard	PERL_FAIL			Configure failed	2026-09-26	Perl failed	
-Apache::Session::Lock::Memorycached	PERL_FAIL	2	0	2/2 subtests failed; 2/2 test programs failed	2026-10-06	Perl failed	
+Apache::Session::Lock::Memorycached	PERL_FAIL	2	0	2/2 subtests failed; 2/2 test programs failed	2026-10-14	Perl failed	
 Apache::Session::Memorycached	PERL_FAIL	2	0	2/2 subtests failed; 2/2 test programs failed	2026-09-16	Perl failed	
 Apache::SharedMem	PERL_FAIL			5/5 test programs failed; 0/0 subtests failed	2026-09-27	Perl failed	
 Apache::SubProcess	PERL_FAIL			Configure failed	2026-09-21	Perl failed	
@@ -177,7 +177,7 @@ AsposeEmailCloud::EmailApi	PERL_FAIL			TIMEOUT (runtime >300s; last output 3s ag
 Async::Blackboard	PERL_FAIL	13		1/3 test programs failed; 0/13 subtests failed	2026-09-28	Perl failed	
 AtteanX::Store::LDF	PERL_FAIL			TIMEOUT (runtime >300s; last output 4s ago)	2026-10-13	Perl failed	
 AtteanX::Store::LMDB	PERL_FAIL	5	0	5/5 subtests failed; 4/4 test programs failed	2026-09-21	Perl failed	
-Attribute::Generator	PERL_FAIL	1	0	1/1 subtests failed; 5/5 test programs failed	2026-09-23	Perl failed	
+Attribute::Generator	PERL_FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-10-15	Perl failed	
 Attribute::Method::Typeable	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 109s)	2026-10-14	Perl failed	
 Audio::Ao	PERL_FAIL			Configure failed	2026-10-07	Perl failed	
 Audio::Beep	PERL_FAIL	3	2	1/3 subtests failed; 1/1 test programs failed	2026-09-24	Perl failed	
@@ -187,7 +187,7 @@ Audio::TagLib	PERL_FAIL	123	4	119/123 subtests failed; 60/60 test programs faile
 Audio::XMMSClient	PERL_FAIL	9	5	4/9 subtests failed; 1/2 test programs failed	2026-09-27	Perl failed	
 Authen::ACE	PERL_FAIL				2026-10-04	Perl failed	
 Authen::Htpasswd::Trac	PERL_FAIL	47	43	4/47 subtests failed; 3/5 test programs failed	2026-10-06	Perl failed	
-Authen::NZRealMe	PERL_FAIL	215	191	24/215 subtests failed; 15/19 test programs failed	2026-09-23	Perl failed	
+Authen::NZRealMe	PERL_FAIL	215	191	24/215 subtests failed; 15/19 test programs failed	2026-10-14	Perl failed	
 Authen::Smb	PERL_FAIL				2026-10-07	Perl failed	
 Authen::Tcpdmatch	PERL_FAIL	106		1/18 test programs failed; 0/106 subtests failed	2026-09-27	Perl failed	
 AutoCode::AccessorMaker	PERL_FAIL			No parseable output	2026-10-02	Perl failed	
@@ -211,7 +211,7 @@ B::Stats	PERL_FAIL	35	13	22/35 subtests failed; 3/3 test programs failed	2026-10
 B::Tree	PERL_FAIL				2026-10-07	Perl failed	
 BDB	PERL_FAIL	1	0	1/1 subtests failed; 2/2 test programs failed	2026-10-12	Perl failed	
 BDB::Wrapper	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-03	Perl failed	
-BIE::Data::HDF5	PERL_FAIL			Configure failed	2026-09-24	Perl failed	
+BIE::Data::HDF5	PERL_FAIL			Configure failed	2026-10-15	Perl failed	
 BIE::Data::HDF5::Data	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-19	Perl failed	
 BIE::Data::HDF5::File	PERL_FAIL	2	0	2/2 subtests failed; 1/1 test programs failed	2026-09-23	Perl failed	
 BIE::Data::HDF5::Path	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-24	Perl failed	
@@ -245,20 +245,20 @@ Bio::SeqIO::excel	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 6
 Bio::Tools::Phylo::PAML	PERL_FAIL	90	89	1/90 subtests failed; 2/8 test programs failed	2026-09-27	Perl failed	
 Bio::Tradis	PERL_FAIL	71	50	21/71 subtests failed; 15/18 test programs failed	2026-09-23	Perl failed	
 BioX::CLPM	PERL_FAIL	13	0	13/13 subtests failed; 2/2 test programs failed	2026-09-27	Perl failed	
-BioX::SeqUtils::Promoter	PERL_FAIL	17	0	17/17 subtests failed; 6/6 test programs failed	2026-09-23	Perl failed	
+BioX::SeqUtils::Promoter	PERL_FAIL	17	0	17/17 subtests failed; 6/6 test programs failed	2026-10-14	Perl failed	
 BioX::Workflow	PERL_FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-09	Perl failed	
 Bit::Set	PERL_FAIL			5/5 test programs failed; 0/0 subtests failed	2026-09-27	Perl failed	
 BitTorrent	PERL_FAIL			No parseable output	2026-10-14	Perl failed	
 Blikistan	PERL_FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-10-14	Perl failed	
 BonusTypes	PERL_FAIL			Make failed	2026-10-14	Perl failed	
-Bootylicious	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-09-23	Perl failed	
+Bootylicious	PERL_FAIL	150	131	19/150 subtests failed; 14/25 test programs failed	2026-10-15	Perl failed	
 Bot::BasicBot::Pluggable::Module::StripFormatting	PERL_FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-10-14	Perl failed	
 BsDiPa	PERL_FAIL				2026-10-05	Perl failed	
 Bubble	PERL_FAIL			Make failed	2026-09-23	Perl failed	
 Build	PERL_FAIL	4	2	2/4 subtests failed; 1/2 test programs failed	2026-09-30	Perl failed	
 Bundle::PBib	PERL_FAIL	38	33	5/38 subtests failed; 4/6 test programs failed	2026-09-28	Perl failed	
 Business::Intelligence::MicroStrategy::CommandManager	PERL_FAIL			No parseable output	2026-10-07	Perl failed	
-Business::OnlinePayment::2CheckOut	PERL_FAIL	3	2	1/3 subtests failed; 1/3 test programs failed	2026-09-22	Perl failed	
+Business::OnlinePayment::2CheckOut	PERL_FAIL	3	2	1/3 subtests failed; 1/3 test programs failed	2026-10-14	Perl failed	
 Business::OnlinePayment::BitPay::KeyUtils	PERL_FAIL				2026-09-22	Perl failed	
 Business::OnlinePayment::PPIPayMover	PERL_FAIL	3		4/7 test programs failed; 0/3 subtests failed	2026-10-12	Perl failed	
 Business::OnlinePayment::PaperlessTrans	PERL_FAIL	5	1	4/5 subtests failed; 1/21 test programs failed	2026-10-03	Perl failed	
@@ -271,7 +271,7 @@ C::DebugFile	PERL_FAIL	2		2/2 test programs failed; 0/2 subtests failed	2026-10-
 C::Scan::Constants	PERL_FAIL	21	17	4/21 subtests failed; 1/4 test programs failed	2026-10-08	Perl failed	
 C::sparse	PERL_FAIL				2026-09-24	Perl failed	
 CAD::Drawing	PERL_FAIL			Make failed	2026-09-23	Perl failed	
-CAD::Drawing::IO::OpenDWG	PERL_FAIL	1	0	1/1 subtests failed; 1/4 test programs failed	2026-09-21	Perl failed	
+CAD::Drawing::IO::OpenDWG	PERL_FAIL	1	0	1/1 subtests failed; 1/4 test programs failed	2026-10-14	Perl failed	
 CAD::Drawing::IO::Tk	PERL_FAIL	1	0	1/1 subtests failed; 1/4 test programs failed	2026-09-27	Perl failed	
 CAD::Drawing::Template	PERL_FAIL	1	0	1/1 subtests failed; 1/4 test programs failed	2026-10-08	Perl failed	
 CAD::OpenSCAD	PERL_FAIL			2/2 test programs failed; 0/0 subtests failed	2026-09-28	Perl failed	
@@ -280,6 +280,7 @@ CC::Activity	PERL_FAIL			3/3 test programs failed; 0/0 subtests failed	2026-09-2
 CCCP::ConfigXML	PERL_FAIL	3	1	2/3 subtests failed; 1/1 test programs failed	2026-10-02	Perl failed	
 CDB_File::BiIndex	PERL_FAIL			2/2 test programs failed; 0/0 subtests failed	2026-09-29	Perl failed	
 CDB_File::Generator	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-26	Perl failed	
+CDB_File_Thawed	PERL_FAIL	14	4	10/14 subtests failed; 3/4 test programs failed	2026-10-14	Perl failed	
 CGI::Alert	PERL_FAIL	95	68	27/95 subtests failed; 1/3 test programs failed	2026-10-06	Perl failed	
 CGI::AppBuilder	PERL_FAIL			Configure failed	2026-09-23	Perl failed	
 CGI::AppBuilder::Frame	PERL_FAIL			Configure failed	2026-10-07	Perl failed	
@@ -291,10 +292,10 @@ CGI::AppBuilder::Tasks	PERL_FAIL			Configure failed	2026-09-27	Perl failed
 CGI::Application::Plugin::CAPTCHA	PERL_FAIL	3	1	2/3 subtests failed; 5/6 test programs failed	2026-10-12	Perl failed	
 CGI::Application::Plugin::HelpMan	PERL_FAIL	25		1/2 test programs failed; 0/25 subtests failed	2026-09-29	Perl failed	
 CGI::Application::Plugin::Routes	PERL_FAIL	6		1/5 test programs failed; 0/6 subtests failed	2026-09-28	Perl failed	
-CGI::Application::Plugin::TmplInnerOuter	PERL_FAIL			2/2 test programs failed; 0/0 subtests failed	2026-09-19	Perl failed	
+CGI::Application::Plugin::TmplInnerOuter	PERL_FAIL			2/2 test programs failed; 0/0 subtests failed	2026-10-14	Perl failed	
 CGI::Builder::CgiAppAPI	PERL_FAIL			TIMEOUT (runtime >300s; last output 10s ago)	2026-10-13	Perl failed	
 CGI::Builder::DFVCheck	PERL_FAIL	2	1	1/2 subtests failed; 3/4 test programs failed	2026-10-07	Perl failed	
-CGI::Builder::Session	PERL_FAIL	4	3	1/4 subtests failed; 3/5 test programs failed	2026-09-24	Perl failed	
+CGI::Builder::Session	PERL_FAIL	4	3	1/4 subtests failed; 3/5 test programs failed	2026-10-15	Perl failed	
 CGI::CIPP	PERL_FAIL				2026-09-24	Perl failed	
 CGI::CookieSerial	PERL_FAIL			Configure failed	2026-09-21	Perl failed	
 CGI::Emulate::PSGI::Streaming	PERL_FAIL	7		1/7 test programs failed; 0/7 subtests failed	2026-09-23	Perl failed	
@@ -309,7 +310,7 @@ CGI::Shorten	PERL_FAIL			Missing: DB_File.pm	2026-09-26	Perl failed
 CGI::Untaint::country	PERL_FAIL	9		1/3 test programs failed; 0/9 subtests failed	2026-10-14	Perl failed	
 CGI::Untaint::url	PERL_FAIL	17	11	6/17 subtests failed; 1/3 test programs failed	2026-10-03	Perl failed	
 CGI::Validate	PERL_FAIL				2026-10-07	Perl failed	
-CGI::WML	PERL_FAIL	12		2/4 test programs failed; 0/12 subtests failed	2026-09-23	Perl failed	
+CGI::WML	PERL_FAIL	12		2/4 test programs failed; 0/12 subtests failed	2026-10-14	Perl failed	
 CGI::Wiki::Plugin::Categoriser	PERL_FAIL			4/4 test programs failed; 0/0 subtests failed	2026-09-27	Perl failed	
 CGI::Wiki::Plugin::Diff	PERL_FAIL	2		3/5 test programs failed; 0/2 subtests failed	2026-09-27	Perl failed	
 CGI::Wiki::Plugin::Locator::UK	PERL_FAIL			5/5 test programs failed; 0/0 subtests failed	2026-10-13	Perl failed	
@@ -319,6 +320,7 @@ CGIS	PERL_FAIL	4	3	1/4 subtests failed; 1/1 test programs failed	2026-09-26	Perl
 CHI::Driver::BerkeleyDB	PERL_FAIL	2	0	2/2 subtests failed; 2/4 test programs failed	2026-10-12	Perl failed	
 CHI::Driver::LMDB	PERL_FAIL	3	1	2/3 subtests failed; 3/4 test programs failed	2026-10-09	Perl failed	
 CHI::Driver::Redis::SortedSet	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-09	Perl failed	
+CLI::Meta::diff	PERL_FAIL			TIMEOUT (runtime >300s; last output 6s ago)	2026-10-15	Perl failed	
 CLucene	PERL_FAIL			Make failed	2026-10-14	Perl failed	
 CORBA::MICO	PERL_FAIL			Configure failed	2026-09-29	Perl failed	
 CORBA::ORBit	PERL_FAIL			Configure failed	2026-09-27	Perl failed	
@@ -333,7 +335,7 @@ CPANPLUS::Backend	PERL_FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-1
 CPANPLUS::Config::BaseEnv	PERL_FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-10-14	Perl failed	
 CPANPLUS::Daemon	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-20	Perl failed	
 CPANPLUS::Shell::Curses	PERL_FAIL	2	1	1/2 subtests failed; 1/2 test programs failed	2026-10-12	Perl failed	
-CPANPLUS::Shell::Wx	PERL_FAIL	12	2	10/12 subtests failed; 1/1 test programs failed	2026-09-24	Perl failed	
+CPANPLUS::Shell::Wx	PERL_FAIL	12	2	10/12 subtests failed; 1/1 test programs failed	2026-10-15	Perl failed	
 CPANTS::Weight	PERL_FAIL	7	5	2/7 subtests failed; 3/6 test programs failed	2026-09-15	Perl failed	
 CPU::Z80::Assembler::Token	PERL_FAIL			TIMEOUT (runtime >300s; last output 4s ago)	2026-10-09	Perl failed	
 CSS::Prepare	PERL_FAIL	3	1	2/3 subtests failed; 59/59 test programs failed	2026-09-30	Perl failed	
@@ -345,14 +347,15 @@ CWB::Web	PERL_FAIL	3	0	3/3 subtests failed; 1/1 test programs failed	2026-09-28	
 Cache::BDB	PERL_FAIL	7	4	3/7 subtests failed; 5/8 test programs failed	2026-10-09	Perl failed	
 Cache::Memcached::GetParserXS	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-06	Perl failed	
 Cache::utLRU	PERL_FAIL	1	0	1/1 subtests failed; 9/9 test programs failed	2026-10-09	Perl failed	
-Cairo	PERL_FAIL	2	1	1/2 subtests failed; 9/9 test programs failed	2026-09-22	Perl failed	
+Cairo	PERL_FAIL	2	1	1/2 subtests failed; 9/9 test programs failed	2026-10-14	Perl failed	
 CairoX::Sweet	PERL_FAIL			TIMEOUT (runtime >300s; last output 30s ago)	2026-10-06	Perl failed	
 Callback::Cleanup	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-04	Perl failed	
 Callerid	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-23	Perl failed	
 Catalog	PERL_FAIL			Configure failed	2026-09-19	Perl failed	
 Catalyst::ActionRole::RequestModel	PERL_FAIL			Unknown test outcome	2026-10-14	Perl failed	
 Catalyst::Controller::DBIC::Transaction	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-19	Perl failed	
-Catalyst::Helper::View::ByCode	PERL_FAIL	11	0	11/11 subtests failed; 7/9 test programs failed	2026-10-12	Perl failed	
+Catalyst::Helper::Model::Riak	PERL_FAIL			Unknown test outcome	2026-10-14	Perl failed	
+Catalyst::Helper::View::TT	PERL_FAIL			Unknown test outcome	2026-10-15	Perl failed	
 Catalyst::Plugin::Alarm	PERL_FAIL	10		1/5 test programs failed; 0/10 subtests failed	2026-09-28	Perl failed	
 Catalyst::Plugin::AuthenCookie	PERL_FAIL	18	17	1/18 subtests failed; 1/4 test programs failed	2026-10-09	Perl failed	
 Catalyst::Plugin::Browser	PERL_FAIL	3	2	1/3 subtests failed; 1/6 test programs failed	2026-10-08	Perl failed	
@@ -362,10 +365,8 @@ Catalyst::Plugin::ServeFile	PERL_FAIL	26	21	5/26 subtests failed; 1/1 test progr
 Catalyst::Plugin::Server	PERL_FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-10-13	Perl failed	
 Catalyst::Plugin::Server::JSONRPC	PERL_FAIL	2		7/10 test programs failed; 0/2 subtests failed	2026-09-24	Perl failed	
 Catalyst::Plugin::Static::Simple	PERL_FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-09-27	Perl failed	
-Catalyst::View::ByCode	PERL_FAIL	138	124	14/138 subtests failed; 6/13 test programs failed	2026-09-20	Perl failed	
 Catalyst::View::EmbeddedPerl::PerRequest	PERL_FAIL	28	24	4/28 subtests failed; 1/1 test programs failed	2026-10-02	Perl failed	
 Catalyst::View::Excel::Template::Plus	PERL_FAIL	5		2/5 test programs failed; 0/5 subtests failed	2026-09-28	Perl failed	
-Catalyst::View::TT	PERL_FAIL	61	25	36/61 subtests failed; 9/13 test programs failed	2026-09-23	Perl failed	
 Catalyst::View::Template	PERL_FAIL	46	28	18/46 subtests failed; 1/1 test programs failed	2026-10-03	Perl failed	
 Catalyst::View::Thumbnail	PERL_FAIL	4	3	1/4 subtests failed; 1/3 test programs failed	2026-09-28	Perl failed	
 CatalystX::Action::ExtJS::Deserialize	PERL_FAIL	1		5/6 test programs failed; 0/1 subtests failed	2026-10-09	Perl failed	
@@ -373,6 +374,7 @@ CatalystX::Action::Negotiate	PERL_FAIL	6	2	4/6 subtests failed; 1/5 test program
 CatalystX::Example::YUIUploader	PERL_FAIL	3	2	1/3 subtests failed; 1/3 test programs failed	2026-09-22	Perl failed	
 CatalystX::Restarter::GTK	PERL_FAIL	24	18	6/24 subtests failed; 2/3 test programs failed	2026-10-09	Perl failed	
 CatalystX::Widget::Paginator	PERL_FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-09-23	Perl failed	
+Catmandu::HTML	PERL_FAIL			TIMEOUT (runtime >300s; last output 8s ago)	2026-10-15	Perl failed	
 Catmandu::WoS	PERL_FAIL			TIMEOUT (runtime >300s; last output 8s ago)	2026-10-14	Perl failed	
 CfgTie::CfgArgs	PERL_FAIL	1		2/2 test programs failed; 0/1 subtests failed	2026-10-13	Perl failed	
 Char::KOI8R	PERL_FAIL			TIMEOUT (runtime >300s; last output 11s ago)	2026-10-14	Perl failed	
@@ -383,7 +385,6 @@ Chart::Plot	PERL_FAIL				2026-10-03	Perl failed
 Chart::XMGR	PERL_FAIL			Configure failed	2026-09-27	Perl failed	
 Cheater	PERL_FAIL	9		11/13 test programs failed; 0/9 subtests failed	2026-10-04	Perl failed	
 Check::OneHash	PERL_FAIL			Unknown test outcome	2026-10-07	Perl failed	
-Chouette	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-22	Perl failed	
 Cisco::ShowIPRoute::Parser	PERL_FAIL				2026-09-27	Perl failed	
 Clang	PERL_FAIL	8	7	1/8 subtests failed; 6/9 test programs failed	2026-10-13	Perl failed	
 Class::DBI::Factory	PERL_FAIL			Unknown test outcome	2026-10-09	Perl failed	
@@ -416,9 +417,9 @@ Coro::LocalScalar::XS	PERL_FAIL			Configure failed	2026-10-14	Perl failed
 Corona	PERL_FAIL	1	0	1/1 subtests failed; 1/2 test programs failed	2026-10-09	Perl failed	
 CouchDB::View	PERL_FAIL	4		1/3 test programs failed; 0/4 subtests failed	2026-10-12	Perl failed	
 Counter	PERL_FAIL			No parseable output	2026-10-09	Perl failed	
-Crixa	PERL_FAIL	7	3	4/7 subtests failed; 2/15 test programs failed	2026-09-23	Perl failed	
+Crixa	PERL_FAIL	7	3	4/7 subtests failed; 2/15 test programs failed	2026-10-14	Perl failed	
 Crypt::AllOrNothing::Util	PERL_FAIL	7	4	3/7 subtests failed; 3/5 test programs failed	2026-10-04	Perl failed	
-Crypt::Dining	PERL_FAIL	3	1	2/3 subtests failed; 2/2 test programs failed	2026-09-22	Perl failed	
+Crypt::Dining	PERL_FAIL	3	1	2/3 subtests failed; 2/2 test programs failed	2026-10-14	Perl failed	
 Crypt::EECDH	PERL_FAIL	1		1 subtests failed in test files	2026-10-03	Perl failed	
 Crypt::FPE::FF1	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-27	Perl failed	
 Crypt::GOST	PERL_FAIL				2026-09-16	Perl failed	
@@ -431,20 +432,20 @@ Crypt::Nettle	PERL_FAIL			5/5 test programs failed; 0/0 subtests failed	2026-10-
 Crypt::OpenSSL::DSA	PERL_FAIL			3/3 test programs failed; 0/0 subtests failed	2026-09-19	Perl failed	
 Crypt::PBC::WIBE	PERL_FAIL	1		1 subtests failed in test files	2026-09-23	Perl failed	
 Crypt::PWSafe3	PERL_FAIL	3	0	3/3 subtests failed; 1/1 test programs failed	2026-10-08	Perl failed	
-Crypt::RSA	PERL_FAIL	6		15/16 test programs failed; 0/6 subtests failed	2026-09-20	Perl failed	
+Crypt::RSA	PERL_FAIL	6		15/16 test programs failed; 0/6 subtests failed	2026-10-15	Perl failed	
 Crypt::Random::Source::Weak::OpenSSLRand	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-05	Perl failed	
 Crypt::Simple::SMIME	PERL_FAIL	24	23	1/24 subtests failed; 1/1 test programs failed	2026-09-21	Perl failed	
 Crypt::Sodium	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-23	Perl failed	
 Cvs::Simple	PERL_FAIL	44	43	1/44 subtests failed; 1/11 test programs failed	2026-09-27	Perl failed	
 CyberSource	PERL_FAIL				2026-10-04	Perl failed	
-DB2::db	PERL_FAIL	35	27	8/35 subtests failed; 3/5 test programs failed	2026-09-23	Perl failed	
+DB2::db	PERL_FAIL	33	25	8/33 subtests failed; 3/5 test programs failed	2026-10-14	Perl failed	
 DB::Berkeley	PERL_FAIL	6	0	6/6 subtests failed; 15/18 test programs failed	2026-10-09	Perl failed	
 DB::Pluggable::Dumper	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-05	Perl failed	
 DBD::ASAny	PERL_FAIL			Configure failed	2026-09-21	Perl failed	
 DBD::AnyData	PERL_FAIL	6		1/4 test programs failed; 0/6 subtests failed	2026-10-12	Perl failed	
 DBD::Avatica	PERL_FAIL	3	0	3/3 subtests failed; 2/5 test programs failed	2026-10-09	Perl failed	
 DBD::Cego	PERL_FAIL			9/9 test programs failed; 0/0 subtests failed	2026-10-14	Perl failed	
-DBD::DB2	PERL_FAIL			Configure failed	2026-09-23	Perl failed	
+DBD::DB2	PERL_FAIL			Configure failed	2026-10-14	Perl failed	
 DBD::DBMaker	PERL_FAIL			Configure failed	2026-10-07	Perl failed	
 DBD::Empress	PERL_FAIL				2026-10-09	Perl failed	
 DBD::Gofer::Transport::http	PERL_FAIL	4	2	2/4 subtests failed; 1/4 test programs failed	2026-09-30	Perl failed	
@@ -484,13 +485,14 @@ DBIx::EnumConstraints	PERL_FAIL	1		1/1 test programs failed; 0/1 subtests failed
 DBIx::Inspector	PERL_FAIL	9	7	2/9 subtests failed; 1/4 test programs failed	2026-10-06	Perl failed	
 DBIx::Migration::Directories	PERL_FAIL	129		2/6 test programs failed; 0/129 subtests failed	2026-09-26	Perl failed	
 DBIx::MyParsePP	PERL_FAIL			Unknown test outcome	2026-09-23	Perl failed	
+DBIx::MyParsePP::Parser	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-15	Perl failed	
 DBIx::NinjaORM	PERL_FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-06	Perl failed	
 DBIx::OracleSequence	PERL_FAIL				2026-10-03	Perl failed	
 DBIx::PasswordIniFile	PERL_FAIL	11		4/6 test programs failed; 0/11 subtests failed	2026-09-27	Perl failed	
 DBIx::Patcher	PERL_FAIL			1/4 test programs failed; 0/0 subtests failed	2026-09-27	Perl failed	
 DBIx::Pg::CallFunction	PERL_FAIL	1		1/4 test programs failed; 0/1 subtests failed	2026-10-09	Perl failed	
 DBIx::PgLink	PERL_FAIL	90	73	17/90 subtests failed; 19/36 test programs failed	2026-09-26	Perl failed	
-DBIx::Procedure::Oracle	PERL_FAIL				2026-09-19	Perl failed	
+DBIx::Procedure::Oracle	PERL_FAIL				2026-10-14	Perl failed	
 DBIx::ProfileManager	PERL_FAIL	1	0	1/1 subtests failed; 2/2 test programs failed	2026-09-23	Perl failed	
 DBIx::QuickORM	PERL_FAIL	26		26/30 test programs failed; 0/26 subtests failed	2026-09-19	Perl failed	
 DBIx::Romani	PERL_FAIL				2026-10-09	Perl failed	
@@ -503,6 +505,7 @@ DBIx::dbMan	PERL_FAIL	1		2/3 test programs failed; 0/1 subtests failed	2026-09-2
 DBM::Deep	PERL_FAIL	1499	1495	4/1499 subtests failed; 3/53 test programs failed	2026-09-20	Perl failed	
 DBM::Deep::Blue	PERL_FAIL			11/11 test programs failed; 0/0 subtests failed	2026-10-13	Perl failed	
 DBQuery	PERL_FAIL			Configure failed	2026-10-13	Perl failed	
+DCE::ACL	PERL_FAIL			9/9 test programs failed; 0/0 subtests failed	2026-10-15	Perl failed	
 DMS::XS::Parser	PERL_FAIL			3/3 test programs failed; 0/0 subtests failed	2026-09-28	Perl failed	
 DNS::BL	PERL_FAIL	4253	4196	57/4253 subtests failed; 3/6 test programs failed	2026-10-04	Perl failed	
 DR::Msgpuck	PERL_FAIL	4	1	3/4 subtests failed; 3/3 test programs failed	2026-09-28	Perl failed	
@@ -515,7 +518,7 @@ Dancer2::Plugin::Auth::Tiny	PERL_FAIL			TIMEOUT (runtime >300s; last output 12s 
 Dancer2::Plugin::Emailesque	PERL_FAIL	1		1 subtests failed in test files	2026-10-05	Perl failed	
 Dancer2::Plugin::FormValidator	PERL_FAIL	114	111	3/114 subtests failed; 19/21 test programs failed	2026-09-27	Perl failed	
 Dancer2::Plugin::FormValidator::Extension::Password	PERL_FAIL	20		1/4 test programs failed; 0/20 subtests failed	2026-10-13	Perl failed	
-Dancer2::Plugin::Github::Webhook	PERL_FAIL	6	1	5/6 subtests failed; 1/5 test programs failed	2026-09-24	Perl failed	
+Dancer2::Plugin::Github::Webhook	PERL_FAIL	6	1	5/6 subtests failed; 1/5 test programs failed	2026-10-15	Perl failed	
 Dancer2::Plugin::Locale::Wolowitz	PERL_FAIL	18		16 subtests failed in test files	2026-10-04	Perl failed	
 Dancer2::Plugin::REST	PERL_FAIL	2	1	1/2 subtests failed; 8/9 test programs failed	2026-09-26	Perl failed	
 Dancer2::Plugin::TemplateFlute	PERL_FAIL	112	17	95/112 subtests failed; 1/8 test programs failed	2026-09-28	Perl failed	
@@ -566,7 +569,7 @@ DateTime::Calendar::TauStation	PERL_FAIL			TIMEOUT (runtime >300s; last output 1
 DateTime::Event::Klingon	PERL_FAIL	4	1	3/4 subtests failed; 4/6 test programs failed	2026-09-18	Perl failed	
 DateTime::Format::Intl	PERL_FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-08	Perl failed	
 DateTime::TimeZone::Local::Win32	PERL_FAIL	1		1/2 test programs failed; 0/1 subtests failed	2026-10-04	Perl failed	
-DateTimeX::Lite	PERL_FAIL	2914	2887	27/2914 subtests failed; 48/69 test programs failed	2026-09-18	Perl failed	
+DateTimeX::Lite	PERL_FAIL	2914	2887	27/2914 subtests failed; 48/69 test programs failed	2026-10-15	Perl failed	
 Db::Ctree	PERL_FAIL			Configure failed	2026-09-26	Perl failed	
 Db::DFC	PERL_FAIL			Missing: JNI.pm	2026-10-07	Perl failed	
 DbFramework::Attribute	PERL_FAIL			6/6 test programs failed; 0/0 subtests failed	2026-09-28	Perl failed	
@@ -574,13 +577,14 @@ Debug::Flags	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09
 Devel::DTrace	PERL_FAIL	1	0	1/1 subtests failed; 2/2 test programs failed	2026-10-12	Perl failed	
 Devel::DebugInit	PERL_FAIL	2		2/2 test programs failed; 0/2 subtests failed	2026-09-21	Perl failed	
 Devel::TypeCheck	PERL_FAIL	63	55	8/63 subtests failed; 3/4 test programs failed	2026-09-27	Perl failed	
+Devel::tvdb	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-14	Perl failed	
 Device::ParallelPort::drv::win32	PERL_FAIL				2026-10-07	Perl failed	
-Device::Quasar3108	PERL_FAIL	1		1/1 test programs failed; 0/1 subtests failed	2026-09-23	Perl failed	
+Device::Quasar3108	PERL_FAIL	1		1/1 test programs failed; 0/1 subtests failed	2026-10-14	Perl failed	
 Device::Serdisp	PERL_FAIL	2	0	2/2 subtests failed; 1/1 test programs failed	2026-10-04	Perl failed	
 Device::USB::MissileLauncher::RocketBaby	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-03	Perl failed	
 Device::USB::Win32Async	PERL_FAIL	3	1	2/3 subtests failed; 3/5 test programs failed	2026-10-03	Perl failed	
 Device::Velleman::PPS10	PERL_FAIL	1		1/1 test programs failed; 0/1 subtests failed	2026-10-13	Perl failed	
-Device::WH1091	PERL_FAIL	1		1/1 test programs failed; 0/1 subtests failed	2026-09-23	Perl failed	
+Device::WH1091	PERL_FAIL	1		1/1 test programs failed; 0/1 subtests failed	2026-10-15	Perl failed	
 DiffieHellmanConsumerSession	PERL_FAIL	110	108	2/110 subtests failed; 4/6 test programs failed	2026-09-23	Perl failed	
 Digest::Tiger	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-29	Perl failed	
 Dist::Zilla::Plugin::Documentation::SQL	PERL_FAIL			TIMEOUT (runtime >300s; last output 20s ago)	2026-09-21	Perl failed	
@@ -598,12 +602,12 @@ Dyn	PERL_FAIL			No parseable output	2026-09-27	Perl failed
 EBook::MOBI::Image	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-12	Perl failed	
 EC::About	PERL_FAIL			Unknown test outcome	2026-09-30	Perl failed	
 EFL	PERL_FAIL			Configure failed	2026-10-09	Perl failed	
-EO	PERL_FAIL	14	0	14/14 subtests failed; 18/18 test programs failed	2026-09-23	Perl failed	
+EO	PERL_FAIL	14	0	14/14 subtests failed; 18/18 test programs failed	2026-10-14	Perl failed	
 ETL::Pipeline	PERL_FAIL			Unknown test outcome	2026-09-26	Perl failed	
 EV::ADNS	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-27	Perl failed	
 EV::ClickHouse	PERL_FAIL	1	0	1/1 subtests failed; 51/51 test programs failed	2026-09-23	Perl failed	
 EV::Kafka	PERL_FAIL	1	0	1/1 subtests failed; 34/34 test programs failed	2026-10-04	Perl failed	
-EZID	PERL_FAIL	9	5	4/9 subtests failed; 1/1 test programs failed	2026-09-23	Perl failed	
+EZID	PERL_FAIL	9	6	3/9 subtests failed; 1/1 test programs failed	2026-10-15	Perl failed	
 Easy	PERL_FAIL			Make failed	2026-09-22	Perl failed	
 EasyDate	PERL_FAIL			Make failed	2026-10-04	Perl failed	
 Ecma48::Util	PERL_FAIL	20		1/6 test programs failed; 0/20 subtests failed	2026-09-26	Perl failed	
@@ -622,6 +626,7 @@ Exception::Cxx	PERL_FAIL	8	0	8/8 subtests failed; 2/2 test programs failed	2026-
 Exception::DBManager::Grammar	PERL_FAIL			3/3 test programs failed; 0/0 subtests failed	2026-10-07	Perl failed	
 ExtUtils::ModuleMaker::TT	PERL_FAIL			TIMEOUT (runtime >300s; last output 7s ago)	2026-10-08	Perl failed	
 ExtUtils::PkgConfig	PERL_FAIL	27	11	16/27 subtests failed; 4/4 test programs failed	2026-10-12	Perl failed	
+FFI::Build::File::Pascal	PERL_FAIL	1	0	1/1 subtests failed; 4/4 test programs failed	2026-10-14	Perl failed	
 FFI::Build::File::Zig	PERL_FAIL	2	1	1/2 subtests failed; 3/4 test programs failed	2026-10-14	Perl failed	
 FFI::Me	PERL_FAIL	3	0	3/3 subtests failed; 2/11 test programs failed	2026-10-14	Perl failed	
 FFI::Platypus::Lang::Pascal	PERL_FAIL			4/4 test programs failed; 0/0 subtests failed	2026-09-18	Perl failed	
@@ -638,7 +643,7 @@ FWS::V2	PERL_FAIL	6		2 subtests failed in test files	2026-10-09	Perl failed
 Facebook::Graph::Cmdline	PERL_FAIL	2	0	2/2 subtests failed; 2/2 test programs failed	2026-09-27	Perl failed	
 Faker	PERL_FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-09-22	Perl failed	
 FameHLI::API	PERL_FAIL			Configure failed	2026-10-06	Perl failed	
-Faster	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-18	Perl failed	
+Faster	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-14	Perl failed	
 Fdb	PERL_FAIL	1		1 subtests failed in test files	2026-10-07	Perl failed	
 Fierce::Parser	PERL_FAIL	42	27	15/42 subtests failed; 12/13 test programs failed	2026-09-28	Perl failed	
 File::ArchivableFormats	PERL_FAIL	170	169	1/170 subtests failed; 1/5 test programs failed	2026-09-24	Perl failed	
@@ -652,13 +657,14 @@ File::Stat::Moose	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026
 Filter::PerlTags::Extra	PERL_FAIL	1		1 subtests failed in test files	2026-09-20	Perl failed	
 Finance::Currency::Convert::Custom	PERL_FAIL	13	1	12/13 subtests failed; 1/1 test programs failed	2026-10-08	Perl failed	
 Finance::FXCM::Simple	PERL_FAIL	10	9	1/10 subtests failed; 1/1 test programs failed	2026-10-09	Perl failed	
-Finance::MICR::GOCR	PERL_FAIL	4	3	1/4 subtests failed; 3/3 test programs failed	2026-10-12	Perl failed	
+Finance::MICR::GOCR	PERL_FAIL	4	3	1/4 subtests failed; 3/3 test programs failed	2026-10-14	Perl failed	
 Finance::MICR::GOCR::Check	PERL_FAIL	4	3	1/4 subtests failed; 3/3 test programs failed	2026-09-22	Perl failed	
 Finance::Optical::StrongBuy	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-26	Perl failed	
 Firefox::Marionette	PERL_FAIL			TIMEOUT (runtime >300s; last output 4s ago)	2026-10-06	Perl failed	
 FirewallManager	PERL_FAIL	1		1 subtests failed in test files	2026-09-24	Perl failed	
 FlightRecorder	PERL_FAIL			4/4 test programs failed; 0/0 subtests failed	2026-10-08	Perl failed	
 Forest	PERL_FAIL			Unknown test outcome	2026-09-29	Perl failed	
+Forex	PERL_FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-15	Perl failed	
 Form::Toolkit	PERL_FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-14	Perl failed	
 FrameNet::QueryData	PERL_FAIL	8		1/5 test programs failed; 0/8 subtests failed	2026-10-07	Perl failed	
 FreeBSD::i386::Ptrace	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-03	Perl failed	
@@ -666,7 +672,8 @@ FreePAN::IndexPages	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for
 Freq	PERL_FAIL			4/4 test programs failed; 0/0 subtests failed	2026-09-23	Perl failed	
 Fuse::Filesys::Virtual	PERL_FAIL	7	4	3/7 subtests failed; 8/9 test programs failed	2026-10-02	Perl failed	
 FusqlFS	PERL_FAIL			Unknown test outcome	2026-09-30	Perl failed	
-Future::IO::Impl::Ppoll	PERL_FAIL	1		10/11 test programs failed; 0/1 subtests failed	2026-09-19	Perl failed	
+Future	PERL_FAIL			TIMEOUT (runtime >300s; last output 8s ago)	2026-10-15	Perl failed	
+Future::IO::Impl::Ppoll	PERL_FAIL	1		10/11 test programs failed; 0/1 subtests failed	2026-10-15	Perl failed	
 Future::IO::Resolver	PERL_FAIL	3		6/7 test programs failed; 0/3 subtests failed	2026-10-12	Perl failed	
 GBPVR::CDBI	PERL_FAIL	42	22	20/42 subtests failed; 2/4 test programs failed	2026-09-27	Perl failed	
 GCJ::Cni	PERL_FAIL			3/3 test programs failed; 0/0 subtests failed	2026-10-03	Perl failed	
@@ -676,7 +683,7 @@ GD::Arrow	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-05
 GD::Chord::Piano	PERL_FAIL	1	0	1/1 subtests failed; 2/2 test programs failed	2026-09-18	Perl failed	
 GD::Graph	PERL_FAIL			No parseable output	2026-10-02	Perl failed	
 GD::Graph3d	PERL_FAIL	5	0	5/5 subtests failed; 1/1 test programs failed	2026-10-08	Perl failed	
-GD::Graph::Hooks	PERL_FAIL	3	0	3/3 subtests failed; 1/1 test programs failed	2026-09-17	Perl failed	
+GD::Graph::Hooks	PERL_FAIL	3	0	3/3 subtests failed; 1/1 test programs failed	2026-10-14	Perl failed	
 GD::Graph::Polar	PERL_FAIL	2	1	1/2 subtests failed; 1/1 test programs failed	2026-10-13	Perl failed	
 GD::Graph::Thermometer	PERL_FAIL	3	1	2/3 subtests failed; 2/4 test programs failed	2026-09-27	Perl failed	
 GD::Graph::histogram	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-26	Perl failed	
@@ -688,14 +695,15 @@ GD::OrgChart	PERL_FAIL			5/5 test programs failed; 0/0 subtests failed	2026-10-0
 GD::RPPNG	PERL_FAIL				2026-10-14	Perl failed	
 GD::SecurityImage	PERL_FAIL	2		4/8 test programs failed; 0/2 subtests failed	2026-10-14	Perl failed	
 GD::SecurityImage::AC	PERL_FAIL			2/4 test programs failed; 0/0 subtests failed	2026-10-12	Perl failed	
-GD::SecurityImage::Utils	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-23	Perl failed	
+GD::SecurityImage::Utils	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-15	Perl failed	
 GD::Text	PERL_FAIL			3/3 test programs failed; 0/0 subtests failed	2026-10-14	Perl failed	
 GD::Text::Arc	PERL_FAIL				2026-09-19	Perl failed	
 GD::Thumbnail	PERL_FAIL	2	1	1/2 subtests failed; 2/6 test programs failed	2026-10-12	Perl failed	
 GD::Tiler	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-08	Perl failed	
 GD::Window	PERL_FAIL	2	1	1/2 subtests failed; 1/1 test programs failed	2026-09-28	Perl failed	
-GIFgraph	PERL_FAIL			Configure failed	2026-10-07	Perl failed	
-GIFgraph::boxplot	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-17	Perl failed	
+GFgtk	PERL_FAIL			Unknown test outcome	2026-10-15	Perl failed	
+GIFgraph	PERL_FAIL			Configure failed	2026-10-14	Perl failed	
+GIFgraph::boxplot	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-14	Perl failed	
 GMail::IMAPD	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-23	Perl failed	
 GO	PERL_FAIL			Configure failed	2026-09-29	Perl failed	
 GPIB	PERL_FAIL			Configure failed	2026-10-14	Perl failed	
@@ -704,7 +712,7 @@ GSAPI	PERL_FAIL	11	10	1/11 subtests failed; 9/10 test programs failed	2026-10-08
 GSM::SMS	PERL_FAIL			Configure failed	2026-09-29	Perl failed	
 GTestRunnerSuite	PERL_FAIL	1		1/2 test programs failed; 0/1 subtests failed	2026-10-09	Perl failed	
 GUIDeFATE	PERL_FAIL			Unknown test outcome	2026-09-18	Perl failed	
-Game::TextPacMonster	PERL_FAIL	433		1/11 test programs failed; 0/433 subtests failed	2026-09-19	Perl failed	
+Game::TextPacMonster	PERL_FAIL	433		1/11 test programs failed; 0/433 subtests failed	2026-10-15	Perl failed	
 Games::BubbleBreaker	PERL_FAIL	3		1 subtests failed in test files	2026-10-04	Perl failed	
 Games::Console	PERL_FAIL	39	37	2/39 subtests failed; 1/2 test programs failed	2026-10-03	Perl failed	
 Games::Construder	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-02	Perl failed	
@@ -721,7 +729,7 @@ Games::Tournament	PERL_FAIL	1191	1189	2/1191 subtests failed; 2/33 test programs
 Games::Tournament::Swiss	PERL_FAIL	1191	1189	2/1191 subtests failed; 2/33 test programs failed	2026-09-13	Perl failed	
 Games::Traveller::Animals	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-03	Perl failed	
 Gapp	PERL_FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-14	Perl failed	
-GappX::FileTree	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-19	Perl failed	
+GappX::FileTree	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-15	Perl failed	
 GappX::NoticeBox	PERL_FAIL			2/2 test programs failed; 0/0 subtests failed	2026-09-29	Perl failed	
 Gearman::Client::Async	PERL_FAIL	8		11/12 test programs failed; 0/8 subtests failed	2026-09-27	Perl failed	
 Genezzo::Contrib::Clustered	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-09-30	Perl failed	
@@ -749,6 +757,7 @@ Gnome2::Wnck	PERL_FAIL			9/9 test programs failed; 0/0 subtests failed	2026-10-0
 Gnome::Applet	PERL_FAIL			Configure failed	2026-10-08	Perl failed	
 Gnuplot::Simple	PERL_FAIL			1/2 test programs failed; 0/0 subtests failed	2026-09-27	Perl failed	
 Google::AJAX::Library	PERL_FAIL	61	60	1/61 subtests failed; 1/3 test programs failed	2026-10-09	Perl failed	
+Google::Ads::AdWords::Client	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-15	Perl failed	
 Google::Ai::Generativelanguage::V1	PERL_FAIL	3		3 subtests failed in test files	2026-10-08	Perl failed	
 Google::Checkout::Command::AddMerchantOrderNumber	PERL_FAIL	142	82	60/142 subtests failed; 3/4 test programs failed	2026-09-27	Perl failed	
 Google::Cloud::Bigquery::Storage::V1	PERL_FAIL	2		2 subtests failed in test files	2026-10-08	Perl failed	
@@ -790,7 +799,7 @@ Gtk2::Ex::Utils	PERL_FAIL	2	0	2/2 subtests failed; 1/1 test programs failed	2026
 Gtk2::Ex::WidgetBits	PERL_FAIL	30		46/48 test programs failed; 0/30 subtests failed	2026-09-30	Perl failed	
 Gtk2::Ex::WidgetCursor	PERL_FAIL			4/4 test programs failed; 0/0 subtests failed	2026-10-09	Perl failed	
 Gtk2::Ex::Xor	PERL_FAIL			5/5 test programs failed; 0/0 subtests failed	2026-09-12	Perl failed	
-Gtk2::GLExt	PERL_FAIL			3/3 test programs failed; 0/0 subtests failed	2026-09-19	Perl failed	
+Gtk2::GLExt	PERL_FAIL			3/3 test programs failed; 0/0 subtests failed	2026-10-14	Perl failed	
 Gtk2::GladeXML::Simple	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-04	Perl failed	
 Gtk2::Hexgrid	PERL_FAIL	6	5	1/6 subtests failed; 7/8 test programs failed	2026-09-20	Perl failed	
 Gtk2::ImageView::Browser	PERL_FAIL	6	4	2/6 subtests failed; 2/4 test programs failed	2026-09-27	Perl failed	
@@ -804,7 +813,7 @@ Gtk::Perl	PERL_FAIL			Configure failed	2026-09-13	Perl failed
 HDB	PERL_FAIL				2026-09-28	Perl failed	
 HEAT::Crypto	PERL_FAIL			TIMEOUT (runtime >300s; last output 8s ago)	2026-10-14	Perl failed	
 HPC::Runner::Command	PERL_FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-10-13	Perl failed	
-HTML::AsHTML	PERL_FAIL	95	57	38/95 subtests failed; 7/11 test programs failed	2026-09-19	Perl failed	
+HTML::AsHTML	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 97s)	2026-10-14	Perl failed	
 HTML::Bricks	PERL_FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-09-27	Perl failed	
 HTML::EP::Explorer	PERL_FAIL			Configure failed	2026-10-08	Perl failed	
 HTML::EP::Glimpse	PERL_FAIL			Configure failed	2026-10-13	Perl failed	
@@ -816,20 +825,20 @@ HTML::ForumCode	PERL_FAIL	93	87	6/93 subtests failed; 2/5 test programs failed	2
 HTML::GMap	PERL_FAIL	3	2	1/3 subtests failed; 1/1 test programs failed	2026-10-02	Perl failed	
 HTML::GoogleMaps	PERL_FAIL	23		1/1 test programs failed; 0/23 subtests failed	2026-10-06	Perl failed	
 HTML::HTML5::Builder	PERL_FAIL	5	3	2/5 subtests failed; 2/2 test programs failed	2026-09-24	Perl failed	
-HTML::HTML5::Outline	PERL_FAIL	3		1/5 test programs failed; 0/3 subtests failed	2026-09-21	Perl failed	
+HTML::HTML5::Outline	PERL_FAIL	3		1/5 test programs failed; 0/3 subtests failed	2026-10-14	Perl failed	
 HTML::HTML5::Writer	PERL_FAIL	3	1	2/3 subtests failed; 1/1 test programs failed	2026-09-26	Perl failed	
 HTML::HTMLDoc	PERL_FAIL	1		115 subtests failed in test files	2026-10-09	Perl failed	
 HTML::Inspect	PERL_FAIL	5	0	5/5 subtests failed; 7/7 test programs failed	2026-09-26	Perl failed	
 HTML::Macro	PERL_FAIL			TIMEOUT (runtime >300s; last output 8s ago)	2026-10-13	Perl failed	
 HTML::Mason	PERL_FAIL	92	87	5/92 subtests failed; 3/13 test programs failed	2026-09-28	Perl failed	
-HTML::MobileJpCSS	PERL_FAIL	7	1	6/7 subtests failed; 6/7 test programs failed	2026-09-20	Perl failed	
+HTML::MobileJpCSS	PERL_FAIL	7	1	6/7 subtests failed; 6/7 test programs failed	2026-10-15	Perl failed	
 HTML::Pen	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-08	Perl failed	
 HTML::RSSAutodiscovery	PERL_FAIL	24	21	3/24 subtests failed; 3/5 test programs failed	2026-10-09	Perl failed	
 HTML::Seamstress	PERL_FAIL	17	13	4/17 subtests failed; 2/4 test programs failed	2026-09-28	Perl failed	
 HTML::Simple	PERL_FAIL			No parseable output	2026-10-13	Perl failed	
 HTML::TableTiler	PERL_FAIL	2	1	1/2 subtests failed; 5/6 test programs failed	2026-09-27	Perl failed	
-HTML::Tempi	PERL_FAIL				2026-09-24	Perl failed	
-HTML::Tested::ClassDBI	PERL_FAIL	10		8/8 test programs failed; 0/10 subtests failed	2026-09-24	Perl failed	
+HTML::Tempi	PERL_FAIL				2026-10-14	Perl failed	
+HTML::Tested::ClassDBI	PERL_FAIL	10		8/8 test programs failed; 0/10 subtests failed	2026-10-14	Perl failed	
 HTML::Tidy5	PERL_FAIL			28/28 test programs failed; 0/0 subtests failed	2026-09-19	Perl failed	
 HTML::ValidationRules::Legacy	PERL_FAIL	30		1/3 test programs failed; 0/30 subtests failed	2026-10-07	Perl failed	
 HTML::WidgetValidator	PERL_FAIL	2		44/45 test programs failed; 0/2 subtests failed	2026-09-21	Perl failed	
@@ -866,7 +875,7 @@ Huawei::Info::Ipaddr	PERL_FAIL	1		1 subtests failed in test files	2026-10-05	Per
 HubSpot::Client	PERL_FAIL			Make failed	2026-09-23	Perl failed	
 Hubot	PERL_FAIL			TIMEOUT (runtime >300s; last output 19s ago)	2026-10-13	Perl failed	
 IO::All::LWP	PERL_FAIL	10	5	5/10 subtests failed; 5/6 test programs failed	2026-09-29	Perl failed	
-IO::All::Rule	PERL_FAIL	44	20	24/44 subtests failed; 10/14 test programs failed	2026-09-24	Perl failed	
+IO::All::Rule	PERL_FAIL	46	20	26/46 subtests failed; 10/14 test programs failed	2026-10-14	Perl failed	
 IO::Async::Loop::Uring	PERL_FAIL	2		2 subtests failed in test files	2026-10-12	Perl failed	
 IO::AsyncX::Sendfile	PERL_FAIL	23	22	1/23 subtests failed; 1/4 test programs failed	2026-10-03	Perl failed	
 IO::Compress::Lzma	PERL_FAIL	26	20	6/26 subtests failed; 37/45 test programs failed	2026-09-20	Perl failed	
@@ -885,7 +894,6 @@ IPTables::Mangle	PERL_FAIL			TIMEOUT (runtime >300s; last output 6s ago)	2026-10
 IPTables::libiptc	PERL_FAIL	2	0	2/2 subtests failed; 9/9 test programs failed	2026-10-08	Perl failed	
 IRC::Indexer	PERL_FAIL			Unknown test outcome	2026-09-23	Perl failed	
 IS::Conf	PERL_FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-13	Perl failed	
-IS::Init	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 112s)	2026-09-23	Perl failed	
 Image::Base::Gtk2::Gdk::Drawable	PERL_FAIL			7/7 test programs failed; 0/0 subtests failed	2026-09-23	Perl failed	
 Image::Density::TIFF	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-13	Perl failed	
 Image::Flight::Suborbital	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-04	Perl failed	
@@ -966,11 +974,12 @@ LaTeXML::Plugin::LtxMojo	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no outpu
 Language::Eforth	PERL_FAIL			1 subtests failed in test files	2026-10-02	Perl failed	
 Language::MzScheme	PERL_FAIL	6	0	6/6 subtests failed; 6/7 test programs failed	2026-10-08	Perl failed	
 Language::PGForth	PERL_FAIL			Make failed	2026-09-26	Perl failed	
+LastLog::File	PERL_FAIL			No parseable output	2026-10-15	Perl failed	
 Launcher::Cascade	PERL_FAIL	182	171	11/182 subtests failed; 2/15 test programs failed	2026-10-04	Perl failed	
 Lchmod	PERL_FAIL	1	0	1/1 subtests failed; 2/11 test programs failed	2026-09-20	Perl failed	
 Letter	PERL_FAIL				2026-10-14	Perl failed	
 Lexical::Types	PERL_FAIL	35	1	34/35 subtests failed; 16/18 test programs failed	2026-09-22	Perl failed	
-Lingua::AFR::Numbers	PERL_FAIL	5	4	1/5 subtests failed; 1/1 test programs failed	2026-09-20	Perl failed	
+Lingua::AFR::Numbers	PERL_FAIL	5	4	1/5 subtests failed; 1/1 test programs failed	2026-10-14	Perl failed	
 Lingua::BrillTagger	PERL_FAIL			2/2 test programs failed; 0/0 subtests failed	2026-09-23	Perl failed	
 Lingua::CJK::Tokenizer	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-08	Perl failed	
 Lingua::FeatureMatrix	PERL_FAIL				2026-09-19	Perl failed	
@@ -982,7 +991,7 @@ Lingua::Translate	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 7
 Lingua::Wordnet	PERL_FAIL			2/2 test programs failed; 0/0 subtests failed	2026-10-07	Perl failed	
 Lingua::ZH::CEDICT	PERL_FAIL	26	25	1/26 subtests failed; 1/6 test programs failed	2026-09-23	Perl failed	
 Lingua::ZH::MMSEG	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 107s)	2026-09-23	Perl failed	
-Lingua::ZH::PinyinConvert	PERL_FAIL	3		2/3 test programs failed; 0/3 subtests failed	2026-09-19	Perl failed	
+Lingua::ZH::PinyinConvert	PERL_FAIL	3		2/3 test programs failed; 0/3 subtests failed	2026-10-14	Perl failed	
 Lingua::ZH::Summary	PERL_FAIL	7		1/5 test programs failed; 0/7 subtests failed	2026-10-08	Perl failed	
 Lingy::Common	PERL_FAIL			11/12 test programs failed; 0/0 subtests failed	2026-10-13	Perl failed	
 Linux::Event	PERL_FAIL			Configure failed	2026-09-29	Perl failed	
@@ -998,11 +1007,11 @@ Log::Dispatch::Config::TestLog	PERL_FAIL			1/1 test programs failed; 0/0 subtest
 Log::Dispatch::MacGrowl	PERL_FAIL	6		2/3 test programs failed; 0/6 subtests failed	2026-10-05	Perl failed	
 Log::Dynamic	PERL_FAIL	15	14	1/15 subtests failed; 1/10 test programs failed	2026-09-19	Perl failed	
 Log::Syslog::DangaSocket	PERL_FAIL	13	12	1/13 subtests failed; 2/2 test programs failed	2026-09-28	Perl failed	
-Log::Syslog::Fast	PERL_FAIL	329	318	11/329 subtests failed; 13/18 test programs failed	2026-09-22	Perl failed	
+Log::Syslog::Fast	PERL_FAIL	329	321	8/329 subtests failed; 12/18 test programs failed	2026-10-14	Perl failed	
 LogFilter	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-08	Perl failed	
 Lorem	PERL_FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-10-07	Perl failed	
 Lucene	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-12	Perl failed	
-Lyrics::Fetcher::LyricsTranslate	PERL_FAIL	1		1/2 test programs failed; 0/1 subtests failed	2026-09-20	Perl failed	
+Lyrics::Fetcher::LyricsTranslate	PERL_FAIL	1		1/2 test programs failed; 0/1 subtests failed	2026-10-15	Perl failed	
 MARC::BBMARC	PERL_FAIL	355	354	1/355 subtests failed; 1/5 test programs failed	2026-10-08	Perl failed	
 MARC::Errorchecks	PERL_FAIL	355	354	1/355 subtests failed; 1/5 test programs failed	2026-09-15	Perl failed	
 MARC::File::SAX	PERL_FAIL	21	17	4/21 subtests failed; 7/7 test programs failed	2026-10-12	Perl failed	
@@ -1019,14 +1028,13 @@ MPEG::LibMPEG3	PERL_FAIL				2026-09-24	Perl failed
 MPEG::MP3Play	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-07	Perl failed	
 MQSeries	PERL_FAIL			Configure failed	2026-09-28	Perl failed	
 MVC::Neaf	PERL_FAIL			Unknown test outcome	2026-09-27	Perl failed	
-Mac::AEObjDesc	PERL_FAIL			Make failed	2026-10-07	Perl failed	
+Mac::AEObjDesc	PERL_FAIL			Make failed	2026-10-15	Perl failed	
 Mac::Apps::Anarchie	PERL_FAIL			Missing: Mac/AppleEvents.pm	2026-10-09	Perl failed	
 Mac::Apps::Launch	PERL_FAIL	2	1	1/2 subtests failed; 1/2 test programs failed	2026-10-04	Perl failed	
 Mac::Apps::PBar	PERL_FAIL			Missing: Mac/AppleEvents.pm	2026-10-03	Perl failed	
 Mac::Carbon	PERL_FAIL			Configure failed	2026-09-27	Perl failed	
 Mac::Choose	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-04	Perl failed	
 Mac::Glue	PERL_FAIL			Make failed	2026-09-23	Perl failed	
-Mac::iPhoto::Exif	PERL_FAIL	17	6	11/17 subtests failed; 1/2 test programs failed	2026-09-19	Perl failed	
 Mail::DMARC::opendmarc	PERL_FAIL	2	0	2/2 subtests failed; 2/2 test programs failed	2026-10-08	Perl failed	
 Mail::GnuPG	PERL_FAIL	3	1	2/3 subtests failed; 8/10 test programs failed	2026-10-03	Perl failed	
 Mail::QmailRemote	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 108s)	2026-10-09	Perl failed	
@@ -1046,13 +1054,13 @@ MasonX::WebApp	PERL_FAIL			4/4 test programs failed; 0/0 subtests failed	2026-10
 Math::BigInt::GMP	PERL_FAIL	110	89	21/110 subtests failed; 12/13 test programs failed	2026-10-07	Perl failed	
 Math::Calculus::Differentiate	PERL_FAIL			Missing: Math/Calculus/Expression.pm	2026-09-27	Perl failed	
 Math::ExprEval	PERL_FAIL			No parseable output	2026-10-12	Perl failed	
-Math::FakeBfloat16	PERL_FAIL			8/8 test programs failed; 0/0 subtests failed	2026-09-23	Perl failed	
+Math::FakeBfloat16	PERL_FAIL			8/8 test programs failed; 0/0 subtests failed	2026-10-15	Perl failed	
 Math::FakeDD	PERL_FAIL			23/23 test programs failed; 0/0 subtests failed	2026-10-07	Perl failed	
 Math::GMPz	PERL_FAIL	3		53/54 test programs failed; 0/3 subtests failed	2026-10-08	Perl failed	
 Math::GSL::Linalg::SVD	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-08	Perl failed	
 Math::LongDouble	PERL_FAIL	2		23/25 test programs failed; 0/2 subtests failed	2026-10-14	Perl failed	
 Math::PRSG	PERL_FAIL				2026-09-28	Perl failed	
-Math::Pari	PERL_FAIL			Configure failed	2026-10-08	Perl failed	
+Math::Pari	PERL_FAIL			Configure failed	2026-10-15	Perl failed	
 Math::Random	PERL_FAIL			TIMEOUT (runtime >300s; last output 10s ago)	2026-10-14	Perl failed	
 Math::Random::Brownian	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-06	Perl failed	
 Math::Vector::Real::XS	PERL_FAIL	36	31	5/36 subtests failed; 3/4 test programs failed	2026-10-03	Perl failed	
@@ -1065,7 +1073,7 @@ Metabrik::Repository	PERL_FAIL	230	135	95/230 subtests failed; 35/39 test progra
 Metadata::DB::Indexer	PERL_FAIL	1		1/1 test programs failed; 0/1 subtests failed	2026-10-08	Perl failed	
 MetasploitExpress::Parser	PERL_FAIL	18	15	3/18 subtests failed; 2/4 test programs failed	2026-10-09	Perl failed	
 Metaweb	PERL_FAIL	17	16	1/17 subtests failed; 2/6 test programs failed	2026-10-07	Perl failed	
-Method::Cumulative	PERL_FAIL	3	0	3/3 subtests failed; 7/8 test programs failed	2026-09-20	Perl failed	
+Method::Cumulative	PERL_FAIL	3	0	3/3 subtests failed; 7/8 test programs failed	2026-10-14	Perl failed	
 Method::Signatures::PP	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-26	Perl failed	
 Microarray	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-08	Perl failed	
 Microarray::CdtDataset	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-14	Perl failed	
@@ -1073,7 +1081,7 @@ Minima	PERL_FAIL	4	3	1/4 subtests failed; 12/14 test programs failed	2026-09-28	
 Minion::Backend::Storable	PERL_FAIL	4	2	2/4 subtests failed; 6/10 test programs failed	2026-09-24	Perl failed	
 Minion::Backend::mysql	PERL_FAIL	2	1	1/2 subtests failed; 2/3 test programs failed	2026-09-23	Perl failed	
 Mmap::a2	PERL_FAIL			Configure failed	2026-09-24	Perl failed	
-Mobile::Data::ITU	PERL_FAIL			Configure failed	2026-09-20	Perl failed	
+Mobile::Data::ITU	PERL_FAIL			Configure failed	2026-10-15	Perl failed	
 Mobile::Data::SID	PERL_FAIL			Configure failed	2026-10-07	Perl failed	
 Module::AnyEvent::Helper	PERL_FAIL	38	34	4/38 subtests failed; 13/19 test programs failed	2026-09-28	Perl failed	
 Module::CPANTS::ProcessCPAN	PERL_FAIL			Unknown test outcome	2026-09-29	Perl failed	
@@ -1082,7 +1090,7 @@ Module::Reader	PERL_FAIL	119	111	8/119 subtests failed; 1/3 test programs failed
 Module::Setup	PERL_FAIL	466		1/47 test programs failed; 0/466 subtests failed	2026-09-26	Perl failed	
 Module::Text::Template::Build	PERL_FAIL			Configure failed	2026-09-26	Perl failed	
 MogileFS::Client::Async	PERL_FAIL	2	0	2/2 subtests failed; 3/3 test programs failed	2026-10-08	Perl failed	
-MogileFS::Client::Fuse	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-23	Perl failed	
+MogileFS::Client::Fuse	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-14	Perl failed	
 MogileFS::Plugin::FileRefs	PERL_FAIL	1	0	1/1 subtests failed; 2/2 test programs failed	2026-10-04	Perl failed	
 MogileFS::Plugin::MultiHook	PERL_FAIL	3	1	2/3 subtests failed; 3/4 test programs failed	2026-09-27	Perl failed	
 MogileFS::Plugin::RandomWrites	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-05	Perl failed	
@@ -1098,7 +1106,7 @@ MojoX::Log::Any	PERL_FAIL	10	8	2/10 subtests failed; 1/3 test programs failed	20
 MojoX::Plugin::AnyCache	PERL_FAIL	157		6/17 test programs failed; 0/157 subtests failed	2026-09-26	Perl failed	
 MojoX::Plugin::PODRenderer	PERL_FAIL	2	1	1/2 subtests failed; 1/1 test programs failed	2026-09-18	Perl failed	
 MojoX::Renderer::HTP	PERL_FAIL	6	4	2/6 subtests failed; 2/4 test programs failed	2026-09-27	Perl failed	
-MojoX::Routes::AsGraph	PERL_FAIL	1		1/5 test programs failed; 0/1 subtests failed	2026-09-23	Perl failed	
+MojoX::Routes::AsGraph	PERL_FAIL	1		1/5 test programs failed; 0/1 subtests failed	2026-10-14	Perl failed	
 MojoX::Session::Store::MongoDB	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-13	Perl failed	
 Mojolicious	PERL_FAIL			Unknown test outcome	2026-09-20	Perl failed	
 Mojolicious::Plugin::Angular::MaterialDesign	PERL_FAIL	1		1/2 test programs failed; 0/1 subtests failed	2026-09-20	Perl failed	
@@ -1111,7 +1119,9 @@ Mojolicious::Plugin::ForkCart	PERL_FAIL			1/1 test programs failed; 0/0 subtests
 Mojolicious::Plugin::FormTamperingProtector	PERL_FAIL	30		1/3 test programs failed; 0/30 subtests failed	2026-09-10	Perl failed	
 Mojolicious::Plugin::GeoCoder	PERL_FAIL			No parseable output	2026-10-04	Perl failed	
 Mojolicious::Plugin::LinkedContent	PERL_FAIL	7		1/2 test programs failed; 0/7 subtests failed	2026-10-06	Perl failed	
+Mojolicious::Plugin::Mongol	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 63s)	2026-10-15	Perl failed	
 Mojolicious::Plugin::MountPSGI	PERL_FAIL			7/7 test programs failed; 0/0 subtests failed	2026-09-24	Perl failed	
+Mojolicious::Plugin::MultiConfig	PERL_FAIL			No parseable output	2026-10-14	Perl failed	
 Mojolicious::Plugin::Parallol	PERL_FAIL			1/3 test programs failed; 0/0 subtests failed	2026-10-14	Perl failed	
 Mojolicious::Plugin::Prove	PERL_FAIL			8/10 test programs failed; 0/0 subtests failed	2026-09-22	Perl failed	
 Mojolicious::Plugin::REST	PERL_FAIL			2/2 test programs failed; 0/0 subtests failed	2026-09-22	Perl failed	
@@ -1124,7 +1134,7 @@ MongooseX::JSMethod	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for
 MooX::Press	PERL_FAIL	3	2	1/3 subtests failed; 36/43 test programs failed	2026-10-07	Perl failed	
 MooX::Purple	PERL_FAIL			TIMEOUT (runtime >300s; last output 6s ago)	2026-10-14	Perl failed	
 MooX::Types::CLike	PERL_FAIL	11	10	1/11 subtests failed; 2/5 test programs failed	2026-10-04	Perl failed	
-Moose::Meta::Attribute::Custom::Trait::Index	PERL_FAIL	14		1/5 test programs failed; 0/14 subtests failed	2026-10-08	Perl failed	
+Moose::Meta::Attribute::Custom::Trait::Index	PERL_FAIL	14		1/5 test programs failed; 0/14 subtests failed	2026-10-14	Perl failed	
 Moose::Meta::Attribute::Custom::Trait::Prototype	PERL_FAIL			Unknown test outcome	2026-10-13	Perl failed	
 MooseX::APIRole	PERL_FAIL			TIMEOUT (runtime >300s; last output 4s ago)	2026-10-14	Perl failed	
 MooseX::App::Cmd::Command::BashComplete	PERL_FAIL	4	1	3/4 subtests failed; 2/3 test programs failed	2026-10-02	Perl failed	
@@ -1134,7 +1144,7 @@ MooseX::ConstructInstance	PERL_FAIL	19	16	3/19 subtests failed; 3/4 test program
 MooseX::DOM	PERL_FAIL	4		2 subtests failed in test files	2026-10-13	Perl failed	
 MooseX::Documenter	PERL_FAIL			TIMEOUT (runtime >300s; last output 17s ago)	2026-10-07	Perl failed	
 MooseX::ErrorHandling	PERL_FAIL	4	2	2/4 subtests failed; 1/2 test programs failed	2026-10-08	Perl failed	
-MooseX::Graph::Easy::StateMachine	PERL_FAIL			2/2 test programs failed; 0/0 subtests failed	2026-09-20	Perl failed	
+MooseX::Graph::Easy::StateMachine	PERL_FAIL			2/2 test programs failed; 0/0 subtests failed	2026-10-14	Perl failed	
 MooseX::LogDispatch	PERL_FAIL	22		1/5 test programs failed; 0/22 subtests failed	2026-09-27	Perl failed	
 MooseX::Meta::Attribute::Index	PERL_FAIL			Configure failed	2026-09-14	Perl failed	
 MooseX::Role::XMLRPC::Client	PERL_FAIL	24		1/14 test programs failed; 0/24 subtests failed	2026-10-08	Perl failed	
@@ -1167,6 +1177,7 @@ Net::Artera	PERL_FAIL	2		1/1 test programs failed; 0/2 subtests failed	2026-09-2
 Net::BrowserID::Verify	PERL_FAIL	8	6	2/8 subtests failed; 1/6 test programs failed	2026-10-05	Perl failed	
 Net::CIDR::Compare	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-04	Perl failed	
 Net::CUPS	PERL_FAIL	6	4	2/6 subtests failed; 2/2 test programs failed	2026-10-13	Perl failed	
+Net::Cloudflare::DNS::Teal	PERL_FAIL			TIMEOUT (runtime >300s; last output 286s ago)	2026-10-15	Perl failed	
 Net::DNS::SEC	PERL_FAIL	47		3/12 test programs failed; 0/47 subtests failed	2026-09-26	Perl failed	
 Net::DNSServer	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 103s)	2026-10-13	Perl failed	
 Net::DRI	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-03	Perl failed	
@@ -1184,13 +1195,14 @@ Net::IMAP::Server	PERL_FAIL	44	41	3/44 subtests failed; 2/15 test programs faile
 Net::IMP::HTTP	PERL_FAIL	16	15	1/16 subtests failed; 4/5 test programs failed	2026-09-27	Perl failed	
 Net::IPv6Address	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-02	Perl failed	
 Net::Inspect	PERL_FAIL	1	0	1/1 subtests failed; 2/2 test programs failed	2026-10-03	Perl failed	
+Net::LDAP::Makepath	PERL_FAIL			TIMEOUT (runtime >300s; last output 5s ago)	2026-10-15	Perl failed	
 Net::LibIDN2	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-14	Perl failed	
 Net::Linkedin::OAuth2	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 68s)	2026-09-23	Perl failed	
 Net::Lyskom	PERL_FAIL				2026-09-24	Perl failed	
 Net::NATS::Streaming::Client	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-09	Perl failed	
 Net::NSCAng::Client	PERL_FAIL			No parseable output	2026-10-07	Perl failed	
 Net::Ncap	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-20	Perl failed	
-Net::Netflix	PERL_FAIL	3	1	2/3 subtests failed; 2/3 test programs failed	2026-09-21	Perl failed	
+Net::Netflix	PERL_FAIL	3	1	2/3 subtests failed; 2/3 test programs failed	2026-10-15	Perl failed	
 Net::Nmsg	PERL_FAIL	6	0	6/6 subtests failed; 7/7 test programs failed	2026-10-09	Perl failed	
 Net::OBEX	PERL_FAIL	152	146	6/152 subtests failed; 3/7 test programs failed	2026-10-13	Perl failed	
 Net::OpenID::Common	PERL_FAIL	1		7/9 test programs failed; 0/1 subtests failed	2026-10-03	Perl failed	
@@ -1210,11 +1222,11 @@ Net::SMTP::Verify	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 1
 Net::SPAMerLookup	PERL_FAIL	6	4	2/6 subtests failed; 2/4 test programs failed	2026-09-24	Perl failed	
 Net::SPOCP	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 63s)	2026-10-04	Perl failed	
 Net::STF::Bucket	PERL_FAIL	30		1/2 test programs failed; 0/30 subtests failed	2026-10-09	Perl failed	
-Net::Squid::Auth::Plugin::SimpleLDAP	PERL_FAIL	2		2 subtests failed in test files	2026-09-19	Perl failed	
+Net::Squid::Auth::Plugin::SimpleLDAP	PERL_FAIL	2		2 subtests failed in test files	2026-10-15	Perl failed	
 Net::Squid::ReverseProxy	PERL_FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-10-14	Perl failed	
 Net::StackExchange	PERL_FAIL	60		1/6 test programs failed; 0/60 subtests failed	2026-10-04	Perl failed	
 Net::Stripe	PERL_FAIL	5	0	5/5 subtests failed; 2/2 test programs failed	2026-09-19	Perl failed	
-Net::Subnet::Count	PERL_FAIL			Missing: IP/Address.pm	2026-09-19	Perl failed	
+Net::Subnet::Count	PERL_FAIL			Missing: IP/Address.pm	2026-10-15	Perl failed	
 Net::TPP	PERL_FAIL	7	6	1/7 subtests failed; 1/6 test programs failed	2026-09-21	Perl failed	
 Net::Telnet::Brcd	PERL_FAIL	2		1/1 test programs failed; 0/2 subtests failed	2026-09-30	Perl failed	
 Net::Whois::Proxy	PERL_FAIL	3	2	1/3 subtests failed; 1/2 test programs failed	2026-09-26	Perl failed	
@@ -1279,22 +1291,24 @@ OpenThought	PERL_FAIL			Configure failed	2026-09-29	Perl failed
 OpenXML::Properties	PERL_FAIL	17		3/5 test programs failed; 0/17 subtests failed	2026-09-26	Perl failed	
 OpusVL::SimpleCrypto	PERL_FAIL	1		2/3 test programs failed; 0/1 subtests failed	2026-09-22	Perl failed	
 Oracle::CAPI	PERL_FAIL				2026-10-03	Perl failed	
-Oracle::Loader	PERL_FAIL			Configure failed	2026-09-19	Perl failed	
+Oracle::Loader	PERL_FAIL			Configure failed	2026-10-14	Perl failed	
 Oracle::SQL::Builder	PERL_FAIL			Configure failed	2026-09-19	Perl failed	
 Oracle::SQLLoader	PERL_FAIL	10	8	2/10 subtests failed; 8/8 test programs failed	2026-09-24	Perl failed	
 Oracle::Trigger	PERL_FAIL			Configure failed	2026-10-08	Perl failed	
-Oryx	PERL_FAIL			18/18 test programs failed; 0/0 subtests failed	2026-09-20	Perl failed	
-OurNet::Query	PERL_FAIL				2026-10-09	Perl failed	
+Org::FRDCSA::AIE	PERL_FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-15	Perl failed	
+Oryx	PERL_FAIL			18/18 test programs failed; 0/0 subtests failed	2026-10-14	Perl failed	
 OxdPerlModule	PERL_FAIL	1		1 subtests failed in test files	2026-10-03	Perl failed	
 Oz	PERL_FAIL	10		1/3 test programs failed; 0/10 subtests failed	2026-09-20	Perl failed	
 PAGI::Server	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-09-23	Perl failed	
 PANT	PERL_FAIL	77		4/7 test programs failed; 0/77 subtests failed	2026-10-03	Perl failed	
+PAR::Repository::Web	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-14	Perl failed	
 PBS::Attributes	PERL_FAIL	1153	312	841/1153 subtests failed; 4/4 test programs failed	2026-09-30	Perl failed	
 PDF::OCR2	PERL_FAIL	3		4/6 test programs failed; 0/3 subtests failed	2026-09-26	Perl failed	
 PDFLib	PERL_FAIL			Configure failed	2026-09-19	Perl failed	
 PDFLib::PPS	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-19	Perl failed	
 PDFio::FFI	PERL_FAIL	1		1 subtests failed in test files	2026-09-26	Perl failed	
 PDK::Device	PERL_FAIL			Unknown test outcome	2026-10-03	Perl failed	
+PDL::Demos::PGPLOT	PERL_FAIL	4	2	2/4 subtests failed; 15/16 test programs failed	2026-10-14	Perl failed	
 PDL::Drawing::Prima	PERL_FAIL			Configure failed	2026-10-14	Perl failed	
 PDL::Graphics::Prima	PERL_FAIL	1		1 subtests failed in test files	2026-09-19	Perl failed	
 PDL::LinearAlgebra	PERL_FAIL			3/3 test programs failed; 0/0 subtests failed	2026-09-23	Perl failed	
@@ -1321,17 +1335,17 @@ POE::Component::Client::DNS	PERL_FAIL	40	34	6/40 subtests failed; 6/9 test progr
 POE::Component::Client::HTTPDeferred	PERL_FAIL	2		1/4 test programs failed; 0/2 subtests failed	2026-09-28	Perl failed	
 POE::Component::Client::MPD	PERL_FAIL			TIMEOUT (runtime >300s; last output 56s ago)	2026-09-26	Perl failed	
 POE::Component::Client::MogileFS	PERL_FAIL	5	4	1/5 subtests failed; 1/3 test programs failed	2026-10-12	Perl failed	
-POE::Component::Client::NNTP	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-09-20	Perl failed	
+POE::Component::Client::NNTP	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-14	Perl failed	
 POE::Component::Client::SMTP	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 82s)	2026-10-12	Perl failed	
-POE::Component::Client::TCPMulti	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 99s)	2026-09-20	Perl failed	
-POE::Component::Daemon	PERL_FAIL	5	2	3/5 subtests failed; 5/5 test programs failed	2026-09-20	Perl failed	
+POE::Component::Client::TCPMulti	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 96s)	2026-10-14	Perl failed	
+POE::Component::Daemon	PERL_FAIL	5	2	3/5 subtests failed; 5/5 test programs failed	2026-10-14	Perl failed	
 POE::Component::Daemon::Win32	PERL_FAIL				2026-10-12	Perl failed	
 POE::Component::IRC::Object	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-05	Perl failed	
 POE::Component::IRC::Plugin::BaseWrap	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 203s)	2026-10-08	Perl failed	
 POE::Component::IRC::Plugin::ImageMirror	PERL_FAIL	1	0	1/1 subtests failed; 2/2 test programs failed	2026-10-07	Perl failed	
 POE::Component::IRC::Plugin::MegaHAL	PERL_FAIL	2	1	1/2 subtests failed; 2/2 test programs failed	2026-09-29	Perl failed	
 POE::Component::IRC::Plugin::POE::Knee	PERL_FAIL	4	2	2/4 subtests failed; 2/4 test programs failed	2026-10-13	Perl failed	
-POE::Component::IRC::Plugin::QueryDNSBL	PERL_FAIL	7	6	1/7 subtests failed; 1/4 test programs failed	2026-09-23	Perl failed	
+POE::Component::IRC::Plugin::QueryDNSBL	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 78s)	2026-10-14	Perl failed	
 POE::Component::MessageQueue	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-08	Perl failed	
 POE::Component::MetaCPAN::Recent	PERL_FAIL	4	3	1/4 subtests failed; 1/4 test programs failed	2026-09-20	Perl failed	
 POE::Component::Metabase::Relay::Server	PERL_FAIL	2	0	2/2 subtests failed; 2/4 test programs failed	2026-10-06	Perl failed	
@@ -1398,7 +1412,7 @@ PerlBean	PERL_FAIL	13		1/13 test programs failed; 0/13 subtests failed	2026-09-2
 PerlFM	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-13	Perl failed	
 PerlGSL::DiffEq	PERL_FAIL	4	0	4/4 subtests failed; 6/6 test programs failed	2026-09-23	Perl failed	
 PerlIO::via::LAUTER_DEUTSCHER	PERL_FAIL	11	3	8/11 subtests failed; 3/5 test programs failed	2026-10-13	Perl failed	
-PerlIO::via::ToFirePHP	PERL_FAIL	7		1 subtests failed in test files	2026-09-22	Perl failed	
+PerlIO::via::ToFirePHP	PERL_FAIL	7		1 subtests failed in test files	2026-10-15	Perl failed	
 PerlMol	PERL_FAIL	2	1	1/2 subtests failed; 1/2 test programs failed	2026-09-27	Perl failed	
 PerlPoint::Converters	PERL_FAIL	37	36	1/37 subtests failed; 1/22 test programs failed	2026-10-07	Perl failed	
 PerlPoint::Package	PERL_FAIL			34/34 test programs failed; 0/0 subtests failed	2026-09-18	Perl failed	
@@ -1409,7 +1423,7 @@ Pg	PERL_FAIL			Configure failed	2026-09-30	Perl failed
 Pg::Explain	PERL_FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-10-04	Perl failed	
 PgSQL	PERL_FAIL				2026-10-03	Perl failed	
 PheMail::Server	PERL_FAIL				2026-10-07	Perl failed	
-PiFlash	PERL_FAIL	47	43	4/47 subtests failed; 6/9 test programs failed	2026-09-19	Perl failed	
+PiFlash	PERL_FAIL	47	43	4/47 subtests failed; 6/9 test programs failed	2026-10-15	Perl failed	
 Pinwheel	PERL_FAIL	2255	2205	50/2255 subtests failed; 12/29 test programs failed	2026-09-27	Perl failed	
 PkgForge::App::Buildd	PERL_FAIL	43	29	14/43 subtests failed; 5/6 test programs failed	2026-10-13	Perl failed	
 PkgForge::Registry	PERL_FAIL	2	1	1/2 subtests failed; 1/1 test programs failed	2026-10-04	Perl failed	
@@ -1438,10 +1452,10 @@ Pod::ToDocBook	PERL_FAIL	23		7/7 test programs failed; 0/23 subtests failed	2026
 Pogo	PERL_FAIL				2026-09-27	Perl failed	
 Poppler	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-07	Perl failed	
 Portable	PERL_FAIL	20	14	6/20 subtests failed; 4/5 test programs failed	2026-09-29	Perl failed	
-PostgreSQL::PLPerl::Call	PERL_FAIL	2			2026-09-22	Perl failed	
+PostgreSQL::PLPerl::Call	PERL_FAIL	2			2026-10-15	Perl failed	
 PowerBuilder::DataWindow	PERL_FAIL	1		1 subtests failed in test files	2026-10-04	Perl failed	
 PowerTools::Data	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-08	Perl failed	
-Prancer	PERL_FAIL	67		1/7 test programs failed; 0/67 subtests failed	2026-09-24	Perl failed	
+Prancer	PERL_FAIL	67		1/7 test programs failed; 0/67 subtests failed	2026-10-15	Perl failed	
 PrefixCompiler	PERL_FAIL			No parseable output	2026-10-09	Perl failed	
 Prima	PERL_FAIL			Make failed	2026-10-14	Perl failed	
 Prima::IPA	PERL_FAIL			Make failed	2026-10-08	Perl failed	
@@ -1460,9 +1474,9 @@ Pvm	PERL_FAIL				2026-10-02	Perl failed
 PwTree	PERL_FAIL			No parseable output	2026-10-13	Perl failed	
 QBit::Application::Model::DB::clickhouse	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-04	Perl failed	
 QBit::Application::Model::DBManager	PERL_FAIL			3/3 test programs failed; 0/0 subtests failed	2026-09-12	Perl failed	
-QBit::Class	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-24	Perl failed	
+QBit::Class	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-15	Perl failed	
 QDBM_File	PERL_FAIL	7	1	6/7 subtests failed; 6/7 test programs failed	2026-09-30	Perl failed	
-QtGui	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-19	Perl failed	
+QtGui	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-15	Perl failed	
 Qudo::Plugin::Logger	PERL_FAIL	3		1/2 test programs failed; 0/3 subtests failed	2026-10-03	Perl failed	
 Queue	PERL_FAIL			No parseable output	2026-10-03	Perl failed	
 Quizzer::AutoSelect	PERL_FAIL			Make failed	2026-10-05	Perl failed	
@@ -1486,7 +1500,7 @@ RPM4	PERL_FAIL			Configure failed	2026-09-24	Perl failed
 RPM::Make	PERL_FAIL			Configure failed	2026-09-27	Perl failed	
 RPM::Search	PERL_FAIL			No parseable output	2026-10-08	Perl failed	
 RPM::Spec	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-09	Perl failed	
-RPi::ADC::ADS	PERL_FAIL	10	8	2/10 subtests failed; 19/22 test programs failed	2026-09-20	Perl failed	
+RPi::ADC::ADS	PERL_FAIL	10	8	2/10 subtests failed; 19/22 test programs failed	2026-10-15	Perl failed	
 RPi::BMP180	PERL_FAIL	1		1 subtests failed in test files	2026-09-20	Perl failed	
 RPi::DHT11	PERL_FAIL	1		2/3 test programs failed; 0/1 subtests failed	2026-09-29	Perl failed	
 RPi::DigiPot::MCP4XXXX	PERL_FAIL	1		1 subtests failed in test files	2026-10-14	Perl failed	
@@ -1517,7 +1531,7 @@ RayApp	PERL_FAIL			Configure failed	2026-09-28	Perl failed
 Redis::CappedCollection	PERL_FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-10-13	Perl failed	
 Refinements	PERL_FAIL			TIMEOUT (runtime >300s; last output 9s ago)	2026-10-14	Perl failed	
 Religion::Bible::Regex::Lexer	PERL_FAIL	3	1	2/3 subtests failed; 2/3 test programs failed	2026-10-06	Perl failed	
-ReportBox	PERL_FAIL			Missing: Tk/Toplevel.pm	2026-09-20	Perl failed	
+ReportBox	PERL_FAIL			Missing: Tk/Toplevel.pm	2026-10-14	Perl failed	
 ResourcePool::Resource::Net::LDAPapi	PERL_FAIL	1	0	1/1 subtests failed; 3/3 test programs failed	2026-09-29	Perl failed	
 Reuters::SSL	PERL_FAIL				2026-10-04	Perl failed	
 Rex::JobControl	PERL_FAIL			1/3 test programs failed; 0/0 subtests failed	2026-09-20	Perl failed	
@@ -1552,7 +1566,6 @@ SPVM::HTTP::Tiny	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-
 SPVM::Net::SSLeay	PERL_FAIL			3/3 test programs failed; 0/0 subtests failed	2026-09-30	Perl failed	
 SPVM::Regex	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-29	Perl failed	
 SPVM::Resource::Zlib::V1_2_11	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-02	Perl failed	
-SPVM::Time::Local	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-24	Perl failed	
 SQL::Abstract	PERL_FAIL			TIMEOUT (runtime >300s; last output 5s ago)	2026-10-14	Perl failed	
 SQL::Abstract::FromQuery	PERL_FAIL			6/6 test programs failed; 0/0 subtests failed	2026-10-04	Perl failed	
 SQL::Entity	PERL_FAIL	116	104	12/116 subtests failed; 4/10 test programs failed	2026-09-28	Perl failed	
@@ -1597,11 +1610,12 @@ SetDualVar	PERL_FAIL				2026-10-08	Perl failed
 Shardcache::Client::Fast	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-26	Perl failed	
 ShardedKV::Continuum::CHash	PERL_FAIL			3/4 test programs failed; 0/0 subtests failed	2026-09-24	Perl failed	
 ShardedKV::Continuum::Jump	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-19	Perl failed	
+ShardedKV::Storage::ReplicatedRest	PERL_FAIL	2		1/1 test programs failed; 0/2 subtests failed	2026-10-15	Perl failed	
 ShardedKV::Storage::Rest	PERL_FAIL	2		1/1 test programs failed; 0/2 subtests failed	2026-09-22	Perl failed	
 Sidef	PERL_FAIL	1		1 subtests failed in test files	2026-09-30	Perl failed	
 Silicon::Chip	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-06	Perl failed	
 Sim::Agent::Compiler	PERL_FAIL			TIMEOUT (runtime >300s; last output 8s ago)	2026-10-14	Perl failed	
-Simple::SAX::Serializer	PERL_FAIL	38	36	2/38 subtests failed; 1/4 test programs failed	2026-09-23	Perl failed	
+Simple::SAX::Serializer	PERL_FAIL	38	36	2/38 subtests failed; 1/4 test programs failed	2026-10-14	Perl failed	
 SimpleRadarControls	PERL_FAIL			Configure failed	2026-09-30	Perl failed	
 Sisimai::Incognito	PERL_FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-10-13	Perl failed	
 Sledge::Plugin::RedirectReferer	PERL_FAIL	6	4	2/6 subtests failed; 2/4 test programs failed	2026-10-04	Perl failed	
@@ -1611,7 +1625,7 @@ Slinke	PERL_FAIL			Syntax error	2026-09-27	Perl failed
 Slob	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-04	Perl failed	
 Socialtext::Resting	PERL_FAIL	2		1/3 test programs failed; 0/2 subtests failed	2026-09-23	Perl failed	
 Socialtext::Resting::Utils	PERL_FAIL	136	84	52/136 subtests failed; 4/14 test programs failed	2026-09-27	Perl failed	
-Software::Catalog::SW::zotero	PERL_FAIL	1	0	1/1 subtests failed; 1/4 test programs failed	2026-09-20	Perl failed	
+Software::Catalog::SW::zotero	PERL_FAIL	1	0	1/1 subtests failed; 1/4 test programs failed	2026-10-14	Perl failed	
 Software::Packager::Aix	PERL_FAIL	31	29	2/31 subtests failed; 2/3 test programs failed	2026-09-23	Perl failed	
 SolarBeam	PERL_FAIL	82		2/6 test programs failed; 0/82 subtests failed	2026-10-04	Perl failed	
 Sort::ArbBiLex	PERL_FAIL			TIMEOUT (runtime >300s; last output 6s ago)	2026-10-08	Perl failed	
@@ -1624,22 +1638,24 @@ Stencil	PERL_FAIL			9/9 test programs failed; 0/0 subtests failed	2026-09-20	Per
 Strava::GPX	PERL_FAIL	1		1/1 test programs failed; 0/1 subtests failed	2026-09-16	Perl failed	
 Stream	PERL_FAIL				2026-09-30	Perl failed	
 StreamRoot::Manifest	PERL_FAIL	1		1 subtests failed in test files	2026-10-07	Perl failed	
-String::Interpolate::Delayed	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-13	Perl failed	
+String::Interpolate::Delayed	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-14	Perl failed	
 String::Numeric::XS	PERL_FAIL	664	663	1/664 subtests failed; 1/6 test programs failed	2026-09-23	Perl failed	
 String::REPartition	PERL_FAIL	14	12	2/14 subtests failed; 1/4 test programs failed	2026-09-27	Perl failed	
 String::Rexx	PERL_FAIL	441	439	2/441 subtests failed; 4/49 test programs failed	2026-09-26	Perl failed	
 Stump	PERL_FAIL	2	1	1/2 subtests failed; 1/2 test programs failed	2026-09-28	Perl failed	
-Sub::Nary	PERL_FAIL	6	4	2/6 subtests failed; 13/17 test programs failed	2026-09-19	Perl failed	
+Sub::Nary	PERL_FAIL	6	4	2/6 subtests failed; 13/17 test programs failed	2026-10-14	Perl failed	
 Superluminal	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-04	Perl failed	
 Supervisor	PERL_FAIL	26	21	5/26 subtests failed; 1/2 test programs failed	2026-09-23	Perl failed	
 Sword	PERL_FAIL	4	0	4/4 subtests failed; 4/4 test programs failed	2026-09-22	Perl failed	
 Syntax::Feature::Function	PERL_FAIL			1/5 test programs failed; 0/0 subtests failed	2026-09-24	Perl failed	
 Syringe	PERL_FAIL	5	4	1/5 subtests failed; 2/5 test programs failed	2026-10-12	Perl failed	
+Sys::ForkAsync	PERL_FAIL	2		1 subtests failed in test files	2026-10-15	Perl failed	
 Sys::ForkQueue	PERL_FAIL	2		1 subtests failed in test files	2026-09-18	Perl failed	
 Sys::GetRandom::PP	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-09	Perl failed	
 Sys::SyslogMessages	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-27	Perl failed	
 Sys::Virt	PERL_FAIL	47	37	10/47 subtests failed; 10/13 test programs failed	2026-09-26	Perl failed	
 SysTray	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-04	Perl failed	
+System::Explain	PERL_FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-10-15	Perl failed	
 SystemTray::Applet::Gnome	PERL_FAIL	3	1	2/3 subtests failed; 2/3 test programs failed	2026-10-07	Perl failed	
 TAP::Formatter::EARL	PERL_FAIL	4	0	4/4 subtests failed; 3/3 test programs failed	2026-09-24	Perl failed	
 TCOD	PERL_FAIL	1		9/10 test programs failed; 0/1 subtests failed	2026-09-26	Perl failed	
@@ -1674,7 +1690,7 @@ Test::DBUnit	PERL_FAIL	112	110	2/112 subtests failed; 1/4 test programs failed	2
 Test::Flatten	PERL_FAIL	25		7/12 test programs failed; 0/25 subtests failed	2026-09-26	Perl failed	
 Test::Group	PERL_FAIL	263	203	60/263 subtests failed; 15/20 test programs failed	2026-09-23	Perl failed	
 Test::JSON::RPC::Autodoc	PERL_FAIL	15		1 subtests failed in test files	2026-09-24	Perl failed	
-Test::Legal	PERL_FAIL	239	217	22/239 subtests failed; 8/26 test programs failed	2026-09-23	Perl failed	
+Test::Legal	PERL_FAIL			TIMEOUT (runtime >300s; last output 4s ago)	2026-10-15	Perl failed	
 Test::Magpie	PERL_FAIL	11	6	5/11 subtests failed; 8/12 test programs failed	2026-10-02	Perl failed	
 Test::Mimic::Recorder	PERL_FAIL	64	60	4/64 subtests failed; 1/1 test programs failed	2026-09-28	Perl failed	
 Test::Mojo::More	PERL_FAIL	7	6	1/7 subtests failed; 1/5 test programs failed	2026-09-27	Perl failed	
@@ -1691,7 +1707,7 @@ Test::Unix::User	PERL_FAIL	3	1	2/3 subtests failed; 4/5 test programs failed	202
 Test::WWW::Stub	PERL_FAIL	3		1 subtests failed in test files	2026-09-26	Perl failed	
 Test::Zapp	PERL_FAIL			Unknown test outcome	2026-10-08	Perl failed	
 Text::Annotated::Line	PERL_FAIL	8	3	5/8 subtests failed; 2/2 test programs failed	2026-10-03	Perl failed	
-Text::Aspell	PERL_FAIL	1	0	1/1 subtests failed; 2/3 test programs failed	2026-09-24	Perl failed	
+Text::Aspell	PERL_FAIL	1	0	1/1 subtests failed; 2/3 test programs failed	2026-10-14	Perl failed	
 Text::CSV_PP::Simple	PERL_FAIL	18		1/6 test programs failed; 0/18 subtests failed	2026-09-18	Perl failed	
 Text::Chump	PERL_FAIL	69	61	8/69 subtests failed; 4/8 test programs failed	2026-09-19	Perl failed	
 Text::Darts	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-07	Perl failed	
@@ -1705,7 +1721,7 @@ Text::MicroMason	PERL_FAIL	1310	1296	14/1310 subtests failed; 5/39 test programs
 Text::MicroMason::SafeServerPages	PERL_FAIL	1		1/2 test programs failed; 0/1 subtests failed	2026-10-05	Perl failed	
 Text::Nimble	PERL_FAIL	11	6	5/11 subtests failed; 1/6 test programs failed	2026-10-07	Perl failed	
 Text::Prefix	PERL_FAIL			2/2 test programs failed; 0/0 subtests failed	2026-10-03	Perl failed	
-Text::Pretty	PERL_FAIL	3	1	2/3 subtests failed; 2/3 test programs failed	2026-09-20	Perl failed	
+Text::Pretty	PERL_FAIL	3	1	2/3 subtests failed; 2/3 test programs failed	2026-10-14	Perl failed	
 Text::Query::BuildSQL	PERL_FAIL			Configure failed	2026-10-08	Perl failed	
 Text::Restructured	PERL_FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-10-04	Perl failed	
 Text::Tx	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-08	Perl failed	
@@ -1724,7 +1740,7 @@ Tie::JCR	PERL_FAIL	4	2	2/4 subtests failed; 2/3 test programs failed	2026-10-04	
 Tie::MLDBM	PERL_FAIL	9	8	1/9 subtests failed; 2/6 test programs failed	2026-10-06	Perl failed	
 Tie::RDBM::Cached	PERL_FAIL			Make failed	2026-10-08	Perl failed	
 Tie::Redis::Candy	PERL_FAIL			TIMEOUT (runtime >300s; last output 5s ago)	2026-10-14	Perl failed	
-Tie::Watch	PERL_FAIL			Configure failed	2026-10-14	Perl failed	
+Tie::Watch	PERL_FAIL			Configure failed	2026-10-15	Perl failed	
 Time::Object	PERL_FAIL			2/2 test programs failed; 0/0 subtests failed	2026-10-09	Perl failed	
 Time::Simple	PERL_FAIL			TIMEOUT (runtime >300s; last output 4s ago)	2026-10-14	Perl failed	
 Time::dt	PERL_FAIL	2	1	1/2 subtests failed; 1/2 test programs failed	2026-09-29	Perl failed	
@@ -1757,7 +1773,7 @@ Tk::QuickTk	PERL_FAIL	1	0	1/1 subtests failed; 2/2 test programs failed	2026-10-
 Tk::ROSyntaxText	PERL_FAIL	1	0	1/1 subtests failed; 20/23 test programs failed	2026-09-19	Perl failed	
 Tk::StatusBar	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-20	Perl failed	
 Tk::TM::Common	PERL_FAIL			Missing: Tk.pm	2026-10-13	Perl failed	
-Tk::TableMatrix	PERL_FAIL			Configure failed	2026-09-21	Perl failed	
+Tk::TableMatrix	PERL_FAIL			Configure failed	2026-10-15	Perl failed	
 Tk::Text::SuperText	PERL_FAIL	5	1	4/5 subtests failed; 2/3 test programs failed	2026-10-13	Perl failed	
 Tk::TextVi	PERL_FAIL	1	0	1/1 subtests failed; 15/15 test programs failed	2026-09-28	Perl failed	
 Tk::Thumbnail	PERL_FAIL			Missing: Tk.pm	2026-10-04	Perl failed	
@@ -1783,11 +1799,12 @@ UNIVERSAL::DOES	PERL_FAIL	149	145	4/149 subtests failed; 2/3 test programs faile
 UNIVERSAL::ref	PERL_FAIL			1/3 test programs failed; 0/0 subtests failed	2026-09-23	Perl failed	
 UNIVERSAL::which	PERL_FAIL			TIMEOUT (runtime >300s; last output 6s ago)	2026-10-14	Perl failed	
 URI::ParseSearchString::More	PERL_FAIL	291	289	2/291 subtests failed; 1/5 test programs failed	2026-09-18	Perl failed	
+URLprocessor	PERL_FAIL			TIMEOUT (runtime >300s; last output 11s ago)	2026-10-15	Perl failed	
 USB::LibUSB	PERL_FAIL	7	5	2/7 subtests failed; 2/3 test programs failed	2026-10-04	Perl failed	
 UUID	PERL_FAIL			Make failed	2026-10-09	Perl failed	
 Unicode::Map8	PERL_FAIL			4/4 test programs failed; 0/0 subtests failed	2026-09-19	Perl failed	
 Unicode::MapUTF8	PERL_FAIL	3	2	1/3 subtests failed; 2/4 test programs failed	2026-09-23	Perl failed	
-Unicode::Overload	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-14	Perl failed	
+Unicode::Overload	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-14	Perl failed	
 Unisyn::Parse	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-12	Perl failed	
 VANAMBURG::SEMPROG::SimpleGraph	PERL_FAIL	15	11	4/15 subtests failed; 10/11 test programs failed	2026-09-28	Perl failed	
 VBTK	PERL_FAIL			Configure failed	2026-09-28	Perl failed	
@@ -1817,21 +1834,21 @@ WWW::Blog::Metadata::Yadis	PERL_FAIL	1	0	1/1 subtests failed; 2/2 test programs 
 WWW::Bund	PERL_FAIL			TIMEOUT (runtime >300s; last output 29s ago)	2026-10-04	Perl failed	
 WWW::BurrpTV	PERL_FAIL	9		1/3 test programs failed; 0/9 subtests failed	2026-10-05	Perl failed	
 WWW::CheckPad	PERL_FAIL	2	1	1/2 subtests failed; 1/1 test programs failed	2026-10-03	Perl failed	
-WWW::Comix	PERL_FAIL	16	9	7/16 subtests failed; 1/3 test programs failed	2026-09-22	Perl failed	
+WWW::Comix	PERL_FAIL	16	9	7/16 subtests failed; 1/3 test programs failed	2026-10-14	Perl failed	
 WWW::Curl	PERL_FAIL	14	5	9/14 subtests failed; 15/22 test programs failed	2026-10-13	Perl failed	
 WWW::Curl::TraceAscii	PERL_FAIL	1	0	1/1 subtests failed; 4/7 test programs failed	2026-10-09	Perl failed	
 WWW::Curl::UserAgent	PERL_FAIL	4	1	3/4 subtests failed; 4/9 test programs failed	2026-09-19	Perl failed	
 WWW::Deezer	PERL_FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-10-08	Perl failed	
 WWW::Dict::TWMOE::Phrase	PERL_FAIL	13	7	6/13 subtests failed; 3/7 test programs failed	2026-09-27	Perl failed	
 WWW::DreamHost::API	PERL_FAIL			TIMEOUT (runtime >300s; last output 6s ago)	2026-10-13	Perl failed	
-WWW::EZTV	PERL_FAIL	6	4	2/6 subtests failed; 2/4 test programs failed	2026-09-20	Perl failed	
+WWW::EZTV	PERL_FAIL	6	4	2/6 subtests failed; 2/4 test programs failed	2026-10-15	Perl failed	
 WWW::Expand	PERL_FAIL	11	4	7/11 subtests failed; 1/3 test programs failed	2026-10-04	Perl failed	
 WWW::FCM::HTTP::V1	PERL_FAIL	9			2026-10-03	Perl failed	
 WWW::Fimfiction	PERL_FAIL	8	6	2/8 subtests failed; 1/6 test programs failed	2026-09-28	Perl failed	
 WWW::Google::C2DM	PERL_FAIL	5		1/3 test programs failed; 0/5 subtests failed	2026-10-13	Perl failed	
 WWW::Google::Cloud::Messaging	PERL_FAIL	17		2/5 test programs failed; 0/17 subtests failed	2026-09-27	Perl failed	
 WWW::Google::Groups	PERL_FAIL				2026-10-03	Perl failed	
-WWW::Hanako	PERL_FAIL	4		1/3 test programs failed; 0/4 subtests failed	2026-09-23	Perl failed	
+WWW::Hanako	PERL_FAIL	4		1/3 test programs failed; 0/4 subtests failed	2026-10-15	Perl failed	
 WWW::HtmlUnit	PERL_FAIL	1	0	1/1 subtests failed; 4/4 test programs failed	2026-10-07	Perl failed	
 WWW::JSON	PERL_FAIL	88		1/8 test programs failed; 0/88 subtests failed	2026-09-24	Perl failed	
 WWW::JSONAPI	PERL_FAIL	3		1/5 test programs failed; 0/3 subtests failed	2026-10-03	Perl failed	
@@ -1846,8 +1863,8 @@ WWW::Mechanize::Plugin::Snapshot	PERL_FAIL	3		6/9 test programs failed; 0/3 subt
 WWW::Mechanize::Sleepy	PERL_FAIL	30	28	2/30 subtests failed; 1/2 test programs failed	2026-09-27	Perl failed	
 WWW::MetaForge	PERL_FAIL	161	160	1/161 subtests failed; 1/17 test programs failed	2026-10-04	Perl failed	
 WWW::Metaweb	PERL_FAIL	12		2/5 test programs failed; 0/12 subtests failed	2026-10-07	Perl failed	
-WWW::Offliberty	PERL_FAIL	2	1	1/2 subtests failed; 1/3 test programs failed	2026-09-19	Perl failed	
-WWW::Patent::Page	PERL_FAIL	213		3/8 test programs failed; 0/213 subtests failed	2026-09-19	Perl failed	
+WWW::Offliberty	PERL_FAIL	2	1	1/2 subtests failed; 1/3 test programs failed	2026-10-15	Perl failed	
+WWW::Patent::Page	PERL_FAIL	213		3/8 test programs failed; 0/213 subtests failed	2026-10-14	Perl failed	
 WWW::Poll	PERL_FAIL				2026-10-13	Perl failed	
 WWW::Postmark	PERL_FAIL	20	12	8/20 subtests failed; 2/4 test programs failed	2026-10-03	Perl failed	
 WWW::Salesforce::Report	PERL_FAIL	64	62	2/64 subtests failed; 1/7 test programs failed	2026-09-20	Perl failed	
@@ -1860,7 +1877,8 @@ WWW::Search::DrugBank	PERL_FAIL	10	8	2/10 subtests failed; 1/5 test programs fai
 WWW::Search::HGNC	PERL_FAIL	17	15	2/17 subtests failed; 1/5 test programs failed	2026-09-26	Perl failed	
 WWW::Search::NCBI::PubMed	PERL_FAIL			Make failed	2026-10-07	Perl failed	
 WWW::Search::Scrape	PERL_FAIL	21	20	1/21 subtests failed; 3/6 test programs failed	2026-10-03	Perl failed	
-WWW::Search::Yahoo	PERL_FAIL	11	10	1/11 subtests failed; 3/5 test programs failed	2026-09-23	Perl failed	
+WWW::Search::Yahoo	PERL_FAIL	11	10	1/11 subtests failed; 3/5 test programs failed	2026-10-15	Perl failed	
+WWW::Search::Yahoo::DE	PERL_FAIL	11	10	1/11 subtests failed; 1/3 test programs failed	2026-10-15	Perl failed	
 WWW::Search::Yahoo::Deutschland	PERL_FAIL	11	10	1/11 subtests failed; 1/3 test programs failed	2026-09-24	Perl failed	
 WWW::Shopify::Liquid	PERL_FAIL			Unknown test outcome	2026-09-30	Perl failed	
 WWW::Shopify::Tools::Themer	PERL_FAIL			Unknown test outcome	2026-09-29	Perl failed	
@@ -1931,7 +1949,7 @@ Win32::CommandLine	PERL_FAIL	4	2	2/4 subtests failed; 9/23 test programs failed	
 Win32::Console::ANSI	PERL_FAIL	2	1	1/2 subtests failed; 9/11 test programs failed	2026-10-06	Perl failed	
 Win32::Detached	PERL_FAIL	1	0	1/1 subtests failed; 1/4 test programs failed	2026-09-27	Perl failed	
 Win32::EnumPrinters	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-26	Perl failed	
-Win32::EnvProcess	PERL_FAIL			Configure failed	2026-09-18	Perl failed	
+Win32::EnvProcess	PERL_FAIL			Configure failed	2026-10-15	Perl failed	
 Win32::ErrorMode	PERL_FAIL	1		1/2 test programs failed; 0/1 subtests failed	2026-10-09	Perl failed	
 Win32::EventLog::Carp	PERL_FAIL	5	3	2/5 subtests failed; 4/5 test programs failed	2026-10-12	Perl failed	
 Win32::Excel::Refresh	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-02	Perl failed	
@@ -1952,10 +1970,10 @@ Win32::MBCS	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-
 Win32::MCI::CD	PERL_FAIL				2026-10-09	Perl failed	
 Win32::MSI::DB	PERL_FAIL				2026-10-04	Perl failed	
 Win32::Mechanize::NotepadPlusPlus	PERL_FAIL	9	4	5/9 subtests failed; 28/28 test programs failed	2026-10-06	Perl failed	
-Win32::MinXML	PERL_FAIL	1	0	1/1 subtests failed; 1/2 test programs failed	2026-10-14	Perl failed	
+Win32::MinXML	PERL_FAIL	1	0	1/1 subtests failed; 1/2 test programs failed	2026-10-15	Perl failed	
 Win32::MinXSLT	PERL_FAIL	1	0	1/1 subtests failed; 1/2 test programs failed	2026-09-10	Perl failed	
 Win32::MultiMedia::Joystick	PERL_FAIL			No parseable output	2026-10-02	Perl failed	
-Win32::NameTranslate	PERL_FAIL	1	0	1/1 subtests failed; 1/3 test programs failed	2026-09-18	Perl failed	
+Win32::NameTranslate	PERL_FAIL	1	0	1/1 subtests failed; 1/3 test programs failed	2026-10-14	Perl failed	
 Win32::NetPacket	PERL_FAIL	1	0	1/1 subtests failed; 5/5 test programs failed	2026-10-08	Perl failed	
 Win32::OLE	PERL_FAIL			7/7 test programs failed; 0/0 subtests failed	2026-09-27	Perl failed	
 Win32::Packer	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-23	Perl failed	
@@ -1968,7 +1986,7 @@ Win32::RunAsAdmin	PERL_FAIL	1		1 subtests failed in test files	2026-09-20	Perl f
 Win32::SAPI4	PERL_FAIL	2	1	1/2 subtests failed; 3/4 test programs failed	2026-10-13	Perl failed	
 Win32::SDDL	PERL_FAIL	5	3	2/5 subtests failed; 4/10 test programs failed	2026-10-03	Perl failed	
 Win32::SearchPath	PERL_FAIL			Configure failed	2026-10-04	Perl failed	
-Win32::SerialPort	PERL_FAIL			7/7 test programs failed; 0/0 subtests failed	2026-09-23	Perl failed	
+Win32::SerialPort	PERL_FAIL			7/7 test programs failed; 0/0 subtests failed	2026-10-14	Perl failed	
 Win32::Shortkeys::Kbh	PERL_FAIL	3	0	3/3 subtests failed; 1/1 test programs failed	2026-10-04	Perl failed	
 Win32::Sound	PERL_FAIL	1		1 subtests failed in test files	2026-09-20	Perl failed	
 Win32::SoundRec	PERL_FAIL			Unknown test outcome	2026-09-27	Perl failed	
@@ -1982,7 +2000,7 @@ Win32::WindowsMedia	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	
 Win32API::File::Time	PERL_FAIL	9	8	1/9 subtests failed; 1/2 test programs failed	2026-09-26	Perl failed	
 Win32API::Registry	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-13	Perl failed	
 Wing	PERL_FAIL			Make failed	2026-10-04	Perl failed	
-WiringPi::API	PERL_FAIL	1		29/34 test programs failed; 0/1 subtests failed	2026-09-24	Perl failed	
+WiringPi::API	PERL_FAIL	1		29/34 test programs failed; 0/1 subtests failed	2026-10-14	Perl failed	
 Wishlist	PERL_FAIL				2026-10-14	Perl failed	
 Wizard	PERL_FAIL			Configure failed	2026-09-28	Perl failed	
 WoW::Wiki	PERL_FAIL	2	1	1/2 subtests failed; 1/1 test programs failed	2026-10-06	Perl failed	
@@ -1995,7 +2013,7 @@ WordNet::SenseRelate::TargetWord	PERL_FAIL	40		3/4 test programs failed; 0/40 su
 WordNet::Similarity	PERL_FAIL	136	130	6/136 subtests failed; 21/22 test programs failed	2026-09-18	Perl failed	
 WordNet::get_wn_info	PERL_FAIL			Make failed	2026-10-12	Perl failed	
 Wrangler	PERL_FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-21	Perl failed	
-Wx	PERL_FAIL			Configure failed	2026-10-14	Perl failed	
+Wx	PERL_FAIL			Configure failed	2026-10-15	Perl failed	
 Wx::EnhMetaFile	PERL_FAIL			2/2 test programs failed; 0/0 subtests failed	2026-10-07	Perl failed	
 Wx::Perl::DataWalker	PERL_FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-03	Perl failed	
 Wx::Perl::DirTree	PERL_FAIL	5	4	1/5 subtests failed; 1/3 test programs failed	2026-09-24	Perl failed	
@@ -2024,7 +2042,7 @@ XML::CompileX::Transport::SOAPXMPP	PERL_FAIL			1/1 test programs failed; 0/0 sub
 XML::DOM::Namespace	PERL_FAIL	192	182	10/192 subtests failed; 2/35 test programs failed	2026-10-08	Perl failed	
 XML::DOM::XPath	PERL_FAIL	193	183	10/193 subtests failed; 1/35 test programs failed	2026-09-14	Perl failed	
 XML::Declare	PERL_FAIL	8		2/6 test programs failed; 0/8 subtests failed	2026-10-08	Perl failed	
-XML::EP	PERL_FAIL	30	28	2/30 subtests failed; 1/4 test programs failed	2026-09-19	Perl failed	
+XML::EP	PERL_FAIL	30	28	2/30 subtests failed; 1/4 test programs failed	2026-10-15	Perl failed	
 XML::ExtOn	PERL_FAIL	54	53	1/54 subtests failed; 7/11 test programs failed	2026-10-09	Perl failed	
 XML::Feed	PERL_FAIL	131	116	15/131 subtests failed; 10/13 test programs failed	2026-09-29	Perl failed	
 XML::Filter::Dispatcher	PERL_FAIL			Configure failed	2026-10-07	Perl failed	
@@ -2076,8 +2094,9 @@ Yancy	PERL_FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-09-23	Perl fa
 Yancy::Backend::Static	PERL_FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-07	Perl failed	
 Yote	PERL_FAIL	1		1/1 test programs failed; 0/1 subtests failed	2026-10-07	Perl failed	
 Yote::Locker	PERL_FAIL			Unknown test outcome	2026-10-06	Perl failed	
+ZConf::BGSet	PERL_FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-15	Perl failed	
 ZConf::Runner	PERL_FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-14	Perl failed	
-ZMQ::CZMQ	PERL_FAIL	6	2	4/6 subtests failed; 4/4 test programs failed	2026-09-23	Perl failed	
+ZMQ::CZMQ	PERL_FAIL	6	2	4/6 subtests failed; 4/4 test programs failed	2026-10-14	Perl failed	
 ZMQ::Declare	PERL_FAIL	57	56	1/57 subtests failed; 3/6 test programs failed	2026-10-12	Perl failed	
 ZMQ::FFI	PERL_FAIL			Unknown test outcome	2026-09-29	Perl failed	
 ZMQ::LibCZMQ1	PERL_FAIL	9	2	7/9 subtests failed; 5/5 test programs failed	2026-09-26	Perl failed	
