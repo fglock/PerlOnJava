@@ -45,4 +45,43 @@ class RuntimeCodeScopeExitReachabilityTest {
             }
         }
     }
+
+    @Test
+    void deferredReleaseRetainsCapturesForCodeStoredInReachableHashWithoutWeakRefs() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeScalar captured = new RuntimeScalar("controller");
+            captured.retainClosureCapture();
+            RuntimeCode callback = new RuntimeCode(null, List.of());
+            callback.refCount = 1;
+            callback.capturedScalars = new RuntimeScalar[] { captured };
+
+            RuntimeHash callbacks = new RuntimeHash();
+            callbacks.elements.put("callback", new RuntimeScalar(callback));
+            String globalName = "RuntimeCodeScopeExitReachabilityTest::deferredCallbacks";
+            GlobalVariable.globalHashes.put(globalName, callbacks);
+            boolean previousActive = MortalList.isActive();
+            MortalList.setActive(true);
+
+            try {
+                MortalList.deferDecrement(callback);
+                MortalList.flush();
+
+                assertNotNull(callback.capturedScalars,
+                        "a rooted callback must keep its lexical captures when a temporary owner is released");
+                assertEquals(1, captured.captureCount);
+
+                GlobalVariable.globalHashes.remove(globalName);
+                MortalList.deferDecrement(callback);
+                MortalList.flush();
+
+                assertNull(callback.capturedScalars,
+                        "removing the last Perl root must release callback captures");
+                assertEquals(0, captured.captureCount);
+            } finally {
+                GlobalVariable.globalHashes.remove(globalName);
+                MortalList.setActive(previousActive);
+            }
+        }
+    }
 }

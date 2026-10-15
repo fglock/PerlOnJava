@@ -1722,6 +1722,14 @@ public class MortalList {
                 // have a legacy bridge count and retain the old compatibility
                 // sentinel behavior.
                 if (base.nativeCaptureOwnerCount() == 0) base.refCount = 1;
+            } else if (base instanceof RuntimeCode code
+                    && ReachabilityWalker.isReachableFromRoots(code)) {
+                // A callback stored in a long-lived Perl container can have
+                // its selective CV count consumed by a temporary invocation
+                // alias. The container is still a strong owner even when no
+                // weak references point at the CODE object. Preserve the CV
+                // and its lexical captures until the last Perl root is gone.
+                base.refCount = 1;
             } else if (base.localBindingExists) {
                 if (base instanceof RuntimeScalar scalar
                         && scalar.referencedByScalarReference

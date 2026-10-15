@@ -164,6 +164,15 @@ public class PerlScriptExecutionTest extends PerlRuntimeTestBase {
                 if (shardTotal > 1 && shardIndex >= 0 && shardIndex < shardTotal) {
                     System.out.println("Running shard " + (shardIndex + 1) + " of " + shardTotal);
 
+                    final List<String> ISOLATED_TESTS = List.of(
+                        "unit/mojolicious_websocket_callback_lifetime.t"
+                    );
+                    java.util.function.Predicate<String> isIsolated = s ->
+                            ISOLATED_TESTS.contains(s.replace('\\', '/'));
+                    if (shardTotal == 6 && shardIndex == 5) {
+                        return sortedScripts.stream().filter(isIsolated);
+                    }
+
                     // Tests known to be much slower than the rest. Use forward
                     // slashes; we match against both '/' and '\' separators.
                     final List<String> HEAVY_TESTS = List.of(
@@ -177,7 +186,6 @@ public class PerlScriptExecutionTest extends PerlRuntimeTestBase {
                         "unit/html_content_extractor_jsoup.t",
                         "unit/json_xs_compat.t",
                         "unit/jvm_eval_nested_compound_assignment.t",
-                        "unit/mojolicious_websocket_callback_lifetime.t",
                         "unit/unpack_short_string.t"
                     );
                     java.util.function.Predicate<String> isHeavy = s -> {
@@ -194,6 +202,7 @@ public class PerlScriptExecutionTest extends PerlRuntimeTestBase {
                     // Light shards: round-robin over the remaining (shardTotal - 1) shards.
                     List<String> lightScripts = sortedScripts.stream()
                             .filter(isHeavy.negate())
+                            .filter(isIsolated.negate())
                             .collect(Collectors.toList());
                     final int lightShards = shardTotal - 1;
                     final int finalShardIndex = shardIndex;
