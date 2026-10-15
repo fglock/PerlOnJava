@@ -1,6 +1,8 @@
 package org.perlonjava.frontend.analysis;
 
 import org.perlonjava.frontend.astnode.*;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Visitor that counts the maximum number of temporary local variables
@@ -17,7 +19,12 @@ import org.perlonjava.frontend.astnode.*;
  * absorbed by that buffer.
  */
 public class TempLocalCountVisitor implements Visitor {
+    /** Extra temporary locals reserved for emitter infrastructure. */
+    public static final int LOCAL_SLOT_SAFETY_MARGIN = 32;
+
     private int tempCount = 0;
+    private int maxLexicalPadSlot = -1;
+    private final List<OperatorNode> lexicalDeclarations = new ArrayList<>();
 
     /**
      * Get the estimated number of temporary locals needed.
@@ -28,11 +35,23 @@ public class TempLocalCountVisitor implements Visitor {
         return tempCount;
     }
 
+    /** Highest parser-assigned lexical pad slot referenced by this body. */
+    public int getMaxLexicalPadSlot() {
+        return maxLexicalPadSlot;
+    }
+
+    /** Lexical declaration nodes in AST source traversal order. */
+    public List<OperatorNode> getLexicalDeclarations() {
+        return List.copyOf(lexicalDeclarations);
+    }
+
     /**
      * Reset the counter for reuse.
      */
     public void reset() {
         tempCount = 0;
+        maxLexicalPadSlot = -1;
+        lexicalDeclarations.clear();
     }
 
     private void countTemp() {
@@ -128,6 +147,11 @@ public class TempLocalCountVisitor implements Visitor {
 
     @Override
     public void visit(OperatorNode node) {
+        if (node.annotations != null
+                && node.annotations.get("lexicalPadSlot") instanceof Integer slot) {
+            maxLexicalPadSlot = Math.max(maxLexicalPadSlot, slot);
+            lexicalDeclarations.add(node);
+        }
         switch (node.operator) {
             // local() allocates a temp for dynamic variable tracking.
             case "local" -> countTemp();

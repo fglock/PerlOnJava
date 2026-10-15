@@ -10,6 +10,7 @@ import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.JavaClassInfo;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
+import org.perlonjava.frontend.analysis.TempLocalCountVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
@@ -2330,6 +2331,7 @@ public class SubroutineParser {
         // so those entries only appear in filteredSnapshot as "padding" for the
         // skipVariables slots. We must always include them.
         Map<Integer, SymbolTable.SymbolEntry> visibleVars = parser.ctx.symbolTable.getAllVisibleVariables();
+        Map<Integer, Integer> sourceLexicalSlotMap = new HashMap<>();
         int addedCount = 0;
         for (SymbolTable.SymbolEntry entry : visibleVars.values()) {
             // Skip field declarations when creating snapshot for bytecode generation
@@ -2355,12 +2357,14 @@ public class SubroutineParser {
             // entry as a lexical constructor field, not as an ordinary `our`
             // lookup: the alias is removed after eval compilation and a later
             // global lookup would create an unrelated scalar cell.
+            int filteredIndex;
             if (isEvalSeedLexical(entry)) {
-                filteredSnapshot.addVariable(entry.name(), "my", null, entry.ast());
+                filteredIndex = filteredSnapshot.addVariable(entry.name(), "my", null, entry.ast());
             } else {
-                filteredSnapshot.addVariable(
+                filteredIndex = filteredSnapshot.addVariable(
                         entry.name(), entry.decl(), entry.perlPackage(), entry.ast());
             }
+            sourceLexicalSlotMap.put(entry.index(), filteredIndex);
             addedCount++;
         }
 
@@ -2441,6 +2445,14 @@ public class SubroutineParser {
                 parser.ctx.compilerOptions,
                 new RuntimeArray()
         );
+        TempLocalCountVisitor lexicalCount = new TempLocalCountVisitor();
+        compilationBlock.accept(lexicalCount);
+        // Preserve the normal lazy named-sub layout for small pads. Large pads
+        // exceed the emitter's local-slot safety margin and need explicit mapping.
+        if (lexicalCount.getLexicalDeclarations().size()
+                > TempLocalCountVisitor.LOCAL_SLOT_SAFETY_MARGIN) {
+            newCtx.sourceLexicalSlotMap = sourceLexicalSlotMap;
+        }
 
         // Hybrid lazy/eager compilation approach:
         // - Keep lazy compilation for normal code (preserves test compatibility)

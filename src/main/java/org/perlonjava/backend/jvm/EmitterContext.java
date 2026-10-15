@@ -86,6 +86,9 @@ public class EmitterContext {
      */
     public String[] capturedEnv;
 
+    /** Maps parser pad indices to this generated method's JVM local indices. */
+    public Map<Integer, Integer> sourceLexicalSlotMap;
+
     /**
      * Flag indicating if this is an evalbytes context - prevents Unicode source detection
      */
@@ -169,6 +172,7 @@ public class EmitterContext {
                 this.mv, this.cw, contextType, this.isBoxed, this.errorUtil, this.compilerOptions,
                 this.unitcheckBlocks);
         newContext.isLvalueSubroutine = this.isLvalueSubroutine;
+        newContext.sourceLexicalSlotMap = this.sourceLexicalSlotMap;
         contextCache.put(contextType, newContext);
         return newContext;
     }
