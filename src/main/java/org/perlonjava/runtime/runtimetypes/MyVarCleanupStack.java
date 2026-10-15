@@ -173,10 +173,6 @@ public class MyVarCleanupStack {
                     base.localBindingExists = false;
                 }
                 noteVarLeftScope(var);
-                if (var instanceof RuntimeScalar scalar) {
-                    MortalList.processScopeExitCaptureCandidatesAfterLexicalExit(
-                            java.util.List.of(scalar));
-                }
                 return;
             }
         }
@@ -272,16 +268,13 @@ public class MyVarCleanupStack {
      */
     public static void popMark(int mark) {
         ArrayList<Object> stack = stack();
-        ArrayList<RuntimeScalar> exitedLexicals = new ArrayList<>();
         while (stack.size() > mark) {
             Object var = stack.removeLast();
             if (var != null) {
                 decLiveCount(var);
                 noteVarLeftScope(var);
-                if (var instanceof RuntimeScalar scalar) exitedLexicals.add(scalar);
             }
         }
-        MortalList.processScopeExitCaptureCandidatesAfterLexicalExit(exitedLexicals);
     }
 
     /**

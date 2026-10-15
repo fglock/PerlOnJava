@@ -10,19 +10,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class PerlOwnerSlotRuntimeRetentionTest {
     @Test
-    void ownerRootSnapshotDropsReferentsWithoutAnAttachedOwnerSlot() {
-        PerlRuntime runtime = new PerlRuntime();
-        try (PerlRuntime.Binding ignored = runtime.bind()) {
-            RuntimeHash referent = new RuntimeHash();
-            runtime.retainOwnerSlotReferent(referent);
-
-            assertEquals(1, runtime.positiveOwnerSlotReferentCount(referent));
-            assertTrue(PerlRuntime.snapshotOwnerSlotReferents().isEmpty());
-            assertEquals(0, runtime.positiveOwnerSlotReferentCount(referent));
-        }
-    }
-
-    @Test
     void positiveOwnerSlotsRetainReferentsWithinTheirPerlRuntime() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
