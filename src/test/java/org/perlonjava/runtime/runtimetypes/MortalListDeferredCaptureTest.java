@@ -4,10 +4,28 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
 class MortalListDeferredCaptureTest {
+    @Test
+    void forwardedRuntimeListUsesOneTemporaryRootUntilItsSingleRelease() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeList result = new RuntimeList();
+
+            MortalList.pushTemporaryRoot(result);
+            MortalList.pushTemporaryRoot(result);
+            assertEquals(1, MortalList.snapshotTemporaryRoots().size(),
+                    "forwarding the same result must not duplicate its temporary root");
+
+            MortalList.popTemporaryRoot(result);
+            assertFalse(MortalList.hasTemporaryRoots(),
+                    "one release clears the single forwarded result root");
+        }
+    }
+
     @Test
     void unreachableHttpBodyCaptureReleasesAtItsScopeBoundaryWithoutWeakRefs() {
         PerlRuntime runtime = new PerlRuntime();
