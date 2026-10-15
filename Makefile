@@ -26,7 +26,9 @@ THREAD_TOOLING_TESTS := \
 	dev/tools/tests/perl_test_runner_win32_exclusion.t \
 	dev/tools/tests/perl_test_runner_weighted_integration.t
 
-CPAN_TESTER_TESTS := dev/tools/tests/cpan_random_tester_parser.t
+CPAN_TESTER_TESTS := \
+	dev/tools/tests/cpan_random_tester_parser.t \
+	dev/tools/tests/cpan_random_tester_timeout.t
 
 THREAD_DIST_DIRS := perl5/dist/threads/t perl5/dist/threads-shared/t perl5/dist/Thread-Queue/t perl5/dist/Thread-Semaphore/t
 THREAD_PLATFORM_TESTS := \
