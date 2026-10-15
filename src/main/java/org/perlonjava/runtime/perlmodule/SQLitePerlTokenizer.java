@@ -135,6 +135,11 @@ final class SQLitePerlTokenizer implements AutoCloseable {
         if (!(connection instanceof org.sqlite.SQLiteConnection sqliteConnection)) {
             throw new SQLException("Perl FTS tokenizers require the Xerial SQLite JDBC connection");
         }
+        // JDBC has no method for opting into SQLite's legacy FTS3/4 tokenizer
+        // API. Load a tiny native extension to enable that connection-local API
+        // through SQLite's extension table; this avoids linking Java to
+        // Xerial's private SQLite symbols. Java registers the Perl callbacks
+        // separately through FFM and the fts3_tokenizer() SQL function.
         sqliteConnection.getDatabase().enable_load_extension(true);
         try {
             Path path = helperExtensionPath();
