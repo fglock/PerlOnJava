@@ -96,7 +96,6 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise AND operation.
      */
     public static RuntimeScalar bitwiseAnd(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        // Fast path: both INTEGER - skip all checks (defined, looksLikeNumber, tied)
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (isNumericBitwiseOperand(t1) && isNumericBitwiseOperand(t2)) {
@@ -107,7 +106,11 @@ public class BitwiseOperators {
             return unsignedResult(unsignedValue(runtimeScalar).and(unsignedValue(arg2)))
                     .propagateTaint(runtimeScalar, arg2);
         }
+        return bitwiseAndSlow(runtimeScalar, arg2, t1, t2);
+    }
 
+    private static RuntimeScalar bitwiseAndSlow(RuntimeScalar runtimeScalar, RuntimeScalar arg2,
+                                                int t1, int t2) {
         // Check for overloaded '&' operator on blessed objects
         int blessId = blessedId(runtimeScalar);
         int blessId2 = blessedId(arg2);
@@ -172,16 +175,6 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise OR operation.
      */
     public static RuntimeScalar bitwiseOr(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        // A real typeglob cannot be coerced into the numeric lvalue used by
-        // `*FH |= 0`.  Proxy/PVLV values deliberately remain eligible for the
-        // ordinary string-bitwise path, as they are mutable scalar lvalues.
-        if (runtimeScalar instanceof RuntimeGlob
-                && (arg2.type == RuntimeScalarType.INTEGER
-                    || arg2.type == RuntimeScalarType.DOUBLE
-                    || arg2.type == RuntimeScalarType.DUALVAR)) {
-            throw new PerlCompilerException("Can't coerce GLOB to integer in bitwise operation");
-        }
-        // Fast path: both INTEGER - skip all checks (looksLikeNumber, tied)
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
@@ -191,6 +184,19 @@ public class BitwiseOperators {
             }
             return unsignedResult(unsignedValue(runtimeScalar).or(unsignedValue(arg2)))
                     .propagateTaint(runtimeScalar, arg2);
+        }
+        return bitwiseOrSlow(runtimeScalar, arg2, t1, t2);
+    }
+
+    private static RuntimeScalar bitwiseOrSlow(RuntimeScalar runtimeScalar, RuntimeScalar arg2,
+                                               int t1, int t2) {
+        // A real typeglob cannot be coerced into the numeric lvalue used by
+        // `*FH |= 0`. Proxy/PVLV values remain eligible for string bitwise.
+        if (runtimeScalar instanceof RuntimeGlob
+                && (arg2.type == RuntimeScalarType.INTEGER
+                    || arg2.type == RuntimeScalarType.DOUBLE
+                    || arg2.type == RuntimeScalarType.DUALVAR)) {
+            throw new PerlCompilerException("Can't coerce GLOB to integer in bitwise operation");
         }
 
         // Check for overloaded '|' operator on blessed objects
@@ -265,7 +271,6 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise XOR operation.
      */
     public static RuntimeScalar bitwiseXor(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        // Fast path: both INTEGER - skip all checks (looksLikeNumber, tied)
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
@@ -276,7 +281,11 @@ public class BitwiseOperators {
             return unsignedResult(unsignedValue(runtimeScalar).xor(unsignedValue(arg2)))
                     .propagateTaint(runtimeScalar, arg2);
         }
+        return bitwiseXorSlow(runtimeScalar, arg2, t1, t2);
+    }
 
+    private static RuntimeScalar bitwiseXorSlow(RuntimeScalar runtimeScalar, RuntimeScalar arg2,
+                                                int t1, int t2) {
         // Check for overloaded '^' operator on blessed objects
         int blessId = blessedId(runtimeScalar);
         int blessId2 = blessedId(arg2);
