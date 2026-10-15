@@ -7,6 +7,7 @@ priorities and future plans.
 ## Work in progress
 
 - Cover FormState session restoration across requests and HTTP response conversion from callback and streaming PSGI responses; refresh HTTP::Message and LWP compatibility status (#1650, #1651, #1652).
+- Preserve the awaited Future value when its source scalar or aggregate slot changes during suspension, covering PAGI::Server request-body receives (#1818).
 - Preserve `exit()` raised while compiling dynamic `eval` strings, including `Test::More`'s `skip_all` behavior; preserve lexical hints in prototype callback blocks so Test2 suppresses configured load diagnostics; and skip only Pod::HtmlEasy's two `IPC::Run` stdio assertions that require unsupported `fork()` (#1471, #1589, #1735).
 - Recognize `IO` as a parent of unblessed filehandle IO references, support `PerlIO :pop` on built-in layers, and cover negotiated TLS version metadata on a local TLS connection (#1782, #1607, #1435).
 - Preserve whole-glob aliases across nested localization, support dynamic glob-reference localization, and accept Perl's `@$` glob dereference under strict vars (#1630, #1305, #1302).
