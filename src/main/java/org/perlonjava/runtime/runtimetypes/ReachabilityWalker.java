@@ -1492,6 +1492,21 @@ public class ReachabilityWalker {
             if (stats != null) stats.nodesVisited++;
             if (cur instanceof RuntimeStash) continue;
             if (cur instanceof RuntimeHash hash) {
+                if (Boolean.getBoolean("PJ_CODE_ROOT_TRACE")
+                        && (hash.elements.containsKey("reactor")
+                                || hash.elements.containsKey("timers")
+                                || hash.elements.containsKey("cb"))) {
+                    System.err.println("[MOJO-TIMER-HASH] identity=" + System.identityHashCode(hash)
+                            + " keys=" + hash.elements.keySet());
+                    for (Map.Entry<String, RuntimeScalar> entry : hash.elements.entrySet()) {
+                        Object value = entry.getValue() == null ? null : entry.getValue().value;
+                        System.err.println("[MOJO-TIMER-EDGE] key=" + entry.getKey()
+                                + " type=" + (entry.getValue() == null ? -1 : entry.getValue().type)
+                                + " valueClass=" + (value == null ? "null" : value.getClass().getName())
+                                + " valueId=" + (value instanceof RuntimeBase base
+                                        ? System.identityHashCode(base) : -1));
+                    }
+                }
                 if (hash.elements instanceof TieHash tieHash) {
                     if (!budget.visitEdge()) break walk;
                     if (stats != null) stats.edgesInspected++;
