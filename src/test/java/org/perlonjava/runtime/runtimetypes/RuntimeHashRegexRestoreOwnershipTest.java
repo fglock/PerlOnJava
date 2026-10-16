@@ -21,9 +21,9 @@ class RuntimeHashRegexRestoreOwnershipTest {
 
             hash.restoreRegexMutationState(snapshot);
 
-            assertEquals(1, stableReferent.hashSlotOwnerCount,
+            assertEquals(1, stableReferent.hashSlotOwnerCount(),
                     "the restored entry has exactly one hash slot owner");
-            assertEquals(0, temporaryReferent.hashSlotOwnerCount,
+            assertEquals(0, temporaryReferent.hashSlotOwnerCount(),
                     "the discarded entry no longer has a hash slot owner");
         }
     }
