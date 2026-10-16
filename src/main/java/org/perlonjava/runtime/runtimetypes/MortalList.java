@@ -1923,6 +1923,9 @@ public class MortalList {
                     + " name=" + code.packageName + "::" + code.subName
                     + " reachable=" + reachable + " captures="
                     + (code.capturedScalars == null ? 0 : code.capturedScalars.length));
+            if ("main".equals(code.packageName)) {
+                System.err.println("[CODE-ROOT-PATH] " + ReachabilityWalker.findPathTo(code));
+            }
         }
         return reachable;
     }
