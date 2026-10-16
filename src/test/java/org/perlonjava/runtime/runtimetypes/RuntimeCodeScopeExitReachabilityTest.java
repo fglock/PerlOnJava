@@ -112,7 +112,7 @@ class RuntimeCodeScopeExitReachabilityTest {
                 assertTrue(runtime.lifecycleState.deferredScopeExitCaptureCandidates.contains(codeRef));
                 assertTrue(callback.capturedScalars != null,
                         "a rooted callback keeps its captures while the pad is live");
-                MortalList.flushAboveMark();
+                MortalList.flush();
                 assertTrue(runtime.lifecycleState.deferredScopeExitCaptureCandidates.contains(codeRef));
 
                 assertNotNull(callback.capturedScalars,
@@ -128,7 +128,7 @@ class RuntimeCodeScopeExitReachabilityTest {
                 assertFalse(ReachabilityWalker.hasStrongCycle(callback));
                 assertFalse(SpecialBlock.hasPendingEndBlock(callback));
                 assertFalse(RuntimeCode.isActiveCode(callback));
-                MortalList.flushAboveMark();
+                MortalList.flush();
                 assertFalse(runtime.lifecycleState.deferredScopeExitCaptureCandidates.contains(codeRef));
 
                 assertNull(callback.capturedScalars,
