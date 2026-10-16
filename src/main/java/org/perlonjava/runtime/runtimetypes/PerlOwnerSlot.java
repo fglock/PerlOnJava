@@ -18,7 +18,8 @@ public final class PerlOwnerSlot {
 
     public enum Kind {
         CLOSURE_PAD,
-        HASH_ENTRY
+        HASH_ENTRY,
+        ARRAY_ELEMENT
     }
 
     private final Kind kind;
@@ -139,6 +140,14 @@ public final class PerlOwnerSlot {
     public synchronized void acquireHashEntry(RuntimeBase target) {
         if (kind != Kind.HASH_ENTRY) {
             throw new IllegalStateException("hash-entry acquisition requires a HASH_ENTRY slot");
+        }
+        transferTo(target);
+    }
+
+    /** Attach this stable array-element slot to its current direct referent. */
+    public synchronized void acquireArrayElement(RuntimeBase target) {
+        if (kind != Kind.ARRAY_ELEMENT) {
+            throw new IllegalStateException("array-element acquisition requires an ARRAY_ELEMENT slot");
         }
         transferTo(target);
     }
