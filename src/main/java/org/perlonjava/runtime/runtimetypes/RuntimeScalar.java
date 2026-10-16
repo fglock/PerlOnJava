@@ -399,6 +399,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Last hash/array container that stored this scalar slot. Used only as a
     // narrow guard for live CODE refs whose captures must survive void discard.
     RuntimeBase containerOwner;
+    private Set<RuntimeHash> hashContainerOwners;
 
     /** Return the aggregate slot that directly owns this scalar, if any. */
     public RuntimeBase getContainerOwner() {
@@ -407,7 +408,26 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     void markContainerOwner(RuntimeBase owner) {
         this.containerOwner = owner;
+        if (owner instanceof RuntimeHash hash) {
+            if (hashContainerOwners == null) {
+                hashContainerOwners = Collections.newSetFromMap(new IdentityHashMap<>());
+            }
+            hashContainerOwners.add(hash);
+        }
         propagateTiedHandlerMarkerToReferent();
+    }
+
+    List<RuntimeHash> hashContainerOwnersSnapshot() {
+        return hashContainerOwners == null ? List.of() : List.copyOf(hashContainerOwners);
+    }
+
+    void unmarkHashContainerOwner(RuntimeHash owner) {
+        if (hashContainerOwners == null) return;
+        hashContainerOwners.remove(owner);
+        if (hashContainerOwners.isEmpty()) hashContainerOwners = null;
+        if (containerOwner == owner) {
+            containerOwner = hashContainerOwners == null ? null : hashContainerOwners.iterator().next();
+        }
     }
 
     private void propagateTiedHandlerMarkerToReferent() {
@@ -2786,12 +2806,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // scalar wrapper is assigned a new referent (the normal class-field
         // ADJUST path). RuntimeHash's map hook covers slot replacement; this
         // covers mutation of a slot that is already in the map.
-        if (containerOwner instanceof RuntimeHash && oldBase != this.value) {
-            if (oldBase != null && oldBase.hashSlotOwnerCount > 0) {
-                oldBase.hashSlotOwnerCount--;
-            }
-            if (this.value instanceof RuntimeBase newBase) {
-                newBase.hashSlotOwnerCount++;
+        if (oldBase != this.value) {
+            RuntimeBase newBase = this.value instanceof RuntimeBase base ? base : null;
+            for (RuntimeHash owner : hashContainerOwnersSnapshot()) {
+                owner.updateHashEntryOwnersForScalar(this, oldBase, newBase);
             }
         }
         if (this.captureCount > 0 && (this.type & RuntimeScalarType.REFERENCE_BIT) != 0

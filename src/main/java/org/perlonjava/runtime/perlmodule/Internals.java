@@ -577,7 +577,7 @@ public class Internals extends PerlModuleBase {
             // selective refCount owner. Do not discount that real owner.
             boolean fieldOwnedMethodResult = rc == 1
                     && !base.localBindingExists
-                    && base.hashSlotOwnerCount > 0
+                    && base.hashSlotOwnerCount() > 0
                     && !ReachabilityWalker.hasLiveStrongScalarReferentOtherThan(base, arg);
             boolean bObjectProbe = args.size() > 1 && args.get(1).getBoolean();
             int adjust = compileHintsHash
