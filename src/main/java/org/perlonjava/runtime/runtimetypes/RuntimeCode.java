@@ -8039,7 +8039,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         for (int i = 0; i < captures.length; i++) {
             RuntimeBase value = code.closedOverVariables.get(code.directLeafIntegerAdditionCaptureNames[i]);
             if (!(value instanceof RuntimeScalar scalar)
-                    || scalar.type != INTEGER || scalar.value instanceof BigInteger
+                    || scalar.type != INTEGER || RuntimeScalar.isWideIntegerValue(scalar.value)
                     || scalar.tainted || scalar.blessId != 0) return null;
             captures[i] = scalar;
         }

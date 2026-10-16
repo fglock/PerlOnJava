@@ -76,7 +76,7 @@ public class MathOperators {
     }
 
     private static boolean hasWideInteger(RuntimeScalar scalar) {
-        return scalar.type == INTEGER && scalar.value instanceof BigInteger;
+        return scalar.type == INTEGER && RuntimeScalar.isWideIntegerValue(scalar.value);
     }
 
     private static boolean hasWideInteger(RuntimeScalar left, RuntimeScalar right) {

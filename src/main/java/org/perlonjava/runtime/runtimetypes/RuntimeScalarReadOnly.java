@@ -87,6 +87,17 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
         this.type = RuntimeScalarType.INTEGER;
     }
 
+    /** Constructs an immutable unsigned word without eagerly formatting it. */
+    public RuntimeScalarReadOnly(UnsignedWordValue value) {
+        super();
+        this.b = value.bits() != 0;
+        this.i = value.intValue();
+        this.s = null;
+        this.d = value.doubleValue();
+        this.value = value;
+        this.type = RuntimeScalarType.INTEGER;
+    }
+
     /**
      * Constructs a RuntimeScalarReadOnly representing a boolean value.
      *
@@ -266,7 +277,7 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
      */
     @Override
     public String toString() {
-        return s;
+        return s != null ? s : value.toString();
     }
 
     /**

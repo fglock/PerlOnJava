@@ -1017,18 +1017,20 @@ public class EmitVariable {
                     }
                 }
 
-                // Numeric bitwise results assigned to a lexical scalar can
-                // update that cell directly for the common nonnegative native
-                // integer case, avoiding a temporary RuntimeScalar. The helper
-                // keeps negative unsigned words and all non-plain cases on the
-                // regular operator path.
+                // Numeric bitwise and shift results assigned to a lexical scalar
+                // can update that cell directly for the common native integer
+                // case, avoiding a temporary RuntimeScalar. Helpers preserve
+                // the regular operator path for unsigned and non-plain cases.
                 if (node.left instanceof OperatorNode lexical
                         && lexical.operator.equals("$")
                         && lexical.operand instanceof IdentifierNode identifier
                         && node.right instanceof BinaryOperatorNode bitwise
+                        && !Boolean.TRUE.equals(bitwise.getAnnotation("useInteger"))
                         && (bitwise.operator.equals("&")
                             || bitwise.operator.equals("|")
-                            || bitwise.operator.equals("^"))) {
+                            || bitwise.operator.equals("^")
+                            || bitwise.operator.equals("<<")
+                            || bitwise.operator.equals(">>"))) {
                     String lexicalName = "$" + identifier.name;
                     SymbolTable.SymbolEntry lexicalEntry = ctx.symbolTable.getSymbolEntry(lexicalName);
                     if (lexicalEntry != null
@@ -1047,6 +1049,8 @@ public class EmitVariable {
                             case "&" -> "bitwiseAndInto";
                             case "|" -> "bitwiseOrInto";
                             case "^" -> "bitwiseXorInto";
+                            case "<<" -> "shiftLeftInto";
+                            case ">>" -> "shiftRightInto";
                             default -> throw new IllegalStateException(
                                     "Unsupported bitwise assignment operator: " + bitwise.operator);
                         };

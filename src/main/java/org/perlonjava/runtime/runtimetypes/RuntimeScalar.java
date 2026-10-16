@@ -1403,8 +1403,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         } else if (type == RuntimeScalarType.INTEGER) {
             // For regular integers
-            return value instanceof BigInteger integerValue
-                    ? integerValue : BigInteger.valueOf(((Number) value).longValue());
+            if (value instanceof BigInteger integerValue) return integerValue;
+            if (value instanceof UnsignedWordValue unsignedValue) return unsignedValue.toBigInteger();
+            return BigInteger.valueOf(((Number) value).longValue());
         } else if (type == RuntimeScalarType.UNDEF) {
             return BigInteger.ZERO;
         } else {
@@ -1491,6 +1492,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             if (value instanceof BigInteger integerValue) {
                 return integerValue;
             }
+            if (value instanceof UnsignedWordValue unsignedValue) {
+                return unsignedValue.toBigInteger();
+            }
             long val = ((Number) value).longValue();
             if (val < 0) {
                 // Convert negative to unsigned BigInteger
@@ -1543,6 +1547,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 return BigInteger.ZERO;
             }
         }
+    }
+
+    /** True when an integer uses arbitrary-precision or unsigned-word storage. */
+    public static boolean isWideIntegerValue(Object value) {
+        return value instanceof BigInteger || value instanceof UnsignedWordValue;
     }
 
     public long getLong() {
@@ -1738,14 +1747,68 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     /** Mark this scalar tainted when any scalar input to an operation is tainted. */
+    public RuntimeScalar propagateTaint(RuntimeScalar input) {
+        if (isPlainTaintInput(input) && (input == null || !input.tainted)) return this;
+        if (!GlobalContext.isTaintModeActive()) return this;
+        if (input != null && input.isTainted()) {
+            if (isTainted()) return this;
+            RuntimeScalar taintedResult = new RuntimeScalar(this);
+            taintedResult.tainted = true;
+            return taintedResult;
+        }
+        return this;
+    }
+
+    public RuntimeScalar propagateTaint(RuntimeScalar first, RuntimeScalar second) {
+        boolean plainInputs = isPlainTaintInput(first) && isPlainTaintInput(second);
+        if (plainInputs && (first == null || !first.tainted)
+                && (second == null || !second.tainted)) {
+            return this;
+        }
+        if (!GlobalContext.isTaintModeActive()) return this;
+        if ((first != null && first.isTainted()) || (second != null && second.isTainted())) {
+            if (isTainted()) return this;
+            RuntimeScalar taintedResult = new RuntimeScalar(this);
+            taintedResult.tainted = true;
+            return taintedResult;
+        }
+        return this;
+    }
+
+    private static boolean isPlainTaintInput(RuntimeScalar input) {
+        return input == null
+                || ((input.getClass() == RuntimeScalar.class
+                        || input.getClass() == RuntimeScalarReadOnly.class)
+                    && input.type < TIED_SCALAR);
+    }
+
     public RuntimeScalar propagateTaint(RuntimeScalar... inputs) {
+        // Most compiled numeric operations have only ordinary scalar operands.
+        // Their taint flags are directly available, so avoid looking up the
+        // current Perl runtime when none of them is tainted. Keep magic values
+        // on the original path because isTainted() can invoke tied FETCH.
+        boolean plainInputs = inputs != null;
+        boolean hasTaintedPlainInput = false;
+        if (plainInputs) {
+            for (RuntimeScalar input : inputs) {
+                if (input == null) continue;
+                if (isPlainTaintInput(input)) {
+                    hasTaintedPlainInput |= input.tainted;
+                } else {
+                    plainInputs = false;
+                    break;
+                }
+            }
+        }
+        if (plainInputs) {
+            if (!hasTaintedPlainInput || !GlobalContext.isTaintModeActive()) return this;
+        } else if (!GlobalContext.isTaintModeActive()) {
+            return this;
+        }
         // Outside taint mode there is no provenance to propagate.  In
         // particular, asking a tied scalar whether it is tainted would invoke
         // FETCH a second time after the operator has already fetched its
         // value.
-        if (!GlobalContext.isTaintModeActive()) {
-            return this;
-        }
         for (RuntimeScalar input : inputs) {
             if (input != null && input.isTainted()) {
                 if (isTainted()) {
@@ -3546,7 +3609,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if ((index.getClass() == RuntimeScalar.class
                     || index.getClass() == RuntimeScalarReadOnly.class)
                 && index.type == INTEGER
-                && !(index.value instanceof BigInteger)) {
+                && !isWideIntegerValue(index.value)) {
             long nativeIndex = index.getLong();
             if (integerMode) {
                 long adjusted = subtract ? nativeIndex - adjustment : nativeIndex + adjustment;
@@ -3591,7 +3654,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if ((index.getClass() == RuntimeScalar.class
                     || index.getClass() == RuntimeScalarReadOnly.class)
                 && index.type == INTEGER
-                && !(index.value instanceof BigInteger)) {
+                && !isWideIntegerValue(index.value)) {
             long nativeIndex = index.getLong();
             if (integerMode) {
                 long adjusted = subtract ? nativeIndex - adjustment : nativeIndex + adjustment;
@@ -5353,6 +5416,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     this.value = doubleValue + 1;
                     break;
                 }
+                if (this.value instanceof UnsignedWordValue unsignedValue) {
+                    setIntegerValue(unsignedValue.toBigInteger().add(BigInteger.ONE));
+                    break;
+                }
                 if (this.value instanceof BigInteger integerValue) {
                     setIntegerValue(integerValue.add(BigInteger.ONE));
                     break;
@@ -5576,7 +5643,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 return old;
             }
         }
-        if (this.type == INTEGER && !(this.value instanceof BigInteger)) {
+        if (this.type == INTEGER && !isWideIntegerValue(this.value)) {
             long integerValue = ((Number) this.value).longValue();
             if (integerValue < Long.MAX_VALUE) {
                 setIntegerValue(integerValue + 1);
@@ -5602,6 +5669,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (this.value instanceof Double doubleValue) {
                     this.type = RuntimeScalarType.DOUBLE;
                     this.value = doubleValue + 1;
+                    break;
+                }
+                if (this.value instanceof UnsignedWordValue unsignedValue) {
+                    setIntegerValue(unsignedValue.toBigInteger().add(BigInteger.ONE));
                     break;
                 }
                 if (this.value instanceof BigInteger integerValue) {
@@ -5758,6 +5829,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
             case INTEGER -> { // 0
+                if (this.value instanceof UnsignedWordValue unsignedValue) {
+                    setIntegerValue(unsignedValue.toBigInteger().subtract(BigInteger.ONE));
+                    break;
+                }
                 if (this.value instanceof BigInteger integerValue) {
                     setIntegerValue(integerValue.subtract(BigInteger.ONE));
                     break;
@@ -5911,6 +5986,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
             case INTEGER -> { // 0
+                if (this.value instanceof UnsignedWordValue unsignedValue) {
+                    setIntegerValue(unsignedValue.toBigInteger().subtract(BigInteger.ONE));
+                    break;
+                }
                 if (this.value instanceof BigInteger integerValue) {
                     setIntegerValue(integerValue.subtract(BigInteger.ONE));
                     break;
