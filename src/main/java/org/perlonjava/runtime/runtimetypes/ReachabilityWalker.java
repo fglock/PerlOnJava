@@ -331,7 +331,7 @@ public class ReachabilityWalker {
             } else if (cur instanceof RuntimeCode code) {
                 visitCodePadConstants(code, todo);
                 visitCodeStateVariables(code, todo);
-                if (hasActiveClosedOverVariables(code)) {
+                if (code.closedOverVariables != null) {
                     for (RuntimeBase captured : code.closedOverVariables.values()) {
                         addReachable(captured, todo);
                         if (captured instanceof RuntimeScalar scalar) {
@@ -449,7 +449,7 @@ public class ReachabilityWalker {
         if (!walkCaptures && !WeakRefRegistry.hasWeakRefsTo(code)) return false;
         if ((code.capturedScalars != null && code.capturedScalars.length != 0)
                 || (code.capturedAggregates != null && code.capturedAggregates.length != 0)
-                || hasActiveClosedOverVariables(code)) {
+                || (code.closedOverVariables != null && !code.closedOverVariables.isEmpty())) {
             return true;
         }
         if (!code.captureFieldsRecorded) {
@@ -462,12 +462,6 @@ public class ReachabilityWalker {
         return code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
                 && interpreted.capturedVars != null
                 && interpreted.capturedVars.length != 0;
-    }
-
-    private static boolean hasActiveClosedOverVariables(RuntimeCode code) {
-        return !code.captureOwnersReleased
-                && code.closedOverVariables != null
-                && !code.closedOverVariables.isEmpty();
     }
 
     /**
@@ -802,7 +796,7 @@ public class ReachabilityWalker {
                     String path = curPath + "<state " + state.getKey() + ">";
                     if (howReached.putIfAbsent(state.getValue(), path) == null) todo.add(state.getValue());
                 }
-                if (hasActiveClosedOverVariables(code)) {
+                if (code.closedOverVariables != null) {
                     int i = 0;
                     for (Map.Entry<String, RuntimeBase> entry : code.closedOverVariables.entrySet()) {
                         RuntimeBase captured = entry.getValue();
@@ -1658,7 +1652,7 @@ public class ReachabilityWalker {
                         && sc.value instanceof RuntimeBase rb
                         && seen.add(rb)) todo.addLast(rb);
             } else if (cur instanceof RuntimeCode code) {
-                if (hasActiveClosedOverVariables(code)) {
+                if (code.closedOverVariables != null) {
                     for (RuntimeBase captured : code.closedOverVariables.values()) {
                         if (captured == null) continue;
                         if (captured instanceof RuntimeScalar scalar
@@ -1853,7 +1847,7 @@ public class ReachabilityWalker {
                     addScalarReachabilityEdge(state, seen,
                             reachableScalars, todo, stats, true, false);
                 }
-                if (hasActiveClosedOverVariables(code)) {
+                if (code.closedOverVariables != null) {
                     for (RuntimeBase captured : code.closedOverVariables.values()) {
                         if (stats != null) stats.edgesInspected++;
                         if (captured instanceof RuntimeScalar scalar
@@ -2115,7 +2109,7 @@ public class ReachabilityWalker {
                             if (captured == target) return true;
                         }
                     }
-                    if (hasActiveClosedOverVariables(callback)) {
+                    if (callback.closedOverVariables != null) {
                         for (RuntimeBase captured : callback.closedOverVariables.values()) {
                             if (!budget.visitEdge()) break walk;
                             if (stats != null) stats.edgesInspected++;
@@ -2720,7 +2714,7 @@ public class ReachabilityWalker {
         // whether a suspended async sub's returning Future is still owned by
         // a live closure; reflective/capture arrays are not guaranteed to
         // expose that ownership on every backend.
-        if (hasActiveClosedOverVariables(code)) {
+        if (code.closedOverVariables != null) {
             for (RuntimeBase captured : code.closedOverVariables.values()) {
                 if (budget != null && !budget.visitEdge()) return false;
                 if (captured == null) continue;
