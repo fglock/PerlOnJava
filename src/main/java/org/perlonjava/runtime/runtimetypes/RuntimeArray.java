@@ -94,7 +94,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     // @_ even though the complete array was not expanded at the call site.
     private int activeScalarLocalElements;
     private boolean scalarLocalContainerCleared;
-    private final Set<String> isaArrayNames = new LinkedHashSet<>();
+    // Most RuntimeArrays are temporary argument/value arrays, not @ISA.
+    // Keep hierarchy-validation metadata lazy so ordinary arrays do not each
+    // allocate a LinkedHashSet.
+    private Set<String> isaArrayNames;
 
     void beginScalarLocalElement() { activeScalarLocalElements++; }
     void markScalarLocalContainerCleared() {
@@ -337,6 +340,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public void markIsaArray(String arrayName) {
         isaArray = true;
         if (arrayName != null && arrayName.endsWith("::ISA")) {
+            if (isaArrayNames == null) {
+                isaArrayNames = new LinkedHashSet<>();
+            }
             isaArrayNames.add(arrayName.substring(0, arrayName.length() - 5));
         }
     }
@@ -348,7 +354,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     private void validateIsaMutation() {
-        if (isaArray && !isaArrayNames.isEmpty()) {
+        if (isaArray && isaArrayNames != null && !isaArrayNames.isEmpty()) {
             InheritanceResolver.validateIsaArrays(isaArrayNames);
         }
     }
