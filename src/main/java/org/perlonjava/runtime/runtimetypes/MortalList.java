@@ -1556,9 +1556,6 @@ public class MortalList {
         state.fullRootSnapshot = null;
         state.unblessedAggregateRootSnapshot = null;
         state.scalarRootSnapshot = null;
-        if (!state.deferredScopeExitCaptureCandidates.isEmpty()) {
-            markBoundaryWork(state);
-        }
     }
 
     static void invalidateExternalRootSnapshotAfterArgumentPop() {
@@ -1568,6 +1565,7 @@ public class MortalList {
                 && state.deferredScopeExitCandidateDepthCounts.lastKey() > argsDepth;
         if (candidateRootFramePopped) {
             invalidateExternalRootSnapshot();
+            markBoundaryWork(state);
         }
     }
 
