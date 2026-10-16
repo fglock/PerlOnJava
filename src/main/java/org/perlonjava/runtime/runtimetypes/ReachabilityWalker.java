@@ -1540,7 +1540,7 @@ public class ReachabilityWalker {
                     for (RuntimeScalar captured : code.capturedScalars) {
                         if (!budget.visitEdge()) break walk;
                         if (stats != null) stats.edgesInspected++;
-                        followScalar(captured, null, seen, todo);
+                        followScalarIncludingCode(captured, null, seen, todo);
                     }
                 }
                 if (!includeOwnedCapturePads && code.capturedAggregates != null) {
