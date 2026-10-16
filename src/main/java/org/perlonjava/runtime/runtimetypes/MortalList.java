@@ -361,6 +361,15 @@ public class MortalList {
                     || (base != null && endReachable.contains(base))
                     || (base != null && cycleProtected.contains(base))
                     || scalarReachable;
+            if (base != null && RuntimeBase.refCountTraceEnabled()
+                    && "LifetimeController".equals(NameNormalizer.getBlessStr(base.blessId))) {
+                System.err.println("[SCOPE-CANDIDATE] scalar=" + System.identityHashCode(scalar)
+                        + " deferred=" + state.deferredCapturesSet.containsKey(scalar)
+                        + " end=" + endReachable.contains(scalar) + "/" + endReachable.contains(base)
+                        + " cycle=" + cycleProtected.contains(base)
+                        + " scalarRoot=" + scalarReachable + " retained=" + retained
+                        + " captureCount=" + scalar.captureCount + " refCount=" + base.refCount);
+            }
             if (retained) continue;
 
             scalar.releaseUnreachableSemanticCaptureOwner();
