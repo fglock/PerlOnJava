@@ -84,4 +84,52 @@ class RuntimeCodeScopeExitReachabilityTest {
             }
         }
     }
+
+    @Test
+    void deferredReleaseFollowsCaptureFromRootedCallbackToNestedCallback() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeScalar captured = new RuntimeScalar("controller");
+            captured.retainClosureCapture();
+            RuntimeCode callback = new RuntimeCode(null, List.of());
+            callback.refCount = 1;
+            callback.capturedScalars = new RuntimeScalar[] { captured };
+
+            RuntimeScalar callbackRef = new RuntimeScalar(callback);
+            callbackRef.captureCount = 1;
+            callbackRef.scopeExited = true;
+            RuntimeCode timerWrapper = new RuntimeCode(null, List.of());
+            timerWrapper.refCount = 1;
+            timerWrapper.capturedScalars = new RuntimeScalar[] { callbackRef };
+
+            RuntimeHash reactorTimers = new RuntimeHash();
+            reactorTimers.elements.put("timer", new RuntimeScalar(timerWrapper));
+            RuntimeCode singletonMethod = new RuntimeCode(null, List.of());
+            singletonMethod.stateVariable.put("loop", new RuntimeScalar(reactorTimers));
+            String globalName = "RuntimeCodeScopeExitReachabilityTest::singleton";
+            GlobalVariable.globalCodeRefs.put(globalName, new RuntimeScalar(singletonMethod));
+            boolean previousActive = MortalList.isActive();
+            MortalList.setActive(true);
+
+            try {
+                MortalList.deferDecrement(callback);
+                MortalList.flush();
+
+                assertNotNull(callback.capturedScalars,
+                        "a rooted timer wrapper must retain the callback stored in its capture pad");
+                assertEquals(1, captured.captureCount);
+
+                GlobalVariable.globalCodeRefs.remove(globalName);
+                MortalList.deferDecrement(callback);
+                MortalList.flush();
+
+                assertNull(callback.capturedScalars,
+                        "removing the rooted wrapper must release the nested callback captures");
+                assertEquals(0, captured.captureCount);
+            } finally {
+                GlobalVariable.globalCodeRefs.remove(globalName);
+                MortalList.setActive(previousActive);
+            }
+        }
+    }
 }
