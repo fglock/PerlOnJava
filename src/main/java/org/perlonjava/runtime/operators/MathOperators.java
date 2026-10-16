@@ -1057,6 +1057,13 @@ public class MathOperators {
      * @return The modified arg1.
      */
     public static RuntimeScalar addAssign(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Ordinary native integer lvalues cannot be blessed or overload
+        // arithmetic. Try their in-place path before resolving blessing IDs;
+        // tied, shared, wide, and non-integer scalars fail this guard and keep
+        // the normal overload-aware path below.
+        RuntimeScalar updated = addAssignIntegerInPlace(arg1, arg1, arg2);
+        if (updated != null) return updated;
+
         // Check for (+= overload first
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
@@ -1068,8 +1075,6 @@ public class MathOperators {
                 return arg1;
             }
         }
-        RuntimeScalar updated = addAssignIntegerInPlace(arg1, arg1, arg2);
-        if (updated != null) return updated;
         // Fall back to base operator (which already has (+ overload support)
         RuntimeScalar result = add(arg1, arg2);
         arg1.set(result);
