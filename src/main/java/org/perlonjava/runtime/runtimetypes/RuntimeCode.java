@@ -5523,8 +5523,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 int blessId = ((RuntimeBase) invocant.value).blessId;
                 if (blessId != 0) {
                     int methodHash = System.identityHashCode(method.value);
-                    RuntimeCodeRuntimeState runtimeCodeState =
-                            PerlRuntime.current().runtimeCodeState();
+                    PerlRuntime methodRuntime = PerlRuntime.current();
+                    RuntimeCodeRuntimeState runtimeCodeState = methodRuntime.runtimeCodeState();
 
                     // Check if cache hit
                     RuntimeCode cachedCode = runtimeCodeState.cachedInlineMethod(
@@ -5559,7 +5559,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 
                                 MortalList.pushMark();
                                 try {
-                                    return applyCachedMethod(cachedCode, a, callContext);
+                                    return applyCachedMethod(
+                                            cachedCode, a, callContext, methodRuntime);
                                 } finally {
                                     MortalList.popMark();
                                 }
@@ -5604,7 +5605,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             }
                             MortalList.pushMark();
                             try {
-                                return applyCachedMethod(code, a, callContext);
+                                return applyCachedMethod(code, a, callContext, null);
                             } finally {
                                 MortalList.popMark();
                             }
@@ -5632,11 +5633,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * method's caller return as well.
      */
     private static RuntimeList applyCachedMethod(
-            RuntimeCode code, RuntimeArray args, int callContext) {
+            RuntimeCode code, RuntimeArray args, int callContext,
+            PerlRuntime cachedRuntime) {
         try {
             // Preserve LVALUE here: generated code performs the callable check
             // from the raw context. Normalizing it first would silently turn a
             // forbidden lvalue method assignment into an ordinary scalar call.
+            if (cachedRuntime != null && code.compilerSupplier == null
+                    && code.boundRuntime == null && code.constantValue == null) {
+                return code.apply(args, callContext, cachedRuntime);
+            }
             return code.apply(args, callContext);
         } catch (PerlNonLocalReturnException e) {
             if (e.targetCode != null && e.targetCode != code) {
@@ -9395,9 +9401,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public RuntimeList apply(RuntimeArray a, int callContext) {
+        return apply(a, callContext, null);
+    }
+
+    private RuntimeList apply(RuntimeArray a, int callContext, PerlRuntime cachedRuntime) {
         if (boundRuntime != null && PerlRuntime.currentOrNull() != boundRuntime) {
             try (PerlRuntime.Binding ignored = boundRuntime.bind()) {
-                return apply(a, callContext);
+                return apply(a, callContext, null);
             }
         }
         requireClassMethodInstance(this, a);
@@ -9481,7 +9491,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 DebugState.pushArgs(a);
                 DebugHooks.enterSubroutine(debugSubName);
             }
-            PerlRuntime runtime = PerlRuntime.current();
+            PerlRuntime runtime = cachedRuntime != null
+                    ? cachedRuntime : PerlRuntime.current();
             ExecutionRuntimeState executionState = runtime.executionState();
             org.perlonjava.runtime.CompilationRuntimeState compilationState =
                     runtime.compilationState;
