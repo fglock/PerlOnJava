@@ -95,7 +95,7 @@ class RuntimeCodeScopeExitReachabilityTest {
             callback.refCount = 1;
             callback.capturedScalars = new RuntimeScalar[] { captured };
 
-            RuntimeScalar callbackRef = callback.createReference();
+            RuntimeScalar callbackRef = new RuntimeScalar(callback);
             callbackRef.captureCount = 1;
             callbackRef.scopeExited = true;
             RuntimeCode timerWrapper = new RuntimeCode(null, List.of());
