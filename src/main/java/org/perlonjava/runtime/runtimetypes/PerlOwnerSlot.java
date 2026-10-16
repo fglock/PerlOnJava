@@ -24,6 +24,7 @@ public final class PerlOwnerSlot {
 
     private final Kind kind;
     private final RuntimeScalar padCell;
+    private volatile RuntimeCode closureOwner;
     private final long identity = NEXT_ID.incrementAndGet();
     private RuntimeBase referent;
     private PerlRuntime ownerRuntime;
@@ -103,6 +104,10 @@ public final class PerlOwnerSlot {
         return legacyCaptureCount;
     }
 
+    RuntimeCode closureOwner() {
+        return closureOwner;
+    }
+
     /** Acquire one closure-pad referent count through the legacy bridge. */
     public synchronized void acquireLegacyCapture(RuntimeBase target) {
         Objects.requireNonNull(target, "target");
@@ -128,11 +133,17 @@ public final class PerlOwnerSlot {
 
     /** Acquire a captured aggregate pad as an explicit owner slot. */
     public synchronized void acquireCapture(RuntimeBase target) {
+        acquireCapture(target, null);
+    }
+
+    /** Acquire a captured aggregate pad as an edge from its owning closure. */
+    public synchronized void acquireCapture(RuntimeBase target, RuntimeCode owner) {
         Objects.requireNonNull(target, "target");
         if (target.refCount == Integer.MIN_VALUE) {
             throw new IllegalStateException("cannot capture a destroyed referent");
         }
         nativeCaptureOwner = true;
+        closureOwner = owner;
         transferTo(target);
     }
 

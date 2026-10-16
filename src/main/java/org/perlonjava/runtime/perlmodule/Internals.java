@@ -401,7 +401,7 @@ public class Internals extends PerlModuleBase {
             for (int i = 0; i < code.capturedAggregates.length; i++) {
                 if (code.capturedAggregates[i] == previous) {
                     PerlOwnerSlot replacementOwner =
-                            replacement.retainClosureCaptureOwner();
+                            replacement.retainClosureCaptureOwner(code);
                     PerlOwnerSlot[] ownerSlots = code.capturedAggregateOwnerSlots;
                     PerlOwnerSlot previousOwner = ownerSlots != null
                                     && i < ownerSlots.length
@@ -808,6 +808,7 @@ public class Internals extends PerlModuleBase {
             }
             System.err.println("  total direct holders=" + matchIdx
                     + " total lexicals scanned=" + totalLexIdx);
+            ReachabilityWalker.dumpCaptureOwnersForTrace(base);
             if (matchIdx == 0 && !parentScalars.isEmpty()) {
                 System.err.println("  --- parent-holder candidates ("
                         + parentScalars.size() + ") ---");

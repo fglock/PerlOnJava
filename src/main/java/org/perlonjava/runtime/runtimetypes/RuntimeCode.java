@@ -5380,7 +5380,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     code.closedOverVariables.put(f.getName(), capturedAggregate);
                     capturedAggregates.add(capturedAggregate);
-                    PerlOwnerSlot ownerSlot = capturedAggregate.retainClosureCaptureOwner();
+                    PerlOwnerSlot ownerSlot = capturedAggregate.retainClosureCaptureOwner(code);
                     capturedAggregateOwnerSlots.add(ownerSlot);
                 }
             }
