@@ -722,6 +722,9 @@ public class MortalList {
                 && hash.refCount >= 0
                 && hash.hadCountedReference
                 && isReachableFromExternalRootCached(hash)) return;
+        if (hadLocalBinding
+                && containerContainsCodeReference(hash)
+                && isReachableFromExternalRootCached(hash)) return;
         List<RuntimeScalar> valuesInDestructionOrder = new ArrayList<>(hash.elements.values());
         Collections.reverse(valuesInDestructionOrder);
         for (RuntimeScalar val : valuesInDestructionOrder) {
@@ -762,6 +765,11 @@ public class MortalList {
         // Alias arrays such as @_ do not own their original element slots.
         if (arr.refCount > 0 || temporaryRootDirectlyReferences(arr)
                 || directlyReferences(returned, arr)) return;
+        // Refcount tracking does not cover every Perl callback container.
+        // Keep a CODE-bearing array intact while a persistent Perl root still
+        // owns it (for example, Mojo::Reactor's recurring timer table).
+        if (containerContainsCodeReference(arr)
+                && isReachableFromExternalRootCached(arr)) return;
         // \$#array creates a scalar proxy, not an array reference.  Once the
         // lexical AV exits, that proxy becomes an orphaned undef lvalue; it
         // must not retain this Java RuntimeArray merely through its backing
@@ -1003,6 +1011,11 @@ public class MortalList {
             if (!(s.value instanceof RuntimeBase base)) continue;
             if (!visited.add(base)) continue;  // already visited — cycle
 
+            if (base instanceof RuntimeCode) {
+                deferDecrementIfTracked(s);
+                continue;
+            }
+
             if (base.blessId != 0) {
                 boolean releasingLastOwner = false;
                 if (s.refCountOwned && base.refCount > 0) {
@@ -1137,6 +1150,35 @@ public class MortalList {
             work.add(base);
         } else if (base instanceof RuntimeCode && base.refCount >= 0) {
             return true;
+        }
+        return false;
+    }
+
+    /** Whether an aggregate contains a CODE slot, including through nested aggregates. */
+    private static boolean containerContainsCodeReference(RuntimeBase container) {
+        if (!(container instanceof RuntimeArray || container instanceof RuntimeHash)) return false;
+        ArrayDeque<RuntimeBase> work = new ArrayDeque<>();
+        Set<RuntimeBase> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        work.add(container);
+        while (!work.isEmpty()) {
+            RuntimeBase current = work.removeFirst();
+            if (!visited.add(current)) continue;
+            Iterable<RuntimeScalar> values;
+            if (current instanceof RuntimeArray array) {
+                values = array.elements;
+            } else if (current instanceof RuntimeHash hash) {
+                values = hash.elements.values();
+            } else {
+                continue;
+            }
+            for (RuntimeScalar value : values) {
+                if (value == null || (value.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                        || !(value.value instanceof RuntimeBase referent)) continue;
+                if (referent instanceof RuntimeCode) return true;
+                if (referent instanceof RuntimeArray || referent instanceof RuntimeHash) {
+                    work.addLast(referent);
+                }
+            }
         }
         return false;
     }
