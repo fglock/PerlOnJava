@@ -574,12 +574,10 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     private static final class OwnerTrace {
         final int scalarIdentity;
         final String acquireSite;
-        final java.lang.ref.WeakReference<RuntimeScalar> scalar;
 
         OwnerTrace(RuntimeScalar scalar, String acquireSite) {
             this.scalarIdentity = System.identityHashCode(scalar);
             this.acquireSite = acquireSite;
-            this.scalar = new java.lang.ref.WeakReference<>(scalar);
         }
     }
 
@@ -764,15 +762,6 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 first = false;
                 result.append("scalar=").append(owner.scalarIdentity)
                         .append(" acquire=").append(owner.acquireSite);
-                RuntimeScalar scalar = owner.scalar.get();
-                if (scalar != null) {
-                    result.append(" type=").append(scalar.type)
-                            .append(" captureCount=").append(scalar.captureCount)
-                            .append(" scopeExited=").append(scalar.scopeExited)
-                            .append(" localBinding=").append(scalar.localBindingExists)
-                            .append(" ownsScalarReferenceContents=")
-                            .append(scalar.ownsScalarReferenceContents);
-                }
             }
             result.append(']');
         }
