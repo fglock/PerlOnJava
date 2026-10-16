@@ -292,6 +292,11 @@ public class InheritanceResolver {
         return currentState().overloadContextCache().get(blessId);
     }
 
+    /** Returns whether overload metadata, including a negative result, is cached. */
+    public static boolean hasCachedOverloadContext(int blessId) {
+        return currentState().overloadContextCache().containsKey(blessId);
+    }
+
     /**
      * Caches an OverloadContext for the given blessing ID.
      *
