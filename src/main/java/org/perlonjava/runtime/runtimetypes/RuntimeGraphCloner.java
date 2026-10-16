@@ -453,7 +453,7 @@ public class RuntimeGraphCloner {
                         new PerlOwnerSlot[target.capturedAggregates.length];
                 for (int i = 0; i < target.capturedAggregates.length; i++) {
                     target.capturedAggregateOwnerSlots[i] =
-                            target.capturedAggregates[i].retainClosureCaptureOwner();
+                            target.capturedAggregates[i].retainClosureCaptureOwner(target);
                 }
             }
         }

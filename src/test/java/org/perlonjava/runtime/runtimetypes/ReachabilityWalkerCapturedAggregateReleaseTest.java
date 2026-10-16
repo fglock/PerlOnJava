@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
@@ -54,6 +55,38 @@ class ReachabilityWalkerCapturedAggregateReleaseTest {
 
             captured.releaseClosureCaptureOwner(secondOwner);
             captured.releaseClosureCaptureOwner(firstOwner);
+        }
+    }
+
+    @Test
+    void capturedAggregateIsReachedThroughItsLiveClosureNotAsAnIndependentRoot() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash capturedValue = new RuntimeHash();
+            RuntimeArray capturedPad = new RuntimeArray();
+            capturedPad.elements.add(capturedValue.createReference());
+            capturedPad.elementsOwned = true;
+            capturedPad.reconcileArrayElementOwnerSlots();
+
+            RuntimeCode closure = new RuntimeCode((String) null, java.util.List.of());
+            closure.capturedAggregates = new RuntimeBase[] {capturedPad};
+            PerlOwnerSlot captureOwner = capturedPad.retainClosureCaptureOwner(closure);
+            closure.capturedAggregateOwnerSlots = new PerlOwnerSlot[] {captureOwner};
+
+            assertTrue(runtime.retainsPositiveOwnerSlotReferent(capturedPad));
+            assertFalse(ReachabilityWalker.isReachableFromRoots(capturedValue),
+                    "the capture pad must not root a closure whose Perl owner has gone away");
+
+            RuntimeScalar closureOwner = new RuntimeScalar(closure);
+            MyVarCleanupStack.register(closureOwner);
+            try {
+                assertTrue(ReachabilityWalker.isReachableFromRoots(capturedValue),
+                        "a live Perl closure keeps its captured aggregate contents reachable");
+            } finally {
+                MyVarCleanupStack.unregister(closureOwner);
+            }
+
+            closure.releaseCaptures();
         }
     }
 }

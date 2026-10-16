@@ -220,11 +220,11 @@ public class ReachabilityWalker {
         for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
             addReachable(rescued, todo);
         }
-        // Explicit owner slots carry semantic Perl ownership even when the
-        // owning pad cell is intentionally absent from conservative lexical
-        // walker roots. Captured aggregate pads use this path so their
-        // elements remain reachable until the closure releases the slot.
-        for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotReferents()) {
+        // Legacy capture slots without a recorded closure owner remain
+        // conservative roots. Production closure pads are reached through
+        // their owning RuntimeCode so a closure cannot become a root through
+        // the aggregate pad it owns.
+        for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotRootReferents()) {
             addReachable(ownerReferent, todo);
         }
         for (RuntimeBase suspended : MortalList.snapshotSuspendedRoots()) {
@@ -741,7 +741,7 @@ public class ReachabilityWalker {
                 }
             }
             int ownerIdx = 0;
-            for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotReferents()) {
+            for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotRootReferents()) {
                 String ownerClass = ownerReferent.blessId == 0
                         ? ownerReferent.getClass().getSimpleName()
                         : NameNormalizer.getBlessStr(ownerReferent.blessId);
@@ -842,6 +842,107 @@ public class ReachabilityWalker {
             }
         }
         return null;
+    }
+
+    /** Dump closure capture owners that can explain a retained target. */
+    public static void dumpCaptureOwnersForTrace(RuntimeBase target) {
+        java.util.Set<RuntimeBase> capturedAggregates =
+                java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        capturedAggregates.add(target);
+        int arrayIndex = 0;
+        for (RuntimeBase owner : PerlRuntime.snapshotOwnerSlotReferents()) {
+            if (!(owner instanceof RuntimeArray array)) continue;
+            boolean containsTarget = false;
+            for (RuntimeScalar element : array.elements) {
+                if (element != null && element.value == target) {
+                    containsTarget = true;
+                    break;
+                }
+            }
+            if (containsTarget) {
+                capturedAggregates.add(array);
+                System.err.println("  captured-array candidate #" + (arrayIndex++)
+                        + " id=" + System.identityHashCode(array)
+                        + " refCount=" + array.refCount
+                        + " captureCount=" + array.captureCount
+                        + " scopeExited=" + array.scopeExited
+                        + " size=" + array.elements.size());
+            }
+        }
+
+        java.util.Set<RuntimeCode> seenCodes =
+                java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for (RuntimeScalar scalar : ScalarRefRegistry.snapshot()) {
+            if (scalar != null && scalar.value instanceof RuntimeCode code) {
+                seenCodes.add(code);
+            }
+        }
+        for (RuntimeScalar scalar : GlobalVariable.globalCodeRefValuesView()) {
+            if (scalar != null && scalar.value instanceof RuntimeCode code) {
+                seenCodes.add(code);
+            }
+        }
+        int codeIndex = 0;
+        for (RuntimeCode code : seenCodes) {
+            boolean capturesTarget = false;
+            if (code.capturedScalars != null) {
+                for (RuntimeScalar capture : code.capturedScalars) {
+                    if (capture != null && capture.value == target) {
+                        capturesTarget = true;
+                        break;
+                    }
+                }
+            }
+            if (!capturesTarget && code.capturedAggregates != null) {
+                for (RuntimeBase capture : code.capturedAggregates) {
+                    if (capturedAggregates.contains(capture)) {
+                        capturesTarget = true;
+                        break;
+                    }
+                }
+            }
+            if (capturesTarget) {
+                System.err.println("  capture-owner #" + (codeIndex++)
+                        + " code=" + code.packageName + "::" + code.subName
+                        + " at=" + code.cvStartFile + ":" + code.cvStartLine
+                        + " refCount=" + code.refCount
+                        + " stashRefCount=" + code.stashRefCount
+                        + " active=" + RuntimeCode.isActiveCode(code)
+                        + " scalarOwners=" + code.activeOwnerCount()
+                        + " hashSlotOwners=" + code.hashSlotOwnerCount()
+                        + " arraySlotOwners=" + code.arraySlotOwnerCount()
+                        + " capturedScalars=" + (code.capturedScalars == null
+                                ? 0 : code.capturedScalars.length)
+                        + " capturedAggregates=" + (code.capturedAggregates == null
+                                ? 0 : code.capturedAggregates.length)
+                        + " closedOver=" + (code.closedOverVariables == null
+                                ? "[]" : code.closedOverVariables.keySet()));
+                for (RuntimeScalar owner : ScalarRefRegistry.snapshot()) {
+                    if (owner == null || owner.value != code) continue;
+                    RuntimeBase container = owner.containerOwner;
+                    System.err.println("    code-scalar id=" + System.identityHashCode(owner)
+                            + " type=" + owner.type
+                            + " refCountOwned=" + owner.refCountOwned
+                            + " captureCount=" + owner.captureCount
+                            + " scopeExited=" + owner.scopeExited
+                            + " container=" + (container == null ? "none"
+                                    : container.getClass().getSimpleName() + "#"
+                                            + System.identityHashCode(container)));
+                    if (container instanceof RuntimeArray array) {
+                        String arrayPath = findPathTo(array) == null ? "<unreachable>"
+                                : String.join(" -> ", findPathTo(array));
+                        System.err.println("      owner-array id=" + System.identityHashCode(array)
+                                + " refCount=" + array.refCount
+                                + " captureCount=" + array.captureCount
+                                + " scopeExited=" + array.scopeExited
+                                + " owned=" + array.elementsOwned
+                                + " aliased=" + array.elementsAliased
+                                + " size=" + array.elements.size()
+                                + " path=" + arrayPath);
+                    }
+                }
+            }
+        }
     }
 
     private static void seedPath(RuntimeScalar s, String label,
@@ -1350,7 +1451,7 @@ public class ReachabilityWalker {
                     if (stats != null) stats.rootsSeeded++;
                 }
             }
-            for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotReferents()) {
+            for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotRootReferents()) {
                 if (!budget.visitEdge()) break rootScan;
                 if (seen.add(ownerReferent)) {
                     todo.addLast(ownerReferent);
@@ -1381,6 +1482,21 @@ public class ReachabilityWalker {
                     if (!budget.visitEdge()) break walk;
                     if (stats != null) stats.edgesInspected++;
                     followScalar(value, null, seen, todo);
+                }
+            } else if (cur instanceof RuntimeCode code) {
+                if (code.capturedScalars != null) {
+                    for (RuntimeScalar captured : code.capturedScalars) {
+                        if (!budget.visitEdge()) break walk;
+                        if (stats != null) stats.edgesInspected++;
+                        followScalar(captured, null, seen, todo);
+                    }
+                }
+                if (code.capturedAggregates != null) {
+                    for (RuntimeBase captured : code.capturedAggregates) {
+                        if (!budget.visitEdge()) break walk;
+                        if (stats != null) stats.edgesInspected++;
+                        if (captured != null && seen.add(captured)) todo.addLast(captured);
+                    }
                 }
             } else if (cur instanceof RuntimeRegex regex) {
                 for (RuntimeCode callback : regex.executableCallbackCodes()) {
@@ -1978,7 +2094,7 @@ public class ReachabilityWalker {
                 if (stats != null) stats.rootsSeeded++;
             }
         }
-        for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotReferents()) {
+        for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotRootReferents()) {
             if (!budget.visitEdge()) return true;
             if (ownerReferent == target) return true;
             if (ownerReferent != null && seen.add(ownerReferent)) {
@@ -2095,6 +2211,22 @@ public class ReachabilityWalker {
                     if (stats != null) stats.edgesInspected++;
                     if (followScalar(v, target, seen, todo)) return true;
                 }
+            } else if (cur instanceof RuntimeCode code) {
+                if (code.capturedScalars != null) {
+                    for (RuntimeScalar captured : code.capturedScalars) {
+                        if (!budget.visitEdge()) break walk;
+                        if (stats != null) stats.edgesInspected++;
+                        if (followScalar(captured, target, seen, todo)) return true;
+                    }
+                }
+                if (code.capturedAggregates != null) {
+                    for (RuntimeBase captured : code.capturedAggregates) {
+                        if (!budget.visitEdge()) break walk;
+                        if (stats != null) stats.edgesInspected++;
+                        if (captured == target) return true;
+                        if (captured != null && seen.add(captured)) todo.addLast(captured);
+                    }
+                }
             } else if (cur instanceof RuntimeRegex regex) {
                 // Executable regex callbacks are strong owners of their
                 // lexical captures while a qr// scalar remains live. Follow
@@ -2120,18 +2252,9 @@ public class ReachabilityWalker {
                     if (!budget.complete) break walk;
                 }
             }
-            // Note: we deliberately don't follow RuntimeCode.capturedScalars
-            // here — closure captures are NOT considered strong reachability
-            // edges for this query (matches the default of
-            // ReachabilityWalker.walk() which has walkCodeCaptures=false
-            // for the second-phase BFS). Without this discipline, DBIC's
-            // leak detector (t/52leaks.t) reports false positives because
-            // the walker would keep things alive that user code released.
-            //
-            // For Class::MOP's %METAS hash (which we also need to find for
-            // the Moose bootstrap), we don't need closure-capture walking
-            // because %METAS is declared `our %METAS` (package global) so
-            // it appears directly in GlobalVariable.globalHashes.
+            // Closure captures are followed only after the RuntimeCode itself
+            // was found from a Perl root. Owned aggregate pads are not roots in
+            // their own right when their owning closure is known.
         }
         return !budget.complete || !todo.isEmpty();
     }
