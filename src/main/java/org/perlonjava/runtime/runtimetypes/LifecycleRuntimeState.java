@@ -34,6 +34,8 @@ final class LifecycleRuntimeState {
             Collections.newSetFromMap(new IdentityHashMap<>());
     final IdentityHashMap<RuntimeScalar, Integer> deferredScopeExitCandidateArgsDepths =
             new IdentityHashMap<>();
+    final java.util.TreeMap<Integer, Integer> deferredScopeExitCandidateDepthCounts =
+            new java.util.TreeMap<>();
     // Strong semantic referents retained by explicit Perl owner slots. Counts
     // are per referent because several independent pad slots can own one base.
     final IdentityHashMap<RuntimeBase, Integer> positiveOwnerReferents = new IdentityHashMap<>();
@@ -122,6 +124,7 @@ final class LifecycleRuntimeState {
         deferredCapturesSet.clear();
         deferredScopeExitCaptureCandidates.clear();
         deferredScopeExitCandidateArgsDepths.clear();
+        deferredScopeExitCandidateDepthCounts.clear();
         synchronized (this) {
             positiveOwnerReferents.clear();
         }
