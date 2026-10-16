@@ -365,9 +365,13 @@ public class MortalList {
                     || (base != null && endReachable.contains(base))
                     || (base != null && cycleProtected.contains(base))
                     || scalarReachable;
+            List<String> rootPath = retained && base != null
+                    && state.deferredCapturesSet.containsKey(scalar)
+                    && scalar.captureCount > 0
+                    ? ReachabilityWalker.findPathTo(base, true) : null;
             if (base != null && RuntimeBase.refCountTraceEnabled()
                     && "LifetimeController".equals(NameNormalizer.getBlessStr(base.blessId))) {
-                List<String> rootPath = ReachabilityWalker.findPathTo(base, true);
+                if (rootPath == null) rootPath = ReachabilityWalker.findPathTo(base, true);
                 System.err.println("[SCOPE-CANDIDATE] scalar=" + System.identityHashCode(scalar)
                         + " deferred=" + state.deferredCapturesSet.containsKey(scalar)
                         + " end=" + endReachable.contains(scalar) + "/" + endReachable.contains(base)
@@ -380,9 +384,10 @@ public class MortalList {
             }
             if (retained) {
                 retainedCandidates.add(scalar);
-                int argsDepth = RuntimeCode.argsStackDepth();
-                if (argsDepth > 0) {
-                    state.deferredScopeExitCandidateArgsDepths.put(scalar, argsDepth);
+                int activeArgsIndex = activeArgsRootIndex(rootPath);
+                if (activeArgsIndex >= 0) {
+                    state.deferredScopeExitCandidateArgsDepths.put(
+                            scalar, RuntimeCode.argsStackDepth() - activeArgsIndex);
                 } else {
                     state.deferredScopeExitCandidateArgsDepths.remove(scalar);
                 }
@@ -407,6 +412,20 @@ public class MortalList {
         state.deferredScopeExitCaptureCandidates.clear();
         state.deferredScopeExitCaptureCandidates.addAll(retainedCandidates);
         if (found) flushAboveMark();
+    }
+
+    private static int activeArgsRootIndex(List<String> rootPath) {
+        if (rootPath == null || rootPath.isEmpty()) return -1;
+        String label = rootPath.getFirst();
+        String prefix = "<active-args#";
+        if (!label.startsWith(prefix)) return -1;
+        int end = label.indexOf('>', prefix.length());
+        if (end < 0) return -1;
+        try {
+            return Integer.parseInt(label.substring(prefix.length(), end));
+        } catch (NumberFormatException ignored) {
+            return -1;
+        }
     }
 
     static void noteDeferredCaptureMayBeReady() {
