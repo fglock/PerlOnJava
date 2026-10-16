@@ -232,6 +232,7 @@ public class BytecodeInterpreter {
             if ((closure.capturedScalars != null || closure.capturedAggregates != null)
                     && closure.refCount == 0
                     && closure.stashRefCount <= 0
+                    && !ReachabilityWalker.isReachableFromRoots(closure)
                     && (frame.returnedClosures == null
                         || !frame.returnedClosures.contains(closure))) {
                 closure.releaseCaptures();
@@ -3916,6 +3917,7 @@ public class BytecodeInterpreter {
                     if ((closure.capturedScalars != null || closure.capturedAggregates != null)
                             && closure.refCount == 0
                             && closure.stashRefCount <= 0
+                            && !ReachabilityWalker.isReachableFromRoots(closure)
                             && (frame.returnedClosures == null || !frame.returnedClosures.contains(closure))) {
                         closure.releaseCaptures();
                     }
