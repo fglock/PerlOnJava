@@ -713,7 +713,12 @@ public class DestroyDispatch {
                         && ReachabilityWalker.isScalarReachable(owner)) return true;
             }
             for (PerlOwnerSlot ownerSlot : referent.ownerSlotSnapshot()) {
-                if (!ownerSlotsAtStart.contains(ownerSlot)) return true;
+                // Array element slots are currently diagnostic identities; the
+                // owning array is not yet part of the resurrection root check.
+                // Treating a newly materialized array slot as proof of Perl
+                // resurrection misclassifies destructor-local array writes.
+                if (!ownerSlotsAtStart.contains(ownerSlot)
+                        && ownerSlot.kind() != PerlOwnerSlot.Kind.ARRAY_ELEMENT) return true;
             }
             return false;
         }
