@@ -1366,15 +1366,8 @@ public class ReachabilityWalker {
 
     /** Root proof for a CODE referent without treating its own aggregate pads as roots. */
     static boolean isCodeReachableFromRoots(RuntimeCode code) {
-        if (code == null) return false;
-        RootReachabilitySnapshot snapshot = reachableFromRootsSnapshotWithStatus(true, false);
-        boolean reachable = snapshot.isReachable(code);
-        if (!reachable && Boolean.getBoolean("PJ_CODE_ROOT_TRACE")) {
-            System.err.println("[CODE-ROOT-SNAPSHOT] identity=" + System.identityHashCode(code)
-                    + " complete=" + snapshot.complete() + " nodes="
-                    + snapshot.reachable().size() + " edges=" + snapshot.edgesVisited());
-        }
-        return reachable;
+        return code != null
+                && reachableFromRootsSnapshotWithStatus(true, false).isReachable(code);
     }
 
     /**
