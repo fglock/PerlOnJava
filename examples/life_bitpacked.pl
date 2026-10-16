@@ -656,11 +656,13 @@ sub next_generation_flat64 {
         $below_left, $below_right, $s1, $c1, $s2, $c2, $s3, $c3,
         $sum0, $c4, $cc1_sum, $cc1_carry, $cc2_sum, $cc2_carry,
         $sum1, $c5, $sum2, $c6);
-    for $row (0 .. $height - 1) {
+    $row = 0;
+    while ($row < $height) {
         $row_off = $row * $words_per_row;
         $above_off = ($row - 1) * $words_per_row;
         $below_off = ($row + 1) * $words_per_row;
-        for $word (0 .. $words_per_row - 1) {
+        $word = 0;
+        while ($word < $words_per_row) {
             $idx = $row_off + $word;
             $cell = $curr->[$idx];
             $left_w = $word > 0 ? $curr->[$idx - 1] : 0;
@@ -706,7 +708,9 @@ sub next_generation_flat64 {
             $sum2 = $cc1_carry ^ $cc2_carry ^ $c5;
             $c6 = ($cc1_carry & $cc2_carry) | ($cc2_carry & $c5) | ($cc1_carry & $c5);
             $next[$idx] = (~$c6) & (~$sum2) & $sum1 & ($sum0 | $cell);
+            ++$word;
         }
+        ++$row;
     }
     return \@next;
 }
