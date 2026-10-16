@@ -379,7 +379,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Last hash/array container that stored this scalar slot. Used only as a
     // narrow guard for live CODE refs whose captures must survive void discard.
     RuntimeBase containerOwner;
-    private Set<RuntimeHash> hashContainerOwners;
+    private List<WeakReference<RuntimeHash>> hashContainerOwners;
 
     /** Return the aggregate slot that directly owns this scalar, if any. */
     public RuntimeBase getContainerOwner() {
@@ -390,23 +390,34 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.containerOwner = owner;
         if (owner instanceof RuntimeHash hash) {
             if (hashContainerOwners == null) {
-                hashContainerOwners = Collections.newSetFromMap(new IdentityHashMap<>());
+                hashContainerOwners = new ArrayList<>();
             }
-            hashContainerOwners.add(hash);
+            boolean alreadyRegistered = hashContainerOwners.stream()
+                    .anyMatch(reference -> reference.get() == hash);
+            if (!alreadyRegistered) hashContainerOwners.add(new WeakReference<>(hash));
         }
         propagateTiedHandlerMarkerToReferent();
     }
 
     List<RuntimeHash> hashContainerOwnersSnapshot() {
-        return hashContainerOwners == null ? List.of() : List.copyOf(hashContainerOwners);
+        if (hashContainerOwners == null) return List.of();
+        List<RuntimeHash> snapshot = new ArrayList<>(hashContainerOwners.size());
+        hashContainerOwners.removeIf(reference -> reference.get() == null);
+        for (WeakReference<RuntimeHash> reference : hashContainerOwners) {
+            RuntimeHash owner = reference.get();
+            if (owner != null) snapshot.add(owner);
+        }
+        if (hashContainerOwners.isEmpty()) hashContainerOwners = null;
+        return snapshot;
     }
 
     void unmarkHashContainerOwner(RuntimeHash owner) {
         if (hashContainerOwners == null) return;
-        hashContainerOwners.remove(owner);
+        hashContainerOwners.removeIf(reference -> reference.get() == null || reference.get() == owner);
         if (hashContainerOwners.isEmpty()) hashContainerOwners = null;
         if (containerOwner == owner) {
-            containerOwner = hashContainerOwners == null ? null : hashContainerOwners.iterator().next();
+            List<RuntimeHash> remaining = hashContainerOwnersSnapshot();
+            containerOwner = remaining.isEmpty() ? null : remaining.get(0);
         }
     }
 
