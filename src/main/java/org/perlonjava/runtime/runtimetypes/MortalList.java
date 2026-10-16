@@ -363,6 +363,7 @@ public class MortalList {
                     || scalarReachable;
             if (base != null && RuntimeBase.refCountTraceEnabled()
                     && "LifetimeController".equals(NameNormalizer.getBlessStr(base.blessId))) {
+                List<String> rootPath = ReachabilityWalker.findPathTo(base, true);
                 System.err.println("[SCOPE-CANDIDATE] scalar=" + System.identityHashCode(scalar)
                         + " deferred=" + state.deferredCapturesSet.containsKey(scalar)
                         + " end=" + endReachable.contains(scalar) + "/" + endReachable.contains(base)
@@ -370,6 +371,7 @@ public class MortalList {
                         + " scalarRoot=" + scalarReachable + " retained=" + retained
                         + " codeRoot="
                         + ReachabilityWalker.isReachableFromRootsExcludingOwnedCapturePads(base)
+                        + " path=" + (rootPath == null ? "<none>" : String.join(" -> ", rootPath))
                         + " captureCount=" + scalar.captureCount + " refCount=" + base.refCount);
             }
             if (retained) continue;
