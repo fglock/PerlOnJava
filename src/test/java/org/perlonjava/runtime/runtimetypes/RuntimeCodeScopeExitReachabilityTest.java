@@ -8,6 +8,8 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
 class RuntimeCodeScopeExitReachabilityTest {
@@ -81,6 +83,36 @@ class RuntimeCodeScopeExitReachabilityTest {
             } finally {
                 GlobalVariable.globalHashes.remove(globalName);
                 MortalList.setActive(previousActive);
+            }
+        }
+    }
+
+    @Test
+    void releasedClosureMetadataDoesNotRemainASemanticRoot() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeBase capturedReferent = new RuntimeHash();
+            RuntimeScalar captured = new RuntimeScalar(capturedReferent);
+            captured.retainClosureCapture();
+            RuntimeCode callback = new RuntimeCode(null, List.of());
+            callback.capturedScalars = new RuntimeScalar[] { captured };
+            callback.closedOverVariables = java.util.Map.of("self", captured);
+
+            RuntimeHash callbacks = new RuntimeHash();
+            callbacks.elements.put("callback", new RuntimeScalar(callback));
+            String globalName = "RuntimeCodeScopeExitReachabilityTest::releasedMetadata";
+            GlobalVariable.globalHashes.put(globalName, callbacks);
+
+            try {
+                assertTrue(ReachabilityWalker.isScalarReachable(captured),
+                        "a live code owner must keep its lexical capture reachable");
+
+                callback.releaseCaptures();
+
+                assertFalse(ReachabilityWalker.isScalarReachable(captured),
+                        "closed-over debug metadata must not retain a released lexical capture");
+            } finally {
+                GlobalVariable.globalHashes.remove(globalName);
             }
         }
     }
