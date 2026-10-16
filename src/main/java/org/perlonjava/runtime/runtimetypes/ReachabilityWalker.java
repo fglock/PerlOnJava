@@ -747,6 +747,11 @@ public class ReachabilityWalker {
                         : NameNormalizer.getBlessStr(ownerReferent.blessId);
                 String ownerLabel = "<owner-slot#" + (ownerIdx++) + ":" + ownerClass
                         + "@" + System.identityHashCode(ownerReferent) + ">";
+                if (ownerReferent instanceof RuntimeCode code) {
+                    ownerLabel = "<owner-slot#" + (ownerIdx - 1) + ":"
+                            + code.packageName + "::" + code.subName + "@"
+                            + code.cvStartFile + ":" + code.cvStartLine + ">";
+                }
                 if (howReached.putIfAbsent(ownerReferent, ownerLabel) == null) {
                     todo.add(ownerReferent);
                 }
@@ -793,8 +798,10 @@ public class ReachabilityWalker {
                 }
                 if (code.closedOverVariables != null) {
                     int i = 0;
-                    for (RuntimeBase captured : code.closedOverVariables.values()) {
-                        String path = curPath + "<closed-over#" + (i++) + ">";
+                    for (Map.Entry<String, RuntimeBase> entry : code.closedOverVariables.entrySet()) {
+                        RuntimeBase captured = entry.getValue();
+                        String path = curPath + "<closed-over " + entry.getKey()
+                                + "#" + (i++) + ">";
                         if (captured instanceof RuntimeScalar scalar) {
                             visitScalarPath(scalar, path, howReached, todo);
                         } else if (captured != null
