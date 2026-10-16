@@ -2214,7 +2214,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     private RuntimeScalar setPlainInteger(RuntimeScalar value) {
-        clearLastReadlineHandleIfGlobValue();
+        if (isPackageGlobalRoot || containerOwner != null) {
+            clearLastReadlineHandleIfGlobValue();
+        }
         growingString = null;
         type = value.type;
         this.value = value.value;
@@ -2230,9 +2232,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         firstClassRegexValue = value.firstClassRegexValue;
         formatPictureTainted = value.formatPictureTainted;
         globalCodeRefFqn = value.globalCodeRefFqn;
-        RuntimePosLvalue.invalidatePos(this);
-        refreshSubstrLvalues();
-        notifyModifiedWatchers();
+        if (posCacheEntryCreated) RuntimePosLvalue.invalidatePos(this);
+        if (substrLvalueObservers != null) refreshSubstrLvalues();
+        if (modifiedWatchers != null && !modifiedWatchers.isEmpty()) notifyModifiedWatchers();
         return this;
     }
 
@@ -2246,7 +2248,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     /** Store an arithmetic IV result without allocating a temporary scalar. */
     public RuntimeScalar setArithmeticIntegerResult(long result, boolean resultTainted) {
-        clearLastReadlineHandleIfGlobValue();
+        if (isPackageGlobalRoot || containerOwner != null) {
+            clearLastReadlineHandleIfGlobValue();
+        }
         growingString = null;
         transferableGrowingString = false;
         setIntegerValue(result);
@@ -2261,9 +2265,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         firstClassRegexValue = null;
         formatPictureTainted = false;
         globalCodeRefFqn = null;
-        RuntimePosLvalue.invalidatePos(this);
-        refreshSubstrLvalues();
-        notifyModifiedWatchers();
+        if (posCacheEntryCreated) RuntimePosLvalue.invalidatePos(this);
+        if (substrLvalueObservers != null) refreshSubstrLvalues();
+        if (modifiedWatchers != null && !modifiedWatchers.isEmpty()) notifyModifiedWatchers();
         return this;
     }
 
