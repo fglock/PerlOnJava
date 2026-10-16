@@ -100,7 +100,8 @@ class RuntimeCodeScopeExitReachabilityTest {
             callbackRef.scopeExited = true;
             RuntimeCode timerWrapper = new RuntimeCode(null, List.of());
             timerWrapper.refCount = 1;
-            timerWrapper.capturedScalars = new RuntimeScalar[] { callbackRef };
+            timerWrapper.closedOverVariables = new java.util.LinkedHashMap<>();
+            timerWrapper.closedOverVariables.put("$callback", callbackRef);
 
             RuntimeHash reactorTimers = new RuntimeHash();
             RuntimeHash timerRecord = new RuntimeHash();
