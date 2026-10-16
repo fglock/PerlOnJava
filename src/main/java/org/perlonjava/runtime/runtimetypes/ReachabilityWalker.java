@@ -1515,6 +1515,14 @@ public class ReachabilityWalker {
                         && "Mojo::IOLoop".equals(code.packageName)) {
                     System.err.println("[MOJO-LOOP-CV] identity=" + System.identityHashCode(code)
                             + " sub=" + code.subName + " states=" + code.stateVariable.keySet());
+                    for (Map.Entry<String, RuntimeScalar> state : code.stateVariable.entrySet()) {
+                        Object value = state.getValue() == null ? null : state.getValue().value;
+                        System.err.println("[MOJO-LOOP-STATE] key=" + state.getKey()
+                                + " type=" + (state.getValue() == null ? -1 : state.getValue().type)
+                                + " valueClass=" + (value == null ? "null" : value.getClass().getName())
+                                + " valueId=" + (value instanceof RuntimeBase base
+                                        ? System.identityHashCode(base) : -1));
+                    }
                 }
                 // Persistent state is a Perl owner edge from an installed CV.
                 // In particular, singleton services such as Mojo::IOLoop keep
