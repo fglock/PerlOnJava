@@ -63,6 +63,8 @@ class ReachabilityWalkerCapturedAggregateReleaseTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash capturedValue = new RuntimeHash();
+            RuntimeScalar weakProbe = capturedValue.createReference();
+            WeakRefRegistry.weaken(weakProbe);
             RuntimeArray capturedPad = new RuntimeArray();
             capturedPad.elements.add(capturedValue.createReference());
             capturedPad.elementsOwned = true;
@@ -80,6 +82,8 @@ class ReachabilityWalkerCapturedAggregateReleaseTest {
                     "the closure must not be rescued through its own captured aggregate pad");
 
             RuntimeScalar closureOwner = new RuntimeScalar(closure);
+            closureOwner.refCountOwned = true;
+            ScalarRefRegistry.registerRef(closureOwner);
             MyVarCleanupStack.register(closureOwner);
             try {
                 assertTrue(ReachabilityWalker.isCodeReachableFromRoots(closure),
