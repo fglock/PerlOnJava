@@ -1503,15 +1503,33 @@ public class ReachabilityWalker {
                     if (includeOwnedCapturePads) followScalar(value, null, seen, todo);
                     else followScalarIncludingCode(value, null, seen, todo);
                 }
-            } else if (!includeOwnedCapturePads && cur instanceof RuntimeCode code) {
-                if (code.capturedScalars != null) {
+            } else if (cur instanceof RuntimeCode code) {
+                // Persistent state is a Perl owner edge from an installed CV.
+                // In particular, singleton services such as Mojo::IOLoop keep
+                // their reactor (and its callback hashes) in a state variable.
+                for (RuntimeScalar state : code.stateVariable.values()) {
+                    if (!budget.visitEdge()) break walk;
+                    if (stats != null) stats.edgesInspected++;
+                    followScalar(state, null, seen, todo);
+                }
+                for (RuntimeArray state : code.stateArray.values()) {
+                    if (!budget.visitEdge()) break walk;
+                    if (stats != null) stats.edgesInspected++;
+                    if (state != null && seen.add(state)) todo.addLast(state);
+                }
+                for (RuntimeHash state : code.stateHash.values()) {
+                    if (!budget.visitEdge()) break walk;
+                    if (stats != null) stats.edgesInspected++;
+                    if (state != null && seen.add(state)) todo.addLast(state);
+                }
+                if (!includeOwnedCapturePads && code.capturedScalars != null) {
                     for (RuntimeScalar captured : code.capturedScalars) {
                         if (!budget.visitEdge()) break walk;
                         if (stats != null) stats.edgesInspected++;
                         followScalar(captured, null, seen, todo);
                     }
                 }
-                if (code.capturedAggregates != null) {
+                if (!includeOwnedCapturePads && code.capturedAggregates != null) {
                     for (RuntimeBase captured : code.capturedAggregates) {
                         if (!budget.visitEdge()) break walk;
                         if (stats != null) stats.edgesInspected++;
