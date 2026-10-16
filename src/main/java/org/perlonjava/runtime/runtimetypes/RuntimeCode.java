@@ -9481,7 +9481,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 DebugState.pushArgs(a);
                 DebugHooks.enterSubroutine(debugSubName);
             }
-            ExecutionRuntimeState executionState = PerlRuntime.current().executionState();
+            PerlRuntime runtime = PerlRuntime.current();
+            ExecutionRuntimeState executionState = runtime.executionState();
+            org.perlonjava.runtime.CompilationRuntimeState compilationState =
+                    runtime.compilationState;
             // Always push args for getCurrentArgs() support (used by List::Util::any/all/etc.)
             pushArgs(a, pristineArgsSnapshotRequired, executionState);
             pushCallContext(callContext, executionState);
@@ -9501,16 +9504,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // call site, not inside the callee).
             enterCall(executionState);
             // Push warning bits for FATAL warnings support
-            String warningBits = getWarningBitsForCode(this);
+            String warningBits = getWarningBitsForCode(this, compilationState);
             if (warningBits != null) {
-                WarningBitsRegistry.pushCurrent(warningBits);
+                WarningBitsRegistry.pushCurrent(warningBits, compilationState);
             }
-            String savedRuntimeWarningBits = WarningBitsRegistry.getRuntimeWarningBits();
-            WarningBitsRegistry.setRuntimeWarningBits(warningBits);
+            String savedRuntimeWarningBits = compilationState.runtimeWarningBits;
+            compilationState.runtimeWarningBits = warningBits;
             Set<String> savedRuntimeDisabledWarnings =
-                    WarningBitsRegistry.getRuntimeDisabledWarningCategories();
-            WarningBitsRegistry.setRuntimeDisabledWarningCategories(
-                    lexicalDisabledWarningCategories);
+                    compilationState.runtimeDisabledWarningCategories;
+            compilationState.runtimeDisabledWarningCategories = lexicalDisabledWarningCategories;
             RuntimeScalar warningScopeScalar = GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE);
             int savedRuntimeWarningScope = enterCalleeWarningScope(warningScopeScalar);
             JvmClosureFrame closureFrame = jvmClosureFrameRequired
@@ -9539,12 +9541,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 throw WarnDie.maybeInvokeUnhandledDieHandler(e);
             } finally {
                 exitSignatureCall(signatureCall);
-                WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
-                WarningBitsRegistry.setRuntimeDisabledWarningCategories(
-                        savedRuntimeDisabledWarnings);
+                compilationState.runtimeWarningBits = savedRuntimeWarningBits;
+                compilationState.runtimeDisabledWarningCategories = savedRuntimeDisabledWarnings;
                 restoreCallerWarningScope(warningScopeScalar, savedRuntimeWarningScope);
                 if (warningBits != null) {
-                    WarningBitsRegistry.popCurrent();
+                    WarningBitsRegistry.popCurrent(compilationState);
                 }
                 exitCall(executionState);
                 if (closureFrame != null) {
