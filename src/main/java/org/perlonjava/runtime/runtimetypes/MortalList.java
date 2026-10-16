@@ -1737,12 +1737,6 @@ public class MortalList {
                 // weak references point at the CODE object. Preserve the CV
                 // and its lexical captures until the last Perl root is gone.
                 base.refCount = 1;
-            } else if (base.hashSlotOwnerCount() > 0) {
-                // Ordinary hash entries carry stable owner-slot identities.
-                // Preserve the legacy count bridge while any entry still owns
-                // the referent; removing the final entry releases that slot
-                // before its matching deferred decrement is processed.
-                base.refCount = 1;
             } else if (base.localBindingExists) {
                 if (base instanceof RuntimeScalar scalar
                         && scalar.referencedByScalarReference
