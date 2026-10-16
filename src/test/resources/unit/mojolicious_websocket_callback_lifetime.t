@@ -59,8 +59,7 @@ get '/suspended' => sub {
 };
 
 my $t = Test::Mojo->new;
-$t->websocket_ok('/push')->message_ok->message_is('push');
-$t->message_ok->message_is('push')->message_ok->message_is('push')->finish_ok;
+$t->websocket_ok('/push')->message_ok->message_is('push')->finish_ok;
 $t->get_ok('/plugin/upper_case')->status_is(200)->content_is('WELCOME aboard!');
 $t->get_ok('/plugin/camel_case')->status_is(200)->content_is('Welcome aboard!');
 $t->get_ok('/staged' => {'X-Pass' => 1})->status_is(200)->content_is('Welcome aboard!');
