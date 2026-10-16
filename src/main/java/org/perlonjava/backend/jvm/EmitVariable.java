@@ -1017,6 +1017,91 @@ public class EmitVariable {
                     }
                 }
 
+                // Numeric bitwise and shift results assigned to a lexical scalar
+                // can update that cell directly for the common native integer
+                // case, avoiding a temporary RuntimeScalar. Helpers preserve
+                // the regular operator path for unsigned and non-plain cases.
+                if (node.left instanceof OperatorNode lexical
+                        && lexical.operator.equals("$")
+                        && lexical.operand instanceof IdentifierNode identifier
+                        && node.right instanceof BinaryOperatorNode bitwise
+                        && !Boolean.TRUE.equals(bitwise.getAnnotation("useInteger"))
+                        && (bitwise.operator.equals("&")
+                            || bitwise.operator.equals("|")
+                            || bitwise.operator.equals("^")
+                            || bitwise.operator.equals("<<")
+                            || bitwise.operator.equals(">>"))) {
+                    String lexicalName = "$" + identifier.name;
+                    SymbolTable.SymbolEntry lexicalEntry = ctx.symbolTable.getSymbolEntry(lexicalName);
+                    if (lexicalEntry != null
+                            && (lexicalEntry.decl().equals("my") || lexicalEntry.decl().equals("state"))) {
+                        node.left.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+                        int targetSlot = ctx.javaClassInfo.acquireSpillSlot();
+                        boolean pooledTarget = targetSlot >= 0;
+                        if (!pooledTarget) targetSlot = ctx.symbolTable.allocateLocalVariable();
+                        mv.visitVarInsn(Opcodes.ASTORE, targetSlot);
+                        bitwise.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                        bitwise.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                        mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
+                        mv.visitInsn(Opcodes.DUP_X2);
+                        mv.visitInsn(Opcodes.POP);
+                        String bitwiseIntoMethod = switch (bitwise.operator) {
+                            case "&" -> "bitwiseAndInto";
+                            case "|" -> "bitwiseOrInto";
+                            case "^" -> "bitwiseXorInto";
+                            case "<<" -> "shiftLeftInto";
+                            case ">>" -> "shiftRightInto";
+                            default -> throw new IllegalStateException(
+                                    "Unsupported bitwise assignment operator: " + bitwise.operator);
+                        };
+                        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/operators/BitwiseOperators", bitwiseIntoMethod,
+                                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                                        + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                                        + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
+                                        + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                false);
+                        if (pooledTarget) ctx.javaClassInfo.releaseSpillSlot();
+                        break;
+                    }
+                }
+
+                // A warned addition assigned back to an existing lexical scalar
+                // can write the native integer result into that scalar directly,
+                // avoiding the temporary RuntimeScalar returned by addWarn.
+                // Keep this narrow: other lvalues may have observable evaluation
+                // effects, and globals/magical values must use normal assignment.
+                if (ctx.symbolTable.isWarningCategoryEnabled("uninitialized")
+                        && node.left instanceof OperatorNode lexical
+                        && lexical.operator.equals("$")
+                        && lexical.operand instanceof IdentifierNode identifier
+                        && node.right instanceof BinaryOperatorNode addition
+                        && addition.operator.equals("+")
+                        && !ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER)
+                        && !Boolean.TRUE.equals(addition.getAnnotation("useInteger"))) {
+                    String lexicalName = "$" + identifier.name;
+                    SymbolTable.SymbolEntry lexicalEntry = ctx.symbolTable.getSymbolEntry(lexicalName);
+                    if (lexicalEntry != null
+                            && (lexicalEntry.decl().equals("my") || lexicalEntry.decl().equals("state"))) {
+                        node.left.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+                        int targetSlot = ctx.javaClassInfo.acquireSpillSlot();
+                        boolean pooledTarget = targetSlot >= 0;
+                        if (!pooledTarget) targetSlot = ctx.symbolTable.allocateLocalVariable();
+                        mv.visitVarInsn(Opcodes.ASTORE, targetSlot);
+                        addition.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                        addition.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                        mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
+                        mv.visitInsn(Opcodes.DUP_X2);
+                        mv.visitInsn(Opcodes.POP);
+                        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/operators/MathOperators", "addWarnInto",
+                                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                false);
+                        if (pooledTarget) ctx.javaClassInfo.releaseSpillSlot();
+                        break;
+                    }
+                }
+
                 // The left value can be a variable, an operator or a subroutine call:
                 //   `pos`, `substr`, `vec`, `sub :lvalue`
 

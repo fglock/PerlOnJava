@@ -2,6 +2,8 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.runtime.operators.PerlUtfString;
 
+import java.math.BigInteger;
+
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.BYTE_STRING;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.DOUBLE;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.INTEGER;
@@ -71,6 +73,28 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
         this.s = Integer.toString(i);
         this.d = (double) i;
         this.value = i;
+        this.type = RuntimeScalarType.INTEGER;
+    }
+
+    /** Constructs an immutable scalar for an exact large integer value. */
+    public RuntimeScalarReadOnly(BigInteger value) {
+        super();
+        this.b = value.signum() != 0;
+        this.i = value.intValue();
+        this.s = value.toString();
+        this.d = value.doubleValue();
+        this.value = value;
+        this.type = RuntimeScalarType.INTEGER;
+    }
+
+    /** Constructs an immutable unsigned word without eagerly formatting it. */
+    public RuntimeScalarReadOnly(UnsignedWordValue value) {
+        super();
+        this.b = value.bits() != 0;
+        this.i = value.intValue();
+        this.s = null;
+        this.d = value.doubleValue();
+        this.value = value;
         this.type = RuntimeScalarType.INTEGER;
     }
 
@@ -253,7 +277,7 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
      */
     @Override
     public String toString() {
-        return s;
+        return s != null ? s : value.toString();
     }
 
     /**

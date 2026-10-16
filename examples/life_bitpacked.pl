@@ -157,16 +157,19 @@ if ($pattern eq "auto") {
     $pattern_type = $pattern;
 }
 
-print "Bit-packed Conway's Game of Life\n";
-print "Author: Claude (Anthropic)\n\n";
-print "Grid: ${width}x${height} ($words_per_row words per row)\n";
-print "Generations: $generations\n";
-print "Pattern: $pattern_type\n";
-print "Display: $display_mode\n";
-print "Algorithm: $algorithm\n";
+unless ($ENV{PERLONJAVA_LIFE_BENCH_LOAD}) {
+    print "Bit-packed Conway's Game of Life\n";
+    print "Author: Claude (Anthropic)\n\n";
+    print "Grid: ${width}x${height} ($words_per_row words per row)\n";
+    print "Generations: $generations\n";
+    print "Pattern: $pattern_type\n";
+    print "Display: $display_mode\n";
+    print "Algorithm: $algorithm\n";
+}
 
 # Test UTF-8 support and warn if needed
-if ($display_mode eq "block" || $display_mode eq "braille") {
+if (!$ENV{PERLONJAVA_LIFE_BENCH_LOAD}
+        && ($display_mode eq "block" || $display_mode eq "braille")) {
     # Test if UTF-8 is working properly
     print "UTF-8 test: ";
     if ($display_mode eq "block") {
@@ -176,7 +179,7 @@ if ($display_mode eq "block" || $display_mode eq "braille") {
     }
     print "(if you see strange characters, use --resolution ascii)\n";
 }
-print "\n";
+print "\n" unless $ENV{PERLONJAVA_LIFE_BENCH_LOAD};
 
 # =============================================================================
 # PATTERN GENERATORS
@@ -644,44 +647,73 @@ sub next_generation_flat {
 
 # 64-bit version of the flat full-adder path.  Keep this separate from the
 # 32-bit routine: constants let the compiler retain its integer fast paths.
-sub next_generation_flat64 {
-    my ($curr) = @_;
-    my @next = (0) x ($height * $words_per_row);
+sub next_generation_flat64_into {
+    my ($curr, $next) = @_;
     my ($row, $row_off, $above_off, $below_off, $word, $idx, $cell,
         $left_w, $right_w, $n_left, $n_right, $above, $above_l, $above_r,
         $i, $below, $below_l, $below_r, $above_left, $above_right,
-        $below_left, $below_right, $s1, $c1, $s2, $c2, $s3, $c3,
+        $below_left, $below_right, $shift_tmp, $s1, $c1, $s2, $c2, $s3, $c3,
         $sum0, $c4, $cc1_sum, $cc1_carry, $cc2_sum, $cc2_carry,
         $sum1, $c5, $sum2, $c6);
-    for $row (0 .. $height - 1) {
+    $row = 0;
+    while ($row < $height) {
         $row_off = $row * $words_per_row;
         $above_off = ($row - 1) * $words_per_row;
         $below_off = ($row + 1) * $words_per_row;
-        for $word (0 .. $words_per_row - 1) {
+        $word = 0;
+        while ($word < $words_per_row) {
             $idx = $row_off + $word;
             $cell = $curr->[$idx];
             $left_w = $word > 0 ? $curr->[$idx - 1] : 0;
             $right_w = $word < $words_per_row - 1 ? $curr->[$idx + 1] : 0;
-            $n_left = (($cell >> 1) & $low_63_mask) | (($left_w & $high_bit64) ? 1 : 0);
-            $n_right = (($cell << 1) & $clear_low_bit_mask) | (($right_w & 1) ? $high_bit64 : 0);
-            ($above, $above_l, $above_r) = (0, 0, 0);
+            $n_left = $cell >> 1;
+            $n_left = $n_left & $low_63_mask;
+            $shift_tmp = $left_w & $high_bit64;
+            $shift_tmp = $shift_tmp >> 63;
+            $n_left = $n_left | $shift_tmp;
+            $n_right = $cell << 1;
+            $n_right = $n_right & $clear_low_bit_mask;
+            $shift_tmp = $right_w & 1;
+            $shift_tmp = $shift_tmp << 63;
+            $n_right = $n_right | $shift_tmp;
+            $above = 0;
+            $above_l = 0;
+            $above_r = 0;
             if ($row > 0) {
                 $i = $above_off + $word;
                 $above = $curr->[$i];
                 $above_l = $word > 0 ? $curr->[$i - 1] : 0;
                 $above_r = $word < $words_per_row - 1 ? $curr->[$i + 1] : 0;
             }
-            ($below, $below_l, $below_r) = (0, 0, 0);
+            $below = 0;
+            $below_l = 0;
+            $below_r = 0;
             if ($row < $height - 1) {
                 $i = $below_off + $word;
                 $below = $curr->[$i];
                 $below_l = $word > 0 ? $curr->[$i - 1] : 0;
                 $below_r = $word < $words_per_row - 1 ? $curr->[$i + 1] : 0;
             }
-            $above_left = (($above >> 1) & $low_63_mask) | (($above_l & $high_bit64) ? 1 : 0);
-            $above_right = (($above << 1) & $clear_low_bit_mask) | (($above_r & 1) ? $high_bit64 : 0);
-            $below_left = (($below >> 1) & $low_63_mask) | (($below_l & $high_bit64) ? 1 : 0);
-            $below_right = (($below << 1) & $clear_low_bit_mask) | (($below_r & 1) ? $high_bit64 : 0);
+            $above_left = $above >> 1;
+            $above_left = $above_left & $low_63_mask;
+            $shift_tmp = $above_l & $high_bit64;
+            $shift_tmp = $shift_tmp >> 63;
+            $above_left = $above_left | $shift_tmp;
+            $above_right = $above << 1;
+            $above_right = $above_right & $clear_low_bit_mask;
+            $shift_tmp = $above_r & 1;
+            $shift_tmp = $shift_tmp << 63;
+            $above_right = $above_right | $shift_tmp;
+            $below_left = $below >> 1;
+            $below_left = $below_left & $low_63_mask;
+            $shift_tmp = $below_l & $high_bit64;
+            $shift_tmp = $shift_tmp >> 63;
+            $below_left = $below_left | $shift_tmp;
+            $below_right = $below << 1;
+            $below_right = $below_right & $clear_low_bit_mask;
+            $shift_tmp = $below_r & 1;
+            $shift_tmp = $shift_tmp << 63;
+            $below_right = $below_right | $shift_tmp;
             $s1 = $above_left ^ $above ^ $above_right;
             $c1 = ($above_left & $above) | ($above & $above_right) | ($above_left & $above_right);
             $s2 = $n_left ^ $n_right ^ $below_left;
@@ -698,12 +730,21 @@ sub next_generation_flat64 {
             $c5 = $cc2_sum & $c4;
             $sum2 = $cc1_carry ^ $cc2_carry ^ $c5;
             $c6 = ($cc1_carry & $cc2_carry) | ($cc2_carry & $c5) | ($cc1_carry & $c5);
-            $next[$idx] = (~$c6) & (~$sum2) & $sum1 & ($sum0 | $cell);
+            $next->[$idx] = (~$c6) & (~$sum2) & $sum1 & ($sum0 | $cell);
+            ++$word;
         }
+        ++$row;
     }
-    return \@next;
+    return $next;
 }
 
+
+# Allocate a fresh result for callers that need the input grid to remain intact.
+sub next_generation_flat64 {
+    my ($curr) = @_;
+    my $next = [(0) x ($height * $words_per_row)];
+    return next_generation_flat64_into($curr, $next);
+}
 # Dispatcher for algorithm selection (2D grids only; flat uses direct calls)
 sub next_generation {
     if ($algorithm eq 'parallel') {
@@ -967,8 +1008,35 @@ sub print_grid_braille_flat {
 # =============================================================================
 my @grid;      # 2D grid: @grid[$row][$word_idx]
 my $grid_flat; # Flat grid: $grid_flat->[$row * $words_per_row + $word_idx]
+my $benchmark_life_flat64_seed_grid;
+my $grid_flat_next;
+
+# Benchmark driver entry point. It reuses the algorithm above and keeps setup
+# and output outside the timed window while preserving the ordinary CLI path.
+sub benchmark_life_flat64 {
+    my ($requested_width, $requested_height, $generation_count) = @_;
+    $algorithm = 'flat64';
+    $bits_per_word = 64;
+    $width = int(($requested_width + 63) / 64) * 64;
+    $height = $requested_height;
+    $words_per_row = $width / 64;
+
+    unless (defined $benchmark_life_flat64_seed_grid) {
+        srand(1196);
+        $benchmark_life_flat64_seed_grid = generate_random_flat64();
+    }
+    my $grid = $benchmark_life_flat64_seed_grid;
+    my $next_grid = [(0) x ($height * $words_per_row)];
+    for (1 .. $generation_count) {
+        my $previous_grid = $grid;
+        $grid = next_generation_flat64_into($grid, $next_grid);
+        $next_grid = $previous_grid;
+    }
+    return count_live_cells_flat($grid);
+}
 
 # Choose initial pattern based on settings
+unless ($ENV{PERLONJAVA_LIFE_BENCH_LOAD}) {
 if ($algorithm eq 'flat' || $algorithm eq 'flat64') {
     if ($pattern_type eq "glider") {
         print "Creating glider pattern (flat)...\n";
@@ -985,6 +1053,10 @@ if ($algorithm eq 'flat' || $algorithm eq 'flat64') {
         print "Generating random pattern...\n";
         @grid = generate_random();
     }
+}
+
+if ($algorithm eq 'flat64') {
+    $grid_flat_next = [(0) x ($height * $words_per_row)];
 }
 
 my $start_time = time();
@@ -1007,7 +1079,13 @@ if ($display_mode ne "none") {
 # Run simulation
 for my $gen (1 .. $generations) {
     if ($algorithm eq 'flat' || $algorithm eq 'flat64') {
-        $grid_flat = $algorithm eq 'flat64' ? next_generation_flat64($grid_flat) : next_generation_flat($grid_flat);
+        if ($algorithm eq 'flat64') {
+            my $previous_grid = $grid_flat;
+            $grid_flat = next_generation_flat64_into($grid_flat, $grid_flat_next);
+            $grid_flat_next = $previous_grid;
+        } else {
+            $grid_flat = next_generation_flat($grid_flat);
+        }
         
         if ($display_mode ne "none") {
             print_grid_braille_flat($grid_flat) if $display_mode eq "braille";
@@ -1074,3 +1152,6 @@ if ($display_mode eq "braille") {
 } else {
     print "Grid too large for visual display\n";
 }
+}
+
+1;

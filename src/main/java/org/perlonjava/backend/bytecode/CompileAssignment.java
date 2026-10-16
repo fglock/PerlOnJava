@@ -1859,6 +1859,42 @@ public class CompileAssignment {
         return true;
     }
 
+    private static boolean tryDirectAddAssignmentOptimization(
+            BytecodeCompiler bc, BinaryOperatorNode node) {
+        if (!(node.left instanceof OperatorNode leftOp)
+                || !leftOp.operator.equals("$")
+                || !(leftOp.operand instanceof IdentifierNode leftId)
+                || !(node.right instanceof BinaryOperatorNode rightBin)
+                || !rightBin.operator.equals("+")) {
+            return false;
+        }
+        String varName = "$" + leftId.name;
+        boolean isCaptured = bc.capturedVarIndices != null
+                && bc.capturedVarIndices.containsKey(varName);
+        if (!bc.hasVariable(varName)
+                || bc.isOurVariable(varName)
+                || bc.isReservedVariable(varName)
+                || isCaptured
+                || bc.isIntegerEnabled()
+                || bc.isNoOverloadingEnabled()
+                || !bc.isUninitializedWarningsEnabled()
+                || Boolean.TRUE.equals(rightBin.getAnnotation("useInteger"))) {
+            return false;
+        }
+
+        int targetReg = bc.getVariableRegister(varName);
+        bc.compileNode(rightBin.left, -1, RuntimeContextType.SCALAR);
+        int leftReg = bc.lastResultReg;
+        bc.compileNode(rightBin.right, -1, RuntimeContextType.SCALAR);
+        int rightReg = bc.lastResultReg;
+        bc.emit(Opcodes.ADD_ASSIGN_SCALAR_WARN);
+        bc.emitReg(targetReg);
+        bc.emitReg(leftReg);
+        bc.emitReg(rightReg);
+        bc.lastResultReg = targetReg;
+        return true;
+    }
+
     private static boolean handleLocalListAssignment(BytecodeCompiler bc, BinaryOperatorNode node,
             ListNode listNode, int rhsContext) {
         if (listNode.elements.size() == 1) {
@@ -2722,6 +2758,9 @@ public class CompileAssignment {
             // Regular assignment: $x = value
             // OPTIMIZATION: Detect $x = $x + $y and emit ADD_ASSIGN instead of ADD_SCALAR + ALIAS
             if (tryAddAssignOptimization(bytecodeCompiler, node, rhsContext)) {
+                return;
+            }
+            if (tryDirectAddAssignmentOptimization(bytecodeCompiler, node)) {
                 return;
             }
 

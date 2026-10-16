@@ -385,6 +385,13 @@ public class Disassemble {
                         int addRs2 = interpretedCode.bytecode[pc++];
                         sb.append("ADD_SCALAR r").append(rd).append(" = r").append(addRs1).append(" + r").append(addRs2).append("\n");
                         break;
+                    case Opcodes.ADD_ASSIGN_SCALAR_WARN:
+                        rd = interpretedCode.bytecode[pc++];
+                        int addAssignRs1 = interpretedCode.bytecode[pc++];
+                        int addAssignRs2 = interpretedCode.bytecode[pc++];
+                        sb.append("ADD_ASSIGN_SCALAR_WARN r").append(rd).append(" = r")
+                                .append(addAssignRs1).append(" + r").append(addAssignRs2).append("\n");
+                        break;
                     case Opcodes.SUB_SCALAR:
                         rd = interpretedCode.bytecode[pc++];
                         rs1 = interpretedCode.bytecode[pc++];

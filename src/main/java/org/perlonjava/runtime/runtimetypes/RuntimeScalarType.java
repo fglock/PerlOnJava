@@ -38,13 +38,17 @@ public class RuntimeScalarType {
 
     // Get blessing ID as an integer
     public static int blessedId(RuntimeScalar runtimeScalar) {
-        if (runtimeScalar.type == READONLY_SCALAR) return blessedId((RuntimeScalar) runtimeScalar.value);
-        if (runtimeScalar.type == FORMAT) {
+        int type = runtimeScalar.type;
+        // Plain scalar types cannot be blessed. Keep this check first because
+        // ordinary numeric and string operations query blessing frequently.
+        if (type < TIED_SCALAR) return 0;
+        if (type == READONLY_SCALAR) return blessedId((RuntimeScalar) runtimeScalar.value);
+        if (type == FORMAT) {
             return runtimeScalar.value instanceof RuntimeBase base
                     ? NameNormalizer.getEffectiveBlessId(base.blessId)
                     : 0;
         }
-        if ((runtimeScalar.type & REFERENCE_BIT) != 0) {
+        if ((type & REFERENCE_BIT) != 0) {
             if (runtimeScalar.value == null) return 0;
             return NameNormalizer.getEffectiveBlessId(((RuntimeBase) runtimeScalar.value).blessId);
         }

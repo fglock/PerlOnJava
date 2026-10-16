@@ -76,7 +76,7 @@ public class MathOperators {
     }
 
     private static boolean hasWideInteger(RuntimeScalar scalar) {
-        return scalar.type == INTEGER && scalar.value instanceof BigInteger;
+        return scalar.type == INTEGER && RuntimeScalar.isWideIntegerValue(scalar.value);
     }
 
     private static boolean hasWideInteger(RuntimeScalar left, RuntimeScalar right) {
@@ -107,11 +107,43 @@ public class MathOperators {
 
     private static RuntimeScalar exactIntegralProduct(RuntimeScalar left,
                                                        RuntimeScalar right) {
+        RuntimeScalar nativeProduct = exactLongProductOrNull(left, right);
+        if (nativeProduct != null) return nativeProduct;
+        return exactIntegralProductWideOrNull(left, right);
+    }
+
+    private static RuntimeScalar exactIntegralProductWideOrNull(RuntimeScalar left,
+                                                                RuntimeScalar right) {
         BigInteger leftInteger = exactMultiplyInteger(left);
         if (leftInteger == null) return null;
         BigInteger rightInteger = exactMultiplyInteger(right);
         if (rightInteger == null) return null;
         return integerResult(leftInteger.multiply(rightInteger));
+    }
+
+    private static RuntimeScalar exactLongProductOrNull(RuntimeScalar left,
+                                                         RuntimeScalar right) {
+        if (!canMultiplyExactLong(left) || !canMultiplyExactLong(right)) return null;
+        long leftValue = left.getLong();
+        long rightValue = right.getLong();
+        try {
+            return new RuntimeScalar(Math.multiplyExact(leftValue, rightValue));
+        } catch (ArithmeticException ignored) {
+            return null;
+        }
+    }
+
+    private static boolean canMultiplyExactLong(RuntimeScalar scalar) {
+        if (scalar.type == INTEGER) {
+            return scalar.value instanceof Long || scalar.value instanceof Integer;
+        }
+        if (scalar.type != DOUBLE) return false;
+        double value = scalar.getDouble();
+        return Double.isFinite(value)
+                && value == Math.rint(value)
+                && value >= -0x1.0p63
+                && value < 0x1.0p63
+                && (double) (long) value == value;
     }
 
     /** Largest magnitude such that every integer in [-N, N] is exactly representable as double (2^53). */
@@ -411,6 +443,35 @@ public class MathOperators {
     public static RuntimeScalar addWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
         return preserveStringChannel(addWarnUnpropagated(arg1, arg2), arg1, arg2)
                 .propagateTaint(arg1, arg2);
+    }
+
+    /**
+     * Evaluate warned addition directly into a simple scalar assignment target
+     * when both operands are ordinary native integers.
+     */
+    public static RuntimeScalar addWarnInto(RuntimeScalar target,
+                                            RuntimeScalar arg1,
+                                            RuntimeScalar arg2) {
+        RuntimeScalar left = RuntimeScalar.fetchTiedOnce(arg1);
+        RuntimeScalar right = RuntimeScalar.fetchTiedOnce(arg2);
+        if (target.canUpdateArithmeticIntegerInPlace()
+                && left.type == INTEGER
+                && right.type == INTEGER
+                && RuntimeScalarType.blessedId(left) < 0
+                && RuntimeScalarType.blessedId(right) < 0
+                && !hasWideInteger(left, right)) {
+            long a = left.getLong();
+            long b = right.getLong();
+            try {
+                long sum = Math.addExact(a, b);
+                boolean resultTainted = GlobalContext.isTaintModeActive()
+                        && (left.isTainted() || right.isTainted());
+                return target.setArithmeticIntegerResult(sum, resultTainted);
+            } catch (ArithmeticException ignored) {
+                // Preserve the usual UV/NV promotion path on native-IV overflow.
+            }
+        }
+        return target.set(addWarn(left, right));
     }
 
     private static RuntimeScalar addWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {

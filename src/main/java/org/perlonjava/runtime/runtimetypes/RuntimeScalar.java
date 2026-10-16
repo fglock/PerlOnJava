@@ -9,6 +9,7 @@ import org.perlonjava.runtime.io.NativeSocketIOHandle;
 import org.perlonjava.runtime.io.SocketIO;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.StringOperators;
+import org.perlonjava.runtime.operators.MathOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.regex.RuntimeRegex;
@@ -666,6 +667,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * refgen must still bind to a distinct mutable cell.</p>
      */
     public static RuntimeScalar materializeLexicalCell(RuntimeScalar scalar) {
+        // JVM lexical loads pass through this helper so skipped declarations
+        // can be materialized on demand.  Ordinary scalar cells need no
+        // transformation; keep their common case to a class and sentinel
+        // check before the proxy/null handling below.
+        if (scalar != null
+                && scalar.getClass() == RuntimeScalar.class
+                && scalar.refCount != Integer.MIN_VALUE) {
+            return scalar;
+        }
         // A foreach literal alias deliberately occupies a lexical slot.  It
         // is not an uninitialized declaration placeholder: retain its guard
         // so a mutation reports Perl's read-only-value error.
@@ -1393,8 +1403,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         } else if (type == RuntimeScalarType.INTEGER) {
             // For regular integers
-            return value instanceof BigInteger integerValue
-                    ? integerValue : BigInteger.valueOf(((Number) value).longValue());
+            if (value instanceof BigInteger integerValue) return integerValue;
+            if (value instanceof UnsignedWordValue unsignedValue) return unsignedValue.toBigInteger();
+            return BigInteger.valueOf(((Number) value).longValue());
         } else if (type == RuntimeScalarType.UNDEF) {
             return BigInteger.ZERO;
         } else {
@@ -1481,6 +1492,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             if (value instanceof BigInteger integerValue) {
                 return integerValue;
             }
+            if (value instanceof UnsignedWordValue unsignedValue) {
+                return unsignedValue.toBigInteger();
+            }
             long val = ((Number) value).longValue();
             if (val < 0) {
                 // Convert negative to unsigned BigInteger
@@ -1533,6 +1547,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 return BigInteger.ZERO;
             }
         }
+    }
+
+    /** True when an integer uses arbitrary-precision or unsigned-word storage. */
+    public static boolean isWideIntegerValue(Object value) {
+        return value instanceof BigInteger || value instanceof UnsignedWordValue;
     }
 
     public long getLong() {
@@ -1728,14 +1747,68 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     /** Mark this scalar tainted when any scalar input to an operation is tainted. */
+    public RuntimeScalar propagateTaint(RuntimeScalar input) {
+        if (isPlainTaintInput(input) && (input == null || !input.tainted)) return this;
+        if (!GlobalContext.isTaintModeActive()) return this;
+        if (input != null && input.isTainted()) {
+            if (isTainted()) return this;
+            RuntimeScalar taintedResult = new RuntimeScalar(this);
+            taintedResult.tainted = true;
+            return taintedResult;
+        }
+        return this;
+    }
+
+    public RuntimeScalar propagateTaint(RuntimeScalar first, RuntimeScalar second) {
+        boolean plainInputs = isPlainTaintInput(first) && isPlainTaintInput(second);
+        if (plainInputs && (first == null || !first.tainted)
+                && (second == null || !second.tainted)) {
+            return this;
+        }
+        if (!GlobalContext.isTaintModeActive()) return this;
+        if ((first != null && first.isTainted()) || (second != null && second.isTainted())) {
+            if (isTainted()) return this;
+            RuntimeScalar taintedResult = new RuntimeScalar(this);
+            taintedResult.tainted = true;
+            return taintedResult;
+        }
+        return this;
+    }
+
+    private static boolean isPlainTaintInput(RuntimeScalar input) {
+        return input == null
+                || ((input.getClass() == RuntimeScalar.class
+                        || input.getClass() == RuntimeScalarReadOnly.class)
+                    && input.type < TIED_SCALAR);
+    }
+
     public RuntimeScalar propagateTaint(RuntimeScalar... inputs) {
+        // Most compiled numeric operations have only ordinary scalar operands.
+        // Their taint flags are directly available, so avoid looking up the
+        // current Perl runtime when none of them is tainted. Keep magic values
+        // on the original path because isTainted() can invoke tied FETCH.
+        boolean plainInputs = inputs != null;
+        boolean hasTaintedPlainInput = false;
+        if (plainInputs) {
+            for (RuntimeScalar input : inputs) {
+                if (input == null) continue;
+                if (isPlainTaintInput(input)) {
+                    hasTaintedPlainInput |= input.tainted;
+                } else {
+                    plainInputs = false;
+                    break;
+                }
+            }
+        }
+        if (plainInputs) {
+            if (!hasTaintedPlainInput || !GlobalContext.isTaintModeActive()) return this;
+        } else if (!GlobalContext.isTaintModeActive()) {
+            return this;
+        }
         // Outside taint mode there is no provenance to propagate.  In
         // particular, asking a tied scalar whether it is tainted would invoke
         // FETCH a second time after the operator has already fetched its
         // value.
-        if (!GlobalContext.isTaintModeActive()) {
-            return this;
-        }
         for (RuntimeScalar input : inputs) {
             if (input != null && input.isTainted()) {
                 if (isTainted()) {
@@ -2121,10 +2194,84 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         MortalList.deferDecrement(inner);
     }
 
-    // Inlineable fast path for set(RuntimeScalar)
-    // Types < TIED_SCALAR (0-8) never have REFERENCE_BIT (0x8000), so no
-    // reference check is needed here — all reference types route to setLarge().
+    // Keep this entry point small so HotSpot can inline it into generated
+    // code. Less common scalar kinds retain the complete assignment path in
+    // setSlow(); the numeric loop case copies directly between plain cells.
     public RuntimeScalar set(RuntimeScalar value) {
+        if (keysLvalueContainer == null
+                && !threadShared
+                && value != null
+                && value != this
+                && getClass() == RuntimeScalar.class
+                && (value.getClass() == RuntimeScalar.class
+                    || value.getClass() == RuntimeScalarReadOnly.class)
+                && type < TIED_SCALAR
+                && value.type == INTEGER
+                && !value.transferableGrowingString) {
+            return setPlainInteger(value);
+        }
+        return setSlow(value);
+    }
+
+    private RuntimeScalar setPlainInteger(RuntimeScalar value) {
+        if (isPackageGlobalRoot || containerOwner != null) {
+            clearLastReadlineHandleIfGlobValue();
+        }
+        growingString = null;
+        type = value.type;
+        this.value = value.value;
+        utf8UncheckedOctets = value.utf8UncheckedOctets;
+        utf8MalformedWarning = value.utf8MalformedWarning;
+        tainted = value.tainted;
+        numericLiteralText = value.numericLiteralText;
+        numericContextSeen = value.numericContextSeen;
+        scalarStoredGlob = value.scalarStoredGlob
+                || (value.type == GLOB && value.value instanceof RuntimeGlob);
+        firstClassRegexScalar = value.firstClassRegexScalar;
+        firstClassRegexReferent = value.firstClassRegexReferent;
+        firstClassRegexValue = value.firstClassRegexValue;
+        formatPictureTainted = value.formatPictureTainted;
+        globalCodeRefFqn = value.globalCodeRefFqn;
+        if (posCacheEntryCreated) RuntimePosLvalue.invalidatePos(this);
+        if (substrLvalueObservers != null) refreshSubstrLvalues();
+        if (modifiedWatchers != null && !modifiedWatchers.isEmpty()) notifyModifiedWatchers();
+        return this;
+    }
+
+    /** Whether a warned integer arithmetic result can update this lexical cell directly. */
+    public boolean canUpdateArithmeticIntegerInPlace() {
+        return getClass() == RuntimeScalar.class
+                && keysLvalueContainer == null
+                && !threadShared
+                && type < TIED_SCALAR;
+    }
+
+    /** Store an arithmetic IV result without allocating a temporary scalar. */
+    public RuntimeScalar setArithmeticIntegerResult(long result, boolean resultTainted) {
+        if (isPackageGlobalRoot || containerOwner != null) {
+            clearLastReadlineHandleIfGlobValue();
+        }
+        growingString = null;
+        transferableGrowingString = false;
+        setIntegerValue(result);
+        utf8UncheckedOctets = false;
+        utf8MalformedWarning = null;
+        tainted = resultTainted;
+        numericLiteralText = null;
+        numericContextSeen = false;
+        scalarStoredGlob = false;
+        firstClassRegexScalar = false;
+        firstClassRegexReferent = null;
+        firstClassRegexValue = null;
+        formatPictureTainted = false;
+        globalCodeRefFqn = null;
+        if (posCacheEntryCreated) RuntimePosLvalue.invalidatePos(this);
+        if (substrLvalueObservers != null) refreshSubstrLvalues();
+        if (modifiedWatchers != null && !modifiedWatchers.isEmpty()) notifyModifiedWatchers();
+        return this;
+    }
+
+    private RuntimeScalar setSlow(RuntimeScalar value) {
         if (keysLvalueContainer != null) {
             if (keysLvalueContainer instanceof RuntimeHash hash) {
                 hash.preallocateCapacity(value.getInt());
@@ -2146,7 +2293,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             value.transferableGrowingString = false;
         } else {
             if (value != null && value != this
-                    && (value.type == STRING || value.type == BYTE_STRING)) {
+                    && (value.type == STRING || value.type == BYTE_STRING)
+                    && value.growingString != null) {
                 value.materializeGrowingString();
             }
             if (value != this) {
@@ -3455,6 +3603,96 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Method to implement `$v->[10]`
     public RuntimeScalar arrayDerefGet(RuntimeScalar index) {
         return this.arrayDeref().get(index);
+    }
+
+    /** Read an array element using a simple integer index adjustment without
+     * materializing the intermediate arithmetic result scalar. */
+    public RuntimeScalar arrayDerefGetAdjusted(RuntimeScalar index, int adjustment,
+                                               boolean subtract, boolean warnUninitialized,
+                                               boolean integerMode) {
+        if ((index.getClass() == RuntimeScalar.class
+                    || index.getClass() == RuntimeScalarReadOnly.class)
+                && index.type == INTEGER
+                && !isWideIntegerValue(index.value)) {
+            long nativeIndex = index.getLong();
+            if (integerMode) {
+                long adjusted = subtract ? nativeIndex - adjustment : nativeIndex + adjustment;
+                return arrayDeref().get((int) adjusted);
+            }
+            try {
+                long adjusted = subtract
+                        ? Math.subtractExact(nativeIndex, adjustment)
+                        : Math.addExact(nativeIndex, adjustment);
+                return arrayDeref().get((int) adjusted);
+            } catch (ArithmeticException ignored) {
+                // Preserve Perl's overflow promotion through the normal operator path.
+            }
+        }
+        RuntimeScalar adjustedIndex;
+        if (integerMode) {
+            RuntimeScalar offset = RuntimeScalarCache.getScalarInt(adjustment);
+            adjustedIndex = subtract
+                    ? warnUninitialized
+                        ? MathOperators.integerSubtractWarn(index, offset)
+                        : MathOperators.integerSubtract(index, offset)
+                    : warnUninitialized
+                        ? MathOperators.integerAddWarn(index, offset)
+                        : MathOperators.integerAdd(index, offset);
+        } else {
+            adjustedIndex = subtract
+                    ? warnUninitialized
+                        ? MathOperators.subtractWarn(index, adjustment)
+                        : MathOperators.subtract(index, adjustment)
+                    : warnUninitialized
+                        ? MathOperators.addWarn(index, adjustment)
+                        : MathOperators.add(index, adjustment);
+        }
+        return arrayDeref().get(adjustedIndex);
+    }
+
+    /** Non-strict-ref variant of {@link #arrayDerefGetAdjusted}. */
+    public RuntimeScalar arrayDerefGetAdjustedNonStrict(RuntimeScalar index, int adjustment,
+                                                        boolean subtract, boolean warnUninitialized,
+                                                        boolean integerMode,
+                                                        String packageName) {
+        if ((index.getClass() == RuntimeScalar.class
+                    || index.getClass() == RuntimeScalarReadOnly.class)
+                && index.type == INTEGER
+                && !isWideIntegerValue(index.value)) {
+            long nativeIndex = index.getLong();
+            if (integerMode) {
+                long adjusted = subtract ? nativeIndex - adjustment : nativeIndex + adjustment;
+                return arrayDerefNonStrict(packageName).get((int) adjusted);
+            }
+            try {
+                long adjusted = subtract
+                        ? Math.subtractExact(nativeIndex, adjustment)
+                        : Math.addExact(nativeIndex, adjustment);
+                return arrayDerefNonStrict(packageName).get((int) adjusted);
+            } catch (ArithmeticException ignored) {
+                // Preserve Perl's overflow promotion through the normal operator path.
+            }
+        }
+        RuntimeScalar adjustedIndex;
+        if (integerMode) {
+            RuntimeScalar offset = RuntimeScalarCache.getScalarInt(adjustment);
+            adjustedIndex = subtract
+                    ? warnUninitialized
+                        ? MathOperators.integerSubtractWarn(index, offset)
+                        : MathOperators.integerSubtract(index, offset)
+                    : warnUninitialized
+                        ? MathOperators.integerAddWarn(index, offset)
+                        : MathOperators.integerAdd(index, offset);
+        } else {
+            adjustedIndex = subtract
+                    ? warnUninitialized
+                        ? MathOperators.subtractWarn(index, adjustment)
+                        : MathOperators.subtract(index, adjustment)
+                    : warnUninitialized
+                        ? MathOperators.addWarn(index, adjustment)
+                        : MathOperators.add(index, adjustment);
+        }
+        return arrayDerefNonStrict(packageName).get(adjustedIndex);
     }
 
     // Method to implement `$v->[10]`, when "no strict refs" is in effect
@@ -5182,6 +5420,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     this.value = doubleValue + 1;
                     break;
                 }
+                if (this.value instanceof UnsignedWordValue unsignedValue) {
+                    setIntegerValue(unsignedValue.toBigInteger().add(BigInteger.ONE));
+                    break;
+                }
                 if (this.value instanceof BigInteger integerValue) {
                     setIntegerValue(integerValue.add(BigInteger.ONE));
                     break;
@@ -5405,7 +5647,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 return old;
             }
         }
-        if (this.type == INTEGER && !(this.value instanceof BigInteger)) {
+        if (this.type == INTEGER && !isWideIntegerValue(this.value)) {
             long integerValue = ((Number) this.value).longValue();
             if (integerValue < Long.MAX_VALUE) {
                 setIntegerValue(integerValue + 1);
@@ -5431,6 +5673,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (this.value instanceof Double doubleValue) {
                     this.type = RuntimeScalarType.DOUBLE;
                     this.value = doubleValue + 1;
+                    break;
+                }
+                if (this.value instanceof UnsignedWordValue unsignedValue) {
+                    setIntegerValue(unsignedValue.toBigInteger().add(BigInteger.ONE));
                     break;
                 }
                 if (this.value instanceof BigInteger integerValue) {
@@ -5587,6 +5833,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
             case INTEGER -> { // 0
+                if (this.value instanceof UnsignedWordValue unsignedValue) {
+                    setIntegerValue(unsignedValue.toBigInteger().subtract(BigInteger.ONE));
+                    break;
+                }
                 if (this.value instanceof BigInteger integerValue) {
                     setIntegerValue(integerValue.subtract(BigInteger.ONE));
                     break;
@@ -5740,6 +5990,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
             case INTEGER -> { // 0
+                if (this.value instanceof UnsignedWordValue unsignedValue) {
+                    setIntegerValue(unsignedValue.toBigInteger().subtract(BigInteger.ONE));
+                    break;
+                }
                 if (this.value instanceof BigInteger integerValue) {
                     setIntegerValue(integerValue.subtract(BigInteger.ONE));
                     break;

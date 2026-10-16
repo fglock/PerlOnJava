@@ -1848,9 +1848,11 @@ public class GlobalVariable {
      * does not call this method and therefore remains compact.
      */
     public static void promotePseudoConstantForEvalCodeAssignment(RuntimeScalar codeRef) {
-        if (RuntimeCode.getEvalDepth() <= 0 || codeRef == null
-                || codeRef.type != RuntimeScalarType.CODE
+        if (codeRef == null || codeRef.type != RuntimeScalarType.CODE
                 || !(codeRef.value instanceof RuntimeCode code)) {
+            return;
+        }
+        if (RuntimeCode.getEvalDepth() <= 0) {
             return;
         }
         String key = code.referenceOriginFqn != null ? code.referenceOriginFqn
