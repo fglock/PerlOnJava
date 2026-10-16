@@ -1370,6 +1370,11 @@ public class ReachabilityWalker {
                 && reachableFromRootsSnapshotWithStatus(true, false).isReachable(code);
     }
 
+    static boolean isReachableFromRootsExcludingOwnedCapturePads(RuntimeBase target) {
+        return target != null
+                && reachableFromRootsSnapshotWithStatus(true, false).isReachable(target);
+    }
+
     /**
      * Collect the bounded root graph needed to answer reachability for
      * unblessed aggregates. Installed CODE slot identities cannot own an

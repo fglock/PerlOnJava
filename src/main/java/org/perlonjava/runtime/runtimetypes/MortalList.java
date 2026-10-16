@@ -368,6 +368,8 @@ public class MortalList {
                         + " end=" + endReachable.contains(scalar) + "/" + endReachable.contains(base)
                         + " cycle=" + cycleProtected.contains(base)
                         + " scalarRoot=" + scalarReachable + " retained=" + retained
+                        + " codeRoot="
+                        + ReachabilityWalker.isReachableFromRootsExcludingOwnedCapturePads(base)
                         + " captureCount=" + scalar.captureCount + " refCount=" + base.refCount);
             }
             if (retained) continue;
