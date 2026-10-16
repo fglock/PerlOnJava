@@ -403,7 +403,6 @@ public class RuntimeGraphCloner {
         target.declaredOurVariables = source.declaredOurVariables == null
                 ? null : new java.util.LinkedHashMap<>(source.declaredOurVariables);
         target.stateVariableInitialized = new java.util.HashMap<>(source.stateVariableInitialized);
-        target.captureOwnersReleased = source.captureOwnersReleased;
         target.stateVariable = cloneScalarMap(source.stateVariable);
         target.stateArray = cloneArrayMap(source.stateArray);
         target.stateHash = cloneHashMap(source.stateHash);
