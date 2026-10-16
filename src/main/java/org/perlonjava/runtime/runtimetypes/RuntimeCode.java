@@ -823,8 +823,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public static void pushActiveCode(RuntimeCode code) {
         PerlRuntime runtime = PerlRuntime.current();
-        ExecutionRuntimeState executionState = runtime.executionState();
-        RuntimeScalar callerPackage = runtime.executionState().currentCallerPackage;
+        pushActiveCode(code, runtime.executionState());
+    }
+
+    private static void pushActiveCode(
+            RuntimeCode code, ExecutionRuntimeState executionState) {
+        RuntimeScalar callerPackage = executionState.currentCallerPackage;
         String previousPackage = callerPackage.toString();
         String callSitePackage = executionState.pendingCallerPackages.peek();
         if (callSitePackage == null) callSitePackage = previousPackage;
@@ -884,8 +888,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static void popActiveCode(RuntimeCode code) {
-        PerlRuntime runtime = PerlRuntime.current();
-        ExecutionRuntimeState executionState = runtime.executionState();
+        popActiveCode(code, PerlRuntime.current().executionState());
+    }
+
+    private static void popActiveCode(
+            RuntimeCode code, ExecutionRuntimeState executionState) {
         Deque<ActiveLexicalFrame> frames = activeLexicalFrames(executionState);
         if (!frames.isEmpty() && frames.peek().code() == code) {
             ActiveLexicalFrame frame = frames.pop();
@@ -1253,22 +1260,33 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private static void pushArgs(RuntimeArray args, boolean snapshotRequired) {
-        argsStack().push(args);
+        pushArgs(args, snapshotRequired, PerlRuntime.current().executionState());
+    }
+
+    private static void pushArgs(
+            RuntimeArray args, boolean snapshotRequired,
+            ExecutionRuntimeState executionState) {
+        executionState.argsStack.push(args);
         // Snapshot the args list so @DB::args stays pristine even if the sub
         // later shifts/pops from @_.
         if (args == null || args.elements.isEmpty()) {
-            pristineArgsStack().push(EMPTY_ARGUMENT_SNAPSHOT);
+            executionState.pristineArgsStack.push(EMPTY_ARGUMENT_SNAPSHOT);
         } else if (snapshotRequired) {
-            pristineArgsStack().push(new java.util.ArrayList<>(args.elements));
+            executionState.pristineArgsStack.push(new java.util.ArrayList<>(args.elements));
         } else {
-            pristineArgsStack().push(args.elements);
+            executionState.pristineArgsStack.push(args.elements);
         }
     }
 
     public static void pushCallContext(int callContext) {
-        callContextStack().push(callContext);
-        PerlRuntime.current().executionState().pendingCallerPackages.push(
-                PerlRuntime.current().executionState().currentCallerPackage.toString());
+        pushCallContext(callContext, PerlRuntime.current().executionState());
+    }
+
+    private static void pushCallContext(
+            int callContext, ExecutionRuntimeState executionState) {
+        executionState.callContextStack.push(callContext);
+        executionState.pendingCallerPackages.push(
+                executionState.currentCallerPackage.toString());
     }
 
     public static int currentRawCallContext() {
@@ -1282,26 +1300,30 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * Public so BytecodeInterpreter can use it when calling InterpretedCode directly.
      */
     public static void popArgs() {
-        Deque<RuntimeArray> stack = argsStack();
+        popArgs(PerlRuntime.current().executionState());
+    }
+
+    private static void popArgs(ExecutionRuntimeState executionState) {
+        Deque<RuntimeArray> stack = executionState.argsStack;
         RuntimeArray exitedArgs = null;
         if (!stack.isEmpty()) {
             exitedArgs = stack.pop();
         }
-        Deque<java.util.List<RuntimeScalar>> pStack = pristineArgsStack();
+        Deque<java.util.List<RuntimeScalar>> pStack = executionState.pristineArgsStack;
         if (!pStack.isEmpty()) {
             pStack.pop();
         }
         cleanupOwnedArgumentAliases(exitedArgs);
         drainDeferredArgumentAggregateCleanup();
-        Deque<Boolean> haStack = hasArgsStack();
+        Deque<Boolean> haStack = executionState.hasArgsStack;
         if (!haStack.isEmpty()) {
             haStack.pop();
         }
-        Deque<Integer> ctxStack = callContextStack();
+        Deque<Integer> ctxStack = executionState.callContextStack;
         if (!ctxStack.isEmpty()) {
             ctxStack.pop();
         }
-        Deque<String> pendingPackages = PerlRuntime.current().executionState().pendingCallerPackages;
+        Deque<String> pendingPackages = executionState.pendingCallerPackages;
         if (!pendingPackages.isEmpty()) {
             pendingPackages.pop();
         }
@@ -2375,10 +2397,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * are also exempt — see inTailCallTrampoline.
      */
     private void enterCall() {
+        enterCall(PerlRuntime.current().executionState());
+    }
+
+    private void enterCall(ExecutionRuntimeState executionState) {
         if (!callDepthTrackingRequired || isMapGrepBlock || isEvalBlock || isBuiltin) {
             return;
         }
-        ExecutionRuntimeState executionState = PerlRuntime.current().executionState();
         if (executionState.tailCallTrampolineDepth > 0) {
             return;
         }
@@ -2410,10 +2435,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /** Paired with enterCall() — decrements the recursion counter. */
     private void exitCall() {
+        exitCall(PerlRuntime.current().executionState());
+    }
+
+    private void exitCall(ExecutionRuntimeState executionState) {
         if (!callDepthTrackingRequired || isMapGrepBlock || isEvalBlock || isBuiltin) {
             return;
         }
-        ExecutionRuntimeState executionState = PerlRuntime.current().executionState();
         if (executionState.tailCallTrampolineDepth > 0) {
             return;
         }
@@ -9439,10 +9467,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 DebugState.pushArgs(a);
                 DebugHooks.enterSubroutine(debugSubName);
             }
+            ExecutionRuntimeState executionState = PerlRuntime.current().executionState();
             // Always push args for getCurrentArgs() support (used by List::Util::any/all/etc.)
-            pushArgs(a, pristineArgsSnapshotRequired);
-            pushCallContext(callContext);
-            pushActiveCode(this);
+            pushArgs(a, pristineArgsSnapshotRequired, executionState);
+            pushCallContext(callContext, executionState);
+            pushActiveCode(this, executionState);
 
             // hasArgs tracking for caller()[4]:
             // This is the 2-arg instance method, called from the 3-arg static apply(scalar, array, ctx).
@@ -9450,13 +9479,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // which inherits the caller's @_ instead of creating a fresh one.
             // Perl's caller()[4] (hasargs) should be false/empty for these calls.
             // See also: the 3-arg instance method apply(name, array, ctx) which pushes true.
-            hasArgsStack().push(false);
+            executionState.hasArgsStack.push(false);
 
             // Check deep recursion BEFORE pushing the callee's warning bits,
             // so the "Deep recursion on subroutine" warning is gated on the
             // caller's lexical warning bits (matching Perl's ckWARN at the
             // call site, not inside the callee).
-            enterCall();
+            enterCall(executionState);
             // Push warning bits for FATAL warnings support
             String warningBits = getWarningBitsForCode(this);
             if (warningBits != null) {
@@ -9502,12 +9531,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();
                 }
-                exitCall();
+                exitCall(executionState);
                 if (closureFrame != null) {
                     popJvmClosureFrame(closureFrame);
                 }
-                popActiveCode(this);
-                popArgs(); // also pops hasArgsStack — see popArgs() implementation
+                popActiveCode(this, executionState);
+                popArgs(executionState); // also pops hasArgsStack — see popArgs() implementation
                 if (DebugState.isDebugMode()) {
                     DebugHooks.exitSubroutine();
                     DebugState.popArgs();
