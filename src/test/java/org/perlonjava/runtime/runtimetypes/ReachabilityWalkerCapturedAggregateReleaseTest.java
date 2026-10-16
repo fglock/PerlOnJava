@@ -74,14 +74,16 @@ class ReachabilityWalkerCapturedAggregateReleaseTest {
             closure.capturedAggregateOwnerSlots = new PerlOwnerSlot[] {captureOwner};
 
             assertTrue(runtime.retainsPositiveOwnerSlotReferent(capturedPad));
-            assertFalse(ReachabilityWalker.isReachableFromRoots(capturedValue),
-                    "the capture pad must not root a closure whose Perl owner has gone away");
+            assertTrue(ReachabilityWalker.isReachableFromRoots(capturedValue),
+                    "ordinary cleanup still treats the captured pad as a semantic owner");
+            assertFalse(ReachabilityWalker.isCodeReachableFromRoots(closure),
+                    "the closure must not be rescued through its own captured aggregate pad");
 
             RuntimeScalar closureOwner = new RuntimeScalar(closure);
             MyVarCleanupStack.register(closureOwner);
             try {
-                assertTrue(ReachabilityWalker.isReachableFromRoots(capturedValue),
-                        "a live Perl closure keeps its captured aggregate contents reachable");
+                assertTrue(ReachabilityWalker.isCodeReachableFromRoots(closure),
+                        "a live Perl closure remains rooted through its lexical owner");
             } finally {
                 MyVarCleanupStack.unregister(closureOwner);
             }
