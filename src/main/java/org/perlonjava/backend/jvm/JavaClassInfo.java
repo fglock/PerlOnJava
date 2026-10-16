@@ -71,6 +71,8 @@ public class JavaClassInfo {
     public Map<String, Integer> readOnlyArgumentSlots = Collections.emptyMap();
     /** The guarded candidate's sole final return expression is a fresh integer result. */
     public boolean readOnlyArgumentFreshScalarReturn;
+    /** The emitted CV cannot change match state or call code that could change it. */
+    public boolean skipRegexStateSnapshot;
     /** Prevents the guarded fallback from recursively selecting the fast path. */
     public boolean emittingReadOnlyArgumentFallback;
 
