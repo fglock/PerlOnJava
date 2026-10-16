@@ -767,6 +767,7 @@ public class MortalList {
         // must not retain this Java RuntimeArray merely through its backing
         // reference.  A real escaped \@array has refCount > 0 above.
         arr.orphanArraySizeLvalues();
+        arr.releaseArrayElementOwnerSlots();
         if (!arr.elementsAliased) {
             for (RuntimeScalar elem : arr.elements) {
                 if (returned == null) RuntimeScalar.releaseIoOwner(elem);
