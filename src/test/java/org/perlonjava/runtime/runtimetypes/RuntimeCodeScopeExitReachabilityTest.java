@@ -95,7 +95,7 @@ class RuntimeCodeScopeExitReachabilityTest {
             callback.refCount = 1;
             callback.capturedScalars = new RuntimeScalar[] { captured };
 
-            RuntimeScalar callbackRef = new RuntimeScalar(callback);
+            RuntimeScalar callbackRef = callback.createReference();
             callbackRef.captureCount = 1;
             callbackRef.scopeExited = true;
             RuntimeCode timerWrapper = new RuntimeCode(null, List.of());
@@ -103,11 +103,11 @@ class RuntimeCodeScopeExitReachabilityTest {
             timerWrapper.capturedScalars = new RuntimeScalar[] { callbackRef };
 
             RuntimeHash reactorTimers = new RuntimeHash();
-            reactorTimers.elements.put("timer", new RuntimeScalar(timerWrapper));
+            reactorTimers.elements.put("timer", timerWrapper.createReference());
             RuntimeCode singletonMethod = new RuntimeCode(null, List.of());
-            singletonMethod.stateVariable.put("loop", new RuntimeScalar(reactorTimers));
+            singletonMethod.stateVariable.put("loop", reactorTimers.createReference());
             String globalName = "RuntimeCodeScopeExitReachabilityTest::singleton";
-            GlobalVariable.globalCodeRefs.put(globalName, new RuntimeScalar(singletonMethod));
+            GlobalVariable.globalCodeRefs.put(globalName, singletonMethod.createReference());
             GlobalVariable.invalidateGlobalCodeRefGraphRoots();
             boolean previousActive = MortalList.isActive();
             MortalList.setActive(true);
