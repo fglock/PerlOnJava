@@ -40,6 +40,10 @@ public class MyVarCleanupStack {
         return PerlRuntime.current().executionState().liveMyVarCounts;
     }
 
+    private static IdentityHashMap<Object, Integer> registeredCounts() {
+        return PerlRuntime.current().executionState().registeredMyVarCounts;
+    }
+
     /**
      * Phase I: O(1) check whether the given object is currently registered
      * (its declaration scope hasn't exited). Used by the reachability
@@ -57,13 +61,11 @@ public class MyVarCleanupStack {
      * True when {@code var} is currently registered as a lexical, regardless
      * of whether weak-ref tracking has populated the live-count map. Used by
      * first-bless paths that can run before the first {@code weaken()} call.
+     * The identity-counted registration map keeps this check O(1).
      */
     public static boolean isRegistered(Object var) {
         if (var == null) return false;
-        for (Object entry : stack()) {
-            if (entry == var) return true;
-        }
-        return false;
+        return registeredCounts().containsKey(var);
     }
 
     /**
@@ -108,6 +110,7 @@ public class MyVarCleanupStack {
      */
     public static void register(Object var) {
         stack().add(var);
+        if (var != null) registeredCounts().merge(var, 1, Integer::sum);
         // liveCounts is consulted by ReachabilityWalker.sweepWeakRefs and
         // .isReachableFromRoots. We populate it lazily — only after the
         // first weaken() call (which sets WeakRefRegistry.weakRefsExist).
@@ -163,10 +166,11 @@ public class MyVarCleanupStack {
         for (int i = stack.size() - 1; i >= 0; i--) {
             if (stack.get(i) == var) {
                 stack.remove(i);
+                decRegisteredCount(var);
                 decLiveCount(var);
-                if (!isRegistered(var)
-                        && var instanceof RuntimeBase base
-                        && (base instanceof RuntimeArray || base instanceof RuntimeHash)) {
+                if (var instanceof RuntimeBase base
+                        && (base instanceof RuntimeArray || base instanceof RuntimeHash)
+                        && !isRegistered(var)) {
                     // The scope cleanup normally clears this marker before
                     // unregistering. Keep the stack authoritative as well for
                     // callers that release a lexical slot directly.
@@ -187,10 +191,13 @@ public class MyVarCleanupStack {
     public static void replace(Object oldVar, Object newVar) {
         if (oldVar == null || newVar == null || oldVar == newVar) return;
         ArrayList<Object> stack = stack();
+        IdentityHashMap<Object, Integer> registeredCounts = registeredCounts();
         IdentityHashMap<Object, Integer> liveCounts = liveCounts();
         for (int i = stack.size() - 1; i >= 0; i--) {
             if (stack.get(i) == oldVar) {
                 stack.set(i, newVar);
+                decCount(registeredCounts, oldVar);
+                registeredCounts.merge(newVar, 1, Integer::sum);
                 Integer count = liveCounts.get(oldVar);
                 if (count != null) {
                     if (count <= 1) liveCounts.remove(oldVar);
@@ -201,6 +208,17 @@ public class MyVarCleanupStack {
                 return;
             }
         }
+    }
+
+    private static void decRegisteredCount(Object var) {
+        decCount(registeredCounts(), var);
+    }
+
+    private static void decCount(IdentityHashMap<Object, Integer> counts, Object var) {
+        Integer count = counts.get(var);
+        if (count == null) return;
+        if (count <= 1) counts.remove(var);
+        else counts.put(var, count - 1);
     }
 
     private static void decLiveCount(Object var) {
@@ -252,6 +270,7 @@ public class MyVarCleanupStack {
         for (int i = stack.size() - 1; i >= mark; i--) {
             Object var = stack.removeLast();
             if (var != null) {
+                decRegisteredCount(var);
                 decLiveCount(var);
                 MortalList.evalExceptionScopeCleanup(var);
                 noteVarLeftScope(var);
@@ -271,6 +290,7 @@ public class MyVarCleanupStack {
         while (stack.size() > mark) {
             Object var = stack.removeLast();
             if (var != null) {
+                decRegisteredCount(var);
                 decLiveCount(var);
                 noteVarLeftScope(var);
             }
