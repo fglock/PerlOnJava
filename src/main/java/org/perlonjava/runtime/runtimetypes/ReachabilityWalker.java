@@ -1511,6 +1511,11 @@ public class ReachabilityWalker {
                     else followScalarIncludingCode(value, null, seen, todo);
                 }
             } else if (cur instanceof RuntimeCode code) {
+                if (Boolean.getBoolean("PJ_CODE_ROOT_TRACE")
+                        && "Mojo::IOLoop".equals(code.packageName)) {
+                    System.err.println("[MOJO-LOOP-CV] identity=" + System.identityHashCode(code)
+                            + " sub=" + code.subName + " states=" + code.stateVariable.keySet());
+                }
                 // Persistent state is a Perl owner edge from an installed CV.
                 // In particular, singleton services such as Mojo::IOLoop keep
                 // their reactor (and its callback hashes) in a state variable.
