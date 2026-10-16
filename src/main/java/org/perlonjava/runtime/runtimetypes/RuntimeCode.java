@@ -75,6 +75,39 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static final ThreadLocal<ArrayDeque<SortComparatorFrame>> sortComparatorFrames =
             ThreadLocal.withInitial(ArrayDeque::new);
 
+    /**
+     * Guard for the generated read-only parameter-unpack fast path. The
+     * compiler proves that the lexical parameters are only read; this runtime
+     * check keeps overloaded, tied, and non-integer values on the copy path.
+     */
+    public static boolean canBorrowReadOnlyArguments(
+            RuntimeArray args, int hashArgumentIndex, int integerArgumentIndex,
+            String firstHashKey, String secondHashKey) {
+        if (args == null || args.getClass() != RuntimeArray.class
+                || args.type != RuntimeArray.PLAIN_ARRAY
+                || hashArgumentIndex < 0 || hashArgumentIndex >= args.size()
+                || integerArgumentIndex < 0 || integerArgumentIndex >= args.size()
+                || firstHashKey == null) {
+            return false;
+        }
+        RuntimeScalar self = args.get(hashArgumentIndex);
+        if (self == null || self.type != HASHREFERENCE
+                || !(self.value instanceof RuntimeHash hash)
+                || hash.getClass() != RuntimeHash.class
+                || hash.type != RuntimeHash.PLAIN_HASH
+                || OverloadContext.hasDirectOverload(self, "(%{}")) {
+            return false;
+        }
+        RuntimeScalar firstValue = hash.elements.get(firstHashKey);
+        if (firstValue == null || firstValue.type != INTEGER) return false;
+        if (secondHashKey != null) {
+            RuntimeScalar secondValue = hash.elements.get(secondHashKey);
+            if (secondValue == null || secondValue.type != INTEGER) return false;
+        }
+        RuntimeScalar integerArgument = args.get(integerArgumentIndex);
+        return integerArgument != null && integerArgument.type == INTEGER;
+    }
+
     public static void enterSortComparator(RuntimeScalar comparator) {
         sortComparatorDepth.set(sortComparatorDepth.get() + 1);
         RuntimeCode comparatorCode = comparator != null && comparator.value instanceof RuntimeCode code
@@ -1815,6 +1848,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         try {
             if (result == null) {
                 return null;
+            }
+            if (result.freshScalarResult) {
+                copyCapturedScalars = false;
             }
             if (effectiveContext == RuntimeContextType.VOID) {
                 return result;

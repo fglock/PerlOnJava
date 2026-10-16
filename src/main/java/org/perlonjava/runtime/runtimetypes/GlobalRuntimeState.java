@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Runtime-owned Perl global state.
@@ -80,10 +81,19 @@ public final class GlobalRuntimeState {
     private java.util.ArrayList<RuntimeScalar> cachedCodeRefEdgeRootValues;
     private long cachedStashEnumerationVersion = -1;
     private boolean coreGlobalsInitialized;
+    private final AtomicLong scalarBindingVersion = new AtomicLong();
 
     /** Core package scalar slots owned by this runtime. */
     public Map<String, RuntimeScalar> scalarValues() {
         return scalarValues;
+    }
+
+    long scalarBindingVersion() {
+        return scalarBindingVersion.get();
+    }
+
+    void invalidateScalarBindingCache() {
+        scalarBindingVersion.incrementAndGet();
     }
 
     /** Core package array slots owned by this runtime. */
@@ -367,6 +377,7 @@ public final class GlobalRuntimeState {
 
     void clearCoreValues() {
         scalarValues.clear();
+        invalidateScalarBindingCache();
         arrayValues.clear();
         hashValues.clear();
         foreachScalarAliases.clear();
@@ -403,6 +414,7 @@ public final class GlobalRuntimeState {
 
     void clearGlobAndStashValues() {
         stashAliases.clear();
+        invalidateScalarBindingCache();
         resolvedStashAliases.clear();
         globAliases.clear();
         stashEntryCache.clear();

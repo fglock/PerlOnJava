@@ -176,6 +176,10 @@ public class GlobalVariable {
         return PerlRuntime.current().globalState;
     }
 
+    static GlobalRuntimeState currentGlobalRuntimeState() {
+        return globalState();
+    }
+
     /** Return the generated-class loader owned by the bound runtime. */
     public static CustomClassLoader getGlobalClassLoader() {
         return globalState().generatedClassLoader();
@@ -266,10 +270,39 @@ public class GlobalVariable {
         @Override public boolean containsKey(Object key) { return delegate().containsKey(key); }
         @Override public int size() { return delegate().size(); }
         @Override public boolean isEmpty() { return delegate().isEmpty(); }
-        @Override public T put(String key, T value) { return delegate().put(key, value); }
-        @Override public T putIfAbsent(String key, T value) { return delegate().putIfAbsent(key, value); }
-        @Override public T remove(Object key) { return delegate().remove(key); }
-        @Override public void clear() { delegate().clear(); }
+        @Override public T put(String key, T value) {
+            GlobalRuntimeState state = globalState();
+            Map<String, T> values = table.apply(state);
+            T previous = values.put(key, value);
+            if ((Object) values == state.stashAliases()) state.invalidateScalarBindingCache();
+            return previous;
+        }
+        @Override public T putIfAbsent(String key, T value) {
+            GlobalRuntimeState state = globalState();
+            Map<String, T> values = table.apply(state);
+            T previous = values.putIfAbsent(key, value);
+            if (previous == null && (Object) values == state.stashAliases()) {
+                state.invalidateScalarBindingCache();
+            }
+            return previous;
+        }
+        @Override public T remove(Object key) {
+            GlobalRuntimeState state = globalState();
+            Map<String, T> values = table.apply(state);
+            T previous = values.remove(key);
+            if (previous != null && (Object) values == state.stashAliases()) {
+                state.invalidateScalarBindingCache();
+            }
+            return previous;
+        }
+        @Override public void clear() {
+            GlobalRuntimeState state = globalState();
+            Map<String, T> values = table.apply(state);
+            if (!values.isEmpty() && (Object) values == state.stashAliases()) {
+                state.invalidateScalarBindingCache();
+            }
+            values.clear();
+        }
         @Override public Set<Entry<String, T>> entrySet() { return delegate().entrySet(); }
         @Override public Set<String> keySet() { return delegate().keySet(); }
         @Override public Collection<T> values() { return delegate().values(); }
@@ -288,6 +321,13 @@ public class GlobalVariable {
 
         private Map<String, T> delegate() {
             return table.apply(globalState());
+        }
+
+        private void noteScalarBindingMutation() {
+            GlobalRuntimeState state = globalState();
+            if ((Object) table.apply(state) == state.scalarValues()) {
+                state.invalidateScalarBindingCache();
+            }
         }
 
         @Override
@@ -321,6 +361,7 @@ public class GlobalVariable {
             markStashEntryVisible(key);
             markPackageGlobalRoot(value);
             T previous = delegate().put(key, value);
+            noteScalarBindingMutation();
             if (newKey) {
                 invalidateStashEnumerationCache();
             }
@@ -342,6 +383,7 @@ public class GlobalVariable {
         public T remove(Object key) {
             T previous = delegate().remove(key);
             if (previous != null) {
+                noteScalarBindingMutation();
                 invalidateStashEnumerationCache();
                 invalidatePackageRootSnapshot();
             }
@@ -351,6 +393,7 @@ public class GlobalVariable {
         @Override
         public void clear() {
             if (!delegate().isEmpty()) {
+                noteScalarBindingMutation();
                 invalidateStashEnumerationCache();
                 invalidatePackageRootSnapshot();
             }
@@ -389,6 +432,7 @@ public class GlobalVariable {
                             if (!canRemove) throw new IllegalStateException("next() has not been called");
                             iterator.remove();
                             canRemove = false;
+                            noteScalarBindingMutation();
                             invalidateStashEnumerationCache();
                             invalidatePackageRootSnapshot();
                         }

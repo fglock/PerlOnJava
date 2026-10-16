@@ -5,6 +5,7 @@ import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.astnode.StringNode;
+import org.perlonjava.frontend.analysis.ReadOnlyArgumentUnpackAnalysis;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
@@ -61,6 +62,17 @@ public class JavaClassInfo {
     /** Static fields holding this class's package-scalar pins, keyed by the pinned name. */
     private final Map<String, String> scalarPinFields = new LinkedHashMap<>();
     private final IdentityHashMap<StringNode, String> stringLiteralFields = new IdentityHashMap<>();
+
+    /** Optional proven read-only {@code my (...) = @_} fast path for this generated CV. */
+    public ReadOnlyArgumentUnpackAnalysis.Candidate readOnlyArgumentCandidate;
+    /** Runtime flag set when the live argument cells satisfy the fast-path guards. */
+    public int readOnlyArgumentFlagSlot = -1;
+    /** Borrowed argument cells cached in JVM locals for fast scalar reads. */
+    public Map<String, Integer> readOnlyArgumentSlots = Collections.emptyMap();
+    /** The guarded candidate's sole final return expression is a fresh integer result. */
+    public boolean readOnlyArgumentFreshScalarReturn;
+    /** Prevents the guarded fallback from recursively selecting the fast path. */
+    public boolean emittingReadOnlyArgumentFallback;
 
     /** The pin field already declared for {@code name} in this class, or null. */
     public String scalarPinField(String name) {
