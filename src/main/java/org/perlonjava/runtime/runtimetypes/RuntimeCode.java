@@ -94,8 +94,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (self == null || self.type != HASHREFERENCE
                 || !(self.value instanceof RuntimeHash hash)
                 || hash.getClass() != RuntimeHash.class
-                || hash.type != RuntimeHash.PLAIN_HASH
-                || OverloadContext.hasDirectOverload(self, "(%{}")) {
+                || hash.type != RuntimeHash.PLAIN_HASH) {
+            return false;
+        }
+        // Ordinary classes have a positive effective blessing ID. Only
+        // overloaded classes need the direct `%{}` lookup; avoiding the
+        // overload-context query here keeps the common blessed-hash path
+        // from repeating class resolution on every call.
+        int blessId = RuntimeScalarType.blessedId(self);
+        if (blessId < 0 && OverloadContext.hasDirectOverload(self, "(%{}")) {
             return false;
         }
         RuntimeScalar firstValue = hash.elements.get(firstHashKey);
