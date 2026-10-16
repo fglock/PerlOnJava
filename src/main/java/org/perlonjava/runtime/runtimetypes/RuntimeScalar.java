@@ -5555,6 +5555,27 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return result;
     }
 
+    /** Postfix ++ in void context for a proven lexical lvalue. */
+    public void postAutoIncrementVoid() {
+        watcherMutationDepth++;
+        try {
+            if (getClass() == RuntimeScalar.class
+                    && type == INTEGER
+                    && !isWideIntegerValue(value)) {
+                long integerValue = ((Number) value).longValue();
+                if (integerValue < Long.MAX_VALUE) {
+                    warnImprecisionForAutoOperation(1);
+                    setIntegerValue(integerValue + 1);
+                    return;
+                }
+            }
+            postAutoIncrementWithoutWatcherNotification();
+        } finally {
+            watcherMutationDepth--;
+            notifyModifiedWatchers();
+        }
+    }
+
     /** Implements ++ while lexical {@code use integer} is active. */
     public RuntimeScalar integerPreAutoIncrement() {
         watcherMutationDepth++;

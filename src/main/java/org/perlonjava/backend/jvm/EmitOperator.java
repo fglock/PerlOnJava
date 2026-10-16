@@ -1741,7 +1741,8 @@ public class EmitOperator {
                                        EmitterVisitor emitterVisitor) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         int operandContext = switch (operator) {
-            case "preAutoIncrement", "postAutoIncrement", "preAutoDecrement", "postAutoDecrement" ->
+            case "preAutoIncrement", "postAutoIncrement", "postAutoIncrementVoid",
+                    "preAutoDecrement", "postAutoDecrement" ->
                     RuntimeContextType.LVALUE;
             default -> RuntimeContextType.SCALAR;
         };
@@ -1750,6 +1751,14 @@ public class EmitOperator {
         if (operatorHandler != null) {
             emitOperatorWithKey(operator, node, emitterVisitor);
         } else {
+            if (operator.equals("postAutoIncrementVoid")) {
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                        operator,
+                        "()V",
+                        false);
+                return;
+            }
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                     "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
                     operator,
