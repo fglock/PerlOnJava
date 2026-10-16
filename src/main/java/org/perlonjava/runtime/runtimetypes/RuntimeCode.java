@@ -5593,7 +5593,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     private static RuntimeList applyCachedMethod(
             RuntimeCode code, RuntimeArray args, int callContext) {
-        int effectiveContext = effectiveCallContext(code, callContext);
         try {
             // Preserve LVALUE here: generated code performs the callable check
             // from the raw context. Normalizing it first would silently turn a
@@ -5609,7 +5608,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeList result = e.returnValue != null
                     ? e.returnValue.getList() : new RuntimeList();
             return coerceScalarCallResult(
-                    result, effectiveContext, callContext, !isLvalueCode(code));
+                    result, effectiveCallContext(code, callContext),
+                    callContext, !isLvalueCode(code));
         }
     }
 
