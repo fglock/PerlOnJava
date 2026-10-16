@@ -1266,6 +1266,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (!pendingPackages.isEmpty()) {
             pendingPackages.pop();
         }
+        MortalList.invalidateExternalRootSnapshotAfterArgumentPop();
     }
 
     /**

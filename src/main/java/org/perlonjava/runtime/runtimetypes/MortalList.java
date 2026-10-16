@@ -327,7 +327,9 @@ public class MortalList {
     private static void noteDeferredScopeExitCaptureCandidate(
             LifecycleRuntimeState state, RuntimeScalar scalar) {
         if (scalar.value instanceof RuntimeBase base && isDeferredScopeExitCandidate(base)) {
-            state.deferredScopeExitCaptureCandidates.add(scalar);
+            if (state.deferredScopeExitCaptureCandidates.add(scalar)) {
+                markBoundaryWork(state);
+            }
         }
     }
 
@@ -1527,10 +1529,21 @@ public class MortalList {
     }
 
     static void invalidateExternalRootSnapshot() {
-        state().externalRootSnapshot = null;
-        state().fullRootSnapshot = null;
-        state().unblessedAggregateRootSnapshot = null;
-        state().scalarRootSnapshot = null;
+        LifecycleRuntimeState state = state();
+        state.externalRootSnapshot = null;
+        state.fullRootSnapshot = null;
+        state.unblessedAggregateRootSnapshot = null;
+        state.scalarRootSnapshot = null;
+        if (!state.deferredScopeExitCaptureCandidates.isEmpty()) {
+            markBoundaryWork(state);
+        }
+    }
+
+    static void invalidateExternalRootSnapshotAfterArgumentPop() {
+        LifecycleRuntimeState state = state();
+        if (!state.deferredScopeExitCaptureCandidates.isEmpty()) {
+            invalidateExternalRootSnapshot();
+        }
     }
 
     static void invalidateAllRootSnapshots() {
