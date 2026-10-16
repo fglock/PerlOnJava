@@ -1370,10 +1370,6 @@ public class ReachabilityWalker {
                 && reachableFromRootsSnapshotWithStatus(true, false).isReachable(code);
     }
 
-    static RootReachabilitySnapshot codeReachabilitySnapshot() {
-        return reachableFromRootsSnapshotWithStatus(true, false);
-    }
-
     /**
      * Collect the bounded root graph needed to answer reachability for
      * unblessed aggregates. Installed CODE slot identities cannot own an
@@ -1508,28 +1504,6 @@ public class ReachabilityWalker {
                     else followScalarIncludingCode(value, null, seen, todo);
                 }
             } else if (!includeOwnedCapturePads && cur instanceof RuntimeCode code) {
-                if (code.padConstants != null) {
-                    for (RuntimeBase constant : code.padConstants) {
-                        if (!budget.visitEdge()) break walk;
-                        if (stats != null) stats.edgesInspected++;
-                        if (constant != null && seen.add(constant)) todo.addLast(constant);
-                    }
-                }
-                for (RuntimeScalar state : code.stateVariable.values()) {
-                    if (!budget.visitEdge()) break walk;
-                    if (stats != null) stats.edgesInspected++;
-                    followScalarIncludingCode(state, null, seen, todo);
-                }
-                for (RuntimeArray state : code.stateArray.values()) {
-                    if (!budget.visitEdge()) break walk;
-                    if (stats != null) stats.edgesInspected++;
-                    if (seen.add(state)) todo.addLast(state);
-                }
-                for (RuntimeHash state : code.stateHash.values()) {
-                    if (!budget.visitEdge()) break walk;
-                    if (stats != null) stats.edgesInspected++;
-                    if (seen.add(state)) todo.addLast(state);
-                }
                 if (code.capturedScalars != null) {
                     for (RuntimeScalar captured : code.capturedScalars) {
                         if (!budget.visitEdge()) break walk;
