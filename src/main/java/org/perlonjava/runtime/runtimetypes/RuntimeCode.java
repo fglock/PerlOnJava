@@ -5438,13 +5438,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                          RuntimeScalar currentSub,
                                          RuntimeBase[] args,
                                          int callContext) {
+        RuntimeArray methodArgs = new RuntimeArray(args.length + 1);
+        for (RuntimeBase arg : args) {
+            arg.setArrayOfAlias(methodArgs);
+        }
+        return callCached(callsiteId, runtimeScalar, method, currentSub,
+                methodArgs, callContext);
+    }
+
+    /**
+     * Cached method-call entry for JVM call sites that have already expanded
+     * evaluated arguments into their Perl {@code @_} array.
+     */
+    public static RuntimeList callCached(int callsiteId,
+                                         RuntimeScalar runtimeScalar,
+                                         RuntimeScalar method,
+                                         RuntimeScalar currentSub,
+                                         RuntimeArray methodArgs,
+                                         int callContext) {
         if ((method.type == RuntimeScalarType.STRING || method.type == RuntimeScalarType.BYTE_STRING)
                 && method.toString().startsWith(FIRST_ARGUMENT_METHOD_PREFIX)) {
             String actualMethod = method.toString().substring(FIRST_ARGUMENT_METHOD_PREFIX.length());
-            RuntimeArray methodArgs = new RuntimeArray(args.length);
-            for (RuntimeBase arg : args) {
-                arg.setArrayOfAlias(methodArgs);
-            }
             RuntimeScalar firstArgument = methodArgs.elements.isEmpty()
                     ? new RuntimeScalar() : methodArgs.elements.removeFirst();
             return call(firstArgument, new RuntimeScalar(actualMethod), currentSub,
@@ -5460,7 +5474,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         int calleeContext = callContext == RuntimeContextType.METHOD_CODEREF
                 ? RuntimeContextType.SCALAR : callContext;
         RuntimeList result = callCachedInner(
-                callsiteId, runtimeScalar, method, currentSub, args, calleeContext);
+                callsiteId, runtimeScalar, method, currentSub, methodArgs, calleeContext);
         return bindReturnedMethodCoderef(result, runtimeScalar, callContext);
         } catch (RuntimeException e) {
             if (!(e instanceof PerlExitException)) {
@@ -5477,7 +5491,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                          RuntimeScalar runtimeScalar,
                                          RuntimeScalar method,
                                          RuntimeScalar currentSub,
-                                         RuntimeBase[] args,
+                                         RuntimeArray methodArgs,
                                          int callContext) {
         // Handle tied scalars: the invocant may be a TIED_SCALAR returned
         // from a tied hash / array FETCH (e.g. $tied_hash{obj}->method).
@@ -5487,7 +5501,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR
                 && method.type != RuntimeScalarType.CODE) {
             return callCached(callsiteId, runtimeScalar.tiedFetch(), method,
-                    currentSub, args, callContext);
+                    currentSub, methodArgs, callContext);
         }
         RuntimeBase pjMethodInvHold = acquireMethodInvocantHold(runtimeScalar);
         try {
@@ -5514,11 +5528,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             // RuntimeCode.apply() so caller(), next::method, warnings,
                             // recursion tracking, and scope cleanup see a real Perl frame.
                             try {
-                                RuntimeArray a = new RuntimeArray(args.length + 1);
-                                a.elements.add(methodInvocantArgument(runtimeScalar));
-                                for (RuntimeBase arg : args) {
-                                    arg.setArrayOfAlias(a);
-                                }
+                                RuntimeArray a = methodArgs;
+                                a.elements.add(0, methodInvocantArgument(runtimeScalar));
                                 
                                 // If this is an AUTOLOAD, set $AUTOLOAD before calling
                                 String autoloadVariableName = cachedCode.autoloadVariableName;
@@ -5573,11 +5584,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             }
                             
                             // Call the method with function-scoped mortal boundary
-                            RuntimeArray a = new RuntimeArray(args.length + 1);
-                            a.elements.add(methodInvocantArgument(runtimeScalar));
-                            for (RuntimeBase arg : args) {
-                                arg.setArrayOfAlias(a);
-                            }
+                            RuntimeArray a = methodArgs;
+                            a.elements.add(0, methodInvocantArgument(runtimeScalar));
                             
                             String autoloadVariableName = code.autoloadVariableName;
                             if (autoloadVariableName != null && !methodName.equals("AUTOLOAD")) {
@@ -5601,11 +5609,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         
         // Fall back without nesting through call(...) — avoids double refcount hold
         // (this outer frame already holds the invocant for the inlined-cache miss path).
-        RuntimeArray aFallback = new RuntimeArray(args.length + 1);
-        aFallback.elements.add(methodInvocantArgument(runtimeScalar));
-        for (RuntimeBase arg : args) {
-            arg.setArrayOfAlias(aFallback);
-        }
+        RuntimeArray aFallback = methodArgs;
+        aFallback.elements.add(0, methodInvocantArgument(runtimeScalar));
         return dispatchPerlMethodAfterSelfInjected(runtimeScalar, method, currentSub, aFallback, callContext);
         } finally {
             releaseMethodInvocantHold(pjMethodInvHold);
