@@ -5148,7 +5148,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // Mark that this variable's scope has exited. When releaseCaptures
             // later decrements captureCount to 0, it will know the scope is gone.
             scalar.scopeExited = true;
-            MortalList.noteDeferredScopeExitCaptureCandidate(scalar);
+            if (scalar.type != RuntimeScalarType.CODE) {
+                MortalList.noteDeferredScopeExitCaptureCandidate(scalar);
+            }
             // For CODE refs: still decrement the VALUE's refCount so the RuntimeCode
             // is eventually destroyed and its releaseCaptures fires (decrementing
             // captureCount on all the variables IT captured). This is critical for

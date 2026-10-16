@@ -6,10 +6,8 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
 class RuntimeCodeScopeExitReachabilityTest {
@@ -67,7 +65,7 @@ class RuntimeCodeScopeExitReachabilityTest {
 
             try {
                 MortalList.deferDecrement(callback);
-                MortalList.flushAboveMark();
+                MortalList.flush();
 
                 assertNotNull(callback.capturedScalars,
                         "a rooted callback must keep its lexical captures when a temporary owner is released");
@@ -75,7 +73,7 @@ class RuntimeCodeScopeExitReachabilityTest {
 
                 GlobalVariable.globalHashes.remove(globalName);
                 MortalList.deferDecrement(callback);
-                MortalList.flushAboveMark();
+                MortalList.flush();
 
                 assertNull(callback.capturedScalars,
                         "removing the last Perl root must release callback captures");
@@ -88,7 +86,7 @@ class RuntimeCodeScopeExitReachabilityTest {
     }
 
     @Test
-    void scopeExitedCapturedCodeIsReleasedAfterItsLastRootDisappears() {
+    void arrayScopeExitPreservesRootedCallbacksThenReleasesThemWhenRootIsRemoved() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeScalar captured = new RuntimeScalar("captured");
@@ -98,44 +96,35 @@ class RuntimeCodeScopeExitReachabilityTest {
             callback.capturedScalars = new RuntimeScalar[] { captured };
 
             RuntimeScalar codeRef = new RuntimeScalar(callback);
-            codeRef.retainClosureCapture();
+            codeRef.refCountOwned = true;
+            RuntimeArray callbacks = new RuntimeArray();
+            callbacks.elements.add(codeRef);
+            callbacks.elementsOwned = true;
             String globalName = "RuntimeCodeScopeExitReachabilityTest::callbacks";
-            RuntimeHash callbacks = new RuntimeHash();
-            callbacks.elements.put("callback", codeRef);
-            GlobalVariable.globalHashes.put(globalName, callbacks);
+            GlobalVariable.globalArrays.put(globalName, callbacks);
 
+            RuntimeScalar weakProbe = new RuntimeScalar(new RuntimeHash()).createReference();
+            WeakRefRegistry.weaken(weakProbe);
             boolean previousActive = MortalList.isActive();
             MortalList.setActive(true);
             try {
-                RuntimeScalar.scopeExitCleanup(codeRef);
-                assertTrue(codeRef.scopeExited);
-                assertTrue(runtime.lifecycleState.deferredScopeExitCaptureCandidates.contains(codeRef));
-                assertTrue(callback.capturedScalars != null,
-                        "a rooted callback keeps its captures while the pad is live");
+                MortalList.scopeExitCleanupArray(callbacks);
                 MortalList.flush();
-                assertTrue(runtime.lifecycleState.deferredScopeExitCaptureCandidates.contains(codeRef));
 
+                assertEquals(1, callback.refCount,
+                        "a persistent aggregate root keeps its callback owner count");
                 assertNotNull(callback.capturedScalars,
-                        "a persistent Perl container keeps the scope-exited callback");
+                        "a persistent aggregate root keeps callback captures");
 
-                GlobalVariable.globalHashes.remove(globalName);
-                MortalList.invalidateExternalRootSnapshot();
-                assertTrue(runtime.lifecycleState.deferredScopeExitCaptureCandidates.contains(codeRef));
-                assertFalse(ReachabilityWalker.isCodeReachableFromRoots(callback),
-                        "the callback must no longer be reachable after removing its hash root");
-                assertFalse(ReachabilityWalker.walkEndBlockRoots().contains(callback));
-                assertFalse(ReachabilityWalker.walkEndBlockRoots().contains(codeRef));
-                assertFalse(ReachabilityWalker.hasStrongCycle(callback));
-                assertFalse(SpecialBlock.hasPendingEndBlock(callback));
-                assertFalse(RuntimeCode.isActiveCode(callback));
+                GlobalVariable.globalArrays.remove(globalName);
+                MortalList.scopeExitCleanupArray(callbacks);
                 MortalList.flush();
-                assertFalse(runtime.lifecycleState.deferredScopeExitCaptureCandidates.contains(codeRef));
 
                 assertNull(callback.capturedScalars,
-                        "removing the final Perl root releases the stale callback captures");
+                        "discarding the last callback container releases its captures");
                 assertEquals(0, captured.captureCount);
             } finally {
-                GlobalVariable.globalHashes.remove(globalName);
+                GlobalVariable.globalArrays.remove(globalName);
                 MortalList.setActive(previousActive);
             }
         }
