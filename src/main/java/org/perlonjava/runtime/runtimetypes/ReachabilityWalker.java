@@ -1537,6 +1537,18 @@ public class ReachabilityWalker {
                                 + " valueClass=" + (value == null ? "null" : value.getClass().getName())
                                 + " valueId=" + (value instanceof RuntimeBase base
                                         ? System.identityHashCode(base) : -1));
+                        if (value instanceof RuntimeHash stateHash) {
+                            for (Map.Entry<String, RuntimeScalar> entry : stateHash.elements.entrySet()) {
+                                Object child = entry.getValue() == null ? null : entry.getValue().value;
+                                if (child instanceof RuntimeHash childHash) {
+                                    System.err.println("[MOJO-LOOP-CHILD] key=" + entry.getKey()
+                                            + " identity=" + System.identityHashCode(childHash)
+                                            + " keys=" + childHash.elements.keySet()
+                                            + " stash=" + (childHash instanceof RuntimeStash)
+                                            + " blessed=" + NameNormalizer.getBlessStr(childHash.blessId));
+                                }
+                            }
+                        }
                     }
                 }
                 // Persistent state is a Perl owner edge from an installed CV.
