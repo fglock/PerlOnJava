@@ -1731,7 +1731,7 @@ public class MortalList {
                 // sentinel behavior.
                 if (base.nativeCaptureOwnerCount() == 0) base.refCount = 1;
             } else if (base instanceof RuntimeCode code
-                    && ReachabilityWalker.isReachableFromRoots(code)) {
+                    && ReachabilityWalker.isCodeReachableFromRoots(code)) {
                 // A callback stored in a long-lived Perl container can have
                 // its selective CV count consumed by a temporary invocation
                 // alias. The container is still a strong owner even when no
