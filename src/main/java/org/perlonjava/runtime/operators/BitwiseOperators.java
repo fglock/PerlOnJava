@@ -16,7 +16,7 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.blessedId;
  */
 public class BitwiseOperators {
     private static final BigInteger UV_MASK = BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE);
-    private static final int UNSIGNED_WORD_CACHE_MASK = 4095;
+    private static final int UNSIGNED_WORD_CACHE_MASK = 16383;
     private static final AtomicReferenceArray<UnsignedWordResult> UNSIGNED_WORD_CACHE =
             new AtomicReferenceArray<>(UNSIGNED_WORD_CACHE_MASK + 1);
 
