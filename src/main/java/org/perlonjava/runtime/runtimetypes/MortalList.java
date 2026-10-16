@@ -327,9 +327,7 @@ public class MortalList {
     private static void noteDeferredScopeExitCaptureCandidate(
             LifecycleRuntimeState state, RuntimeScalar scalar) {
         if (scalar.value instanceof RuntimeBase base && isDeferredScopeExitCandidate(base)) {
-            if (state.deferredScopeExitCaptureCandidates.add(scalar)) {
-                markBoundaryWork(state);
-            }
+            state.deferredScopeExitCaptureCandidates.add(scalar);
         }
     }
 
@@ -354,8 +352,6 @@ public class MortalList {
         Set<RuntimeBase> endReachable = ReachabilityWalker.walkEndBlockRoots();
         Set<RuntimeBase> cycleProtected = ReachabilityWalker.strongCycleProtectedReferents();
         boolean found = false;
-        Set<RuntimeScalar> retainedCandidates =
-                Collections.newSetFromMap(new IdentityHashMap<>());
         for (RuntimeScalar scalar : new ArrayList<>(state.deferredScopeExitCaptureCandidates)) {
             if (!scalar.scopeExited) continue;
             RuntimeBase base = scalar.value instanceof RuntimeBase value ? value : null;
@@ -365,27 +361,8 @@ public class MortalList {
                     || (base != null && endReachable.contains(base))
                     || (base != null && cycleProtected.contains(base))
                     || scalarReachable;
-            if (base != null && RuntimeBase.refCountTraceEnabled()
-                    && "LifetimeController".equals(NameNormalizer.getBlessStr(base.blessId))) {
-                List<String> rootPath = ReachabilityWalker.findPathTo(base, true);
-                System.err.println("[SCOPE-CANDIDATE] scalar=" + System.identityHashCode(scalar)
-                        + " deferred=" + state.deferredCapturesSet.containsKey(scalar)
-                        + " end=" + endReachable.contains(scalar) + "/" + endReachable.contains(base)
-                        + " cycle=" + cycleProtected.contains(base)
-                        + " scalarRoot=" + scalarReachable + " retained=" + retained
-                        + " codeRoot="
-                        + ReachabilityWalker.isReachableFromRootsExcludingOwnedCapturePads(base)
-                        + " path=" + (rootPath == null ? "<none>" : String.join(" -> ", rootPath))
-                        + " captureCount=" + scalar.captureCount + " refCount=" + base.refCount);
-            }
-            if (retained) {
-                retainedCandidates.add(scalar);
-                setDeferredScopeExitCandidateArgsDepth(
-                        state, scalar, RuntimeCode.argsStackDepth());
-                continue;
-            }
+            if (retained) continue;
 
-            setDeferredScopeExitCandidateArgsDepth(state, scalar, 0);
             scalar.releaseUnreachableSemanticCaptureOwner();
             Integer deferredCount = state.deferredCapturesSet.get(scalar);
             if (deferredCount != null) {
@@ -401,21 +378,7 @@ public class MortalList {
             found = true;
         }
         state.deferredScopeExitCaptureCandidates.clear();
-        state.deferredScopeExitCaptureCandidates.addAll(retainedCandidates);
         if (found) flushAboveMark();
-    }
-
-    private static void setDeferredScopeExitCandidateArgsDepth(
-            LifecycleRuntimeState state, RuntimeScalar scalar, int argsDepth) {
-        Integer previousDepth = state.deferredScopeExitCandidateArgsDepths.remove(scalar);
-        if (previousDepth != null) {
-            int remaining = state.deferredScopeExitCandidateDepthCounts.getOrDefault(previousDepth, 0) - 1;
-            if (remaining <= 0) state.deferredScopeExitCandidateDepthCounts.remove(previousDepth);
-            else state.deferredScopeExitCandidateDepthCounts.put(previousDepth, remaining);
-        }
-        if (argsDepth <= 0) return;
-        state.deferredScopeExitCandidateArgsDepths.put(scalar, argsDepth);
-        state.deferredScopeExitCandidateDepthCounts.merge(argsDepth, 1, Integer::sum);
     }
 
     static void noteDeferredCaptureMayBeReady() {
@@ -1551,22 +1514,10 @@ public class MortalList {
     }
 
     static void invalidateExternalRootSnapshot() {
-        LifecycleRuntimeState state = state();
-        state.externalRootSnapshot = null;
-        state.fullRootSnapshot = null;
-        state.unblessedAggregateRootSnapshot = null;
-        state.scalarRootSnapshot = null;
-    }
-
-    static void invalidateExternalRootSnapshotAfterArgumentPop() {
-        LifecycleRuntimeState state = state();
-        int argsDepth = RuntimeCode.argsStackDepth();
-        boolean candidateRootFramePopped = !state.deferredScopeExitCandidateDepthCounts.isEmpty()
-                && state.deferredScopeExitCandidateDepthCounts.lastKey() > argsDepth;
-        if (candidateRootFramePopped) {
-            invalidateExternalRootSnapshot();
-            markBoundaryWork(state);
-        }
+        state().externalRootSnapshot = null;
+        state().fullRootSnapshot = null;
+        state().unblessedAggregateRootSnapshot = null;
+        state().scalarRootSnapshot = null;
     }
 
     static void invalidateAllRootSnapshots() {
