@@ -1731,7 +1731,7 @@ public class MortalList {
                 // sentinel behavior.
                 if (base.nativeCaptureOwnerCount() == 0) base.refCount = 1;
             } else if (base instanceof RuntimeCode code
-                    && ReachabilityWalker.isCodeReachableFromRoots(code)) {
+                    && isCodeReachableFromRootsForDeferredRelease(code)) {
                 // A callback stored in a long-lived Perl container can have
                 // its selective CV count consumed by a temporary invocation
                 // alias. The container is still a strong owner even when no
@@ -1914,6 +1914,17 @@ public class MortalList {
                 DestroyDispatch.callDestroy(base);
             }
         }
+    }
+
+    private static boolean isCodeReachableFromRootsForDeferredRelease(RuntimeCode code) {
+        boolean reachable = ReachabilityWalker.isCodeReachableFromRoots(code);
+        if (Boolean.getBoolean("PJ_CODE_ROOT_TRACE")) {
+            System.err.println("[CODE-ROOT-CHECK] identity=" + System.identityHashCode(code)
+                    + " name=" + code.packageName + "::" + code.subName
+                    + " reachable=" + reachable + " captures="
+                    + (code.capturedScalars == null ? 0 : code.capturedScalars.length));
+        }
+        return reachable;
     }
 
     private static boolean blessedClassHasDestroy(RuntimeBase base) {
