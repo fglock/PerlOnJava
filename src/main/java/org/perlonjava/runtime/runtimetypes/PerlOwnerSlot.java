@@ -17,7 +17,8 @@ public final class PerlOwnerSlot {
     private static final AtomicLong NEXT_ID = new AtomicLong();
 
     public enum Kind {
-        CLOSURE_PAD
+        CLOSURE_PAD,
+        HASH_ENTRY
     }
 
     private final Kind kind;
@@ -131,6 +132,14 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("cannot capture a destroyed referent");
         }
         nativeCaptureOwner = true;
+        transferTo(target);
+    }
+
+    /** Attach this stable hash-entry slot to its current direct referent. */
+    public synchronized void acquireHashEntry(RuntimeBase target) {
+        if (kind != Kind.HASH_ENTRY) {
+            throw new IllegalStateException("hash-entry acquisition requires a HASH_ENTRY slot");
+        }
         transferTo(target);
     }
 

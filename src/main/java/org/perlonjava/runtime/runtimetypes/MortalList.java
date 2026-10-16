@@ -668,7 +668,10 @@ public class MortalList {
         // data), we must still cascade decrements so their weak-ref entries
         // can be cleared when the referent's refCount reaches 0.
         if (!RuntimeBase.blessedObjectExists() && !WeakRefRegistry.weakRefsExist()
-                && !RuntimeScalar.watcherCleanupNeeded()) return;
+                && !RuntimeScalar.watcherCleanupNeeded()) {
+            hash.releaseHashEntryOwnerSlots();
+            return;
+        }
         // If the hash has outstanding references (e.g., from \%hash stored elsewhere),
         // do NOT clean up elements — the hash is still alive and its elements are
         // accessible through the reference. Cleanup will happen when the last
@@ -707,7 +710,10 @@ public class MortalList {
                 if (needsWalk) break;
             }
         }
-        if (!needsWalk) return;
+        if (!needsWalk) {
+            hash.releaseHashEntryOwnerSlots();
+            return;
+        }
         // Refcount drift can miss an escaped hash reference. DBIC's
         // source_registrations hash is assigned into the live schema while the
         // original hash later exits; walking it here would destroy ResultSources
@@ -721,6 +727,7 @@ public class MortalList {
         for (RuntimeScalar val : valuesInDestructionOrder) {
             deferDecrementRecursive(val);
         }
+        hash.releaseHashEntryOwnerSlots();
     }
 
     /**
@@ -1729,6 +1736,12 @@ public class MortalList {
                 // alias. The container is still a strong owner even when no
                 // weak references point at the CODE object. Preserve the CV
                 // and its lexical captures until the last Perl root is gone.
+                base.refCount = 1;
+            } else if (base.hashSlotOwnerCount() > 0) {
+                // Ordinary hash entries carry stable owner-slot identities.
+                // Preserve the legacy count bridge while any entry still owns
+                // the referent; removing the final entry releases that slot
+                // before its matching deferred decrement is processed.
                 base.refCount = 1;
             } else if (base.localBindingExists) {
                 if (base instanceof RuntimeScalar scalar
