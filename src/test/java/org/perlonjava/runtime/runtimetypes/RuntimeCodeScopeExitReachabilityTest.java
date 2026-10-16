@@ -108,6 +108,7 @@ class RuntimeCodeScopeExitReachabilityTest {
             singletonMethod.stateVariable.put("loop", new RuntimeScalar(reactorTimers));
             String globalName = "RuntimeCodeScopeExitReachabilityTest::singleton";
             GlobalVariable.globalCodeRefs.put(globalName, new RuntimeScalar(singletonMethod));
+            GlobalVariable.invalidateGlobalCodeRefGraphRoots();
             boolean previousActive = MortalList.isActive();
             MortalList.setActive(true);
 
@@ -120,6 +121,7 @@ class RuntimeCodeScopeExitReachabilityTest {
                 assertEquals(1, captured.captureCount);
 
                 GlobalVariable.globalCodeRefs.remove(globalName);
+                GlobalVariable.invalidateGlobalCodeRefGraphRoots();
                 MortalList.deferDecrement(callback);
                 MortalList.flush();
 
@@ -128,6 +130,7 @@ class RuntimeCodeScopeExitReachabilityTest {
                 assertEquals(0, captured.captureCount);
             } finally {
                 GlobalVariable.globalCodeRefs.remove(globalName);
+                GlobalVariable.invalidateGlobalCodeRefGraphRoots();
                 MortalList.setActive(previousActive);
             }
         }
