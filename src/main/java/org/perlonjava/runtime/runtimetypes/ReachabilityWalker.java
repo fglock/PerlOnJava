@@ -220,11 +220,11 @@ public class ReachabilityWalker {
         for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
             addReachable(rescued, todo);
         }
-        // Legacy capture slots without a recorded closure owner remain
-        // conservative roots. Production closure pads are reached through
-        // their owning RuntimeCode so a closure cannot become a root through
-        // the aggregate pad it owns.
-        for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotRootReferents()) {
+        // Explicit owner slots carry semantic Perl ownership even when the
+        // owning pad cell is intentionally absent from conservative lexical
+        // walker roots. Captured aggregate pads use this path so their
+        // elements remain reachable until the closure releases the slot.
+        for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotReferents()) {
             addReachable(ownerReferent, todo);
         }
         for (RuntimeBase suspended : MortalList.snapshotSuspendedRoots()) {
@@ -741,7 +741,7 @@ public class ReachabilityWalker {
                 }
             }
             int ownerIdx = 0;
-            for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotRootReferents()) {
+            for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotReferents()) {
                 String ownerClass = ownerReferent.blessId == 0
                         ? ownerReferent.getClass().getSimpleName()
                         : NameNormalizer.getBlessStr(ownerReferent.blessId);
@@ -1364,6 +1364,12 @@ public class ReachabilityWalker {
         return reachableFromRootsSnapshotWithStatus(true);
     }
 
+    /** Root proof for a CODE referent without treating its own aggregate pads as roots. */
+    static boolean isCodeReachableFromRoots(RuntimeCode code) {
+        return code != null
+                && reachableFromRootsSnapshotWithStatus(true, false).isReachable(code);
+    }
+
     /**
      * Collect the bounded root graph needed to answer reachability for
      * unblessed aggregates. Installed CODE slot identities cannot own an
@@ -1377,6 +1383,11 @@ public class ReachabilityWalker {
 
     private static RootReachabilitySnapshot reachableFromRootsSnapshotWithStatus(
             boolean includeInstalledCodeSlots) {
+        return reachableFromRootsSnapshotWithStatus(includeInstalledCodeSlots, true);
+    }
+
+    private static RootReachabilitySnapshot reachableFromRootsSnapshotWithStatus(
+            boolean includeInstalledCodeSlots, boolean includeOwnedCapturePads) {
         ReachabilityQueryStats stats = MortalList.activeReachabilityQueryStats();
         if (stats != null) stats.snapshotsBuilt++;
         final int maxVisits = MAX_ROOT_SNAPSHOT_VISITS;
@@ -1400,7 +1411,8 @@ public class ReachabilityWalker {
             }
             for (RuntimeScalar scalar : GlobalVariable.globalVariableValuesView()) {
                 if (!budget.visitEdge()) break rootScan;
-                seedTarget(scalar, null, seen, todo, stats);
+                if (includeOwnedCapturePads) seedTarget(scalar, null, seen, todo, stats);
+                else seedTargetIncludingCode(scalar, null, seen, todo, stats);
             }
             for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrayEntriesView()) {
                 if (!budget.visitEdge()) break rootScan;
@@ -1423,13 +1435,15 @@ public class ReachabilityWalker {
                 if (scalar == null || scalar.captureCount > 0 || WeakRefRegistry.isweak(scalar)
                         || (!MyVarCleanupStack.isLive(scalar) && !scalar.refCountOwned)
                         || scalar.scopeExited) continue;
-                seedTarget(scalar, null, seen, todo, stats);
+                if (includeOwnedCapturePads) seedTarget(scalar, null, seen, todo, stats);
+                else seedTargetIncludingCode(scalar, null, seen, todo, stats);
             }
             for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
                 if (!budget.visitEdge()) break rootScan;
                 if (liveVar instanceof RuntimeScalar scalar) {
                     if (seen.add(scalar) && stats != null) stats.rootsSeeded++;
-                    seedTarget(scalar, null, seen, todo, stats);
+                    if (includeOwnedCapturePads) seedTarget(scalar, null, seen, todo, stats);
+                    else seedTargetIncludingCode(scalar, null, seen, todo, stats);
                 } else if (liveVar instanceof RuntimeBase base && seen.add(base)) {
                     todo.addLast(base);
                     if (stats != null) stats.rootsSeeded++;
@@ -1441,7 +1455,8 @@ public class ReachabilityWalker {
                         && scalar.type == RuntimeScalarType.REGEX
                         && !scalar.scopeExited
                         && !WeakRefRegistry.isweak(scalar)) {
-                    seedTarget(scalar, null, seen, todo, stats);
+                    if (includeOwnedCapturePads) seedTarget(scalar, null, seen, todo, stats);
+                    else seedTargetIncludingCode(scalar, null, seen, todo, stats);
                 }
             }
             for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
@@ -1451,7 +1466,10 @@ public class ReachabilityWalker {
                     if (stats != null) stats.rootsSeeded++;
                 }
             }
-            for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotRootReferents()) {
+            java.util.List<RuntimeBase> ownerReferents = includeOwnedCapturePads
+                    ? PerlRuntime.snapshotOwnerSlotReferents()
+                    : PerlRuntime.snapshotOwnerSlotRootReferents();
+            for (RuntimeBase ownerReferent : ownerReferents) {
                 if (!budget.visitEdge()) break rootScan;
                 if (seen.add(ownerReferent)) {
                     todo.addLast(ownerReferent);
@@ -1475,15 +1493,17 @@ public class ReachabilityWalker {
                 for (RuntimeScalar value : hash.elements.values()) {
                     if (!budget.visitEdge()) break walk;
                     if (stats != null) stats.edgesInspected++;
-                    followScalar(value, null, seen, todo);
+                    if (includeOwnedCapturePads) followScalar(value, null, seen, todo);
+                    else followScalarIncludingCode(value, null, seen, todo);
                 }
             } else if (cur instanceof RuntimeArray array) {
                 for (RuntimeScalar value : array.elements) {
                     if (!budget.visitEdge()) break walk;
                     if (stats != null) stats.edgesInspected++;
-                    followScalar(value, null, seen, todo);
+                    if (includeOwnedCapturePads) followScalar(value, null, seen, todo);
+                    else followScalarIncludingCode(value, null, seen, todo);
                 }
-            } else if (cur instanceof RuntimeCode code) {
+            } else if (!includeOwnedCapturePads && cur instanceof RuntimeCode code) {
                 if (code.capturedScalars != null) {
                     for (RuntimeScalar captured : code.capturedScalars) {
                         if (!budget.visitEdge()) break walk;
@@ -2094,7 +2114,7 @@ public class ReachabilityWalker {
                 if (stats != null) stats.rootsSeeded++;
             }
         }
-        for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotRootReferents()) {
+        for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotReferents()) {
             if (!budget.visitEdge()) return true;
             if (ownerReferent == target) return true;
             if (ownerReferent != null && seen.add(ownerReferent)) {
@@ -2211,22 +2231,6 @@ public class ReachabilityWalker {
                     if (stats != null) stats.edgesInspected++;
                     if (followScalar(v, target, seen, todo)) return true;
                 }
-            } else if (cur instanceof RuntimeCode code) {
-                if (code.capturedScalars != null) {
-                    for (RuntimeScalar captured : code.capturedScalars) {
-                        if (!budget.visitEdge()) break walk;
-                        if (stats != null) stats.edgesInspected++;
-                        if (followScalar(captured, target, seen, todo)) return true;
-                    }
-                }
-                if (code.capturedAggregates != null) {
-                    for (RuntimeBase captured : code.capturedAggregates) {
-                        if (!budget.visitEdge()) break walk;
-                        if (stats != null) stats.edgesInspected++;
-                        if (captured == target) return true;
-                        if (captured != null && seen.add(captured)) todo.addLast(captured);
-                    }
-                }
             } else if (cur instanceof RuntimeRegex regex) {
                 // Executable regex callbacks are strong owners of their
                 // lexical captures while a qr// scalar remains live. Follow
@@ -2252,9 +2256,9 @@ public class ReachabilityWalker {
                     if (!budget.complete) break walk;
                 }
             }
-            // Closure captures are followed only after the RuntimeCode itself
-            // was found from a Perl root. Owned aggregate pads are not roots in
-            // their own right when their owning closure is known.
+            // Closure captures remain opaque in the conservative refcount
+            // query; CODE-specific owner rescue uses the explicit owner-aware
+            // root proof above instead.
         }
         return !budget.complete || !todo.isEmpty();
     }
@@ -2795,6 +2799,17 @@ public class ReachabilityWalker {
         }
     }
 
+    private static void seedTargetIncludingCode(RuntimeScalar scalar, RuntimeBase target,
+            Set<RuntimeBase> seen, java.util.ArrayDeque<RuntimeBase> todo,
+            ReachabilityQueryStats stats) {
+        seedTarget(scalar, target, seen, todo, stats);
+        if (scalar != null && !WeakRefRegistry.isweak(scalar)
+                && scalar.value instanceof RuntimeCode code) {
+            if (code == target) seen.add(code);
+            else if (seen.add(code)) todo.addLast(code);
+        }
+    }
+
     private static boolean followScalar(RuntimeScalar s, RuntimeBase target,
                                         Set<RuntimeBase> seen,
                                         java.util.ArrayDeque<RuntimeBase> todo) {
@@ -2805,6 +2820,16 @@ public class ReachabilityWalker {
             if (b == target) return true;
             if (seen.add(b)) todo.addLast(b);
         }
+        return false;
+    }
+
+    private static boolean followScalarIncludingCode(RuntimeScalar scalar, RuntimeBase target,
+            Set<RuntimeBase> seen, java.util.ArrayDeque<RuntimeBase> todo) {
+        if (followScalar(scalar, target, seen, todo)) return true;
+        if (scalar == null || WeakRefRegistry.isweak(scalar)
+                || !(scalar.value instanceof RuntimeCode code)) return false;
+        if (code == target) return true;
+        if (seen.add(code)) todo.addLast(code);
         return false;
     }
 
