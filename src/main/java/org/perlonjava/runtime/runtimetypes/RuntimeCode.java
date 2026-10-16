@@ -2576,9 +2576,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /** Generated closure fields were copied into capturedScalars/aggregates. */
     public boolean captureFieldsRecorded;
 
-    /** Capture bookkeeping has been released; closedOverVariables is metadata only. */
-    public boolean captureOwnersReleased;
-
     /**
      * Captured aggregate lexicals (arrays/hashes). Their element cleanup is
      * deferred while the closure keeps the aggregate alive.
@@ -2871,7 +2868,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * captures, those are released recursively.
      */
     public void releaseCaptures() {
-        captureOwnersReleased = true;
         if (capturedScalars != null) {
             RuntimeScalar[] scalars = capturedScalars;
             capturedScalars = null;  // null out first to prevent re-entry
@@ -3809,7 +3805,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.capturedScalars = codeFrom.capturedScalars;
         this.capturedAggregates = codeFrom.capturedAggregates;
         this.captureFieldsRecorded = codeFrom.captureFieldsRecorded;
-        this.captureOwnersReleased = codeFrom.captureOwnersReleased;
         this.capturedAggregateOwnerSlots = codeFrom.capturedAggregateOwnerSlots;
         this.closedOverVariables = codeFrom.closedOverVariables;
         this.lexicalVariableNames = codeFrom.lexicalVariableNames;
