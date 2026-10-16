@@ -441,6 +441,11 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the sum.
      */
     public static RuntimeScalar addWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Integer operands cannot carry a Perl string channel, so skip the
+        // string-channel preservation checks used by the generic path.
+        if (arg1.type == INTEGER && arg2.type == INTEGER) {
+            return addWarnUnpropagated(arg1, arg2).propagateTaint(arg1, arg2);
+        }
         return preserveStringChannel(addWarnUnpropagated(arg1, arg2), arg1, arg2)
                 .propagateTaint(arg1, arg2);
     }
