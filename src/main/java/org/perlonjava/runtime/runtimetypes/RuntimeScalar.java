@@ -424,6 +424,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // narrow guard for live CODE refs whose captures must survive void discard.
     RuntimeBase containerOwner;
     private List<WeakReference<RuntimeHash>> hashContainerOwners;
+    private List<WeakReference<RuntimeArray>> arrayContainerOwners;
 
     /** Return the aggregate slot that directly owns this scalar, if any. */
     public RuntimeBase getContainerOwner() {
@@ -475,6 +476,32 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             List<RuntimeHash> remaining = hashContainerOwnersSnapshot();
             containerOwner = remaining.isEmpty() ? null : remaining.get(0);
         }
+    }
+
+    void markArrayContainerOwner(RuntimeArray owner) {
+        if (arrayContainerOwners == null) arrayContainerOwners = new ArrayList<>();
+        arrayContainerOwners.removeIf(reference -> reference.get() == null);
+        if (arrayContainerOwners.stream().noneMatch(reference -> reference.get() == owner)) {
+            arrayContainerOwners.add(new WeakReference<>(owner));
+        }
+    }
+
+    List<RuntimeArray> arrayContainerOwnersSnapshot() {
+        if (arrayContainerOwners == null) return List.of();
+        arrayContainerOwners.removeIf(reference -> reference.get() == null);
+        List<RuntimeArray> snapshot = new ArrayList<>(arrayContainerOwners.size());
+        for (WeakReference<RuntimeArray> reference : arrayContainerOwners) {
+            RuntimeArray owner = reference.get();
+            if (owner != null) snapshot.add(owner);
+        }
+        if (arrayContainerOwners.isEmpty()) arrayContainerOwners = null;
+        return snapshot;
+    }
+
+    void unmarkArrayContainerOwner(RuntimeArray owner) {
+        if (arrayContainerOwners == null) return;
+        arrayContainerOwners.removeIf(reference -> reference.get() == null || reference.get() == owner);
+        if (arrayContainerOwners.isEmpty()) arrayContainerOwners = null;
     }
 
     private void propagateTiedHandlerMarkerToReferent() {
@@ -2863,6 +2890,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             RuntimeBase newBase = this.value instanceof RuntimeBase base ? base : null;
             for (RuntimeHash owner : hashContainerOwnersSnapshot()) {
                 owner.updateHashEntryOwnersForScalar(this, oldBase, newBase);
+            }
+            for (RuntimeArray owner : arrayContainerOwnersSnapshot()) {
+                owner.updateArrayElementOwnersForScalar(this);
             }
         }
         if (this.captureCount > 0 && (this.type & RuntimeScalarType.REFERENCE_BIT) != 0
