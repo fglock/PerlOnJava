@@ -354,6 +354,8 @@ public class MortalList {
         Set<RuntimeBase> endReachable = ReachabilityWalker.walkEndBlockRoots();
         Set<RuntimeBase> cycleProtected = ReachabilityWalker.strongCycleProtectedReferents();
         boolean found = false;
+        Set<RuntimeScalar> retainedCandidates =
+                Collections.newSetFromMap(new IdentityHashMap<>());
         for (RuntimeScalar scalar : new ArrayList<>(state.deferredScopeExitCaptureCandidates)) {
             if (!scalar.scopeExited) continue;
             RuntimeBase base = scalar.value instanceof RuntimeBase value ? value : null;
@@ -376,7 +378,10 @@ public class MortalList {
                         + " path=" + (rootPath == null ? "<none>" : String.join(" -> ", rootPath))
                         + " captureCount=" + scalar.captureCount + " refCount=" + base.refCount);
             }
-            if (retained) continue;
+            if (retained) {
+                retainedCandidates.add(scalar);
+                continue;
+            }
 
             scalar.releaseUnreachableSemanticCaptureOwner();
             Integer deferredCount = state.deferredCapturesSet.get(scalar);
@@ -393,6 +398,7 @@ public class MortalList {
             found = true;
         }
         state.deferredScopeExitCaptureCandidates.clear();
+        state.deferredScopeExitCaptureCandidates.addAll(retainedCandidates);
         if (found) flushAboveMark();
     }
 
