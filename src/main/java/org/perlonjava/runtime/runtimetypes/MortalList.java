@@ -380,9 +380,16 @@ public class MortalList {
             }
             if (retained) {
                 retainedCandidates.add(scalar);
+                int argsDepth = RuntimeCode.argsStackDepth();
+                if (argsDepth > 0) {
+                    state.deferredScopeExitCandidateArgsDepths.put(scalar, argsDepth);
+                } else {
+                    state.deferredScopeExitCandidateArgsDepths.remove(scalar);
+                }
                 continue;
             }
 
+            state.deferredScopeExitCandidateArgsDepths.remove(scalar);
             scalar.releaseUnreachableSemanticCaptureOwner();
             Integer deferredCount = state.deferredCapturesSet.get(scalar);
             if (deferredCount != null) {
@@ -1547,7 +1554,10 @@ public class MortalList {
 
     static void invalidateExternalRootSnapshotAfterArgumentPop() {
         LifecycleRuntimeState state = state();
-        if (!state.deferredScopeExitCaptureCandidates.isEmpty()) {
+        int argsDepth = RuntimeCode.argsStackDepth();
+        boolean candidateRootFramePopped = state.deferredScopeExitCandidateArgsDepths
+                .values().stream().anyMatch(depth -> argsDepth < depth);
+        if (candidateRootFramePopped) {
             invalidateExternalRootSnapshot();
         }
     }
