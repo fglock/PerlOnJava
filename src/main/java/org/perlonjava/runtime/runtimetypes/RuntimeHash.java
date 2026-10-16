@@ -41,6 +41,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public int type;
     // Map to store the elements of the hash
     public Map<String, RuntimeScalar> elements;
+    /** Stable semantic owner identity for each ordinary hash entry. */
+    private final Map<String, PerlOwnerSlot> hashEntryOwnerSlots = new HashMap<>();
     /** True only for Perl's compile-time %^H hash. */
     public boolean isHintHash;
     /** True for Perl's runtime %{^HOOK} hash. */
@@ -192,7 +194,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             owner.markPackageRootedValue(value);
             RuntimeScalar result = super.put(key, value);
-            updateReferentHashSlotOwnership(previous, value);
+            owner.updateHashEntryOwner(key, previous, value);
+            if (previous != value) owner.detachHashCellIfAbsent(previous);
             return result;
         }
 
@@ -228,19 +231,26 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             super.putAll(updates);
             for (Map.Entry<String, RuntimeScalar> e : updates.entrySet()) {
-                updateReferentHashSlotOwnership(previousValues.get(e.getKey()), e.getValue());
+                owner.updateHashEntryOwner(e.getKey(), previousValues.get(e.getKey()), e.getValue());
+            }
+            for (RuntimeScalar previous : previousValues.values()) {
+                owner.detachHashCellIfAbsent(previous);
             }
         }
 
         @Override
         public RuntimeScalar remove(Object key) {
+            boolean existed = super.containsKey(key);
             RuntimeScalar previous = super.remove(key);
+            if (existed && key instanceof String stringKey) {
+                owner.releaseHashEntryOwner(stringKey, previous);
+            }
+            owner.detachHashCellIfAbsent(previous);
             if (previous != null) {
                 if (owner.isHintHash && !owner.suppressHintHashLifecycleCleanup) {
                     MortalList.deferDestroyForContainerClear(java.util.Collections.singletonList(previous));
                 }
                 owner.notePackageRootMutation(previous, null);
-                updateReferentHashSlotOwnership(previous, null);
             }
             return previous;
         }
@@ -252,9 +262,14 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     MortalList.deferDestroyForContainerClear(values());
                 }
                 owner.notePackageRootClear(values());
-                for (RuntimeScalar value : values()) {
-                    updateReferentHashSlotOwnership(value, null);
+                Set<RuntimeScalar> previousValues = Collections.newSetFromMap(new IdentityHashMap<>());
+                previousValues.addAll(values());
+                for (Map.Entry<String, RuntimeScalar> entry : new ArrayList<>(entrySet())) {
+                    owner.releaseHashEntryOwner(entry.getKey(), entry.getValue());
                 }
+                super.clear();
+                for (RuntimeScalar previous : previousValues) owner.detachHashCellIfAbsent(previous);
+                return;
             }
             super.clear();
         }
@@ -576,6 +591,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 // tied outer hint hash; it must not dispatch CLEAR on the
                 // outer tie object (which may deliberately omit CLEAR).
                 if (isHintHash && materializedList.elements.isEmpty()) {
+                    releaseHashEntryOwnerSlots();
                     elements = newElementMap();
                     type = PLAIN_HASH;
                     yield new RuntimeArray();
@@ -669,16 +685,67 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         return scalar != null && scalar.value instanceof RuntimeBase base ? base : null;
     }
 
-    private static void updateReferentHashSlotOwnership(
-            RuntimeScalar oldValue, RuntimeScalar newValue) {
-        RuntimeBase oldReferent = directReferent(oldValue);
-        RuntimeBase newReferent = directReferent(newValue);
-        if (oldReferent == newReferent) return;
-        if (oldReferent != null && oldReferent.hashSlotOwnerCount > 0) {
-            oldReferent.hashSlotOwnerCount--;
+    private void updateHashEntryOwner(String key, RuntimeScalar previous, RuntimeScalar value) {
+        // Shared hashes still use their canonical legacy accounting; an owner
+        // slot belongs to one PerlRuntime and cannot represent shared storage.
+        if (threadShared) {
+            adjustSharedHashSlotOwnerCount(directReferent(previous), directReferent(value));
+            return;
         }
-        if (newReferent != null) {
-            newReferent.hashSlotOwnerCount++;
+        PerlOwnerSlot slot = hashEntryOwnerSlots.computeIfAbsent(key,
+                ignored -> new PerlOwnerSlot(PerlOwnerSlot.Kind.HASH_ENTRY));
+        slot.acquireHashEntry(directReferent(value));
+    }
+
+    private void detachHashCellIfAbsent(RuntimeScalar scalar) {
+        if (scalar != null && !elements.containsValue(scalar)) {
+            scalar.unmarkHashContainerOwner(this);
+        }
+    }
+
+    private void releaseHashEntryOwner(String key, RuntimeScalar previous) {
+        if (threadShared) {
+            adjustSharedHashSlotOwnerCount(directReferent(previous), null);
+            return;
+        }
+        PerlOwnerSlot removed = hashEntryOwnerSlots.remove(key);
+        if (removed != null) removed.release();
+    }
+
+    private static void adjustSharedHashSlotOwnerCount(RuntimeBase oldReferent,
+                                                       RuntimeBase newReferent) {
+        if (oldReferent == newReferent) return;
+        if (oldReferent != null) oldReferent.adjustSharedHashSlotOwnerCount(-1);
+        if (newReferent != null) newReferent.adjustSharedHashSlotOwnerCount(1);
+    }
+
+    PerlOwnerSlot hashEntryOwnerSlot(String key) {
+        return hashEntryOwnerSlots.get(key);
+    }
+
+    void releaseHashEntryOwnerSlots() {
+        if (threadShared) return;
+        Set<RuntimeScalar> cells = Collections.newSetFromMap(new IdentityHashMap<>());
+        cells.addAll(elements.values());
+        for (RuntimeScalar cell : cells) {
+            if (cell != null) cell.unmarkHashContainerOwner(this);
+        }
+        for (PerlOwnerSlot slot : hashEntryOwnerSlots.values()) slot.release();
+        hashEntryOwnerSlots.clear();
+    }
+
+    /** Update every entry that aliases a scalar cell whose referent changed. */
+    void updateHashEntryOwnersForScalar(RuntimeScalar scalar, RuntimeBase oldReferent,
+                                        RuntimeBase nextReferent) {
+        for (Map.Entry<String, RuntimeScalar> entry : elements.entrySet()) {
+            if (entry.getValue() != scalar) continue;
+            if (threadShared) {
+                adjustSharedHashSlotOwnerCount(oldReferent, nextReferent);
+                continue;
+            }
+            PerlOwnerSlot slot = hashEntryOwnerSlots.computeIfAbsent(entry.getKey(),
+                    ignored -> new PerlOwnerSlot(PerlOwnerSlot.Kind.HASH_ENTRY));
+            slot.acquireHashEntry(nextReferent);
         }
     }
 
@@ -1771,6 +1838,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         if (!hasDestroyableValues()) {
             MortalList.deferDestroyForContainerClear(this.elements.values());
             if (this.type == PLAIN_HASH) {
+                releaseHashEntryOwnerSlots();
                 this.elements = newElementMap();
             } else {
                 this.elements.clear();
@@ -1794,6 +1862,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             String key = entry.getKey();
             RuntimeScalar value = entry.getValue();
             it.remove();
+            releaseHashEntryOwner(key, value);
+            detachHashCellIfAbsent(value);
             notePackageRootMutation(value, null);
             if (this.byteKeys != null) this.byteKeys.remove(key);
             // Defer DESTROY for this one value, then flush so it runs now.
@@ -1917,7 +1987,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 this.blessId = savedBlessId;
             }
             notePackageRootClear(this.elements.values());
-            this.elements = previousState.elements;
+            releaseHashEntryOwnerSlots();
+            this.elements = newElementMap(previousState.elements);
+            previousState.releaseHashEntryOwnerSlots();
             notePackageRootClear(this.elements.values());
             if (isPackageRootedHash()) {
                 for (RuntimeScalar value : this.elements.values()) {
@@ -1951,6 +2023,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             this.blessId = activeState.blessId;
             this.byteKeys = activeState.byteKeys != null ? new HashSet<>(activeState.byteKeys) : null;
             this.elements.putAll(activeState.elements);
+            activeState.releaseHashEntryOwnerSlots();
         }
     }
 

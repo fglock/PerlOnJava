@@ -192,14 +192,6 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public boolean storedInPackageGlobal = false;
 
     /**
-     * Number of live hash-element slots that directly own this referent.
-     * This is separate from selective refCount because a returned method
-     * value can be detached from its slot while the hash remains an owner.
-     */
-    public int hashSlotOwnerCount = 0;
-
-
-    /**
      * Marks a scalar/container whose contents are reachable from package
      * globals. Mutating such an object can change cached root-reachability
      * answers, so mutation paths invalidate MortalList's external-root
@@ -315,6 +307,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     /** Identity ledger for migrated slots; selective refCount remains the
      * lifecycle bridge while owner families move to this API. */
     private java.util.Set<PerlOwnerSlot> ownerSlots = null;
+    /** Legacy-only hash slots shared across runtime wrappers. */
+    private int sharedHashSlotOwnerCount;
 
     synchronized void addOwnerSlot(PerlOwnerSlot slot) {
         if (ownerSlots == null) {
@@ -345,6 +339,15 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     /** Number of distinct captured pad slots that own this referent. */
     public int semanticCaptureOwnerCount() {
         return ownerSlotCount(PerlOwnerSlot.Kind.CLOSURE_PAD);
+    }
+
+    /** Number of live ordinary hash-entry slots that directly own this referent. */
+    public int hashSlotOwnerCount() {
+        return ownerSlotCount(PerlOwnerSlot.Kind.HASH_ENTRY) + sharedHashSlotOwnerCount;
+    }
+
+    synchronized void adjustSharedHashSlotOwnerCount(int delta) {
+        sharedHashSlotOwnerCount = Math.max(0, sharedHashSlotOwnerCount + delta);
     }
 
     /** Count captured aggregate pads whose lifetime is owned natively by slots. */
