@@ -320,6 +320,8 @@ public class MortalList {
         if (scalar == null || !scalar.scopeExited
                 || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
                 || !(scalar.value instanceof RuntimeBase base)
+                || (base instanceof RuntimeCode code
+                        && (scalar.refCountOwned || code.refCount <= 0))
                 || !isDeferredScopeExitCandidate(base)) return;
         noteDeferredScopeExitCaptureCandidate(state(), scalar);
     }
@@ -327,11 +329,17 @@ public class MortalList {
     private static void noteDeferredScopeExitCaptureCandidate(
             LifecycleRuntimeState state, RuntimeScalar scalar) {
         if (scalar.value instanceof RuntimeBase base && isDeferredScopeExitCandidate(base)) {
-            state.deferredScopeExitCaptureCandidates.add(scalar);
+            if (state.deferredScopeExitCaptureCandidates.add(scalar)) {
+                markBoundaryWork(state);
+            }
         }
     }
 
     private static boolean isDeferredScopeExitCandidate(RuntimeBase base) {
+        if (base instanceof RuntimeCode code) {
+            return (code.capturedScalars != null && code.capturedScalars.length != 0)
+                    || (code.capturedAggregates != null && code.capturedAggregates.length != 0);
+        }
         if (base == null || base.blessId == 0) return false;
         if (WeakRefRegistry.hasWeakRefsTo(base)) return true;
         String className = NameNormalizer.getBlessStr(base.blessId);
@@ -350,34 +358,64 @@ public class MortalList {
         if (state.deferredScopeExitCaptureCandidates.isEmpty()) return;
 
         Set<RuntimeBase> endReachable = ReachabilityWalker.walkEndBlockRoots();
-        Set<RuntimeBase> cycleProtected = ReachabilityWalker.strongCycleProtectedReferents();
+        boolean hasCodeCandidates = state.deferredScopeExitCaptureCandidates.stream()
+                .anyMatch(candidate -> candidate.value instanceof RuntimeCode);
+        ReachabilityWalker.RootReachabilitySnapshot codeRootSnapshot = hasCodeCandidates
+                ? ReachabilityWalker.codeReachabilitySnapshot() : null;
+        boolean hasNonCodeCandidates = state.deferredScopeExitCaptureCandidates.stream()
+                .anyMatch(candidate -> !(candidate.value instanceof RuntimeCode));
+        Set<RuntimeBase> cycleProtected = hasNonCodeCandidates
+                ? ReachabilityWalker.strongCycleProtectedReferents() : Collections.emptySet();
         boolean found = false;
+        Set<RuntimeScalar> retainedCodeCandidates =
+                Collections.newSetFromMap(new IdentityHashMap<>());
         for (RuntimeScalar scalar : new ArrayList<>(state.deferredScopeExitCaptureCandidates)) {
             if (!scalar.scopeExited) continue;
             RuntimeBase base = scalar.value instanceof RuntimeBase value ? value : null;
-            boolean scalarReachable = ReachabilityWalker.isScalarReachable(scalar)
-                    || ReachabilityWalker.isReachableFromRoots(scalar);
+            boolean scalarReachable = !(base instanceof RuntimeCode)
+                    && (ReachabilityWalker.isScalarReachable(scalar)
+                    || ReachabilityWalker.isReachableFromRoots(scalar));
+            boolean codeReachable = base instanceof RuntimeCode code
+                    && (code.stashRefCount > 0
+                    || code.activeEndBlockExecutions > 0
+                    || SpecialBlock.hasPendingEndBlock(code)
+                    || RuntimeCode.isActiveCode(code)
+                    || ReachabilityWalker.hasStrongCycle(code)
+                    || codeRootSnapshot.isReachable(code));
             boolean retained = endReachable.contains(scalar)
                     || (base != null && endReachable.contains(base))
                     || (base != null && cycleProtected.contains(base))
-                    || scalarReachable;
-            if (retained) continue;
+                    || scalarReachable
+                    || codeReachable;
+            if (retained) {
+                if (base instanceof RuntimeCode) retainedCodeCandidates.add(scalar);
+                continue;
+            }
 
-            scalar.releaseUnreachableSemanticCaptureOwner();
             Integer deferredCount = state.deferredCapturesSet.get(scalar);
             if (deferredCount != null) {
+                scalar.releaseUnreachableSemanticCaptureOwner();
                 for (int i = state.deferredCaptures.size() - 1; i >= 0; i--) {
                     if (state.deferredCaptures.get(i) != scalar) continue;
                     deferDecrementIfTracked(scalar);
                     state.deferredCaptures.remove(i);
                     removeFromDeferredSet(scalar);
                 }
+            } else if (base instanceof RuntimeCode code) {
+                while (scalar.captureCount > 0) scalar.releaseClosureCapture();
+                scalar.releaseUnreachableSemanticCaptureOwner();
+                if (code.refCount > 0) deferDecrement(code);
+                else code.releaseCaptures();
             } else if (base != null) {
+                scalar.releaseUnreachableSemanticCaptureOwner();
                 requestTargetedWeakSweep(base);
+            } else {
+                scalar.releaseUnreachableSemanticCaptureOwner();
             }
             found = true;
         }
         state.deferredScopeExitCaptureCandidates.clear();
+        state.deferredScopeExitCaptureCandidates.addAll(retainedCodeCandidates);
         if (found) flushAboveMark();
     }
 
@@ -722,9 +760,6 @@ public class MortalList {
                 && hash.refCount >= 0
                 && hash.hadCountedReference
                 && isReachableFromExternalRootCached(hash)) return;
-        if (hadLocalBinding
-                && containerContainsCodeReference(hash)
-                && isReachableFromExternalRootCached(hash)) return;
         List<RuntimeScalar> valuesInDestructionOrder = new ArrayList<>(hash.elements.values());
         Collections.reverse(valuesInDestructionOrder);
         for (RuntimeScalar val : valuesInDestructionOrder) {
@@ -765,11 +800,6 @@ public class MortalList {
         // Alias arrays such as @_ do not own their original element slots.
         if (arr.refCount > 0 || temporaryRootDirectlyReferences(arr)
                 || directlyReferences(returned, arr)) return;
-        // Refcount tracking does not cover every Perl callback container.
-        // Keep a CODE-bearing array intact while a persistent Perl root still
-        // owns it (for example, Mojo::Reactor's recurring timer table).
-        if (containerContainsCodeReference(arr)
-                && isReachableFromExternalRootCached(arr)) return;
         // \$#array creates a scalar proxy, not an array reference.  Once the
         // lexical AV exits, that proxy becomes an orphaned undef lvalue; it
         // must not retain this Java RuntimeArray merely through its backing
@@ -1011,11 +1041,6 @@ public class MortalList {
             if (!(s.value instanceof RuntimeBase base)) continue;
             if (!visited.add(base)) continue;  // already visited — cycle
 
-            if (base instanceof RuntimeCode) {
-                deferDecrementIfTracked(s);
-                continue;
-            }
-
             if (base.blessId != 0) {
                 boolean releasingLastOwner = false;
                 if (s.refCountOwned && base.refCount > 0) {
@@ -1150,35 +1175,6 @@ public class MortalList {
             work.add(base);
         } else if (base instanceof RuntimeCode && base.refCount >= 0) {
             return true;
-        }
-        return false;
-    }
-
-    /** Whether an aggregate contains a CODE slot, including through nested aggregates. */
-    private static boolean containerContainsCodeReference(RuntimeBase container) {
-        if (!(container instanceof RuntimeArray || container instanceof RuntimeHash)) return false;
-        ArrayDeque<RuntimeBase> work = new ArrayDeque<>();
-        Set<RuntimeBase> visited = Collections.newSetFromMap(new IdentityHashMap<>());
-        work.add(container);
-        while (!work.isEmpty()) {
-            RuntimeBase current = work.removeFirst();
-            if (!visited.add(current)) continue;
-            Iterable<RuntimeScalar> values;
-            if (current instanceof RuntimeArray array) {
-                values = array.elements;
-            } else if (current instanceof RuntimeHash hash) {
-                values = hash.elements.values();
-            } else {
-                continue;
-            }
-            for (RuntimeScalar value : values) {
-                if (value == null || (value.type & RuntimeScalarType.REFERENCE_BIT) == 0
-                        || !(value.value instanceof RuntimeBase referent)) continue;
-                if (referent instanceof RuntimeCode) return true;
-                if (referent instanceof RuntimeArray || referent instanceof RuntimeHash) {
-                    work.addLast(referent);
-                }
-            }
         }
         return false;
     }
@@ -1556,10 +1552,14 @@ public class MortalList {
     }
 
     static void invalidateExternalRootSnapshot() {
-        state().externalRootSnapshot = null;
-        state().fullRootSnapshot = null;
-        state().unblessedAggregateRootSnapshot = null;
-        state().scalarRootSnapshot = null;
+        LifecycleRuntimeState state = state();
+        state.externalRootSnapshot = null;
+        state.fullRootSnapshot = null;
+        state.unblessedAggregateRootSnapshot = null;
+        state.scalarRootSnapshot = null;
+        if (!state.deferredScopeExitCaptureCandidates.isEmpty()) {
+            markBoundaryWork(state);
+        }
     }
 
     static void invalidateAllRootSnapshots() {
