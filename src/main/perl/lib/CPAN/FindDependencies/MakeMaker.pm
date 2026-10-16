@@ -21,7 +21,10 @@ sub getreqs_from_mm {
     my $result = run_process(
         argv => [ $^X, 'Makefile.PL' ],
         cwd => $tempdir,
-        timeout => 10,
+        # MakeMaker can take several seconds to start on a loaded Windows CI
+        # worker. Keep the child bounded without treating startup latency as
+        # a hung Makefile.PL.
+        timeout => 60,
     );
     return "Makefile.PL didn't finish in a reasonable time\n"
         if $result->{timed_out};
