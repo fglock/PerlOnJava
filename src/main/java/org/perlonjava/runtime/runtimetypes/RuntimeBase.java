@@ -346,6 +346,11 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return ownerSlotCount(PerlOwnerSlot.Kind.HASH_ENTRY) + sharedHashSlotOwnerCount;
     }
 
+    /** Number of live ordinary array-element slots that directly own this referent. */
+    public int arraySlotOwnerCount() {
+        return ownerSlotCount(PerlOwnerSlot.Kind.ARRAY_ELEMENT);
+    }
+
     synchronized void adjustSharedHashSlotOwnerCount(int delta) {
         sharedHashSlotOwnerCount = Math.max(0, sharedHashSlotOwnerCount + delta);
     }
