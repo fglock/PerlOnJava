@@ -56,6 +56,8 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.runUnitcheckBlock
  * It provides functionality to compile, store, and execute Perl subroutines and eval strings.
  */
 public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
+    private static final CallerStack.CallerInfo NO_ACTIVE_CALL_SITE =
+            new CallerStack.CallerInfo(null, null, 0);
     private static final java.util.concurrent.atomic.AtomicLong CORE_EVALBYTES_TAGS =
             new java.util.concurrent.atomic.AtomicLong();
     private static final ThreadLocal<ArrayDeque<EvalRuntimeContext>> EVAL_RUNTIME_CONTEXTS =
@@ -796,7 +798,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         CallerStack.CallerInfo directCallSite = executionState.pendingDirectCallSites.poll();
         executionState.activeCodeCallSites.push(directCallSite != null
                 ? directCallSite
-                : new CallerStack.CallerInfo(callSitePackage, null, 0));
+                : NO_ACTIVE_CALL_SITE);
         activeCodeStack(executionState).push(code);
         // Keep the live pad for every active CV. Besides Devel::LexAlias and
         // runtime regex sources, eval STRING in package DB must resolve the
@@ -1044,6 +1046,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeCode code, String variableName, RuntimeBase cell) {
         PerlRuntime runtime = PerlRuntime.current();
         Deque<ActiveLexicalFrame> frames = activeLexicalFrames(runtime.executionState());
+        ActiveLexicalFrame top = frames.peek();
+        if (top != null && sameLogicalCode(top.code(), code)) {
+            top.put(variableName, cell);
+            return;
+        }
         for (ActiveLexicalFrame frame : frames) {
             if (sameLogicalCode(frame.code(), code)) {
                 frame.put(variableName, cell);
@@ -1454,6 +1461,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public static Integer getCallContextAtCallerFrame(int logicalFrame) {
         if (logicalFrame < 0) return null;
+        if (logicalFrame == 0) {
+            Iterator<RuntimeCode> codeIterator = activeCodeStack().iterator();
+            Iterator<Integer> contextIterator = callContextStack().iterator();
+            if (!codeIterator.hasNext() || !contextIterator.hasNext()) return null;
+            RuntimeCode previous = codeIterator.next();
+            Integer outermostContext = contextIterator.next();
+            while (codeIterator.hasNext() && contextIterator.hasNext()) {
+                RuntimeCode next = codeIterator.next();
+                Integer nextContext = contextIterator.next();
+                if (!isCompilerWrapperPair(next, previous)) break;
+                outermostContext = nextContext;
+                previous = next;
+            }
+            return outermostContext;
+        }
         java.util.List<RuntimeCode> codes = new java.util.ArrayList<>(activeCodeStack());
         java.util.List<Integer> contexts = new java.util.ArrayList<>(callContextStack());
         int size = Math.min(codes.size(), contexts.size());
@@ -2542,7 +2564,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     private static RuntimeBase findBoundActiveLexical(RuntimeCode code, String variableName) {
         PerlRuntime runtime = PerlRuntime.current();
-        for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
+        Deque<ActiveLexicalFrame> frames = activeLexicalFrames(runtime.executionState());
+        ActiveLexicalFrame top = frames.peek();
+        if (top != null && sameLogicalCode(top.code(), code)) {
+            return top.cells().get(variableName);
+        }
+        for (ActiveLexicalFrame frame : frames) {
             if (sameLogicalCode(frame.code(), code)) {
                 RuntimeBase cell = frame.cells().get(variableName);
                 if (cell != null) return cell;
