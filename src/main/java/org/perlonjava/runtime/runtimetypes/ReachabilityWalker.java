@@ -1409,6 +1409,13 @@ public class ReachabilityWalker {
                     seedTarget(codeRef, null, seen, todo, stats);
                 }
             }
+            for (RuntimeCode activeCode : PerlRuntime.current().executionState().activeCodeStack) {
+                if (!budget.visitEdge()) break rootScan;
+                if (activeCode != null && seen.add(activeCode)) {
+                    todo.addLast(activeCode);
+                    if (stats != null) stats.rootsSeeded++;
+                }
+            }
             for (RuntimeScalar codeRef : GlobalVariable.globalCodeRefEdgeRootsView()) {
                 if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
                     if (stats != null) stats.globalCodeCaptureRootsWalked++;

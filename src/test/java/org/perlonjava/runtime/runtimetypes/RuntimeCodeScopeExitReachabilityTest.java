@@ -122,6 +122,18 @@ class RuntimeCodeScopeExitReachabilityTest {
 
                 GlobalVariable.globalCodeRefs.remove(globalName);
                 GlobalVariable.invalidateGlobalCodeRefGraphRoots();
+                RuntimeCode.pushActiveCode(timerWrapper);
+                try {
+                    MortalList.deferDecrement(callback);
+                    MortalList.flush();
+
+                    assertNotNull(callback.capturedScalars,
+                            "an active callback must retain a nested callback in its capture pad");
+                    assertEquals(1, captured.captureCount);
+                } finally {
+                    RuntimeCode.popActiveCode(timerWrapper);
+                }
+
                 MortalList.deferDecrement(callback);
                 MortalList.flush();
 
