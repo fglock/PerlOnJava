@@ -229,6 +229,11 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     /** Retain one aggregate pad capture through an explicit owner slot. */
     public PerlOwnerSlot retainClosureCaptureOwner() {
+        return retainClosureCaptureOwner(null);
+    }
+
+    /** Retain this aggregate pad through the semantic edge from its closure. */
+    public PerlOwnerSlot retainClosureCaptureOwner(RuntimeCode closureOwner) {
         // A closure-pad slot is a semantic Perl owner even though it does not
         // contribute to the legacy selective refcount. A targeted weak sweep
         // can therefore leave an unblessed aggregate's legacy count at the
@@ -240,7 +245,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             refCount = 0;
         }
         PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
-        ownerSlot.acquireCapture(this);
+        ownerSlot.acquireCapture(this, closureOwner);
         retainClosureCapture();
         return ownerSlot;
     }
@@ -366,6 +371,17 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             }
         }
         return count;
+    }
+
+    /** Whether an active captured-pad slot has no owning closure edge recorded. */
+    synchronized boolean hasUnassociatedClosureCaptureOwner() {
+        if (ownerSlots == null) return false;
+        for (PerlOwnerSlot slot : ownerSlots) {
+            if (slot.kind() == PerlOwnerSlot.Kind.CLOSURE_PAD
+                    && slot.isNativeCaptureOwner()
+                    && slot.closureOwner() == null) return true;
+        }
+        return false;
     }
 
     // Conservative gate for the tied-handler reachability fallback. Once a
@@ -814,7 +830,9 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             }
             result.append(']');
         }
-        result.append(" semanticCaptureOwners=").append(semanticCaptureOwnerCount());
+        result.append(" semanticCaptureOwners=").append(semanticCaptureOwnerCount())
+                .append(" hashEntryOwners=").append(hashSlotOwnerCount())
+                .append(" arrayElementOwners=").append(arraySlotOwnerCount());
         return result.toString();
     }
 
