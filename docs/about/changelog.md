@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Keep lexical-registration membership checks constant-time, avoiding quadratic CPAN index parsing as cleanup stacks grow.
 - Preserve numeric types of cached read-only scalars in ranges, rejecting unsigned endpoints outside the supported integer range.
 - Improve JVM execution performance for the bit-packed Life example, ordinary scalar assignments, and common blessing lookups.
 - Add a reproducible, warmup-aware Perl versus PerlOnJava performance runner (#1196).
