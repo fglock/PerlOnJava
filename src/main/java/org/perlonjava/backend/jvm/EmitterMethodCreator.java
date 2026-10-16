@@ -468,6 +468,8 @@ public class EmitterMethodCreator implements Opcodes {
                                 (String) ast.getAnnotation("compiledSubroutineName"));
         ctx.javaClassInfo.readOnlyArgumentCandidate =
                 org.perlonjava.frontend.analysis.ReadOnlyArgumentUnpackAnalysis.analyze(ast);
+        ctx.javaClassInfo.skipRegexStateSnapshot =
+                org.perlonjava.frontend.analysis.RegexStateSnapshotAnalysis.canSkipSnapshot(ast);
         ctx.javaClassInfo.readOnlyArgumentFlagSlot = -1;
         ctx.javaClassInfo.readOnlyArgumentSlots = java.util.Collections.emptyMap();
         ctx.javaClassInfo.readOnlyArgumentFreshScalarReturn =
@@ -774,8 +776,10 @@ public class EmitterMethodCreator implements Opcodes {
             // Store dynamicIndex so goto &sub can access it for cleanup before tail call
             ctx.javaClassInfo.dynamicLevelSlot = dynamicIndex;
 
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RegexState", "save", "()V", false);
+            if (!ctx.javaClassInfo.skipRegexStateSnapshot) {
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RegexState", "save", "()V", false);
+            }
 
             // Store the computed RuntimeList return value in a dedicated local slot.
             // This keeps the operand stack empty at join labels (endCatch), avoiding
