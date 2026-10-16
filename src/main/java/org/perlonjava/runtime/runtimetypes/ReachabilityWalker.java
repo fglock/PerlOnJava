@@ -1601,6 +1601,17 @@ public class ReachabilityWalker {
                         if (captured != null && seen.add(captured)) todo.addLast(captured);
                     }
                 }
+                if (!includeOwnedCapturePads && code.closedOverVariables != null) {
+                    for (RuntimeBase captured : code.closedOverVariables.values()) {
+                        if (!budget.visitEdge()) break walk;
+                        if (stats != null) stats.edgesInspected++;
+                        if (captured instanceof RuntimeScalar scalar) {
+                            followScalarIncludingCode(scalar, null, seen, todo);
+                        } else if (captured != null && seen.add(captured)) {
+                            todo.addLast(captured);
+                        }
+                    }
+                }
             } else if (cur instanceof RuntimeRegex regex) {
                 for (RuntimeCode callback : regex.executableCallbackCodes()) {
                     if (!budget.visitEdge()) break walk;
