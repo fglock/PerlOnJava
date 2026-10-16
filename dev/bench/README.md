@@ -26,6 +26,7 @@ under PerlOnJava (and optionally system Perl for comparison). Use them to:
 | `benchmark_refcount_store.pl` | Tracked reference stores after `weaken()` activates lifecycle bookkeeping |
 | `benchmark_string.pl` | String operations (concat, substr, etc.) |
 | `benchmark_threads.pl` | Ithread snapshot, creation, scheduling, and join overhead |
+| `performance_over_perl.py` | Paired, warmup-aware Perl versus PerlOnJava workload measurements |
 
 ## Running
 
@@ -37,6 +38,17 @@ under PerlOnJava (and optionally system Perl for comparison). Use them to:
 perl  dev/bench/benchmark_closure.pl
 ./jperl dev/bench/benchmark_closure.pl
 ```
+
+For the controlled Perl comparison protocol, build the repository first and
+run the paired benchmark authority from the repository root:
+
+```bash
+python3 dev/bench/performance_over_perl.py --output /tmp/performance-over-perl.json
+```
+
+The default run uses seven workload groups, seven alternating fresh-process
+pairs, stabilized warmup, and raw JSON samples. Use smaller window and pair
+counts only to smoke-check the runner; smoke runs are not performance evidence.
 
 ## See Also
 

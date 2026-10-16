@@ -117,7 +117,10 @@ Phase 1 provides:
 Cross-package registration uses direct `GlobalVariable.getGlobalCodeRef()` calls
 since `registerMethod` prefixes with the module name.
 
-**Results**: HTTP::Message → PASS, Devel::Cover → PASS, HTML::Parser 190/415
+**Results**: HTTP::Message 7.04 passed its current 23-file compatibility run
+(871 tests on each PerlOnJava backend; system Perl passes 884 with optional
+dependencies enabled), Devel::Cover → PASS, HTML::Parser 190/415. The remaining
+downstream Catalyst HTTP exception coverage is tracked by #1652.
 
 **Phase 2** (future): Full hparser.c port (~1900 lines), argspec compilation,
 array-ref accumulator handlers (needed for TokeParser/PullParser).
@@ -247,11 +250,14 @@ socket/async features may not work.
 
 ### Blocked Modules (cannot install/test)
 
-#### HTTP::Message — PASS (unblocked)
+#### HTTP::Message — PASS (unblocked; refreshed 2026-10-15)
 
 **Previously blocked** on Clone::PP and HTML::Entities.
-**Fixed by**: P1 (Clone::PP) and P7 (HTML::Parser Java XS backend).
-Now passes all tests (243s runtime).
+**Fixed by**: P1 (Clone::PP) and P7 (HTML::Parser Java XS backend), followed by
+the runtime work tracked in #1117. HTTP::Message 7.04 currently passes 23 files
+and 871 tests on both PerlOnJava backends; system Perl passes 884 tests with
+optional dependencies enabled. Catalyst HTTP exception behavior is tracked
+separately in #1652.
 
 #### Devel::Cover — PASS (unblocked)
 
@@ -277,13 +283,16 @@ port with argspec compilation and accumulator handlers for TokeParser).
 
 #### Plack — blocked on dep chain (skipped from smoke tests)
 
-**Blocker**: Needs HTTP::Message (now fixed), and other HTTP modules.
-HTTP::Message is now unblocked. May be worth re-enabling in smoke tests.
+**Blocker**: Needs HTTP::Message and other HTTP modules. HTTP::Message 7.04 is
+now passing its full supported suite; Plack remains outside the smoke set until
+its other dependencies and downstream behavior are validated.
 
 #### LWP::UserAgent — may be unblocked
 
-HTTP::Message now passes. LWP::UserAgent may work now.
-**Action**: Re-test with `./jcpan -t LWP::UserAgent`.
+HTTP::Message 7.04 and LWP::UserAgent 6.83 both pass their supported suites:
+23 files / 871 PerlOnJava tests for HTTP::Message and 23 files / 330 tests for
+LWP on each backend (2026-10-15). Catalyst's HTTP exception path remains under
+follow-up in #1652.
 
 #### DBIx::Class — blocked on DBI
 
@@ -366,7 +375,7 @@ perl dev/tools/cpan_smoke_test.pl --compare cpan_smoke_PREVIOUS.dat
 | Log::Log4perl | FAIL | 715/719 |
 | JSON | FAIL | 23683/24886 |
 | Devel::Cover | PASS | 1/1 |
-| HTTP::Message | PASS | (all) |
+| HTTP::Message 7.04 | PASS | 871/871 PerlOnJava; 884 system Perl with optional dependencies (2026-10-15) |
 | HTML::Parser | FAIL | 190/415 |
 
 ### Next Steps

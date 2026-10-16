@@ -157,16 +157,19 @@ if ($pattern eq "auto") {
     $pattern_type = $pattern;
 }
 
-print "Bit-packed Conway's Game of Life\n";
-print "Author: Claude (Anthropic)\n\n";
-print "Grid: ${width}x${height} ($words_per_row words per row)\n";
-print "Generations: $generations\n";
-print "Pattern: $pattern_type\n";
-print "Display: $display_mode\n";
-print "Algorithm: $algorithm\n";
+unless ($ENV{PERLONJAVA_LIFE_BENCH_LOAD}) {
+    print "Bit-packed Conway's Game of Life\n";
+    print "Author: Claude (Anthropic)\n\n";
+    print "Grid: ${width}x${height} ($words_per_row words per row)\n";
+    print "Generations: $generations\n";
+    print "Pattern: $pattern_type\n";
+    print "Display: $display_mode\n";
+    print "Algorithm: $algorithm\n";
+}
 
 # Test UTF-8 support and warn if needed
-if ($display_mode eq "block" || $display_mode eq "braille") {
+if (!$ENV{PERLONJAVA_LIFE_BENCH_LOAD}
+        && ($display_mode eq "block" || $display_mode eq "braille")) {
     # Test if UTF-8 is working properly
     print "UTF-8 test: ";
     if ($display_mode eq "block") {
@@ -176,7 +179,7 @@ if ($display_mode eq "block" || $display_mode eq "braille") {
     }
     print "(if you see strange characters, use --resolution ascii)\n";
 }
-print "\n";
+print "\n" unless $ENV{PERLONJAVA_LIFE_BENCH_LOAD};
 
 # =============================================================================
 # PATTERN GENERATORS
@@ -653,13 +656,11 @@ sub next_generation_flat64 {
         $below_left, $below_right, $s1, $c1, $s2, $c2, $s3, $c3,
         $sum0, $c4, $cc1_sum, $cc1_carry, $cc2_sum, $cc2_carry,
         $sum1, $c5, $sum2, $c6);
-    $row = 0;
-    while ($row < $height) {
+    for $row (0 .. $height - 1) {
         $row_off = $row * $words_per_row;
         $above_off = ($row - 1) * $words_per_row;
         $below_off = ($row + 1) * $words_per_row;
-        $word = 0;
-        while ($word < $words_per_row) {
+        for $word (0 .. $words_per_row - 1) {
             $idx = $row_off + $word;
             $cell = $curr->[$idx];
             $left_w = $word > 0 ? $curr->[$idx - 1] : 0;
@@ -705,9 +706,7 @@ sub next_generation_flat64 {
             $sum2 = $cc1_carry ^ $cc2_carry ^ $c5;
             $c6 = ($cc1_carry & $cc2_carry) | ($cc2_carry & $c5) | ($cc1_carry & $c5);
             $next[$idx] = (~$c6) & (~$sum2) & $sum1 & ($sum0 | $cell);
-            ++$word;
         }
-        ++$row;
     }
     return \@next;
 }
@@ -976,7 +975,25 @@ sub print_grid_braille_flat {
 my @grid;      # 2D grid: @grid[$row][$word_idx]
 my $grid_flat; # Flat grid: $grid_flat->[$row * $words_per_row + $word_idx]
 
+# Benchmark driver entry point. It reuses the algorithm above and keeps setup
+# and output outside the timed window while preserving the ordinary CLI path.
+sub benchmark_life_flat64 {
+    my ($requested_width, $requested_height, $generation_count) = @_;
+    $algorithm = 'flat64';
+    $bits_per_word = 64;
+    $width = int(($requested_width + 63) / 64) * 64;
+    $height = $requested_height;
+    $words_per_row = $width / 64;
+
+    my $grid = generate_glider_flat64();
+    for (1 .. $generation_count) {
+        $grid = next_generation_flat64($grid);
+    }
+    return count_live_cells_flat($grid);
+}
+
 # Choose initial pattern based on settings
+unless ($ENV{PERLONJAVA_LIFE_BENCH_LOAD}) {
 if ($algorithm eq 'flat' || $algorithm eq 'flat64') {
     if ($pattern_type eq "glider") {
         print "Creating glider pattern (flat)...\n";
@@ -1082,3 +1099,6 @@ if ($display_mode eq "braille") {
 } else {
     print "Grid too large for visual display\n";
 }
+}
+
+1;

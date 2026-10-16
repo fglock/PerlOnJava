@@ -1654,6 +1654,7 @@ public class MortalList {
     static void invalidateFullRootSnapshotForScalarClear() {
         PerlRuntime runtime = PerlRuntime.currentOrNull();
         if (runtime != null) {
+            runtime.lifecycleState.liveRootSnapshot = null;
             runtime.lifecycleState.fullRootSnapshot = null;
             runtime.lifecycleState.unblessedAggregateRootSnapshot = null;
         }
@@ -1678,7 +1679,6 @@ public class MortalList {
         LifecycleRuntimeState state = state();
         state.flushReachableCache = null;
         state.flushTiedReachableCache = null;
-        state.liveRootSnapshot = null;
         state.scalarRootSnapshot = null;
         state.fullRootSnapshot = null;
         if (!state.flushing && state.reachabilityDrainDepth == 0) {

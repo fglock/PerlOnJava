@@ -180,6 +180,7 @@ public class DBI extends PerlModuleBase {
 
             if (jdbcUrl.toLowerCase().contains("sqlite")) {
                 registerSqliteRegexp(conn);
+                SQLitePerlTokenizer.install(conn);
             }
 
             // Remove password from dbh hash
@@ -849,7 +850,11 @@ public class DBI extends PerlModuleBase {
         return executeWithErrorHandling(() -> {
             Connection conn = connection(dbh, "disconnect");
 
-            conn.close();
+            try {
+                conn.close();
+            } finally {
+                SQLitePerlTokenizer.remove(conn);
+            }
             dbh.put("Active", new RuntimeScalar(false));
 
             return new RuntimeHash().createReference().getList();

@@ -224,6 +224,25 @@ class FutureAsyncAwaitRuntimeTest {
             die "wrong resumed result\n"
                     unless $pending_result->AWAIT_GET == 42;
 
+            # Awaiting an aggregate slot must retain the Future value, not the
+            # mutable slot itself. PAGI clears receive_pending before completing
+            # it, which used to make resume call AWAIT_GET on undef.
+            my $await_slot = {};
+            my $await_slot_source = Future->new;
+            $await_slot->{pending} = $await_slot_source;
+            async sub await_mutable_slot {
+                return await $await_slot->{pending};
+            }
+            my $await_slot_result = await_mutable_slot();
+            die "mutable-slot await completed early\n"
+                    if $await_slot_result->AWAIT_IS_READY;
+            $await_slot->{pending} = undef;
+            $await_slot_source->AWAIT_DONE(42);
+            die "mutable-slot await did not resume\n"
+                    unless $await_slot_result->AWAIT_IS_READY;
+            die "mutable-slot await lost its Future\n"
+                    unless $await_slot_result->AWAIT_GET == 42;
+
             async sub add_two {
                 my ($first, $second) = @_;
                 return await($first) + await($second);

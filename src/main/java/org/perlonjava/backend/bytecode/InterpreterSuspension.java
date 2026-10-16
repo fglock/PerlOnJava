@@ -19,11 +19,14 @@ final class InterpreterSuspension extends RuntimeList {
     InterpreterSuspension(SuspendedInterpreterFrame frame, RuntimeScalar awaited,
                           int destinationRegister, int context) {
         this.frame = frame;
-        this.awaited = awaited;
-        this.awaitedOwner = new RuntimeScalar();
-        this.awaitedOwner.set(awaited);
-        this.awaitedRoot = RuntimeScalarType.isReference(awaited)
-                && awaited.value instanceof RuntimeBase base ? base : null;
+        // Await operands can be mutable lvalue scalars backed by aggregate
+        // slots. Snapshot the Future value: its owner may clear or replace the
+        // slot before the readiness callback resumes this frame.
+        this.awaited = new RuntimeScalar();
+        this.awaited.set(awaited);
+        this.awaitedOwner = this.awaited;
+        this.awaitedRoot = RuntimeScalarType.isReference(this.awaited)
+                && this.awaited.value instanceof RuntimeBase base ? base : null;
         MortalList.retainSuspendedRoot(awaitedRoot);
         this.awaitedRootRetained = awaitedRoot != null;
         this.destinationRegister = destinationRegister;

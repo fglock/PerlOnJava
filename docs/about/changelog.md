@@ -7,6 +7,10 @@ priorities and future plans.
 ## Work in progress
 
 - Improve JVM execution performance for the bit-packed Life example, ordinary scalar assignments, and common blessing lookups.
+- Add a reproducible, warmup-aware Perl versus PerlOnJava performance runner (#1196).
+- Cover FormState session restoration across requests and HTTP response conversion from callback and streaming PSGI responses; refresh HTTP::Message and LWP compatibility status (#1650, #1651, #1652).
+- Preserve the awaited Future value when its source scalar or aggregate slot changes during suspension, covering PAGI::Server request-body receives (#1818).
+- Preserve escaped byte strings in interpreter closures and `bytes::substr`, honor requested CRLF output in `MIME::QuotedPrint`, and cover URI Basic Auth byte-string userinfo (#1275, #1313, #1341).
 - Preserve `exit()` raised while compiling dynamic `eval` strings, including `Test::More`'s `skip_all` behavior; preserve lexical hints in prototype callback blocks so Test2 suppresses configured load diagnostics; and skip only Pod::HtmlEasy's two `IPC::Run` stdio assertions that require unsupported `fork()` (#1471, #1589, #1735).
 - Recognize `IO` as a parent of unblessed filehandle IO references, support `PerlIO :pop` on built-in layers, and cover negotiated TLS version metadata on a local TLS connection (#1782, #1607, #1435).
 - Preserve whole-glob aliases across nested localization, support dynamic glob-reference localization, and accept Perl's `@$` glob dereference under strict vars (#1630, #1305, #1302).
@@ -17,11 +21,13 @@ priorities and future plans.
 - Recover malformed HTML through Jsoup in `XML::LibXML`, decode HTML attribute entities by default, report `HTML::Parser` source positions, and allow nested `AUTOLOAD` tail calls from sort comparators (#1416, #1457, #1634).
 - Preserve anonymous and eval caller metadata, retain source-relative require paths, and deparse folded closure expressions; report the final initializer line for multiline imported DSL declarations (#1548, #1620).
 - Preserve package-qualified anonymous caller names used by generated accessors (#1276).
+- Reuse live lexical reachability snapshots across cleanup drains while roots remain unchanged, reducing repeated graph walks in large CPAN workloads (#1797).
 - Implement `XML::LibXML::Dtd->parse_string` with a wrapped DTD node that serializes using XML::LibXML's node type and DTD syntax (#1348).
 - Expand `HTML::Parser`'s `@attr` callback argspec, honor `empty_element_tags`, expose comment bodies through `tagname`, and suppress configured ignored elements for consumers such as HTML::Lint (#1416).
 - Normalize HTML tag names during `XML::LibXML` HTML parsing and accept Windows `perl.exe` shebangs in the current runtime (#1634).
 - Preserve late-bound fully qualified subroutine calls written with `->(...)` when the sub is loaded after its caller is compiled (#1634).
 - Fix DBI `do()` overrides, DBD::Sponge initialization, and SQLite generated ID lookup.
+- Track active pure-Perl DBI statements, prevent fallback dispatch recursion, handle legacy column bindings, and support Perl FTS4 tokenizers on SQLite (#1802, #1459, #1320).
 - Parse escaped backslashes in transliteration lists once, inherit strict-vars
   settings in string eval, and ignore trailing shebang comments (#1783, #1454,
   #1524).
