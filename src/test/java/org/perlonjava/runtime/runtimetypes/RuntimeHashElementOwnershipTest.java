@@ -50,56 +50,28 @@ class RuntimeHashElementOwnershipTest {
 
     @Test
     void aliasedHashScalarTransfersEachEntrySlotWhenItsReferentChanges() {
-        RuntimeArray first = new RuntimeArray();
-        RuntimeArray second = new RuntimeArray();
-        RuntimeHash hash = new RuntimeHash();
-        RuntimeHash otherHash = new RuntimeHash();
-        var cell = first.createReference();
-
-        hash.elements.put("left", cell);
-        hash.elements.put("right", cell);
-        otherHash.elements.put("third", cell);
-        PerlOwnerSlot leftSlot = hash.hashEntryOwnerSlot("left");
-        PerlOwnerSlot rightSlot = hash.hashEntryOwnerSlot("right");
-        PerlOwnerSlot thirdSlot = otherHash.hashEntryOwnerSlot("third");
-
-        cell.set(second.createReference());
-
-        assertEquals(0, first.hashSlotOwnerCount());
-        assertEquals(3, second.hashSlotOwnerCount());
-        assertSame(second, leftSlot.referent());
-        assertSame(second, rightSlot.referent());
-        assertSame(second, thirdSlot.referent());
-    }
-
-    @Test
-    void hashEntrySlotPreservesReferentAcrossDeferredLegacyDecrement() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
-            boolean previousActive = MortalList.isActive();
-            MortalList.setActive(true);
-            try {
-                RuntimeArray referent = new RuntimeArray();
-                referent.refCount = 1;
-                RuntimeHash hash = new RuntimeHash();
-                hash.elements.put("value", referent.createReference());
+            RuntimeArray first = new RuntimeArray();
+            RuntimeArray second = new RuntimeArray();
+            RuntimeHash hash = new RuntimeHash();
+            RuntimeHash otherHash = new RuntimeHash();
+            var cell = first.createReference();
 
-                MortalList.deferDecrement(referent);
-                MortalList.flush();
+            hash.elements.put("left", cell);
+            hash.elements.put("right", cell);
+            otherHash.elements.put("third", cell);
+            PerlOwnerSlot leftSlot = hash.hashEntryOwnerSlot("left");
+            PerlOwnerSlot rightSlot = hash.hashEntryOwnerSlot("right");
+            PerlOwnerSlot thirdSlot = otherHash.hashEntryOwnerSlot("third");
 
-                assertEquals(1, referent.refCount,
-                        "a live hash-entry slot bridges a deferred selective-count decrement");
-                assertEquals(1, referent.hashSlotOwnerCount());
+            cell.set(second.createReference());
 
-                hash.elements.remove("value");
-                assertEquals(0, referent.hashSlotOwnerCount());
-                MortalList.deferDecrement(referent);
-                MortalList.flush();
-                assertEquals(0, referent.refCount,
-                        "after its final slot is removed, the deferred decrement is applied");
-            } finally {
-                MortalList.setActive(previousActive);
-            }
+            assertEquals(0, first.hashSlotOwnerCount());
+            assertEquals(3, second.hashSlotOwnerCount());
+            assertSame(second, leftSlot.referent());
+            assertSame(second, rightSlot.referent());
+            assertSame(second, thirdSlot.referent());
         }
     }
 

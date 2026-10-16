@@ -167,9 +167,14 @@ public final class PerlOwnerSlot {
         RuntimeBase previous = referent;
         PerlRuntime previousRuntime = ownerRuntime;
         LifecycleRuntimeState previousState = ownerRuntimeState;
-        PerlRuntime nextRuntime = nextReferent == null
+        // Hash entry slots are owned by their hash, so retaining their
+        // referent from the runtime would turn an unrooted hash into a root.
+        // Closure-pad slots are runtime roots while their Perl closure lives.
+        PerlRuntime nextRuntime = kind != Kind.CLOSURE_PAD || nextReferent == null
                 ? null : PerlRuntime.currentOrNull();
-        if (nextReferent != null && nextRuntime == null) nextRuntime = previousRuntime;
+        if (kind == Kind.CLOSURE_PAD && nextReferent != null && nextRuntime == null) {
+            nextRuntime = previousRuntime;
+        }
 
         referent = nextReferent;
         ownerRuntime = nextRuntime;
