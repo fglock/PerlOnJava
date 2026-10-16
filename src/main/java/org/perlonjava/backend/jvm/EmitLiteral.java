@@ -2,6 +2,7 @@ package org.perlonjava.backend.jvm;
 
 import org.perlonjava.app.cli.CompilerOptions;
 
+import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
@@ -282,14 +283,7 @@ public class EmitLiteral {
                 int stringIndex = RuntimeScalarCache.getOrCreateByteStringIndex(node.value);
 
                 if (stringIndex >= 0) {
-                    // Use cached RuntimeScalar
-                    mv.visitLdcInsn(stringIndex);
-                    mv.visitMethodInsn(
-                            Opcodes.INVOKESTATIC,
-                            "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache",
-                            "materializeByteStringLiteral",
-                            "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly;",
-                            false);
+                    emitCachedStringLiteral(ctx, node, stringIndex, true);
                     return;
                 } else {
                     // String is too long for cache or null, create new object
@@ -317,14 +311,7 @@ public class EmitLiteral {
         int stringIndex = RuntimeScalarCache.getOrCreateStringIndex(node.value);
 
         if (stringIndex >= 0) {
-            // Use cached RuntimeScalar
-            mv.visitLdcInsn(stringIndex);
-            mv.visitMethodInsn(
-                    Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache",
-                    "materializeStringLiteral",
-                    "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly;",
-                    false);
+            emitCachedStringLiteral(ctx, node, stringIndex, false);
         } else {
             // String is too long for cache or null, create new object
             mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly");
@@ -337,6 +324,38 @@ public class EmitLiteral {
                     "(Ljava/lang/String;)V",
                     false);
         }
+    }
+
+    private static void emitCachedStringLiteral(
+            EmitterContext ctx, StringNode node, int cacheIndex, boolean byteString) {
+        MethodVisitor mv = ctx.mv;
+        if (ctx.javaClassInfo == null || ctx.cw == null) {
+            mv.visitLdcInsn(cacheIndex);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache",
+                    byteString ? "materializeByteStringLiteral" : "materializeStringLiteral",
+                    "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly;", false);
+            return;
+        }
+        String field = ctx.javaClassInfo.stringLiteralField(node, ctx.cw);
+        String owner = ctx.javaClassInfo.javaClassName;
+        String descriptor = "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly;";
+        Label ready = new Label();
+        mv.visitVarInsn(Opcodes.ALOAD, 0);
+        mv.visitFieldInsn(Opcodes.GETFIELD, owner, field, descriptor);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitJumpInsn(Opcodes.IFNONNULL, ready);
+        mv.visitInsn(Opcodes.POP);
+        mv.visitLdcInsn(cacheIndex);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache",
+                byteString ? "materializeByteStringLiteral" : "materializeStringLiteral",
+                "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly;", false);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitVarInsn(Opcodes.ALOAD, 0);
+        mv.visitInsn(Opcodes.SWAP);
+        mv.visitFieldInsn(Opcodes.PUTFIELD, owner, field, descriptor);
+        mv.visitLabel(ready);
     }
 
     /**

@@ -1,8 +1,10 @@
 package org.perlonjava.backend.jvm;
 
 import org.objectweb.asm.Label;
+import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.perlonjava.frontend.astnode.StringNode;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
@@ -58,6 +60,7 @@ public class JavaClassInfo {
 
     /** Static fields holding this class's package-scalar pins, keyed by the pinned name. */
     private final Map<String, String> scalarPinFields = new LinkedHashMap<>();
+    private final IdentityHashMap<StringNode, String> stringLiteralFields = new IdentityHashMap<>();
 
     /** The pin field already declared for {@code name} in this class, or null. */
     public String scalarPinField(String name) {
@@ -68,6 +71,17 @@ public class JavaClassInfo {
     public String registerScalarPinField(String name) {
         String field = "scalarPin$" + scalarPinFields.size();
         scalarPinFields.put(name, field);
+        return field;
+    }
+
+    /** Register an instance field for one compiled string literal occurrence. */
+    public String stringLiteralField(StringNode node, ClassWriter cw) {
+        String field = stringLiteralFields.get(node);
+        if (field != null) return field;
+        field = "stringLiteral$" + stringLiteralFields.size();
+        stringLiteralFields.put(node, field);
+        cw.visitField(Opcodes.ACC_PRIVATE, field,
+                "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly;", null, null).visitEnd();
         return field;
     }
 

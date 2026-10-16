@@ -24,6 +24,7 @@ public class NameNormalizer {
     public static final class State {
         final Map<String, Integer> blessIdCache = new java.util.HashMap<>();
         final Map<Integer, String> blessStrCache = new java.util.HashMap<>();
+        final Map<Integer, Integer> effectiveBlessIdCache = new java.util.HashMap<>();
         int currentBlessId;
         int currentOverloadedBlessId = -1;
 
@@ -36,6 +37,7 @@ public class NameNormalizer {
             target.blessIdCache.putAll(blessIdCache);
             target.blessStrCache.clear();
             target.blessStrCache.putAll(blessStrCache);
+            target.effectiveBlessIdCache.clear();
             target.currentBlessId = currentBlessId;
             target.currentOverloadedBlessId = currentOverloadedBlessId;
         }
@@ -90,7 +92,9 @@ public class NameNormalizer {
     }
 
     public static void invalidateBlessIdCache() {
-        state().blessIdCache.clear();
+        State state = state();
+        state.blessIdCache.clear();
+        state.effectiveBlessIdCache.clear();
     }
 
     /**
@@ -103,17 +107,24 @@ public class NameNormalizer {
         if (id == 0) return id;
 
         State state = state();
+        Integer cachedEffective = state.effectiveBlessIdCache.get(id);
+        if (cachedEffective != null) return cachedEffective;
+
         String className = state.blessStrCache.get(id);
         if (className == null || "__ANON__".equals(className)) {
+            state.effectiveBlessIdCache.put(id, id);
             return id;
         }
 
         Integer cached = state.blessIdCache.get(className);
         if (cached != null && cached < 0) {
+            state.effectiveBlessIdCache.put(id, cached);
             return cached;
         }
 
-        return cached != null ? cached : getBlessId(className);
+        int effective = cached != null ? cached : getBlessId(className);
+        state.effectiveBlessIdCache.put(id, effective);
+        return effective;
     }
 
     /**

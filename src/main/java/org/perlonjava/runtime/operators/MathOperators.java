@@ -474,6 +474,27 @@ public class MathOperators {
         return target.set(addWarn(left, right));
     }
 
+    /** Return {@code null} when this assignment needs the general Perl path. */
+    private static RuntimeScalar addAssignIntegerInPlace(
+            RuntimeScalar target, RuntimeScalar left, RuntimeScalar right) {
+        if (!target.canUpdateArithmeticIntegerInPlace()
+                || left.type != INTEGER
+                || right.type != INTEGER
+                || hasWideInteger(left, right)) {
+            return null;
+        }
+        long leftValue = left.getLong();
+        long rightValue = right.getLong();
+        try {
+            long sum = Math.addExact(leftValue, rightValue);
+            boolean resultTainted = GlobalContext.isTaintModeActive()
+                    && (left.isTainted() || right.isTainted());
+            return target.setArithmeticIntegerResult(sum, resultTainted);
+        } catch (ArithmeticException ignored) {
+            return null;
+        }
+    }
+
     private static RuntimeScalar addWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         arg1 = RuntimeScalar.fetchTiedOnce(arg1);
         arg2 = RuntimeScalar.fetchTiedOnce(arg2);
@@ -1042,6 +1063,8 @@ public class MathOperators {
                 return arg1;
             }
         }
+        RuntimeScalar updated = addAssignIntegerInPlace(arg1, arg1, arg2);
+        if (updated != null) return updated;
         // Fall back to base operator (which already has (+ overload support)
         RuntimeScalar result = add(arg1, arg2);
         arg1.set(result);
@@ -1172,6 +1195,8 @@ public class MathOperators {
                 return arg1;
             }
         }
+        RuntimeScalar updated = addAssignIntegerInPlace(arg1, arg1, arg2);
+        if (updated != null) return updated;
         RuntimeScalar result = addWarn(arg1, arg2);
         arg1.set(result);
         return arg1;

@@ -1591,7 +1591,17 @@ public class EmitVariable {
                 // The my operator needs to be processed to create the variables first.
                 node.left.accept(emitterVisitor.with(RuntimeContextType.LVALUE_LIST));   // emit the variable (target)
                 mv.visitVarInsn(Opcodes.ALOAD, rhsListSlot);                      // reload RHS list
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "setFromList", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
+                if (isVoidMyScalarListAssignment(ctx, node)) {
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeList", "setFromListVoid",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)"
+                                    + "Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
+                } else {
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeBase", "setFromList",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)"
+                                    + "Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
+                }
 
                 if (pooledRhsList) {
                     ctx.javaClassInfo.releaseSpillSlot();
@@ -1703,6 +1713,25 @@ public class EmitVariable {
             return innerContext == RuntimeContextType.LIST;
         }
         return false;
+    }
+
+    private static boolean isVoidMyScalarListAssignment(
+            EmitterContext ctx, BinaryOperatorNode assignment) {
+        if (ctx.contextType != RuntimeContextType.VOID
+                || !(assignment.left instanceof OperatorNode declaration)
+                || !declaration.operator.equals("my")
+                || !(declaration.operand instanceof ListNode targets)
+                || targets.elements.isEmpty()) {
+            return false;
+        }
+        for (Node target : targets.elements) {
+            if (!(target instanceof OperatorNode scalar)
+                    || !scalar.operator.equals("$")
+                    || !(scalar.operand instanceof IdentifierNode)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static boolean isScalarLvalueTarget(Node node) {
