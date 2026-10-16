@@ -10,9 +10,12 @@ package org.perlonjava.runtime.runtimetypes;
  * name again.</p>
  */
 public final class ScalarPin {
+    private record BindingCache(GlobalRuntimeState runtimeState, long version, RuntimeScalar scalar) {}
+
     private final String name;
     /** Non-null once the name has been deleted from its stash. */
     private RuntimeScalar detached;
+    private volatile BindingCache bindingCache;
 
     ScalarPin(String name) {
         this.name = name;
@@ -21,7 +24,22 @@ public final class ScalarPin {
     /** The scalar this site currently reads. */
     public RuntimeScalar scalar() {
         RuntimeScalar frozen = detached;
-        return frozen != null ? frozen : GlobalVariable.getGlobalVariable(name);
+        if (frozen != null) return frozen;
+
+        GlobalRuntimeState runtimeState = GlobalVariable.currentGlobalRuntimeState();
+        long version = runtimeState.scalarBindingVersion();
+        BindingCache cached = bindingCache;
+        if (cached != null
+                && cached.runtimeState() == runtimeState
+                && cached.version() == version) {
+            return cached.scalar();
+        }
+
+        RuntimeScalar scalar = GlobalVariable.getGlobalVariable(name);
+        if (runtimeState.scalarBindingVersion() == version) {
+            bindingCache = new BindingCache(runtimeState, version, scalar);
+        }
+        return scalar;
     }
 
     void detach(RuntimeScalar frozen) {

@@ -466,6 +466,14 @@ public class EmitterMethodCreator implements Opcodes {
                 org.perlonjava.frontend.analysis.PristineArgsSnapshotAnalysis
                         .requiresSnapshot(ast,
                                 (String) ast.getAnnotation("compiledSubroutineName"));
+        ctx.javaClassInfo.readOnlyArgumentCandidate =
+                org.perlonjava.frontend.analysis.ReadOnlyArgumentUnpackAnalysis.analyze(ast);
+        ctx.javaClassInfo.readOnlyArgumentFlagSlot = -1;
+        ctx.javaClassInfo.readOnlyArgumentSlots = java.util.Collections.emptyMap();
+        ctx.javaClassInfo.readOnlyArgumentFreshScalarReturn =
+                ctx.javaClassInfo.readOnlyArgumentCandidate != null
+                        && ctx.javaClassInfo.readOnlyArgumentCandidate.freshScalarReturn();
+        ctx.javaClassInfo.emittingReadOnlyArgumentFallback = false;
         String methodName = "apply";
         byte[] classData = null;
         boolean asmDebug = System.getenv("JPERL_ASM_DEBUG") != null;
@@ -890,6 +898,19 @@ public class EmitterMethodCreator implements Opcodes {
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;IZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                     false);
             mv.visitVarInsn(Opcodes.ASTORE, returnListSlot);
+            if (ctx.javaClassInfo.readOnlyArgumentFreshScalarReturn
+                    && ctx.javaClassInfo.readOnlyArgumentFlagSlot >= 0) {
+                Label ordinaryReturn = new Label();
+                mv.visitVarInsn(Opcodes.ILOAD,
+                        ctx.javaClassInfo.readOnlyArgumentFlagSlot);
+                mv.visitJumpInsn(Opcodes.IFEQ, ordinaryReturn);
+                mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);
+                mv.visitInsn(Opcodes.ICONST_1);
+                mv.visitFieldInsn(Opcodes.PUTFIELD,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                        "freshScalarResult", "Z");
+                mv.visitLabel(ordinaryReturn);
+            }
 
             // (Return-path cleanup is emitted at each 'return' site in handleReturnOperator.)
 

@@ -23,6 +23,8 @@ public class RuntimeList extends RuntimeBase {
 
     /** Alternating key/value elements produced by %hash{...}. */
     public boolean keyValueHashSlice;
+    /** This one-call scalar result is proven independent of the callee's lexical cells. */
+    public boolean freshScalarResult;
 
     // List to hold the elements of the list.
     public List<RuntimeBase> elements;
