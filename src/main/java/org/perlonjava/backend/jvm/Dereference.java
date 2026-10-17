@@ -1539,6 +1539,24 @@ public class Dereference {
             }
         }
 
+        boolean verifiedPlainHashArgument = false;
+        var readOnlyCandidate = emitterVisitor.ctx.javaClassInfo.readOnlyArgumentCandidate;
+        if ("get".equals(hashOperation)
+                && readOnlyCandidate != null
+                && readOnlyCandidate.freshScalarReturn()
+                && emitterVisitor.ctx.javaClassInfo.readOnlyArgumentFlagSlot >= 0
+                && !emitterVisitor.ctx.javaClassInfo.emittingReadOnlyArgumentFallback
+                && nodeRight.elements.size() == 1
+                && nodeRight.elements.getFirst() instanceof StringNode key
+                && node.left instanceof OperatorNode scalar
+                && "$".equals(scalar.operator)
+                && scalar.operand instanceof IdentifierNode identifier) {
+            Integer argumentIndex = readOnlyCandidate.argumentIndices().get("$" + identifier.name);
+            verifiedPlainHashArgument = argumentIndex != null
+                    && argumentIndex == readOnlyCandidate.hashArgumentIndex()
+                    && readOnlyCandidate.hashKeys().contains(key.value);
+        }
+
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit -> (HashLiteralNode) autoquote " + node.right);
         if (nodeRight.elements.size() > 1) {
             // Multiple elements: join them with $; (SUBSEP), like $h{a,b,c}
@@ -1559,11 +1577,41 @@ public class Dereference {
         }
         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, keySlot);
 
+        Label ordinaryHashDereference = null;
+        Label hashDereferenceDone = null;
+        boolean strictRefs = emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(
+                Strict.HINT_STRICT_REFS);
+        if (verifiedPlainHashArgument) {
+            ordinaryHashDereference = new Label();
+            hashDereferenceDone = new Label();
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ILOAD,
+                    emitterVisitor.ctx.javaClassInfo.readOnlyArgumentFlagSlot);
+            emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.IFEQ, ordinaryHashDereference);
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, keySlot);
+            if (strictRefs) {
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                        "hashDerefGetForVerifiedPlainHashMethod",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
+            } else {
+                emitterVisitor.pushCurrentPackage();
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                        "hashDerefGetForVerifiedPlainHashMethodNonStrict",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
+            }
+            emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.GOTO, hashDereferenceDone);
+            emitterVisitor.ctx.mv.visitLabel(ordinaryHashDereference);
+        }
+
         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, keySlot);
 
         // Check if strict refs is enabled at compile time
-        if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS)) {
+        if (strictRefs) {
             // Use strict version (throws error on symbolic references)
             String methodName = switch (hashOperation) {
                 case "get" -> "hashDerefGet";
@@ -1601,6 +1649,9 @@ public class Dereference {
                     methodName, hashOperation.equals("delete")
                             ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
                             : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        }
+        if (hashDereferenceDone != null) {
+            emitterVisitor.ctx.mv.visitLabel(hashDereferenceDone);
         }
 
         if (pooledKey) {
