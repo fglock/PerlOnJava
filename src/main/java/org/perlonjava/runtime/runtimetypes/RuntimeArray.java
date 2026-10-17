@@ -714,7 +714,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             arrayElementOwnerSlots.set(index, null);
         } else {
             if (slot == null) {
-                slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.ARRAY_ELEMENT);
+                slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.ARRAY_ELEMENT, null, this);
                 arrayElementOwnerSlots.set(index, slot);
             }
             slot.acquireArrayElement(referent);

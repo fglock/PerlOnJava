@@ -697,7 +697,7 @@ public class DestroyDispatch {
      * those aliases are not resurrection. Objects which have not activated
      * owner tracking retain the legacy count-based behavior.
      */
-    private static boolean hasEscapedPerlOwner(RuntimeBase referent,
+    static boolean hasEscapedPerlOwner(RuntimeBase referent,
                                                 boolean checkingGlobalOwnerDelta,
                                                 Set<RuntimeScalar> activeOwnersAtStart,
                                                 Set<PerlOwnerSlot> ownerSlotsAtStart) {
@@ -716,12 +716,15 @@ public class DestroyDispatch {
                 }
             }
             for (PerlOwnerSlot ownerSlot : referent.ownerSlotSnapshot()) {
-                // Array element slots are currently diagnostic identities; the
-                // owning array is not yet part of the resurrection root check.
-                // Treating a newly materialized array slot as proof of Perl
-                // resurrection misclassifies destructor-local array writes.
-                if (!ownerSlotsAtStart.contains(ownerSlot)
-                        && ownerSlot.kind() != PerlOwnerSlot.Kind.ARRAY_ELEMENT) return true;
+                if (ownerSlotsAtStart.contains(ownerSlot)) continue;
+                RuntimeBase ownerContainer = ownerSlot.ownerContainer();
+                if (ownerContainer != null
+                        && ReachabilityWalker.isReachableFromRoots(ownerContainer, true)) {
+                    return true;
+                }
+                // Closure pads have no aggregate container. Their referent
+                // edge is itself enough to prove that Perl retained the value.
+                if (ownerSlot.kind() == PerlOwnerSlot.Kind.CLOSURE_PAD) return true;
             }
             return false;
         }
