@@ -499,10 +499,16 @@ public class MathOperators {
     }
 
     private static boolean integerResultTainted(RuntimeScalar left, RuntimeScalar right) {
-        if (left.getClass() == RuntimeScalar.class && right.getClass() == RuntimeScalar.class) {
+        if (hasDirectTaintBit(left) && hasDirectTaintBit(right)) {
             return (left.tainted || right.tainted) && GlobalContext.isTaintModeActive();
         }
         return GlobalContext.isTaintModeActive() && (left.isTainted() || right.isTainted());
+    }
+
+    private static boolean hasDirectTaintBit(RuntimeScalar scalar) {
+        Class<?> scalarClass = scalar.getClass();
+        return scalarClass == RuntimeScalar.class
+                || scalarClass == RuntimeScalarReadOnly.class;
     }
 
     private static RuntimeScalar addWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {

@@ -2155,7 +2155,10 @@ public class MortalList {
      * Analogous to Perl 5's SAVETMPS.
      */
     public static void pushMark() {
-        LifecycleRuntimeState state = state();
+        pushMark(state());
+    }
+
+    static void pushMark(LifecycleRuntimeState state) {
         if (!state.mortalActive) return;
         state.marks.add(state.pending.size());
         state.tiedReleaseMarks.add(state.pendingTiedReleases.size());
@@ -2170,7 +2173,10 @@ public class MortalList {
      * next statement boundary.
      */
     public static void popMark() {
-        LifecycleRuntimeState state = state();
+        popMark(state());
+    }
+
+    static void popMark(LifecycleRuntimeState state) {
         if (!state.mortalActive || state.marks.isEmpty()) return;
         state.marks.removeLast();
         if (!state.tiedReleaseMarks.isEmpty()) {
