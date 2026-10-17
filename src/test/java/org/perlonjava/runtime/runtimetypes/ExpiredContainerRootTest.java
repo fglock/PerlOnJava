@@ -9,6 +9,30 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class ExpiredContainerRootTest {
     @Test
+    void capturedScopeExitedContainerRemainsAnOwner() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray container = new RuntimeArray();
+            RuntimeScalar value = new RuntimeScalar();
+            container.elements.add(value);
+            value.markArrayContainerOwner(container);
+            container.scopeExited = true;
+            MyVarCleanupStack.register(container);
+
+            PerlOwnerSlot capture = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
+            try {
+                capture.acquireCapture(container);
+
+                assertTrue(value.isStoredInRegisteredContainerOwner(),
+                        "an active captured aggregate keeps its stored scalar alive after lexical exit");
+            } finally {
+                capture.release();
+                MyVarCleanupStack.unregister(container);
+            }
+        }
+    }
+
+    @Test
     void unregisteredContainerLeftInLiveVarSnapshotIsNotAnOwner() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
