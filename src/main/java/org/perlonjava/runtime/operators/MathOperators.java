@@ -491,7 +491,9 @@ public class MathOperators {
         long rightValue = right.getLong();
         try {
             long sum = Math.addExact(leftValue, rightValue);
-            boolean resultTainted = integerResultTainted(left, right);
+            // left is the exact plain RuntimeScalar target established by
+            // canUpdateArithmeticIntegerInPlace() above.
+            boolean resultTainted = integerResultTaintedFromPlainLeft(left, right);
             return target.setArithmeticIntegerResult(sum, resultTainted);
         } catch (ArithmeticException ignored) {
             return null;
@@ -503,6 +505,15 @@ public class MathOperators {
             return (left.tainted || right.tainted) && GlobalContext.isTaintModeActive();
         }
         return GlobalContext.isTaintModeActive() && (left.isTainted() || right.isTainted());
+    }
+
+    private static boolean integerResultTaintedFromPlainLeft(
+            RuntimeScalar plainLeft, RuntimeScalar right) {
+        if (hasDirectTaintBit(right)) {
+            return (plainLeft.tainted || right.tainted) && GlobalContext.isTaintModeActive();
+        }
+        return GlobalContext.isTaintModeActive()
+                && (plainLeft.isTainted() || right.isTainted());
     }
 
     private static boolean hasDirectTaintBit(RuntimeScalar scalar) {
