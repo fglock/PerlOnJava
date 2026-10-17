@@ -3571,7 +3571,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && target.value != null
                 && target.value.getClass() == RuntimeHash.class
                 && ((RuntimeHash) target.value).type == RuntimeHash.PLAIN_HASH) {
-            return ((RuntimeHash) target.value).get(asciiKey);
+            RuntimeHash hash = (RuntimeHash) target.value;
+            if (!hash.threadShared && !hash.isEnvironmentHash) {
+                RuntimeScalar value = hash.elements.get(asciiKey);
+                if (value != null) return value;
+            }
+            return hash.get(asciiKey);
         }
         return target.hashDerefGet(index);
     }
@@ -3594,7 +3599,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && target.value != null
                 && target.value.getClass() == RuntimeHash.class
                 && ((RuntimeHash) target.value).type == RuntimeHash.PLAIN_HASH) {
-            return ((RuntimeHash) target.value).get(asciiKey);
+            RuntimeHash hash = (RuntimeHash) target.value;
+            if (!hash.threadShared && !hash.isEnvironmentHash) {
+                RuntimeScalar value = hash.elements.get(asciiKey);
+                if (value != null) return value;
+            }
+            return hash.get(asciiKey);
         }
         return target.hashDerefGetNonStrict(index, packageName);
     }
