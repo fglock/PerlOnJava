@@ -493,7 +493,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     boolean isStoredInRegisteredContainerOwner() {
         RuntimeBase owner = containerOwner;
-        if (owner == null || owner.scopeExited || !MyVarCleanupStack.isRegistered(owner)) return false;
+        if (owner == null || !MyVarCleanupStack.isRegistered(owner)) return false;
+        if (owner.scopeExited && owner.semanticCaptureOwnerCount() == 0) return false;
         if (owner instanceof RuntimeHash hash) {
             return hash.elements.containsValue(this);
         }
