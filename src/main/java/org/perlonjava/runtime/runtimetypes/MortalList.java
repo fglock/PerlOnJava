@@ -1910,7 +1910,7 @@ public class MortalList {
         LifecycleRuntimeState state = state();
         if (!state.mortalActive) return;
         if (state.flushing) return;
-        boolean topLevel = state.marks.isEmpty();
+        boolean topLevel = !state.hasMortalMarks();
         if (state.pending.isEmpty() && state.pendingTiedReleases.isEmpty()
                 && state.pendingIoReleases.isEmpty()) {
             processReadyDeferredCaptures(state);
@@ -1930,9 +1930,7 @@ public class MortalList {
             state.pendingTransientOwnerKinds.clear();
             state.pendingTiedReleases.clear();
             state.pendingIoReleases.clear();
-            state.marks.clear(); // All entries drained; marks are meaningless now
-            state.tiedReleaseMarks.clear();
-            state.ioReleaseMarks.clear();
+            state.markDepth = 0; // All entries drained; marks are meaningless now
         } finally {
             if (topLevel) state.topLevelFlushDepth--;
             state.flushing = false;
@@ -2160,9 +2158,8 @@ public class MortalList {
 
     static void pushMark(LifecycleRuntimeState state) {
         if (!state.mortalActive) return;
-        state.marks.add(state.pending.size());
-        state.tiedReleaseMarks.add(state.pendingTiedReleases.size());
-        state.ioReleaseMarks.add(state.pendingIoReleases.size());
+        state.pushMortalMark(state.pending.size(), state.pendingTiedReleases.size(),
+                state.pendingIoReleases.size());
     }
 
     /**
@@ -2177,12 +2174,8 @@ public class MortalList {
     }
 
     static void popMark(LifecycleRuntimeState state) {
-        if (!state.mortalActive || state.marks.isEmpty()) return;
-        state.marks.removeLast();
-        if (!state.tiedReleaseMarks.isEmpty()) {
-            state.tiedReleaseMarks.removeLast();
-        }
-        if (!state.ioReleaseMarks.isEmpty()) state.ioReleaseMarks.removeLast();
+        if (!state.mortalActive || !state.hasMortalMarks()) return;
+        state.popMortalMark();
     }
 
     /**
@@ -2201,7 +2194,7 @@ public class MortalList {
         LifecycleRuntimeState state = state();
         if (!state.mortalActive) return;
         if (state.flushing) return;
-        boolean topLevel = state.marks.isEmpty();
+        boolean topLevel = !state.hasMortalMarks();
         if (state.pending.isEmpty() && state.pendingTiedReleases.isEmpty()
                 && state.pendingIoReleases.isEmpty()) {
             processReadyDeferredCaptures(state);
@@ -2210,9 +2203,11 @@ public class MortalList {
             refreshBoundaryWork(state);
             return;
         }
-        int mark = state.marks.isEmpty() ? 0 : state.marks.getLast();
-        int tiedMark = state.tiedReleaseMarks.isEmpty() ? 0 : state.tiedReleaseMarks.getLast();
-        int ioMark = state.ioReleaseMarks.isEmpty() ? 0 : state.ioReleaseMarks.getLast();
+        int mark = state.hasMortalMarks() ? state.marks[state.markDepth - 1] : 0;
+        int tiedMark = state.hasMortalMarks()
+                ? state.tiedReleaseMarks[state.markDepth - 1] : 0;
+        int ioMark = state.hasMortalMarks()
+                ? state.ioReleaseMarks[state.markDepth - 1] : 0;
         if (state.pending.size() <= mark && state.pendingTiedReleases.size() <= tiedMark
                 && state.pendingIoReleases.size() <= ioMark) {
             processReadyDeferredCaptures(state);
@@ -2268,10 +2263,11 @@ public class MortalList {
      */
     public static void popAndFlush() {
         LifecycleRuntimeState state = state();
-        if (!state.mortalActive || state.marks.isEmpty()) return;
-        int mark = state.marks.removeLast();
-        int tiedMark = state.tiedReleaseMarks.isEmpty() ? 0 : state.tiedReleaseMarks.removeLast();
-        int ioMark = state.ioReleaseMarks.isEmpty() ? 0 : state.ioReleaseMarks.removeLast();
+        if (!state.mortalActive || !state.hasMortalMarks()) return;
+        int markIndex = --state.markDepth;
+        int mark = state.marks[markIndex];
+        int tiedMark = state.tiedReleaseMarks[markIndex];
+        int ioMark = state.ioReleaseMarks[markIndex];
         if (state.pending.size() <= mark && state.pendingTiedReleases.size() <= tiedMark
                 && state.pendingIoReleases.size() <= ioMark) {
             // Even if no mortal entries to process, check deferred captures

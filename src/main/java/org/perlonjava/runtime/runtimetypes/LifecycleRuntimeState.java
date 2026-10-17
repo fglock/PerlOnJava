@@ -2,6 +2,7 @@ package org.perlonjava.runtime.runtimetypes;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -38,9 +39,11 @@ final class LifecycleRuntimeState {
     boolean deferredCapturesMayBeReady;
     final ArrayDeque<RuntimeBase> temporaryRoots = new ArrayDeque<>();
     final IdentityHashMap<RuntimeBase, Integer> suspendedRoots = new IdentityHashMap<>();
-    final ArrayList<Integer> marks = new ArrayList<>();
-    final ArrayList<Integer> tiedReleaseMarks = new ArrayList<>();
-    final ArrayList<Integer> ioReleaseMarks = new ArrayList<>();
+    private static final int INITIAL_MARK_CAPACITY = 16;
+    int[] marks = new int[INITIAL_MARK_CAPACITY];
+    int[] tiedReleaseMarks = new int[INITIAL_MARK_CAPACITY];
+    int[] ioReleaseMarks = new int[INITIAL_MARK_CAPACITY];
+    int markDepth;
     boolean flushing;
     int reachabilityDrainDepth;
     int topLevelFlushDepth;
@@ -73,6 +76,27 @@ final class LifecycleRuntimeState {
     final IdentityHashMap<RuntimeBase, ReachabilityWalker.WeakRootWitness>
             weakSweepRootWitnesses = new IdentityHashMap<>();
     ReachabilityQueryStats activeReachabilityQueryStats;
+
+    void pushMortalMark(int pendingSize, int tiedReleaseSize, int ioReleaseSize) {
+        if (markDepth == marks.length) {
+            int capacity = marks.length * 2;
+            marks = Arrays.copyOf(marks, capacity);
+            tiedReleaseMarks = Arrays.copyOf(tiedReleaseMarks, capacity);
+            ioReleaseMarks = Arrays.copyOf(ioReleaseMarks, capacity);
+        }
+        marks[markDepth] = pendingSize;
+        tiedReleaseMarks[markDepth] = tiedReleaseSize;
+        ioReleaseMarks[markDepth] = ioReleaseSize;
+        markDepth++;
+    }
+
+    boolean hasMortalMarks() {
+        return markDepth != 0;
+    }
+
+    void popMortalMark() {
+        if (markDepth > 0) markDepth--;
+    }
 
     final Set<RuntimeScalar> weakScalars = Collections.newSetFromMap(new IdentityHashMap<>());
     final IdentityHashMap<RuntimeBase, Set<RuntimeScalar>> referentToWeakRefs = new IdentityHashMap<>();
@@ -125,9 +149,7 @@ final class LifecycleRuntimeState {
         deferredCapturesMayBeReady = false;
         temporaryRoots.clear();
         suspendedRoots.clear();
-        marks.clear();
-        tiedReleaseMarks.clear();
-        ioReleaseMarks.clear();
+        markDepth = 0;
         flushing = false;
         reachabilityDrainDepth = 0;
         topLevelFlushDepth = 0;
