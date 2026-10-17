@@ -1037,6 +1037,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
     }
 
+    /** Push both pieces of generated-frame metadata with one runtime lookup. */
+    public static void pushJvmFrame(RuntimeScalar selfReference, boolean comparator) {
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        if (selfReference != null) {
+            state.activeJvmSelfReferences.push(selfReference);
+        }
+        state.activeJvmSortComparators.push(comparator);
+    }
+
     /** Remove the matching JVM-generated method self reference on return. */
     public static void popJvmSelfReference(RuntimeScalar selfReference) {
         if (selfReference == null) return;
@@ -1046,6 +1055,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         } else {
             stack.removeFirstOccurrence(selfReference);
         }
+    }
+
+    /** Pop both pieces of generated-frame metadata with one runtime lookup. */
+    public static void popJvmFrame(RuntimeScalar selfReference) {
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        if (selfReference != null) {
+            Deque<RuntimeScalar> stack = state.activeJvmSelfReferences;
+            if (!stack.isEmpty() && stack.peek() == selfReference) {
+                stack.pop();
+            } else {
+                stack.removeFirstOccurrence(selfReference);
+            }
+        }
+        Deque<Boolean> comparatorStack = state.activeJvmSortComparators;
+        if (!comparatorStack.isEmpty()) comparatorStack.pop();
     }
 
     /** Track whether a JVM-generated frame is a sort BLOCK pseudo-block. */

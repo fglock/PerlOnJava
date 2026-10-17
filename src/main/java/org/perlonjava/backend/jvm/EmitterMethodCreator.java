@@ -597,20 +597,16 @@ public class EmitterMethodCreator implements Opcodes {
             mv.visitCode();
 
             // Direct JVM-to-JVM calls bypass RuntimeCode.apply(), so retain
-            // the generated method's self reference for dynamic wrappers
+            // the generated method's frame metadata for dynamic wrappers
             // such as &{"CORE::__SUB__"}.
             mv.visitVarInsn(Opcodes.ALOAD, 0);
             mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassInfo.javaClassName,
                     "__SUB__", "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "pushJvmSelfReference",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V", false);
             mv.visitInsn(ctx.javaClassInfo.isSortComparator ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "pushJvmSortComparator",
-                    "(Z)V", false);
+                    "pushJvmFrame",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Z)V", false);
 
             // Initialize local variables with closure values from instance fields
             // Skip some indices because they are reserved for special arguments (this, "@_" and call
@@ -1379,12 +1375,8 @@ public class EmitterMethodCreator implements Opcodes {
                     "__SUB__", "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "popJvmSelfReference",
+                    "popJvmFrame",
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V", false);
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "popJvmSortComparator",
-                    "()V", false);
             mv.visitInsn(Opcodes.ARETURN); // Returns an Object
             mv.visitMaxs(0, 0); // Automatically computed
             mv.visitEnd();
