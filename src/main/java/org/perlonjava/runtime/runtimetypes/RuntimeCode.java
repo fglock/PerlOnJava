@@ -2736,7 +2736,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     + " captured=" + (capturedScalars == null ? 0 : capturedScalars.length)
                     + " closedOver=" + (closedOverVariables == null
                     ? "[]" : closedOverVariables.keySet())
+                    + " roots=" + ReachabilityWalker.isCodeReachableFromRoots(this)
                     + " path=" + ReachabilityWalker.findPathTo(this, true));
+            new Exception("capture release call site").printStackTrace(System.err);
         }
         if (capturedScalars != null) {
             RuntimeScalar[] scalars = capturedScalars;
