@@ -16,12 +16,13 @@ class DestroyDispatchAggregateOwnerRootTest {
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash localHash = new RuntimeHash();
             RuntimeArray referent = new RuntimeArray();
-            PerlOwnerSlot slot = new PerlOwnerSlot(
-                    PerlOwnerSlot.Kind.HASH_ENTRY, null, localHash);
-            slot.acquireHashEntry(referent);
-
-            assertFalse(hasNewRootedOwner(referent),
-                    "a new hash entry in an unrooted temporary hash is not resurrection");
+            localHash.elements.put("self", referent.createReference());
+            try {
+                assertFalse(hasNewRootedOwner(referent),
+                        "a new hash entry in an unrooted temporary hash is not resurrection");
+            } finally {
+                localHash.elements.clear();
+            }
         }
     }
 
@@ -34,15 +35,13 @@ class DestroyDispatchAggregateOwnerRootTest {
             globalHash.isGlobalPackageHash = true;
             GlobalVariable.globalHashes.put(globalName, globalHash);
             RuntimeArray referent = new RuntimeArray();
-            PerlOwnerSlot slot = new PerlOwnerSlot(
-                    PerlOwnerSlot.Kind.HASH_ENTRY, null, globalHash);
-            slot.acquireHashEntry(referent);
+            globalHash.elements.put("self", referent.createReference());
             try {
                 assertTrue(hasNewRootedOwner(referent),
                         "a new hash entry in a package global hash is resurrection");
             } finally {
+                globalHash.elements.clear();
                 GlobalVariable.globalHashes.remove(globalName);
-                slot.release();
             }
         }
     }
