@@ -7587,7 +7587,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // This enables FATAL warnings to work even at top-level (no caller frame)
             org.perlonjava.runtime.CompilationRuntimeState compilationState =
                     PerlRuntime.current().compilationState;
-            int callerCallSiteHints = WarningBitsRegistry.getCallSiteHints();
+            int callerCallSiteHints = WarningBitsRegistry.getCallSiteHints(compilationState);
             String callerCallSiteWarningBits = WarningBitsRegistry.getCallSiteBits();
             String warningBits = getWarningBitsForCode(code, compilationState);
             if (warningBits != null) {
@@ -7613,7 +7613,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Save caller's call-site hint hash so caller()[10] can retrieve them
             HintHashRegistry.pushCallerHintHash(compilationState);
             org.perlonjava.runtime.FeatureFlagsRegistry.pushCallerFeatureFlags(compilationState);
-            WarningBitsRegistry.setCallSiteHints(code.lexicalHints);
+            WarningBitsRegistry.setCallSiteHints(compilationState, code.lexicalHints);
             int cleanupMark = MyVarCleanupStack.pushMark();
             // Establish a function-scoped mortal boundary so that
             // statement-boundary flushAboveMark() inside this function
@@ -7767,7 +7767,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // After unwindTo, entries are already removed; popMark is a no-op.
                 // On normal return, popMark discards registrations without cleanup.
                 MyVarCleanupStack.popMark(cleanupMark);
-                WarningBitsRegistry.setCallSiteHints(callerCallSiteHints);
+                WarningBitsRegistry.setCallSiteHints(compilationState, callerCallSiteHints);
                 WarningBitsRegistry.setCallSiteBits(callerCallSiteWarningBits);
                 HintHashRegistry.popCallerHintHash(compilationState);
                 org.perlonjava.runtime.FeatureFlagsRegistry.popCallerFeatureFlags(compilationState);
@@ -8344,7 +8344,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Look up warning bits for the code's class and push to context stack
                 org.perlonjava.runtime.CompilationRuntimeState compilationState =
                         PerlRuntime.current().compilationState;
-                int callerCallSiteHints = WarningBitsRegistry.getCallSiteHints();
+                int callerCallSiteHints = WarningBitsRegistry.getCallSiteHints(compilationState);
                 String callerCallSiteWarningBits = WarningBitsRegistry.getCallSiteBits();
                 String warningBits = getWarningBitsForCode(code, compilationState);
                 if (warningBits != null) {
@@ -8375,7 +8375,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Save caller's call-site hint hash so caller()[10] can retrieve them
                 HintHashRegistry.pushCallerHintHash(compilationState);
                 org.perlonjava.runtime.FeatureFlagsRegistry.pushCallerFeatureFlags(compilationState);
-                WarningBitsRegistry.setCallSiteHints(code.lexicalHints);
+                WarningBitsRegistry.setCallSiteHints(compilationState, code.lexicalHints);
                 int cleanupMark = MyVarCleanupStack.pushMark();
                 MortalList.pushMark();
                 boolean returnedTailCall = false;
@@ -8423,7 +8423,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     MortalList.popMark();
                     MyVarCleanupStack.popMark(cleanupMark);
-                    WarningBitsRegistry.setCallSiteHints(callerCallSiteHints);
+                    WarningBitsRegistry.setCallSiteHints(compilationState, callerCallSiteHints);
                     WarningBitsRegistry.setCallSiteBits(callerCallSiteWarningBits);
                     HintHashRegistry.popCallerHintHash(compilationState);
                     org.perlonjava.runtime.FeatureFlagsRegistry.popCallerFeatureFlags(compilationState);
@@ -8714,7 +8714,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Look up warning bits for the code's class and push to context stack
                 org.perlonjava.runtime.CompilationRuntimeState compilationState =
                         PerlRuntime.current().compilationState;
-                int callerCallSiteHints = WarningBitsRegistry.getCallSiteHints();
+                int callerCallSiteHints = WarningBitsRegistry.getCallSiteHints(compilationState);
                 String callerCallSiteWarningBits = WarningBitsRegistry.getCallSiteBits();
                 String warningBits = getWarningBitsForCode(code, compilationState);
                 if (warningBits != null) {
@@ -8740,7 +8740,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Save caller's call-site hint hash so caller()[10] can retrieve them
                 HintHashRegistry.pushCallerHintHash(compilationState);
                 org.perlonjava.runtime.FeatureFlagsRegistry.pushCallerFeatureFlags(compilationState);
-                WarningBitsRegistry.setCallSiteHints(code.lexicalHints);
+                WarningBitsRegistry.setCallSiteHints(compilationState, code.lexicalHints);
                 int cleanupMark = MyVarCleanupStack.pushMark();
                 MortalList.pushMark();
                 boolean returnedTailCall = false;
@@ -8786,7 +8786,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     MortalList.popMark();
                     MyVarCleanupStack.popMark(cleanupMark);
-                    WarningBitsRegistry.setCallSiteHints(callerCallSiteHints);
+                    WarningBitsRegistry.setCallSiteHints(compilationState, callerCallSiteHints);
                     WarningBitsRegistry.setCallSiteBits(callerCallSiteWarningBits);
                     HintHashRegistry.popCallerHintHash(compilationState);
                     org.perlonjava.runtime.FeatureFlagsRegistry.popCallerFeatureFlags(compilationState);

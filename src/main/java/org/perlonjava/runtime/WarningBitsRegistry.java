@@ -255,6 +255,10 @@ public class WarningBitsRegistry {
     public static void setCallSiteHints(int hints) {
         state().callSiteHints = hints;
     }
+
+    public static void setCallSiteHints(CompilationRuntimeState state, int hints) {
+        state.callSiteHints = hints;
+    }
     
     /**
      * Gets the $^H value for the current call site.
@@ -263,6 +267,10 @@ public class WarningBitsRegistry {
      */
     public static int getCallSiteHints() {
         return state().callSiteHints;
+    }
+
+    public static int getCallSiteHints(CompilationRuntimeState state) {
+        return state.callSiteHints;
     }
     
     /**
