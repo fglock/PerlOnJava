@@ -9371,7 +9371,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     protected static int enterCalleeWarningScope(RuntimeScalar scope) {
         int savedScope = scope.getInt();
-        scope.set(0);
+        if (savedScope != 0) {
+            scope.set(0);
+        }
         return savedScope;
     }
 
@@ -9393,7 +9395,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     protected static void restoreCallerWarningScope(RuntimeScalar scope, int savedScope) {
-        scope.set(savedScope);
+        if (scope.getInt() != savedScope) {
+            scope.set(savedScope);
+        }
     }
 
     private static void requireClassMethodInstance(RuntimeCode code, RuntimeArray args) {
