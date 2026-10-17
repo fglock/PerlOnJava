@@ -378,7 +378,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     // Last hash/array container that stored this scalar slot. Used only as a
     // narrow guard for live CODE refs whose captures must survive void discard.
-    RuntimeBase containerOwner;
+    volatile RuntimeBase containerOwner;
     private List<WeakReference<RuntimeHash>> hashContainerOwners;
     private List<WeakReference<RuntimeArray>> arrayContainerOwners;
 
@@ -387,7 +387,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return containerOwner;
     }
 
-    void markContainerOwner(RuntimeBase owner) {
+    synchronized void markContainerOwner(RuntimeBase owner) {
         this.containerOwner = owner;
         if (owner instanceof RuntimeHash hash) {
             if (hashContainerOwners == null) {
@@ -400,7 +400,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         propagateTiedHandlerMarkerToReferent();
     }
 
-    List<RuntimeHash> hashContainerOwnersSnapshot() {
+    synchronized List<RuntimeHash> hashContainerOwnersSnapshot() {
         if (hashContainerOwners == null) return List.of();
         List<RuntimeHash> snapshot = new ArrayList<>(hashContainerOwners.size());
         hashContainerOwners.removeIf(reference -> reference.get() == null);
@@ -412,7 +412,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return snapshot;
     }
 
-    void unmarkHashContainerOwner(RuntimeHash owner) {
+    synchronized void unmarkHashContainerOwner(RuntimeHash owner) {
         if (hashContainerOwners == null) return;
         hashContainerOwners.removeIf(reference -> reference.get() == null || reference.get() == owner);
         if (hashContainerOwners.isEmpty()) hashContainerOwners = null;
@@ -422,7 +422,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
     }
 
-    void markArrayContainerOwner(RuntimeArray owner) {
+    synchronized void markArrayContainerOwner(RuntimeArray owner) {
         if (arrayContainerOwners == null) arrayContainerOwners = new ArrayList<>();
         arrayContainerOwners.removeIf(reference -> reference.get() == null);
         if (arrayContainerOwners.stream().noneMatch(reference -> reference.get() == owner)) {
@@ -430,7 +430,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
     }
 
-    List<RuntimeArray> arrayContainerOwnersSnapshot() {
+    synchronized List<RuntimeArray> arrayContainerOwnersSnapshot() {
         if (arrayContainerOwners == null) return List.of();
         arrayContainerOwners.removeIf(reference -> reference.get() == null);
         List<RuntimeArray> snapshot = new ArrayList<>(arrayContainerOwners.size());
@@ -442,7 +442,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return snapshot;
     }
 
-    void unmarkArrayContainerOwner(RuntimeArray owner) {
+    synchronized void unmarkArrayContainerOwner(RuntimeArray owner) {
         if (arrayContainerOwners == null) return;
         arrayContainerOwners.removeIf(reference -> reference.get() == null || reference.get() == owner);
         if (arrayContainerOwners.isEmpty()) arrayContainerOwners = null;
