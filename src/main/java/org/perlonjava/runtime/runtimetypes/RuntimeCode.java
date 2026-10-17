@@ -1321,7 +1321,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             pStack.pop();
         }
         cleanupOwnedArgumentAliases(exitedArgs);
-        drainDeferredArgumentAggregateCleanup();
+        drainDeferredArgumentAggregateCleanup(executionState);
         Deque<Boolean> haStack = executionState.hasArgsStack;
         if (!haStack.isEmpty()) {
             haStack.pop();
@@ -1446,8 +1446,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return false;
     }
 
-    private static void drainDeferredArgumentAggregateCleanup() {
-        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+    private static void drainDeferredArgumentAggregateCleanup(ExecutionRuntimeState state) {
         if (state.deferredArgumentAggregateCleanup.isEmpty()) return;
         for (RuntimeBase aggregate : new java.util.ArrayList<>(
                 state.deferredArgumentAggregateCleanup.keySet())) {
@@ -5476,21 +5475,24 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // the method dies. Without this, the method's my-variable entries
         // linger on the stack and their refCount decrements are lost,
         // causing blessed objects to leak (DESTROY never fires).
-        int cleanupMark = MyVarCleanupStack.pushMark();
+        PerlRuntime methodRuntime = PerlRuntime.current();
+        ExecutionRuntimeState methodExecutionState = methodRuntime.executionState();
+        int cleanupMark = MyVarCleanupStack.pushMark(methodExecutionState);
         try {
         int calleeContext = callContext == RuntimeContextType.METHOD_CODEREF
                 ? RuntimeContextType.SCALAR : callContext;
         RuntimeList result = callCachedInner(
-                callsiteId, runtimeScalar, method, currentSub, methodArgs, calleeContext);
+                callsiteId, runtimeScalar, method, currentSub, methodArgs, calleeContext,
+                methodRuntime);
         return bindReturnedMethodCoderef(result, runtimeScalar, callContext);
         } catch (RuntimeException e) {
             if (!(e instanceof PerlExitException)) {
-                MyVarCleanupStack.unwindTo(cleanupMark);
+                MyVarCleanupStack.unwindTo(cleanupMark, methodExecutionState);
                 MortalList.flush();
             }
             throw e;
         } finally {
-            MyVarCleanupStack.popMark(cleanupMark);
+            MyVarCleanupStack.popMark(cleanupMark, methodExecutionState);
         }
     }
 
@@ -5499,7 +5501,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                          RuntimeScalar method,
                                          RuntimeScalar currentSub,
                                          RuntimeArray methodArgs,
-                                         int callContext) {
+                                         int callContext,
+                                         PerlRuntime methodRuntime) {
         // Handle tied scalars: the invocant may be a TIED_SCALAR returned
         // from a tied hash / array FETCH (e.g. $tied_hash{obj}->method).
         // Dispatch sees only the TIED_SCALAR shell, so unwrap to the
@@ -5523,7 +5526,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 int blessId = ((RuntimeBase) invocant.value).blessId;
                 if (blessId != 0) {
                     int methodHash = System.identityHashCode(method.value);
-                    PerlRuntime methodRuntime = PerlRuntime.current();
                     RuntimeCodeRuntimeState runtimeCodeState = methodRuntime.runtimeCodeState();
 
                     // Check if cache hit
@@ -5557,12 +5559,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                     }
                                 }
                                 
-                                MortalList.pushMark();
+                                MortalList.pushMark(methodRuntime.lifecycleState);
                                 try {
                                     return applyCachedMethod(
                                             cachedCode, a, callContext, methodRuntime);
                                 } finally {
-                                    MortalList.popMark();
+                                    MortalList.popMark(methodRuntime.lifecycleState);
                                 }
                             } catch (Throwable e) {
                                 if (e instanceof RuntimeException) throw (RuntimeException) e;
@@ -5603,11 +5605,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 setAutoloadMethodName(
                                         autoloadVariableName, fullMethodName, method);
                             }
-                            MortalList.pushMark();
+                            MortalList.pushMark(methodRuntime.lifecycleState);
                             try {
                                 return applyCachedMethod(code, a, callContext, null);
                             } finally {
-                                MortalList.popMark();
+                                MortalList.popMark(methodRuntime.lifecycleState);
                             }
                         }
                     }
