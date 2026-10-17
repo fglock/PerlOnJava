@@ -6,6 +6,7 @@ import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.Stack;
 
@@ -108,6 +109,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     // while mutating ops such as unshift can insert new counted elements that
     // this array must release during tail-call/scope cleanup.
     public Set<RuntimeScalar> ownedAliasElements;
+    /** Stable semantic identities for direct referents held by owning elements. */
+    private List<PerlOwnerSlot> arrayElementOwnerSlots;
     // Internal one-shot array used to materialize the RHS of list assignment.
     // Its elements are expression temporaries, not durable array-owned slots.
     boolean transientListAssignmentRhs;
@@ -148,6 +151,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     void resetElementListAfterAutovivification() {
+        releaseArrayElementOwnerSlots();
         elements = newElementList();
     }
 
@@ -163,6 +167,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     void restoreRegexMutationState(Object token) {
         if (!(token instanceof RegexMutationState state)) return;
         deferElementsAddedSince(state.elements);
+        releaseArrayElementOwnerSlots();
         elements = newElementList(state.elements);
         type = state.type;
         strictAutovivify = state.strictAutovivify;
@@ -172,6 +177,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         ownedAliasElements = state.ownedAliasElements == null ? null
                 : Collections.newSetFromMap(new IdentityHashMap<>());
         if (ownedAliasElements != null) ownedAliasElements.addAll(state.ownedAliasElements);
+        reconcileArrayElementOwnerSlots();
         blessId = state.blessId;
         markPackageRootedValues(0);
     }
@@ -221,6 +227,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             if (value != null) value.markContainerOwner(owner);
             owner.markPackageRootedValue(value);
             boolean changed = super.add(value);
+            if (changed) owner.arrayElementAdded(size() - 1, value);
             owner.validateIsaMutation();
             return changed;
         }
@@ -236,6 +243,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             if (element != null) element.markContainerOwner(owner);
             owner.markPackageRootedValue(element);
             super.add(index, element);
+            owner.arrayElementAdded(index, element);
             owner.validateIsaMutation();
         }
 
@@ -244,11 +252,17 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             if (!owner.threadShared) {
                 if (!c.isEmpty()) owner.noteIsaMutation();
                 owner.notePackageRootMutationIf(owner.hasRootEdge(c));
-                for (RuntimeScalar value : c) {
+                List<RuntimeScalar> added = new ArrayList<>(c);
+                for (RuntimeScalar value : added) {
                     if (value != null) value.markContainerOwner(owner);
                     owner.markPackageRootedValue(value);
                 }
-                boolean changed = super.addAll(c);
+                boolean changed = super.addAll(added);
+                if (changed) {
+                    int start = size() - added.size();
+                    int index = start;
+                    for (RuntimeScalar value : added) owner.arrayElementAdded(index++, value);
+                }
                 if (changed) owner.validateIsaMutation();
                 return changed;
             }
@@ -265,11 +279,16 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             if (!owner.threadShared) {
                 if (!c.isEmpty()) owner.noteIsaMutation();
                 owner.notePackageRootMutationIf(owner.hasRootEdge(c));
-                for (RuntimeScalar value : c) {
+                List<RuntimeScalar> added = new ArrayList<>(c);
+                for (RuntimeScalar value : added) {
                     if (value != null) value.markContainerOwner(owner);
                     owner.markPackageRootedValue(value);
                 }
-                boolean changed = super.addAll(index, c);
+                boolean changed = super.addAll(index, added);
+                if (changed) {
+                    int insertAt = index;
+                    for (RuntimeScalar value : added) owner.arrayElementAdded(insertAt++, value);
+                }
                 if (changed) owner.validateIsaMutation();
                 return changed;
             }
@@ -294,6 +313,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             if (element != null) element.markContainerOwner(owner);
             owner.markPackageRootedValue(element);
             RuntimeScalar result = super.set(index, element);
+            owner.arrayElementReplaced(index, previous, element);
+            if (owner.elementsAliased && element != null) {
+                // A write into an aliased array slot replaces the borrowed
+                // slot with a value owned by this array. Keep that value
+                // reachable even after the original argument frame exits.
+                owner.markOwnedAliasElement(element);
+            }
             owner.validateIsaMutation();
             return result;
         }
@@ -301,6 +327,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         @Override
         public RuntimeScalar remove(int index) {
             RuntimeScalar previous = super.remove(index);
+            owner.arrayElementRemoved(index, previous);
             owner.noteIsaMutation();
             owner.notePackageRootMutation(previous, null);
             owner.validateIsaMutation();
@@ -309,13 +336,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
         @Override
         public boolean remove(Object o) {
-            boolean removed = super.remove(o);
-            if (removed && o instanceof RuntimeScalar scalar) {
-                owner.noteIsaMutation();
-                owner.notePackageRootMutation(scalar, null);
-                owner.validateIsaMutation();
-            }
-            return removed;
+            int index = indexOf(o);
+            if (index < 0) return false;
+            remove(index);
+            return true;
         }
 
         @Override
@@ -323,9 +347,58 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             if (!isEmpty()) {
                 owner.noteIsaMutation();
                 owner.notePackageRootClear(this);
+                owner.arrayElementsCleared(this);
             }
             super.clear();
             owner.validateIsaMutation();
+        }
+
+        @Override
+        protected void removeRange(int fromIndex, int toIndex) {
+            if (fromIndex == toIndex) return;
+            List<RuntimeScalar> removed = new ArrayList<>(subList(fromIndex, toIndex));
+            owner.noteIsaMutation();
+            owner.notePackageRootClear(removed);
+            super.removeRange(fromIndex, toIndex);
+            owner.arrayElementsRemoved(fromIndex, removed);
+            owner.validateIsaMutation();
+        }
+
+        @Override
+        public boolean removeIf(java.util.function.Predicate<? super RuntimeScalar> filter) {
+            Objects.requireNonNull(filter);
+            boolean changed = false;
+            for (int i = size() - 1; i >= 0; i--) {
+                if (filter.test(get(i))) {
+                    remove(i);
+                    changed = true;
+                }
+            }
+            return changed;
+        }
+
+        @Override
+        public boolean removeAll(java.util.Collection<?> values) {
+            Objects.requireNonNull(values);
+            return removeIf(values::contains);
+        }
+
+        @Override
+        public boolean retainAll(java.util.Collection<?> values) {
+            Objects.requireNonNull(values);
+            return removeIf(value -> !values.contains(value));
+        }
+
+        @Override
+        public void replaceAll(java.util.function.UnaryOperator<RuntimeScalar> operator) {
+            Objects.requireNonNull(operator);
+            for (int i = 0; i < size(); i++) set(i, operator.apply(get(i)));
+        }
+
+        @Override
+        public void sort(java.util.Comparator<? super RuntimeScalar> comparator) {
+            super.sort(comparator);
+            owner.reconcileArrayElementOwnerSlots();
         }
     }
 
@@ -408,12 +481,139 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
         ownedAliasElements.add(scalar);
         elementsOwned = true;
+        reconcileArrayElementOwnerSlots();
     }
 
     public boolean ownsElement(RuntimeScalar scalar) {
         if (!elementsOwned || scalar == null) return false;
         if (!elementsAliased) return true;
         return ownedAliasElements != null && ownedAliasElements.contains(scalar);
+    }
+
+    private static RuntimeBase directReferent(RuntimeScalar scalar) {
+        return scalar != null && scalar.value instanceof RuntimeBase base ? base : null;
+    }
+
+    private boolean containsElementIdentity(RuntimeScalar scalar) {
+        for (RuntimeScalar element : elements) if (element == scalar) return true;
+        return false;
+    }
+
+    private void syncArrayElementOwnerSlot(int index) {
+        if (threadShared || index < 0 || index >= elements.size()) return;
+        if (arrayElementOwnerSlots == null) {
+            if (ownsElement(elements.get(index))) reconcileArrayElementOwnerSlots();
+            return;
+        }
+        if (index >= arrayElementOwnerSlots.size()) return;
+        RuntimeScalar scalar = elements.get(index);
+        RuntimeBase referent = ownsElement(scalar) ? directReferent(scalar) : null;
+        PerlOwnerSlot slot = arrayElementOwnerSlots.get(index);
+        if (referent == null) {
+            if (slot != null) slot.release();
+            arrayElementOwnerSlots.set(index, null);
+        } else {
+            if (slot == null) {
+                slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.ARRAY_ELEMENT);
+                arrayElementOwnerSlots.set(index, slot);
+            }
+            slot.acquireArrayElement(referent);
+        }
+    }
+
+    void reconcileArrayElementOwnerSlots() {
+        if (threadShared || !elementsOwned) {
+            releaseArrayElementOwnerSlots();
+            return;
+        }
+        if (arrayElementOwnerSlots == null) {
+            arrayElementOwnerSlots = new ArrayList<>(Collections.nCopies(elements.size(), null));
+        } else if (arrayElementOwnerSlots.size() < elements.size()) {
+            arrayElementOwnerSlots.addAll(Collections.nCopies(
+                    elements.size() - arrayElementOwnerSlots.size(), null));
+        } else if (arrayElementOwnerSlots.size() > elements.size()) {
+            for (int i = arrayElementOwnerSlots.size() - 1; i >= elements.size(); i--) {
+                PerlOwnerSlot slot = arrayElementOwnerSlots.remove(i);
+                if (slot != null) slot.release();
+            }
+        }
+        for (int i = 0; i < elements.size(); i++) syncArrayElementOwnerSlot(i);
+    }
+
+    private void arrayElementAdded(int index, RuntimeScalar scalar) {
+        if (scalar != null) scalar.markArrayContainerOwner(this);
+        if (threadShared) return;
+        if (arrayElementOwnerSlots == null) {
+            if (ownsElement(scalar)) reconcileArrayElementOwnerSlots();
+            return;
+        }
+        arrayElementOwnerSlots.add(index, null);
+        syncArrayElementOwnerSlot(index);
+    }
+
+    private void arrayElementReplaced(int index, RuntimeScalar previous, RuntimeScalar scalar) {
+        if (scalar != null) scalar.markArrayContainerOwner(this);
+        if (previous != null && previous != scalar && !containsElementIdentity(previous)) {
+            previous.unmarkArrayContainerOwner(this);
+        }
+        syncArrayElementOwnerSlot(index);
+    }
+
+    private void arrayElementRemoved(int index, RuntimeScalar previous) {
+        if (arrayElementOwnerSlots != null && !threadShared
+                && index >= 0 && index < arrayElementOwnerSlots.size()) {
+            PerlOwnerSlot slot = arrayElementOwnerSlots.remove(index);
+            if (slot != null) slot.release();
+        }
+        if (previous != null && !containsElementIdentity(previous)) {
+            previous.unmarkArrayContainerOwner(this);
+        }
+    }
+
+    private void arrayElementsRemoved(int startIndex, List<RuntimeScalar> removed) {
+        if (arrayElementOwnerSlots != null && !threadShared) {
+            for (int i = removed.size() - 1; i >= 0; i--) {
+                int index = startIndex + i;
+                if (index < arrayElementOwnerSlots.size()) {
+                    PerlOwnerSlot slot = arrayElementOwnerSlots.remove(index);
+                    if (slot != null) slot.release();
+                }
+            }
+        }
+        for (RuntimeScalar scalar : removed) {
+            if (scalar != null && !containsElementIdentity(scalar)) {
+                scalar.unmarkArrayContainerOwner(this);
+            }
+        }
+    }
+
+    private void arrayElementsCleared(List<RuntimeScalar> removed) {
+        releaseArrayElementOwnerSlots();
+        Set<RuntimeScalar> unique = Collections.newSetFromMap(new IdentityHashMap<>());
+        unique.addAll(removed);
+        for (RuntimeScalar scalar : unique) {
+            if (scalar != null) scalar.unmarkArrayContainerOwner(this);
+        }
+    }
+
+    void updateArrayElementOwnersForScalar(RuntimeScalar scalar) {
+        if (threadShared || arrayElementOwnerSlots == null) return;
+        for (int i = 0; i < elements.size(); i++) {
+            if (elements.get(i) == scalar) syncArrayElementOwnerSlot(i);
+        }
+    }
+
+    void releaseArrayElementOwnerSlots() {
+        if (arrayElementOwnerSlots == null) return;
+        for (PerlOwnerSlot slot : arrayElementOwnerSlots) {
+            if (slot != null) slot.release();
+        }
+        arrayElementOwnerSlots = null;
+    }
+
+    PerlOwnerSlot arrayElementOwnerSlot(int index) {
+        return arrayElementOwnerSlots == null || index < 0 || index >= arrayElementOwnerSlots.size()
+                ? null : arrayElementOwnerSlots.get(index);
     }
 
     public void forgetOwnedAliasElement(RuntimeScalar scalar) {
@@ -425,6 +625,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 elementsOwned = false;
             }
         }
+        reconcileArrayElementOwnerSlots();
     }
 
     /**
@@ -610,6 +811,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     runtimeArray.elementsAliased = false;
                     runtimeArray.ownedAliasElements = null;
                 }
+                runtimeArray.reconcileArrayElementOwnerSlots();
                 yield getScalarInt(runtimeArray.elements.size());
             }
             case AUTOVIVIFY_ARRAY -> {
@@ -655,6 +857,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     runtimeArray.elementsAliased = false;
                     runtimeArray.ownedAliasElements = null;
                 }
+                runtimeArray.reconcileArrayElementOwnerSlots();
                 yield getScalarInt(runtimeArray.elements.size());
             }
             case AUTOVIVIFY_ARRAY -> {
@@ -1401,6 +1604,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         this.ownedAliasElements = null;
         this.elementsAliased = false;
         this.elements.add(value);
+        this.elementsOwned = true;
+        this.elementsAliased = false;
+        reconcileArrayElementOwnerSlots();
         markPackageRootedValue(value);
         MortalList.flush();
         return this;
@@ -1463,6 +1669,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 this.elementsOwned = true;
                 this.elementsAliased = false;
                 this.ownedAliasElements = null;
+                reconcileArrayElementOwnerSlots();
 
                 // Create a new array with scalarContextSize set for assignment return value
                 // This is needed for eval context where assignment should return element count
@@ -1562,6 +1769,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         this.elementsOwned = false;
         this.elementsAliased = true;
         this.ownedAliasElements = null;
+        reconcileArrayElementOwnerSlots();
         return this;
     }
 
@@ -1592,6 +1800,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         this.elementsOwned = false;
         this.elementsAliased = true;
         this.ownedAliasElements = null;
+        reconcileArrayElementOwnerSlots();
         return this;
     }
 
@@ -1675,6 +1884,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         this.elementsOwned = true;
         this.elementsAliased = false;
         this.ownedAliasElements = null;
+        reconcileArrayElementOwnerSlots();
         RuntimeScalar result = new RuntimeScalar();
         result.type = RuntimeScalarType.ARRAYREFERENCE;
         result.value = this;
@@ -2006,6 +2216,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 arr.elements.add(element);
             }
             arr.elementsAliased = true;
+            arr.reconcileArrayElementOwnerSlots();
             return arr;
         }
 
@@ -2031,6 +2242,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
         arr.elementsAliased = true;
         arr.elementsOwned = arr.ownedAliasElements != null && !arr.ownedAliasElements.isEmpty();
+        arr.reconcileArrayElementOwnerSlots();
         return arr;
     }
 
@@ -2059,6 +2271,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             }
         }
         this.elementsOwned = false;
+        reconcileArrayElementOwnerSlots();
         return arr;
     }
 
@@ -2087,6 +2300,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         this.elementsOwned = false;
         carrier.elementsAliased = true;
         carrier.elementsOwned = carrier.ownedAliasElements != null && !carrier.ownedAliasElements.isEmpty();
+        reconcileArrayElementOwnerSlots();
+        carrier.reconcileArrayElementOwnerSlots();
         return carrier;
     }
 

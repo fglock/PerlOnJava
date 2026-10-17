@@ -709,11 +709,19 @@ public class DestroyDispatch {
                 // time the destructor returns. During global teardown, package
                 // roots are still available to the reachability walker, so
                 // require a new scalar owner to remain rooted before warning.
+                if (owner.isRetiredBorrowedArrayAlias()) continue;
                 if (!activeOwnersAtStart.contains(owner)
-                        && ReachabilityWalker.isScalarReachable(owner)) return true;
+                        && ReachabilityWalker.isScalarReachable(owner)) {
+                    return true;
+                }
             }
             for (PerlOwnerSlot ownerSlot : referent.ownerSlotSnapshot()) {
-                if (!ownerSlotsAtStart.contains(ownerSlot)) return true;
+                // Array element slots are currently diagnostic identities; the
+                // owning array is not yet part of the resurrection root check.
+                // Treating a newly materialized array slot as proof of Perl
+                // resurrection misclassifies destructor-local array writes.
+                if (!ownerSlotsAtStart.contains(ownerSlot)
+                        && ownerSlot.kind() != PerlOwnerSlot.Kind.ARRAY_ELEMENT) return true;
             }
             return false;
         }

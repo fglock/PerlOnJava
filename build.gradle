@@ -812,10 +812,35 @@ def unitShardTasks = []
     }
 }
 
+// Keep the asynchronous Mojolicious lifetime regression in a fresh test
+// process after the standard shards. Reusing the Perl runtime for the other
+// resource corpus can leave stateful event-loop test fixtures behind.
+def websocketLifetimeTask = tasks.register('testUnitWebsocketLifetime', Test) {
+    group = 'verification'
+    description = 'Runs the isolated Mojolicious WebSocket lifetime regression'
+
+    useJUnitPlatform {
+        includeTags 'unit'
+        excludeTags 'full'
+    }
+
+    systemProperty 'test.shard.index', parallelShards
+    systemProperty 'test.shard.total', parallelShards + 1
+
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include '**/PerlScriptExecutionTest.class'
+
+    mustRunAfter unitShardTasks.collect { tasks.named(it) }
+    onlyIf {
+        jperlTestShardProp.get().isEmpty() || jperlTestShardProp.get() == "$parallelShards"
+    }
+}
+
 tasks.register('testUnitParallel') {
     group = 'verification'
     description = 'Runs unit tests in parallel across multiple JVMs. Usage: gradle testUnitParallel --parallel'
-    dependsOn unitShardTasks
+    dependsOn unitShardTasks + [websocketLifetimeTask]
     dependsOn testJoni
     dependsOn verifyJoniPackaging
 }

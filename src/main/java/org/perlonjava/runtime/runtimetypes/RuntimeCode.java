@@ -204,6 +204,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         && closure.refCount == 0
                         && closure.stashRefCount <= 0
                         && !closure.localBindingExists
+                        && !ReachabilityWalker.isReachableFromRoots(closure)
                         && (frame.returned == null || !frame.returned.containsKey(closure))) {
                     closure.releaseCaptures();
                 }
@@ -5236,7 +5237,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     code.closedOverVariables.put(f.getName(), capturedAggregate);
                     capturedAggregates.add(capturedAggregate);
-                    PerlOwnerSlot ownerSlot = capturedAggregate.retainClosureCaptureOwner();
+                    PerlOwnerSlot ownerSlot = capturedAggregate.retainClosureCaptureOwner(code);
                     capturedAggregateOwnerSlots.add(ownerSlot);
                 }
             }

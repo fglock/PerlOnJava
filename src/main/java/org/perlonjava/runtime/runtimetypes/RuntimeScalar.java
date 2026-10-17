@@ -378,16 +378,89 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     // Last hash/array container that stored this scalar slot. Used only as a
     // narrow guard for live CODE refs whose captures must survive void discard.
-    RuntimeBase containerOwner;
+    volatile RuntimeBase containerOwner;
+    private List<WeakReference<RuntimeHash>> hashContainerOwners;
+    private List<WeakReference<RuntimeArray>> arrayContainerOwners;
 
     /** Return the aggregate slot that directly owns this scalar, if any. */
     public RuntimeBase getContainerOwner() {
         return containerOwner;
     }
 
-    void markContainerOwner(RuntimeBase owner) {
+    synchronized void markContainerOwner(RuntimeBase owner) {
         this.containerOwner = owner;
+        if (owner instanceof RuntimeHash hash) {
+            if (hashContainerOwners == null) {
+                hashContainerOwners = new ArrayList<>();
+            }
+            boolean alreadyRegistered = hashContainerOwners.stream()
+                    .anyMatch(reference -> reference.get() == hash);
+            if (!alreadyRegistered) hashContainerOwners.add(new WeakReference<>(hash));
+        }
         propagateTiedHandlerMarkerToReferent();
+    }
+
+    synchronized List<RuntimeHash> hashContainerOwnersSnapshot() {
+        if (hashContainerOwners == null) return List.of();
+        List<RuntimeHash> snapshot = new ArrayList<>(hashContainerOwners.size());
+        hashContainerOwners.removeIf(reference -> reference.get() == null);
+        for (WeakReference<RuntimeHash> reference : hashContainerOwners) {
+            RuntimeHash owner = reference.get();
+            if (owner != null) snapshot.add(owner);
+        }
+        if (hashContainerOwners.isEmpty()) hashContainerOwners = null;
+        return snapshot;
+    }
+
+    synchronized void unmarkHashContainerOwner(RuntimeHash owner) {
+        if (hashContainerOwners == null) return;
+        hashContainerOwners.removeIf(reference -> reference.get() == null || reference.get() == owner);
+        if (hashContainerOwners.isEmpty()) hashContainerOwners = null;
+        if (containerOwner == owner) {
+            List<RuntimeHash> remaining = hashContainerOwnersSnapshot();
+            containerOwner = remaining.isEmpty() ? null : remaining.get(0);
+        }
+    }
+
+    synchronized void markArrayContainerOwner(RuntimeArray owner) {
+        if (arrayContainerOwners == null) arrayContainerOwners = new ArrayList<>();
+        arrayContainerOwners.removeIf(reference -> reference.get() == null);
+        if (arrayContainerOwners.stream().noneMatch(reference -> reference.get() == owner)) {
+            arrayContainerOwners.add(new WeakReference<>(owner));
+        }
+    }
+
+    synchronized List<RuntimeArray> arrayContainerOwnersSnapshot() {
+        if (arrayContainerOwners == null) return List.of();
+        arrayContainerOwners.removeIf(reference -> reference.get() == null);
+        List<RuntimeArray> snapshot = new ArrayList<>(arrayContainerOwners.size());
+        for (WeakReference<RuntimeArray> reference : arrayContainerOwners) {
+            RuntimeArray owner = reference.get();
+            if (owner != null) snapshot.add(owner);
+        }
+        if (arrayContainerOwners.isEmpty()) arrayContainerOwners = null;
+        return snapshot;
+    }
+
+    /** Whether an exited scalar remains only as a borrowed {@code @_}-style alias. */
+    boolean isRetiredBorrowedArrayAlias() {
+        if (!scopeExited) return false;
+        for (RuntimeHash owner : hashContainerOwnersSnapshot()) {
+            if (owner.elements.containsValue(this)) return false;
+        }
+        boolean foundAlias = false;
+        for (RuntimeArray owner : arrayContainerOwnersSnapshot()) {
+            if (!owner.elements.contains(this)) continue;
+            foundAlias = true;
+            if (!owner.elementsAliased || owner.ownsElement(this)) return false;
+        }
+        return foundAlias;
+    }
+
+    synchronized void unmarkArrayContainerOwner(RuntimeArray owner) {
+        if (arrayContainerOwners == null) return;
+        arrayContainerOwners.removeIf(reference -> reference.get() == null || reference.get() == owner);
+        if (arrayContainerOwners.isEmpty()) arrayContainerOwners = null;
     }
 
     private void propagateTiedHandlerMarkerToReferent() {
@@ -400,12 +473,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     boolean isStoredInRegisteredContainerOwner() {
         RuntimeBase owner = containerOwner;
-        if (owner == null || !MyVarCleanupStack.isRegistered(owner)) return false;
+        if (owner == null || owner.scopeExited || !MyVarCleanupStack.isRegistered(owner)) return false;
         if (owner instanceof RuntimeHash hash) {
             return hash.elements.containsValue(this);
         }
         if (owner instanceof RuntimeArray array) {
-            return array.elements.contains(this);
+            return array.elements.contains(this)
+                    && (!array.elementsAliased || array.ownsElement(this));
         }
         return false;
     }
@@ -2753,12 +2827,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // scalar wrapper is assigned a new referent (the normal class-field
         // ADJUST path). RuntimeHash's map hook covers slot replacement; this
         // covers mutation of a slot that is already in the map.
-        if (containerOwner instanceof RuntimeHash && oldBase != this.value) {
-            if (oldBase != null && oldBase.hashSlotOwnerCount > 0) {
-                oldBase.hashSlotOwnerCount--;
+        if (oldBase != this.value) {
+            RuntimeBase newBase = this.value instanceof RuntimeBase base ? base : null;
+            for (RuntimeHash owner : hashContainerOwnersSnapshot()) {
+                owner.updateHashEntryOwnersForScalar(this, oldBase, newBase);
             }
-            if (this.value instanceof RuntimeBase newBase) {
-                newBase.hashSlotOwnerCount++;
+            for (RuntimeArray owner : arrayContainerOwnersSnapshot()) {
+                owner.updateArrayElementOwnersForScalar(this);
             }
         }
         if (this.captureCount > 0 && (this.type & RuntimeScalarType.REFERENCE_BIT) != 0
@@ -5040,7 +5115,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     && scalar.value instanceof RuntimeCode code
                     && code.capturedScalars != null
                     && code.refCount == 0
-                    && !GlobalVariable.installedGlobalCodeRefsView().contains(code)) {
+                    && !GlobalVariable.installedGlobalCodeRefsView().contains(code)
+                    && !ReachabilityWalker.isReachableFromRoots(code)) {
                 code.releaseCaptures();
             }
             return;

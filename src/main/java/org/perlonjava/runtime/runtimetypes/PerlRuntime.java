@@ -241,6 +241,22 @@ public final class PerlRuntime implements AutoCloseable {
         }
     }
 
+    /**
+     * Snapshot only legacy/unassociated capture pads that still need to act as
+     * conservative roots. Pads owned by a RuntimeCode are reached through that
+     * closure's capture edge, avoiding a false root from a closure to its own
+     * captured aggregate graph.
+     */
+    static java.util.List<RuntimeBase> snapshotOwnerSlotRootReferents() {
+        java.util.List<RuntimeBase> referents = snapshotOwnerSlotReferents();
+        if (referents.isEmpty()) return referents;
+        java.util.ArrayList<RuntimeBase> roots = new java.util.ArrayList<>(referents.size());
+        for (RuntimeBase referent : referents) {
+            if (referent.hasUnassociatedClosureCaptureOwner()) roots.add(referent);
+        }
+        return java.util.List.copyOf(roots);
+    }
+
     /** Record the address exposed by Perl reference stringification for B introspection. */
     public void registerReferenceAddress(RuntimeBase value) {
         registerReferenceAddress(referenceAddress(value), value);

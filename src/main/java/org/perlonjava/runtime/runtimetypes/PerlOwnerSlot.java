@@ -17,11 +17,14 @@ public final class PerlOwnerSlot {
     private static final AtomicLong NEXT_ID = new AtomicLong();
 
     public enum Kind {
-        CLOSURE_PAD
+        CLOSURE_PAD,
+        HASH_ENTRY,
+        ARRAY_ELEMENT
     }
 
     private final Kind kind;
     private final RuntimeScalar padCell;
+    private volatile RuntimeCode closureOwner;
     private final long identity = NEXT_ID.incrementAndGet();
     private RuntimeBase referent;
     private PerlRuntime ownerRuntime;
@@ -101,6 +104,10 @@ public final class PerlOwnerSlot {
         return legacyCaptureCount;
     }
 
+    RuntimeCode closureOwner() {
+        return closureOwner;
+    }
+
     /** Acquire one closure-pad referent count through the legacy bridge. */
     public synchronized void acquireLegacyCapture(RuntimeBase target) {
         Objects.requireNonNull(target, "target");
@@ -126,11 +133,33 @@ public final class PerlOwnerSlot {
 
     /** Acquire a captured aggregate pad as an explicit owner slot. */
     public synchronized void acquireCapture(RuntimeBase target) {
+        acquireCapture(target, null);
+    }
+
+    /** Acquire a captured aggregate pad as an edge from its owning closure. */
+    public synchronized void acquireCapture(RuntimeBase target, RuntimeCode owner) {
         Objects.requireNonNull(target, "target");
         if (target.refCount == Integer.MIN_VALUE) {
             throw new IllegalStateException("cannot capture a destroyed referent");
         }
         nativeCaptureOwner = true;
+        closureOwner = owner;
+        transferTo(target);
+    }
+
+    /** Attach this stable hash-entry slot to its current direct referent. */
+    public synchronized void acquireHashEntry(RuntimeBase target) {
+        if (kind != Kind.HASH_ENTRY) {
+            throw new IllegalStateException("hash-entry acquisition requires a HASH_ENTRY slot");
+        }
+        transferTo(target);
+    }
+
+    /** Attach this stable array-element slot to its current direct referent. */
+    public synchronized void acquireArrayElement(RuntimeBase target) {
+        if (kind != Kind.ARRAY_ELEMENT) {
+            throw new IllegalStateException("array-element acquisition requires an ARRAY_ELEMENT slot");
+        }
         transferTo(target);
     }
 
@@ -158,9 +187,14 @@ public final class PerlOwnerSlot {
         RuntimeBase previous = referent;
         PerlRuntime previousRuntime = ownerRuntime;
         LifecycleRuntimeState previousState = ownerRuntimeState;
-        PerlRuntime nextRuntime = nextReferent == null
+        // Hash entry slots are owned by their hash, so retaining their
+        // referent from the runtime would turn an unrooted hash into a root.
+        // Closure-pad slots are runtime roots while their Perl closure lives.
+        PerlRuntime nextRuntime = kind != Kind.CLOSURE_PAD || nextReferent == null
                 ? null : PerlRuntime.currentOrNull();
-        if (nextReferent != null && nextRuntime == null) nextRuntime = previousRuntime;
+        if (kind == Kind.CLOSURE_PAD && nextReferent != null && nextRuntime == null) {
+            nextRuntime = previousRuntime;
+        }
 
         referent = nextReferent;
         ownerRuntime = nextRuntime;

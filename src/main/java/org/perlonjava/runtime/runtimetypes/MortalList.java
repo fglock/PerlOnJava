@@ -113,7 +113,13 @@ public class MortalList {
 
     public static void pushTemporaryRoot(RuntimeBase root) {
         if (root != null) {
-            state().temporaryRoots.push(root);
+            ArrayDeque<RuntimeBase> roots = state().temporaryRoots;
+            if (root instanceof RuntimeList) {
+                for (RuntimeBase existing : roots) {
+                    if (existing == root) return;
+                }
+            }
+            roots.push(root);
         }
     }
 
@@ -662,7 +668,10 @@ public class MortalList {
         // data), we must still cascade decrements so their weak-ref entries
         // can be cleared when the referent's refCount reaches 0.
         if (!RuntimeBase.blessedObjectExists() && !WeakRefRegistry.weakRefsExist()
-                && !RuntimeScalar.watcherCleanupNeeded()) return;
+                && !RuntimeScalar.watcherCleanupNeeded()) {
+            hash.releaseHashEntryOwnerSlots();
+            return;
+        }
         // If the hash has outstanding references (e.g., from \%hash stored elsewhere),
         // do NOT clean up elements — the hash is still alive and its elements are
         // accessible through the reference. Cleanup will happen when the last
@@ -701,7 +710,10 @@ public class MortalList {
                 if (needsWalk) break;
             }
         }
-        if (!needsWalk) return;
+        if (!needsWalk) {
+            hash.releaseHashEntryOwnerSlots();
+            return;
+        }
         // Refcount drift can miss an escaped hash reference. DBIC's
         // source_registrations hash is assigned into the live schema while the
         // original hash later exits; walking it here would destroy ResultSources
@@ -715,6 +727,7 @@ public class MortalList {
         for (RuntimeScalar val : valuesInDestructionOrder) {
             deferDecrementRecursive(val);
         }
+        hash.releaseHashEntryOwnerSlots();
     }
 
     /**
@@ -754,6 +767,7 @@ public class MortalList {
         // must not retain this Java RuntimeArray merely through its backing
         // reference.  A real escaped \@array has refCount > 0 above.
         arr.orphanArraySizeLvalues();
+        arr.releaseArrayElementOwnerSlots();
         if (!arr.elementsAliased) {
             for (RuntimeScalar elem : arr.elements) {
                 if (returned == null) RuntimeScalar.releaseIoOwner(elem);
@@ -1616,7 +1630,8 @@ public class MortalList {
         if (container instanceof RuntimeHash hash) {
             containsScalar = hash.elements.containsValue(scalar);
         } else if (container instanceof RuntimeArray array) {
-            containsScalar = array.elements.contains(scalar);
+            containsScalar = array.elements.contains(scalar)
+                    && (!array.elementsAliased || array.ownsElement(scalar));
         } else {
             containsScalar = false;
         }
@@ -1716,6 +1731,14 @@ public class MortalList {
                 // have a legacy bridge count and retain the old compatibility
                 // sentinel behavior.
                 if (base.nativeCaptureOwnerCount() == 0) base.refCount = 1;
+            } else if (base instanceof RuntimeCode code
+                    && ReachabilityWalker.isCodeReachableFromRoots(code)) {
+                // A callback stored in a long-lived Perl container can have
+                // its selective CV count consumed by a temporary invocation
+                // alias. The container is still a strong owner even when no
+                // weak references point at the CODE object. Preserve the CV
+                // and its lexical captures until the last Perl root is gone.
+                base.refCount = 1;
             } else if (base.localBindingExists) {
                 if (base instanceof RuntimeScalar scalar
                         && scalar.referencedByScalarReference
