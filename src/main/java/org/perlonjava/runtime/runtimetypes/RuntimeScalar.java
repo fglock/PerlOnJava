@@ -442,6 +442,21 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return snapshot;
     }
 
+    /** Whether an exited scalar remains only as a borrowed {@code @_}-style alias. */
+    boolean isRetiredBorrowedArrayAlias() {
+        if (!scopeExited) return false;
+        for (RuntimeHash owner : hashContainerOwnersSnapshot()) {
+            if (owner.elements.containsValue(this)) return false;
+        }
+        boolean foundAlias = false;
+        for (RuntimeArray owner : arrayContainerOwnersSnapshot()) {
+            if (!owner.elements.contains(this)) continue;
+            foundAlias = true;
+            if (!owner.elementsAliased || owner.ownsElement(this)) return false;
+        }
+        return foundAlias;
+    }
+
     synchronized void unmarkArrayContainerOwner(RuntimeArray owner) {
         if (arrayContainerOwners == null) return;
         arrayContainerOwners.removeIf(reference -> reference.get() == null || reference.get() == owner);
@@ -458,12 +473,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     boolean isStoredInRegisteredContainerOwner() {
         RuntimeBase owner = containerOwner;
-        if (owner == null || !MyVarCleanupStack.isRegistered(owner)) return false;
+        if (owner == null || owner.scopeExited || !MyVarCleanupStack.isRegistered(owner)) return false;
         if (owner instanceof RuntimeHash hash) {
             return hash.elements.containsValue(this);
         }
         if (owner instanceof RuntimeArray array) {
-            return array.elements.contains(this);
+            return array.elements.contains(this)
+                    && (!array.elementsAliased || array.ownsElement(this));
         }
         return false;
     }
