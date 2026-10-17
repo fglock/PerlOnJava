@@ -3,6 +3,7 @@ package org.perlonjava.runtime.runtimetypes;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.lang.ref.WeakReference;
 
 /**
  * Identity for one Perl strong-owner slot.
@@ -24,6 +25,7 @@ public final class PerlOwnerSlot {
 
     private final Kind kind;
     private final RuntimeScalar padCell;
+    private final WeakReference<RuntimeBase> ownerContainer;
     private volatile RuntimeCode closureOwner;
     private final long identity = NEXT_ID.incrementAndGet();
     private RuntimeBase referent;
@@ -68,12 +70,17 @@ public final class PerlOwnerSlot {
     }
 
     public PerlOwnerSlot(Kind kind) {
-        this(kind, null);
+        this(kind, null, null);
     }
 
     PerlOwnerSlot(Kind kind, RuntimeScalar padCell) {
+        this(kind, padCell, null);
+    }
+
+    PerlOwnerSlot(Kind kind, RuntimeScalar padCell, RuntimeBase ownerContainer) {
         this.kind = Objects.requireNonNull(kind, "kind");
         this.padCell = padCell;
+        this.ownerContainer = ownerContainer == null ? null : new WeakReference<>(ownerContainer);
     }
 
     public Kind kind() {
@@ -86,6 +93,10 @@ public final class PerlOwnerSlot {
 
     RuntimeScalar padCell() {
         return padCell;
+    }
+
+    RuntimeBase ownerContainer() {
+        return ownerContainer == null ? null : ownerContainer.get();
     }
 
     boolean isNativeCaptureOwner() {
