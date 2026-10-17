@@ -1630,7 +1630,8 @@ public class MortalList {
         if (container instanceof RuntimeHash hash) {
             containsScalar = hash.elements.containsValue(scalar);
         } else if (container instanceof RuntimeArray array) {
-            containsScalar = array.elements.contains(scalar);
+            containsScalar = array.elements.contains(scalar)
+                    && (!array.elementsAliased || array.ownsElement(scalar));
         } else {
             containsScalar = false;
         }
