@@ -1673,9 +1673,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static int effectiveCallContext(RuntimeCode code, int callContext) {
-        if (isLvalueCode(code)
-                && (callContext == RuntimeContextType.LVALUE
-                || callContext == RuntimeContextType.LVALUE_LIST)) {
+        if ((callContext == RuntimeContextType.LVALUE
+                || callContext == RuntimeContextType.LVALUE_LIST)
+                && isLvalueCode(code)) {
             return callContext;
         }
         return effectiveCallContext(callContext);
