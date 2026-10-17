@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Run standard Perl's `cpan -t Module` for CPAN oracle checks and keep download failures inconclusive instead of reporting missing local modules as Perl failures.
 - Keep lexical-registration membership checks constant-time, avoiding quadratic CPAN index parsing as cleanup stacks grow.
 - Preserve numeric types of cached read-only scalars in ranges, rejecting unsigned endpoints outside the supported integer range.
 - Improve JVM execution performance for the bit-packed Life example, ordinary scalar assignments, and common blessing lookups.

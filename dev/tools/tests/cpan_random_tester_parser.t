@@ -126,11 +126,6 @@ ok(defined $timeout_source, 'extracted timeout-result reconciliation');
 eval $timeout_source;
 die "cannot load timeout-result reconciliation: $@" if $@;
 
-my ($oracle_source) = $source =~ /(sub cpan_archive_for_module_in_log \{.*?)(?=\nsub run_standard_perl_oracle)/s;
-ok(defined $oracle_source, 'extracted standard-Perl archive resolver');
-eval $oracle_source;
-die "cannot load standard-Perl archive resolver: $@" if $@;
-
 my ($percentage_source) = $source =~ /(sub pass_percentage \{.*?)(?=\n\nsub cutoff_date_for_days_ago)/s;
 ok(defined $percentage_source, 'extracted pass percentage calculation');
 eval $percentage_source;
@@ -337,22 +332,6 @@ is_deeply(
 );
 is($streamed_retry_results[0]{status}, 'PASS',
     'streaming parser uses the successful retry result');
-
-my $oracle_log = <<'LOG';
-Running test for module 'REST::Google::Translate'
-Checksum for /tmp/cpan/sources/authors/id/E/EJ/EJS/REST-Google-1.0.8.tar.gz ok
-Running Build test for EJS/REST-Google-1.0.8.tar.gz
-Result: FAIL
-LOG
-my ($oracle_log_fh, $oracle_log_path) = tempfile();
-print {$oracle_log_fh} $oracle_log;
-close $oracle_log_fh or die "cannot close $oracle_log_path: $!";
-%dist_to_canonical_module = ('REST-Google-1.0.8' => 'REST::Google');
-is(
-    cpan_archive_for_module_in_log($oracle_log_path, 'REST::Google'),
-    'E/EJ/EJS/REST-Google-1.0.8.tar.gz',
-    'standard-Perl oracle resolves the exact archive for a canonical module alias',
-);
 
 is(pass_percentage(8833, 8277), '51.6',
     'pass percentage excludes skipped and standard-Perl-failed modules');

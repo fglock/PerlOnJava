@@ -448,7 +448,7 @@ for my $module (@selected) {
         }
     }
 
-    apply_standard_perl_oracle(\@all_results, $log_path, $module_max_runtime)
+    apply_standard_perl_oracle(\@all_results, $module_max_runtime)
         if $perl_oracle eq 'failures';
 
     if ($strict_exit) {
@@ -522,21 +522,20 @@ sub record_target_timeout {
     }
 }
 
-# Run a standard-Perl oracle only for failures.  The CPAN invocation is given
-# the exact author/archive selected by jcpan, and all CPAN state, build trees,
-# and installs are redirected to a disposable directory.  A failed oracle
-# moves the result into a separate report state; unavailable and timed-out
-# oracles deliberately leave the PerlOnJava failure visible for triage.
+# Run a standard-Perl oracle only for failures. CPAN resolves the module
+# independently and runs its distribution tests with standard Perl. CPAN state,
+# build trees, and installs are redirected to a disposable directory. A failed
+# oracle moves the result into a separate report state; unavailable and timed-out
+# oracles leave the PerlOnJava failure visible for triage.
 sub apply_standard_perl_oracle {
-    my ($results, $source_log, $target_hard_cap) = @_;
-    return unless $results && $source_log && -f $source_log;
+    my ($results, $target_hard_cap) = @_;
+    return unless $results;
 
     for my $result (@$results) {
         next unless ($result->{status} // '') eq 'FAIL';
-        my $archive = cpan_archive_for_module_in_log($source_log, $result->{module});
-        my ($oracle_status, $oracle_log) = $archive
-            ? run_standard_perl_oracle($archive, $result->{module}, $target_hard_cap)
-            : run_standard_perl_module_probe($result->{module}, $target_hard_cap);
+        my ($oracle_status, $oracle_log) = run_standard_perl_oracle(
+            $result->{module}, $target_hard_cap,
+        );
         $result->{perl_oracle_log} = $oracle_log if $oracle_log;
         next unless $oracle_status eq 'FAIL';
 
@@ -545,36 +544,24 @@ sub apply_standard_perl_oracle {
     }
 }
 
-sub cpan_archive_for_module_in_log {
-    my ($path, $module) = @_;
-    open my $fh, '<', $path or return undef;
-    my $selected;
-    while (my $line = <$fh>) {
-        $selected = $1 if $line =~ /Running (?:test|install) for module '([^']+)'/;
-        if ($line =~ m{Checksum for \S+/authors/id/([^\s]+\.(?:tar\.gz|tgz))\s+ok}) {
-            my $archive = $1;
-            (my $dist = $archive) =~ s{.*/}{};
-            $dist =~ s/\.(?:tar\.gz|tgz)$//;
-            if ((defined $selected && $selected eq $module)
-                || (($dist_to_canonical_module{$dist} // '') eq $module)) {
-                close $fh;
-                return $archive;
-            }
-        }
-    }
-    close $fh;
-    return undef;
-}
-
 sub run_standard_perl_oracle {
-    my ($archive, $module, $target_hard_cap) = @_;
+    my ($module, $target_hard_cap) = @_;
     my $cpan = File::Spec->catfile($Config{scriptdir}, 'cpan');
     return ('UNAVAILABLE', undef) unless -x $cpan;
 
     my $oracle_root = tempdir('perlonjava-cpan-oracle-XXXXXX', TMPDIR => 1, CLEANUP => 1);
     my $cpan_home = File::Spec->catdir($oracle_root, 'cpan-home');
     my $install_base = File::Spec->catdir($oracle_root, 'install');
-    make_path($cpan_home, $install_base);
+    my $config_path = File::Spec->catfile($oracle_root, 'cpan-config.pm');
+    make_path(
+        $cpan_home,
+        File::Spec->catdir($cpan_home, 'build'),
+        File::Spec->catdir($cpan_home, 'sources'),
+        File::Spec->catdir($cpan_home, 'prefs'),
+        $install_base,
+    );
+    return ('UNAVAILABLE', undef)
+        unless write_standard_perl_cpan_config($config_path, $cpan_home);
 
     my $log_path = File::Spec->catfile(
         $perl_oracle_log_dir,
@@ -582,7 +569,6 @@ sub run_standard_perl_oracle {
     );
     $log_path = unique_archive_path($log_path) if -e $log_path;
 
-    local $ENV{PERL_CPAN_HOME} = $cpan_home;
     local $ENV{PERL_MM_OPT} = "INSTALL_BASE=$install_base";
     local $ENV{PERL_MB_OPT} = "--install_base $install_base";
     my $oracle_lib = File::Spec->catdir($install_base, 'lib', 'perl5');
@@ -593,15 +579,16 @@ sub run_standard_perl_oracle {
     my ($oracle_soft_timeout, $oracle_hard_cap) = effective_oracle_timeout_limits(
         $perl_oracle_timeout, $target_hard_cap,
     );
+    my $command = standard_perl_cpan_command($cpan, $config_path, $module);
+    return ('UNAVAILABLE', undef) unless $command;
     my ($output, $timed_out) = run_with_timeout(
-        [$cpan, '-t', $archive], $oracle_soft_timeout, $log_path,
-        $oracle_hard_cap,
+        $command, $oracle_soft_timeout, $log_path, $oracle_hard_cap,
     );
     return ('TIMEOUT', $log_path) if $timed_out;
 
     my @results = parse_all_module_results_from_file(
         $log_path, \%dist_to_canonical_module);
-    my ($target) = grep { ($_->{module} // '') eq $module } @results;
+    my $target = target_result_for_module($module, \@results, \%module_to_dist);
     return (($target->{status} // 'UNAVAILABLE'), $log_path) if $target;
 
     # CPAN.pm normally identifies the requested module in its output.  Do not
@@ -609,43 +596,44 @@ sub run_standard_perl_oracle {
     return ('UNAVAILABLE', $log_path);
 }
 
-sub standard_perl_module_probe_command {
-    my ($module) = @_;
-    return unless defined $module && $module =~ /\A[A-Za-z_]\w*(?:::\w+)*\z/;
-
-    return [
-        $^X, "-M$module", '-e',
-        'print "PERLONJAVA_MODULE_LOAD_OK\n"',
-    ];
+sub standard_perl_cpan_command {
+    my ($cpan, $config_path, $module) = @_;
+    return unless defined $cpan && length $cpan
+        && defined $config_path && length $config_path
+        && defined $module && $module =~ /\A[A-Za-z_]\w*(?:::\w+)*\z/;
+    return [$cpan, '-j', $config_path, '-t', $module];
 }
 
-sub standard_perl_module_probe_succeeded {
-    my ($output) = @_;
-    return defined($output) && $output =~ /^PERLONJAVA_MODULE_LOAD_OK\r?$/m;
-}
+sub write_standard_perl_cpan_config {
+    my ($path, $cpan_home) = @_;
+    no warnings 'once';
+    my $config = eval {
+        require CPAN;
+        require CPAN::HandleConfig;
+        CPAN::HandleConfig->require_myconfig_or_config();
+        $CPAN::Config;
+    };
+    return 0 unless ref($config) eq 'HASH';
 
-sub run_standard_perl_module_probe {
-    my ($module, $target_hard_cap) = @_;
-    my $command = standard_perl_module_probe_command($module);
-    return ('UNAVAILABLE', undef) unless $command;
+    my %oracle_config = %$config;
+    $oracle_config{cpan_home} = $cpan_home;
+    $oracle_config{build_dir} = File::Spec->catdir($cpan_home, 'build');
+    $oracle_config{keep_source_where} = File::Spec->catdir($cpan_home, 'sources');
+    $oracle_config{prefs_dir} = File::Spec->catdir($cpan_home, 'prefs');
+    $oracle_config{histfile} = File::Spec->catfile($cpan_home, 'histfile');
 
-    my $log_path = File::Spec->catfile(
-        $perl_oracle_log_dir,
-        safe_log_name($module) . '.log',
-    );
-    $log_path = unique_archive_path($log_path) if -e $log_path;
-
-    my ($oracle_soft_timeout, $oracle_hard_cap) = effective_oracle_timeout_limits(
-        $perl_oracle_timeout, $target_hard_cap,
-    );
-    my ($output, $timed_out) = run_with_timeout(
-        $command, $oracle_soft_timeout, $log_path, $oracle_hard_cap,
-    );
-    return ('TIMEOUT', $log_path) if $timed_out;
-    return (
-        standard_perl_module_probe_succeeded($output) ? 'PASS' : 'FAIL',
-        $log_path,
-    );
+    my $old_umask = umask 0077;
+    my $ok = eval {
+        require Data::Dumper;
+        open my $fh, '>', $path or die "cannot create isolated CPAN config: $!";
+        my $dump = Data::Dumper->new([\%oracle_config])->Terse(1)->Dump;
+        print {$fh} "\$CPAN::Config = $dump;\n1;\n"
+            or die "cannot write isolated CPAN config: $!";
+        close $fh or die "cannot close isolated CPAN config: $!";
+        1;
+    };
+    umask $old_umask;
+    return $ok ? 1 : 0;
 }
 
 

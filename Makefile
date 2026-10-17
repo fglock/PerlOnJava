@@ -28,6 +28,7 @@ THREAD_TOOLING_TESTS := \
 
 CPAN_TESTER_TESTS := \
 	dev/tools/tests/cpan_random_tester_parser.t \
+	dev/tools/tests/cpan_random_tester_perl_oracle.t \
 	dev/tools/tests/cpan_random_tester_timeout.t
 
 THREAD_DIST_DIRS := perl5/dist/threads/t perl5/dist/threads-shared/t perl5/dist/Thread-Queue/t perl5/dist/Thread-Semaphore/t
