@@ -2143,7 +2143,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public static boolean isLvalueCode(RuntimeCode code) {
         if (code == null) return false;
-        if (code.attributes != null && code.attributes.contains("lvalue")) return true;
+        if (code.attributes != null) {
+            java.util.List<String> attributes = code.attributes;
+            int attributeCount = attributes.size();
+            if (attributeCount == 1) {
+                if ("lvalue".equals(attributes.get(0))) return true;
+            } else if (attributeCount > 1 && attributes.contains("lvalue")) {
+                return true;
+            }
+        }
         if ("CORE".equals(code.packageName) && "undef".equals(code.subName)) return true;
         return "CORE::undef".equals(code.referenceOriginFqn);
     }
