@@ -1505,24 +1505,6 @@ public class ReachabilityWalker {
                                 + " valueClass=" + (value == null ? "null" : value.getClass().getName())
                                 + " valueId=" + (value instanceof RuntimeBase base
                                         ? System.identityHashCode(base) : -1));
-                        if (value instanceof RuntimeCode nested) {
-                            System.err.println("[MOJO-TIMER-CODE] identity="
-                                    + System.identityHashCode(nested) + " name="
-                                    + nested.packageName + "::" + nested.subName + " captures="
-                                    + (nested.capturedScalars == null ? 0 : nested.capturedScalars.length));
-                            if (nested.capturedScalars != null) {
-                                for (int i = 0; i < nested.capturedScalars.length; i++) {
-                                    RuntimeScalar capture = nested.capturedScalars[i];
-                                    Object capturedValue = capture == null ? null : capture.value;
-                                    System.err.println("[MOJO-CODE-CAPTURE] index=" + i
-                                            + " type=" + (capture == null ? -1 : capture.type)
-                                            + " valueClass=" + (capturedValue == null ? "null"
-                                                    : capturedValue.getClass().getName())
-                                            + " valueId=" + (capturedValue instanceof RuntimeBase base
-                                                    ? System.identityHashCode(base) : -1));
-                                }
-                            }
-                        }
                     }
                 }
                 if (hash.elements instanceof TieHash tieHash) {
