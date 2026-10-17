@@ -79,6 +79,26 @@ class RuntimeArrayElementOwnershipTest {
     }
 
     @Test
+    void replacingAnAliasedSlotTransfersOwnershipToTheArray() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            RuntimeArray array = new RuntimeArray();
+            RuntimeScalar borrowed = new RuntimeScalar();
+            array.elements.add(borrowed);
+            array.elementsAliased = true;
+            array.elementsOwned = false;
+            RuntimeScalar stored = referent.createReference();
+
+            array.elements.set(0, stored);
+
+            assertTrue(array.ownsElement(stored));
+            assertEquals(1, referent.arraySlotOwnerCount());
+            assertSame(referent, array.arrayElementOwnerSlot(0).referent());
+        }
+    }
+
+    @Test
     void nonOwningAliasedElementDoesNotProveScalarReachability() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {

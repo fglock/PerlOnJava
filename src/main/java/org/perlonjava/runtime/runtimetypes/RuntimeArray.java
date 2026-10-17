@@ -318,6 +318,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             owner.markPackageRootedValue(element);
             RuntimeScalar result = super.set(index, element);
             owner.arrayElementReplaced(index, previous, element);
+            if (owner.elementsAliased && element != null) {
+                // A write into an aliased array slot replaces the borrowed
+                // slot with a value owned by this array. Keep that value
+                // reachable even after the original argument frame exits.
+                owner.markOwnedAliasElement(element);
+            }
             owner.validateIsaMutation();
             return result;
         }
