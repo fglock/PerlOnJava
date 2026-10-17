@@ -46,7 +46,8 @@ import java.util.concurrent.locks.ReentrantLock;
  * and bind the intended runtime themselves.</p>
  */
 public final class PerlRuntime implements AutoCloseable {
-    private static final ThreadLocal<BindingFrame> CURRENT = new ThreadLocal<>();
+    private static final ThreadLocal<PerlRuntime> CURRENT = new ThreadLocal<>();
+    private static final ThreadLocal<BindingFrame> CURRENT_BINDING = new ThreadLocal<>();
     public final long pid = ProcessHandle.current().pid();
     String currentDirectory = System.getProperty("user.dir");
     private final ReentrantLock executionLock = new ReentrantLock();
@@ -186,7 +187,7 @@ public final class PerlRuntime implements AutoCloseable {
 
     /** Return the runtime bound to this thread, failing clearly when absent. */
     public static PerlRuntime current() {
-        PerlRuntime runtime = currentOrNull();
+        PerlRuntime runtime = CURRENT.get();
         if (runtime == null) {
             throw new IllegalStateException(
                     "No PerlRuntime is bound to the current thread; use PerlRuntime.bind() in a scoped block");
@@ -196,8 +197,7 @@ public final class PerlRuntime implements AutoCloseable {
 
     /** Return the runtime bound to this thread, or {@code null}. */
     public static PerlRuntime currentOrNull() {
-        BindingFrame frame = CURRENT.get();
-        return frame != null ? frame.runtime : null;
+        return CURRENT.get();
     }
 
     LifecycleRuntimeState retainOwnerSlotReferent(RuntimeBase referent) {
@@ -289,8 +289,9 @@ public final class PerlRuntime implements AutoCloseable {
             }
             activeBindings.incrementAndGet();
         }
-        BindingFrame frame = new BindingFrame(this, CURRENT.get());
-        CURRENT.set(frame);
+        BindingFrame frame = new BindingFrame(this, CURRENT_BINDING.get());
+        CURRENT.set(this);
+        CURRENT_BINDING.set(frame);
         return new Binding(frame, Thread.currentThread(), this);
     }
 
@@ -875,14 +876,16 @@ public final class PerlRuntime implements AutoCloseable {
             if (Thread.currentThread() != owner) {
                 throw new IllegalStateException("PerlRuntime binding must be closed by its owning thread");
             }
-            if (CURRENT.get() != frame) {
+            if (CURRENT_BINDING.get() != frame) {
                 throw new IllegalStateException("PerlRuntime bindings must be closed in LIFO order");
             }
             closed = true;
             if (frame.previous == null) {
                 CURRENT.remove();
+                CURRENT_BINDING.remove();
             } else {
-                CURRENT.set(frame.previous);
+                CURRENT.set(frame.previous.runtime);
+                CURRENT_BINDING.set(frame.previous);
             }
             runtime.releaseBinding();
         }

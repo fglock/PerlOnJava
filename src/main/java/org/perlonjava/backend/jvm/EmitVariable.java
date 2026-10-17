@@ -17,6 +17,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_REFS;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_VARS;
@@ -383,6 +384,38 @@ public class EmitVariable {
      * @param emitterVisitor the visitor containing the emitter context and method visitor
      * @param node           the OperatorNode representing the variable operation
      */
+    private static void emitLexicalVariableCell(
+            MethodVisitor mv, String sigil, SymbolTable.SymbolEntry symbolEntry) {
+        mv.visitVarInsn(Opcodes.ALOAD, symbolEntry.index());
+        if (sigil.equals("$") && !"our".equals(symbolEntry.decl())) {
+            // Control flow can bypass a lexical declaration, leaving its JVM
+            // local slot null. Materialize the ordinary writable Perl cell.
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                    "materializeLexicalCell",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitVarInsn(Opcodes.ASTORE, symbolEntry.index());
+        } else if (sigil.equals("@") && !"our".equals(symbolEntry.decl())) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeArray",
+                    "materializeLexicalCell",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
+                    false);
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitVarInsn(Opcodes.ASTORE, symbolEntry.index());
+        } else if (sigil.equals("%") && !"our".equals(symbolEntry.decl())) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeHash",
+                    "materializeLexicalCell",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;",
+                    false);
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitVarInsn(Opcodes.ASTORE, symbolEntry.index());
+        }
+    }
+
     static void handleVariableOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         String sigil = node.operator;
 
@@ -538,36 +571,29 @@ public class EmitVariable {
             } else {
                 // ===== LEXICAL VARIABLE ACCESS =====
                 // Variable is lexical (my/state/@_/BEGIN-captured-our), load it from JVM local variable slot
-                mv.visitVarInsn(Opcodes.ALOAD, symbolEntry.index());
-                if (sigil.equals("$") && !"our".equals(symbolEntry.decl())) {
-                    // Control flow can bypass a lexical declaration, leaving
-                    // its JVM local slot null. A lexical scalar access still
-                    // denotes a writable Perl undef cell, including under
-                    // refgen and lvalue-list contexts. Store the materialized
-                    // cell back so subsequent aliases retain its identity.
-                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                            "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                            "materializeLexicalCell",
-                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                            false);
-                    mv.visitInsn(Opcodes.DUP);
-                    mv.visitVarInsn(Opcodes.ASTORE, symbolEntry.index());
-                } else if (sigil.equals("@") && !"our".equals(symbolEntry.decl())) {
-                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                            "org/perlonjava/runtime/runtimetypes/RuntimeArray",
-                            "materializeLexicalCell",
-                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
-                            false);
-                    mv.visitInsn(Opcodes.DUP);
-                    mv.visitVarInsn(Opcodes.ASTORE, symbolEntry.index());
-                } else if (sigil.equals("%") && !"our".equals(symbolEntry.decl())) {
-                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                            "org/perlonjava/runtime/runtimetypes/RuntimeHash",
-                            "materializeLexicalCell",
-                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;",
-                            false);
-                    mv.visitInsn(Opcodes.DUP);
-                    mv.visitVarInsn(Opcodes.ASTORE, symbolEntry.index());
+                Integer borrowedSlot = null;
+                var candidate = emitterVisitor.ctx.javaClassInfo.readOnlyArgumentCandidate;
+                if (sigil.equals("$")
+                        && "my".equals(symbolEntry.decl())
+                        && emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
+                        && candidate != null
+                        && emitterVisitor.ctx.javaClassInfo.readOnlyArgumentFlagSlot >= 0
+                        && !emitterVisitor.ctx.javaClassInfo.emittingReadOnlyArgumentFallback) {
+                    borrowedSlot = emitterVisitor.ctx.javaClassInfo.readOnlyArgumentSlots.get("$" + name);
+                }
+                if (borrowedSlot != null) {
+                    Label useLexical = new Label();
+                    Label variableDone = new Label();
+                    mv.visitVarInsn(Opcodes.ILOAD,
+                            emitterVisitor.ctx.javaClassInfo.readOnlyArgumentFlagSlot);
+                    mv.visitJumpInsn(Opcodes.IFEQ, useLexical);
+                    mv.visitVarInsn(Opcodes.ALOAD, borrowedSlot);
+                    mv.visitJumpInsn(Opcodes.GOTO, variableDone);
+                    mv.visitLabel(useLexical);
+                    emitLexicalVariableCell(mv, sigil, symbolEntry);
+                    mv.visitLabel(variableDone);
+                } else {
+                    emitLexicalVariableCell(mv, sigil, symbolEntry);
                 }
             }
 
@@ -896,6 +922,64 @@ public class EmitVariable {
             return;
         }
         EmitterContext ctx = emitterVisitor.ctx;
+
+        var readOnlyCandidate = ctx.javaClassInfo.readOnlyArgumentCandidate;
+        if (readOnlyCandidate != null
+                && readOnlyCandidate.assignment() == node
+                && ctx.contextType == RuntimeContextType.VOID
+                && !ctx.javaClassInfo.emittingReadOnlyArgumentFallback) {
+            int flagSlot = ctx.symbolTable.allocateLocalVariable();
+            ctx.javaClassInfo.readOnlyArgumentFlagSlot = flagSlot;
+            Map<String, Integer> borrowedSlots = new java.util.LinkedHashMap<>();
+            for (String name : readOnlyCandidate.argumentIndices().keySet()) {
+                int slot = ctx.symbolTable.allocateLocalVariable();
+                borrowedSlots.put(name, slot);
+                ctx.mv.visitInsn(Opcodes.ACONST_NULL);
+                ctx.mv.visitVarInsn(Opcodes.ASTORE, slot);
+            }
+            ctx.javaClassInfo.readOnlyArgumentSlots = borrowedSlots;
+            MethodVisitor guardedMv = ctx.mv;
+            Label fallback = new Label();
+            Label done = new Label();
+            guardedMv.visitVarInsn(Opcodes.ALOAD, 1);
+            guardedMv.visitLdcInsn(readOnlyCandidate.hashArgumentIndex());
+            guardedMv.visitLdcInsn(readOnlyCandidate.integerArgumentIndex());
+            guardedMv.visitLdcInsn(readOnlyCandidate.hashKeys().getFirst());
+            if (readOnlyCandidate.hashKeys().size() > 1) {
+                guardedMv.visitLdcInsn(readOnlyCandidate.hashKeys().get(1));
+            } else {
+                guardedMv.visitInsn(Opcodes.ACONST_NULL);
+            }
+            guardedMv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "canBorrowReadOnlyArguments",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;IILjava/lang/String;Ljava/lang/String;)Z",
+                    false);
+            guardedMv.visitVarInsn(Opcodes.ISTORE, flagSlot);
+            guardedMv.visitVarInsn(Opcodes.ILOAD, flagSlot);
+            guardedMv.visitJumpInsn(Opcodes.IFEQ, fallback);
+            for (Map.Entry<String, Integer> entry : readOnlyCandidate.argumentIndices().entrySet()) {
+                guardedMv.visitVarInsn(Opcodes.ALOAD, 1);
+                guardedMv.visitLdcInsn(entry.getValue());
+                guardedMv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeArray",
+                        "get",
+                        "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
+                guardedMv.visitVarInsn(Opcodes.ASTORE, borrowedSlots.get(entry.getKey()));
+            }
+            guardedMv.visitJumpInsn(Opcodes.GOTO, done);
+            guardedMv.visitLabel(fallback);
+            ctx.javaClassInfo.emittingReadOnlyArgumentFallback = true;
+            try {
+                handleAssignOperator(emitterVisitor, node);
+            } finally {
+                ctx.javaClassInfo.emittingReadOnlyArgumentFallback = false;
+            }
+            guardedMv.visitJumpInsn(Opcodes.GOTO, done);
+            guardedMv.visitLabel(done);
+            return;
+        }
 
         if (node.left instanceof OperatorNode leftOperator
                 && leftOperator.operator.equals("substr")
@@ -1591,7 +1675,17 @@ public class EmitVariable {
                 // The my operator needs to be processed to create the variables first.
                 node.left.accept(emitterVisitor.with(RuntimeContextType.LVALUE_LIST));   // emit the variable (target)
                 mv.visitVarInsn(Opcodes.ALOAD, rhsListSlot);                      // reload RHS list
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "setFromList", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
+                if (isVoidMyScalarListAssignment(ctx, node)) {
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeList", "setFromListVoid",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)"
+                                    + "Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
+                } else {
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeBase", "setFromList",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)"
+                                    + "Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
+                }
 
                 if (pooledRhsList) {
                     ctx.javaClassInfo.releaseSpillSlot();
@@ -1703,6 +1797,25 @@ public class EmitVariable {
             return innerContext == RuntimeContextType.LIST;
         }
         return false;
+    }
+
+    private static boolean isVoidMyScalarListAssignment(
+            EmitterContext ctx, BinaryOperatorNode assignment) {
+        if (ctx.contextType != RuntimeContextType.VOID
+                || !(assignment.left instanceof OperatorNode declaration)
+                || !declaration.operator.equals("my")
+                || !(declaration.operand instanceof ListNode targets)
+                || targets.elements.isEmpty()) {
+            return false;
+        }
+        for (Node target : targets.elements) {
+            if (!(target instanceof OperatorNode scalar)
+                    || !scalar.operator.equals("$")
+                    || !(scalar.operand instanceof IdentifierNode)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static boolean isScalarLvalueTarget(Node node) {

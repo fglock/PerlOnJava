@@ -219,7 +219,7 @@ public class OverloadContext {
 
         // Check cache first
         OverloadContext cachedContext = InheritanceResolver.getCachedOverloadContext(blessId);
-        if (cachedContext != null) {
+        if (cachedContext != null || InheritanceResolver.hasCachedOverloadContext(blessId)) {
             return cachedContext;
         }
 
@@ -293,13 +293,14 @@ public class OverloadContext {
             System.err.flush();
         }
 
-        // Create context if overloading is enabled
+        // Cache negative results too. Ordinary blessed classes without
+        // overload methods are common, and repeated runtime guards should not
+        // rescan their inheritance hierarchy on every call.
         OverloadContext context = null;
         if (methodOverloaded != null || hasFallbackGlob) {
             context = new OverloadContext(perlClassName, methodOverloaded, hasFallbackGlob, fallbackValue, hasAnyOperatorMethod);
-            // Cache the result
-            InheritanceResolver.cacheOverloadContext(blessId, context);
         }
+        InheritanceResolver.cacheOverloadContext(blessId, context);
 
         return context;
     }

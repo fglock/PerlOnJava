@@ -443,7 +443,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                 WarningBitsRegistry.getRuntimeDisabledWarningCategories();
         WarningBitsRegistry.setRuntimeDisabledWarningCategories(
                 getLexicalDisabledWarningCategories());
-        int savedRuntimeWarningScope = enterCalleeWarningScope();
+        RuntimeScalar warningScopeScalar = GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE);
+        int savedRuntimeWarningScope = enterCalleeWarningScope(warningScopeScalar);
         int cleanupMark = MyVarCleanupStack.pushMark();
         try {
             validateNamedSignatureArguments(args);
@@ -489,7 +490,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
             WarningBitsRegistry.setRuntimeDisabledWarningCategories(
                     savedRuntimeDisabledWarnings);
-            restoreCallerWarningScope(savedRuntimeWarningScope);
+            restoreCallerWarningScope(warningScopeScalar, savedRuntimeWarningScope);
             if (warningBitsString != null) {
                 WarningBitsRegistry.popCurrent();
             }
@@ -533,7 +534,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                 WarningBitsRegistry.getRuntimeDisabledWarningCategories();
         WarningBitsRegistry.setRuntimeDisabledWarningCategories(
                 getLexicalDisabledWarningCategories());
-        int savedRuntimeWarningScope = enterCalleeWarningScope();
+        RuntimeScalar warningScopeScalar = GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE);
+        int savedRuntimeWarningScope = enterCalleeWarningScope(warningScopeScalar);
         int cleanupMark = MyVarCleanupStack.pushMark();
         try {
             validateNamedSignatureArguments(args);
@@ -561,7 +563,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
             WarningBitsRegistry.setRuntimeDisabledWarningCategories(
                     savedRuntimeDisabledWarnings);
-            restoreCallerWarningScope(savedRuntimeWarningScope);
+            restoreCallerWarningScope(warningScopeScalar, savedRuntimeWarningScope);
             if (warningBitsString != null) {
                 WarningBitsRegistry.popCurrent();
             }

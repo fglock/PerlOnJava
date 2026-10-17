@@ -154,6 +154,13 @@ public class InheritanceResolver {
      * Checks if the @ISA array for a class has changed since last cached.
      */
     private static boolean hasIsaChanged(String className, MroRuntimeState state) {
+        // Structural @ISA mutations advance the shared symbol epoch, which
+        // currentState() observes and uses to clear derived caches. Classes
+        // with no parents therefore need no repeated stash lookup or array
+        // scan on every method dispatch.
+        if (state.emptyIsaCache().contains(className)) {
+            return false;
+        }
         RuntimeArray isaArray = getIsaArrayForClass(className);
         
         // Build current ISA list
@@ -168,6 +175,10 @@ public class InheritanceResolver {
         }
 
         List<String> cachedIsa = state.isaStateCache().get(className);
+
+        if (currentIsa.isEmpty()) {
+            state.emptyIsaCache().add(className);
+        }
 
         // If ISA changed, update cache and return true
         if (!currentIsa.equals(cachedIsa)) {
@@ -279,6 +290,11 @@ public class InheritanceResolver {
      */
     public static OverloadContext getCachedOverloadContext(int blessId) {
         return currentState().overloadContextCache().get(blessId);
+    }
+
+    /** Returns whether overload metadata, including a negative result, is cached. */
+    public static boolean hasCachedOverloadContext(int blessId) {
+        return currentState().overloadContextCache().containsKey(blessId);
     }
 
     /**

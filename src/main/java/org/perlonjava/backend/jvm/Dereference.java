@@ -1021,9 +1021,15 @@ public class Dereference {
             }
             mv.visitVarInsn(Opcodes.ASTORE, objectSlot);
 
-            // Generate native RuntimeBase[] array for parameters instead of RuntimeList
+            // For small literal calls, keep values in JVM locals until every
+            // expression has run, then build @_ directly. Other calls retain
+            // the array path so tied and aggregate argument expansion keeps
+            // its existing ordering and larger calls do not consume locals.
             ListNode paramList = ListNode.makeList(arguments);
             int argCount = paramList.elements.size();
+            boolean directRuntimeArray = argCount <= 5
+                    && paramList.elements.stream().allMatch(argument ->
+                            argument instanceof NumberNode || argument instanceof StringNode);
 
             int argsArraySlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
             boolean pooledArgsArray = argsArraySlot >= 0;
@@ -1031,43 +1037,65 @@ public class Dereference {
                 argsArraySlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
             }
 
-            // Create array of RuntimeBase with size equal to number of arguments
-            if (argCount <= 5) {
-                mv.visitInsn(Opcodes.ICONST_0 + argCount);
-            } else if (argCount <= 127) {
-                mv.visitIntInsn(Opcodes.BIPUSH, argCount);
-            } else {
-                mv.visitIntInsn(Opcodes.SIPUSH, argCount);
-            }
-            mv.visitTypeInsn(Opcodes.ANEWARRAY, "org/perlonjava/runtime/runtimetypes/RuntimeBase");
-
-            mv.visitVarInsn(Opcodes.ASTORE, argsArraySlot);
-
-            // Populate the array with arguments
             EmitterVisitor listVisitor = emitterVisitor.with(RuntimeContextType.LIST);
-            for (int index = 0; index < argCount; index++) {
-                int argSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
-                boolean pooledArg = argSlot >= 0;
-                if (!pooledArg) {
-                    argSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            if (directRuntimeArray) {
+                int[] argSlots = new int[argCount];
+                boolean[] pooledArgSlots = new boolean[argCount];
+                // Evaluate every expression before expanding array/list
+                // arguments, matching the previous call-site evaluation order.
+                for (int index = 0; index < argCount; index++) {
+                    int argSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                    boolean pooledArg = argSlot >= 0;
+                    if (!pooledArg) {
+                        argSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                    }
+                    argSlots[index] = argSlot;
+                    pooledArgSlots[index] = pooledArg;
+
+                    paramList.elements.get(index).accept(listVisitor);
+                    mv.visitVarInsn(Opcodes.ASTORE, argSlot);
                 }
 
-                paramList.elements.get(index).accept(listVisitor);
-                mv.visitVarInsn(Opcodes.ASTORE, argSlot);
+                // Reserve one slot for the invocant added in RuntimeCode.
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeArray");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitInsn(Opcodes.ICONST_0 + argCount + 1);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeArray", "<init>", "(I)V", false);
+                mv.visitVarInsn(Opcodes.ASTORE, argsArraySlot);
 
-                mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
-                if (index <= 5) {
-                    mv.visitInsn(Opcodes.ICONST_0 + index);
-                } else if (index <= 127) {
-                    mv.visitIntInsn(Opcodes.BIPUSH, index);
-                } else {
-                    mv.visitIntInsn(Opcodes.SIPUSH, index);
+                for (int index = 0; index < argCount; index++) {
+                    mv.visitVarInsn(Opcodes.ALOAD, argSlots[index]);
+                    mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                            "setArrayOfAlias",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
+                            false);
+                    mv.visitInsn(Opcodes.POP);
                 }
-                mv.visitVarInsn(Opcodes.ALOAD, argSlot);
-                mv.visitInsn(Opcodes.AASTORE);
+                for (int index = argCount - 1; index >= 0; index--) {
+                    if (pooledArgSlots[index]) emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                }
+            } else {
+                if (argCount <= 127) mv.visitIntInsn(Opcodes.BIPUSH, argCount);
+                else mv.visitIntInsn(Opcodes.SIPUSH, argCount);
+                mv.visitTypeInsn(Opcodes.ANEWARRAY,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeBase");
+                mv.visitVarInsn(Opcodes.ASTORE, argsArraySlot);
 
-                if (pooledArg) {
-                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                for (int index = 0; index < argCount; index++) {
+                    int argSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                    boolean pooledArg = argSlot >= 0;
+                    if (!pooledArg) argSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                    paramList.elements.get(index).accept(listVisitor);
+                    mv.visitVarInsn(Opcodes.ASTORE, argSlot);
+                    mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+                    if (index <= 127) mv.visitIntInsn(Opcodes.BIPUSH, index);
+                    else mv.visitIntInsn(Opcodes.SIPUSH, index);
+                    mv.visitVarInsn(Opcodes.ALOAD, argSlot);
+                    mv.visitInsn(Opcodes.AASTORE);
+                    if (pooledArg) emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
                 }
             }
 
@@ -1113,11 +1141,14 @@ public class Dereference {
             } else {
                 emitterVisitor.pushCallContext();
             }
+            String argsDescriptor = directRuntimeArray
+                    ? "Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;"
+                    : "[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;";
             mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "callCached",
-                    "(ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    "(ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;" + argsDescriptor + "I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                     false); // generate a cached .call()
 
             // Tagged returns control-flow handling for method calls:
@@ -1508,6 +1539,28 @@ public class Dereference {
             }
         }
 
+        boolean verifiedPlainHashArgument = false;
+        String verifiedPlainHashAsciiKey = null;
+        var readOnlyCandidate = emitterVisitor.ctx.javaClassInfo.readOnlyArgumentCandidate;
+        if ("get".equals(hashOperation)
+                && readOnlyCandidate != null
+                && readOnlyCandidate.freshScalarReturn()
+                && emitterVisitor.ctx.javaClassInfo.readOnlyArgumentFlagSlot >= 0
+                && !emitterVisitor.ctx.javaClassInfo.emittingReadOnlyArgumentFallback
+                && nodeRight.elements.size() == 1
+                && nodeRight.elements.getFirst() instanceof StringNode key
+                && node.left instanceof OperatorNode scalar
+                && "$".equals(scalar.operator)
+                && scalar.operand instanceof IdentifierNode identifier) {
+            Integer argumentIndex = readOnlyCandidate.argumentIndices().get("$" + identifier.name);
+            verifiedPlainHashArgument = argumentIndex != null
+                    && argumentIndex == readOnlyCandidate.hashArgumentIndex()
+                    && readOnlyCandidate.hashKeys().contains(key.value);
+            if (verifiedPlainHashArgument && key.value.chars().allMatch(character -> character < 128)) {
+                verifiedPlainHashAsciiKey = key.value;
+            }
+        }
+
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit -> (HashLiteralNode) autoquote " + node.right);
         if (nodeRight.elements.size() > 1) {
             // Multiple elements: join them with $; (SUBSEP), like $h{a,b,c}
@@ -1528,11 +1581,51 @@ public class Dereference {
         }
         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, keySlot);
 
+        Label ordinaryHashDereference = null;
+        Label hashDereferenceDone = null;
+        boolean strictRefs = emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(
+                Strict.HINT_STRICT_REFS);
+        if (verifiedPlainHashArgument) {
+            ordinaryHashDereference = new Label();
+            hashDereferenceDone = new Label();
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ILOAD,
+                    emitterVisitor.ctx.javaClassInfo.readOnlyArgumentFlagSlot);
+            emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.IFEQ, ordinaryHashDereference);
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, keySlot);
+            boolean asciiLiteralKey = verifiedPlainHashAsciiKey != null;
+            if (asciiLiteralKey) emitterVisitor.ctx.mv.visitLdcInsn(verifiedPlainHashAsciiKey);
+            if (strictRefs) {
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                        asciiLiteralKey
+                                ? "hashDerefGetForVerifiedPlainHashMethodAsciiKey"
+                                : "hashDerefGetForVerifiedPlainHashMethod",
+                        asciiLiteralKey
+                                ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                                : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
+            } else {
+                emitterVisitor.pushCurrentPackage();
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                        asciiLiteralKey
+                                ? "hashDerefGetForVerifiedPlainHashMethodAsciiKeyNonStrict"
+                                : "hashDerefGetForVerifiedPlainHashMethodNonStrict",
+                        asciiLiteralKey
+                                ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                                : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
+            }
+            emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.GOTO, hashDereferenceDone);
+            emitterVisitor.ctx.mv.visitLabel(ordinaryHashDereference);
+        }
+
         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, keySlot);
 
         // Check if strict refs is enabled at compile time
-        if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS)) {
+        if (strictRefs) {
             // Use strict version (throws error on symbolic references)
             String methodName = switch (hashOperation) {
                 case "get" -> "hashDerefGet";
@@ -1570,6 +1663,9 @@ public class Dereference {
                     methodName, hashOperation.equals("delete")
                             ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
                             : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        }
+        if (hashDereferenceDone != null) {
+            emitterVisitor.ctx.mv.visitLabel(hashDereferenceDone);
         }
 
         if (pooledKey) {

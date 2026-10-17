@@ -127,13 +127,44 @@ public final class ExecutionRuntimeState {
     final IdentityHashMap<Object, Integer> liveMyVarCounts = new IdentityHashMap<>();
 
     private final IdentityHashMap<RuntimeCode, CallDepthState> callDepths = new IdentityHashMap<>();
+    private RuntimeCode lastCallDepthCode;
+    private CallDepthState lastCallDepthState;
+
+    private static final int MAX_CACHED_CALL_DEPTHS = 256;
+    private static final int PRUNE_CALL_DEPTHS_AT = 512;
 
     public CallDepthState callDepth(RuntimeCode code) {
-        return callDepths.computeIfAbsent(code, ignored -> new CallDepthState());
+        if (lastCallDepthCode == code) return lastCallDepthState;
+        CallDepthState state = callDepths.get(code);
+        if (state != null) {
+            lastCallDepthCode = code;
+            lastCallDepthState = state;
+            return state;
+        }
+        if (callDepths.size() >= PRUNE_CALL_DEPTHS_AT) {
+            var iterator = callDepths.entrySet().iterator();
+            while (callDepths.size() > MAX_CACHED_CALL_DEPTHS && iterator.hasNext()) {
+                var entry = iterator.next();
+                if (entry.getValue().depth == 0) {
+                    if (entry.getKey() == lastCallDepthCode) {
+                        lastCallDepthCode = null;
+                        lastCallDepthState = null;
+                    }
+                    iterator.remove();
+                }
+            }
+        }
+        state = new CallDepthState();
+        callDepths.put(code, state);
+        lastCallDepthCode = code;
+        lastCallDepthState = state;
+        return state;
     }
 
     public void releaseCallDepth(RuntimeCode code) {
-        callDepths.remove(code);
+        // Keep the reset state for hot subroutines. Removing it here caused
+        // every non-recursive call to allocate a CallDepthState and a new
+        // IdentityHashMap entry. Inactive entries are pruned on demand above.
     }
 
     public static final class CallDepthState {

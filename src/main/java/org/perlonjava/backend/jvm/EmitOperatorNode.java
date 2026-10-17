@@ -3,6 +3,7 @@ package org.perlonjava.backend.jvm;
 import org.perlonjava.app.cli.CompilerOptions;
 
 import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.astnode.IdentifierNode;
 import org.perlonjava.frontend.astnode.ListNode;
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.astnode.NumberNode;
@@ -148,7 +149,23 @@ public class EmitOperatorNode {
             // Auto-increment/decrement operators
             case "++" -> EmitOperator.handleUnaryDefaultCase(node, "preAutoIncrement", emitterVisitor);
             case "--" -> EmitOperator.handleUnaryDefaultCase(node, "preAutoDecrement", emitterVisitor);
-            case "++postfix" -> EmitOperator.handleUnaryDefaultCase(node, "postAutoIncrement", emitterVisitor);
+            case "++postfix" -> {
+                boolean discardedLexicalIncrement = false;
+                if (emitterVisitor.ctx.contextType
+                        == org.perlonjava.runtime.runtimetypes.RuntimeContextType.VOID
+                        && node.operand instanceof OperatorNode operand
+                        && "$".equals(operand.operator)
+                        && operand.operand instanceof IdentifierNode identifier) {
+                    var entry = emitterVisitor.ctx.symbolTable
+                            .getSymbolEntry("$" + identifier.name);
+                    discardedLexicalIncrement = entry != null && "my".equals(entry.decl());
+                }
+                EmitOperator.handleUnaryDefaultCase(
+                        node,
+                        discardedLexicalIncrement
+                                ? "postAutoIncrementVoid" : "postAutoIncrement",
+                        emitterVisitor);
+            }
             case "--postfix" -> EmitOperator.handleUnaryDefaultCase(node, "postAutoDecrement", emitterVisitor);
 
             // Special case for length under "use bytes"

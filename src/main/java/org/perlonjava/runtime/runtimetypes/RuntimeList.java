@@ -23,6 +23,8 @@ public class RuntimeList extends RuntimeBase {
 
     /** Alternating key/value elements produced by %hash{...}. */
     public boolean keyValueHashSlice;
+    /** This one-call scalar result is proven independent of the callee's lexical cells. */
+    public boolean freshScalarResult;
 
     // List to hold the elements of the list.
     public List<RuntimeBase> elements;
@@ -687,46 +689,7 @@ public class RuntimeList extends RuntimeBase {
                 }
             }
             if (allSimpleScalars) {
-                // Suppress MortalList.flush() during LHS assignments, matching
-                // the slow path below. Without this, a blessed return value
-                // (e.g., Holler->new()) passed as an argument following a
-                // reference-typed arg can fire DESTROY mid-assignment when
-                // an earlier lhs.set() triggers setLargeRefCounted → flush()
-                // before the blessed value's own lhs.set() captures it.
-                // Repros: t/tt_leak.t tests 5, 9 (TT stash updates with
-                // blessed temps as values).
-                boolean wasFlushing = MortalList.suppressFlush(true);
-                try {
-                    List<RuntimeScalar> rhsElements = rhsArray.elements;
-                    int rhsSize = rhsElements.size();
-                    int lhsSize = elements.size();
-
-                    // Copy RHS values first to handle aliasing (e.g., ($a,$b) = ($b,$a))
-                    RuntimeScalar[] rhsValues = new RuntimeScalar[Math.min(lhsSize, rhsSize)];
-                    for (int i = 0; i < rhsValues.length; i++) {
-                        RuntimeScalar elem = rhsElements.get(i);
-                        // Handle null elements (from delete $array[i])
-                        rhsValues[i] = (elem == null) ? new RuntimeScalar() : new RuntimeScalar(elem);
-                    }
-
-                    RuntimeArray result = new RuntimeArray(lhsSize);
-                    result.scalarContextSize = rhsSize;
-                    for (int i = 0; i < lhsSize; i++) {
-                        RuntimeScalar lhs = (RuntimeScalar) elements.get(i);
-                        if (lhs.isKeysLvalue()) {
-                            lhs.rejectKeysLvalueListAssignment();
-                        }
-                        if (i < rhsValues.length) {
-                            lhs.set(rhsValues[i]);
-                        } else {
-                            lhs.set(new RuntimeScalar());
-                        }
-                        result.elements.add(lhs);
-                    }
-                    return result;
-                } finally {
-                    MortalList.suppressFlush(wasFlushing);
-                }
+                return assignSimpleScalarsFromArray(rhsArray, true);
             }
         }
 
@@ -903,6 +866,88 @@ public class RuntimeList extends RuntimeBase {
         MortalList.suppressFlush(wasFlushing);
 
         return result;
+    }
+
+    /** Assign a simple scalar LHS from one RHS array when the expression is void. */
+    public RuntimeArray setFromListVoid(RuntimeList value) {
+        if (value.elements.size() == 1 && value.elements.get(0) instanceof RuntimeArray rhsArray) {
+            boolean allSimpleScalars = true;
+            for (RuntimeBase elem : elements) {
+                if (!(elem instanceof RuntimeScalar) || elem instanceof RuntimeScalarReadOnly) {
+                    allSimpleScalars = false;
+                    break;
+                }
+            }
+            if (allSimpleScalars) {
+                assignSimpleScalarsFromArray(rhsArray, false);
+                return null;
+            }
+        }
+        return setFromList(value);
+    }
+
+    private RuntimeArray assignSimpleScalarsFromArray(RuntimeArray rhsArray, boolean returnResult) {
+        // Suppress MortalList.flush() during LHS assignments, matching the slow path.
+        boolean wasFlushing = MortalList.suppressFlush(true);
+        try {
+            List<RuntimeScalar> rhsElements = rhsArray.elements;
+            int rhsSize = rhsElements.size();
+            int lhsSize = elements.size();
+
+            boolean sequentialCopySafe = true;
+            for (RuntimeBase lhs : elements) {
+                if (lhs == null || lhs.getClass() != RuntimeScalar.class) {
+                    sequentialCopySafe = false;
+                    break;
+                }
+                for (int i = 0; i < Math.min(lhsSize, rhsSize); i++) {
+                    RuntimeScalar rhs = rhsElements.get(i);
+                    if (rhs != null
+                            && rhs.getClass() != RuntimeScalar.class
+                            && rhs.getClass() != RuntimeScalarReadOnly.class) {
+                        sequentialCopySafe = false;
+                        break;
+                    }
+                    if (lhs == rhs) {
+                        sequentialCopySafe = false;
+                        break;
+                    }
+                }
+                if (!sequentialCopySafe) break;
+            }
+
+            if (sequentialCopySafe) {
+                RuntimeArray result = returnResult ? new RuntimeArray(lhsSize) : null;
+                if (result != null) result.scalarContextSize = rhsSize;
+                for (int i = 0; i < lhsSize; i++) {
+                    RuntimeScalar lhs = (RuntimeScalar) elements.get(i);
+                    if (lhs.isKeysLvalue()) lhs.rejectKeysLvalueListAssignment();
+                    RuntimeScalar rhs = i < rhsSize ? rhsElements.get(i) : null;
+                    lhs.set(rhs == null ? new RuntimeScalar() : rhs);
+                    if (result != null) result.elements.add(lhs);
+                }
+                return result;
+            }
+
+            // Copy RHS values first to handle aliasing (e.g., ($a,$b) = ($b,$a)).
+            RuntimeScalar[] rhsValues = new RuntimeScalar[Math.min(lhsSize, rhsSize)];
+            for (int i = 0; i < rhsValues.length; i++) {
+                RuntimeScalar elem = rhsElements.get(i);
+                rhsValues[i] = (elem == null) ? new RuntimeScalar() : new RuntimeScalar(elem);
+            }
+
+            RuntimeArray result = returnResult ? new RuntimeArray(lhsSize) : null;
+            if (result != null) result.scalarContextSize = rhsSize;
+            for (int i = 0; i < lhsSize; i++) {
+                RuntimeScalar lhs = (RuntimeScalar) elements.get(i);
+                if (lhs.isKeysLvalue()) lhs.rejectKeysLvalueListAssignment();
+                lhs.set(i < rhsValues.length ? rhsValues[i] : new RuntimeScalar());
+                if (result != null) result.elements.add(lhs);
+            }
+            return result;
+        } finally {
+            MortalList.suppressFlush(wasFlushing);
+        }
     }
 
     /**

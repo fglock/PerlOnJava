@@ -3547,6 +3547,68 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return this.hashDeref().get(index);
     }
 
+    /**
+     * Fetch a literal key after the generated method's argument guard has
+     * proved that this scalar points to an ordinary plain hash without a
+     * {@code %\{\}} overload. Keep the defensive type check here so an
+     * incorrect compiler guard falls back to the full Perl dereference path.
+     */
+    public static RuntimeScalar hashDerefGetForVerifiedPlainHashMethod(
+            RuntimeScalar target, RuntimeScalar index) {
+        if (target.type == HASHREFERENCE
+                && target.value != null
+                && target.value.getClass() == RuntimeHash.class
+                && ((RuntimeHash) target.value).type == RuntimeHash.PLAIN_HASH) {
+            return ((RuntimeHash) target.value).get(index);
+        }
+        return target.hashDerefGet(index);
+    }
+
+    /** Fast literal lookup for an ASCII key proven safe by the generated method guard. */
+    public static RuntimeScalar hashDerefGetForVerifiedPlainHashMethodAsciiKey(
+            RuntimeScalar target, RuntimeScalar index, String asciiKey) {
+        if (target.type == HASHREFERENCE
+                && target.value != null
+                && target.value.getClass() == RuntimeHash.class
+                && ((RuntimeHash) target.value).type == RuntimeHash.PLAIN_HASH) {
+            RuntimeHash hash = (RuntimeHash) target.value;
+            if (!hash.threadShared && !hash.isEnvironmentHash) {
+                RuntimeScalar value = hash.elements.get(asciiKey);
+                if (value != null) return value;
+            }
+            return hash.get(asciiKey);
+        }
+        return target.hashDerefGet(index);
+    }
+
+    public static RuntimeScalar hashDerefGetForVerifiedPlainHashMethodNonStrict(
+            RuntimeScalar target, RuntimeScalar index, String packageName) {
+        if (target.type == HASHREFERENCE
+                && target.value != null
+                && target.value.getClass() == RuntimeHash.class
+                && ((RuntimeHash) target.value).type == RuntimeHash.PLAIN_HASH) {
+            return ((RuntimeHash) target.value).get(index);
+        }
+        return target.hashDerefGetNonStrict(index, packageName);
+    }
+
+    /** Non-strict fallback counterpart for a verified ASCII literal hash key. */
+    public static RuntimeScalar hashDerefGetForVerifiedPlainHashMethodAsciiKeyNonStrict(
+            RuntimeScalar target, RuntimeScalar index, String asciiKey, String packageName) {
+        if (target.type == HASHREFERENCE
+                && target.value != null
+                && target.value.getClass() == RuntimeHash.class
+                && ((RuntimeHash) target.value).type == RuntimeHash.PLAIN_HASH) {
+            RuntimeHash hash = (RuntimeHash) target.value;
+            if (!hash.threadShared && !hash.isEnvironmentHash) {
+                RuntimeScalar value = hash.elements.get(asciiKey);
+                if (value != null) return value;
+            }
+            return hash.get(asciiKey);
+        }
+        return target.hashDerefGetNonStrict(index, packageName);
+    }
+
     // Method to implement `$v->{key}`, when "no strict refs" is in effect
     public RuntimeScalar hashDerefGetNonStrict(RuntimeScalar index, String packageName) {
         return this.hashDerefNonStrict(packageName).get(index);
@@ -5553,6 +5615,27 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         notifyModifiedWatchers();
         return result;
+    }
+
+    /** Postfix ++ in void context for a proven lexical lvalue. */
+    public void postAutoIncrementVoid() {
+        watcherMutationDepth++;
+        try {
+            if (getClass() == RuntimeScalar.class
+                    && type == INTEGER
+                    && !isWideIntegerValue(value)) {
+                long integerValue = ((Number) value).longValue();
+                if (integerValue < Long.MAX_VALUE) {
+                    warnImprecisionForAutoOperation(1);
+                    setIntegerValue(integerValue + 1);
+                    return;
+                }
+            }
+            postAutoIncrementWithoutWatcherNotification();
+        } finally {
+            watcherMutationDepth--;
+            notifyModifiedWatchers();
+        }
     }
 
     /** Implements ++ while lexical {@code use integer} is active. */
