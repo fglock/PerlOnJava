@@ -13,7 +13,8 @@ priorities and future plans.
 - Improve JVM method-call throughput with guarded argument unpacking, cached
   empty inheritance checks, direct small literal-argument frames, cached
   negative overload metadata, and skipped regex snapshots and return-time
-  context scans for proven call-free arithmetic methods.
+  context scans for proven call-free arithmetic methods; avoid inactive taint
+  mode lookups for untainted plain integer compound-assignment operands.
 - Add a reproducible, warmup-aware Perl versus PerlOnJava performance runner (#1196).
 - Cover FormState session restoration across requests and HTTP response conversion from callback and streaming PSGI responses; refresh HTTP::Message and LWP compatibility status (#1650, #1651, #1652).
 - Preserve the awaited Future value when its source scalar or aggregate slot changes during suspension, covering PAGI::Server request-body receives (#1818).
