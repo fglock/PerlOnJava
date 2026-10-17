@@ -5515,116 +5515,116 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         RuntimeBase pjMethodInvHold = acquireMethodInvocantHold(runtimeScalar);
         try {
-        // Fast path: check inline cache for monomorphic call sites
-        if (method.type == RuntimeScalarType.STRING || method.type == RuntimeScalarType.BYTE_STRING) {
-            // Unwrap READONLY_SCALAR for blessId check (same as in call())
-            RuntimeScalar invocant = runtimeScalar;
-            while (invocant.type == RuntimeScalarType.READONLY_SCALAR) {
-                invocant = (RuntimeScalar) invocant.value;
+            int blessId = methodInvocantBlessId(runtimeScalar, method);
+            int methodHash = 0;
+            RuntimeCodeRuntimeState runtimeCodeState = null;
+            if (blessId != 0) {
+                methodHash = System.identityHashCode(method.value);
+                runtimeCodeState = methodRuntime.runtimeCodeState();
+                RuntimeCode cachedCode = runtimeCodeState.cachedInlineMethod(
+                        callsiteId, blessId, methodHash);
+                if (cachedCode != null
+                        && (cachedCode.subroutine != null || cachedCode.methodHandle != null)) {
+                    return invokeCachedMethodHit(cachedCode, runtimeScalar, method,
+                            methodArgs, callContext, blessId, methodRuntime);
+                }
             }
-            if (RuntimeScalarType.isReference(invocant)) {
-                int blessId = ((RuntimeBase) invocant.value).blessId;
-                if (blessId != 0) {
-                    int methodHash = System.identityHashCode(method.value);
-                    RuntimeCodeRuntimeState runtimeCodeState = methodRuntime.runtimeCodeState();
+            return callCachedMethodMiss(callsiteId, runtimeScalar, method, currentSub,
+                    methodArgs, callContext, blessId, methodHash,
+                    runtimeCodeState, methodRuntime);
+        } finally {
+            releaseMethodInvocantHold(pjMethodInvHold);
+        }
+    }
 
-                    // Check if cache hit
-                    RuntimeCode cachedCode = runtimeCodeState.cachedInlineMethod(
-                            callsiteId, blessId, methodHash);
-                    if (cachedCode != null
-                            && (cachedCode.subroutine != null || cachedCode.methodHandle != null)) {
-                            // Cache hit: skip method lookup, but still enter through
-                            // RuntimeCode.apply() so caller(), next::method, warnings,
-                            // recursion tracking, and scope cleanup see a real Perl frame.
-                            try {
-                                RuntimeArray a = methodArgs;
-                                a.elements.add(0, methodInvocantArgument(runtimeScalar));
-                                
-                                // If this is an AUTOLOAD, set $AUTOLOAD before calling
-                                String autoloadVariableName = cachedCode.autoloadVariableName;
-                                if (autoloadVariableName != null) {
-                                    String methodName = method.toString();
-                                    // Only set $AUTOLOAD when dispatching to AUTOLOAD as a fallback
-                                    // (method name != "AUTOLOAD"). When calling AUTOLOAD directly
-                                    // (e.g., $self->SUPER::AUTOLOAD), the caller has already set it.
-                                    if (!methodName.equals("AUTOLOAD")) {
-                                        // Use the original calling class (perlClassName), not the class
-                                        // where AUTOLOAD was found. Perl sets $AUTOLOAD to Child::method
-                                        // even when AUTOLOAD is inherited from Base.
-                                        String perlClassName = NameNormalizer.getBlessStr(blessId);
-                                        String fullMethodName =
-                                                qualifyAutoloadMethodName(methodName, perlClassName);
-                                        setAutoloadMethodName(
-                                                autoloadVariableName, fullMethodName, method);
-                                    }
-                                }
-                                
-                                MortalList.pushMark(methodRuntime.lifecycleState);
-                                try {
-                                    return applyCachedMethod(
-                                            cachedCode, a, callContext, methodRuntime);
-                                } finally {
-                                    MortalList.popMark(methodRuntime.lifecycleState);
-                                }
-                            } catch (Throwable e) {
-                                if (e instanceof RuntimeException) throw (RuntimeException) e;
-                                throw new RuntimeException(e);
-                            }
+    private static int methodInvocantBlessId(RuntimeScalar runtimeScalar, RuntimeScalar method) {
+        if (method.type != RuntimeScalarType.STRING && method.type != RuntimeScalarType.BYTE_STRING) {
+            return 0;
+        }
+        RuntimeScalar invocant = runtimeScalar;
+        while (invocant.type == RuntimeScalarType.READONLY_SCALAR) {
+            invocant = (RuntimeScalar) invocant.value;
+        }
+        return RuntimeScalarType.isReference(invocant)
+                ? ((RuntimeBase) invocant.value).blessId
+                : 0;
+    }
+
+    private static RuntimeList invokeCachedMethodHit(
+            RuntimeCode code, RuntimeScalar runtimeScalar, RuntimeScalar method,
+            RuntimeArray methodArgs, int callContext, int blessId,
+            PerlRuntime methodRuntime) {
+        try {
+            RuntimeArray args = methodArgs;
+            args.elements.add(0, methodInvocantArgument(runtimeScalar));
+
+            String autoloadVariableName = code.autoloadVariableName;
+            if (autoloadVariableName != null) {
+                String methodName = method.toString();
+                if (!methodName.equals("AUTOLOAD")) {
+                    String perlClassName = NameNormalizer.getBlessStr(blessId);
+                    String fullMethodName = qualifyAutoloadMethodName(methodName, perlClassName);
+                    setAutoloadMethodName(autoloadVariableName, fullMethodName, method);
+                }
+            }
+
+            MortalList.pushMark(methodRuntime.lifecycleState);
+            try {
+                return applyCachedMethod(code, args, callContext, methodRuntime);
+            } finally {
+                MortalList.popMark(methodRuntime.lifecycleState);
+            }
+        } catch (Throwable e) {
+            if (e instanceof RuntimeException) throw (RuntimeException) e;
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static RuntimeList callCachedMethodMiss(
+            int callsiteId, RuntimeScalar runtimeScalar, RuntimeScalar method,
+            RuntimeScalar currentSub, RuntimeArray methodArgs, int callContext,
+            int blessId, int methodHash, RuntimeCodeRuntimeState runtimeCodeState,
+            PerlRuntime methodRuntime) {
+        if (blessId != 0) {
+            String methodName = method.toString();
+            if (!methodName.contains("::")) {
+                String perlClassName = NameNormalizer.getBlessStr(blessId);
+                RuntimeScalar resolvedMethod = InheritanceResolver.findMethodInHierarchy(
+                        methodName, perlClassName, null, 0);
+                if (resolvedMethod != null && resolvedMethod.type == RuntimeScalarType.CODE) {
+                    RuntimeCode code = (RuntimeCode) resolvedMethod.value;
+                    if (code.compilerSupplier != null) {
+                        code.compilerSupplier.get();
+                        code = (RuntimeCode) resolvedMethod.value;
                     }
-                    
-                    // Cache miss - do full lookup and update cache
-                    String methodName = method.toString();
-                    if (!methodName.contains("::")) {
-                        String perlClassName = NameNormalizer.getBlessStr(blessId);
-                        RuntimeScalar resolvedMethod = InheritanceResolver.findMethodInHierarchy(methodName, perlClassName, null, 0);
-                        if (resolvedMethod != null && resolvedMethod.type == RuntimeScalarType.CODE) {
-                            RuntimeCode code = (RuntimeCode) resolvedMethod.value;
-                            
-                            // Run compiler supplier if needed
-                            if (code.compilerSupplier != null) {
-                                code.compilerSupplier.get();
-                                code = (RuntimeCode) resolvedMethod.value;
-                            }
-                            
-                            // Only cache if method is defined and has a subroutine or method handle
-                            if (code.subroutine != null || code.methodHandle != null) {
-                                // Update cache
-                                runtimeCodeState.cacheInlineMethod(
-                                        callsiteId, blessId, methodHash, code);
-                            }
-                            
-                            // Call the method with function-scoped mortal boundary
-                            RuntimeArray a = methodArgs;
-                            a.elements.add(0, methodInvocantArgument(runtimeScalar));
-                            
-                            String autoloadVariableName = code.autoloadVariableName;
-                            if (autoloadVariableName != null && !methodName.equals("AUTOLOAD")) {
-                                // Use the original calling class, not where AUTOLOAD was found
-                                String fullMethodName =
-                                        qualifyAutoloadMethodName(methodName, perlClassName);
-                                setAutoloadMethodName(
-                                        autoloadVariableName, fullMethodName, method);
-                            }
-                            MortalList.pushMark(methodRuntime.lifecycleState);
-                            try {
-                                return applyCachedMethod(code, a, callContext, null);
-                            } finally {
-                                MortalList.popMark(methodRuntime.lifecycleState);
-                            }
-                        }
+                    if ((code.subroutine != null || code.methodHandle != null)
+                            && runtimeCodeState != null) {
+                        runtimeCodeState.cacheInlineMethod(
+                                callsiteId, blessId, methodHash, code);
+                    }
+
+                    RuntimeArray args = methodArgs;
+                    args.elements.add(0, methodInvocantArgument(runtimeScalar));
+                    String autoloadVariableName = code.autoloadVariableName;
+                    if (autoloadVariableName != null && !methodName.equals("AUTOLOAD")) {
+                        String fullMethodName = qualifyAutoloadMethodName(methodName, perlClassName);
+                        setAutoloadMethodName(autoloadVariableName, fullMethodName, method);
+                    }
+                    MortalList.pushMark(methodRuntime.lifecycleState);
+                    try {
+                        return applyCachedMethod(code, args, callContext, null);
+                    } finally {
+                        MortalList.popMark(methodRuntime.lifecycleState);
                     }
                 }
             }
         }
-        
-        // Fall back without nesting through call(...) — avoids double refcount hold
-        // (this outer frame already holds the invocant for the inlined-cache miss path).
-        RuntimeArray aFallback = methodArgs;
-        aFallback.elements.add(0, methodInvocantArgument(runtimeScalar));
-        return dispatchPerlMethodAfterSelfInjected(runtimeScalar, method, currentSub, aFallback, callContext);
-        } finally {
-            releaseMethodInvocantHold(pjMethodInvHold);
-        }
+
+        // This frame already holds the invocant, so preserve the direct fallback path.
+        RuntimeArray fallbackArgs = methodArgs;
+        fallbackArgs.elements.add(0, methodInvocantArgument(runtimeScalar));
+        return dispatchPerlMethodAfterSelfInjected(
+                runtimeScalar, method, currentSub, fallbackArgs, callContext);
     }
 
     /**
