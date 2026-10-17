@@ -596,18 +596,6 @@ public class EmitterMethodCreator implements Opcodes {
             // Generate the subroutine block
             mv.visitCode();
 
-            // Direct JVM-to-JVM calls bypass RuntimeCode.apply(), so retain
-            // the generated method's frame metadata for dynamic wrappers
-            // such as &{"CORE::__SUB__"}.
-            mv.visitVarInsn(Opcodes.ALOAD, 0);
-            mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassInfo.javaClassName,
-                    "__SUB__", "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
-            mv.visitInsn(ctx.javaClassInfo.isSortComparator ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "pushJvmFrame",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Z)V", false);
-
             // Initialize local variables with closure values from instance fields
             // Skip some indices because they are reserved for special arguments (this, "@_" and call
             // context)
@@ -753,6 +741,32 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, slot);
             }
+
+            // Direct JVM-to-JVM calls bypass RuntimeCode.apply(), so retain
+            // generated-frame metadata for dynamic wrappers such as
+            // &{"CORE::__SUB__"}. Capture the execution state once so frame
+            // teardown does not perform a second thread-local runtime lookup.
+            int jvmFrameStateSlot = ctx.symbolTable.allocateLocalVariable();
+            ctx.javaClassInfo.jvmFrameStateSlot = jvmFrameStateSlot;
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/PerlRuntime",
+                    "current",
+                    "()Lorg/perlonjava/runtime/runtimetypes/PerlRuntime;", false);
+            mv.visitFieldInsn(Opcodes.GETFIELD,
+                    "org/perlonjava/runtime/runtimetypes/PerlRuntime",
+                    "executionState",
+                    "Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;");
+            mv.visitVarInsn(Opcodes.ASTORE, jvmFrameStateSlot);
+            mv.visitVarInsn(Opcodes.ALOAD, jvmFrameStateSlot);
+            mv.visitVarInsn(Opcodes.ALOAD, 0);
+            mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassInfo.javaClassName,
+                    "__SUB__", "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+            mv.visitInsn(ctx.javaClassInfo.isSortComparator ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "pushJvmFrame",
+                    "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Z)V",
+                    false);
 
             // Create a label for the return point
             ctx.javaClassInfo.returnLabel = new Label();
@@ -1370,13 +1384,15 @@ public class EmitterMethodCreator implements Opcodes {
                 Local.localTeardown(dynamicIndex, mv);
             }
 
+            mv.visitVarInsn(Opcodes.ALOAD, jvmFrameStateSlot);
             mv.visitVarInsn(Opcodes.ALOAD, 0);
             mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassInfo.javaClassName,
                     "__SUB__", "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "popJvmFrame",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V", false);
+                    "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
+                    false);
             mv.visitInsn(Opcodes.ARETURN); // Returns an Object
             mv.visitMaxs(0, 0); // Automatically computed
             mv.visitEnd();

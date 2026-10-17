@@ -897,9 +897,10 @@ public class EmitVariable {
                     // A call result consumed as a scalar can return its private
                     // one-scalar wrapper to the runtime-local pool. Ordinary
                     // lists and markers retain scalar() behavior.
+                    mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.jvmFrameStateSlot);
                     mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                             "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalarAndRecycle",
-                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                 }
                 // LIST context: RuntimeList is already correct, no conversion needed
 

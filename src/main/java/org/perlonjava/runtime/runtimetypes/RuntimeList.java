@@ -98,6 +98,22 @@ public class RuntimeList extends RuntimeBase {
         return scalar;
     }
 
+    /** Extract and recycle using the execution state already captured by generated code. */
+    public static RuntimeScalar scalarAndRecycle(
+            RuntimeList result, ExecutionRuntimeState executionState) {
+        RuntimeScalar scalar = result.scalar();
+        ScalarResultDiagnostics.scalarExtracted(result.recyclableScalarResult, result.elements.size());
+        if (result.recyclableScalarResult && result.elements.size() == 1) {
+            result.elements.clear();
+            result.recyclableScalarResult = false;
+            if (executionState != null) {
+                executionState.availableScalarResultLists.addFirst(result);
+                ScalarResultDiagnostics.recycled();
+            }
+        }
+        return scalar;
+    }
+
     /**
      * Constructs a RuntimeList from another RuntimeList.
      * Creates a shallow copy of the elements list to prevent mutation of the original.

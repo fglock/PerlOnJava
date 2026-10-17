@@ -1039,7 +1039,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /** Push both pieces of generated-frame metadata with one runtime lookup. */
     public static void pushJvmFrame(RuntimeScalar selfReference, boolean comparator) {
-        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        pushJvmFrame(PerlRuntime.current().executionState(), selfReference, comparator);
+    }
+
+    /** Push generated-frame metadata through the state captured by its caller. */
+    public static void pushJvmFrame(
+            ExecutionRuntimeState state, RuntimeScalar selfReference, boolean comparator) {
         if (selfReference != null) {
             state.activeJvmSelfReferences.push(selfReference);
         }
@@ -1059,7 +1064,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /** Pop both pieces of generated-frame metadata with one runtime lookup. */
     public static void popJvmFrame(RuntimeScalar selfReference) {
-        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        popJvmFrame(PerlRuntime.current().executionState(), selfReference);
+    }
+
+    /** Pop generated-frame metadata through the state captured by its caller. */
+    public static void popJvmFrame(
+            ExecutionRuntimeState state, RuntimeScalar selfReference) {
         if (selfReference != null) {
             Deque<RuntimeScalar> stack = state.activeJvmSelfReferences;
             if (!stack.isEmpty() && stack.peek() == selfReference) {

@@ -1321,9 +1321,11 @@ public class Dereference {
                 // selected scalar/lvalue context, recycle only a private
                 // one-scalar result wrapper; normal lists and markers are
                 // unchanged.
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD,
+                        emitterVisitor.ctx.javaClassInfo.jvmFrameStateSlot);
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalarAndRecycle",
-                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
             } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
                 // Remove the value from the stack
                 emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);

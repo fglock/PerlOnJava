@@ -38,6 +38,9 @@ public class JavaClassInfo {
     /** Active finally whose body must run before a Perl return leaves its wrapper. */
     public TryFinallyContext activeTryFinallyContext;
 
+    /** Local slot holding this generated invocation's execution state. */
+    public int jvmFrameStateSlot;
+
     /**
      * Outermost boolean short-circuit expression token used for caller().
      * Perl attributes calls anywhere in an &&/and/||/or expression to the
