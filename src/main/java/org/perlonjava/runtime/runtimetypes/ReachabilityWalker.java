@@ -1777,6 +1777,7 @@ public class ReachabilityWalker {
         // here; transient method-call argument scalars are NOT
         // (they get unwound when the method returns).
         for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
+            if (!MyVarCleanupStack.isRegistered(liveVar)) continue;
             if (liveVar instanceof RuntimeScalar scalar && scalar.scopeExited) continue;
             if (liveVar instanceof RuntimeBase runtimeBase && runtimeBase.scopeExited) continue;
             if (liveVar == target) return true;
