@@ -3564,6 +3564,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return target.hashDerefGet(index);
     }
 
+    /** Fast literal lookup for an ASCII key proven safe by the generated method guard. */
+    public static RuntimeScalar hashDerefGetForVerifiedPlainHashMethodAsciiKey(
+            RuntimeScalar target, RuntimeScalar index, String asciiKey) {
+        if (target.type == HASHREFERENCE
+                && target.value != null
+                && target.value.getClass() == RuntimeHash.class
+                && ((RuntimeHash) target.value).type == RuntimeHash.PLAIN_HASH) {
+            return ((RuntimeHash) target.value).get(asciiKey);
+        }
+        return target.hashDerefGet(index);
+    }
+
     public static RuntimeScalar hashDerefGetForVerifiedPlainHashMethodNonStrict(
             RuntimeScalar target, RuntimeScalar index, String packageName) {
         if (target.type == HASHREFERENCE
@@ -3571,6 +3583,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && target.value.getClass() == RuntimeHash.class
                 && ((RuntimeHash) target.value).type == RuntimeHash.PLAIN_HASH) {
             return ((RuntimeHash) target.value).get(index);
+        }
+        return target.hashDerefGetNonStrict(index, packageName);
+    }
+
+    /** Non-strict fallback counterpart for a verified ASCII literal hash key. */
+    public static RuntimeScalar hashDerefGetForVerifiedPlainHashMethodAsciiKeyNonStrict(
+            RuntimeScalar target, RuntimeScalar index, String asciiKey, String packageName) {
+        if (target.type == HASHREFERENCE
+                && target.value != null
+                && target.value.getClass() == RuntimeHash.class
+                && ((RuntimeHash) target.value).type == RuntimeHash.PLAIN_HASH) {
+            return ((RuntimeHash) target.value).get(asciiKey);
         }
         return target.hashDerefGetNonStrict(index, packageName);
     }
