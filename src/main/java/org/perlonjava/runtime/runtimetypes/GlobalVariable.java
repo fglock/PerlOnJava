@@ -1529,9 +1529,11 @@ public class GlobalVariable {
             return;
         }
         int marker = key.lastIndexOf("__lexsub_");
-        if (marker <= key.lastIndexOf("::") + 2 || marker + "__lexsub_".length() >= key.length()) {
+        if (marker < 0 || marker + "__lexsub_".length() >= key.length()) {
             return;
         }
+        int packageSeparator = key.lastIndexOf("::");
+        if (marker <= packageSeparator + 2) return;
         int suffixStart = marker + "__lexsub_".length();
         boolean packageCodePreexisted = key.startsWith("preexisting_", suffixStart);
         if (packageCodePreexisted) {
@@ -1542,8 +1544,8 @@ public class GlobalVariable {
                 return;
             }
         }
-        scalar.lexicalSubName = key.substring(key.lastIndexOf("::") + 2, marker);
-        scalar.lexicalSubPackageName = key.substring(0, key.lastIndexOf("::"));
+        scalar.lexicalSubName = key.substring(packageSeparator + 2, marker);
+        scalar.lexicalSubPackageName = key.substring(0, packageSeparator);
         scalar.lexicalSubPackageCodeDefinedAtDeclaration = packageCodePreexisted;
     }
 

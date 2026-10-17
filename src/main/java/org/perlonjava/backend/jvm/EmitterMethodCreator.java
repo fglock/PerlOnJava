@@ -1204,8 +1204,20 @@ public class EmitterMethodCreator implements Opcodes {
             }
 
             // Materialize $1, $&, etc. into concrete scalars BEFORE restoring regex state.
-            // The return list may contain lazy ScalarSpecialVariable references; if we
-            // restored first, they would resolve to the caller's (stale) values.
+            // A successfully guarded fresh numeric return cannot contain a lazy special
+            // variable, so it can bypass both the active-frame scan and the materializer.
+            Label materializeSpecialVars = null;
+            Label materializedSpecialVars = null;
+            if (ctx.javaClassInfo.readOnlyArgumentFreshScalarReturn
+                    && ctx.javaClassInfo.readOnlyArgumentFlagSlot >= 0) {
+                materializeSpecialVars = new Label();
+                materializedSpecialVars = new Label();
+                mv.visitVarInsn(Opcodes.ILOAD,
+                        ctx.javaClassInfo.readOnlyArgumentFlagSlot);
+                mv.visitJumpInsn(Opcodes.IFEQ, materializeSpecialVars);
+                mv.visitJumpInsn(Opcodes.GOTO, materializedSpecialVars);
+                mv.visitLabel(materializeSpecialVars);
+            }
             mv.visitInsn(Opcodes.DUP);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
@@ -1214,6 +1226,9 @@ public class EmitterMethodCreator implements Opcodes {
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "materializeSpecialVarsInResult",
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;I)V", false);
+            if (materializedSpecialVars != null) {
+                mv.visitLabel(materializedSpecialVars);
+            }
 
             if (useTryCatch) {
                 // For eval BLOCK, wrap the teardown in a try-catch to catch exceptions
