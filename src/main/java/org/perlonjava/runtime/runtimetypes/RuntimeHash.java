@@ -814,6 +814,13 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         return new RuntimeScalar(key); // non-ASCII, not in byteKeys → STRING (UTF-8)
     }
 
+    private static boolean isAsciiKey(String key) {
+        for (int i = 0; i < key.length(); i++) {
+            if (key.charAt(i) > 127) return false;
+        }
+        return true;
+    }
+
     /**
      * Retrieves a value by key.
      *
@@ -920,7 +927,11 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 if (value != null) {
                     // Update the key's byte/UTF-8 flag to match the accessing key's type.
                     // In Perl, the key's UTF-8 flag is updated on each access.
-                    markKeyByte(key, keyScalar.type == BYTE_STRING);
+                    // ASCII keys are always materialized as byte strings, so their
+                    // access-time key flag cannot affect observable key values.
+                    if (!isAsciiKey(key)) {
+                        markKeyByte(key, keyScalar.type == BYTE_STRING);
+                    }
                     yield SharedPerlStorage.fetchedElement(this, value);
                 }
                 // Lazy element autovivification - pass key's byte flag for type tracking
