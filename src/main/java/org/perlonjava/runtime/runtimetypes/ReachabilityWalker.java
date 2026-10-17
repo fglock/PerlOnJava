@@ -1509,9 +1509,7 @@ public class ReachabilityWalker {
                             System.err.println("[MOJO-TIMER-CODE] identity="
                                     + System.identityHashCode(nested) + " name="
                                     + nested.packageName + "::" + nested.subName + " captures="
-                                    + (nested.capturedScalars == null ? 0 : nested.capturedScalars.length)
-                                    + " closedOver=" + (nested.closedOverVariables == null
-                                            ? "[]" : nested.closedOverVariables.keySet()));
+                                    + (nested.capturedScalars == null ? 0 : nested.capturedScalars.length));
                             if (nested.capturedScalars != null) {
                                 for (int i = 0; i < nested.capturedScalars.length; i++) {
                                     RuntimeScalar capture = nested.capturedScalars[i];
