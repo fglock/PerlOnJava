@@ -1714,7 +1714,8 @@ public class ReachabilityWalker {
         }
         if (container instanceof RuntimeArray array
                 && array.isPackageGlobalRoot
-                && array.elements.contains(target)) {
+                && array.elements.contains(target)
+                && (!array.elementsAliased || array.ownsElement(target))) {
             return true;
         }
         if (target.isPackageGlobalRoot
@@ -1727,7 +1728,9 @@ public class ReachabilityWalker {
         }
         Boolean drainSnapshotResult =
                 MortalList.isScalarReachableFromDrainSnapshot(target);
-        if (drainSnapshotResult != null) return drainSnapshotResult;
+        if (drainSnapshotResult != null) {
+            return drainSnapshotResult;
+        }
         if (stats != null) stats.scalarReachabilityRootWalks++;
         final int MAX_VISITS = MAX_ROOT_SNAPSHOT_VISITS;
 
@@ -1774,6 +1777,8 @@ public class ReachabilityWalker {
         // here; transient method-call argument scalars are NOT
         // (they get unwound when the method returns).
         for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
+            if (liveVar instanceof RuntimeScalar scalar && scalar.scopeExited) continue;
+            if (liveVar instanceof RuntimeBase runtimeBase && runtimeBase.scopeExited) continue;
             if (liveVar == target) return true;
             if (liveVar instanceof RuntimeBase rb && seen.add(rb)) todo.addLast(rb);
         }
@@ -1808,14 +1813,19 @@ public class ReachabilityWalker {
                     if (val == null) continue;
                     // Skip weak refs — they don't keep their referent alive.
                     if (WeakRefRegistry.isweak(val)) continue;
-                    if (val == target) return true;
+                    if (val == target) {
+                        return true;
+                    }
                     if (seen.add(val)) todo.addLast(val);
                 }
             } else if (cur instanceof RuntimeArray arr) {
                 for (RuntimeScalar elem : arr.elements) {
                     if (elem == null) continue;
+                    if (arr.elementsAliased && !arr.ownsElement(elem)) continue;
                     if (WeakRefRegistry.isweak(elem)) continue;
-                    if (elem == target) return true;
+                    if (elem == target) {
+                        return true;
+                    }
                     if (seen.add(elem)) todo.addLast(elem);
                 }
             } else if (cur instanceof RuntimeScalar sc) {
@@ -1831,7 +1841,9 @@ public class ReachabilityWalker {
                                 && WeakRefRegistry.isweak(scalar)) {
                             continue;
                         }
-                        if (captured == target) return true;
+                        if (captured == target) {
+                            return true;
+                        }
                         if (seen.add(captured)) todo.addLast(captured);
                     }
                 }
@@ -1839,13 +1851,17 @@ public class ReachabilityWalker {
                     for (RuntimeScalar cap : code.capturedScalars) {
                         if (cap == null) continue;
                         if (WeakRefRegistry.isweak(cap)) continue;
-                        if (cap == target) return true;
+                        if (cap == target) {
+                            return true;
+                        }
                         if (seen.add(cap)) todo.addLast(cap);
                     }
                 }
                 if (code.capturedAggregates != null) {
                     for (RuntimeBase cap : code.capturedAggregates) {
-                        if (cap == target) return true;
+                        if (cap == target) {
+                            return true;
+                        }
                         if (seen.add(cap)) todo.addLast(cap);
                     }
                 }
@@ -1987,6 +2003,7 @@ public class ReachabilityWalker {
                 }
             } else if (current instanceof RuntimeArray array) {
                 for (RuntimeScalar value : array.elements) {
+                    if (array.elementsAliased && !array.ownsElement(value)) continue;
                     addScalarReachabilityEdge(value, seen,
                             reachableScalars, todo, stats, true, false);
                 }

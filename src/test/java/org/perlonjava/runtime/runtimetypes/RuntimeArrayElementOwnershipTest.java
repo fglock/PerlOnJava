@@ -4,8 +4,10 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
 class RuntimeArrayElementOwnershipTest {
@@ -73,6 +75,32 @@ class RuntimeArrayElementOwnershipTest {
             array.forgetOwnedAliasElement(cell);
             assertEquals(0, referent.arraySlotOwnerCount());
             assertNull(array.arrayElementOwnerSlot(0));
+        }
+    }
+
+    @Test
+    void nonOwningAliasedElementDoesNotProveScalarReachability() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            RuntimeArray packageRoot = new RuntimeArray();
+            RuntimeScalar cell = referent.createReference();
+            packageRoot.elements.add(cell);
+            packageRoot.elementsAliased = true;
+            packageRoot.elementsOwned = false;
+            packageRoot.isPackageGlobalRoot = true;
+
+            assertFalse(packageRoot.ownsElement(cell));
+            assertFalse(ReachabilityWalker.isScalarReachable(cell),
+                    "an @_ style alias is not an independent Perl owner");
+            cell.scopeExited = true;
+            assertTrue(cell.isRetiredBorrowedArrayAlias());
+
+            packageRoot.markOwnedAliasElement(cell);
+            assertTrue(packageRoot.ownsElement(cell));
+            assertFalse(cell.isRetiredBorrowedArrayAlias());
+            assertTrue(ReachabilityWalker.isScalarReachable(cell),
+                    "an explicitly transferred alias element is an owner");
         }
     }
 
