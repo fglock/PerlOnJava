@@ -27,13 +27,19 @@ BEGIN {
 
 package LifetimeController;
 use Mojo::Base 'Mojolicious::Controller';
-sub DESTROY { shift->stash->{destroyed} = 1 }
+sub DESTROY {
+  my $self = shift;
+  $main::websocket_controller_destroyed = 1 if $self->stash->{websocket_lifetime};
+  $self->stash->{destroyed} = 1;
+}
 package main;
+our $push_timer_id;
+our $websocket_controller_destroyed = 0;
 app->controller_class('LifetimeController');
 websocket '/push' => sub {
   my $c = shift;
-  my $id = Mojo::IOLoop->recurring(0.1 => sub { $c->send('push') });
-  $c->on(finish => sub { Mojo::IOLoop->remove($id) });
+  $c->stash->{websocket_lifetime} = 1;
+  $push_timer_id = Mojo::IOLoop->recurring(0.1 => sub { $c->send('push') });
 };
 get '/longpoll' => sub {
   my $c = shift;
@@ -62,7 +68,11 @@ my $t = Test::Mojo->new;
 $t->websocket_ok('/push')
   ->message_ok->message_is('push')
   ->message_ok->message_is('push')
-  ->message_ok->message_is('push')->finish_ok;
+  ->message_ok->message_is('push');
+ok(!$websocket_controller_destroyed,
+  'WebSocket controller remains alive while the connection is open');
+Mojo::IOLoop->remove($push_timer_id);
+$t->finish_ok;
 $t->get_ok('/plugin/upper_case')->status_is(200)->content_is('WELCOME aboard!');
 $t->get_ok('/plugin/camel_case')->status_is(200)->content_is('Welcome aboard!');
 $t->get_ok('/staged' => {'X-Pass' => 1})->status_is(200)->content_is('Welcome aboard!');
@@ -72,6 +82,12 @@ my $stash;
 $t->app->plugins->once(before_dispatch => sub { $stash = shift->stash });
 $t->get_ok('/longpoll')->status_is(200)->content_is('Poll!');
 Mojo::IOLoop->one_tick until $stash->{finished};
+unless ($stash->{destroyed}) {
+  for (1 .. 10) {
+    last if $stash->{destroyed};
+    Mojo::IOLoop->one_tick;
+  }
+}
 is($stash->{finished}, 1, 'long-poll response has finished');
 ok($stash->{destroyed}, 'long-poll controller is destroyed after response finish');
 done_testing;
