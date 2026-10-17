@@ -135,7 +135,7 @@ public class MathOperators {
 
     private static boolean canMultiplyExactLong(RuntimeScalar scalar) {
         if (scalar.type == INTEGER) {
-            return scalar.value instanceof Long || scalar.value instanceof Integer;
+            return RuntimeScalar.isNativeIntegerValue(scalar.value);
         }
         if (scalar.type != DOUBLE) return false;
         double value = scalar.getDouble();

@@ -38,6 +38,26 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  * scalar.
  */
 public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference, DynamicState {
+    /** Mutable IV payload used by repeatedly updated scalar cells. */
+    private static final class MutableIntegerValue extends Number {
+        private static final long serialVersionUID = 1L;
+        private volatile long value;
+
+        private MutableIntegerValue(long value) { this.value = value; }
+        private void set(long value) { this.value = value; }
+        @Override public int intValue() { return (int) value; }
+        @Override public long longValue() { return value; }
+        @Override public float floatValue() { return value; }
+        @Override public double doubleValue() { return value; }
+        @Override public String toString() { return Long.toString(value); }
+    }
+
+    private static Object copyScalarPayload(int scalarType, Object payload) {
+        return scalarType == RuntimeScalarType.INTEGER && payload instanceof MutableIntegerValue integer
+                ? new MutableIntegerValue(integer.longValue())
+                : payload;
+    }
+
     /** Reject localizing a dereference whose source is an actual reference. */
     public static void rejectLocalizeThroughReference(RuntimeScalar source) {
         if (source != null && (source.type == RuntimeScalarType.UNDEF
@@ -843,7 +863,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             scalar.materializeGrowingString();
         }
         this.type = scalar.type;
-        this.value = scalar.value;
+        this.value = copyScalarPayload(scalar.type, scalar.value);
         this.utf8UncheckedOctets = scalar.utf8UncheckedOctets;
         this.utf8MalformedWarning = scalar.utf8MalformedWarning;
         this.tainted = scalar.tainted;
@@ -940,7 +960,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             case RuntimeScalar scalar -> {
                 this.type = scalar.type;
-                this.value = scalar.value;
+                this.value = copyScalarPayload(scalar.type, scalar.value);
                 this.utf8UncheckedOctets = scalar.utf8UncheckedOctets;
                 this.utf8MalformedWarning = scalar.utf8MalformedWarning;
                 this.tainted = scalar.tainted;
@@ -1552,6 +1572,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /** True when an integer uses arbitrary-precision or unsigned-word storage. */
     public static boolean isWideIntegerValue(Object value) {
         return value instanceof BigInteger || value instanceof UnsignedWordValue;
+    }
+
+    /** True when the payload uses a signed native-width integer representation. */
+    public static boolean isNativeIntegerValue(Object value) {
+        return value instanceof Integer || value instanceof Long
+                || value instanceof MutableIntegerValue;
     }
 
     public long getLong() {
@@ -2219,7 +2245,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         growingString = null;
         type = value.type;
-        this.value = value.value;
+        this.value = copyScalarPayload(value.type, value.value);
         utf8UncheckedOctets = value.utf8UncheckedOctets;
         utf8MalformedWarning = value.utf8MalformedWarning;
         tainted = value.tainted;
@@ -2253,7 +2279,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         growingString = null;
         transferableGrowingString = false;
-        setIntegerValue(result);
+        if (value instanceof MutableIntegerValue mutableInteger) {
+            mutableInteger.set(result);
+        } else if (result >= -128 && result <= 127) {
+            value = Integer.valueOf((int) result);
+        } else {
+            value = new MutableIntegerValue(result);
+        }
+        type = RuntimeScalarType.INTEGER;
         utf8UncheckedOctets = false;
         utf8MalformedWarning = null;
         tainted = resultTainted;
@@ -2324,7 +2357,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (value != null && this.type < TIED_SCALAR & value.type < TIED_SCALAR) {
             if (this != value) {
                 this.type = value.type;
-                this.value = value.value;
+                this.value = copyScalarPayload(value.type, value.value);
                 this.utf8UncheckedOctets = value.utf8UncheckedOctets;
                 this.utf8MalformedWarning = value.utf8MalformedWarning;
                 this.tainted = value.tainted;
@@ -2340,7 +2373,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 RuntimePosLvalue.invalidatePos(this);
             } else {
                 this.type = value.type;
-                this.value = value.value;
+                this.value = copyScalarPayload(value.type, value.value);
                 this.utf8UncheckedOctets = value.utf8UncheckedOctets;
                 this.utf8MalformedWarning = value.utf8MalformedWarning;
                 this.tainted = value.tainted;
@@ -2497,7 +2530,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // No MortalList.flush() here — neither old nor new value is a reference,
         // so no refCount was incremented/decremented, and no mortal entries were added.
         this.type = value.type;
-        this.value = value.value;
+        this.value = copyScalarPayload(value.type, value.value);
         this.utf8UncheckedOctets = value.utf8UncheckedOctets;
         this.utf8MalformedWarning = value.utf8MalformedWarning;
         this.tainted = value.tainted;
@@ -2562,7 +2595,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // fall through to full refCounted assignment
                 } else {
                     this.type = value.type;
-                    this.value = value.value;
+                    this.value = copyScalarPayload(value.type, value.value);
                     this.utf8UncheckedOctets = value.utf8UncheckedOctets;
                     this.utf8MalformedWarning = value.utf8MalformedWarning;
                     this.tainted = value.tainted;
@@ -2736,7 +2769,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         // Do the assignment
         this.type = value.type;
-        this.value = value.value;
+        this.value = copyScalarPayload(value.type, value.value);
         // An explicitly discarded closure can have an inflated CODE refcount,
         // so waiting for callDestroy() leaves its captures alive indefinitely.
         // Release them only after this slot is gone, the code is inactive, and
@@ -5590,7 +5623,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         if (result != null) {
                             // For fallback, + should NOT modify operand, so we handle assignment
                             this.type = result.type;
-                            this.value = result.value;
+                            this.value = copyScalarPayload(result.type, result.value);
                             return this;
                         }
 
@@ -5873,7 +5906,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         if (result != null) {
                             // For fallback, + should NOT modify operand, so we handle assignment
                             this.type = result.type;
-                            this.value = result.value;
+                            this.value = copyScalarPayload(result.type, result.value);
                             return old;
                         }
 
@@ -5996,7 +6029,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         if (copyResult != null) {
                             // Copy the cloned object's fields into this
                             this.type = copyResult.type;
-                            this.value = copyResult.value;
+                            this.value = copyScalarPayload(copyResult.type, copyResult.value);
                             copiedToPlainScalar = !RuntimeScalarType.isReference(this);
                         }
 
@@ -6025,7 +6058,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         if (result != null) {
                             // For fallback, - should NOT modify operand, so we handle assignment
                             this.type = result.type;
-                            this.value = result.value;
+                            this.value = copyScalarPayload(result.type, result.value);
                             return this;
                         }
                     }
@@ -6155,7 +6188,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         if (copyResult != null) {
                             // Copy the cloned object's fields into this
                             this.type = copyResult.type;
-                            this.value = copyResult.value;
+                            this.value = copyScalarPayload(copyResult.type, copyResult.value);
                             copiedToPlainScalar = !RuntimeScalarType.isReference(this);
                         }
 
@@ -6184,7 +6217,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         if (result != null) {
                             // For fallback, - should NOT modify operand, so we handle assignment
                             this.type = result.type;
-                            this.value = result.value;
+                            this.value = copyScalarPayload(result.type, result.value);
                             return old;
                         }
                     }
@@ -6290,7 +6323,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         RuntimeScalar currentState = new RuntimeScalar();
         // Copy the current type and value to the new state
         currentState.type = this.type;
-        currentState.value = this.value;
+        currentState.value = copyScalarPayload(this.type, this.value);
         currentState.blessId = this.blessId;
         currentState.ownsScalarReferenceContents = this.ownsScalarReferenceContents;
         currentState.referencedByScalarReference = this.referencedByScalarReference;
@@ -6355,7 +6388,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
             // Restore the type, value from the saved state
             this.type = previousState.type;
-            this.value = previousState.value;
+            this.value = copyScalarPayload(previousState.type, previousState.value);
             this.blessId = previousState.blessId;
             this.ownsScalarReferenceContents = previousState.ownsScalarReferenceContents;
             this.referencedByScalarReference =
@@ -6406,7 +6439,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         dynamicSaveState();
         if (token instanceof RuntimeScalar activeState) {
             this.type = activeState.type;
-            this.value = activeState.value;
+            this.value = copyScalarPayload(activeState.type, activeState.value);
             this.blessId = activeState.blessId;
             this.ownsScalarReferenceContents = activeState.ownsScalarReferenceContents;
             this.referencedByScalarReference = activeState.referencedByScalarReference;
