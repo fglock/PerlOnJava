@@ -2239,6 +2239,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
     // Method object representing the compiled subroutine (legacy - used by PerlModuleBase)
     public MethodHandle methodHandle;
+    private record WarningBitsCache(Class<?> codeClass, String bits) {}
+    private volatile WarningBitsCache warningBitsCache;
     // Functional interface for direct subroutine invocation (preferred for generated classes)
     public PerlSubroutine subroutine;
     public boolean isStatic;
@@ -8131,8 +8133,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             try {
                 // The type contains the declaring class as the first parameter type for instance methods
                 // For our generated apply methods, we use the class that was loaded
-                String className = code.methodHandle.type().parameterType(0).getName();
-                return compilationState.warningBitsByClass.get(className);
+                Class<?> codeClass = code.methodHandle.type().parameterType(0);
+                return warningBitsForClass(code, codeClass, compilationState);
             } catch (Exception e) {
                 // If we can't get the class name, fall back to null
                 return null;
@@ -8152,10 +8154,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // A generated JVM implementation has no placeholder methodHandle even
         // though its class registered the authoritative definition-time bits.
         if (code.codeObject != null) {
-            return compilationState.warningBitsByClass.get(code.codeObject.getClass().getName());
+            return warningBitsForClass(code, code.codeObject.getClass(), compilationState);
         }
         
         return null;
+    }
+
+    private static String warningBitsForClass(
+            RuntimeCode code, Class<?> codeClass,
+            org.perlonjava.runtime.CompilationRuntimeState compilationState) {
+        WarningBitsCache cached = code.warningBitsCache;
+        if (cached != null && cached.codeClass() == codeClass) {
+            return cached.bits();
+        }
+        String bits = compilationState.warningBitsByClass.get(codeClass.getName());
+        // Class-local warning bits are immutable for the lifetime of generated
+        // code. Leave misses uncached because a generated class can register
+        // its bits lazily during first invocation.
+        if (bits != null) {
+            code.warningBitsCache = new WarningBitsCache(codeClass, bits);
+        }
+        return bits;
     }
 
     /**
