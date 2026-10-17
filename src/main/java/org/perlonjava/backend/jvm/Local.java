@@ -12,10 +12,11 @@ public class Local {
 
     static int saveLocalLevel(EmitterContext ctx, MethodVisitor mv) {
         int dynamicIndex = ctx.symbolTable.allocateLocalVariable();
+        mv.visitVarInsn(Opcodes.ALOAD, ctx.javaClassInfo.jvmFrameStateSlot);
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
                 "getLocalLevel",
-                "()I",
+                "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;)I",
                 false);
         mv.visitVarInsn(Opcodes.ISTORE, dynamicIndex);
         return dynamicIndex;
@@ -25,12 +26,13 @@ public class Local {
         return saveLocalLevel(ctx, mv);
     }
 
-    static void localTeardown(int dynamicIndex, MethodVisitor mv) {
+    static void localTeardown(int dynamicIndex, MethodVisitor mv, int stateSlot) {
+        mv.visitVarInsn(Opcodes.ALOAD, stateSlot);
         mv.visitVarInsn(Opcodes.ILOAD, dynamicIndex);
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
                 "teardownFrameToLocalLevel",
-                "(I)V",
+                "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;I)V",
                 false);
     }
 
@@ -62,13 +64,14 @@ public class Local {
         return false;
     }
 
-    static void localTeardown(localRecord localRecord, MethodVisitor mv) {
+    static void localTeardown(localRecord localRecord, MethodVisitor mv, int stateSlot) {
         if (localRecord.needsCleanup()) {
+            mv.visitVarInsn(Opcodes.ALOAD, stateSlot);
             mv.visitVarInsn(Opcodes.ILOAD, localRecord.dynamicIndex());
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
                     "popToLocalLevel",
-                    "(I)V",
+                    "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;I)V",
                     false);
         }
     }

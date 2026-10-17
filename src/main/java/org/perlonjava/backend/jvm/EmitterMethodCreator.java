@@ -1260,7 +1260,7 @@ public class EmitterMethodCreator implements Opcodes {
 
                 // Teardown local variables — popToLocalLevel() also restores regex state
                 // (RegexState was pushed onto the DVM stack at sub entry).
-                Local.localTeardown(dynamicIndex, mv);
+                Local.localTeardown(dynamicIndex, mv, jvmFrameStateSlot);
 
                 // Deferred lexical cleanup runs after the eval body method
                 // returns. Drain it here, before clearing $@, when doing so
@@ -1381,7 +1381,7 @@ public class EmitterMethodCreator implements Opcodes {
                 // No try-catch: just do the teardown
                 // Teardown local variables — popToLocalLevel() also restores regex state
                 // (RegexState was pushed onto the DVM stack at sub entry).
-                Local.localTeardown(dynamicIndex, mv);
+                Local.localTeardown(dynamicIndex, mv, jvmFrameStateSlot);
             }
 
             mv.visitVarInsn(Opcodes.ALOAD, jvmFrameStateSlot);

@@ -680,7 +680,8 @@ public class EmitBlock {
         mv.visitLabel(redoLabel);
 
         // Restore 'local' environment if 'redo' was called
-        Local.localTeardown(localRecord, mv);
+        Local.localTeardown(localRecord, mv,
+                emitterVisitor.ctx.javaClassInfo.jvmFrameStateSlot);
 
         boolean switchContinueTarget = node.getBooleanAnnotation("switchContinueTarget");
         if (node.isLoop || switchContinueTarget) {
@@ -908,7 +909,8 @@ public class EmitBlock {
             }
         }
 
-        Local.localTeardown(localRecord, mv);
+        Local.localTeardown(localRecord, mv,
+                emitterVisitor.ctx.javaClassInfo.jvmFrameStateSlot);
 
         if (regexStateLocal >= 0) {
             mv.visitVarInsn(Opcodes.ALOAD, regexStateLocal);

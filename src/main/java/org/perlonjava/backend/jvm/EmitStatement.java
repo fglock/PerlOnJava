@@ -501,9 +501,12 @@ public class EmitStatement {
         int conditionLocalLevel = -1;
         if (FindDeclarationVisitor.containsLocalOrDefer(node.condition)) {
             conditionLocalLevel = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD,
+                    emitterVisitor.ctx.javaClassInfo.jvmFrameStateSlot);
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
-                    "getLocalLevel", "()I", false);
+                    "getLocalLevel",
+                    "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;)I", false);
             emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ISTORE, conditionLocalLevel);
         }
         node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
@@ -520,10 +523,13 @@ public class EmitStatement {
         // A local used as an if condition is scoped to the condition
         // expression, not to either branch of the if statement.
         if (conditionLocalLevel != -1) {
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD,
+                    emitterVisitor.ctx.javaClassInfo.jvmFrameStateSlot);
             emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ILOAD, conditionLocalLevel);
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
-                    "popToLocalLevel", "(I)V", false);
+                    "popToLocalLevel",
+                    "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;I)V", false);
         }
 
         // Jump to the else label if the condition is false
@@ -822,7 +828,8 @@ public class EmitStatement {
 
             // Restore local variables that were saved before the loop/block.
             // This catches `last` exits which bypass the body block's own localTeardown.
-            Local.localTeardown(for3LocalRecord, mv);
+            Local.localTeardown(for3LocalRecord, mv,
+                    emitterVisitor.ctx.javaClassInfo.jvmFrameStateSlot);
 
             // Exit the scope in the symbol table
             if (node.useNewScope) {
@@ -1080,7 +1087,8 @@ public class EmitStatement {
                 javaClassInfo.finallyBlockDepth--;
             }
         }
-        Local.localTeardown(errorLocalLevel, mv);
+        Local.localTeardown(errorLocalLevel, mv,
+                emitterVisitor.ctx.javaClassInfo.jvmFrameStateSlot);
         mv.visitLabel(finallyEnd);
 
         if (tryFinallyContext != null) {

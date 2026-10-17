@@ -17,7 +17,8 @@ priorities and future plans.
   methods; avoid inactive taint mode lookups for untainted plain integer
   compound-assignment operands; cache generated warning metadata and reuse
   integer payloads for repeatedly updated scalar cells; reuse captured runtime
-  state for generated call-frame bookkeeping and scalar-result recycling.
+  state for generated call-frame bookkeeping, scalar-result recycling, and
+  dynamic-local level reads and teardown.
 - Add a reproducible, warmup-aware Perl versus PerlOnJava performance runner (#1196).
 - Cover FormState session restoration across requests and HTTP response conversion from callback and streaming PSGI responses; refresh HTTP::Message and LWP compatibility status (#1650, #1651, #1652).
 - Preserve the awaited Future value when its source scalar or aggregate slot changes during suspension, covering PAGI::Server request-body receives (#1818).
