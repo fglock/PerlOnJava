@@ -120,6 +120,11 @@ public class DynamicVariableManager {
         variableStack().addLast(variable);
     }
 
+    static void pushLocalVariable(ExecutionRuntimeState executionState, DynamicState variable) {
+        variable.dynamicSaveState();
+        variableStack(executionState).addLast(variable);
+    }
+
     public static void enterDeferExecution() {
         DEFER_EXECUTION_DEPTH.set(DEFER_EXECUTION_DEPTH.get() + 1);
     }

@@ -15,6 +15,12 @@ import java.util.Set;
 
 /** Per-interpreter execution and dynamic-scope state migrated in Phase 5. */
 public final class ExecutionRuntimeState {
+    final PerlRuntime ownerRuntime;
+
+    ExecutionRuntimeState(PerlRuntime ownerRuntime) {
+        this.ownerRuntime = ownerRuntime;
+    }
+
     /** Set once the interpreter enters its global destruction phase. */
     boolean globalDestruction;
 

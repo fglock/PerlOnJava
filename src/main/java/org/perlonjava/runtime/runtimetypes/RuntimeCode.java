@@ -9599,7 +9599,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             boolean signatureCall = enterSignatureCall();
             try {
                 validateNamedSignatureArguments(a);
-                popSignatureValidationCallerFrame();
+                if (!signatureNamedParams.isEmpty() || "%".equals(signatureSlurpySigil)) {
+                    popSignatureValidationCallerFrame();
+                }
                 RuntimeList result;
                 // Prefer functional interface over MethodHandle for better performance
                 if (this.subroutine != null) {
@@ -9772,7 +9774,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             boolean signatureCall = enterSignatureCall();
             try {
                 validateNamedSignatureArguments(a);
-                popSignatureValidationCallerFrame();
+                if (!signatureNamedParams.isEmpty() || "%".equals(signatureSlurpySigil)) {
+                    popSignatureValidationCallerFrame();
+                }
                 RuntimeList result;
                 // Prefer functional interface over MethodHandle for better performance
                 if (this.subroutine != null) {

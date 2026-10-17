@@ -65,7 +65,7 @@ public final class PerlRuntime implements AutoCloseable {
     private volatile long perlThreadStackSize;
     private volatile boolean perlThreadExitOnly;
 
-    public ExecutionRuntimeState executionState = new ExecutionRuntimeState();
+    public ExecutionRuntimeState executionState = new ExecutionRuntimeState(this);
     public RuntimeRegexState regexState = new RuntimeRegexState();
     public MroRuntimeState mroState = new MroRuntimeState();
     public GlobalRuntimeState globalState = new GlobalRuntimeState();
@@ -698,7 +698,7 @@ public final class PerlRuntime implements AutoCloseable {
     }
 
     private void replaceRuntimeState() {
-        executionState = new ExecutionRuntimeState();
+        executionState = new ExecutionRuntimeState(this);
         regexState = new RuntimeRegexState();
         mroState = new MroRuntimeState();
         globalState = new GlobalRuntimeState();

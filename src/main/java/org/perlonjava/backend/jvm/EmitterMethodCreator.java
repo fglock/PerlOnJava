@@ -787,8 +787,10 @@ public class EmitterMethodCreator implements Opcodes {
             ctx.javaClassInfo.dynamicLevelSlot = dynamicIndex;
 
             if (!ctx.javaClassInfo.skipRegexStateSnapshot) {
+                mv.visitVarInsn(Opcodes.ALOAD, jvmFrameStateSlot);
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/runtimetypes/RegexState", "save", "()V", false);
+                        "org/perlonjava/runtime/runtimetypes/RegexState", "save",
+                        "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;)V", false);
             }
 
             // Store the computed RuntimeList return value in a dedicated local slot.
