@@ -1554,19 +1554,6 @@ public class ReachabilityWalker {
                         }
                     }
                 }
-                if (!includeOwnedCapturePads
-                        && code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
-                        && interpreted.capturedVars != null) {
-                    for (RuntimeBase captured : interpreted.capturedVars) {
-                        if (!budget.visitEdge()) break walk;
-                        if (stats != null) stats.edgesInspected++;
-                        if (captured instanceof RuntimeScalar scalar) {
-                            followScalarIncludingCode(scalar, null, seen, todo);
-                        } else if (captured != null && seen.add(captured)) {
-                            todo.addLast(captured);
-                        }
-                    }
-                }
             } else if (cur instanceof RuntimeRegex regex) {
                 for (RuntimeCode callback : regex.executableCallbackCodes()) {
                     if (!budget.visitEdge()) break walk;
@@ -2913,20 +2900,6 @@ public class ReachabilityWalker {
         // expose that ownership on every backend.
         if (code.closedOverVariables != null) {
             for (RuntimeBase captured : code.closedOverVariables.values()) {
-                if (budget != null && !budget.visitEdge()) return false;
-                if (captured == null) continue;
-                if (captured instanceof RuntimeScalar scalar) {
-                    if (followScalar(scalar, target, seen, todo)) return true;
-                } else if (captured == target) {
-                    return true;
-                } else if (seen.add(captured)) {
-                    todo.addLast(captured);
-                }
-            }
-        }
-        if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
-                && interpreted.capturedVars != null) {
-            for (RuntimeBase captured : interpreted.capturedVars) {
                 if (budget != null && !budget.visitEdge()) return false;
                 if (captured == null) continue;
                 if (captured instanceof RuntimeScalar scalar) {
