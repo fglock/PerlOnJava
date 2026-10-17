@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 closure-pad path is implemented and validated on both backends. Full UAT comparison, local gates, selected CPAN workloads, and PR CI pass. PR #1653 remains a draft pending review.
+**Status:** Phase 1 closure-pad path is complete. Phase 2 is in progress in [PR #1816](https://github.com/fglock/PerlOnJava/pull/1816); its current candidate passes local `make`, Ubuntu/Windows CI, and the unchanged HTML-Tree lifecycle suite on both backends. Ordinary array/hash slots still use the legacy selective count as lifecycle authority.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
@@ -105,7 +105,9 @@ and first path establish implementation cost.
 
 ## Progress tracking
 
-### Current status: Phase 1 complete; merged in PR #1653 as `84f32be179bdc2b351c3eaae1cb26df39964ab6b` (2026-10-07)
+### Current status: Phase 2 in progress; Phase 1 merged in PR #1653 as `84f32be179bdc2b351c3eaae1cb26df39964ab6b` (2026-10-07)
+
+The #1794/#1795 regression candidate is open in [PR #1816](https://github.com/fglock/PerlOnJava/pull/1816), rebased onto master `6b577fd68a179452561695a9e6bba784d9195060`. Its full `nice -n 19 make` and Ubuntu/Windows CI pass. HTML-Tree 5.07 passes all 23 files / 989 tests on the JVM backend; unchanged `t/refloop.t` passes 8/8 on blead Perl 5.45.4, JVM, and interpreter. A new ordinary aggregate element refcount test passes on blead Perl 5.45.4 and both local backends, covering insert, push, shift, replace, delete, and final destruction. This is integration evidence only: array/hash owner slots currently identify edges, but `RuntimeBase.refCount`, `refCountOwned`, and reachability cleanup remain authoritative for ordinary aggregate stores. The Catalyst test still emits a global-destruction warning on both PerlOnJava backends.
 
 ### Completed
 
@@ -301,10 +303,12 @@ and first path establish implementation cost.
 
 ### Next steps
 
-1. Extend the ownership path through scalar proxies and ordinary array/hash
-   slots in Phase 2. Keep the newly passing HTML::Tree suite as an integration
-   guard, then verify its exact refcount/destruction assertions are supported by
-   explicit owner slots rather than cleanup reachability fallbacks.
+1. Migrate ordinary array/hash element stores and scalar proxies from the
+   selective `refCount` bridge to owner-slot accounting. Cover acquisition,
+   transfer, replacement, deletion, aliases, and final release with exact
+   refcount/weak-reference/DESTROY assertions before using HTML-Tree as the
+   integration guard. Remove reachability cleanup authority only for paths
+   whose ownership transitions are fully represented by slots.
 2. Resolve the strict target failures in the fresh-home CPAN release
    acceptance, then rerun that gate on the final candidate. The current run
    distinguishes prerequisite/setup timeouts and missing dependencies from
