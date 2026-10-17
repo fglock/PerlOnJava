@@ -860,7 +860,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // package so calls made by that subroutine capture the right package,
         // even when the sub itself was invoked from another package.
         if (code.packageName != null && !code.packageName.isEmpty()) {
-            callerPackage.set(code.packageName);
+            callerPackage.setInternalPackageName(code.packageName);
         }
     }
 
@@ -903,7 +903,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Deque<ActiveLexicalFrame> frames = activeLexicalFrames(executionState);
         if (!frames.isEmpty() && frames.peek().code() == code) {
             ActiveLexicalFrame frame = frames.pop();
-            executionState.currentCallerPackage.set(frame.previousCallerPackage());
+            executionState.currentCallerPackage.setInternalPackageName(
+                    frame.previousCallerPackage());
             recycleActiveLexicalFrame(frame, executionState);
         } else {
             var iterator = frames.iterator();

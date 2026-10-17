@@ -3255,6 +3255,25 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return this;
     }
 
+    /** Set the private caller-package tracker without scalar magic checks. */
+    RuntimeScalar setInternalPackageName(String value) {
+        if (getClass() != RuntimeScalar.class || type >= TIED_SCALAR) {
+            return set(value);
+        }
+        growingString = null;
+        type = value == null ? UNDEF : RuntimeScalarType.STRING;
+        this.value = value;
+        utf8UncheckedOctets = false;
+        utf8MalformedWarning = null;
+        tainted = false;
+        numericLiteralText = null;
+        numericContextSeen = false;
+        firstClassRegexScalar = false;
+        formatPictureTainted = false;
+        notifyModifiedWatchers();
+        return this;
+    }
+
     public RuntimeScalar set(RuntimeGlob value) {
         return set(new RuntimeScalar(value));
     }
