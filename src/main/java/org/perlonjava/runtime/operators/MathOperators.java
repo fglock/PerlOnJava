@@ -469,8 +469,7 @@ public class MathOperators {
             long b = right.getLong();
             try {
                 long sum = Math.addExact(a, b);
-                boolean resultTainted = GlobalContext.isTaintModeActive()
-                        && (left.isTainted() || right.isTainted());
+                boolean resultTainted = integerResultTainted(left, right);
                 return target.setArithmeticIntegerResult(sum, resultTainted);
             } catch (ArithmeticException ignored) {
                 // Preserve the usual UV/NV promotion path on native-IV overflow.
@@ -492,12 +491,18 @@ public class MathOperators {
         long rightValue = right.getLong();
         try {
             long sum = Math.addExact(leftValue, rightValue);
-            boolean resultTainted = GlobalContext.isTaintModeActive()
-                    && (left.isTainted() || right.isTainted());
+            boolean resultTainted = integerResultTainted(left, right);
             return target.setArithmeticIntegerResult(sum, resultTainted);
         } catch (ArithmeticException ignored) {
             return null;
         }
+    }
+
+    private static boolean integerResultTainted(RuntimeScalar left, RuntimeScalar right) {
+        if (left.getClass() == RuntimeScalar.class && right.getClass() == RuntimeScalar.class) {
+            return (left.tainted || right.tainted) && GlobalContext.isTaintModeActive();
+        }
+        return GlobalContext.isTaintModeActive() && (left.isTainted() || right.isTainted());
     }
 
     private static RuntimeScalar addWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
