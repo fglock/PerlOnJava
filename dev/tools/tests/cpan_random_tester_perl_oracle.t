@@ -20,64 +20,63 @@ ok(defined $timeout_source, 'extracted standard-Perl oracle timeout calculation'
 eval $timeout_source;
 die "cannot load oracle timeout calculation: $@" if $@;
 
-my ($probe_source) = $source =~ /(sub standard_perl_module_probe_command \{.*?)(?=\n\n# ═)/s;
-ok(defined $probe_source, 'extracted standard-Perl module probe');
-eval $probe_source;
-die "cannot load standard-Perl module probe: $@" if $@;
+my ($cpan_helpers_source) = $source =~ /(sub standard_perl_cpan_command \{.*?)(?=\n\n# ═)/s;
+ok(defined $cpan_helpers_source, 'extracted standard-Perl CPAN helpers');
+eval $cpan_helpers_source;
+die "cannot load standard-Perl CPAN helpers: $@" if $@;
 
-my ($apply_source) = $source =~ /(sub apply_standard_perl_oracle \{.*?)(?=\nsub cpan_archive_for_module_in_log)/s;
+my ($apply_source) = $source =~ /(sub apply_standard_perl_oracle \{.*?)(?=\nsub run_standard_perl_oracle)/s;
 ok(defined $apply_source, 'extracted standard-Perl oracle result handling');
 eval $apply_source;
 die "cannot load standard-Perl oracle result handling: $@" if $@;
 
-my $cmd = standard_perl_module_probe_command('strict');
+my $cmd = standard_perl_cpan_command(
+    '/usr/bin/cpan', '/tmp/oracle-cpan-config.pm', 'XML::Parser::Style::RDF',
+);
 is_deeply(
     $cmd,
-    [$^X, '-Mstrict', '-e', 'print "PERLONJAVA_MODULE_LOAD_OK\n"'],
-    'module probe invokes the selected module through the current Perl executable',
+    ['/usr/bin/cpan', '-j', '/tmp/oracle-cpan-config.pm', '-t', 'XML::Parser::Style::RDF'],
+    'oracle asks standard CPAN to test the requested module with its isolated config',
 );
-ok(!standard_perl_module_probe_command('bad module'),
-    'module probe rejects invalid module names');
-ok(standard_perl_module_probe_succeeded("PERLONJAVA_MODULE_LOAD_OK\n"),
-    'module probe recognizes a successful load marker');
-ok(!standard_perl_module_probe_succeeded("Can't locate Missing.pm\n"),
-    'module probe recognizes a standard-Perl load failure');
+ok(!standard_perl_cpan_command('/usr/bin/cpan', '/tmp/cpan-config.pm', 'bad module'),
+    'CPAN command builder rejects invalid module names');
+ok(!standard_perl_cpan_command('', '/tmp/cpan-config.pm', 'Foo::Bar'),
+    'CPAN command builder rejects an unavailable cpan executable');
+ok(!standard_perl_cpan_command('/usr/bin/cpan', '', 'Foo::Bar'),
+    'CPAN command builder rejects a missing isolated config');
 
 $perl_oracle_timeout = 30;
 $perl_oracle_log_dir = tempdir(CLEANUP => 1);
 sub safe_log_name { return $_[0] }
 
-my ($mock_output, $mock_timeout);
+my $isolated_cpan_home = File::Spec->catdir($perl_oracle_log_dir, 'isolated-cpan');
+my $isolated_config = File::Spec->catfile($perl_oracle_log_dir, 'isolated-cpan-config.pm');
+ok(write_standard_perl_cpan_config($isolated_config, $isolated_cpan_home),
+    'writes the standard Perl CPAN configuration into the oracle directory');
+my $saved_cpan_config = $CPAN::Config;
+ok(do $isolated_config, 'generated CPAN config is loadable');
+is($CPAN::Config->{cpan_home}, $isolated_cpan_home,
+    'isolated CPAN config redirects CPAN state into the oracle directory');
+is($CPAN::Config->{build_dir}, File::Spec->catdir($isolated_cpan_home, 'build'),
+    'isolated CPAN config redirects build trees into the oracle directory');
+$CPAN::Config = $saved_cpan_config;
+
 {
     no warnings 'redefine';
     no warnings 'once';
-    local *main::run_with_timeout = sub {
-        return ($mock_output, $mock_timeout, '');
-    };
-
-    ($mock_output, $mock_timeout) = ("Can't locate Authen/SASL/Perl/Layer.pm\n", 0);
-    is((run_standard_perl_module_probe('Authen::SASL::Perl::Layer', 90))[0], 'FAIL',
-        'an unresolved module is a standard-Perl failure even without a CPAN archive');
-
-    ($mock_output, $mock_timeout) = ("PERLONJAVA_MODULE_LOAD_OK\n", 0);
-    is((run_standard_perl_module_probe('strict', 90))[0], 'PASS',
-        'a module available to standard Perl passes the module probe');
-
-    ($mock_output, $mock_timeout) = ('', 1);
-    is((run_standard_perl_module_probe('strict', 90))[0], 'TIMEOUT',
-        'a timed-out module probe remains inconclusive');
-
-    local *main::cpan_archive_for_module_in_log = sub { return undef };
-    local *main::run_standard_perl_module_probe = sub { return ('FAIL', 'probe.log') };
-    my $source_log = File::Spec->catfile($perl_oracle_log_dir, 'target.log');
-    open my $source_fh, '>', $source_log or die "cannot create $source_log: $!";
-    close $source_fh or die "cannot close $source_log: $!";
+    local *main::run_standard_perl_oracle = sub { return ('FAIL', 'oracle.log') };
     my $unresolved_target = [{ module => 'Authen::SASL::Perl::Layer', status => 'FAIL' }];
-    apply_standard_perl_oracle($unresolved_target, $source_log, 90);
+    apply_standard_perl_oracle($unresolved_target, 90);
     is($unresolved_target->[0]{status}, 'PERL_FAIL',
-        'a missing CPAN archive falls back to standard-Perl module loading');
-    is($unresolved_target->[0]{perl_oracle_log}, 'probe.log',
-        'fallback probe log is attached to the result');
+        'a standard CPAN test failure is marked as a standard-Perl failure');
+    is($unresolved_target->[0]{perl_oracle_log}, 'oracle.log',
+        'standard CPAN oracle log is attached to the result');
+
+    local *main::run_standard_perl_oracle = sub { return ('UNAVAILABLE', 'oracle.log') };
+    my $download_failure = [{ module => 'XML::Parser::Style::RDF', status => 'FAIL' }];
+    apply_standard_perl_oracle($download_failure, 90);
+    is($download_failure->[0]{status}, 'FAIL',
+        'an unavailable standard CPAN test does not claim the module fails on Perl');
 }
 
 done_testing;
