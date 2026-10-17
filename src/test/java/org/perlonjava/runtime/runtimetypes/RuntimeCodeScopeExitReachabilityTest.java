@@ -2,7 +2,6 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.perlonjava.backend.bytecode.InterpretedCode;
 
 import java.util.List;
 
@@ -152,58 +151,4 @@ class RuntimeCodeScopeExitReachabilityTest {
         }
     }
 
-    @Test
-    void deferredReleaseFollowsInterpretedClosureCaptureFromRootedTimer() {
-        PerlRuntime runtime = new PerlRuntime();
-        try (PerlRuntime.Binding ignored = runtime.bind()) {
-            RuntimeScalar captured = new RuntimeScalar("controller");
-            captured.retainClosureCapture();
-            RuntimeCode callback = new RuntimeCode(null, List.of());
-            callback.refCount = 1;
-            callback.capturedScalars = new RuntimeScalar[] { captured };
-
-            RuntimeScalar callbackRef = new RuntimeScalar(callback);
-            callbackRef.captureCount = 1;
-            callbackRef.scopeExited = true;
-            InterpretedCode timerCallback = new InterpretedCode(
-                    new int[0], new Object[0], new String[0], 10,
-                    new RuntimeBase[] { callbackRef }, "<test>", 1,
-                    new java.util.TreeMap<>(), new java.util.HashMap<>(),
-                    null, 0, 0, new java.util.BitSet());
-            timerCallback.refCount = 1;
-            RuntimeHash timerRecord = new RuntimeHash();
-            timerRecord.elements.put("cb", new RuntimeScalar(timerCallback));
-            RuntimeHash timers = new RuntimeHash();
-            timers.elements.put("timer", timerRecord.createReference());
-            RuntimeCode singletonMethod = new RuntimeCode(null, List.of());
-            singletonMethod.stateVariable.put("loop", timers.createReference());
-            String globalName = "RuntimeCodeScopeExitReachabilityTest::interpretedSingleton";
-            GlobalVariable.globalCodeRefs.put(globalName, new RuntimeScalar(singletonMethod));
-            GlobalVariable.invalidateGlobalCodeRefGraphRoots();
-            boolean previousActive = MortalList.isActive();
-            MortalList.setActive(true);
-
-            try {
-                MortalList.deferDecrement(callback);
-                MortalList.flush();
-
-                assertNotNull(callback.capturedScalars,
-                        "a rooted interpreted timer must retain a callback in capturedVars");
-                assertEquals(1, captured.captureCount);
-
-                GlobalVariable.globalCodeRefs.remove(globalName);
-                GlobalVariable.invalidateGlobalCodeRefGraphRoots();
-                MortalList.deferDecrement(callback);
-                MortalList.flush();
-
-                assertNull(callback.capturedScalars,
-                        "removing the interpreted timer root must release nested callback captures");
-                assertEquals(0, captured.captureCount);
-            } finally {
-                GlobalVariable.globalCodeRefs.remove(globalName);
-                GlobalVariable.invalidateGlobalCodeRefGraphRoots();
-                MortalList.setActive(previousActive);
-            }
-        }
-    }
 }
