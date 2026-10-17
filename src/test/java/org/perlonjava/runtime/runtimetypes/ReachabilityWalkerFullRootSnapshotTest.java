@@ -14,6 +14,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class ReachabilityWalkerFullRootSnapshotTest {
     @Test
+    void scopeExitedScalarInLiveVarSnapshotIsNotAnOwner() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeScalar expired = new RuntimeScalar();
+            expired.scopeExited = true;
+            MyVarCleanupStack.register(expired);
+            MyVarCleanupStack.snapshotStackToLiveCounts();
+            try {
+                assertFalse(ReachabilityWalker.isScalarReachable(expired),
+                        "a stale live-var snapshot must not revive an expired scalar");
+            } finally {
+                MyVarCleanupStack.unregister(expired);
+            }
+        }
+    }
+
+    @Test
     void oneSnapshotAnswersAllTargetsLikeThePerTargetRootWalk() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
