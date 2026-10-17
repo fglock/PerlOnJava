@@ -2725,6 +2725,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * captures, those are released recursively.
      */
     public void releaseCaptures() {
+        if (System.getenv("PJ_TRACE_CODE_CREATION") != null
+                && cvStartFile != null
+                && (cvStartFile.contains("mojolicious_websocket_callback_lifetime")
+                || cvStartFile.contains("Mojo/IOLoop.pm"))) {
+            System.err.println("[CV-RELEASE] source=" + cvStartFile + ":" + cvStartLine
+                    + " class=" + (codeObject == null ? "null" : codeObject.getClass().getName())
+                    + " code=" + System.identityHashCode(this)
+                    + " refCount=" + refCount
+                    + " captured=" + (capturedScalars == null ? 0 : capturedScalars.length)
+                    + " closedOver=" + (closedOverVariables == null
+                    ? "[]" : closedOverVariables.keySet())
+                    + " path=" + ReachabilityWalker.findPathTo(this, true));
+        }
         if (capturedScalars != null) {
             RuntimeScalar[] scalars = capturedScalars;
             capturedScalars = null;  // null out first to prevent re-entry
@@ -5250,6 +5263,32 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             code.capturedAggregates = capturedAggregates.toArray(new RuntimeBase[0]);
             code.capturedAggregateOwnerSlots =
                     capturedAggregateOwnerSlots.toArray(new PerlOwnerSlot[0]);
+        }
+        if (System.getenv("PJ_TRACE_CODE_CREATION") != null
+                && cvStartFile != null
+                && (cvStartFile.contains("mojolicious_websocket_callback_lifetime")
+                || cvStartFile.contains("Mojo/IOLoop.pm"))) {
+            System.err.println("[CV-CREATE] source=" + cvStartFile + ":" + cvStartLine
+                    + " class=" + clazz.getName()
+                    + " code=" + System.identityHashCode(code)
+                    + " captured=" + captured.size()
+                    + " aggregates=" + capturedAggregates.size()
+                    + " closedOver=" + (code.closedOverVariables == null
+                    ? "[]" : code.closedOverVariables.keySet()));
+            for (Field f : allFields) {
+                try {
+                    Object value = f.get(codeObject);
+                    System.err.println("[CV-FIELD] " + f.getName() + ":"
+                            + f.getType().getSimpleName() + "="
+                            + (value instanceof RuntimeScalar scalar
+                            ? "scalar#" + System.identityHashCode(scalar) + "/type" + scalar.type
+                            : value instanceof RuntimeBase base
+                            ? base.getClass().getSimpleName() + "#" + System.identityHashCode(base)
+                            : value == null ? "null" : value.getClass().getSimpleName()));
+                } catch (IllegalAccessException ignored) {
+                    System.err.println("[CV-FIELD] " + f.getName() + "=<inaccessible>");
+                }
+            }
         }
         GlobalVariable.invalidateGlobalCodeRefGraphRoots();
 
