@@ -3547,6 +3547,34 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return this.hashDeref().get(index);
     }
 
+    /**
+     * Fetch a literal key after the generated method's argument guard has
+     * proved that this scalar points to an ordinary plain hash without a
+     * {@code %\{\}} overload. Keep the defensive type check here so an
+     * incorrect compiler guard falls back to the full Perl dereference path.
+     */
+    public static RuntimeScalar hashDerefGetForVerifiedPlainHashMethod(
+            RuntimeScalar target, RuntimeScalar index) {
+        if (target.type == HASHREFERENCE
+                && target.value != null
+                && target.value.getClass() == RuntimeHash.class
+                && ((RuntimeHash) target.value).type == RuntimeHash.PLAIN_HASH) {
+            return ((RuntimeHash) target.value).get(index);
+        }
+        return target.hashDerefGet(index);
+    }
+
+    public static RuntimeScalar hashDerefGetForVerifiedPlainHashMethodNonStrict(
+            RuntimeScalar target, RuntimeScalar index, String packageName) {
+        if (target.type == HASHREFERENCE
+                && target.value != null
+                && target.value.getClass() == RuntimeHash.class
+                && ((RuntimeHash) target.value).type == RuntimeHash.PLAIN_HASH) {
+            return ((RuntimeHash) target.value).get(index);
+        }
+        return target.hashDerefGetNonStrict(index, packageName);
+    }
+
     // Method to implement `$v->{key}`, when "no strict refs" is in effect
     public RuntimeScalar hashDerefGetNonStrict(RuntimeScalar index, String packageName) {
         return this.hashDerefNonStrict(packageName).get(index);
