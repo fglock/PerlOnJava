@@ -25,6 +25,8 @@ public class NameNormalizer {
         final Map<String, Integer> blessIdCache = new java.util.HashMap<>();
         final Map<Integer, String> blessStrCache = new java.util.HashMap<>();
         final Map<Integer, Integer> effectiveBlessIdCache = new java.util.HashMap<>();
+        int lastEffectiveBlessId;
+        int lastEffectiveBlessResult;
         int currentBlessId;
         int currentOverloadedBlessId = -1;
 
@@ -38,6 +40,8 @@ public class NameNormalizer {
             target.blessStrCache.clear();
             target.blessStrCache.putAll(blessStrCache);
             target.effectiveBlessIdCache.clear();
+            target.lastEffectiveBlessId = 0;
+            target.lastEffectiveBlessResult = 0;
             target.currentBlessId = currentBlessId;
             target.currentOverloadedBlessId = currentOverloadedBlessId;
         }
@@ -95,6 +99,8 @@ public class NameNormalizer {
         State state = state();
         state.blessIdCache.clear();
         state.effectiveBlessIdCache.clear();
+        state.lastEffectiveBlessId = 0;
+        state.lastEffectiveBlessResult = 0;
     }
 
     /**
@@ -107,23 +113,36 @@ public class NameNormalizer {
         if (id == 0) return id;
 
         State state = state();
+        if (state.lastEffectiveBlessId == id) {
+            return state.lastEffectiveBlessResult;
+        }
         Integer cachedEffective = state.effectiveBlessIdCache.get(id);
-        if (cachedEffective != null) return cachedEffective;
+        if (cachedEffective != null) {
+            state.lastEffectiveBlessId = id;
+            state.lastEffectiveBlessResult = cachedEffective;
+            return cachedEffective;
+        }
 
         String className = state.blessStrCache.get(id);
         if (className == null || "__ANON__".equals(className)) {
             state.effectiveBlessIdCache.put(id, id);
+            state.lastEffectiveBlessId = id;
+            state.lastEffectiveBlessResult = id;
             return id;
         }
 
         Integer cached = state.blessIdCache.get(className);
         if (cached != null && cached < 0) {
             state.effectiveBlessIdCache.put(id, cached);
+            state.lastEffectiveBlessId = id;
+            state.lastEffectiveBlessResult = cached;
             return cached;
         }
 
         int effective = cached != null ? cached : getBlessId(className);
         state.effectiveBlessIdCache.put(id, effective);
+        state.lastEffectiveBlessId = id;
+        state.lastEffectiveBlessResult = effective;
         return effective;
     }
 
