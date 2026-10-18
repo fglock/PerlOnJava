@@ -9415,6 +9415,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return savedScope;
     }
 
+    /**
+     * Read the live warning-scope scalar at JVM call entry without routing the
+     * common no-stash-alias case through the current-runtime map proxy. The
+     * slot is read on every call because {@code local} may replace it; unusual
+     * stash aliases retain the general name-resolution path.
+     */
+    private static RuntimeScalar currentWarningScopeScalar(PerlRuntime runtime) {
+        GlobalRuntimeState state = runtime.globalState;
+        if (state.stashAliases().isEmpty()) {
+            RuntimeScalar scalar = state.scalarValues().get(GlobalContext.WARNING_SCOPE);
+            if (scalar != null) {
+                return scalar;
+            }
+        }
+        return GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE);
+    }
+
     private static Set<String> callerDisabledWarningCategories(
             org.perlonjava.runtime.CompilationRuntimeState compilationState,
             Set<String> runtimeDisabled,
@@ -9592,7 +9609,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             Set<String> savedRuntimeDisabledWarnings =
                     compilationState.runtimeDisabledWarningCategories;
             compilationState.runtimeDisabledWarningCategories = lexicalDisabledWarningCategories;
-            RuntimeScalar warningScopeScalar = GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE);
+            RuntimeScalar warningScopeScalar = currentWarningScopeScalar(runtime);
             int savedRuntimeWarningScope = enterCalleeWarningScope(warningScopeScalar);
             JvmClosureFrame closureFrame = jvmClosureFrameRequired
                     ? pushJvmClosureFrame() : null;
