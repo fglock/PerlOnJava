@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 closure-pad path is complete. Phase 2 is in progress in [PR #1816](https://github.com/fglock/PerlOnJava/pull/1816). The latest local ownership candidate passes `nice -n 19 make`; its PR update and CI run are pending. The unchanged HTML-Tree lifecycle suite passes on both backends. Ordinary array/hash slots still use the legacy selective count as lifecycle authority.
+**Status:** Phase 1 closure-pad path is complete. Phase 2 is in progress in [PR #1816](https://github.com/fglock/PerlOnJava/pull/1816). The WebSocket controller release regression has been pushed to the draft PR; its updated CI run is pending. The latest local ownership candidate passes `nice -n 19 make`; the unchanged HTML-Tree lifecycle suite passes on both backends. Ordinary array/hash slots still use the legacy selective count as lifecycle authority.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
