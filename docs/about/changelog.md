@@ -12,7 +12,8 @@ priorities and future plans.
 - Improve JVM execution performance for the bit-packed Life example, ordinary scalar assignments, and common blessing lookups.
 - Improve JVM method-call throughput with guarded argument unpacking, cached
   empty inheritance checks, direct small literal-argument frames, cached
-  negative overload metadata, and guard-verified literal hash reads; skip regex
+  negative overload metadata, guard-verified literal hash reads, and stable
+  integer hash-field cells in eligible arithmetic methods; skip regex
   snapshots and return-time context scans for proven call-free arithmetic
   methods; avoid inactive taint mode lookups for untainted plain integer
   compound-assignment operands; cache generated warning metadata and reuse

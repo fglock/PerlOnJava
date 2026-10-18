@@ -30,7 +30,8 @@ public final class ReadOnlyArgumentUnpackAnalysis {
             int hashArgumentIndex,
             int integerArgumentIndex,
             List<String> hashKeys,
-            boolean freshScalarReturn) {}
+            boolean freshScalarReturn,
+            boolean stableHashFieldCells) {}
 
     private record Visit(Node node, Node parent) {}
 
@@ -170,8 +171,66 @@ public final class ReadOnlyArgumentUnpackAnalysis {
                     && isFreshNumericExpression(returnValues.elements.getFirst(),
                             integerArgumentName, hashArgumentName, hashKeys);
         }
+        String integerArgumentName = argumentNameAtIndex(argumentIndices, integerIndex);
+        String hashArgumentName = argumentNameAtIndex(argumentIndices, 0);
+        boolean stableHashFieldCells = freshScalarReturn
+                && integerArgumentName != null && hashArgumentName != null
+                && hasOnlyStableHashCellStatements(block, assignment, onlyReturnStatement,
+                        hashArgumentName, integerArgumentName, hashKeys);
         return new Candidate(assignment, Map.copyOf(argumentIndices), 0,
-                integerIndex, List.copyOf(hashKeys), freshScalarReturn);
+                integerIndex, List.copyOf(hashKeys), freshScalarReturn, stableHashFieldCells);
+    }
+
+    /**
+     * Proves that cached hash value cells cannot be replaced during the body.
+     * Restrict this optimization to simple integer compound updates followed
+     * by the already-proven fresh numeric return; other statements may call
+     * user code or mutate/delete hash entries through another path.
+     */
+    private static boolean hasOnlyStableHashCellStatements(
+            BlockNode block, BinaryOperatorNode unpack, Node returnStatement,
+            String hashArgumentName, String integerArgumentName, Set<String> hashKeys) {
+        if (returnStatement == null) return false;
+        for (Node element : block.elements) {
+            Node statement = unwrapSingleElementLists(element);
+            if (statement == unpack || statement == returnStatement) continue;
+            if (statement instanceof ListNode empty && empty.elements.isEmpty()) continue;
+            if (!(statement instanceof BinaryOperatorNode update)
+                    || !"+=".equals(update.operator)
+                    || !isHashCellForParameter(update.left, hashArgumentName, hashKeys)
+                    || !isIntegerParameter(update.right, integerArgumentName)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static Node unwrapSingleElementLists(Node node) {
+        while (node instanceof ListNode list && list.elements.size() == 1) {
+            node = list.elements.getFirst();
+        }
+        return node;
+    }
+
+    private static boolean isHashCellForParameter(
+            Node node, String hashArgumentName, Set<String> hashKeys) {
+        if (!(node instanceof BinaryOperatorNode arrow)
+                || !"->".equals(arrow.operator)
+                || !(arrow.left instanceof OperatorNode variable)
+                || !"$".equals(variable.operator)
+                || !(variable.operand instanceof IdentifierNode identifier)
+                || !hashArgumentName.equals("$" + identifier.name)) {
+            return false;
+        }
+        String key = literalHashKey(arrow);
+        return key != null && hashKeys.contains(key);
+    }
+
+    private static boolean isIntegerParameter(Node node, String integerArgumentName) {
+        return node instanceof OperatorNode variable
+                && "$".equals(variable.operator)
+                && variable.operand instanceof IdentifierNode identifier
+                && integerArgumentName.equals("$" + identifier.name);
     }
 
     private static int parameterUseKind(Node variable, Node parent) {

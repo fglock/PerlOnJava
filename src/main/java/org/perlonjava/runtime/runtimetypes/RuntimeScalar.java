@@ -3616,6 +3616,29 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return target.hashDerefGet(index);
     }
 
+    /** Fetch an existing literal field cell for a compiler-proven guarded method body. */
+    public static RuntimeScalar getReadOnlyPlainHashMethodField(
+            RuntimeScalar target, String key) {
+        if (target != null && target.type == HASHREFERENCE
+                && target.value != null
+                && target.value.getClass() == RuntimeHash.class) {
+            RuntimeHash hash = (RuntimeHash) target.value;
+            if (hash.type == RuntimeHash.PLAIN_HASH
+                    && !hash.threadShared && !hash.isEnvironmentHash) {
+                return hash.elements.get(key);
+            }
+        }
+        return null;
+    }
+
+    /** Whether a field cell can be reused without bypassing scalar magic. */
+    public static boolean isCacheableReadOnlyPlainHashMethodField(RuntimeScalar value) {
+        return value != null
+                && value.getClass() == RuntimeScalar.class
+                && value.type == INTEGER
+                && !value.hasWatchers();
+    }
+
     /** Fast literal lookup for an ASCII key proven safe by the generated method guard. */
     public static RuntimeScalar hashDerefGetForVerifiedPlainHashMethodAsciiKey(
             RuntimeScalar target, RuntimeScalar index, String asciiKey) {

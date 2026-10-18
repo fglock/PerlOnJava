@@ -472,6 +472,7 @@ public class EmitterMethodCreator implements Opcodes {
                 org.perlonjava.frontend.analysis.RegexStateSnapshotAnalysis.canSkipSnapshot(ast);
         ctx.javaClassInfo.readOnlyArgumentFlagSlot = -1;
         ctx.javaClassInfo.readOnlyArgumentSlots = java.util.Collections.emptyMap();
+        ctx.javaClassInfo.readOnlyArgumentHashFieldSlots = java.util.Collections.emptyMap();
         ctx.javaClassInfo.readOnlyArgumentFreshScalarReturn =
                 ctx.javaClassInfo.readOnlyArgumentCandidate != null
                         && ctx.javaClassInfo.readOnlyArgumentCandidate.freshScalarReturn();

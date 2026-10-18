@@ -77,12 +77,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /**
      * Guard for the generated read-only parameter-unpack fast path. The
-     * compiler proves that the lexical parameters are only read; this runtime
-     * check keeps overloaded, tied, and non-integer values on the copy path.
+     * runtime validates the argument/hash shape and overload state; stable
+     * field-cell candidates validate each field before enabling cached reads.
      */
     public static boolean canBorrowReadOnlyArguments(
             RuntimeArray args, int hashArgumentIndex, int integerArgumentIndex,
-            String firstHashKey, String secondHashKey) {
+            String firstHashKey, String secondHashKey, boolean cacheHashFieldCells) {
         if (args == null || args.getClass() != RuntimeArray.class
                 || args.type != RuntimeArray.PLAIN_ARRAY
                 || hashArgumentIndex < 0 || hashArgumentIndex >= args.size()
@@ -105,11 +105,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (blessId < 0 && OverloadContext.hasDirectOverload(self, "(%{}")) {
             return false;
         }
-        RuntimeScalar firstValue = hash.elements.get(firstHashKey);
-        if (firstValue == null || firstValue.type != INTEGER) return false;
-        if (secondHashKey != null) {
-            RuntimeScalar secondValue = hash.elements.get(secondHashKey);
-            if (secondValue == null || secondValue.type != INTEGER) return false;
+        if (cacheHashFieldCells) {
+            if (hash.threadShared || hash.isEnvironmentHash) return false;
+        } else {
+            RuntimeScalar firstValue = hash.elements.get(firstHashKey);
+            if (firstValue == null || firstValue.type != INTEGER) return false;
+            if (secondHashKey != null) {
+                RuntimeScalar secondValue = hash.elements.get(secondHashKey);
+                if (secondValue == null || secondValue.type != INTEGER) return false;
+            }
         }
         RuntimeScalar integerArgument = args.get(integerArgumentIndex);
         return integerArgument != null && integerArgument.type == INTEGER;

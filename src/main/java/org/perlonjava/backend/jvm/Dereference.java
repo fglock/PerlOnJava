@@ -1543,6 +1543,7 @@ public class Dereference {
 
         boolean verifiedPlainHashArgument = false;
         String verifiedPlainHashAsciiKey = null;
+        Integer cachedHashFieldSlot = null;
         var readOnlyCandidate = emitterVisitor.ctx.javaClassInfo.readOnlyArgumentCandidate;
         if ("get".equals(hashOperation)
                 && readOnlyCandidate != null
@@ -1560,6 +1561,10 @@ public class Dereference {
                     && readOnlyCandidate.hashKeys().contains(key.value);
             if (verifiedPlainHashArgument && key.value.chars().allMatch(character -> character < 128)) {
                 verifiedPlainHashAsciiKey = key.value;
+            }
+            if (verifiedPlainHashArgument && readOnlyCandidate.stableHashFieldCells()) {
+                cachedHashFieldSlot = emitterVisitor.ctx.javaClassInfo
+                        .readOnlyArgumentHashFieldSlots.get(key.value);
             }
         }
 
@@ -1593,31 +1598,35 @@ public class Dereference {
             emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ILOAD,
                     emitterVisitor.ctx.javaClassInfo.readOnlyArgumentFlagSlot);
             emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.IFEQ, ordinaryHashDereference);
-            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
-            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, keySlot);
-            boolean asciiLiteralKey = verifiedPlainHashAsciiKey != null;
-            if (asciiLiteralKey) emitterVisitor.ctx.mv.visitLdcInsn(verifiedPlainHashAsciiKey);
-            if (strictRefs) {
-                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                        asciiLiteralKey
-                                ? "hashDerefGetForVerifiedPlainHashMethodAsciiKey"
-                                : "hashDerefGetForVerifiedPlainHashMethod",
-                        asciiLiteralKey
-                                ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
-                                : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                        false);
+            if (cachedHashFieldSlot != null) {
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, cachedHashFieldSlot);
             } else {
-                emitterVisitor.pushCurrentPackage();
-                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                        asciiLiteralKey
-                                ? "hashDerefGetForVerifiedPlainHashMethodAsciiKeyNonStrict"
-                                : "hashDerefGetForVerifiedPlainHashMethodNonStrict",
-                        asciiLiteralKey
-                                ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
-                                : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                        false);
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, keySlot);
+                boolean asciiLiteralKey = verifiedPlainHashAsciiKey != null;
+                if (asciiLiteralKey) emitterVisitor.ctx.mv.visitLdcInsn(verifiedPlainHashAsciiKey);
+                if (strictRefs) {
+                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                            asciiLiteralKey
+                                    ? "hashDerefGetForVerifiedPlainHashMethodAsciiKey"
+                                    : "hashDerefGetForVerifiedPlainHashMethod",
+                            asciiLiteralKey
+                                    ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                                    : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                            false);
+                } else {
+                    emitterVisitor.pushCurrentPackage();
+                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                            asciiLiteralKey
+                                    ? "hashDerefGetForVerifiedPlainHashMethodAsciiKeyNonStrict"
+                                    : "hashDerefGetForVerifiedPlainHashMethodNonStrict",
+                            asciiLiteralKey
+                                    ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                                    : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                            false);
+                }
             }
             emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.GOTO, hashDereferenceDone);
             emitterVisitor.ctx.mv.visitLabel(ordinaryHashDereference);
