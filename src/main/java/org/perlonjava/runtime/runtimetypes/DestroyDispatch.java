@@ -33,9 +33,13 @@ public class DestroyDispatch {
         return state().currentDestroyTarget;
     }
 
-    static boolean isCheckingGlobalOwnerDelta() {
+    static boolean isInGlobalDestructionPhase() {
         String phase = GlobalVariable.getGlobalVariable(GlobalContext.GLOBAL_PHASE).toString();
-        return "DESTRUCT".equals(phase) || MortalList.isDrainingTopLevelTemporary();
+        return "DESTRUCT".equals(phase);
+    }
+
+    static boolean isCheckingGlobalOwnerDelta() {
+        return isInGlobalDestructionPhase() || MortalList.isDrainingTopLevelTemporary();
     }
 
     static void markDestroyTargetRescued() {
