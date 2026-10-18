@@ -48,6 +48,38 @@ class DestroyDispatchAggregateOwnerRootTest {
     }
 
     @Test
+    void legacyCapturePadCountsOnlyWhenReachableThroughRootedCode() {
+        PerlRuntime runtime = new PerlRuntime();
+        String globalName = "DestroyDispatchAggregateOwnerRootTest::capturing_closure";
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray temporaryReferent = new RuntimeArray();
+            RuntimeScalar temporaryPad = temporaryReferent.createReference();
+            PerlOwnerSlot temporarySlot = new PerlOwnerSlot(
+                    PerlOwnerSlot.Kind.CLOSURE_PAD, temporaryPad);
+            temporarySlot.acquireCapture(temporaryReferent);
+            assertFalse(hasNewRootedOwner(temporaryReferent),
+                    "a pad retained only by an unrooted code object is not resurrection");
+            temporarySlot.release();
+
+            RuntimeArray rootedReferent = new RuntimeArray();
+            RuntimeScalar rootedPad = rootedReferent.createReference();
+            RuntimeCode rootedClosure = new RuntimeCode(null, java.util.List.of());
+            rootedClosure.capturedScalars = new RuntimeScalar[] {rootedPad};
+            GlobalVariable.globalCodeRefs.put(globalName, new RuntimeScalar(rootedClosure));
+            PerlOwnerSlot rootedSlot = new PerlOwnerSlot(
+                    PerlOwnerSlot.Kind.CLOSURE_PAD, rootedPad);
+            rootedSlot.acquireCapture(rootedReferent);
+            try {
+                assertTrue(hasNewRootedOwner(rootedReferent),
+                        "a pad captured by package-global code is resurrection");
+            } finally {
+                GlobalVariable.globalCodeRefs.remove(globalName);
+                rootedSlot.release();
+            }
+        }
+    }
+
+    @Test
     void destructorLocalHashEntryDoesNotCountAsResurrection() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
