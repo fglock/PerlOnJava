@@ -1935,13 +1935,33 @@ public class MortalList {
         for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
             if (slot.kind() != PerlOwnerSlot.Kind.HASH_ENTRY) continue;
             RuntimeBase owner = slot.ownerContainer();
-            if (owner instanceof RuntimeHash
+            boolean rootedOwner = owner instanceof RuntimeHash
                     && (owner.semanticCaptureOwnerCount() > 0
                     || (!owner.scopeExited && MyVarCleanupStack.isRegistered(owner))
-                    || ReachabilityWalker.isReachableFromRoots(owner, true, referent))) {
-                RuntimeScalar cell = slot.ownerCell();
-                if (cell == null) slotsWithoutCell++;
-                else rootedHashCells.add(cell);
+                    || ReachabilityWalker.isReachableFromRoots(owner, true, referent));
+            if (!rootedOwner) continue;
+            RuntimeScalar cell = slot.ownerCell();
+            if (cell == null) {
+                slotsWithoutCell++;
+            } else if (cell.value == referent && cell.refCountOwned
+                    && !WeakRefRegistry.isweak(cell)) {
+                rootedHashCells.add(cell);
+            }
+        }
+        // Arrays need a stricter proof than hashes here. A transitive root walk
+        // can cross closure pads or diagnostic cycles and outlive the Perl
+        // element owner. A directly package-rooted array is an unambiguous
+        // owner when its current scalar cell is a strong reference.
+        for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
+            if (slot.kind() != PerlOwnerSlot.Kind.ARRAY_ELEMENT) continue;
+            RuntimeBase owner = slot.ownerContainer();
+            if (!(owner instanceof RuntimeArray array) || !array.isPackageGlobalRoot) continue;
+            RuntimeScalar cell = slot.ownerCell();
+            if (cell == null) {
+                slotsWithoutCell++;
+            } else if (cell.value == referent && cell.refCountOwned
+                    && !WeakRefRegistry.isweak(cell)) {
+                rootedHashCells.add(cell);
             }
         }
         int owners = slotsWithoutCell + rootedHashCells.size();
