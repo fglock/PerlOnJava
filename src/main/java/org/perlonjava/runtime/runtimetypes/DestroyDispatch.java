@@ -716,16 +716,18 @@ public class DestroyDispatch {
                 // roots are still available to the reachability walker, so
                 // require a new scalar owner to remain rooted before warning.
                 if (owner.isRetiredBorrowedArrayAlias()) continue;
-                if (!activeOwnersAtStart.contains(owner)
-                        && ReachabilityWalker.isScalarReachableFromPackageRoots(owner)) {
-                    return true;
+                if (!activeOwnersAtStart.contains(owner)) {
+                    boolean rooted = ReachabilityWalker.isScalarReachableFromPackageRoots(
+                            owner, referent);
+                    if (rooted) return true;
                 }
             }
             for (PerlOwnerSlot ownerSlot : referent.ownerSlotSnapshot()) {
                 if (ownerSlotsAtStart.contains(ownerSlot)) continue;
                 RuntimeBase ownerContainer = ownerSlot.ownerContainer();
                 if (ownerContainer != null
-                        && ReachabilityWalker.isReachableFromRoots(ownerContainer, true)) {
+                        && ReachabilityWalker.isReachableFromRoots(
+                                ownerContainer, true, referent)) {
                     return true;
                 }
                 // Closure pads have no aggregate container. When capture
@@ -736,7 +738,8 @@ public class DestroyDispatch {
                     if (closureOwner == null
                             || ReachabilityWalker.isCodeReachableFromRoots(closureOwner)) {
                         if (closureOwner == null && ownerSlot.padCell() != null) {
-                            if (ReachabilityWalker.isScalarReachable(ownerSlot.padCell())) {
+                            if (ReachabilityWalker.isScalarReachableFromPackageRoots(
+                                    ownerSlot.padCell(), referent)) {
                                 return true;
                             }
                         } else {

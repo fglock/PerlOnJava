@@ -2971,10 +2971,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && containerOwner != null
                 && !(containerOwner instanceof RuntimeHash owner
                     && owner.isPackageRootedHash())
-                && (!DestroyDispatch.isInGlobalDestructionPhase()
-                    || ReachabilityWalker.isReachableFromRoots(containerOwner, true))
                 && this.value instanceof RuntimeBase base
-                && base == DestroyDispatch.currentDestroyTarget()) {
+                && base == DestroyDispatch.currentDestroyTarget()
+                && (!DestroyDispatch.isInGlobalDestructionPhase()
+                    || ReachabilityWalker.isReachableFromRoots(
+                            containerOwner, true, base))) {
             DestroyDispatch.markDestroyTargetRescued();
             // Transition from destroyed (MIN_VALUE) to tracked so that when the
             // rescuing reference is eventually released (e.g., source goes out of

@@ -52,6 +52,107 @@ class DestroyDispatchAggregateOwnerRootTest {
     }
 
     @Test
+    void scalarOwnerInsideDyingReferentDoesNotCountAsResurrection() {
+        PerlRuntime runtime = new PerlRuntime();
+        String rootName = "DestroyDispatchAggregateOwnerRootTest::self_root";
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash referent = new RuntimeHash();
+            referent.activateOwnerTracking();
+            GlobalVariable.globalHashes.put(rootName, referent);
+            RuntimeScalar selfOwner = referent.createReference();
+            referent.put("self", selfOwner);
+            try {
+                assertFalse(hasNewRootedOwner(referent),
+                        "a new scalar owner reached only through the dying object is not resurrection");
+            } finally {
+                referent.elements.clear();
+                referent.releaseHashEntryOwnerSlots();
+                GlobalVariable.globalHashes.remove(rootName);
+            }
+        }
+    }
+
+    @Test
+    void aggregateOwnerContainerInsideDyingReferentDoesNotCountAsResurrection() {
+        PerlRuntime runtime = new PerlRuntime();
+        String rootName = "DestroyDispatchAggregateOwnerRootTest::aggregate_self_root";
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash referent = new RuntimeHash();
+            RuntimeHash ownerContainer = new RuntimeHash();
+            referent.activateOwnerTracking();
+            GlobalVariable.globalHashes.put(rootName, referent);
+            ownerContainer.put("self", referent.createReference());
+            referent.put("container", ownerContainer.createReference());
+            try {
+                assertFalse(hasNewRootedOwner(referent),
+                        "an owner container reached only through the dying object is not resurrection");
+            } finally {
+                ownerContainer.elements.clear();
+                ownerContainer.releaseHashEntryOwnerSlots();
+                referent.elements.clear();
+                referent.releaseHashEntryOwnerSlots();
+                GlobalVariable.globalHashes.remove(rootName);
+            }
+        }
+    }
+
+    @Test
+    void legacyClosurePadReachableOnlyThroughDyingReferentDoesNotCountAsResurrection() {
+        PerlRuntime runtime = new PerlRuntime();
+        String rootName = "DestroyDispatchAggregateOwnerRootTest::closure_self_root";
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash referent = new RuntimeHash();
+            referent.activateOwnerTracking();
+            GlobalVariable.globalHashes.put(rootName, referent);
+            RuntimeScalar padCell = referent.createReference();
+            referent.put("pad", padCell);
+            PerlOwnerSlot slot = new PerlOwnerSlot(
+                    PerlOwnerSlot.Kind.CLOSURE_PAD, padCell);
+            slot.acquireCapture(referent);
+            try {
+                assertFalse(hasNewRootedOwner(referent),
+                        "a legacy closure pad reachable only through the dying object is not resurrection");
+            } finally {
+                slot.release();
+                referent.elements.clear();
+                referent.releaseHashEntryOwnerSlots();
+                GlobalVariable.globalHashes.remove(rootName);
+            }
+        }
+    }
+
+    @Test
+    void incompleteSmallRootBudgetDoesNotTreatNestedArrayOwnerAsResurrection() {
+        PerlRuntime runtime = new PerlRuntime();
+        String referentRoot = "DestroyDispatchAggregateOwnerRootTest::large_self_root";
+        String paddingRoot = "DestroyDispatchAggregateOwnerRootTest::large_padding";
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash referent = new RuntimeHash();
+            RuntimeArray ownerArray = new RuntimeArray();
+            RuntimeArray padding = new RuntimeArray(60_000);
+            referent.activateOwnerTracking();
+            GlobalVariable.globalHashes.put(referentRoot, referent);
+            GlobalVariable.globalArrays.put(paddingRoot, padding);
+            for (int i = 0; i < 60_000; i++) {
+                padding.elements.add(new RuntimeScalar(i));
+            }
+            ownerArray.push(referent.createReference());
+            referent.put("owner", ownerArray.createReference());
+            try {
+                assertFalse(hasNewRootedOwner(referent),
+                        "a capped walk across unrelated package roots must not invent resurrection through the dying referent");
+            } finally {
+                ownerArray.elements.clear();
+                ownerArray.releaseArrayElementOwnerSlots();
+                referent.elements.clear();
+                referent.releaseHashEntryOwnerSlots();
+                GlobalVariable.globalHashes.remove(referentRoot);
+                GlobalVariable.globalArrays.remove(paddingRoot);
+            }
+        }
+    }
+
+    @Test
     void captureFromUnrootedClosureDoesNotCountAsResurrection() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {

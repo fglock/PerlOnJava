@@ -71,6 +71,43 @@ class DestroyDispatchWeakSlotRescueRootTest {
         }
     }
 
+    @Test
+    void weakSelfReplacementInHashReachableOnlyThroughDyingTargetCannotRescue() {
+        PerlRuntime runtime = new PerlRuntime();
+        String rootName = "DestroyDispatchWeakSlotRescueRootTest::self_root";
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeScalar phase = GlobalVariable.getGlobalVariable(GlobalContext.GLOBAL_PHASE);
+            String oldPhase = phase.toString();
+            RuntimeBase previousTarget = runtime.lifecycleState.currentDestroyTarget;
+            boolean previousRescued = runtime.lifecycleState.destroyTargetRescued;
+            RuntimeArray target = new RuntimeArray();
+            RuntimeHash nestedHash = new RuntimeHash();
+            RuntimeArray globalArray = new RuntimeArray();
+            globalArray.add(target.createReference());
+            target.add(nestedHash.createReference());
+            GlobalVariable.globalArrays.put(rootName, globalArray);
+            RuntimeScalar weakCell = weakSelfCell(target, nestedHash);
+            try {
+                phase.set("DESTRUCT");
+                runtime.lifecycleState.currentDestroyTarget = target;
+                runtime.lifecycleState.destroyTargetRescued = false;
+
+                weakCell.set(target.createReference());
+
+                assertFalse(runtime.lifecycleState.destroyTargetRescued,
+                        "a weak slot reached only through the dying referent cannot rescue it");
+            } finally {
+                nestedHash.elements.clear();
+                target.elements.clear();
+                globalArray.elements.clear();
+                GlobalVariable.globalArrays.remove(rootName);
+                runtime.lifecycleState.currentDestroyTarget = previousTarget;
+                runtime.lifecycleState.destroyTargetRescued = previousRescued;
+                phase.set(oldPhase);
+            }
+        }
+    }
+
     private static RuntimeScalar weakSelfCell(RuntimeBase target, RuntimeHash container) {
         RuntimeScalar weakCell = target.createReference();
         container.elements.put("self", weakCell);
