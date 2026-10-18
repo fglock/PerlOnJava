@@ -1919,7 +1919,18 @@ public class ReachabilityWalker {
     }
 
     static ScalarRootReachabilitySnapshot scalarReachabilitySnapshot() {
-        return scalarReachabilitySnapshot(MAX_ROOT_SNAPSHOT_VISITS, false);
+        return scalarReachabilitySnapshot(MAX_ROOT_SNAPSHOT_VISITS, false, true);
+    }
+
+    /**
+     * Bounded scalar-owner proof from package roots only. Destruction-time
+     * resurrection checks must not treat a still-active local cleanup frame
+     * as a persistent Perl owner.
+     */
+    static boolean isScalarReachableFromPackageRoots(RuntimeScalar target) {
+        if (target == null) return false;
+        return scalarReachabilitySnapshot(MAX_ROOT_SNAPSHOT_VISITS, false, false)
+                .isReachable(target);
     }
 
     /**
@@ -1927,11 +1938,11 @@ public class ReachabilityWalker {
      * distinguish a real owner from a capture cycle beyond its visit limit.
      */
     static ScalarRootReachabilitySnapshot completeScalarReachabilitySnapshot() {
-        return scalarReachabilitySnapshot(Integer.MAX_VALUE, true);
+        return scalarReachabilitySnapshot(Integer.MAX_VALUE, true, true);
     }
 
     private static ScalarRootReachabilitySnapshot scalarReachabilitySnapshot(
-            int maxVisits, boolean includeTransientRoots) {
+            int maxVisits, boolean includeTransientRoots, boolean includeLiveVars) {
         ReachabilityQueryStats stats = MortalList.activeReachabilityQueryStats();
         if (stats != null) {
             stats.snapshotsBuilt++;
@@ -1979,9 +1990,11 @@ public class ReachabilityWalker {
         for (RuntimeHash hash : GlobalVariable.globalHashValuesView()) {
             addScalarReachabilityRoot(hash, seen, reachableScalars, todo, stats);
         }
-        for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
-            if (liveVar instanceof RuntimeBase base) {
-                addScalarReachabilityRoot(base, seen, reachableScalars, todo, stats);
+        if (includeLiveVars) {
+            for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
+                if (liveVar instanceof RuntimeBase base) {
+                    addScalarReachabilityRoot(base, seen, reachableScalars, todo, stats);
+                }
             }
         }
 

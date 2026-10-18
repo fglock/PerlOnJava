@@ -711,7 +711,7 @@ public class DestroyDispatch {
                 // require a new scalar owner to remain rooted before warning.
                 if (owner.isRetiredBorrowedArrayAlias()) continue;
                 if (!activeOwnersAtStart.contains(owner)
-                        && ReachabilityWalker.isScalarReachable(owner)) {
+                        && ReachabilityWalker.isScalarReachableFromPackageRoots(owner)) {
                     return true;
                 }
             }
