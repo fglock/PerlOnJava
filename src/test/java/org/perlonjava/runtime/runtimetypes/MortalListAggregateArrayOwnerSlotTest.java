@@ -13,6 +13,7 @@ class MortalListAggregateArrayOwnerSlotTest {
         String className = "MortalListAggregateArrayOwnerSlotTest::Tracked";
         String rootName = "MortalListAggregateArrayOwnerSlotTest::root";
         String weakRootName = "MortalListAggregateArrayOwnerSlotTest::weak_root";
+        String weakHashName = "MortalListAggregateArrayOwnerSlotTest::weak_hash";
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             boolean previousActive = MortalList.isActive();
             RuntimeHash referent = new RuntimeHash();
@@ -28,6 +29,11 @@ class MortalListAggregateArrayOwnerSlotTest {
             RuntimeScalar weakEntry = weakRoot.elements.get(0);
             WeakRefRegistry.weaken(weakEntry);
             GlobalVariable.aliasGlobalArray(weakRootName, weakRoot);
+            RuntimeHash weakHash = new RuntimeHash();
+            RuntimeScalar weakHashEntry = referenceTo(referent);
+            weakHash.elements.put("value", weakHashEntry);
+            WeakRefRegistry.weaken(weakHashEntry);
+            GlobalVariable.aliasGlobalHash(weakHashName, weakHash);
 
             RuntimeScalar lexicalOwner = referenceTo(referent);
             lexicalOwner.refCountOwned = true;
@@ -48,12 +54,14 @@ class MortalListAggregateArrayOwnerSlotTest {
                         referent.perlLifecycleState(),
                         "a package-rooted strong array element retains its referent");
                 assertEquals(2, referent.refCount,
-                        "the strong array element and lexical owner are restored, but not the weak slot");
+                        "only the strong array element and lexical owner are restored");
 
                 // Keep the weak edge in place for the count assertion, then
                 // remove its diagnostic root before proving final destruction.
                 weakRoot.elements.clear();
                 GlobalVariable.globalArrays.remove(weakRootName);
+                weakHash.elements.clear();
+                GlobalVariable.globalHashes.remove(weakHashName);
                 WeakRefRegistry.clearWeakRefsTo(referent);
 
                 RuntimeScalar removed = root.elements.remove(0);
@@ -76,6 +84,7 @@ class MortalListAggregateArrayOwnerSlotTest {
                 MyVarCleanupStack.unregister(lexicalOwner);
                 GlobalVariable.globalArrays.remove(rootName);
                 GlobalVariable.globalArrays.remove(weakRootName);
+                GlobalVariable.globalHashes.remove(weakHashName);
                 GlobalVariable.removeGlobalCodeRefForStashDelete(className + "::DESTROY");
             }
         }
