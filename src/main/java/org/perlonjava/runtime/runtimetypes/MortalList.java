@@ -1731,6 +1731,17 @@ public class MortalList {
                 // have a legacy bridge count and retain the old compatibility
                 // sentinel behavior.
                 if (base.nativeCaptureOwnerCount() == 0) base.refCount = 1;
+            } else if (restoreRootedHashEntryOwnerCount(base)) {
+                // A hash-entry owner has a stable semantic slot identity even
+                // when an unrelated legacy scalar decrement consumes the
+                // selective count. Restore the count from independently owned
+                // hash slots that still lead from package roots. Hash entries
+                // are copied SV slots; borrowed array aliases are deliberately
+                // excluded here and remain on their legacy path.
+                //
+                // This is a migration bridge: the owner slot is authoritative
+                // for whether the entry still exists, while refCount remains
+                // the dispatch counter until all aggregate stores are migrated.
             } else if (base instanceof RuntimeCode code
                     && ReachabilityWalker.isCodeReachableFromRoots(code)) {
                 // A callback stored in a long-lived Perl container can have
@@ -1915,6 +1926,22 @@ public class MortalList {
                 DestroyDispatch.callDestroy(base);
             }
         }
+    }
+
+    /** Restore legacy count for hash-entry owner slots still reachable from Perl roots. */
+    private static boolean restoreRootedHashEntryOwnerCount(RuntimeBase referent) {
+        int owners = 0;
+        for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
+            if (slot.kind() != PerlOwnerSlot.Kind.HASH_ENTRY) continue;
+            RuntimeBase owner = slot.ownerContainer();
+            if (owner instanceof RuntimeHash
+                    && ReachabilityWalker.isReachableFromRoots(owner, true, referent)) {
+                owners++;
+            }
+        }
+        if (owners == 0) return false;
+        referent.refCount = owners;
+        return true;
     }
 
     private static boolean blessedClassHasDestroy(RuntimeBase base) {
