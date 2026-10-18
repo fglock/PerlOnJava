@@ -9417,14 +9417,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * stash aliases retain the general name-resolution path.
      */
     private static RuntimeScalar currentWarningScopeScalar(PerlRuntime runtime) {
-        GlobalRuntimeState state = runtime.globalState;
-        if (state.stashAliases().isEmpty()) {
-            RuntimeScalar scalar = state.scalarValues().get(GlobalContext.WARNING_SCOPE);
-            if (scalar != null) {
-                return scalar;
-            }
-        }
-        return GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE);
+        return runtime.globalState.warningScopeScalar();
     }
 
     private static Set<String> callerDisabledWarningCategories(

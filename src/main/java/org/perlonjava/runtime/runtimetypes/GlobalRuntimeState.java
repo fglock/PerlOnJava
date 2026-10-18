@@ -58,6 +58,7 @@ public final class GlobalRuntimeState {
     private final Map<String, Boolean> packageExistsCache = new HashMap<>();
     /** The pin that currently reads each linked package scalar; detached pins are removed. */
     private final Map<String, ScalarPin> attachedScalarPins = new HashMap<>();
+    private volatile RuntimeScalar warningScopeScalar;
     private final Set<String> declaredGlobalVariables = new HashSet<>();
     private final Set<String> declaredGlobalArrays = new HashSet<>();
     private final Set<String> declaredGlobalHashes = new HashSet<>();
@@ -94,6 +95,7 @@ public final class GlobalRuntimeState {
 
     void invalidateScalarBindingCache() {
         scalarBindingVersion.incrementAndGet();
+        warningScopeScalar = null;
     }
 
     /** Core package array slots owned by this runtime. */
@@ -200,6 +202,15 @@ public final class GlobalRuntimeState {
 
     Map<String, ScalarPin> attachedScalarPins() {
         return attachedScalarPins;
+    }
+
+    RuntimeScalar warningScopeScalar() {
+        RuntimeScalar scalar = warningScopeScalar;
+        if (scalar == null) {
+            scalar = GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE);
+            warningScopeScalar = scalar;
+        }
+        return scalar;
     }
 
     Map<String, Boolean> packageExistsCache() {

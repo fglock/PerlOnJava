@@ -232,10 +232,12 @@ public class GlobalVariable {
 
     /** Called when {@code name} leaves its stash. Sites that already hold its pin keep {@code removed}. */
     public static void detachScalarPin(String name, RuntimeScalar removed) {
-        ScalarPin pin = attachedScalarPins().remove(name);
+        GlobalRuntimeState state = globalState();
+        ScalarPin pin = state.attachedScalarPins().remove(name);
         if (pin != null) {
             pin.detach(removed != null ? removed : new RuntimeScalar());
         }
+        if (GlobalContext.WARNING_SCOPE.equals(name)) state.invalidateScalarBindingCache();
     }
 
     private static Set<String> deletedCodeRefPins() {
