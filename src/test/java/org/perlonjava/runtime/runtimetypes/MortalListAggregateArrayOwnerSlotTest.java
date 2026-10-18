@@ -24,6 +24,9 @@ class MortalListAggregateArrayOwnerSlotTest {
             RuntimeArray root = new RuntimeArray();
             root.push(referenceTo(referent));
             GlobalVariable.aliasGlobalArray(rootName, root);
+            RuntimeArray lexicalRoot = new RuntimeArray();
+            lexicalRoot.push(referenceTo(referent));
+            MyVarCleanupStack.register(lexicalRoot);
             RuntimeArray weakRoot = new RuntimeArray();
             weakRoot.push(referenceTo(referent));
             RuntimeScalar weakEntry = weakRoot.elements.get(0);
@@ -53,8 +56,8 @@ class MortalListAggregateArrayOwnerSlotTest {
                 assertEquals(RuntimeBase.PerlLifecycleState.LIVE,
                         referent.perlLifecycleState(),
                         "a package-rooted strong array element retains its referent");
-                assertEquals(2, referent.refCount,
-                        "only the strong array element and lexical owner are restored");
+                assertEquals(3, referent.refCount,
+                        "both rooted strong array elements and the lexical owner are restored");
 
                 // Keep the weak edge in place for the count assertion, then
                 // remove its diagnostic root before proving final destruction.
@@ -69,9 +72,15 @@ class MortalListAggregateArrayOwnerSlotTest {
                 MortalList.flush();
 
                 assertEquals(RuntimeBase.PerlLifecycleState.LIVE,
-                        referent.perlLifecycleState(),
-                        "removing the array element preserves the lexical owner");
-                assertEquals(1, referent.refCount);
+                        referent.perlLifecycleState());
+                assertEquals(2, referent.refCount,
+                        "the registered lexical array and scalar owner remain");
+
+                RuntimeScalar lexicalArrayEntry = lexicalRoot.elements.remove(0);
+                MortalList.deferDecrementIfTracked(lexicalArrayEntry);
+                MortalList.flush();
+                assertEquals(1, referent.refCount,
+                        "removing the lexical array element preserves the scalar owner");
 
                 MortalList.deferDecrementIfTracked(lexicalOwner);
                 MortalList.flush();
@@ -82,6 +91,7 @@ class MortalListAggregateArrayOwnerSlotTest {
             } finally {
                 MortalList.setActive(previousActive);
                 MyVarCleanupStack.unregister(lexicalOwner);
+                MyVarCleanupStack.unregister(lexicalRoot);
                 GlobalVariable.globalArrays.remove(rootName);
                 GlobalVariable.globalArrays.remove(weakRootName);
                 GlobalVariable.globalHashes.remove(weakHashName);
