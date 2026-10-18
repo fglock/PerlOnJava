@@ -729,7 +729,13 @@ public class DestroyDispatch {
                     RuntimeCode closureOwner = ownerSlot.closureOwner();
                     if (closureOwner == null
                             || ReachabilityWalker.isCodeReachableFromRoots(closureOwner)) {
-                        return true;
+                        if (closureOwner == null && ownerSlot.padCell() != null) {
+                            if (ReachabilityWalker.isScalarReachable(ownerSlot.padCell())) {
+                                return true;
+                            }
+                        } else {
+                            return true;
+                        }
                     }
                 }
             }
