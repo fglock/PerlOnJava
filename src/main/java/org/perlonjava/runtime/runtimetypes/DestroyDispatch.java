@@ -33,6 +33,11 @@ public class DestroyDispatch {
         return state().currentDestroyTarget;
     }
 
+    static boolean isCheckingGlobalOwnerDelta() {
+        String phase = GlobalVariable.getGlobalVariable(GlobalContext.GLOBAL_PHASE).toString();
+        return "DESTRUCT".equals(phase) || MortalList.isDrainingTopLevelTemporary();
+    }
+
     static void markDestroyTargetRescued() {
         LifecycleRuntimeState state = state();
         state.destroyTargetRescued = true;
@@ -415,10 +420,7 @@ public class DestroyDispatch {
         // can be distinguished from real resurrection during teardown. There
         // is intentionally no backfill: package roots are themselves being
         // dismantled, while any new owner created by DESTROY is recorded.
-        String globalPhase = GlobalVariable.getGlobalVariable(
-                GlobalContext.GLOBAL_PHASE).toString();
-        boolean checkingGlobalOwnerDelta = "DESTRUCT".equals(globalPhase)
-                || MortalList.isDrainingTopLevelTemporary();
+        boolean checkingGlobalOwnerDelta = isCheckingGlobalOwnerDelta();
         Set<RuntimeScalar> activeOwnersAtStart = null;
         Set<PerlOwnerSlot> ownerSlotsAtStart = null;
         if (checkingGlobalOwnerDelta) {
