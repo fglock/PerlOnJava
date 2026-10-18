@@ -11,6 +11,43 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class DestroyDispatchAggregateOwnerRootTest {
     @Test
+    void captureFromUnrootedClosureDoesNotCountAsResurrection() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            RuntimeCode temporaryClosure = new RuntimeCode();
+            PerlOwnerSlot slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
+            slot.acquireCapture(referent, temporaryClosure);
+            try {
+                assertFalse(hasNewRootedOwner(referent),
+                        "a capture owned only by an unrooted closure is not resurrection");
+            } finally {
+                slot.release();
+            }
+        }
+    }
+
+    @Test
+    void captureFromPackageGlobalClosureCountsAsResurrection() {
+        PerlRuntime runtime = new PerlRuntime();
+        String globalName = "DestroyDispatchAggregateOwnerRootTest::closure";
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            RuntimeCode rootedClosure = new RuntimeCode();
+            GlobalVariable.globalCodeRefs.put(globalName, new RuntimeScalar(rootedClosure));
+            PerlOwnerSlot slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
+            slot.acquireCapture(referent, rootedClosure);
+            try {
+                assertTrue(hasNewRootedOwner(referent),
+                        "a capture owned by a package-global closure is resurrection");
+            } finally {
+                GlobalVariable.globalCodeRefs.remove(globalName);
+                slot.release();
+            }
+        }
+    }
+
+    @Test
     void destructorLocalHashEntryDoesNotCountAsResurrection() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
