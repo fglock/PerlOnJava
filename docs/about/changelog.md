@@ -19,7 +19,8 @@ priorities and future plans.
   integer payloads for repeatedly updated scalar cells; reuse captured runtime
   state for generated call-frame bookkeeping, scalar-result recycling, and
   dynamic-local level reads and teardown; skip generic scalar magic checks
-  when updating the internal caller-package tracker; read the live warning
+  when updating the internal caller-package tracker; keep one reusable active
+  lexical frame instead of a per-runtime deque; read the live warning
   scope slot directly at JVM call entry when no stash aliases are active.
 - Add a reproducible, warmup-aware Perl versus PerlOnJava performance runner (#1196).
 - Cover FormState session restoration across requests and HTTP response conversion from callback and streaming PSGI responses; refresh HTTP::Message and LWP compatibility status (#1650, #1651, #1652).

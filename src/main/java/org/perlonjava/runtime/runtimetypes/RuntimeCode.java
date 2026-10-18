@@ -679,12 +679,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return (Deque<ActiveLexicalFrame>) (Deque<?>) executionState.activeLexicalFrames;
     }
 
-    @SuppressWarnings("unchecked")
-    private static Deque<ActiveLexicalFrame> reusableActiveLexicalFrames(
-            ExecutionRuntimeState executionState) {
-        return (Deque<ActiveLexicalFrame>) (Deque<?>) executionState.reusableActiveLexicalFrames;
-    }
-
     /**
      * Thread-local stack of pristine (unshifted) @_ snapshots taken at sub-entry
      * time. Used to populate {@code @DB::args} for {@code caller(N)} from package DB.
@@ -847,8 +841,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Keep the live pad for every active CV. Besides Devel::LexAlias and
         // runtime regex sources, eval STRING in package DB must resolve the
         // debugged caller's lexicals rather than DB's own closure.
-        Deque<ActiveLexicalFrame> reusable = reusableActiveLexicalFrames(executionState);
-        ActiveLexicalFrame frame = reusable.pollFirst();
+        ActiveLexicalFrame frame = (ActiveLexicalFrame) executionState.reusableActiveLexicalFrame;
+        executionState.reusableActiveLexicalFrame = null;
         if (frame == null) {
             frame = new ActiveLexicalFrame(code, previousPackage, callSitePackage);
         } else {
@@ -950,9 +944,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     private static void recycleActiveLexicalFrame(
             ActiveLexicalFrame frame, ExecutionRuntimeState executionState) {
-        Deque<ActiveLexicalFrame> reusable = reusableActiveLexicalFrames(executionState);
         frame.clearForReuse();
-        if (reusable.size() < 8) reusable.addFirst(frame);
+        if (executionState.reusableActiveLexicalFrame == null) {
+            executionState.reusableActiveLexicalFrame = frame;
+        }
     }
 
     public static boolean isActiveCode(RuntimeCode code) {
