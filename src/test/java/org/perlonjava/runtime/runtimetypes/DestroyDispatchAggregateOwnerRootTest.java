@@ -15,7 +15,7 @@ class DestroyDispatchAggregateOwnerRootTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeArray referent = new RuntimeArray();
-            RuntimeCode temporaryClosure = new RuntimeCode();
+            RuntimeCode temporaryClosure = new RuntimeCode(null, java.util.List.of());
             PerlOwnerSlot slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
             slot.acquireCapture(referent, temporaryClosure);
             try {
@@ -33,7 +33,7 @@ class DestroyDispatchAggregateOwnerRootTest {
         String globalName = "DestroyDispatchAggregateOwnerRootTest::closure";
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeArray referent = new RuntimeArray();
-            RuntimeCode rootedClosure = new RuntimeCode();
+            RuntimeCode rootedClosure = new RuntimeCode(null, java.util.List.of());
             GlobalVariable.globalCodeRefs.put(globalName, new RuntimeScalar(rootedClosure));
             PerlOwnerSlot slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
             slot.acquireCapture(referent, rootedClosure);
