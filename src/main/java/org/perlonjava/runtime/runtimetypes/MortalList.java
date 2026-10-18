@@ -1938,7 +1938,7 @@ public class MortalList {
             if (owner instanceof RuntimeHash
                     && (owner.semanticCaptureOwnerCount() > 0
                     || (!owner.scopeExited && MyVarCleanupStack.isRegistered(owner))
-                    || ReachabilityWalker.isReachableFromRoots(owner, false, referent))) {
+                    || ReachabilityWalker.isReachableFromRoots(owner, true, referent))) {
                 RuntimeScalar cell = slot.ownerCell();
                 if (cell == null) slotsWithoutCell++;
                 else rootedHashCells.add(cell);
