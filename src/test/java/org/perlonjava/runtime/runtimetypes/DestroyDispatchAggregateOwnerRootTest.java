@@ -11,6 +11,47 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class DestroyDispatchAggregateOwnerRootTest {
     @Test
+    void destructorLocalScalarOwnerDoesNotCountAsResurrection() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            referent.activateOwnerTracking();
+            RuntimeScalar localOwner = new RuntimeScalar();
+            localOwner.set(referent.createReference());
+            MyVarCleanupStack.register(localOwner);
+            try {
+                assertFalse(hasNewRootedOwner(referent),
+                        "a new scalar owner in an active local frame is not global resurrection");
+            } finally {
+                MyVarCleanupStack.unregister(localOwner);
+            }
+        }
+    }
+
+    @Test
+    void scalarOwnerInPackageGlobalHashCountsAsResurrection() {
+        PerlRuntime runtime = new PerlRuntime();
+        String globalName = "DestroyDispatchAggregateOwnerRootTest::scalar_owner";
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            referent.activateOwnerTracking();
+            RuntimeScalar owner = new RuntimeScalar();
+            owner.set(referent.createReference());
+            RuntimeHash globalHash = new RuntimeHash();
+            globalHash.isGlobalPackageHash = true;
+            GlobalVariable.globalHashes.put(globalName, globalHash);
+            globalHash.elements.put("owner", owner);
+            try {
+                assertTrue(hasNewRootedOwner(referent),
+                        "a new scalar owner reachable through a package-global hash is resurrection");
+            } finally {
+                globalHash.elements.clear();
+                GlobalVariable.globalHashes.remove(globalName);
+            }
+        }
+    }
+
+    @Test
     void captureFromUnrootedClosureDoesNotCountAsResurrection() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
