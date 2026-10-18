@@ -1731,11 +1731,11 @@ public class MortalList {
                 // have a legacy bridge count and retain the old compatibility
                 // sentinel behavior.
                 if (base.nativeCaptureOwnerCount() == 0) base.refCount = 1;
-            } else if (restoreRootedHashEntryOwnerCount(base)) {
+            } else if (restoreReachableHashEntryOwnerCount(base)) {
                 // A hash-entry owner has a stable semantic slot identity even
                 // when an unrelated legacy scalar decrement consumes the
                 // selective count. Restore the count from independently owned
-                // hash slots that still lead from package roots. Hash entries
+                // hash slots that still lead from live Perl roots. Hash entries
                 // are copied SV slots; borrowed array aliases are deliberately
                 // excluded here and remain on their legacy path.
                 //
@@ -1929,15 +1929,33 @@ public class MortalList {
     }
 
     /** Restore legacy count for hash-entry owner slots still reachable from Perl roots. */
-    private static boolean restoreRootedHashEntryOwnerCount(RuntimeBase referent) {
-        int owners = 0;
+    private static boolean restoreReachableHashEntryOwnerCount(RuntimeBase referent) {
+        Set<RuntimeScalar> rootedHashCells = Collections.newSetFromMap(new IdentityHashMap<>());
+        int slotsWithoutCell = 0;
         for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
             if (slot.kind() != PerlOwnerSlot.Kind.HASH_ENTRY) continue;
             RuntimeBase owner = slot.ownerContainer();
             if (owner instanceof RuntimeHash
-                    && ReachabilityWalker.isReachableFromRoots(owner, true, referent)) {
-                owners++;
+                    && (owner.semanticCaptureOwnerCount() > 0
+                    || (!owner.scopeExited && MyVarCleanupStack.isRegistered(owner))
+                    || ReachabilityWalker.isReachableFromRoots(owner, false, referent))) {
+                RuntimeScalar cell = slot.ownerCell();
+                if (cell == null) slotsWithoutCell++;
+                else rootedHashCells.add(cell);
             }
+        }
+        int owners = slotsWithoutCell + rootedHashCells.size();
+        // Active scalar owners may include lexical RVs in addition to hash
+        // cells. Exclude cells already counted through their explicit slots,
+        // then add other still-reachable scalar owners to avoid losing them
+        // when restoring the mixed legacy/native count.
+        for (RuntimeScalar scalar : referent.activeOwnerSnapshot()) {
+            if (scalar == null || rootedHashCells.contains(scalar)
+                    || !scalar.refCountOwned || scalar.value != referent
+                    || !ReachabilityWalker.isScalarReachable(scalar)) {
+                continue;
+            }
+            owners++;
         }
         if (owners == 0) return false;
         referent.refCount = owners;

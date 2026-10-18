@@ -21,9 +21,15 @@ class MortalListAggregateOwnerSlotTest {
 
             RuntimeScalar hashEntry = referenceTo(referent);
             hashEntry.refCountOwned = true;
+            referent.recordActiveOwner(hashEntry);
             RuntimeHash root = new RuntimeHash();
             root.elements.put("value", hashEntry);
             GlobalVariable.globalHashes.put(rootName, root);
+
+            RuntimeScalar lexicalOwner = referenceTo(referent);
+            lexicalOwner.refCountOwned = true;
+            referent.recordActiveOwner(lexicalOwner);
+            MyVarCleanupStack.register(lexicalOwner);
 
             RuntimeScalar unrelatedLegacyOwner = referenceTo(referent);
             unrelatedLegacyOwner.refCountOwned = true;
@@ -40,18 +46,27 @@ class MortalListAggregateOwnerSlotTest {
                 assertEquals(RuntimeBase.PerlLifecycleState.LIVE,
                         referent.perlLifecycleState(),
                         "the rooted hash entry keeps the referent alive at legacy count zero");
-                assertEquals(1, referent.refCount,
-                        "the active hash slot restores one legacy bridge count");
+                assertEquals(2, referent.refCount,
+                        "the active hash slot and separate lexical owner are both restored");
 
                 RuntimeScalar removed = root.elements.remove("value");
                 MortalList.deferDecrementIfTracked(removed);
                 MortalList.flush();
 
+                assertEquals(RuntimeBase.PerlLifecycleState.LIVE,
+                        referent.perlLifecycleState(),
+                        "removing the hash entry preserves the separate lexical owner");
+                assertEquals(1, referent.refCount);
+
+                MortalList.deferDecrementIfTracked(lexicalOwner);
+                MortalList.flush();
+
                 assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED,
                         referent.perlLifecycleState(),
-                        "removing the final hash entry permits destruction");
+                        "releasing the final lexical owner permits destruction");
             } finally {
                 MortalList.setActive(previousActive);
+                MyVarCleanupStack.unregister(lexicalOwner);
                 GlobalVariable.globalHashes.remove(rootName);
                 GlobalVariable.removeGlobalCodeRefForStashDelete(className + "::DESTROY");
             }
