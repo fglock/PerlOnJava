@@ -1955,7 +1955,9 @@ public class MortalList {
         for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
             if (slot.kind() != PerlOwnerSlot.Kind.ARRAY_ELEMENT) continue;
             RuntimeBase owner = slot.ownerContainer();
-            if (!(owner instanceof RuntimeArray array) || !array.isPackageGlobalRoot) continue;
+            if (!(owner instanceof RuntimeArray array)
+                    || (!array.isPackageGlobalRoot
+                    && (array.scopeExited || !MyVarCleanupStack.isRegistered(array)))) continue;
             RuntimeScalar cell = slot.ownerCell();
             if (cell == null) {
                 slotsWithoutCell++;
