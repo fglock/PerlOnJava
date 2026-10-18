@@ -2896,6 +2896,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && containerOwner != null
                 && !(containerOwner instanceof RuntimeHash owner
                     && owner.isPackageRootedHash())
+                && (!DestroyDispatch.isCheckingGlobalOwnerDelta()
+                    || ReachabilityWalker.isReachableFromRoots(containerOwner, true))
                 && this.value instanceof RuntimeBase base
                 && base == DestroyDispatch.currentDestroyTarget()) {
             DestroyDispatch.markDestroyTargetRescued();
