@@ -693,8 +693,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             return;
         }
         PerlOwnerSlot slot = hashEntryOwnerSlots.computeIfAbsent(key,
-                ignored -> new PerlOwnerSlot(PerlOwnerSlot.Kind.HASH_ENTRY, null, this));
-        slot.acquireHashEntry(directReferent(value));
+                ignored -> new PerlOwnerSlot(PerlOwnerSlot.Kind.HASH_ENTRY, null, this, value));
+        slot.acquireHashEntry(directReferent(value), value);
     }
 
     private void detachHashCellIfAbsent(RuntimeScalar scalar) {
@@ -744,8 +744,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 continue;
             }
             PerlOwnerSlot slot = hashEntryOwnerSlots.computeIfAbsent(entry.getKey(),
-                    ignored -> new PerlOwnerSlot(PerlOwnerSlot.Kind.HASH_ENTRY, null, this));
-            slot.acquireHashEntry(nextReferent);
+                    ignored -> new PerlOwnerSlot(PerlOwnerSlot.Kind.HASH_ENTRY, null, this, scalar));
+            slot.acquireHashEntry(nextReferent, scalar);
         }
     }
 
