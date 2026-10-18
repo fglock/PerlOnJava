@@ -21,13 +21,14 @@ class MortalListAggregateOwnerSlotTest {
 
             RuntimeScalar hashEntry = referenceTo(referent);
             hashEntry.refCountOwned = true;
-            referent.recordActiveOwner(hashEntry);
             RuntimeHash root = new RuntimeHash();
             root.elements.put("value", hashEntry);
             GlobalVariable.globalHashes.put(rootName, root);
 
             RuntimeScalar lexicalOwner = referenceTo(referent);
             lexicalOwner.refCountOwned = true;
+            referent.activateOwnerTracking();
+            referent.recordActiveOwner(hashEntry);
             referent.recordActiveOwner(lexicalOwner);
             MyVarCleanupStack.register(lexicalOwner);
 
