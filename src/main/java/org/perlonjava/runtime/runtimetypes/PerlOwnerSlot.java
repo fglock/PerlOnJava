@@ -26,6 +26,7 @@ public final class PerlOwnerSlot {
     private final Kind kind;
     private final RuntimeScalar padCell;
     private final WeakReference<RuntimeBase> ownerContainer;
+    private volatile WeakReference<RuntimeScalar> ownerCell;
     private volatile RuntimeCode closureOwner;
     private final long identity = NEXT_ID.incrementAndGet();
     private RuntimeBase referent;
@@ -78,9 +79,15 @@ public final class PerlOwnerSlot {
     }
 
     PerlOwnerSlot(Kind kind, RuntimeScalar padCell, RuntimeBase ownerContainer) {
+        this(kind, padCell, ownerContainer, null);
+    }
+
+    PerlOwnerSlot(Kind kind, RuntimeScalar padCell, RuntimeBase ownerContainer,
+                  RuntimeScalar ownerCell) {
         this.kind = Objects.requireNonNull(kind, "kind");
         this.padCell = padCell;
         this.ownerContainer = ownerContainer == null ? null : new WeakReference<>(ownerContainer);
+        this.ownerCell = ownerCell == null ? null : new WeakReference<>(ownerCell);
     }
 
     public Kind kind() {
@@ -97,6 +104,11 @@ public final class PerlOwnerSlot {
 
     RuntimeBase ownerContainer() {
         return ownerContainer == null ? null : ownerContainer.get();
+    }
+
+    RuntimeScalar ownerCell() {
+        WeakReference<RuntimeScalar> reference = ownerCell;
+        return reference == null ? null : reference.get();
     }
 
     boolean isNativeCaptureOwner() {
@@ -160,17 +172,29 @@ public final class PerlOwnerSlot {
 
     /** Attach this stable hash-entry slot to its current direct referent. */
     public synchronized void acquireHashEntry(RuntimeBase target) {
+        acquireHashEntry(target, null);
+    }
+
+    /** Attach this stable hash-entry slot to its current scalar cell and referent. */
+    public synchronized void acquireHashEntry(RuntimeBase target, RuntimeScalar cell) {
         if (kind != Kind.HASH_ENTRY) {
             throw new IllegalStateException("hash-entry acquisition requires a HASH_ENTRY slot");
         }
+        ownerCell = cell == null ? null : new WeakReference<>(cell);
         transferTo(target);
     }
 
     /** Attach this stable array-element slot to its current direct referent. */
     public synchronized void acquireArrayElement(RuntimeBase target) {
+        acquireArrayElement(target, null);
+    }
+
+    /** Attach this stable array-element slot to its current scalar cell and referent. */
+    public synchronized void acquireArrayElement(RuntimeBase target, RuntimeScalar cell) {
         if (kind != Kind.ARRAY_ELEMENT) {
             throw new IllegalStateException("array-element acquisition requires an ARRAY_ELEMENT slot");
         }
+        ownerCell = cell == null ? null : new WeakReference<>(cell);
         transferTo(target);
     }
 
@@ -225,6 +249,7 @@ public final class PerlOwnerSlot {
         referent = null;
         ownerRuntime = null;
         ownerRuntimeState = null;
+        ownerCell = null;
         if (previous != null) previous.removeOwnerSlot(this);
         if (previous != null) PerlRuntime.releaseOwnerSlotReferent(previousState, previous);
     }
