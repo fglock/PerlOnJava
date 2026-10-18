@@ -722,9 +722,16 @@ public class DestroyDispatch {
                         && ReachabilityWalker.isReachableFromRoots(ownerContainer, true)) {
                     return true;
                 }
-                // Closure pads have no aggregate container. Their referent
-                // edge is itself enough to prove that Perl retained the value.
-                if (ownerSlot.kind() == PerlOwnerSlot.Kind.CLOSURE_PAD) return true;
+                // Closure pads have no aggregate container. When capture
+                // provenance identifies the owning CODE, require that CODE to
+                // remain rooted before treating the new pad edge as escape.
+                if (ownerSlot.kind() == PerlOwnerSlot.Kind.CLOSURE_PAD) {
+                    RuntimeCode closureOwner = ownerSlot.closureOwner();
+                    if (closureOwner == null
+                            || ReachabilityWalker.isCodeReachableFromRoots(closureOwner)) {
+                        return true;
+                    }
+                }
             }
             return false;
         }
