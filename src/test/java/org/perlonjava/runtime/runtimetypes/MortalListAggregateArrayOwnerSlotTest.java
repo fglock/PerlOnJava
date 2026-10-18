@@ -26,7 +26,8 @@ class MortalListAggregateArrayOwnerSlotTest {
             GlobalVariable.aliasGlobalArray(rootName, root);
             RuntimeArray lexicalRoot = new RuntimeArray();
             lexicalRoot.push(referenceTo(referent));
-            MyVarCleanupStack.register(lexicalRoot);
+            PerlOwnerSlot lexicalArrayCapture = lexicalRoot.retainClosureCaptureOwner();
+            lexicalRoot.scopeExited = true;
             RuntimeArray weakRoot = new RuntimeArray();
             weakRoot.push(referenceTo(referent));
             RuntimeScalar weakEntry = weakRoot.elements.get(0);
@@ -57,7 +58,7 @@ class MortalListAggregateArrayOwnerSlotTest {
                         referent.perlLifecycleState(),
                         "a package-rooted strong array element retains its referent");
                 assertEquals(3, referent.refCount,
-                        "both rooted strong array elements and the lexical owner are restored");
+                        "package and closure-owned array elements plus the scalar owner are restored");
 
                 // Keep the weak edge in place for the count assertion, then
                 // remove its diagnostic root before proving final destruction.
@@ -76,11 +77,10 @@ class MortalListAggregateArrayOwnerSlotTest {
                 assertEquals(2, referent.refCount,
                         "the registered lexical array and scalar owner remain");
 
-                RuntimeScalar lexicalArrayEntry = lexicalRoot.elements.remove(0);
-                MortalList.deferDecrementIfTracked(lexicalArrayEntry);
+                lexicalRoot.releaseClosureCaptureOwner(lexicalArrayCapture);
                 MortalList.flush();
                 assertEquals(1, referent.refCount,
-                        "removing the lexical array element preserves the scalar owner");
+                        "releasing the final array capture preserves the scalar owner");
 
                 MortalList.deferDecrementIfTracked(lexicalOwner);
                 MortalList.flush();
@@ -89,9 +89,11 @@ class MortalListAggregateArrayOwnerSlotTest {
                         referent.perlLifecycleState(),
                         "releasing the final owner permits destruction");
             } finally {
+                if (lexicalArrayCapture.isActive()) {
+                    lexicalRoot.releaseClosureCaptureOwner(lexicalArrayCapture);
+                }
                 MortalList.setActive(previousActive);
                 MyVarCleanupStack.unregister(lexicalOwner);
-                MyVarCleanupStack.unregister(lexicalRoot);
                 GlobalVariable.globalArrays.remove(rootName);
                 GlobalVariable.globalArrays.remove(weakRootName);
                 GlobalVariable.globalHashes.remove(weakHashName);
