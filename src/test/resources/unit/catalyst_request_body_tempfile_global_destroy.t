@@ -30,6 +30,10 @@ my $output = do { local $/; <$log_read> };
 close($log_read);
 unlink($log_path);
 
+if ($output =~ /^1\.\.0 # SKIP (.+)$/m) {
+    plan skip_all => $1;
+}
+
 is($status, 0, 'Catalyst tempfile lifetime regression passes in a child process');
 like($output, qr/^1\.\.24$/m, 'child ran all 24 Catalyst lifetime assertions');
 unlike($output,
