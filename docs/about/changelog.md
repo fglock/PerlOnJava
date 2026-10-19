@@ -7,6 +7,7 @@ priorities and future plans.
 ## Work in progress
 
 - Preserve reference-valued FETCH results from tied-hash `values()` and retain scalar-reference envelopes in Storable round trips (#1554, #1468).
+- Ignore commented-out code when checking lexical constant closures for later mutations, preserving BEGIN-time generated constants (#1785).
 - Run standard Perl's `cpan -t Module` for CPAN oracle checks and keep download failures inconclusive instead of reporting missing local modules as Perl failures.
 - Keep lexical-registration membership checks constant-time, avoiding quadratic CPAN index parsing as cleanup stacks grow.
 - Preserve numeric types of cached read-only scalars in ranges, rejecting unsigned endpoints outside the supported integer range.
