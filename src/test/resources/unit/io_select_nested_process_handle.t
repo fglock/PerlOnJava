@@ -20,7 +20,10 @@ sub add_delayed_child {
 }
 
 my $pid = add_delayed_child($selector, $launcher);
-my @ready = $selector->can_read(5);
+# On Windows CI the nested PerlOnJava child can take several seconds to start
+# under parallel load. Keep the timeout long enough to test handle lifetime
+# instead of measuring JVM startup latency.
+my @ready = $selector->can_read(30);
 is(scalar @ready, 1, 'nested process handle remains selectable after scope exit');
 
 my $line = @ready ? readline($ready[0][0]) : undef;
