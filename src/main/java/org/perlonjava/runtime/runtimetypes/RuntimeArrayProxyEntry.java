@@ -110,6 +110,7 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
         this.firstClassRegexValue = referent.firstClassRegexValue;
         if (!parent.elementsAliased) {
             parent.elementsOwned = true;
+            parent.reconcileArrayElementOwnerSlots();
         }
         return referent;
     }

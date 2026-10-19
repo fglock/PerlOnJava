@@ -130,6 +130,29 @@ class RuntimeArrayElementOwnershipTest {
     }
 
     @Test
+    void scalarRefaliasCreatesAnArrayElementOwnerSlot() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            RuntimeScalar scalarCell = referent.createReference();
+            RuntimeScalar scalarReference = scalarCell.createReference();
+            RuntimeArray array = new RuntimeArray();
+            RuntimeArrayProxyEntry proxy = new RuntimeArrayProxyEntry(array, 0);
+
+            proxy.aliasToReference(scalarReference);
+
+            assertSame(scalarCell, array.elements.get(0));
+            assertTrue(array.ownsElement(scalarCell));
+            assertEquals(1, referent.arraySlotOwnerCount(),
+                    "refaliasing promotes the new array and registers the referenced aggregate");
+            assertSame(referent, array.arrayElementOwnerSlot(0).referent());
+
+            array.elements.clear();
+            assertEquals(0, referent.arraySlotOwnerCount());
+        }
+    }
+
+    @Test
     void nonOwningAliasedElementDoesNotProveScalarReachability() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
