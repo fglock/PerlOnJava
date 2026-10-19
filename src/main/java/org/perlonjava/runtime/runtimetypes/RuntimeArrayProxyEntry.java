@@ -130,6 +130,10 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
         this.lvalue = reference;
         this.type = reference.type;
         this.value = reference.value;
+        if (!parent.elementsAliased) {
+            parent.elementsOwned = true;
+            parent.reconcileArrayElementOwnerSlots();
+        }
         return reference;
     }
 
