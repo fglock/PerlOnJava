@@ -31,6 +31,7 @@ priorities and future plans.
 - Preserve late-bound fully qualified subroutine calls written with `->(...)` when the sub is loaded after its caller is compiled (#1634).
 - Fix DBI `do()` overrides, DBD::Sponge initialization, and SQLite generated ID lookup.
 - Track active pure-Perl DBI statements, prevent fallback dispatch recursion, handle legacy column bindings, and support Perl FTS4 tokenizers on SQLite (#1802, #1459, #1320).
+- Tie pure-Perl DBI outer handles so driver `STORE` hooks see direct attribute assignments, and reject DSNs without the `dbi:` prefix (#1802, #1390).
 - Parse escaped backslashes in transliteration lists once, inherit strict-vars
   settings in string eval, and ignore trailing shebang comments (#1783, #1454,
   #1524).
