@@ -69,6 +69,34 @@ public class RuntimeTiedHashProxyEntry extends TiedVariableBase {
     }
 
     @Override
+    public RuntimeArray arrayDeref() {
+        RuntimeScalar fetched = tiedFetch();
+        if (fetched.type == RuntimeScalarType.UNDEF) {
+            RuntimeArray array = AutovivificationArray.createAutovivifiedArray(this);
+            array.strictAutovivify = false;
+            return array;
+        }
+        RuntimeArray array = fetched.arrayDeref();
+        this.type = fetched.type;
+        this.value = fetched.value;
+        return array;
+    }
+
+    @Override
+    public RuntimeArray arrayDerefNonStrict(String packageName) {
+        RuntimeScalar fetched = tiedFetch();
+        if (fetched.type == RuntimeScalarType.UNDEF) {
+            RuntimeArray array = AutovivificationArray.createAutovivifiedArray(this);
+            array.strictAutovivify = false;
+            return array;
+        }
+        RuntimeArray array = fetched.arrayDerefNonStrict(packageName);
+        this.type = fetched.type;
+        this.value = fetched.value;
+        return array;
+    }
+
+    @Override
     public void dynamicSaveState() {
         boolean existed = TieHash.tiedExists(parent, key).getBoolean();
         RuntimeScalar saved = existed ? new RuntimeScalar(TieHash.tiedFetch(parent, key)) : null;

@@ -146,6 +146,14 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
 
     @Override
     public RuntimeArray arrayDeref() {
+        if (this instanceof RuntimeHashProxyEntry && !hasLvalue()) {
+            // Reading a missing hash element as an array returns an empty
+            // list in Perl. Leave the hash slot absent; lvalue operations
+            // complete the placeholder through AutovivificationArray.vivify.
+            RuntimeArray array = AutovivificationArray.createAutovivifiedArray(this);
+            array.strictAutovivify = false;
+            return array;
+        }
         vivify();  // Ensure the scalar exists in parent hash
         RuntimeArray result = lvalue.arrayDeref();  // Delegate to the actual scalar
         // Update proxy's type and value to match lvalue after vivification
@@ -182,6 +190,11 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
 
     @Override
     public RuntimeArray arrayDerefNonStrict(String packageName) {
+        if (this instanceof RuntimeHashProxyEntry && !hasLvalue()) {
+            RuntimeArray array = AutovivificationArray.createAutovivifiedArray(this);
+            array.strictAutovivify = false;
+            return array;
+        }
         vivify();  // Ensure the scalar exists in parent hash/array
         RuntimeArray result = lvalue.arrayDerefNonStrict(packageName);  // Delegate to the actual scalar
         // Update proxy's type and value to match lvalue after vivification

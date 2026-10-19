@@ -65,8 +65,102 @@ XSLoader::load( 'DBI' );
 @DBI::db::ISA = ('DBI');
 @DBI::st::ISA = ('DBI');
 
+# DBI exposes outer handles as tied hashes.  The tied hash's object is the
+# inner handle passed to driver STORE/FETCH methods, while applications hold
+# a DBI::db or DBI::st outer handle.  Keep that distinction for pure-Perl DBDs
+# such as DBD::Mock, which configure behavior through direct hash assignment.
+sub DBI::dr::TIEHASH { bless $_[1], $_[0] }
+sub DBI::db::TIEHASH { bless $_[1], $_[0] }
+sub DBI::st::TIEHASH { bless $_[1], $_[0] }
+
+sub _tie_handle_hash {
+    my ($handle, $class) = @_;
+    my %outer;
+    my $inner = tie %outer, $class, $handle;
+    my $outer = bless \%outer, $class;
+    return wantarray ? ($outer, $inner) : $outer;
+}
+
+sub _implementor_hash_method {
+    my ($handle, $method) = @_;
+    my $impl = ref($handle) ? $handle->{ImplementorClass} : undef;
+    return unless $impl;
+    my $code = $impl->can($method) or return;
+    no strict 'refs';
+    my $dbi_code = *{"DBI::$method"}{CODE};
+    return if $dbi_code && $code == $dbi_code;
+    return $code;
+}
+
+sub DBI::db::FIRSTKEY { DBI::_handle_hash_firstkey($_[0]) }
+sub DBI::st::FIRSTKEY { DBI::_handle_hash_firstkey($_[0]) }
+sub DBI::dr::FIRSTKEY { DBI::_handle_hash_firstkey($_[0]) }
+sub DBI::db::NEXTKEY  { DBI::_handle_hash_nextkey($_[0]) }
+sub DBI::st::NEXTKEY  { DBI::_handle_hash_nextkey($_[0]) }
+sub DBI::dr::NEXTKEY  { DBI::_handle_hash_nextkey($_[0]) }
+sub DBI::db::SCALAR   { scalar keys %{$_[0]} }
+sub DBI::st::SCALAR   { scalar keys %{$_[0]} }
+sub DBI::dr::SCALAR   { scalar keys %{$_[0]} }
+sub DBI::db::CLEAR    { DBI::_handle_hash_clear($_[0]) }
+sub DBI::st::CLEAR    { DBI::_handle_hash_clear($_[0]) }
+sub DBI::dr::CLEAR    { DBI::_handle_hash_clear($_[0]) }
+sub DBI::db::DELETE   { DBI::_handle_hash_delete($_[0], $_[1]) }
+sub DBI::st::DELETE   { DBI::_handle_hash_delete($_[0], $_[1]) }
+sub DBI::dr::DELETE   { DBI::_handle_hash_delete($_[0], $_[1]) }
+sub DBI::db::EXISTS   { exists $_[0]->{$_[1]} }
+sub DBI::st::EXISTS   { exists $_[0]->{$_[1]} }
+sub DBI::dr::EXISTS   { exists $_[0]->{$_[1]} }
+
+sub _handle_can {
+    my ($handle, $method) = @_;
+    my $code = UNIVERSAL::can($handle, $method);
+    my $impl = ref($handle) ? $handle->{ImplementorClass} : undef;
+    if ($impl) {
+        my $driver_code = $impl->can($method);
+        return $driver_code if $driver_code && (!$code || $driver_code != $code);
+    }
+    return $code;
+}
+sub DBI::db::can { DBI::_handle_can(@_) }
+sub DBI::st::can { DBI::_handle_can(@_) }
+sub DBI::dr::can { DBI::_handle_can(@_) }
+
+our %HandleHashIterators;
+sub _handle_hash_firstkey {
+    my ($handle) = @_;
+    my $id = Scalar::Util::refaddr($handle);
+    my @keys = grep { $_ ne '_dbi_handle_hash_iterator' } keys %$handle;
+    $HandleHashIterators{$id} = \@keys;
+    return _handle_hash_nextkey($handle);
+}
+sub _handle_hash_nextkey {
+    my ($handle) = @_;
+    my $id = Scalar::Util::refaddr($handle);
+    my $keys = $HandleHashIterators{$id} || [];
+    my $key = shift @$keys;
+    delete $HandleHashIterators{$id} unless @$keys;
+    return $key;
+}
+sub _handle_hash_clear {
+    my ($handle) = @_;
+    delete $handle->{$_} for grep { $_ ne '_dbi_handle_hash_iterator' } keys %$handle;
+    return;
+}
+sub _handle_hash_delete {
+    my ($handle, $key) = @_;
+    if (my $code = _implementor_hash_method($handle, 'DELETE')) {
+        return $code->($handle, $key);
+    }
+    return delete $handle->{$key};
+}
+
+sub DBD::_::db::FETCH { DBI::_fetch_handle_value(@_) }
+sub DBD::_::st::FETCH { DBI::_fetch_handle_value(@_) }
+sub DBD::_::dr::FETCH { DBI::_fetch_handle_value(@_) }
+
 # Upstream DBI exposes DBD::_::* base classes for driver shims.  PerlOnJava
-# handles are plain blessed hashes, so these only need inheritance.
+# handles use tied outer hashes with plain inner storage, so these only need
+# inheritance for method dispatch.
 @DBD::_::common::ISA = ('DBI');
 @DBD::_::dr::ISA = ('DBI::dr');
 @DBD::_::db::ISA = ('DBI::db');
@@ -307,7 +401,6 @@ sub DBD::_::dr::connect {
 
     for my $method (qw(
         execute fetchrow_arrayref fetchrow_hashref rows finish
-        bind_param bind_param_inout bind_col
     )) {
         *{"DBI::st::$method"} = \&{"DBI::$method"};
     }
@@ -563,14 +656,15 @@ sub _new_drh {
     _init_handle_attrs($drh, $attr);
     $drh->{Type} = 'dr';
     $drh->{ImplementorClass} = $imp_class;
-    $drh = bless $drh, $imp_class;
-    return wantarray ? ($drh, $drh) : $drh;
+    my $wantarray = wantarray;
+    my ($outer, $inner) = _tie_handle_hash($drh, 'DBI::dr');
+    return $wantarray ? ($outer, $inner) : $outer;
 }
 
 sub _new_dbh {
     my ($drh, $attr) = @_;
     $attr ||= {};
-    my $dr_class = ref($drh) || $drh->{ImplementorClass} || '';
+    my $dr_class = $drh->{ImplementorClass} || ref($drh) || '';
     my $db_class = $dr_class;
     $db_class =~ s/::dr$/::db/;
     my $dbh = {};
@@ -582,8 +676,9 @@ sub _new_dbh {
     # as ImplementorClass.  The wrapper methods above dispatch to that class.
     # Blessing the outer handle directly into the implementor bypasses hooks on
     # DBI::db methods and is observably different to DBI's outer/inner handles.
-    $dbh = bless $dbh, 'DBI::db';
-    return wantarray ? ($dbh, $dbh) : $dbh;
+    my $wantarray = wantarray;
+    my ($outer, $inner) = _tie_handle_hash($dbh, 'DBI::db');
+    return $wantarray ? ($outer, $inner) : $outer;
 }
 
 sub _new_sth {
@@ -610,14 +705,17 @@ sub _new_sth {
     $sth->{ImplementorClass} = $st_class;
     $dbh->{Kids} = ($dbh->{Kids} || 0) + 1;
 
+    my $wantarray = wantarray;
     if (my $root = $dbh->{RootClass}) {
         my $root_st = "${root}::st";
         eval "require $root" unless $root->isa('DBI');
-        $sth = bless $sth, $root_st;
+        my ($outer, $inner) = _tie_handle_hash($sth, $root_st);
+        $sth = $outer;
     } else {
-        $sth = bless $sth, 'DBI::st';
+        my ($outer, $inner) = _tie_handle_hash($sth, 'DBI::st');
+        $sth = $outer;
     }
-    return wantarray ? ($sth, $sth) : $sth;
+    return $wantarray ? ($sth, tied(%$sth)) : $sth;
 }
 
 sub _dispatch_implementor_method {
@@ -636,6 +734,26 @@ sub _dispatch_implementor_method {
     die "Can't locate object method \"$method\" via package \"$impl\"\n"
         unless $code;
     return $code->($handle, @args);
+}
+
+sub DBI::dr::connect {
+    return DBI::_dispatch_implementor_method($_[0], 'connect', @_[1..$#_]);
+}
+
+sub DBI::dr::AUTOLOAD {
+    (my $method = $DBI::dr::AUTOLOAD) =~ s/^.*:://;
+    return if $method eq 'DESTROY';
+    return DBI::_dispatch_implementor_method($_[0], $method, @_[1..$#_]);
+}
+sub DBI::db::AUTOLOAD {
+    (my $method = $DBI::db::AUTOLOAD) =~ s/^.*:://;
+    return if $method eq 'DESTROY';
+    return DBI::_dispatch_implementor_method($_[0], $method, @_[1..$#_]);
+}
+sub DBI::st::AUTOLOAD {
+    (my $method = $DBI::st::AUTOLOAD) =~ s/^.*:://;
+    return if $method eq 'DESTROY';
+    return DBI::_dispatch_implementor_method($_[0], $method, @_[1..$#_]);
 }
 
 sub _is_jdbc_handle {
@@ -819,7 +937,7 @@ use constant {
 # Handles attribute syntax: dbi:Driver(RaiseError=1):rest
 sub parse_dsn {
     my ($class, $dsn) = @_;
-    return unless defined $dsn
+    return unless defined $dsn && $dsn =~ /^dbi:/i
         && $dsn =~ /^([^:]+):([^:(]*)(?:\(([^)]*)\))?:(.*)$/s;
 
     my ($scheme, $driver, $attr_text, $tail) = ($1, $2, $3, $4);
@@ -931,9 +1049,18 @@ sub CLONE {
 # $dbh->FETCH('Active') explicitly, so we need method wrappers.
 sub FETCH {
     my ($self, $key) = @_;
-    if (($self->{Type} || '') eq 'st'
+    my $handle = tied(%$self) || $self;
+    if (my $code = _implementor_hash_method($handle, 'FETCH')) {
+        return $code->($handle, $key);
+    }
+    return _fetch_handle_value($handle, $key);
+}
+
+sub _fetch_handle_value {
+    my ($handle, $key) = @_;
+    if (($handle->{Type} || '') eq 'st'
             && $key eq 'Active'
-            && $self->{$key}
+            && $handle->{$key}
             && !$ACTIVE_FETCH_FREETMPS_RUNNING) {
         local $ACTIVE_FETCH_FREETMPS_RUNNING = 1;
         eval {
@@ -943,20 +1070,36 @@ sub FETCH {
             1;
         };
     }
-    return $self->{$key};
+    return $handle->{$key};
 }
 
 sub STORE {
     my ($self, $key, $value) = @_;
-    $self->{$key} = $value;
-    if (($self->{Type} || '') eq 'st') {
-        $self->{sql_stmt} = $value if $key eq 'f_stmt' && !exists $self->{sql_stmt};
-        $self->{f_stmt} = $value if $key eq 'sql_stmt' && !exists $self->{f_stmt};
-        $self->{sql_params} = $value if $key eq 'f_params' && !exists $self->{sql_params};
-        $self->{f_params} = $value if $key eq 'sql_params' && !exists $self->{f_params};
+    my $handle = tied(%$self) || $self;
+    if (my $code = _implementor_hash_method($handle, 'STORE')) {
+        return $code->($handle, $key, $value);
     }
-    return 1;
+    return _store_handle_value($handle, $key, $value);
 }
+
+sub _store_handle_value {
+    my ($handle, $key, $value) = @_;
+    $handle->{$key} = $value;
+    if (($handle->{Type} || '') eq 'st') {
+        $handle->{sql_stmt} = $value if $key eq 'f_stmt' && !exists $handle->{sql_stmt};
+        $handle->{f_stmt} = $value if $key eq 'sql_stmt' && !exists $handle->{f_stmt};
+        $handle->{sql_params} = $value if $key eq 'f_params' && !exists $handle->{sql_params};
+        $handle->{f_params} = $value if $key eq 'sql_params' && !exists $handle->{f_params};
+    }
+    return $value;
+}
+
+# Driver STORE overrides commonly use SUPER::STORE to reach DBI's backing
+# storage.  Keep that base implementation raw so it does not redispatch to the
+# driver that called it.
+sub DBD::_::db::STORE { DBI::_store_handle_value(@_) }
+sub DBD::_::st::STORE { DBI::_store_handle_value(@_) }
+sub DBD::_::dr::STORE { DBI::_store_handle_value(@_) }
 
 sub _is_comment_only_sql {
     my ($statement) = @_;
@@ -1047,13 +1190,31 @@ sub bind_param {
 sub DBI::st::bind_param {
     my ($sth, $param_num, $value, $attr) = @_;
     if (!_is_jdbc_handle($sth)) {
-        my $impl = $sth->{ImplementorClass} || ref($sth);
-        no strict 'refs';
-        if (my $code = *{"${impl}::bind_param"}{CODE}) {
-            return $code->($sth, $param_num, $value, $attr);
-        }
+        return _dispatch_implementor_method(
+            $sth, 'bind_param', $param_num, $value, $attr,
+        );
     }
     return DBI::bind_param($sth, $param_num, $value, $attr);
+}
+
+sub DBI::st::bind_param_inout {
+    my ($sth, $param_num, $value, $max_len) = @_;
+    if (!_is_jdbc_handle($sth)) {
+        return _dispatch_implementor_method(
+            $sth, 'bind_param_inout', $param_num, $value, $max_len,
+        );
+    }
+    return DBI::bind_param_inout($sth, $param_num, $value, $max_len);
+}
+
+sub DBI::st::bind_col {
+    my ($sth, $column, $value, $attr) = @_;
+    if (!_is_jdbc_handle($sth)) {
+        return _dispatch_implementor_method(
+            $sth, 'bind_col', $column, $value, $attr,
+        );
+    }
+    return DBI::bind_col($sth, $column, $value, $attr);
 }
 
 sub clone {
