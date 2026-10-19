@@ -1948,10 +1948,10 @@ public class MortalList {
                 rootedHashCells.add(cell);
             }
         }
-        // Arrays need a stricter proof than hashes here. A transitive root walk
-        // can cross closure pads or diagnostic cycles and outlive the Perl
-        // element owner. A directly package-rooted array is an unambiguous
-        // owner when its current scalar cell is a strong reference.
+        // Array slots are restored only when the array has a live semantic
+        // owner or can be reached independently from package roots. Excluding
+        // the referent from that walk prevents an owner proof through the
+        // object whose pending release triggered this recovery.
         for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
             if (slot.kind() != PerlOwnerSlot.Kind.ARRAY_ELEMENT) continue;
             RuntimeBase owner = slot.ownerContainer();
