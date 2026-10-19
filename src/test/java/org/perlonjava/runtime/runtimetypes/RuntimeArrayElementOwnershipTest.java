@@ -195,6 +195,29 @@ class RuntimeArrayElementOwnershipTest {
     }
 
     @Test
+    void integerAssignmentTransfersArrayElementOwnerSlotToNoReferent() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            RuntimeArray array = new RuntimeArray();
+            RuntimeScalar cell = referent.createReference();
+            array.elements.add(cell);
+            array.elementsOwned = true;
+            array.reconcileArrayElementOwnerSlots();
+            PerlOwnerSlot slot = array.arrayElementOwnerSlot(0);
+            assertEquals(1, referent.arraySlotOwnerCount());
+
+            cell.set(new RuntimeScalar(7));
+
+            assertNull(array.arrayElementOwnerSlot(0),
+                    "a scalar element with no referent has no active owner slot");
+            assertEquals(0, referent.arraySlotOwnerCount(),
+                    "replacing the referent with an integer releases its array owner slot");
+            assertNull(slot.referent(), "the released slot no longer names a referent");
+        }
+    }
+
+    @Test
     void nonOwningAliasedElementDoesNotProveScalarReachability() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
