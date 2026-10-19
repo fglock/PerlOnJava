@@ -348,13 +348,16 @@ public class MortalList {
     private static void processUnreachableScopeExitCaptureCandidates(
             LifecycleRuntimeState state) {
         if (state.deferredScopeExitCaptureCandidates.isEmpty()) return;
-
         Set<RuntimeBase> endReachable = ReachabilityWalker.walkEndBlockRoots();
         Set<RuntimeBase> cycleProtected = ReachabilityWalker.strongCycleProtectedReferents();
         boolean found = false;
         for (RuntimeScalar scalar : new ArrayList<>(state.deferredScopeExitCaptureCandidates)) {
             if (!scalar.scopeExited) continue;
             RuntimeBase base = scalar.value instanceof RuntimeBase value ? value : null;
+            if (base != null) {
+                ReachabilityWalker.releaseUnreachableScopeExitedCaptureOwners(
+                        java.util.List.of(base), endReachable);
+            }
             boolean scalarReachable = ReachabilityWalker.isScalarReachable(scalar)
                     || ReachabilityWalker.isReachableFromRoots(scalar);
             boolean retained = endReachable.contains(scalar)
