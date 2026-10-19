@@ -161,7 +161,15 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
                 vivify();
             }
         }
-        return lvalue.createReference();
+        RuntimeScalar reference = lvalue.createReference();
+        if (!parent.elementsAliased) {
+            // Taking a reference vivifies an ordinary array slot without
+            // going through set(). Promote the parent now so later writes
+            // through the scalar reference update an ARRAY_ELEMENT owner slot.
+            parent.elementsOwned = true;
+            parent.reconcileArrayElementOwnerSlots();
+        }
+        return reference;
     }
 
     /**
