@@ -631,12 +631,20 @@ public class EmitLiteral {
             // Boxed context: create a RuntimeScalar object
             if (isInteger) {
                 if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(NumberNode) emit boxed integer");
-                // Use cached RuntimeScalar for common integer values
-                mv.visitLdcInsn(Integer.valueOf(value));
-                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache",
-                        "getScalarInt",
-                        "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                int integerValue = Integer.parseInt(value);
+                if (ctx.javaClassInfo != null && ctx.cw != null
+                        && !RuntimeScalarCache.isCachedInt(integerValue)) {
+                    emitCachedIntegerLiteral(ctx, node, integerValue);
+                } else {
+                    // Shared cache entries cover common values. Larger literals use
+                    // a generated per-code-object field to avoid allocating a scalar
+                    // every time a loop evaluates the literal.
+                    mv.visitLdcInsn(integerValue);
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache",
+                            "getScalarInt",
+                            "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                }
             } else if (isLargeInteger) {
                 // Store large integers with precision preservation. Try long first,
                 // then construct an exact BigInteger-backed scalar for UV literals.
@@ -698,6 +706,31 @@ public class EmitLiteral {
                 mv.visitLdcInsn(Double.parseDouble(value));
             }
         }
+    }
+
+    private static void emitCachedIntegerLiteral(
+            EmitterContext ctx, NumberNode node, int integerValue) {
+        MethodVisitor mv = ctx.mv;
+        String field = ctx.javaClassInfo.integerLiteralField(node, ctx.cw);
+        String owner = ctx.javaClassInfo.javaClassName;
+        String descriptor = "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly;";
+        Label ready = new Label();
+        mv.visitVarInsn(Opcodes.ALOAD, 0);
+        mv.visitFieldInsn(Opcodes.GETFIELD, owner, field, descriptor);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitJumpInsn(Opcodes.IFNONNULL, ready);
+        mv.visitInsn(Opcodes.POP);
+        mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly");
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(integerValue);
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly",
+                "<init>", "(I)V", false);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitVarInsn(Opcodes.ALOAD, 0);
+        mv.visitInsn(Opcodes.SWAP);
+        mv.visitFieldInsn(Opcodes.PUTFIELD, owner, field, descriptor);
+        mv.visitLabel(ready);
     }
 
     /**

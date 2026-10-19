@@ -4,6 +4,7 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.perlonjava.frontend.astnode.NumberNode;
 import org.perlonjava.frontend.astnode.StringNode;
 import org.perlonjava.frontend.analysis.ReadOnlyArgumentUnpackAnalysis;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
@@ -65,6 +66,7 @@ public class JavaClassInfo {
     /** Static fields holding this class's package-scalar pins, keyed by the pinned name. */
     private final Map<String, String> scalarPinFields = new LinkedHashMap<>();
     private final IdentityHashMap<StringNode, String> stringLiteralFields = new IdentityHashMap<>();
+    private final IdentityHashMap<NumberNode, String> integerLiteralFields = new IdentityHashMap<>();
 
     /** Optional proven read-only {@code my (...) = @_} fast path for this generated CV. */
     public ReadOnlyArgumentUnpackAnalysis.Candidate readOnlyArgumentCandidate;
@@ -100,6 +102,17 @@ public class JavaClassInfo {
         field = "stringLiteral$" + stringLiteralFields.size();
         stringLiteralFields.put(node, field);
         cw.visitField(Opcodes.ACC_PRIVATE, field,
+                "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly;", null, null).visitEnd();
+        return field;
+    }
+
+    /** Register an instance field for one boxed integer literal outside the shared cache. */
+    public String integerLiteralField(NumberNode node, ClassWriter cw) {
+        String field = integerLiteralFields.get(node);
+        if (field != null) return field;
+        field = "integerLiteral$" + integerLiteralFields.size();
+        integerLiteralFields.put(node, field);
+        cw.visitField(Opcodes.ACC_PRIVATE | Opcodes.ACC_VOLATILE, field,
                 "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly;", null, null).visitEnd();
         return field;
     }

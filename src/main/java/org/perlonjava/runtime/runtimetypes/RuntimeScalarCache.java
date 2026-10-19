@@ -175,6 +175,11 @@ public class RuntimeScalarCache {
         return new RuntimeScalar(i);
     }
 
+    /** Whether a compile-time integer literal already resolves to a shared read-only scalar. */
+    public static boolean isCachedInt(int i) {
+        return i >= minInt && i <= maxInt;
+    }
+
     /**
      * Retrieves a cached RuntimeScalar for the specified long integer value.
      * If the long integer is within the cached range, a cached instance is returned;
