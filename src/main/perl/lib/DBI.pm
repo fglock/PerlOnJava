@@ -401,7 +401,6 @@ sub DBD::_::dr::connect {
 
     for my $method (qw(
         execute fetchrow_arrayref fetchrow_hashref rows finish
-        bind_param bind_param_inout bind_col
     )) {
         *{"DBI::st::$method"} = \&{"DBI::$method"};
     }
@@ -1092,7 +1091,7 @@ sub _store_handle_value {
         $handle->{sql_params} = $value if $key eq 'f_params' && !exists $handle->{sql_params};
         $handle->{f_params} = $value if $key eq 'sql_params' && !exists $handle->{f_params};
     }
-    return 1;
+    return $value;
 }
 
 # Driver STORE overrides commonly use SUPER::STORE to reach DBI's backing
@@ -1191,13 +1190,31 @@ sub bind_param {
 sub DBI::st::bind_param {
     my ($sth, $param_num, $value, $attr) = @_;
     if (!_is_jdbc_handle($sth)) {
-        my $impl = $sth->{ImplementorClass} || ref($sth);
-        no strict 'refs';
-        if (my $code = *{"${impl}::bind_param"}{CODE}) {
-            return $code->($sth, $param_num, $value, $attr);
-        }
+        return _dispatch_implementor_method(
+            $sth, 'bind_param', $param_num, $value, $attr,
+        );
     }
     return DBI::bind_param($sth, $param_num, $value, $attr);
+}
+
+sub DBI::st::bind_param_inout {
+    my ($sth, $param_num, $value, $max_len) = @_;
+    if (!_is_jdbc_handle($sth)) {
+        return _dispatch_implementor_method(
+            $sth, 'bind_param_inout', $param_num, $value, $max_len,
+        );
+    }
+    return DBI::bind_param_inout($sth, $param_num, $value, $max_len);
+}
+
+sub DBI::st::bind_col {
+    my ($sth, $column, $value, $attr) = @_;
+    if (!_is_jdbc_handle($sth)) {
+        return _dispatch_implementor_method(
+            $sth, 'bind_col', $column, $value, $attr,
+        );
+    }
+    return DBI::bind_col($sth, $column, $value, $attr);
 }
 
 sub clone {

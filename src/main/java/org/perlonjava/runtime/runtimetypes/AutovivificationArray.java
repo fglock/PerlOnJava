@@ -45,9 +45,14 @@ public class AutovivificationArray extends ArrayList<RuntimeScalar> {
             // as `\$array[-1]` to be cleared while the slot is still live.
             array.resetElementListAfterAutovivification();
 
-            arrayProxy.scalarToAutovivify.value = array;
-            arrayProxy.scalarToAutovivify.type = RuntimeScalarType.ARRAYREFERENCE;
-            RuntimeScalar.incrementRefCountForContainerStore(arrayProxy.scalarToAutovivify);
+            RuntimeScalar referent = arrayProxy.scalarToAutovivify;
+            if (referent instanceof RuntimeBaseProxy proxy) {
+                proxy.set(array.createReference());
+            } else {
+                referent.value = array;
+                referent.type = RuntimeScalarType.ARRAYREFERENCE;
+                RuntimeScalar.incrementRefCountForContainerStore(referent);
+            }
         }
     }
 

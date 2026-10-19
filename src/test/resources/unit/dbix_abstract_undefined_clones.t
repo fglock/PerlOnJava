@@ -17,6 +17,5 @@ $dbh->{dbh} = DBI->connect('dbi:SQLite:dbname=:memory:', '', '');
 my $other_wrapper = Regression::DBIxAbstractWrapper->new($dbh->{dbh});
 $other_wrapper->DESTROY;
 ok($dbh->{dbh}->ping, 'the original wrapped handle remains connected');
-no strict 'refs';
 is(@{$dbh->{CLONES}}, 0,
     'missing CLONES dereferences as an empty list after reconnect and wrapper destruction');
