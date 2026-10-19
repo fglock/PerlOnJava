@@ -1560,12 +1560,19 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public RuntimeArray values() {
         if (this.type == TIED_HASH) {
             RuntimeArray list = new RuntimeArray();
-            boolean isKey = false;
-            for (RuntimeScalar item : this) {
-                if (isKey) {
-                    RuntimeArray.push(list, item);
-                }
-                isKey = !isKey;
+            // A tied-hash iterator interleaves keys with FETCH results. Some
+            // ties (including Tie::MultiKeyInsertOrderHash) cache an iteration
+            // value for each key so that each() can return that value. values()
+            // must instead enumerate all keys first, allowing the iterator to
+            // finish and clear that cache, then FETCH each value normally.
+            List<RuntimeScalar> keys = new ArrayList<>();
+            RuntimeScalar key = TieHash.tiedFirstKey(this);
+            while (key != null && key.getDefinedBoolean()) {
+                keys.add(new RuntimeScalar(key));
+                key = TieHash.tiedNextKey(this, key);
+            }
+            for (RuntimeScalar tiedKey : keys) {
+                RuntimeArray.push(list, TieHash.tiedFetch(this, tiedKey));
             }
             hashIterator = null; // values resets the iterator
             // Set scalarContextSize so that values() in scalar context returns the count.
