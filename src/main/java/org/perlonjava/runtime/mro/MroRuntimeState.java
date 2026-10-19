@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.mro;
 
 import org.perlonjava.runtime.runtimetypes.OverloadContext;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.HashMap;
@@ -23,7 +24,7 @@ public final class MroRuntimeState {
     private final Map<String, RuntimeScalar> methodCache = new HashMap<>();
     private final Map<Integer, OverloadContext> overloadContextCache = new HashMap<>();
     private final Map<String, List<String>> isaStateCache = new HashMap<>();
-    private final Set<String> emptyIsaCache = new HashSet<>();
+    private final Map<String, RuntimeArray> emptyIsaCache = new HashMap<>();
 
     private final Map<String, Integer> packageGenerations = new HashMap<>();
     private final Set<String> knownPackageMroQueries = new HashSet<>();
@@ -58,7 +59,7 @@ public final class MroRuntimeState {
         return isaStateCache;
     }
 
-    public Set<String> emptyIsaCache() {
+    public Map<String, RuntimeArray> emptyIsaCache() {
         return emptyIsaCache;
     }
 
