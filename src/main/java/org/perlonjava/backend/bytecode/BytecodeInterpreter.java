@@ -273,7 +273,7 @@ public class BytecodeInterpreter {
      * call's result register: a sub whose last statement is that block returns the
      * register as its value, and the caller would otherwise see an unmatched marker.
      */
-    private static RuntimeBase consumedLoopControlResult(int context) {
+    private static RuntimeBase consumedControlFlowResult(int context) {
         return context == RuntimeContextType.SCALAR || context == RuntimeContextType.LVALUE
                 || context == RuntimeContextType.OBJECT ? new RuntimeScalar() : new RuntimeList();
     }
@@ -287,14 +287,34 @@ public class BytecodeInterpreter {
     }
 
     /**
-     * Dispatches loop-control markers returned by map/grep in the current
-     * interpreted frame.  Returns the target PC, or {@code -1} when this frame
-     * does not own the target and the marker must propagate to its caller.
+     * Dispatches non-local control-flow markers returned by map/grep in the
+     * current interpreted frame. Returns the target PC, or {@code -1} when
+     * this frame does not own the target and the marker must propagate.
      */
-    private static int dispatchListOperatorLoopControl(
+    private static int dispatchListOperatorControlFlow(
             RuntimeControlFlowList flow, InterpretedCode code, int context, int resultReg,
-            RuntimeBase[] registers, ArrayList<int[]> controlBlockStack,
+            int sourcePc, RuntimeBase[] registers, ArrayList<int[]> controlBlockStack,
             ArrayList<int[]> labeledBlockStack) {
+        if (flow.getControlFlowType() == ControlFlowType.GOTO) {
+            String label = flow.getControlFlowLabel();
+            Integer targetPc = code.gotoLabelPcs == null ? null : code.gotoLabelPcs.get(label);
+            if (targetPc == null) {
+                return -1;
+            }
+            if (jumpsIntoUnenteredLoopBody(code, label, targetPc, sourcePc)) {
+                throw new PerlCompilerException("Can't \"goto\" into the middle of a foreach loop");
+            }
+            rejectGotoIntoGiven(code, label);
+            if (code.gotoLabelsInsideConstruct != null
+                    && code.gotoLabelsInsideConstruct.contains(label)) {
+                throw new PerlCompilerException(
+                        "Use of \"goto\" to jump into a construct is no longer permitted");
+            }
+            enterGotoLabelPackage(code, targetPc);
+            registers[resultReg] = consumedControlFlowResult(context);
+            return targetPc;
+        }
+
         if (flow.getControlFlowType() != ControlFlowType.LAST
                 && flow.getControlFlowType() != ControlFlowType.NEXT
                 && flow.getControlFlowType() != ControlFlowType.REDO) {
@@ -315,7 +335,7 @@ public class BytecodeInterpreter {
                     default -> -1;
                 };
                 if (targetPc >= 0) {
-                    registers[resultReg] = consumedLoopControlResult(context);
+                    registers[resultReg] = consumedControlFlowResult(context);
                     return targetPc;
                 }
             }
@@ -328,7 +348,7 @@ public class BytecodeInterpreter {
                 while (labeledBlockStack.size() > i) {
                     labeledBlockStack.removeLast();
                 }
-                registers[resultReg] = consumedLoopControlResult(context);
+                registers[resultReg] = consumedControlFlowResult(context);
                 return entry[1];
             }
         }
@@ -2148,7 +2168,7 @@ public class BytecodeInterpreter {
                                                 };
                                                 if (targetPc >= 0) {
                                                     pc = targetPc;
-                                                    registers[rd] = consumedLoopControlResult(context);
+                                                    registers[rd] = consumedControlFlowResult(context);
                                                     releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
                                                     handled = true;
                                                     break;
@@ -2166,7 +2186,7 @@ public class BytecodeInterpreter {
                                                 labeledBlockStack.removeLast();
                                             }
                                             pc = entry[1]; // jump to block exit
-                                            registers[rd] = consumedLoopControlResult(context);
+                                            registers[rd] = consumedControlFlowResult(context);
                                             releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
                                             handled = true;
                                             break;
@@ -2327,7 +2347,7 @@ public class BytecodeInterpreter {
                                                 };
                                                 if (targetPc >= 0) {
                                                     pc = targetPc;
-                                                    registers[rd] = consumedLoopControlResult(context);
+                                                    registers[rd] = consumedControlFlowResult(context);
                                                     releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
                                                     handled = true;
                                                     break;
@@ -2344,7 +2364,7 @@ public class BytecodeInterpreter {
                                                 labeledBlockStack.removeLast();
                                             }
                                             pc = entry[1];
-                                            registers[rd] = consumedLoopControlResult(context);
+                                            registers[rd] = consumedControlFlowResult(context);
                                             releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
                                             handled = true;
                                             break;
@@ -3048,8 +3068,8 @@ public class BytecodeInterpreter {
                                 }
                                 pc = InlineOpcodeHandler.executeMap(bytecode, pc, registers);
                                 if (registers[resultReg] instanceof RuntimeControlFlowList flow) {
-                                    int targetPc = dispatchListOperatorLoopControl(flow, code, context,
-                                            resultReg, registers, controlBlockStack,
+                                    int targetPc = dispatchListOperatorControlFlow(flow, code, context,
+                                            resultReg, pc, registers, controlBlockStack,
                                             labeledBlockStack);
                                     if (targetPc < 0) return flow;
                                     pc = targetPc;
@@ -3064,8 +3084,8 @@ public class BytecodeInterpreter {
                                 }
                                 pc = InlineOpcodeHandler.executeGrep(bytecode, pc, registers);
                                 if (registers[resultReg] instanceof RuntimeControlFlowList flow) {
-                                    int targetPc = dispatchListOperatorLoopControl(flow, code, context,
-                                            resultReg, registers, controlBlockStack,
+                                    int targetPc = dispatchListOperatorControlFlow(flow, code, context,
+                                            resultReg, pc, registers, controlBlockStack,
                                             labeledBlockStack);
                                     if (targetPc < 0) return flow;
                                     pc = targetPc;
