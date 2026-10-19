@@ -1958,7 +1958,8 @@ public class MortalList {
             if (!(owner instanceof RuntimeArray array)
                     || (array.semanticCaptureOwnerCount() == 0
                     && !array.isPackageGlobalRoot
-                    && (array.scopeExited || !MyVarCleanupStack.isRegistered(array)))) continue;
+                    && (array.scopeExited || !MyVarCleanupStack.isRegistered(array))
+                    && !ReachabilityWalker.isReachableFromRoots(array, true, referent))) continue;
             RuntimeScalar cell = slot.ownerCell();
             if (cell == null) {
                 slotsWithoutCell++;
