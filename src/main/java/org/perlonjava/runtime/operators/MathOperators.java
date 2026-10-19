@@ -135,7 +135,7 @@ public class MathOperators {
 
     private static boolean canMultiplyExactLong(RuntimeScalar scalar) {
         if (scalar.type == INTEGER) {
-            return scalar.value instanceof Long || scalar.value instanceof Integer;
+            return RuntimeScalar.isNativeIntegerValue(scalar.value);
         }
         if (scalar.type != DOUBLE) return false;
         double value = scalar.getDouble();
@@ -441,6 +441,11 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the sum.
      */
     public static RuntimeScalar addWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Integer operands cannot carry a Perl string channel, so skip the
+        // string-channel preservation checks used by the generic path.
+        if (arg1.type == INTEGER && arg2.type == INTEGER) {
+            return addWarnUnpropagated(arg1, arg2).propagateTaint(arg1, arg2);
+        }
         return preserveStringChannel(addWarnUnpropagated(arg1, arg2), arg1, arg2)
                 .propagateTaint(arg1, arg2);
     }
@@ -464,14 +469,57 @@ public class MathOperators {
             long b = right.getLong();
             try {
                 long sum = Math.addExact(a, b);
-                boolean resultTainted = GlobalContext.isTaintModeActive()
-                        && (left.isTainted() || right.isTainted());
+                boolean resultTainted = integerResultTainted(left, right);
                 return target.setArithmeticIntegerResult(sum, resultTainted);
             } catch (ArithmeticException ignored) {
                 // Preserve the usual UV/NV promotion path on native-IV overflow.
             }
         }
         return target.set(addWarn(left, right));
+    }
+
+    /** Return {@code null} when this assignment needs the general Perl path. */
+    private static RuntimeScalar addAssignIntegerInPlace(
+            RuntimeScalar target, RuntimeScalar left, RuntimeScalar right) {
+        if (!target.canUpdateArithmeticIntegerInPlace()
+                || left.type != INTEGER
+                || right.type != INTEGER
+                || hasWideInteger(left, right)) {
+            return null;
+        }
+        long leftValue = left.getLong();
+        long rightValue = right.getLong();
+        try {
+            long sum = Math.addExact(leftValue, rightValue);
+            // left is the exact plain RuntimeScalar target established by
+            // canUpdateArithmeticIntegerInPlace() above.
+            boolean resultTainted = integerResultTaintedFromPlainLeft(left, right);
+            return target.setArithmeticIntegerResult(sum, resultTainted);
+        } catch (ArithmeticException ignored) {
+            return null;
+        }
+    }
+
+    private static boolean integerResultTainted(RuntimeScalar left, RuntimeScalar right) {
+        if (hasDirectTaintBit(left) && hasDirectTaintBit(right)) {
+            return (left.tainted || right.tainted) && GlobalContext.isTaintModeActive();
+        }
+        return GlobalContext.isTaintModeActive() && (left.isTainted() || right.isTainted());
+    }
+
+    private static boolean integerResultTaintedFromPlainLeft(
+            RuntimeScalar plainLeft, RuntimeScalar right) {
+        if (hasDirectTaintBit(right)) {
+            return (plainLeft.tainted || right.tainted) && GlobalContext.isTaintModeActive();
+        }
+        return GlobalContext.isTaintModeActive()
+                && (plainLeft.isTainted() || right.isTainted());
+    }
+
+    private static boolean hasDirectTaintBit(RuntimeScalar scalar) {
+        Class<?> scalarClass = scalar.getClass();
+        return scalarClass == RuntimeScalar.class
+                || scalarClass == RuntimeScalarReadOnly.class;
     }
 
     private static RuntimeScalar addWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
@@ -1031,6 +1079,13 @@ public class MathOperators {
      * @return The modified arg1.
      */
     public static RuntimeScalar addAssign(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Ordinary native integer lvalues cannot be blessed or overload
+        // arithmetic. Try their in-place path before resolving blessing IDs;
+        // tied, shared, wide, and non-integer scalars fail this guard and keep
+        // the normal overload-aware path below.
+        RuntimeScalar updated = addAssignIntegerInPlace(arg1, arg1, arg2);
+        if (updated != null) return updated;
+
         // Check for (+= overload first
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
@@ -1172,6 +1227,8 @@ public class MathOperators {
                 return arg1;
             }
         }
+        RuntimeScalar updated = addAssignIntegerInPlace(arg1, arg1, arg2);
+        if (updated != null) return updated;
         RuntimeScalar result = addWarn(arg1, arg2);
         arg1.set(result);
         return arg1;

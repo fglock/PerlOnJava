@@ -32,7 +32,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     private List<RuntimeArraySizeLvalue> arraySizeLvalues;
     private Integer tiedLocalSizeOverride;
     /** Number of pre-existing $# proxies at each local-array entry. */
-    private final Stack<Integer> localArraySizeLvalueCounts = new Stack<>();
+    private Stack<Integer> localArraySizeLvalueCounts;
 
     void registerArraySizeLvalue(RuntimeArraySizeLvalue proxy) {
         if (arraySizeLvalues == null) arraySizeLvalues = new ArrayList<>();
@@ -53,7 +53,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     private void orphanLocalArraySizeLvalues() {
-        int preservedCount = localArraySizeLvalueCounts.isEmpty() ? 0
+        int preservedCount = localArraySizeLvalueCounts == null
+                || localArraySizeLvalueCounts.isEmpty() ? 0
                 : localArraySizeLvalueCounts.pop();
         if (arraySizeLvalues == null) return;
         for (int i = arraySizeLvalues.size() - 1; i >= preservedCount; i--) {
@@ -93,7 +94,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     // @_ even though the complete array was not expanded at the call site.
     private int activeScalarLocalElements;
     private boolean scalarLocalContainerCleared;
-    private final Set<String> isaArrayNames = new LinkedHashSet<>();
+    // Most RuntimeArrays are temporary argument/value arrays, not @ISA.
+    // Keep hierarchy-validation metadata lazy so ordinary arrays do not each
+    // allocate a LinkedHashSet.
+    private Set<String> isaArrayNames;
 
     void beginScalarLocalElement() { activeScalarLocalElements++; }
     void markScalarLocalContainerCleared() {
@@ -336,6 +340,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public void markIsaArray(String arrayName) {
         isaArray = true;
         if (arrayName != null && arrayName.endsWith("::ISA")) {
+            if (isaArrayNames == null) {
+                isaArrayNames = new LinkedHashSet<>();
+            }
             isaArrayNames.add(arrayName.substring(0, arrayName.length() - 5));
         }
     }
@@ -347,7 +354,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     private void validateIsaMutation() {
-        if (isaArray && !isaArrayNames.isEmpty()) {
+        if (isaArray && isaArrayNames != null && !isaArrayNames.isEmpty()) {
             InheritanceResolver.validateIsaArrays(isaArrayNames);
         }
     }
@@ -2257,6 +2264,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      */
     @Override
     public void dynamicSaveState() {
+        if (localArraySizeLvalueCounts == null) {
+            localArraySizeLvalueCounts = new Stack<>();
+        }
         localArraySizeLvalueCounts.push(arraySizeLvalues == null ? 0 : arraySizeLvalues.size());
         // Create a new RuntimeArray to save the current state
         RuntimeArray currentState = new RuntimeArray();

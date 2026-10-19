@@ -34,7 +34,15 @@ public class RegexState implements DynamicState {
     private final RuntimeRegexState.ProvisionalCaptureResolver provisionalCaptureResolver;
 
     public RegexState() {
-        owner = PerlRuntime.current();
+        this(PerlRuntime.current());
+    }
+
+    private RegexState(ExecutionRuntimeState executionState) {
+        this(executionState.ownerRuntime);
+    }
+
+    private RegexState(PerlRuntime owner) {
+        this.owner = owner;
         RuntimeRegexState state = owner.regexState;
         globalMatcher = state.globalMatcher;
         globalMatchString = state.globalMatchString;
@@ -63,6 +71,11 @@ public class RegexState implements DynamicState {
 
     public static void save() {
         DynamicVariableManager.pushLocalVariable(new RegexState());
+    }
+
+    public static void save(ExecutionRuntimeState executionState) {
+        DynamicVariableManager.pushLocalVariable(
+                executionState, new RegexState(executionState));
     }
 
     @Override

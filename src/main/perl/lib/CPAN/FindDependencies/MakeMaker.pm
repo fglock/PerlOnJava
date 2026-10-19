@@ -18,10 +18,11 @@ sub getreqs_from_mm {
     print {$fh} $makefile_pl;
     close $fh;
 
+    my $process_timeout = $^O eq 'MSWin32' ? 60 : 10;
     my $result = run_process(
         argv => [ $^X, 'Makefile.PL' ],
         cwd => $tempdir,
-        timeout => 10,
+        timeout => $process_timeout,
     );
     return "Makefile.PL didn't finish in a reasonable time\n"
         if $result->{timed_out};

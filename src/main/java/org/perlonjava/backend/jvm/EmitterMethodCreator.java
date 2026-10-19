@@ -466,6 +466,17 @@ public class EmitterMethodCreator implements Opcodes {
                 org.perlonjava.frontend.analysis.PristineArgsSnapshotAnalysis
                         .requiresSnapshot(ast,
                                 (String) ast.getAnnotation("compiledSubroutineName"));
+        ctx.javaClassInfo.readOnlyArgumentCandidate =
+                org.perlonjava.frontend.analysis.ReadOnlyArgumentUnpackAnalysis.analyze(ast);
+        ctx.javaClassInfo.skipRegexStateSnapshot =
+                org.perlonjava.frontend.analysis.RegexStateSnapshotAnalysis.canSkipSnapshot(ast);
+        ctx.javaClassInfo.readOnlyArgumentFlagSlot = -1;
+        ctx.javaClassInfo.readOnlyArgumentSlots = java.util.Collections.emptyMap();
+        ctx.javaClassInfo.readOnlyArgumentHashFieldSlots = java.util.Collections.emptyMap();
+        ctx.javaClassInfo.readOnlyArgumentFreshScalarReturn =
+                ctx.javaClassInfo.readOnlyArgumentCandidate != null
+                        && ctx.javaClassInfo.readOnlyArgumentCandidate.freshScalarReturn();
+        ctx.javaClassInfo.emittingReadOnlyArgumentFallback = false;
         String methodName = "apply";
         byte[] classData = null;
         boolean asmDebug = System.getenv("JPERL_ASM_DEBUG") != null;
@@ -585,22 +596,6 @@ public class EmitterMethodCreator implements Opcodes {
 
             // Generate the subroutine block
             mv.visitCode();
-
-            // Direct JVM-to-JVM calls bypass RuntimeCode.apply(), so retain
-            // the generated method's self reference for dynamic wrappers
-            // such as &{"CORE::__SUB__"}.
-            mv.visitVarInsn(Opcodes.ALOAD, 0);
-            mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassInfo.javaClassName,
-                    "__SUB__", "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "pushJvmSelfReference",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V", false);
-            mv.visitInsn(ctx.javaClassInfo.isSortComparator ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "pushJvmSortComparator",
-                    "(Z)V", false);
 
             // Initialize local variables with closure values from instance fields
             // Skip some indices because they are reserved for special arguments (this, "@_" and call
@@ -748,6 +743,32 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitVarInsn(Opcodes.ASTORE, slot);
             }
 
+            // Direct JVM-to-JVM calls bypass RuntimeCode.apply(), so retain
+            // generated-frame metadata for dynamic wrappers such as
+            // &{"CORE::__SUB__"}. Capture the execution state once so frame
+            // teardown does not perform a second thread-local runtime lookup.
+            int jvmFrameStateSlot = ctx.symbolTable.allocateLocalVariable();
+            ctx.javaClassInfo.jvmFrameStateSlot = jvmFrameStateSlot;
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/PerlRuntime",
+                    "current",
+                    "()Lorg/perlonjava/runtime/runtimetypes/PerlRuntime;", false);
+            mv.visitFieldInsn(Opcodes.GETFIELD,
+                    "org/perlonjava/runtime/runtimetypes/PerlRuntime",
+                    "executionState",
+                    "Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;");
+            mv.visitVarInsn(Opcodes.ASTORE, jvmFrameStateSlot);
+            mv.visitVarInsn(Opcodes.ALOAD, jvmFrameStateSlot);
+            mv.visitVarInsn(Opcodes.ALOAD, 0);
+            mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassInfo.javaClassName,
+                    "__SUB__", "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+            mv.visitInsn(ctx.javaClassInfo.isSortComparator ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "pushJvmFrame",
+                    "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Z)V",
+                    false);
+
             // Create a label for the return point
             ctx.javaClassInfo.returnLabel = new Label();
 
@@ -766,8 +787,12 @@ public class EmitterMethodCreator implements Opcodes {
             // Store dynamicIndex so goto &sub can access it for cleanup before tail call
             ctx.javaClassInfo.dynamicLevelSlot = dynamicIndex;
 
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RegexState", "save", "()V", false);
+            if (!ctx.javaClassInfo.skipRegexStateSnapshot) {
+                mv.visitVarInsn(Opcodes.ALOAD, jvmFrameStateSlot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RegexState", "save",
+                        "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;)V", false);
+            }
 
             // Store the computed RuntimeList return value in a dedicated local slot.
             // This keeps the operand stack empty at join labels (endCatch), avoiding
@@ -890,6 +915,19 @@ public class EmitterMethodCreator implements Opcodes {
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;IZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                     false);
             mv.visitVarInsn(Opcodes.ASTORE, returnListSlot);
+            if (ctx.javaClassInfo.readOnlyArgumentFreshScalarReturn
+                    && ctx.javaClassInfo.readOnlyArgumentFlagSlot >= 0) {
+                Label ordinaryReturn = new Label();
+                mv.visitVarInsn(Opcodes.ILOAD,
+                        ctx.javaClassInfo.readOnlyArgumentFlagSlot);
+                mv.visitJumpInsn(Opcodes.IFEQ, ordinaryReturn);
+                mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);
+                mv.visitInsn(Opcodes.ICONST_1);
+                mv.visitFieldInsn(Opcodes.PUTFIELD,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                        "freshScalarResult", "Z");
+                mv.visitLabel(ordinaryReturn);
+            }
 
             // (Return-path cleanup is emitted at each 'return' site in handleReturnOperator.)
 
@@ -1179,8 +1217,20 @@ public class EmitterMethodCreator implements Opcodes {
             }
 
             // Materialize $1, $&, etc. into concrete scalars BEFORE restoring regex state.
-            // The return list may contain lazy ScalarSpecialVariable references; if we
-            // restored first, they would resolve to the caller's (stale) values.
+            // A successfully guarded fresh numeric return cannot contain a lazy special
+            // variable, so it can bypass both the active-frame scan and the materializer.
+            Label materializeSpecialVars = null;
+            Label materializedSpecialVars = null;
+            if (ctx.javaClassInfo.readOnlyArgumentFreshScalarReturn
+                    && ctx.javaClassInfo.readOnlyArgumentFlagSlot >= 0) {
+                materializeSpecialVars = new Label();
+                materializedSpecialVars = new Label();
+                mv.visitVarInsn(Opcodes.ILOAD,
+                        ctx.javaClassInfo.readOnlyArgumentFlagSlot);
+                mv.visitJumpInsn(Opcodes.IFEQ, materializeSpecialVars);
+                mv.visitJumpInsn(Opcodes.GOTO, materializedSpecialVars);
+                mv.visitLabel(materializeSpecialVars);
+            }
             mv.visitInsn(Opcodes.DUP);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
@@ -1189,6 +1239,9 @@ public class EmitterMethodCreator implements Opcodes {
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "materializeSpecialVarsInResult",
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;I)V", false);
+            if (materializedSpecialVars != null) {
+                mv.visitLabel(materializedSpecialVars);
+            }
 
             if (useTryCatch) {
                 // For eval BLOCK, wrap the teardown in a try-catch to catch exceptions
@@ -1210,7 +1263,7 @@ public class EmitterMethodCreator implements Opcodes {
 
                 // Teardown local variables — popToLocalLevel() also restores regex state
                 // (RegexState was pushed onto the DVM stack at sub entry).
-                Local.localTeardown(dynamicIndex, mv);
+                Local.localTeardown(dynamicIndex, mv, jvmFrameStateSlot);
 
                 // Deferred lexical cleanup runs after the eval body method
                 // returns. Drain it here, before clearing $@, when doing so
@@ -1331,20 +1384,18 @@ public class EmitterMethodCreator implements Opcodes {
                 // No try-catch: just do the teardown
                 // Teardown local variables — popToLocalLevel() also restores regex state
                 // (RegexState was pushed onto the DVM stack at sub entry).
-                Local.localTeardown(dynamicIndex, mv);
+                Local.localTeardown(dynamicIndex, mv, jvmFrameStateSlot);
             }
 
+            mv.visitVarInsn(Opcodes.ALOAD, jvmFrameStateSlot);
             mv.visitVarInsn(Opcodes.ALOAD, 0);
             mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassInfo.javaClassName,
                     "__SUB__", "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "popJvmSelfReference",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V", false);
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "popJvmSortComparator",
-                    "()V", false);
+                    "popJvmFrame",
+                    "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
+                    false);
             mv.visitInsn(Opcodes.ARETURN); // Returns an Object
             mv.visitMaxs(0, 0); // Automatically computed
             mv.visitEnd();

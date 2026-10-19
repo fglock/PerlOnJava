@@ -49,7 +49,18 @@ public class CompareOperators {
     }
 
     private static int compareIntegers(RuntimeScalar left, RuntimeScalar right) {
+        if (isNativeInteger(left) && isNativeInteger(right)) {
+            return Long.compare(left.getLong(), right.getLong());
+        }
         return left.getBigint().compareTo(right.getBigint());
+    }
+
+    private static boolean isNativeInteger(RuntimeScalar scalar) {
+        Class<?> scalarClass = scalar.getClass();
+        return (scalarClass == RuntimeScalar.class
+                        || scalarClass == RuntimeScalarReadOnly.class)
+                && scalar.type == RuntimeScalarType.INTEGER
+                && !RuntimeScalar.isWideIntegerValue(scalar.value);
     }
 
     /** Compare against an integer-adjusted numeric RHS without materializing its scalar. */

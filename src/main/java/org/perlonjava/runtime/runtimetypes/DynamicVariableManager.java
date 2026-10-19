@@ -35,8 +35,16 @@ public class DynamicVariableManager {
         return PerlRuntime.current().executionState().dynamicVariableStack;
     }
 
+    private static Deque<DynamicState> variableStack(ExecutionRuntimeState state) {
+        return state.dynamicVariableStack;
+    }
+
     private static Deque<FrameCapture> frameCaptures() {
         return PerlRuntime.current().executionState().dynamicFrameCaptures;
+    }
+
+    private static Deque<FrameCapture> frameCaptures(ExecutionRuntimeState state) {
+        return state.dynamicFrameCaptures;
     }
 
     /**
@@ -47,6 +55,11 @@ public class DynamicVariableManager {
      */
     public static int getLocalLevel() {
         return variableStack().size();
+    }
+
+    /** Return the local level from the execution state captured by generated code. */
+    public static int getLocalLevel(ExecutionRuntimeState state) {
+        return variableStack(state).size();
     }
 
     /** Return whether a package scalar currently has an active local() frame. */
@@ -107,6 +120,11 @@ public class DynamicVariableManager {
         variableStack().addLast(variable);
     }
 
+    static void pushLocalVariable(ExecutionRuntimeState executionState, DynamicState variable) {
+        variable.dynamicSaveState();
+        variableStack(executionState).addLast(variable);
+    }
+
     public static void enterDeferExecution() {
         DEFER_EXECUTION_DEPTH.set(DEFER_EXECUTION_DEPTH.get() + 1);
     }
@@ -133,8 +151,13 @@ public class DynamicVariableManager {
      * @param targetLocalLevel the target size of the stack after popping variables.
      */
     public static void popToLocalLevel(int targetLocalLevel) {
+        popToLocalLevel(PerlRuntime.current().executionState(), targetLocalLevel);
+    }
+
+    public static void popToLocalLevel(
+            ExecutionRuntimeState executionState, int targetLocalLevel) {
         // Ensure the target level is non-negative and does not exceed the current stack size
-        Deque<DynamicState> variableStack = variableStack();
+        Deque<DynamicState> variableStack = variableStack(executionState);
         if (targetLocalLevel < 0 || targetLocalLevel > variableStack.size()) {
             throw new IllegalArgumentException("Invalid target local level: " + targetLocalLevel);
         }
@@ -173,13 +196,18 @@ public class DynamicVariableManager {
      * Ordinary calls retain the normal pop-and-restore behavior.
      */
     public static void teardownFrameToLocalLevel(int targetLocalLevel) {
-        FrameCapture capture = frameCaptures().peekLast();
+        teardownFrameToLocalLevel(PerlRuntime.current().executionState(), targetLocalLevel);
+    }
+
+    public static void teardownFrameToLocalLevel(
+            ExecutionRuntimeState executionState, int targetLocalLevel) {
+        FrameCapture capture = frameCaptures(executionState).peekLast();
         if (capture != null && capture.localLevel == targetLocalLevel
                 && capture.states == null) {
-            capture.states = suspendAbove(targetLocalLevel);
+            capture.states = suspendAbove(executionState, targetLocalLevel);
             return;
         }
-        popToLocalLevel(targetLocalLevel);
+        popToLocalLevel(executionState, targetLocalLevel);
     }
 
     /** Execute one subroutine call while retaining its surviving local() states. */
@@ -227,7 +255,12 @@ public class DynamicVariableManager {
      * bottom-to-top order so they can be reinstated on a later callback.
      */
     public static List<SuspendedState> suspendAbove(int targetLocalLevel) {
-        Deque<DynamicState> variableStack = variableStack();
+        return suspendAbove(PerlRuntime.current().executionState(), targetLocalLevel);
+    }
+
+    private static List<SuspendedState> suspendAbove(
+            ExecutionRuntimeState executionState, int targetLocalLevel) {
+        Deque<DynamicState> variableStack = variableStack(executionState);
         if (targetLocalLevel < 0 || targetLocalLevel > variableStack.size()) {
             throw new IllegalArgumentException("Invalid target local level: " + targetLocalLevel);
         }

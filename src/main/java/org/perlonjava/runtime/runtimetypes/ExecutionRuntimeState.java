@@ -15,6 +15,12 @@ import java.util.Set;
 
 /** Per-interpreter execution and dynamic-scope state migrated in Phase 5. */
 public final class ExecutionRuntimeState {
+    final PerlRuntime ownerRuntime;
+
+    ExecutionRuntimeState(PerlRuntime ownerRuntime) {
+        this.ownerRuntime = ownerRuntime;
+    }
+
     /** Set once the interpreter enters its global destruction phase. */
     boolean globalDestruction;
 
@@ -85,7 +91,8 @@ public final class ExecutionRuntimeState {
     public final Deque<String> activeRegexCallbackPackages = new ArrayDeque<>();
     public final Deque<Object> activeLexicalFrames = new ArrayDeque<>();
     /** Small per-runtime pool for active lexical frame wrappers. */
-    public final Deque<Object> reusableActiveLexicalFrames = new ArrayDeque<>();
+    /** One spare frame is enough because a frame is recycled only after a call returns. */
+    public Object reusableActiveLexicalFrame;
     /** Lexical cells owned by the top-level compilation unit. */
     public final Map<String, RuntimeBase> topLevelLexicals = new LinkedHashMap<>();
     public final Deque<List<RuntimeScalar>> pristineArgsStack = new ArrayDeque<>();
@@ -127,13 +134,44 @@ public final class ExecutionRuntimeState {
     final IdentityHashMap<Object, Integer> liveMyVarCounts = new IdentityHashMap<>();
 
     private final IdentityHashMap<RuntimeCode, CallDepthState> callDepths = new IdentityHashMap<>();
+    private RuntimeCode lastCallDepthCode;
+    private CallDepthState lastCallDepthState;
+
+    private static final int MAX_CACHED_CALL_DEPTHS = 256;
+    private static final int PRUNE_CALL_DEPTHS_AT = 512;
 
     public CallDepthState callDepth(RuntimeCode code) {
-        return callDepths.computeIfAbsent(code, ignored -> new CallDepthState());
+        if (lastCallDepthCode == code) return lastCallDepthState;
+        CallDepthState state = callDepths.get(code);
+        if (state != null) {
+            lastCallDepthCode = code;
+            lastCallDepthState = state;
+            return state;
+        }
+        if (callDepths.size() >= PRUNE_CALL_DEPTHS_AT) {
+            var iterator = callDepths.entrySet().iterator();
+            while (callDepths.size() > MAX_CACHED_CALL_DEPTHS && iterator.hasNext()) {
+                var entry = iterator.next();
+                if (entry.getValue().depth == 0) {
+                    if (entry.getKey() == lastCallDepthCode) {
+                        lastCallDepthCode = null;
+                        lastCallDepthState = null;
+                    }
+                    iterator.remove();
+                }
+            }
+        }
+        state = new CallDepthState();
+        callDepths.put(code, state);
+        lastCallDepthCode = code;
+        lastCallDepthState = state;
+        return state;
     }
 
     public void releaseCallDepth(RuntimeCode code) {
-        callDepths.remove(code);
+        // Keep the reset state for hot subroutines. Removing it here caused
+        // every non-recursive call to allocate a CallDepthState and a new
+        // IdentityHashMap entry. Inactive entries are pruned on demand above.
     }
 
     public static final class CallDepthState {

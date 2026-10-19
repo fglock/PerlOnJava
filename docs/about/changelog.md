@@ -10,6 +10,24 @@ priorities and future plans.
 - Keep lexical-registration membership checks constant-time, avoiding quadratic CPAN index parsing as cleanup stacks grow.
 - Preserve numeric types of cached read-only scalars in ranges, rejecting unsigned endpoints outside the supported integer range.
 - Improve JVM execution performance for the bit-packed Life example, ordinary scalar assignments, and common blessing lookups.
+- Reuse private one-scalar wrappers when materializing scalar returns, reducing result-list allocations across JVM calls.
+- Cache out-of-range boxed integer literals per generated code object, avoiding repeated allocation during loop evaluation while preserving read-only literal behavior.
+- Improve JVM method-call throughput with guarded argument unpacking,
+  identity-checked empty inheritance checks, direct small literal-argument
+  frames, cached
+  negative overload metadata, guard-verified literal hash reads, and stable
+  integer hash-field cells in eligible arithmetic methods; skip regex
+  snapshots and return-time context scans for proven call-free arithmetic
+  methods; avoid inactive taint mode lookups for untainted plain integer
+  compound-assignment operands; cache generated warning metadata and reuse
+  integer payloads for repeatedly updated scalar cells; reuse captured runtime
+  state for generated call-frame bookkeeping, scalar-result recycling, and
+  dynamic-local level reads and teardown; skip redundant runtime-binding checks
+  on same-runtime cached method hits; skip generic scalar magic checks
+  when updating the internal caller-package tracker; keep one reusable active
+  lexical frame instead of a per-runtime deque; cache the live warning-scope
+  scalar per runtime and invalidate it when global scalar bindings change.
+- Preserve inherited method dispatch in child threads.
 - Add a reproducible, warmup-aware Perl versus PerlOnJava performance runner (#1196).
 - Cover FormState session restoration across requests and HTTP response conversion from callback and streaming PSGI responses; refresh HTTP::Message and LWP compatibility status (#1650, #1651, #1652).
 - Preserve the awaited Future value when its source scalar or aggregate slot changes during suspension, covering PAGI::Server request-body receives (#1818).

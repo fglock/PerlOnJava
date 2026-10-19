@@ -1,8 +1,12 @@
 package org.perlonjava.backend.jvm;
 
 import org.objectweb.asm.Label;
+import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.perlonjava.frontend.astnode.NumberNode;
+import org.perlonjava.frontend.astnode.StringNode;
+import org.perlonjava.frontend.analysis.ReadOnlyArgumentUnpackAnalysis;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
@@ -35,6 +39,9 @@ public class JavaClassInfo {
     /** Active finally whose body must run before a Perl return leaves its wrapper. */
     public TryFinallyContext activeTryFinallyContext;
 
+    /** Local slot holding this generated invocation's execution state. */
+    public int jvmFrameStateSlot;
+
     /**
      * Outermost boolean short-circuit expression token used for caller().
      * Perl attributes calls anywhere in an &&/and/||/or expression to the
@@ -58,6 +65,23 @@ public class JavaClassInfo {
 
     /** Static fields holding this class's package-scalar pins, keyed by the pinned name. */
     private final Map<String, String> scalarPinFields = new LinkedHashMap<>();
+    private final IdentityHashMap<StringNode, String> stringLiteralFields = new IdentityHashMap<>();
+    private final IdentityHashMap<NumberNode, String> integerLiteralFields = new IdentityHashMap<>();
+
+    /** Optional proven read-only {@code my (...) = @_} fast path for this generated CV. */
+    public ReadOnlyArgumentUnpackAnalysis.Candidate readOnlyArgumentCandidate;
+    /** Runtime flag set when the live argument cells satisfy the fast-path guards. */
+    public int readOnlyArgumentFlagSlot = -1;
+    /** Borrowed argument cells cached in JVM locals for fast scalar reads. */
+    public Map<String, Integer> readOnlyArgumentSlots = Collections.emptyMap();
+    /** Stable literal hash cells cached in JVM locals for the guarded method body. */
+    public Map<String, Integer> readOnlyArgumentHashFieldSlots = Collections.emptyMap();
+    /** The guarded candidate's sole final return expression is a fresh integer result. */
+    public boolean readOnlyArgumentFreshScalarReturn;
+    /** The emitted CV cannot change match state or call code that could change it. */
+    public boolean skipRegexStateSnapshot;
+    /** Prevents the guarded fallback from recursively selecting the fast path. */
+    public boolean emittingReadOnlyArgumentFallback;
 
     /** The pin field already declared for {@code name} in this class, or null. */
     public String scalarPinField(String name) {
@@ -68,6 +92,28 @@ public class JavaClassInfo {
     public String registerScalarPinField(String name) {
         String field = "scalarPin$" + scalarPinFields.size();
         scalarPinFields.put(name, field);
+        return field;
+    }
+
+    /** Register an instance field for one compiled string literal occurrence. */
+    public String stringLiteralField(StringNode node, ClassWriter cw) {
+        String field = stringLiteralFields.get(node);
+        if (field != null) return field;
+        field = "stringLiteral$" + stringLiteralFields.size();
+        stringLiteralFields.put(node, field);
+        cw.visitField(Opcodes.ACC_PRIVATE, field,
+                "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly;", null, null).visitEnd();
+        return field;
+    }
+
+    /** Register an instance field for one boxed integer literal outside the shared cache. */
+    public String integerLiteralField(NumberNode node, ClassWriter cw) {
+        String field = integerLiteralFields.get(node);
+        if (field != null) return field;
+        field = "integerLiteral$" + integerLiteralFields.size();
+        integerLiteralFields.put(node, field);
+        cw.visitField(Opcodes.ACC_PRIVATE | Opcodes.ACC_VOLATILE, field,
+                "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly;", null, null).visitEnd();
         return field;
     }
 

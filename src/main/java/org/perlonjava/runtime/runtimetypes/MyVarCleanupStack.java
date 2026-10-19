@@ -97,6 +97,10 @@ public class MyVarCleanupStack {
         return stack().size();
     }
 
+    static int pushMark(ExecutionRuntimeState executionState) {
+        return executionState.myVarCleanupStack.size();
+    }
+
     /**
      * Called by emitted bytecode when a my-variable is created.
      * Registers the variable for potential exception cleanup.
@@ -267,6 +271,14 @@ public class MyVarCleanupStack {
      */
     public static void unwindTo(int mark) {
         ArrayList<Object> stack = stack();
+        unwindTo(mark, stack);
+    }
+
+    static void unwindTo(int mark, ExecutionRuntimeState executionState) {
+        unwindTo(mark, executionState.myVarCleanupStack);
+    }
+
+    private static void unwindTo(int mark, ArrayList<Object> stack) {
         for (int i = stack.size() - 1; i >= mark; i--) {
             Object var = stack.removeLast();
             if (var != null) {
@@ -287,6 +299,14 @@ public class MyVarCleanupStack {
      */
     public static void popMark(int mark) {
         ArrayList<Object> stack = stack();
+        popMark(mark, stack);
+    }
+
+    static void popMark(int mark, ExecutionRuntimeState executionState) {
+        popMark(mark, executionState.myVarCleanupStack);
+    }
+
+    private static void popMark(int mark, ArrayList<Object> stack) {
         while (stack.size() > mark) {
             Object var = stack.removeLast();
             if (var != null) {

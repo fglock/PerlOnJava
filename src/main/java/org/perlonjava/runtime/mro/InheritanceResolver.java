@@ -155,6 +155,13 @@ public class InheritanceResolver {
      */
     private static boolean hasIsaChanged(String className, MroRuntimeState state) {
         RuntimeArray isaArray = getIsaArrayForClass(className);
+        RuntimeArray cachedEmptyIsa = state.emptyIsaCache().get(className);
+        if (cachedEmptyIsa == isaArray
+                && isaArray.type != RuntimeArray.TIED_ARRAY
+                && !isaArray.threadShared
+                && isaArray.elements.isEmpty()) {
+            return false;
+        }
         
         // Build current ISA list
         List<String> currentIsa = new ArrayList<>();
@@ -168,6 +175,15 @@ public class InheritanceResolver {
         }
 
         List<String> cachedIsa = state.isaStateCache().get(className);
+
+        if (currentIsa.isEmpty()
+                && isaArray.type != RuntimeArray.TIED_ARRAY
+                && !isaArray.threadShared
+                && isaArray.elements.isEmpty()) {
+            state.emptyIsaCache().put(className, isaArray);
+        } else {
+            state.emptyIsaCache().remove(className);
+        }
 
         // If ISA changed, update cache and return true
         if (!currentIsa.equals(cachedIsa)) {
@@ -279,6 +295,11 @@ public class InheritanceResolver {
      */
     public static OverloadContext getCachedOverloadContext(int blessId) {
         return currentState().overloadContextCache().get(blessId);
+    }
+
+    /** Returns whether overload metadata, including a negative result, is cached. */
+    public static boolean hasCachedOverloadContext(int blessId) {
+        return currentState().overloadContextCache().containsKey(blessId);
     }
 
     /**

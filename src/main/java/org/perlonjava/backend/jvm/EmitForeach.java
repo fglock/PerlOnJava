@@ -430,10 +430,12 @@ public class EmitForeach {
         int savedGlobalUnderscoreIndex = -1;
         if (needLocalizeUnderscore || needLocalizeGlobalLoopVar) {
             dynamicIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            mv.visitVarInsn(Opcodes.ALOAD,
+                    emitterVisitor.ctx.javaClassInfo.jvmFrameStateSlot);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
                     "getLocalLevel",
-                    "()I",
+                    "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;)I",
                     false);
             mv.visitVarInsn(Opcodes.ISTORE, dynamicIndex);
         }
@@ -864,7 +866,8 @@ public class EmitForeach {
 
             popGotoLabelsForBlock(emitterVisitor, blockNode);
 
-            Local.localTeardown(bodyLocalRecord, mv);
+            Local.localTeardown(bodyLocalRecord, mv,
+                    emitterVisitor.ctx.javaClassInfo.jvmFrameStateSlot);
             EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, bodyScopeIndex, true);
             emitterVisitor.ctx.symbolTable.exitScope(bodyScopeIndex);
         } else {
@@ -1006,11 +1009,13 @@ public class EmitForeach {
 
         // Restore dynamic variable stack for our localization
         if ((needLocalizeUnderscore || needLocalizeGlobalLoopVar) && dynamicIndex != -1) {
+            mv.visitVarInsn(Opcodes.ALOAD,
+                    emitterVisitor.ctx.javaClassInfo.jvmFrameStateSlot);
             mv.visitVarInsn(Opcodes.ILOAD, dynamicIndex);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
                     "popToLocalLevel",
-                    "(I)V",
+                    "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;I)V",
                     false);
         }
 
@@ -1024,7 +1029,8 @@ public class EmitForeach {
                     false);
         }
 
-        Local.localTeardown(localRecord, mv);
+        Local.localTeardown(localRecord, mv,
+                emitterVisitor.ctx.javaClassInfo.jvmFrameStateSlot);
 
         EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, true);
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
