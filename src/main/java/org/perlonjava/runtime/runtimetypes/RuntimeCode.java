@@ -1985,9 +1985,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     && !isCodeScalar(scalar)) {
                 if (recyclableScalarResult && result.elements.size() == 1) {
                     // Scalar-context callers discard the list wrapper after extracting this
-                    // copied rvalue. Keep Perl's required scalar copy, then make only the
-                    // new one-element wrapper runtime-local and recyclable.
-                    return RuntimeList.acquireScalarResult(scalar.clone());
+                    // copied rvalue. Reuse a private one-scalar input wrapper when possible;
+                    // otherwise acquire a runtime-local wrapper for the copied value.
+                    RuntimeScalar copied = scalar.clone();
+                    if (result.replaceRecyclableScalarResult(copied)) return result;
+                    return RuntimeList.acquireScalarResult(copied);
                 }
                 return result.cloneScalars();
             }

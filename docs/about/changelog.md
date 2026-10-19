@@ -10,6 +10,7 @@ priorities and future plans.
 - Keep lexical-registration membership checks constant-time, avoiding quadratic CPAN index parsing as cleanup stacks grow.
 - Preserve numeric types of cached read-only scalars in ranges, rejecting unsigned endpoints outside the supported integer range.
 - Improve JVM execution performance for the bit-packed Life example, ordinary scalar assignments, and common blessing lookups.
+- Reuse private one-scalar wrappers when materializing scalar returns, reducing result-list allocations across JVM calls.
 - Improve JVM method-call throughput with guarded argument unpacking, cached
   empty inheritance checks, direct small literal-argument frames, cached
   negative overload metadata, guard-verified literal hash reads, and stable

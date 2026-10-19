@@ -79,6 +79,13 @@ public class RuntimeList extends RuntimeBase {
         return result;
     }
 
+    /** Replace the scalar in a private result wrapper that can return to the runtime-local pool. */
+    boolean replaceRecyclableScalarResult(RuntimeScalar value) {
+        if (!recyclableScalarResult || elements.size() != 1) return false;
+        elements.set(0, value);
+        return true;
+    }
+
     /**
      * Extract a scalar result at a JVM call site and recycle only the private
      * one-scalar wrapper allocated by RuntimeScalar.getList().
