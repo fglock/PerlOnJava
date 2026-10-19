@@ -60,7 +60,7 @@ public final class StorableWriter {
     public String writeTopLevelToFile(RuntimeScalar value, boolean netorder) {
         StorableContext c = StorableContext.forWrite(netorder);
         Header.writeFile(c);
-        emitTopLevel(c, value);
+        emitTopLevel(c, value, false);
         return c.encoded();
     }
 
@@ -69,11 +69,12 @@ public final class StorableWriter {
     public String writeTopLevelToMemory(RuntimeScalar value, boolean netorder) {
         StorableContext c = StorableContext.forWrite(netorder);
         Header.writeInMemory(c);
-        emitTopLevel(c, value);
+        emitTopLevel(c, value, true);
         return c.encoded();
     }
 
-    private void emitTopLevel(StorableContext c, RuntimeScalar value) {
+    private void emitTopLevel(StorableContext c, RuntimeScalar value,
+                              boolean preserveScalarReferenceEnvelope) {
         // do_store requires the input to be a reference (Storable.xs L4593).
         // We're more permissive: accept bare scalars and emit them directly.
         // Real perl would croak with "Not a reference" — adjust later if needed.
@@ -91,6 +92,21 @@ public final class StorableWriter {
             if (value.type == RuntimeScalarType.REFERENCE) {
                 if (RuntimeScalarType.blessedId(value) != 0) {
                     dispatchReferent(c, value);
+                } else if (preserveScalarReferenceEnvelope
+                        && (((RuntimeScalar) value.value).type == RuntimeScalarType.ARRAYREFERENCE
+                            || ((RuntimeScalar) value.value).type == RuntimeScalarType.HASHREFERENCE)) {
+                    // A top-level scalar ref whose scalar contains another
+                    // aggregate reference has two observable levels (for
+                    // example freeze(\\$hashref), used by MLDBM's Storable
+                    // serializer). Keep the scalar-ref layer so thaw returns
+                    // REF -> HASH/ARRAY.
+                    // Emit just its wire wrapper: dispatching the intermediate
+                    // scalar cell as a reference would add a seen-table entry
+                    // with no matching value on the reader side, shifting
+                    // back-reference tags in shared and circular graphs.
+                    c.writeByte(Opcodes.SX_REF);
+                    c.recordWriteSeen(new Object());
+                    dispatch(c, (RuntimeScalar) value.value);
                 } else {
                     dispatch(c, (RuntimeScalar) value.value);
                 }
