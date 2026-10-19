@@ -5686,7 +5686,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // from the raw context. Normalizing it first would silently turn a
             // forbidden lvalue method assignment into an ordinary scalar call.
             if (cachedRuntime != null && code.compilerSupplier == null
-                    && code.boundRuntime == null && code.constantValue == null) {
+                    && (code.boundRuntime == null || code.boundRuntime == cachedRuntime)
+                    && code.constantValue == null) {
                 return code.apply(args, callContext, cachedRuntime);
             }
             return code.apply(args, callContext);
@@ -9482,7 +9483,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private RuntimeList apply(RuntimeArray a, int callContext, PerlRuntime cachedRuntime) {
-        if (boundRuntime != null && PerlRuntime.currentOrNull() != boundRuntime) {
+        if (boundRuntime != null && cachedRuntime != boundRuntime
+                && PerlRuntime.currentOrNull() != boundRuntime) {
             try (PerlRuntime.Binding ignored = boundRuntime.bind()) {
                 return apply(a, callContext, null);
             }

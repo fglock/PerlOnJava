@@ -19,7 +19,8 @@ priorities and future plans.
   compound-assignment operands; cache generated warning metadata and reuse
   integer payloads for repeatedly updated scalar cells; reuse captured runtime
   state for generated call-frame bookkeeping, scalar-result recycling, and
-  dynamic-local level reads and teardown; skip generic scalar magic checks
+  dynamic-local level reads and teardown; skip redundant runtime-binding checks
+  on same-runtime cached method hits; skip generic scalar magic checks
   when updating the internal caller-package tracker; keep one reusable active
   lexical frame instead of a per-runtime deque; cache the live warning-scope
   scalar per runtime and invalidate it when global scalar bindings change.
