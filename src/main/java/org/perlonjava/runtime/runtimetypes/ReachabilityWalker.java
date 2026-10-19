@@ -3782,6 +3782,12 @@ public class ReachabilityWalker {
         java.util.List<RuntimeBase> candidates =
                 DestroyDispatch.snapshotStatementBoundaryDestroyableObjects();
         if (candidates.isEmpty()) return 0;
+        // A scope-exited closure pad can be the only remaining bookkeeping
+        // owner for a destroyable referent after its callback container has
+        // gone away. Retire such dead capture edges before the root walk so
+        // statement-boundary DESTROY matches Perl without waiting for a weak
+        // reference sweep or an explicit jperl_gc().
+        releaseUnreachableScopeExitedCaptureOwners(candidates, null);
         Set<RuntimeBase> live = new ReachabilityWalker().walk();
         return destroyUnreachableDestroyables(candidates, live);
     }
