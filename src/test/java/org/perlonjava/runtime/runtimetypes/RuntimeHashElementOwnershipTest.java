@@ -76,6 +76,27 @@ class RuntimeHashElementOwnershipTest {
     }
 
     @Test
+    void integerAssignmentReleasesHashEntryReferentOwner() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            RuntimeHash hash = new RuntimeHash();
+            RuntimeScalar cell = referent.createReference();
+            hash.elements.put("value", cell);
+            PerlOwnerSlot slot = hash.hashEntryOwnerSlot("value");
+            assertEquals(1, referent.hashSlotOwnerCount());
+
+            cell.set(new RuntimeScalar(7));
+
+            assertSame(slot, hash.hashEntryOwnerSlot("value"),
+                    "the hash key retains its stable slot identity after scalar replacement");
+            assertEquals(0, referent.hashSlotOwnerCount(),
+                    "replacing the reference with an integer releases the hash owner slot");
+            assertNull(slot.referent(), "the active key slot no longer names the old referent");
+        }
+    }
+
+    @Test
     void hashScopeExitReleasesEntrySlotsWhenNoContainerOwnerRemains() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
