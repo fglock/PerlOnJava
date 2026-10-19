@@ -8,6 +8,51 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 @Tag("unit")
 class MortalListAggregateArrayOwnerSlotTest {
     @Test
+    void arrayElementOwnerSurvivesWhenAnonymousArrayIsNestedInPackageRootedHash() {
+        PerlRuntime runtime = new PerlRuntime();
+        String rootName = "MortalListAggregateArrayOwnerSlotTest::nested_root";
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            boolean previousActive = MortalList.isActive();
+            RuntimeHash referent = new RuntimeHash();
+            RuntimeArray nestedArray = new RuntimeArray();
+            RuntimeScalar arrayElement = referenceTo(referent);
+            arrayElement.refCountOwned = true;
+            nestedArray.elements.add(arrayElement);
+            nestedArray.elementsOwned = true;
+            nestedArray.reconcileArrayElementOwnerSlots();
+
+            RuntimeHash packageRoot = new RuntimeHash();
+            packageRoot.elements.put("nested", nestedArray.createAnonymousReference());
+            GlobalVariable.aliasGlobalHash(rootName, packageRoot);
+
+            RuntimeScalar unrelatedLegacyOwner = referenceTo(referent);
+            unrelatedLegacyOwner.refCountOwned = true;
+            referent.refCount = 1;
+
+            try {
+                MortalList.setActive(true);
+                MortalList.deferDecrementIfTracked(unrelatedLegacyOwner);
+                MortalList.flush();
+
+                assertEquals(RuntimeBase.PerlLifecycleState.LIVE,
+                        referent.perlLifecycleState(),
+                        "the nested array's strong element remains owned through the rooted hash");
+                assertEquals(1, referent.refCount,
+                        "the nested array element restores one referent owner at legacy zero");
+            } finally {
+                packageRoot.elements.clear();
+                GlobalVariable.globalHashes.remove(rootName);
+                nestedArray.elements.clear();
+                if (arrayElement.refCountOwned) {
+                    MortalList.deferDecrementIfTracked(arrayElement);
+                    MortalList.flush();
+                }
+                MortalList.setActive(previousActive);
+            }
+        }
+    }
+
+    @Test
     void directlyRootedArrayElementRestoresItsStrongOwnerAtLegacyZero() {
         PerlRuntime runtime = new PerlRuntime();
         String className = "MortalListAggregateArrayOwnerSlotTest::Tracked";
