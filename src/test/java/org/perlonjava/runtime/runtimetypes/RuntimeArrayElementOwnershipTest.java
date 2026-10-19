@@ -153,6 +153,27 @@ class RuntimeArrayElementOwnershipTest {
     }
 
     @Test
+    void aggregateRefaliasCreatesAnArrayElementOwnerSlot() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            RuntimeArray array = new RuntimeArray();
+            RuntimeScalar aggregateReference = referent.createReference();
+
+            new RuntimeArrayProxyEntry(array, 0).aliasToAggregateReference(aggregateReference);
+
+            assertTrue(array.elementsOwned,
+                    "aggregate refaliasing promotes an ordinary array to an owning aggregate");
+            assertEquals(1, referent.arraySlotOwnerCount());
+            assertSame(referent, array.arrayElementOwnerSlot(0).referent());
+
+            array.elements.clear();
+            assertEquals(0, referent.arraySlotOwnerCount(),
+                    "removing the aliased aggregate reference releases the array owner slot");
+        }
+    }
+
+    @Test
     void scalarReferenceToNewArrayElementTracksLaterReferentAssignment() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
