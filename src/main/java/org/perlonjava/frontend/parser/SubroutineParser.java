@@ -3000,6 +3000,10 @@ public class SubroutineParser {
         if (containsModification(parser, blockStart + 1, afterSub, captured)) return true;
 
         for (int i = afterSub; i < blockEnd; i++) {
+            if (isCommentStart(parser, i)) {
+                i = skipCommentLine(parser, i, blockEnd);
+                continue;
+            }
             String text = parser.tokens.get(i).text;
             // BEGIN-time metaprogramming such as Moo's named constant-sub
             // installation cannot subsequently mutate the closed-over cell.
@@ -3042,6 +3046,10 @@ public class SubroutineParser {
         if (start < 0) return -1;
         int depth = 0;
         for (int i = start; i < parser.tokens.size(); i++) {
+            if (isCommentStart(parser, i)) {
+                i = skipCommentLine(parser, i, parser.tokens.size());
+                continue;
+            }
             String text = parser.tokens.get(i).text;
             if ("{".equals(text)) depth++;
             else if ("}".equals(text) && --depth == 0) return i;
@@ -3052,6 +3060,10 @@ public class SubroutineParser {
     private static boolean containsRefaliasDeclaration(Parser parser, int from, int to,
             String captured) {
         for (int i = from; i < to; i++) {
+            if (isCommentStart(parser, i)) {
+                i = skipCommentLine(parser, i, to);
+                continue;
+            }
             if (!"\\".equals(parser.tokens.get(i).text)) continue;
             for (int j = i + 1; j < Math.min(to, i + 5); j++) {
                 if ("my".equals(parser.tokens.get(j).text)
@@ -3064,6 +3076,10 @@ public class SubroutineParser {
     private static boolean containsModification(Parser parser, int from, int to,
             String captured) {
         for (int i = from; i < to; i++) {
+            if (isCommentStart(parser, i)) {
+                i = skipCommentLine(parser, i, to);
+                continue;
+            }
             if (!variableAt(parser, i, captured)) continue;
             int next = i + variableTokenWidth(parser, i, captured);
             if (next < to) {
@@ -3078,6 +3094,27 @@ public class SubroutineParser {
                     || parser.tokens.get(i - 1).text.equals("--"))) return true;
         }
         return false;
+    }
+
+    /**
+     * The lexer retains comments as ordinary tokens. Safety scans over source
+     * ranges must ignore the rest of a line after Perl's comment marker, or
+     * commented-out code (such as a historical eval fallback) can make a
+     * constant lexical CV appear unsafe.
+     */
+    private static boolean isCommentStart(Parser parser, int index) {
+        return index >= 0 && index < parser.tokens.size()
+                && parser.tokens.get(index).type == LexerTokenType.OPERATOR
+                && "#".equals(parser.tokens.get(index).text);
+    }
+
+    /** Return the last token in a comment line so a for-loop advances to newline. */
+    private static int skipCommentLine(Parser parser, int start, int limit) {
+        int i = start + 1;
+        while (i < limit && parser.tokens.get(i).type != LexerTokenType.NEWLINE) {
+            i++;
+        }
+        return i - 1;
     }
 
     private static boolean isLexicalInitializer(Parser parser, int variableIndex) {
