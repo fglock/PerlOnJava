@@ -79,6 +79,11 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
         RuntimeScalar result = super.set(value);
         if (!parent.elementsAliased) {
             parent.elementsOwned = true;
+            // Vivification can insert the lvalue while this array is still
+            // marked non-owning. The element-list mutation then cannot create
+            // an ARRAY_ELEMENT owner slot, so reconcile after the proxy store
+            // promotes the array to an owning aggregate.
+            parent.reconcileArrayElementOwnerSlots();
         }
         return result;
     }
