@@ -153,6 +153,27 @@ class RuntimeArrayElementOwnershipTest {
     }
 
     @Test
+    void scalarReferenceToNewArrayElementTracksLaterReferentAssignment() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            RuntimeArray array = new RuntimeArray();
+            RuntimeScalar elementReference = new RuntimeArrayProxyEntry(array, 0).createReference();
+
+            elementReference.scalarDeref().set(referent.createReference());
+
+            RuntimeScalar element = array.elements.get(0);
+            assertTrue(array.ownsElement(element));
+            assertEquals(1, referent.arraySlotOwnerCount(),
+                    "later writes through the scalar reference need an array owner slot");
+            assertSame(referent, array.arrayElementOwnerSlot(0).referent());
+
+            array.elements.clear();
+            assertEquals(0, referent.arraySlotOwnerCount());
+        }
+    }
+
+    @Test
     void nonOwningAliasedElementDoesNotProveScalarReachability() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
