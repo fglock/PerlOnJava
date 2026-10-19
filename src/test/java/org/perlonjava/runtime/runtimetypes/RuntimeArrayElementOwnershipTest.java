@@ -99,6 +99,37 @@ class RuntimeArrayElementOwnershipTest {
     }
 
     @Test
+    void proxyStoreCreatesAndTransfersItsArrayElementOwnerSlot() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray first = new RuntimeArray();
+            RuntimeArray second = new RuntimeArray();
+            RuntimeArray array = new RuntimeArray();
+            RuntimeArrayProxyEntry proxy = new RuntimeArrayProxyEntry(array, 0);
+
+            proxy.set(first.createReference());
+
+            PerlOwnerSlot slot = array.arrayElementOwnerSlot(0);
+            assertTrue(array.ownsElement(array.elements.get(0)));
+            assertEquals(1, first.arraySlotOwnerCount(),
+                    "a proxy store into a new array must register its referent owner");
+            assertSame(first, slot.referent());
+
+            proxy.set(second.createReference());
+
+            assertSame(slot, array.arrayElementOwnerSlot(0),
+                    "replacing through the proxy preserves the structural slot identity");
+            assertEquals(0, first.arraySlotOwnerCount());
+            assertEquals(1, second.arraySlotOwnerCount());
+            assertSame(second, slot.referent());
+
+            array.elements.clear();
+            assertEquals(0, second.arraySlotOwnerCount(),
+                    "removing the proxy-written element releases its owner slot");
+        }
+    }
+
+    @Test
     void nonOwningAliasedElementDoesNotProveScalarReachability() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
