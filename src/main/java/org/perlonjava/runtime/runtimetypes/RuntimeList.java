@@ -760,21 +760,6 @@ public class RuntimeList extends RuntimeBase {
         int rhsSize = rhsElements.size();
         int rhsIndex = 0;
 
-        if (System.getenv("PJ_REFCOUNT_TRACE") != null) {
-            for (int i = 0; i < rhsSize; i++) {
-                RuntimeScalar scalar = rhsElements.get(i);
-                if (isConfiguredTraceReferent(scalar)) {
-                    System.err.printf("[LIST-ASSIGN-RHS] owner=%d index=%d owned=%s container=%s lhs=%s%n",
-                            System.identityHashCode(scalar), i, scalar.refCountOwned,
-                            scalar.getContainerOwner() == null ? "none"
-                                    : scalar.getContainerOwner().getClass().getSimpleName(),
-                            elements.stream().map(item -> item == null
-                                    ? "null" : item.getClass().getSimpleName())
-                                    .toList());
-                }
-            }
-        }
-
         // Build result with assigned values (including undef for unassigned scalars)
         RuntimeArray result = new RuntimeArray();
         // Store original size for scalar context
@@ -792,12 +777,6 @@ public class RuntimeList extends RuntimeBase {
                 // If the RHS element is also assigned on the LHS, it must not be returned as an alias
                 // (it would reflect the post-assignment value rather than the pre-assignment value).
                 boolean useAlias = rhsAlias != null && lhsScalars != null && !lhsScalars.containsKey(rhsAlias);
-
-                if (isConfiguredTraceReferent(rhsValue)) {
-                    System.err.printf("[LIST-ASSIGN-UNDEF] owner=%d index=%d useAlias=%s alias=%d%n",
-                            System.identityHashCode(rhsValue), rhsIndex, useAlias,
-                            rhsAlias == null ? 0 : System.identityHashCode(rhsAlias));
-                }
 
                 result.elements.add(useAlias ? rhsAlias : rhsValue);
 
@@ -828,10 +807,6 @@ public class RuntimeList extends RuntimeBase {
                     runtimeScalar.rejectKeysLvalueListAssignment();
                 }
                 RuntimeScalar assigned = (rhsIndex < rhsSize) ? rhsElements.get(rhsIndex++) : null;
-                if (isConfiguredTraceReferent(assigned)) {
-                    System.err.printf("[LIST-ASSIGN-SCALAR] owner=%d rhsIndex=%d refOwned=%s%n",
-                            System.identityHashCode(assigned), rhsIndex - 1, assigned.refCountOwned);
-                }
                 runtimeScalar.set(assigned != null ? assigned : new RuntimeScalar());
                 result.elements.add(runtimeScalar);  // Add reference to the variable itself
                 // set() has acquired a new nested scalar-reference owner on the
@@ -851,10 +826,6 @@ public class RuntimeList extends RuntimeBase {
                     base.releaseActiveOwner(assigned);
                     base.refCount--;
                     assigned.refCountOwned = false;
-                }
-                if (isConfiguredTraceReferent(assigned)) {
-                    System.err.printf("[LIST-ASSIGN-SCALAR-DONE] owner=%d refOwned=%s%n",
-                            System.identityHashCode(assigned), assigned.refCountOwned);
                 }
             } else if (elem instanceof RuntimeArray runtimeArray) {
                 List<RuntimeScalar> remaining = (rhsIndex < rhsSize)
@@ -887,17 +858,7 @@ public class RuntimeList extends RuntimeBase {
                 } else {
                     // Plain array: directly reuse the materialized copies.
                     // Their refCountOwned=true transfers to the array elements.
-                    runtimeArray.notePackageRootMutation();
-                    MortalList.deferDestroyForContainerClear(runtimeArray.elements);
-                    runtimeArray.elements.clear();
-                    runtimeArray.elements.addAll(remaining);
-                    for (RuntimeScalar r : remaining) {
-                        runtimeArray.markPackageRootedValue(r);
-                    }
-                    runtimeArray.elementsOwned = true;
-                    runtimeArray.elementsAliased = false;
-                    runtimeArray.ownedAliasElements = null;
-                    runtimeArray.reconcileArrayElementOwnerSlots();
+                    runtimeArray.elements = remaining;
                 }
                 result.elements.addAll(remaining);  // Use original references
                 rhsIndex = rhsSize; // Consume the rest
@@ -931,16 +892,6 @@ public class RuntimeList extends RuntimeBase {
                     }
                 }
                 rhsIndex = rhsSize; // Consume the rest
-            }
-        }
-
-        if (System.getenv("PJ_REFCOUNT_TRACE") != null) {
-            for (int i = rhsIndex; i < rhsSize; i++) {
-                RuntimeScalar scalar = rhsElements.get(i);
-                if (isConfiguredTraceReferent(scalar)) {
-                    System.err.printf("[LIST-ASSIGN-LEFTOVER] owner=%d index=%d refOwned=%s%n",
-                            System.identityHashCode(scalar), i, scalar.refCountOwned);
-                }
             }
         }
 
@@ -1052,13 +1003,6 @@ public class RuntimeList extends RuntimeBase {
             base.refCount--;
             scalar.refCountOwned = false;
         }
-    }
-
-    private static boolean isConfiguredTraceReferent(RuntimeScalar scalar) {
-        String expected = System.getenv("PJ_REFCOUNT_TRACE_CLASS");
-        if (expected == null || scalar == null || !(scalar.value instanceof RuntimeBase base)
-                || base.blessId == 0) return false;
-        return expected.equals(NameNormalizer.getBlessStr(base.blessId));
     }
 
     /**

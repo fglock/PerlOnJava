@@ -574,12 +574,10 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     private static final class OwnerTrace {
         final int scalarIdentity;
         final String acquireSite;
-        final java.lang.ref.WeakReference<RuntimeScalar> scalar;
 
         OwnerTrace(RuntimeScalar scalar, String acquireSite) {
             this.scalarIdentity = System.identityHashCode(scalar);
             this.acquireSite = acquireSite;
-            this.scalar = new java.lang.ref.WeakReference<>(scalar);
         }
     }
 
@@ -850,60 +848,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 + " refCount=" + b.refCount
                 + " owners=" + e.getValue().size());
             for (java.util.Map.Entry<Integer, OwnerTrace> own : e.getValue().entrySet()) {
-                RuntimeScalar scalar = own.getValue().scalar.get();
-                RuntimeBase container = scalar == null ? null : scalar.getContainerOwner();
-                String containerDetails = "none";
-                if (scalar != null) {
-                    for (RuntimeArray arrayOwner : scalar.arrayContainerOwnersSnapshot()) {
-                        System.err.println("    ARRAY-SLOT scalar=" + own.getKey()
-                                + " array=" + System.identityHashCode(arrayOwner)
-                                + " index=" + arrayOwner.elements.indexOf(scalar)
-                                + " owned=" + arrayOwner.elementsOwned
-                                + " aliased=" + arrayOwner.elementsAliased
-                                + " captures=" + arrayOwner.captureCount
-                                + " scopeExited=" + arrayOwner.scopeExited
-                                + " localBinding=" + arrayOwner.localBindingExists
-                                + " refCount=" + arrayOwner.refCount
-                                + " creator=" + arrayOwner.traceAllocationSub());
-                    }
-                }
-                if (container instanceof RuntimeArray array) {
-                    int activeArgsDepth = -1;
-                    if (PerlRuntime.currentOrNull() != null) {
-                        for (int depth = 0; depth < RuntimeCode.argsStackDepth(); depth++) {
-                            if (RuntimeCode.getActiveArgsAt(depth) == array) {
-                                activeArgsDepth = depth;
-                                break;
-                            }
-                        }
-                    }
-                    containerDetails = "RuntimeArray#" + System.identityHashCode(array)
-                            + " creator=" + array.traceAllocationSub()
-                            + " size=" + array.elements.size()
-                            + " owned=" + array.elementsOwned
-                            + " aliased=" + array.elementsAliased
-                            + " transientRhs=" + array.transientListAssignmentRhs
-                            + " activeArgsDepth=" + activeArgsDepth
-                            + " index=" + array.elements.indexOf(scalar);
-                    StackTraceElement[] allocation = array.traceAllocationStack();
-                    if (allocation != null) {
-                        containerDetails += " allocation=" + java.util.Arrays.toString(allocation);
-                    }
-                } else if (container != null) {
-                    containerDetails = container.getClass().getSimpleName()
-                            + "#" + System.identityHashCode(container);
-                }
-                System.err.println("    owner=" + own.getKey() + " from " + own.getValue().acquireSite
-                        + " alive=" + (scalar != null)
-                        + " refOwned=" + (scalar != null && scalar.refCountOwned)
-                        + " scopeExited=" + (scalar != null && scalar.scopeExited)
-                        + " captures=" + (scalar == null ? -1 : scalar.captureCount)
-                        + " packageRoot=" + (scalar != null && scalar.isPackageGlobalRoot)
-                        + " type=" + (scalar == null ? -1 : scalar.type)
-                        + " localArray=" + (scalar == null || scalar.localArrayOwner == null
-                                ? "none" : System.identityHashCode(scalar.localArrayOwner)
-                                        + "[" + scalar.localArrayIndex + "]")
-                        + " container=" + containerDetails);
+                System.err.println("    owner=" + own.getKey() + " from " + own.getValue().acquireSite);
             }
         }
         for (java.util.Map.Entry<RuntimeBase, java.util.ArrayList<PendingOwnerRelease>> e
