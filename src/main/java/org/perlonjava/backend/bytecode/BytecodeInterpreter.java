@@ -3984,6 +3984,18 @@ public class BytecodeInterpreter {
             // their scalar slots have gone away.
             if (!frame.suspended && !createdClosures.isEmpty()) {
                 for (RuntimeCode closure : createdClosures) {
+                    if (System.getenv("PJ_INTERPRETER_TEMP_OWNER_TRACE") != null
+                            && "Mojolicious::Plugins".equals(code.packageName)
+                            && "emit_chain".equals(code.subName)) {
+                        System.err.printf("[EMIT-CHAIN-CLOSURE] closure=%d package=%s sub=%s refCount=%d stash=%d reachable=%s scalarCaptures=%d aggregateCaptures=%d returned=%s%n",
+                                System.identityHashCode(closure), closure.packageName,
+                                closure.subName, closure.refCount, closure.stashRefCount,
+                                ReachabilityWalker.isReachableFromRoots(closure),
+                                closure.capturedScalars == null ? 0 : closure.capturedScalars.length,
+                                closure.capturedAggregates == null ? 0 : closure.capturedAggregates.length,
+                                frame.returnedClosures != null
+                                        && frame.returnedClosures.contains(closure));
+                    }
                     if ((closure.capturedScalars != null || closure.capturedAggregates != null)
                             && closure.stashRefCount <= 0
                             && !ReachabilityWalker.isReachableFromRoots(closure)
