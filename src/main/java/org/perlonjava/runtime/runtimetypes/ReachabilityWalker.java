@@ -1901,11 +1901,14 @@ public class ReachabilityWalker {
      */
     static final class ScalarRootReachabilitySnapshot {
         private final Set<RuntimeScalar> reachable;
+        private final Set<RuntimeBase> reachableBases;
         private final boolean complete;
 
         private ScalarRootReachabilitySnapshot(Set<RuntimeScalar> reachable,
+                                               Set<RuntimeBase> reachableBases,
                                                boolean complete) {
             this.reachable = reachable;
+            this.reachableBases = reachableBases;
             this.complete = complete;
         }
 
@@ -1913,6 +1916,10 @@ public class ReachabilityWalker {
             // A capped traversal cannot prove that an unvisited owner scalar
             // is unreachable. Preserve it until a complete boundary scan.
             return target != null && (!complete || reachable.contains(target));
+        }
+
+        boolean isReachable(RuntimeBase target) {
+            return target != null && (!complete || reachableBases.contains(target));
         }
 
         boolean complete() {
@@ -2108,7 +2115,8 @@ public class ReachabilityWalker {
                 }
             }
         }
-        return new ScalarRootReachabilitySnapshot(reachableScalars, todo.isEmpty());
+        return new ScalarRootReachabilitySnapshot(
+                reachableScalars, seen, todo.isEmpty());
     }
 
     private static void addScalarReachabilityRoot(
@@ -3534,6 +3542,7 @@ public class ReachabilityWalker {
                 if (retainedByEnd.contains(padCell) || retainedByEnd.contains(referent)) continue;
                 if (scalarRoots == null) scalarRoots = completeScalarReachabilitySnapshot();
                 if (scalarRoots.isReachable(padCell)) continue;
+                padCell.releaseUnreachableDestroyableClosureOwners(scalarRoots);
                 if (WALKER_TRACE_CLASS != null && !WALKER_TRACE_CLASS.isEmpty()) {
                     String className = NameNormalizer.getBlessStr(referent.blessId);
                     if (className != null && className.contains(WALKER_TRACE_CLASS)) {

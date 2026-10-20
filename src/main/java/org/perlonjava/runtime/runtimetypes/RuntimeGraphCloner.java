@@ -439,7 +439,7 @@ public class RuntimeGraphCloner {
             }
             try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
                 for (RuntimeScalar captured : target.capturedScalars) {
-                    captured.retainThreadCloneClosureCapture();
+                    captured.retainThreadCloneClosureCapture(target);
                 }
             }
         }

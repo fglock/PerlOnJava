@@ -400,6 +400,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     private PerlOwnerSlot closureOwnerSlot;
 
     /**
+     * Weak links to closures that capture a destroyable referent through this
+     * pad cell.  The closure owns the pad strongly; this reverse index is only
+     * used to release captures when a complete Perl-root walk proves that the
+     * closure itself has become unreachable.
+     */
+    private List<WeakReference<RuntimeCode>> destroyableClosureOwners;
+
+    /**
      * Number of closure-capture owners currently retained on this scalar's
      * referent. This is separate from {@link #captureCount}: a weak scalar, an
      * untracked referent, or a scalar that already owns a normal refCount slot
@@ -566,6 +574,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public void retainClosureCapture() {
+        retainClosureCapture(null);
+    }
+
+    public void retainClosureCapture(RuntimeCode closureOwner) {
         boolean firstCapture = captureCount++ == 0;
         if (firstCapture && type == RuntimeScalarType.CODE) {
             retainClosureCaptureReferent();
@@ -585,15 +597,21 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             RuntimeBase base = semanticCaptureReferent();
             updateClosureOwnerSlot(base);
         }
+        recordDestroyableClosureOwner(closureOwner);
     }
 
     /** Reconstruct capture ownership for an independent ithread snapshot. */
     void retainThreadCloneClosureCapture() {
+        retainThreadCloneClosureCapture(null);
+    }
+
+    void retainThreadCloneClosureCapture(RuntimeCode closureOwner) {
         captureCount++;
         // An owning lexical slot already protects its referent. Borrowed
         // argument aliases do not, and the source runtime's other owners are
         // not a lifetime guarantee in the cloned runtime.
         if (!refCountOwned) retainClosureCaptureReferent();
+        recordDestroyableClosureOwner(closureOwner);
     }
 
     public void releaseClosureCapture() {
@@ -605,6 +623,61 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             releaseClosureOwnerSlot();
             if (scopeExited) MortalList.closureCaptureReleased(this);
         }
+    }
+
+    public void releaseClosureCapture(RuntimeCode closureOwner) {
+        forgetDestroyableClosureOwner(closureOwner);
+        releaseClosureCapture();
+    }
+
+    private void recordDestroyableClosureOwner(RuntimeCode closureOwner) {
+        if (closureOwner == null || WeakRefRegistry.isweak(this)
+                || !(value instanceof RuntimeBase referent) || referent.blessId == 0) {
+            return;
+        }
+        String className = NameNormalizer.getBlessStr(referent.blessId);
+        if (className == null || !DestroyDispatch.classHasDestroy(referent.blessId, className)) {
+            return;
+        }
+        if (destroyableClosureOwners == null) destroyableClosureOwners = new ArrayList<>();
+        for (int i = destroyableClosureOwners.size() - 1; i >= 0; i--) {
+            RuntimeCode existing = destroyableClosureOwners.get(i).get();
+            if (existing == null) {
+                destroyableClosureOwners.remove(i);
+            } else if (existing == closureOwner) {
+                return;
+            }
+        }
+        destroyableClosureOwners.add(new WeakReference<>(closureOwner));
+    }
+
+    private void forgetDestroyableClosureOwner(RuntimeCode closureOwner) {
+        if (closureOwner == null || destroyableClosureOwners == null) return;
+        destroyableClosureOwners.removeIf(reference -> {
+            RuntimeCode existing = reference.get();
+            return existing == null || existing == closureOwner;
+        });
+        if (destroyableClosureOwners.isEmpty()) destroyableClosureOwners = null;
+    }
+
+    boolean releaseUnreachableDestroyableClosureOwners(
+            ReachabilityWalker.ScalarRootReachabilitySnapshot roots) {
+        if (roots == null || !roots.complete() || destroyableClosureOwners == null) return false;
+        List<RuntimeCode> unreachable = new ArrayList<>();
+        List<WeakReference<RuntimeCode>> retained = new ArrayList<>();
+        for (WeakReference<RuntimeCode> reference : destroyableClosureOwners) {
+            RuntimeCode owner = reference.get();
+            if (owner == null) continue;
+            if (roots.isReachable(owner)) retained.add(reference);
+            else unreachable.add(owner);
+        }
+        destroyableClosureOwners = retained.isEmpty() ? null : retained;
+        for (RuntimeCode owner : unreachable) {
+            if (owner.capturedScalars != null || owner.capturedAggregates != null) {
+                owner.releaseCaptures();
+            }
+        }
+        return !unreachable.isEmpty();
     }
 
     /**
@@ -5329,7 +5402,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 }
                 if (selfRef) {
                     // Decrement our captureCount (the closure captured us)
-                    scalar.releaseClosureCapture();
+                    scalar.releaseClosureCapture(code);
                     // Remove self from capturedScalars to prevent double-decrement
                     // when releaseCaptures runs later during CODE ref destruction
                     RuntimeScalar[] old = code.capturedScalars;
