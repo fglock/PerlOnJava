@@ -37,16 +37,6 @@ jobs:
         timeout-minutes: 10
         uses: gradle/actions/setup-gradle@v4
 
-      # A few Perl unit tests use POSIX /tmp paths. On Windows Java resolves
-      # those as a root-relative path on the current drive, so provide that
-      # directory on the ephemeral runner before invoking the test suite.
-      - name: Prepare POSIX /tmp path for Windows tests
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $driveRoot = [System.IO.Path]::GetPathRoot((Get-Location).Path)
-          New-Item -ItemType Directory -Path (Join-Path $driveRoot 'tmp') -Force | Out-Null
-
       # Use Makefile's 'ci' target which handles platform differences
       # Both platforms build and run tests; Windows uses the non-daemon wrapper.
       - name: Build with Make (Windows)
