@@ -4042,7 +4042,15 @@ public class BytecodeInterpreter {
             if (!(register instanceof RuntimeScalar scalar)
                     || scalar.value != closure
                     || !MyVarCleanupStack.isRegistered(scalar)) continue;
-            RuntimeScalar.scopeExitCleanup(scalar);
+            if (scalar.refCountOwned) {
+                RuntimeScalar.scopeExitCleanup(scalar);
+            } else {
+                // Non-owning CODE wrappers can still be the only local root
+                // seen by the conservative reachability walk. Mark the slot
+                // exited without releasing captures before the external-root
+                // check (for example, a RuntimeRegex may still own the CV).
+                scalar.scopeExited = true;
+            }
             MyVarCleanupStack.unregister(scalar);
             registers[i] = null;
         }
