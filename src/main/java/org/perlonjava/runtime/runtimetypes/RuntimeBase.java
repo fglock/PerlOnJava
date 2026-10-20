@@ -853,6 +853,20 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 RuntimeScalar scalar = own.getValue().scalar.get();
                 RuntimeBase container = scalar == null ? null : scalar.getContainerOwner();
                 String containerDetails = "none";
+                if (scalar != null) {
+                    for (RuntimeArray arrayOwner : scalar.arrayContainerOwnersSnapshot()) {
+                        System.err.println("    ARRAY-SLOT scalar=" + own.getKey()
+                                + " array=" + System.identityHashCode(arrayOwner)
+                                + " index=" + arrayOwner.elements.indexOf(scalar)
+                                + " owned=" + arrayOwner.elementsOwned
+                                + " aliased=" + arrayOwner.elementsAliased
+                                + " captures=" + arrayOwner.captureCount
+                                + " scopeExited=" + arrayOwner.scopeExited
+                                + " localBinding=" + arrayOwner.localBindingExists
+                                + " refCount=" + arrayOwner.refCount
+                                + " creator=" + arrayOwner.traceAllocationSub());
+                    }
+                }
                 if (container instanceof RuntimeArray array) {
                     int activeArgsDepth = -1;
                     if (PerlRuntime.currentOrNull() != null) {
