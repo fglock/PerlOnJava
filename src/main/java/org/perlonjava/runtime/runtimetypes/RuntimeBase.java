@@ -870,6 +870,10 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                             + " transientRhs=" + array.transientListAssignmentRhs
                             + " activeArgsDepth=" + activeArgsDepth
                             + " index=" + array.elements.indexOf(scalar);
+                    StackTraceElement[] allocation = array.traceAllocationStack();
+                    if (allocation != null) {
+                        containerDetails += " allocation=" + java.util.Arrays.toString(allocation);
+                    }
                 } else if (container != null) {
                     containerDetails = container.getClass().getSimpleName()
                             + "#" + System.identityHashCode(container);
