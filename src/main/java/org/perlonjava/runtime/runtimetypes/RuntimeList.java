@@ -958,6 +958,9 @@ public class RuntimeList extends RuntimeBase {
                     if (lhs.isKeysLvalue()) lhs.rejectKeysLvalueListAssignment();
                     RuntimeScalar rhs = i < rhsSize ? rhsElements.get(i) : null;
                     lhs.set(rhs == null ? new RuntimeScalar() : rhs);
+                    if (rhsArray.transientListAssignmentRhs && rhs != null) {
+                        releaseDiscardedMaterializedScalar(rhs);
+                    }
                     if (result != null) result.elements.add(lhs);
                 }
                 return result;
@@ -976,11 +979,28 @@ public class RuntimeList extends RuntimeBase {
                 RuntimeScalar lhs = (RuntimeScalar) elements.get(i);
                 if (lhs.isKeysLvalue()) lhs.rejectKeysLvalueListAssignment();
                 lhs.set(i < rhsValues.length ? rhsValues[i] : new RuntimeScalar());
+                if (rhsArray.transientListAssignmentRhs && i < rhsSize) {
+                    releaseDiscardedMaterializedScalar(rhsElements.get(i));
+                }
                 if (result != null) result.elements.add(lhs);
             }
             return result;
         } finally {
             MortalList.suppressFlush(wasFlushing);
+        }
+    }
+
+    /** Release the ownership held by a materialized RHS cell after scalar assignment copied it. */
+    private static void releaseDiscardedMaterializedScalar(RuntimeScalar scalar) {
+        scalar.releaseOwnedScalarReferenceContents();
+        if (scalar.refCountOwned
+                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && scalar.value instanceof RuntimeBase base
+                && base.refCount > 0) {
+            base.releaseOwner(scalar, "RuntimeList materialized-copy undo (simple-scalar-target)");
+            base.releaseActiveOwner(scalar);
+            base.refCount--;
+            scalar.refCountOwned = false;
         }
     }
 
