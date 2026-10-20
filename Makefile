@@ -1,7 +1,14 @@
 .PHONY: all clean test test-unit test-cpan-tester test-interpreter check-thread-test-sources check-thread-core-test-sources check-thread-ecosystem-test-sources check-thread-regex-test-sources test-thread-tooling test-threads test-threads-core test-threads-core-platform test-threads-core-mode test-threads-windows test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-cpan-release-acceptance test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links perl5-update perl5-sync perl5-sync-check
 
 PERL ?= perl
+ifeq ($(OS),Windows_NT)
+# The Windows unit shards each take longer than the 75-minute CI step budget
+# when only two Gradle workers are available. Run the five balanced shards
+# concurrently on the hosted runner while keeping the existing per-worker heap cap.
+GRADLE_ARGS ?= --max-workers=4
+else
 GRADLE_ARGS ?= --max-workers=2
+endif
 # A persistent daemon keeps the priority from the invocation that first
 # started it. Use a single-use Gradle process so workers inherit the
 # launcher's niceness (for example, `nice -n 19 make`).
