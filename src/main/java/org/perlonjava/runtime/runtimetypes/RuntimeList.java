@@ -768,8 +768,8 @@ public class RuntimeList extends RuntimeBase {
                             System.identityHashCode(scalar), i, scalar.refCountOwned,
                             scalar.getContainerOwner() == null ? "none"
                                     : scalar.getContainerOwner().getClass().getSimpleName(),
-                            elements.stream().map(value -> value == null
-                                    ? "null" : value.getClass().getSimpleName())
+                            elements.stream().map(item -> item == null
+                                    ? "null" : item.getClass().getSimpleName())
                                     .toList());
                 }
             }
