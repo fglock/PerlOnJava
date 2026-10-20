@@ -167,6 +167,11 @@ public class BytecodeInterpreter {
         if (value instanceof RuntimeScalar scalar) {
             if (scalar.type == RuntimeScalarType.CODE && scalar.value instanceof RuntimeCode code) {
                 closures.put(code, Boolean.TRUE);
+            } else if (scalar.type == RuntimeScalarType.REGEX
+                    && scalar.value instanceof RuntimeRegex regex) {
+                for (RuntimeCode callback : regex.executableCallbackCodes()) {
+                    closures.put(callback, Boolean.TRUE);
+                }
             }
             return;
         }
