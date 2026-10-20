@@ -836,6 +836,7 @@ public class SubroutineParser {
 
             // Rewrite and return the subroutine call as `&name(arguments)`
             OperatorNode codeRefNode = new OperatorNode("&", nameNode, currentIndex);
+            codeRefNode.setAnnotation("directNamedCallName", fullName);
             // A core keyword without a visible Perl override is not a named
             // subroutine call.  In particular, routing `chop <DATA>` through
             // the direct-CV path materializes main::chop and turns DATA into

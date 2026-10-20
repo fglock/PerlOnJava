@@ -6076,6 +6076,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             frame = args.getFirst().getInt();
         }
 
+        // Perl executes a defer block as part of the surrounding CV's scope;
+        // its implementation closure does not add a caller() frame. The
+        // runtime invokes that block as a code reference, so skip that
+        // implementation-only frame before mapping Perl-visible depth to the
+        // active code stack.
+        if (frame >= 0 && DynamicVariableManager.isExecutingDefer()) {
+            frame++;
+        }
         frame = callerFrameIncludingRegexPseudoBlocks(frame);
         // Perl treats every negative caller depth as an out-of-range frame.
         // Return the usual empty result before indexing implementation stacks;

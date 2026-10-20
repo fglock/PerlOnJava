@@ -966,9 +966,12 @@ public class EmitSubroutine {
                 && operatorNode.operator.equals("&")
                 && operatorNode.getBooleanAnnotation("directNamedCall")
                 && operatorNode.operand instanceof IdentifierNode identifierNode) {
-            String directName = NameNormalizer.normalizeVariableName(
-                    identifierNode.name,
-                    emitterVisitor.ctx.symbolTable.getCurrentPackage());
+            Object resolvedName = operatorNode.getAnnotation("directNamedCallName");
+            String directName = resolvedName instanceof String name
+                    ? name
+                    : NameNormalizer.normalizeVariableName(
+                            identifierNode.name,
+                            emitterVisitor.ctx.symbolTable.getCurrentPackage());
             RuntimeScalar parseTimeCodeRef = operatorNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef
                     ? codeRef
                     : null;
