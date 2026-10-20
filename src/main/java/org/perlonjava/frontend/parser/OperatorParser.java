@@ -454,6 +454,17 @@ public class OperatorParser {
             operand.elements.addFirst(handle);
             handle = null;
         }
+        // In a print filehandle form, a parenthesized argument list can be
+        // followed by `x N`. Perl includes that repetition in print's list;
+        // leaving it for the surrounding expression parser repeats print's
+        // return value and writes the argument only once. The ordinary
+        // unparenthesized list path already consumes this operator.
+        if (handle != null && operand.elements.size() == 1
+                && peek(parser).text.equals("x")) {
+            Node argument = operand.elements.remove(0);
+            int precedence = parser.getPrecedence("x");
+            operand.elements.add(ParseInfix.parseInfixOperation(parser, argument, precedence));
+        }
         if (handle == null) {
             // `print` without arguments means `print to last selected filehandle`
             handle = new OperatorNode("select", new ListNode(currentIndex), currentIndex);
