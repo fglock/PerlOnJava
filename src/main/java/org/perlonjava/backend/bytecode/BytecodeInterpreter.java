@@ -3996,7 +3996,7 @@ public class BytecodeInterpreter {
                     if (System.getenv("PJ_INTERPRETER_TEMP_OWNER_TRACE") != null
                             && "Mojolicious::Plugins".equals(code.packageName)
                             && "emit_chain".equals(code.subName)) {
-                        java.util.List<String> rootPath = ReachabilityWalker.findPathTo(closure, true);
+                        java.util.List<String> rootPath = ReachabilityWalker.findPathTo(closure);
                         System.err.printf("[EMIT-CHAIN-CLOSURE] closure=%d package=%s sub=%s refCount=%d stash=%d reachable=%s external=%s scalarCaptures=%d aggregateCaptures=%d returned=%s path=%s%n",
                                 System.identityHashCode(closure), closure.packageName,
                                 closure.subName, closure.refCount, closure.stashRefCount,
