@@ -293,15 +293,22 @@ public class BytecodeInterpreter {
     private static void trackTemporaryScalarReferenceContents(
             SuspendedInterpreterFrame frame, InterpretedCode code,
             int register, int firstMyVarReg, RuntimeScalar scalar) {
-        if (scalar == null || !scalar.ownsScalarReferenceContents
-                || register < firstMyVarReg || code.myVarRegisters.get(register)
-                || scalar.isPackageGlobalRoot
-                || scalar.getContainerOwner() != null
-                || scalar instanceof RuntimeBaseProxy
-                || MyVarCleanupStack.isRegistered(scalar)) {
-            return;
+        if (scalar == null || !scalar.ownsScalarReferenceContents) return;
+        boolean eligible = register >= firstMyVarReg
+                && !code.myVarRegisters.get(register)
+                && !scalar.isPackageGlobalRoot
+                && scalar.getContainerOwner() == null
+                && !(scalar instanceof RuntimeBaseProxy)
+                && !MyVarCleanupStack.isRegistered(scalar);
+        if (System.getenv("PJ_INTERPRETER_TEMP_OWNER_TRACE") != null) {
+            System.err.printf("[INTERPRETER-TEMP-OWNER] scalar=%d register=%d firstMyVar=%d refOwned=%s scopeExited=%s captures=%d registered=%s packageRoot=%s container=%s eligible=%s%n",
+                    System.identityHashCode(scalar), register, firstMyVarReg,
+                    scalar.refCountOwned, scalar.scopeExited, scalar.captureCount,
+                    MyVarCleanupStack.isRegistered(scalar), scalar.isPackageGlobalRoot,
+                    scalar.getContainerOwner() == null ? "none"
+                            : scalar.getContainerOwner().getClass().getSimpleName(), eligible);
         }
-        frame.temporaryScalarOwners.add(scalar);
+        if (eligible) frame.temporaryScalarOwners.add(scalar);
     }
 
     /**
