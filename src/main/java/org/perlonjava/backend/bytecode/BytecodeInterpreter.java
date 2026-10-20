@@ -3996,7 +3996,8 @@ public class BytecodeInterpreter {
                     if (System.getenv("PJ_INTERPRETER_TEMP_OWNER_TRACE") != null
                             && "Mojolicious::Plugins".equals(code.packageName)
                             && "emit_chain".equals(code.subName)) {
-                        System.err.printf("[EMIT-CHAIN-CLOSURE] closure=%d package=%s sub=%s refCount=%d stash=%d reachable=%s external=%s scalarCaptures=%d aggregateCaptures=%d returned=%s%n",
+                        java.util.List<String> rootPath = ReachabilityWalker.findPathTo(closure, true);
+                        System.err.printf("[EMIT-CHAIN-CLOSURE] closure=%d package=%s sub=%s refCount=%d stash=%d reachable=%s external=%s scalarCaptures=%d aggregateCaptures=%d returned=%s path=%s%n",
                                 System.identityHashCode(closure), closure.packageName,
                                 closure.subName, closure.refCount, closure.stashRefCount,
                                 ReachabilityWalker.isReachableFromRoots(closure),
@@ -4004,7 +4005,8 @@ public class BytecodeInterpreter {
                                 closure.capturedScalars == null ? 0 : closure.capturedScalars.length,
                                 closure.capturedAggregates == null ? 0 : closure.capturedAggregates.length,
                                 frame.returnedClosures != null
-                                        && frame.returnedClosures.contains(closure));
+                                        && frame.returnedClosures.contains(closure),
+                                rootPath == null ? "none" : String.join(" -> ", rootPath));
                     }
                     if ((closure.capturedScalars != null || closure.capturedAggregates != null)
                             && closure.stashRefCount <= 0
