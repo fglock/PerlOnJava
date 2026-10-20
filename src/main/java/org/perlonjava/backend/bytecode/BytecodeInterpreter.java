@@ -3997,6 +3997,25 @@ public class BytecodeInterpreter {
                             && "Mojolicious::Plugins".equals(code.packageName)
                             && "emit_chain".equals(code.subName)) {
                         java.util.List<String> rootPath = ReachabilityWalker.findPathTo(closure);
+                        StringBuilder localHolders = new StringBuilder();
+                        for (RuntimeScalar candidate : org.perlonjava.runtime.runtimetypes.ScalarRefRegistry.snapshot()) {
+                            if (candidate.value != closure) continue;
+                            int register = -1;
+                            for (int i = firstMyVarReg; i < registers.length; i++) {
+                                if (registers[i] == candidate) {
+                                    register = i;
+                                    break;
+                                }
+                            }
+                            if (localHolders.length() > 0) localHolders.append(',');
+                            localHolders.append(System.identityHashCode(candidate))
+                                    .append("@reg=").append(register)
+                                    .append(" live=").append(MyVarCleanupStack.isLive(candidate))
+                                    .append(" registered=").append(MyVarCleanupStack.isRegistered(candidate))
+                                    .append(" scopeExited=").append(candidate.scopeExited)
+                                    .append(" captures=").append(candidate.captureCount)
+                                    .append(" refOwned=").append(candidate.refCountOwned);
+                        }
                         System.err.printf("[EMIT-CHAIN-CLOSURE] closure=%d package=%s sub=%s refCount=%d stash=%d reachable=%s external=%s scalarCaptures=%d aggregateCaptures=%d returned=%s path=%s%n",
                                 System.identityHashCode(closure), closure.packageName,
                                 closure.subName, closure.refCount, closure.stashRefCount,
@@ -4007,6 +4026,7 @@ public class BytecodeInterpreter {
                                 frame.returnedClosures != null
                                         && frame.returnedClosures.contains(closure),
                                 rootPath == null ? "none" : String.join(" -> ", rootPath));
+                        System.err.println("[EMIT-CHAIN-HOLDERS] " + localHolders);
                     }
                     if ((closure.capturedScalars != null || closure.capturedAggregates != null)
                             && closure.stashRefCount <= 0
