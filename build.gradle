@@ -350,10 +350,10 @@ tasks.withType(Test).configureEach {
     // deprecation banner while retaining the tested Netty allocation path.
     jvmArgs += '--sun-misc-unsafe-memory-access=allow'
     // The Perl test corpus loads sizeable bundled tables (for example
-    // I18N::LangTags via Test2).  A 1 GiB Gradle worker can be terminated by
-    // the host before it reports an OOME; keep it below the command-line
-    // default while providing enough headroom for one shard.
-    maxHeapSize = '2g'
+    // I18N::LangTags via Test2). A 1 GiB Gradle worker can be terminated by
+    // the host before it reports an OOME. The expanded lifetime regression
+    // suite also needs room for shard 0's in-process tests.
+    maxHeapSize = '3g'
 }
 
 // Enable native access for all Java execution tasks
