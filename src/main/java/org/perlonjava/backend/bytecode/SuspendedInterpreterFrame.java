@@ -3,10 +3,13 @@ package org.perlonjava.backend.bytecode;
 import org.perlonjava.runtime.runtimetypes.RegexState;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.DynamicVariableManager;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Set;
 import java.util.List;
 
@@ -41,6 +44,11 @@ public final class SuspendedInterpreterFrame {
     final ArrayDeque<RegexState> regexStateStack = new ArrayDeque<>();
     final ArrayList<RuntimeCode> createdClosures = new ArrayList<>();
     final ArrayList<RuntimeBase> methodInvocantHolds = new ArrayList<>();
+    // SET_SCALAR can allocate expression-only cells that own the referent
+    // inside a scalar reference. They are not lexical registers, so emitted
+    // SCOPE_EXIT_CLEANUP opcodes do not see them.
+    final Set<RuntimeScalar> temporaryScalarOwners =
+            Collections.newSetFromMap(new IdentityHashMap<>());
     final ArrayDeque<ArrayList<Integer>> scopeCleanupBatches = new ArrayDeque<>();
     List<DynamicVariableManager.SuspendedState> suspendedDynamicStates;
 
