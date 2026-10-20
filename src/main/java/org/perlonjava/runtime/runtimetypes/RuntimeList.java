@@ -887,7 +887,17 @@ public class RuntimeList extends RuntimeBase {
                 } else {
                     // Plain array: directly reuse the materialized copies.
                     // Their refCountOwned=true transfers to the array elements.
+                    runtimeArray.notePackageRootMutation();
+                    MortalList.deferDestroyForContainerClear(runtimeArray.elements);
+                    runtimeArray.elements.clear();
                     runtimeArray.elements = remaining;
+                    for (RuntimeScalar r : remaining) {
+                        runtimeArray.markPackageRootedValue(r);
+                    }
+                    runtimeArray.elementsOwned = true;
+                    runtimeArray.elementsAliased = false;
+                    runtimeArray.ownedAliasElements = null;
+                    runtimeArray.reconcileArrayElementOwnerSlots();
                 }
                 result.elements.addAll(remaining);  // Use original references
                 rhsIndex = rhsSize; // Consume the rest
