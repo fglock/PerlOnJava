@@ -2308,6 +2308,15 @@ public class BytecodeInterpreter {
                                     callArgs = (RuntimeArray) argsBase;
                                 } else if (argsBase instanceof RuntimeList) {
                                     callArgs = new RuntimeArray();
+                                    if (System.getenv("PJ_REFCOUNT_TRACE") != null
+                                            && "Mojolicious".equals(code.packageName)) {
+                                        ErrorMessageUtil.SourceLocation location =
+                                                InlineOpcodeHandler.sourceLocation(code, callSitePc);
+                                        System.err.printf("[MOJO-INTERPRETER-ARG-ARRAY] array=%d sub=%s::%s source=%s:%d args=%d%n",
+                                                System.identityHashCode(callArgs), code.packageName,
+                                                code.subName, location.fileName(), location.lineNumber(),
+                                                ((RuntimeList) argsBase).elements.size());
+                                    }
                                     argsBase.setArrayOfAlias(callArgs);
                                 } else {
                                     callArgs = new RuntimeArray((RuntimeScalar) argsBase);
