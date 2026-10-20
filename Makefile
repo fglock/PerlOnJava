@@ -123,11 +123,21 @@ perl5-sync-check:
 	$(PERL) dev/import-perl5/update_perl5.pl --sync --verify-idempotent $(if $(FILTER),--filter "$(FILTER)",)
 
 # CI build - optimized for CI/CD environments
-ci: check-java-gradle
+ci: prepare-windows-posix-tmp check-java-gradle
 ifeq ($(OS),Windows_NT)
 	gradlew.bat $(GRADLE_LAUNCH_ARGS) build -x test testUnitParallel --parallel --stacktrace
 else
 	./gradlew $(GRADLE_LAUNCH_ARGS) build -x test testUnitParallel --parallel --stacktrace
+endif
+
+# Some Perl unit scripts use POSIX /tmp paths. On Windows, Java resolves
+# these as root-relative paths on the current drive; create that directory on
+# the runner before compiling and executing the suite.
+prepare-windows-posix-tmp:
+ifeq ($(OS),Windows_NT)
+	powershell -NoProfile -NonInteractive -Command "New-Item -ItemType Directory -Force -Path (Join-Path ([System.IO.Path]::GetPathRoot((Get-Location).Path)) 'tmp') | Out-Null"
+else
+	@:
 endif
 
 # Check Java/Gradle compatibility and fix if needed
