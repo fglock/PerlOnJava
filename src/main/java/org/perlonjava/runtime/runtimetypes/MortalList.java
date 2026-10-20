@@ -324,6 +324,16 @@ public class MortalList {
         noteDeferredScopeExitCaptureCandidate(state(), scalar);
     }
 
+    /** Recheck a scope-exited referent when its final closure owner is released. */
+    public static void closureCaptureReleased(RuntimeScalar scalar) {
+        if (scalar == null || !scalar.scopeExited
+                || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                || !(scalar.value instanceof RuntimeBase base)
+                || !isDeferredScopeExitCandidate(base)) return;
+        noteDeferredScopeExitCaptureCandidate(state(), scalar);
+        requestImmediateWeakSweep();
+    }
+
     private static void noteDeferredScopeExitCaptureCandidate(
             LifecycleRuntimeState state, RuntimeScalar scalar) {
         if (scalar.value instanceof RuntimeBase base && isDeferredScopeExitCandidate(base)) {
@@ -338,6 +348,19 @@ public class MortalList {
         return className != null && DestroyDispatch.classHasDestroy(base.blessId, className);
     }
 
+    private static boolean containerDirectlyOwnsReferent(
+            RuntimeBase container, RuntimeBase referent) {
+        if (container instanceof RuntimeArray array) {
+            return array.elements.stream().anyMatch(scalar -> scalar != null
+                    && scalar.value == referent);
+        }
+        if (container instanceof RuntimeHash hash) {
+            return hash.elements.values().stream().anyMatch(scalar -> scalar != null
+                    && scalar.value == referent);
+        }
+        return false;
+    }
+
     /**
      * Release eval STRING over-captures whose declaring scope just exited and
      * which cannot be reached by live code or an END block. Reachability sweeps
@@ -348,16 +371,34 @@ public class MortalList {
     private static void processUnreachableScopeExitCaptureCandidates(
             LifecycleRuntimeState state) {
         if (state.deferredScopeExitCaptureCandidates.isEmpty()) return;
+        // Nested Perl frames can still own transient callback and request
+        // state through active call arguments. Keep candidates queued until
+        // an outer statement boundary can inspect the completed owner graph.
+        if (RuntimeCode.argsStackDepth() > 1) return;
         Set<RuntimeBase> endReachable = ReachabilityWalker.walkEndBlockRoots();
         Set<RuntimeBase> cycleProtected = ReachabilityWalker.strongCycleProtectedReferents();
+        Set<RuntimeBase> candidateReferents =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+        for (RuntimeScalar scalar : state.deferredScopeExitCaptureCandidates) {
+            if (scalar.scopeExited && scalar.value instanceof RuntimeBase base) {
+                candidateReferents.add(base);
+            }
+        }
+        List<RuntimeBase> captureOwnerReferents = new ArrayList<>(candidateReferents);
+        for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotReferents()) {
+            if (candidateReferents.stream().anyMatch(
+                    candidate -> containerDirectlyOwnsReferent(ownerReferent, candidate))) {
+                captureOwnerReferents.add(ownerReferent);
+            }
+        }
+        ReachabilityWalker.releaseUnreachableScopeExitedCaptureOwners(
+                captureOwnerReferents, endReachable);
         boolean found = false;
         for (RuntimeScalar scalar : new ArrayList<>(state.deferredScopeExitCaptureCandidates)) {
-            if (!scalar.scopeExited) continue;
-            RuntimeBase base = scalar.value instanceof RuntimeBase value ? value : null;
-            if (base != null) {
-                ReachabilityWalker.releaseUnreachableScopeExitedCaptureOwners(
-                        java.util.List.of(base), endReachable);
+            if (!scalar.scopeExited) {
+                continue;
             }
+            RuntimeBase base = scalar.value instanceof RuntimeBase value ? value : null;
             boolean scalarReachable = ReachabilityWalker.isScalarReachable(scalar)
                     || ReachabilityWalker.isReachableFromRoots(scalar);
             boolean retained = endReachable.contains(scalar)
