@@ -890,7 +890,7 @@ public class RuntimeList extends RuntimeBase {
                     runtimeArray.notePackageRootMutation();
                     MortalList.deferDestroyForContainerClear(runtimeArray.elements);
                     runtimeArray.elements.clear();
-                    runtimeArray.elements = remaining;
+                    runtimeArray.elements.addAll(remaining);
                     for (RuntimeScalar r : remaining) {
                         runtimeArray.markPackageRootedValue(r);
                     }
