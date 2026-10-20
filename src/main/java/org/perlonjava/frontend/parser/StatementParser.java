@@ -2318,6 +2318,14 @@ public class StatementParser {
 
         // If the source wasn't changed, nothing to do
         if (filteredSource.equals(remainingSource)) {
+            // `Test::More::use_ok` compiles a synthetic `use Module; 1;`
+            // string during BEGIN. A source filter installed by that use
+            // sees only the trailing `1;` in the eval parser; keep it pending
+            // so the enclosing file parser can apply it to the caller's
+            // source after BEGIN completes.
+            if (parser.parsingEvalString && FilterUtilCall.hasActiveFilters()) {
+                FilterUtilCall.markFilterInstalled();
+            }
             return;
         }
 
