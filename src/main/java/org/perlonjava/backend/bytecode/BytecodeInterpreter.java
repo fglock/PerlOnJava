@@ -297,7 +297,7 @@ public class BytecodeInterpreter {
         boolean eligible = register >= firstMyVarReg
                 && !code.myVarRegisters.get(register)
                 && !scalar.isPackageGlobalRoot
-                && scalar.getContainerOwner() == null
+                && !hasOwningContainerSlot(scalar)
                 && !(scalar instanceof RuntimeBaseProxy)
                 && !MyVarCleanupStack.isRegistered(scalar);
         if (System.getenv("PJ_INTERPRETER_TEMP_OWNER_TRACE") != null) {
@@ -309,6 +309,23 @@ public class BytecodeInterpreter {
                             : scalar.getContainerOwner().getClass().getSimpleName(), eligible);
         }
         if (eligible) frame.temporaryScalarOwners.add(scalar);
+    }
+
+    /**
+     * A borrowed {@code @_} entry has a container marker for alias tracking,
+     * but the argument array does not own the scalar slot. Do not let that
+     * marker suppress cleanup of an otherwise temporary interpreter owner.
+     */
+    private static boolean hasOwningContainerSlot(RuntimeScalar scalar) {
+        RuntimeBase owner = scalar.getContainerOwner();
+        if (owner instanceof RuntimeArray array) {
+            return array.elements.contains(scalar)
+                    && (!array.elementsAliased || array.ownsElement(scalar));
+        }
+        if (owner instanceof RuntimeHash hash) {
+            return hash.elements.containsValue(scalar);
+        }
+        return false;
     }
 
     /**
