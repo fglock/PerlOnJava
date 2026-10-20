@@ -2237,9 +2237,13 @@ public class BytecodeCompiler implements Visitor {
         }
 
         if (needsLocalRestore) {
-            emit(Opcodes.POP_LOCAL_LEVEL);
-            emitReg(localLevelReg);
-            emitRefreshVisibleOurVariables();
+            if (node.getBooleanAnnotation("interpreterDelayLocalRestoreUntilContinue")) {
+                node.setAnnotation("interpreterDelayedLocalLevelReg", localLevelReg);
+            } else {
+                emit(Opcodes.POP_LOCAL_LEVEL);
+                emitReg(localLevelReg);
+                emitRefreshVisibleOurVariables();
+            }
         }
 
         if (node.getBooleanAnnotation("givenBlock")) givenBlockDepth--;
@@ -6345,12 +6349,10 @@ public class BytecodeCompiler implements Visitor {
             // Code reference: &subname or &{expr}
             // Gets a reference to a named subroutine
             if (node.operand instanceof IdentifierNode idNode) {
-                String subName = idNode.name;
-
-                // Use NameNormalizer to properly handle package prefixes
-                // This will add the current package if no package is specified
-                subName = NameNormalizer.normalizeVariableName(subName, getCurrentPackage());
-
+                Object resolvedName = node.getAnnotation("directNamedCallName");
+                String subName = resolvedName instanceof String name
+                        ? name
+                        : NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
                 if (node.getBooleanAnnotation("directNamedCall")) {
                     int rd = allocateOutputRegister();
                     int nameIdx = addToStringPool(subName);
@@ -8120,9 +8122,22 @@ public class BytecodeCompiler implements Visitor {
             pushForeachGlobalAliasRegister(normalizedGlobalLoopSourceName, varReg);
         }
         foreachCompileDepth++;
+        int delayedBodyLocalLevelReg = -1;
         try {
             if (node.body != null) {
+                if (node.body instanceof BlockNode bodyBlock
+                        && blockEndsInDefer(bodyBlock)) {
+                    bodyBlock.setAnnotation("interpreterDelayLocalRestoreUntilContinue", true);
+                }
                 node.body.accept(this);
+                if (node.body instanceof BlockNode bodyBlock) {
+                    Object delayed = bodyBlock.getAnnotation("interpreterDelayedLocalLevelReg");
+                    if (delayed instanceof Integer reg) {
+                        delayedBodyLocalLevelReg = reg;
+                    }
+                    bodyBlock.setAnnotation("interpreterDelayLocalRestoreUntilContinue", null);
+                    bodyBlock.setAnnotation("interpreterDelayedLocalLevelReg", null);
+                }
             }
 
             // Keep foreach alias lowering active through continue. Assigning
@@ -8134,6 +8149,15 @@ public class BytecodeCompiler implements Visitor {
             loopInfo.continuePc = bytecode.size();
             if (node.continueBlock != null) {
                 node.continueBlock.accept(this);
+            }
+
+            // Normal foreach fallthrough keeps the body dynamic scope alive
+            // through continue. Explicit next/last/redo paths retain their
+            // existing transfer-time cleanup in emitLoopControlScopeCleanup.
+            if (delayedBodyLocalLevelReg >= 0) {
+                emit(Opcodes.POP_LOCAL_LEVEL);
+                emitReg(delayedBodyLocalLevelReg);
+                emitRefreshVisibleOurVariables();
             }
 
             // Some parser labels are attached to an enclosing block instead
@@ -8385,6 +8409,16 @@ public class BytecodeCompiler implements Visitor {
         }
 
         emitNormalLoopResult();
+    }
+
+    private static boolean blockEndsInDefer(BlockNode block) {
+        for (int i = block.elements.size() - 1; i >= 0; i--) {
+            Node statement = block.elements.get(i);
+            if (statement != null) {
+                return statement instanceof DeferNode;
+            }
+        }
+        return false;
     }
 
     @Override

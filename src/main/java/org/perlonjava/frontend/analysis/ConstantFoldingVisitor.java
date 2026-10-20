@@ -283,7 +283,8 @@ public class ConstantFoldingVisitor implements Visitor {
 
             if (node.left instanceof OperatorNode opNode && "&".equals(opNode.operator)
                     && opNode.operand instanceof IdentifierNode idNode) {
-                constSubName = idNode.name;
+                Object resolvedName = opNode.getAnnotation("directNamedCallName");
+                constSubName = resolvedName instanceof String name ? name : idNode.name;
                 constTokenIndex = idNode.getIndex();
             } else if (node.left instanceof IdentifierNode idNode) {
                 // Older AST form: BinaryOperatorNode("(", IdentifierNode(name), ListNode())

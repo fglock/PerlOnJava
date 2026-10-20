@@ -797,10 +797,13 @@ public class EmitForeach {
         emitterVisitor.ctx.javaClassInfo.pushLoopLabels(currentLoopLabels);
 
         EmitterVisitor voidVisitor = emitterVisitor.with(RuntimeContextType.VOID);
+        Local.localRecord bodyLocalRecordForContinue = new Local.localRecord(false, -1);
+        boolean bodyEndsInDefer = false;
         if (node.body instanceof BlockNode blockNode) {
             int bodyScopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
             currentLoopLabels.cleanupScopeIndex = bodyScopeIndex;
             Local.localRecord bodyLocalRecord = Local.localSetup(emitterVisitor.ctx, blockNode, mv, true);
+            bodyLocalRecordForContinue = bodyLocalRecord;
             if (bodyLocalRecord.needsCleanup()) {
                 currentLoopLabels.dynamicLocalLevelSlot = bodyLocalRecord.dynamicIndex();
             }
@@ -831,6 +834,8 @@ public class EmitForeach {
                     break;
                 }
             }
+            bodyEndsInDefer = lastNonNullIndex >= 0
+                    && list.get(lastNonNullIndex) instanceof DeferNode;
 
             int savedStatementTokenIndex = emitterVisitor.ctx.javaClassInfo.statementTokenIndex;
             for (int i = 0; i < list.size(); i++) {
@@ -866,8 +871,10 @@ public class EmitForeach {
 
             popGotoLabelsForBlock(emitterVisitor, blockNode);
 
-            Local.localTeardown(bodyLocalRecord, mv,
-                    emitterVisitor.ctx.javaClassInfo.jvmFrameStateSlot);
+            if (!bodyEndsInDefer) {
+                Local.localTeardown(bodyLocalRecord, mv,
+                        emitterVisitor.ctx.javaClassInfo.jvmFrameStateSlot);
+            }
             EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, bodyScopeIndex, true);
             emitterVisitor.ctx.symbolTable.exitScope(bodyScopeIndex);
         } else {
@@ -883,6 +890,16 @@ public class EmitForeach {
             node.continueBlock.accept(emitterVisitor.with(RuntimeContextType.VOID));
             // Check registry again after continue block
             emitRegistryCheck(mv, currentLoopLabels, redoLabel, loopStart, loopEnd);
+        }
+
+        // The body scope remains dynamically active through the continue block
+        // on normal fallthrough.  next/last/redo still perform their own
+        // explicit scope cleanup before transferring control.
+        if (bodyEndsInDefer && bodyLocalRecordForContinue.needsCleanup()) {
+            // The bodyLocalRecord was captured while compiling the body; its
+            // teardown belongs after continue, once the loop iteration exits.
+            Local.localTeardown(bodyLocalRecordForContinue, mv,
+                    emitterVisitor.ctx.javaClassInfo.jvmFrameStateSlot);
         }
 
         mv.visitJumpInsn(Opcodes.GOTO, loopStart);
