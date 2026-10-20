@@ -230,7 +230,6 @@ public class BytecodeInterpreter {
 
         for (RuntimeCode closure : frame.createdClosures) {
             if ((closure.capturedScalars != null || closure.capturedAggregates != null)
-                    && closure.refCount == 0
                     && closure.stashRefCount <= 0
                     && !ReachabilityWalker.isReachableFromRoots(closure)
                     && (frame.returnedClosures == null
@@ -3979,14 +3978,13 @@ public class BytecodeInterpreter {
             // that were never stored via set() (refCount stayed at 0).
             // This handles eval STRING map/grep block closures that over-capture
             // all visible variables but are temporary and should release captures.
-            // Closures stored via set() have refCount > 0 and are skipped.
-            // This matches the JVM-compiled path where scopeExitCleanup releases
-            // captures for CODE refs with refCount=0 (see RuntimeScalar.java
-            // scopeExitCleanup special case for CODE refs).
+            // Closures retained by a Perl root remain reachable and are skipped.
+            // A positive manual refCount alone is not enough to keep a closure
+            // alive: temporary chained closures can carry stale counts after
+            // their scalar slots have gone away.
             if (!frame.suspended && !createdClosures.isEmpty()) {
                 for (RuntimeCode closure : createdClosures) {
                     if ((closure.capturedScalars != null || closure.capturedAggregates != null)
-                            && closure.refCount == 0
                             && closure.stashRefCount <= 0
                             && !ReachabilityWalker.isReachableFromRoots(closure)
                             && (frame.returnedClosures == null || !frame.returnedClosures.contains(closure))) {
