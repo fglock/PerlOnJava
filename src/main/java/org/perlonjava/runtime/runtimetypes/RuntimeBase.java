@@ -852,6 +852,18 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             for (java.util.Map.Entry<Integer, OwnerTrace> own : e.getValue().entrySet()) {
                 RuntimeScalar scalar = own.getValue().scalar.get();
                 RuntimeBase container = scalar == null ? null : scalar.getContainerOwner();
+                String containerDetails = "none";
+                if (container instanceof RuntimeArray array) {
+                    containerDetails = "RuntimeArray#" + System.identityHashCode(array)
+                            + " size=" + array.elements.size()
+                            + " owned=" + array.elementsOwned
+                            + " aliased=" + array.elementsAliased
+                            + " transientRhs=" + array.transientListAssignmentRhs
+                            + " index=" + array.elements.indexOf(scalar);
+                } else if (container != null) {
+                    containerDetails = container.getClass().getSimpleName()
+                            + "#" + System.identityHashCode(container);
+                }
                 System.err.println("    owner=" + own.getKey() + " from " + own.getValue().acquireSite
                         + " alive=" + (scalar != null)
                         + " refOwned=" + (scalar != null && scalar.refCountOwned)
@@ -859,7 +871,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                         + " captures=" + (scalar == null ? -1 : scalar.captureCount)
                         + " packageRoot=" + (scalar != null && scalar.isPackageGlobalRoot)
                         + " type=" + (scalar == null ? -1 : scalar.type)
-                        + " container=" + (container == null ? "none" : container.getClass().getSimpleName()));
+                        + " container=" + containerDetails);
             }
         }
         for (java.util.Map.Entry<RuntimeBase, java.util.ArrayList<PendingOwnerRelease>> e
