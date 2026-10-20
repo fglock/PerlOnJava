@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress in [PR #1816](https://github.com/PerlOnJava/pull/1816), currently open as a draft at `d0efeda1a1b31790ffc81e73d1aaa5c098eedbdc`. Linux and Windows `make` jobs and the configured Perl thread compatibility gates pass on that head. It records hash-entry and array-element owner slots for deferred-release recovery, registers slots after array proxy stores, scalar refaliasing, scalar-reference creation, and aggregate refaliasing, and proves ownership for anonymous arrays reachable through package-rooted hashes while excluding the dying referent. The local `nice -n 19 make` and HTML-Tree 5.07 suite pass; the nested process-handle test allows 30 seconds for Windows child-JVM startup after its previous five-second wait expired in CI. Owner slots still bridge to `RuntimeBase.refCount` for dispatch; this is not the complete Phase 2 ownership migration.
+**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress in [PR #1816](https://github.com/PerlOnJava/pull/1816), currently open as a draft based on master `ede542b2901ebb54e7aae293fae74cbbd6af22d7`. The local full `nice -n 19 make` passes with two Gradle workers and a 3 GiB test heap; the PR's Linux and Windows jobs are running. The candidate records hash-entry and array-element owner slots for deferred-release recovery, registers slots after array proxy stores, scalar refaliasing, scalar-reference creation, and aggregate refaliasing, and proves ownership for anonymous arrays reachable through package-rooted hashes while excluding the dying referent. HTML-Tree 5.07 passes. Owner slots still bridge to `RuntimeBase.refCount` for dispatch; this is not the complete Phase 2 ownership migration.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
@@ -107,9 +107,9 @@ and first path establish implementation cost.
 
 ### Current status: Phase 2 in progress; Phase 1 merged in PR #1653 as `84f32be179bdc2b351c3eaae1cb26df39964ab6b` (2026-10-07)
 
-The #1794/#1795 regression candidate was published in [PR #1816](https://github.com/PerlOnJava/pull/1816) at draft head `d0efeda1a1b31790ffc81e73d1aaa5c098eedbdc`. Those earlier local and CI results are superseded by the 2026-10-20 candidate below. Phase 2 remains a recovery bridge rather than the completed ownership migration: `refCount` still controls dispatch, and scalar/proxy stores, alias cleanup, and complete default owner-slot accounting remain unmigrated.
+The earlier #1794/#1795 candidate was published in [PR #1816](https://github.com/PerlOnJava/pull/1816) at draft head `d0efeda1a1b31790ffc81e73d1aaa5c098eedbdc`; those local and CI results are superseded below. Phase 2 remains a recovery bridge rather than the completed ownership migration: `refCount` still controls dispatch, and scalar/proxy stores, alias cleanup, and complete default owner-slot accounting remain unmigrated.
 
-The newer local candidate is based on current `origin/master` (`ede542b29`) and has not yet been published. Its full `nice -n 19 make` passed in 25m15s with two Gradle workers and a 3 GiB test heap. On blead Perl 5.45.4, the controller, WebSocket, Catalyst tempfile, and ownership regressions pass. The controller regression passes 5/5 on JVM and interpreter; the WebSocket regression passes 6/6 on both; the Catalyst tempfile regression passes 24/24 on both; and `refcount/issue_1794_controller_owner_release.t` passes 3/3 on both. This closes the interpreter parity gaps recorded on the earlier candidate. The build settings bound test concurrency and give the expanded shard 0 enough heap. Continue migrating complete ownership paths through replacement, deletion, aliases, calls, and final release.
+The rebased candidate is published as draft PR #1816, based on `origin/master` (`ede542b29`). Its full `nice -n 19 make` passed in 25m15s with two Gradle workers and a 3 GiB test heap. On blead Perl 5.45.4, the controller, WebSocket, Catalyst tempfile, and ownership regressions pass. The controller regression passes 5/5 on JVM and interpreter; the WebSocket regression passes 6/6 on both; the Catalyst tempfile regression passes 24/24 on both; and `refcount/issue_1794_controller_owner_release.t` passes 3/3 on both. This closes the interpreter parity gaps recorded on the earlier candidate. The build settings bound test concurrency and give the expanded shard 0 enough heap. Continue migrating complete ownership paths through replacement, deletion, aliases, calls, and final release.
 
 ### Completed
 
@@ -118,8 +118,8 @@ The newer local candidate is based on current `origin/master` (`ede542b29`) and 
   validated the controller (5/5), WebSocket (6/6), Catalyst tempfile (24/24),
   and owner-release (3/3) regressions on both backends. The full `make` gate
   passes with the new two-worker and 3 GiB worker settings. Standard Perl
-  5.45.4 passes the Perl-level regressions. The PR publication step remains
-  pending approval.
+  5.45.4 passes the Perl-level regressions. Published the rebased candidate to
+  PR #1816 as a draft; its Linux and Windows CI jobs are pending.
 - [x] Re-read the parent issue's implementation contract and reviewed the
   independent lifecycle candidate handoff. Historical candidate test results
   are not treated as current Phase 1 evidence.
