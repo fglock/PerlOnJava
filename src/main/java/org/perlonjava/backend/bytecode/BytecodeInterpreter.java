@@ -290,6 +290,20 @@ public class BytecodeInterpreter {
         return released;
     }
 
+    private static void trackTemporaryScalarReferenceContents(
+            SuspendedInterpreterFrame frame, InterpretedCode code,
+            int register, int firstMyVarReg, RuntimeScalar scalar) {
+        if (scalar == null || !scalar.ownsScalarReferenceContents
+                || register < firstMyVarReg || code.myVarRegisters.get(register)
+                || scalar.isPackageGlobalRoot
+                || scalar.getContainerOwner() != null
+                || scalar instanceof RuntimeBaseProxy
+                || MyVarCleanupStack.isRegistered(scalar)) {
+            return;
+        }
+        frame.temporaryScalarOwners.add(scalar);
+    }
+
     /**
      * Result of a call whose non-local last/next/redo was consumed by an enclosing
      * labeled block.  Control has left the block, so the marker must not stay in the
@@ -1482,9 +1496,6 @@ public class BytecodeInterpreter {
                                 if (rdVal == null || isImmutableProxy(rdVal)) {
                                     rdScalar = new RuntimeScalar();
                                     registers[rd] = rdScalar;
-                                    if (rd >= firstMyVarReg && !code.myVarRegisters.get(rd)) {
-                                        frame.temporaryScalarOwners.add(rdScalar);
-                                    }
                                 } else if (rdVal instanceof RuntimeScalar) {
                                     rdScalar = (RuntimeScalar) rdVal;
                                 } else {
@@ -1500,6 +1511,8 @@ public class BytecodeInterpreter {
                                     }
                                 }
                                 RuntimeScalar.assignTo(registers[rs], rdScalar);
+                                trackTemporaryScalarReferenceContents(
+                                        frame, code, rd, firstMyVarReg, rdScalar);
                             }
 
                             case Opcodes.COPY_DO_BLOCK_RESULT -> {
