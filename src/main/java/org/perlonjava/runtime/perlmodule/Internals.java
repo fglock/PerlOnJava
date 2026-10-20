@@ -384,12 +384,13 @@ public class Internals extends PerlModuleBase {
             RuntimeCode code, RuntimeBase previous, RuntimeBase replacement) {
         if (previous == replacement) return;
 
-        if (previous instanceof RuntimeScalar && replacement instanceof RuntimeScalar scalar
+        if (previous instanceof RuntimeScalar previousScalar
+                && replacement instanceof RuntimeScalar scalar
                 && code.capturedScalars != null) {
             for (int i = 0; i < code.capturedScalars.length; i++) {
-                if (code.capturedScalars[i] == previous) {
-                    scalar.retainClosureCapture();
-                    previous.releaseClosureCapture();
+                if (code.capturedScalars[i] == previousScalar) {
+                    scalar.retainClosureCapture(code);
+                    previousScalar.releaseClosureCapture(code);
                     code.capturedScalars[i] = scalar;
                     return;
                 }
