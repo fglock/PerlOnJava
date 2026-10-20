@@ -854,11 +854,21 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 RuntimeBase container = scalar == null ? null : scalar.getContainerOwner();
                 String containerDetails = "none";
                 if (container instanceof RuntimeArray array) {
+                    int activeArgsDepth = -1;
+                    if (PerlRuntime.currentOrNull() != null) {
+                        for (int depth = 0; depth < RuntimeCode.argsStackDepth(); depth++) {
+                            if (RuntimeCode.getActiveArgsAt(depth) == array) {
+                                activeArgsDepth = depth;
+                                break;
+                            }
+                        }
+                    }
                     containerDetails = "RuntimeArray#" + System.identityHashCode(array)
                             + " size=" + array.elements.size()
                             + " owned=" + array.elementsOwned
                             + " aliased=" + array.elementsAliased
                             + " transientRhs=" + array.transientListAssignmentRhs
+                            + " activeArgsDepth=" + activeArgsDepth
                             + " index=" + array.elements.indexOf(scalar);
                 } else if (container != null) {
                     containerDetails = container.getClass().getSimpleName()
@@ -871,6 +881,9 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                         + " captures=" + (scalar == null ? -1 : scalar.captureCount)
                         + " packageRoot=" + (scalar != null && scalar.isPackageGlobalRoot)
                         + " type=" + (scalar == null ? -1 : scalar.type)
+                        + " localArray=" + (scalar == null || scalar.localArrayOwner == null
+                                ? "none" : System.identityHashCode(scalar.localArrayOwner)
+                                        + "[" + scalar.localArrayIndex + "]")
                         + " container=" + containerDetails);
             }
         }
