@@ -25,9 +25,21 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.TIED_SCALAR;
 public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference, DynamicState {
     private final StackTraceElement[] traceAllocationStack =
             System.getenv("PJ_REFCOUNT_TRACE") == null ? null : new Throwable().getStackTrace();
+    private final String traceAllocationSub = traceAllocationStack == null
+            || PerlRuntime.currentOrNull() == null ? null : activeSubForTrace();
+
+    private static String activeSubForTrace() {
+        RuntimeCode active = RuntimeCode.getActiveCodeAt(0);
+        if (active == null) return "<no active Perl sub>";
+        return String.valueOf(active.packageName) + "::" + String.valueOf(active.subName);
+    }
 
     StackTraceElement[] traceAllocationStack() {
         return traceAllocationStack;
+    }
+
+    String traceAllocationSub() {
+        return traceAllocationSub;
     }
 
     /** Return an empty lexical cell when control flow skipped its declaration. */
