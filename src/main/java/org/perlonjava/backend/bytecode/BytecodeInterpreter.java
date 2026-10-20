@@ -262,10 +262,32 @@ public class BytecodeInterpreter {
             MyVarCleanupStack.unregister(reg);
             registers[i] = null;
         }
+        if (releaseTemporaryScalarReferenceContents(frame)) {
+            needsFlush = true;
+        }
         if (needsFlush) {
             MortalList.flush();
         }
         code.releaseRegisters();
+    }
+
+    /**
+     * Release nested referent ownership held by interpreter-created scalar
+     * temporaries. These cells are intentionally not sent through full lexical
+     * cleanup: a temporary register can alias an lvalue or aggregate element.
+     * The nested owner is distinct and can be deferred safely so a returned
+     * scalar reference is retained by its caller before the decrement drains.
+     */
+    private static boolean releaseTemporaryScalarReferenceContents(
+            SuspendedInterpreterFrame frame) {
+        boolean released = false;
+        for (RuntimeScalar scalar : frame.temporaryScalarOwners) {
+            if (!scalar.ownsScalarReferenceContents) continue;
+            scalar.deferOwnedScalarReferenceContents();
+            released = true;
+        }
+        frame.temporaryScalarOwners.clear();
+        return released;
     }
 
     /**
@@ -1460,6 +1482,9 @@ public class BytecodeInterpreter {
                                 if (rdVal == null || isImmutableProxy(rdVal)) {
                                     rdScalar = new RuntimeScalar();
                                     registers[rd] = rdScalar;
+                                    if (rd >= firstMyVarReg && !code.myVarRegisters.get(rd)) {
+                                        frame.temporaryScalarOwners.add(rdScalar);
+                                    }
                                 } else if (rdVal instanceof RuntimeScalar) {
                                     rdScalar = (RuntimeScalar) rdVal;
                                 } else {
@@ -3956,6 +3981,10 @@ public class BytecodeInterpreter {
                 if (needsFlush) {
                     MortalList.flush();
                 }
+            }
+
+            if (!frame.suspended) {
+                releaseTemporaryScalarReferenceContents(frame);
             }
 
             // Outer finally: restore interpreter state saved at method entry.
