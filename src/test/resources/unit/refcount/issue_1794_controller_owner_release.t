@@ -3,13 +3,25 @@ use warnings;
 
 use Test::More;
 use Scalar::Util qw(weaken);
-use Mojo::EventEmitter;
 
 {
     package Issue1794Transaction;
-    use Mojo::Base 'Mojo::EventEmitter';
+
+    sub new { bless { events => {} }, shift }
+
+    sub on {
+        my ($self, $name, $callback) = @_;
+        push @{$self->{events}{$name}}, $callback;
+        return $self;
+    }
 
     sub finish { shift->emit('finish') }
+
+    sub emit {
+        my ($self, $name, @args) = @_;
+        $_->($self, @args) for @{$self->{events}{$name} // []};
+        return $self;
+    }
 }
 
 {
