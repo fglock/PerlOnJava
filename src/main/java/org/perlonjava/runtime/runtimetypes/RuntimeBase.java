@@ -864,6 +864,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                         }
                     }
                     containerDetails = "RuntimeArray#" + System.identityHashCode(array)
+                            + " creator=" + array.traceAllocationSub()
                             + " size=" + array.elements.size()
                             + " owned=" + array.elementsOwned
                             + " aliased=" + array.elementsAliased
