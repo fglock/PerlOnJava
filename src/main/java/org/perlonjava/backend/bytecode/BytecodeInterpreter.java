@@ -228,7 +228,13 @@ public class BytecodeInterpreter {
         frame.suspended = false;
         frame.suspendedRuntimeDisabledWarningCategories = null;
 
-        for (RuntimeCode closure : frame.createdClosures) {
+        java.util.List<RuntimeCode> abandonedClosures =
+                new java.util.ArrayList<>(frame.createdClosures);
+        // The diagnostic list is only bookkeeping. Remove it from the frame
+        // before the root walk so it cannot keep the closures it is examining
+        // alive by itself.
+        frame.createdClosures.clear();
+        for (RuntimeCode closure : abandonedClosures) {
             if ((closure.capturedScalars != null || closure.capturedAggregates != null)
                     && closure.stashRefCount <= 0
                     && !ReachabilityWalker.isReachableFromRoots(closure)
@@ -3983,7 +3989,10 @@ public class BytecodeInterpreter {
             // alive: temporary chained closures can carry stale counts after
             // their scalar slots have gone away.
             if (!frame.suspended && !createdClosures.isEmpty()) {
-                for (RuntimeCode closure : createdClosures) {
+                java.util.List<RuntimeCode> frameClosures =
+                        new java.util.ArrayList<>(createdClosures);
+                createdClosures.clear();
+                for (RuntimeCode closure : frameClosures) {
                     if (System.getenv("PJ_INTERPRETER_TEMP_OWNER_TRACE") != null
                             && "Mojolicious::Plugins".equals(code.packageName)
                             && "emit_chain".equals(code.subName)) {
