@@ -237,7 +237,7 @@ public class BytecodeInterpreter {
         for (RuntimeCode closure : abandonedClosures) {
             if ((closure.capturedScalars != null || closure.capturedAggregates != null)
                     && closure.stashRefCount <= 0
-                    && !ReachabilityWalker.isReachableFromRoots(closure)
+                    && !ReachabilityWalker.isReachableFromExternalRoot(closure)
                     && (frame.returnedClosures == null
                         || !frame.returnedClosures.contains(closure))) {
                 closure.releaseCaptures();
@@ -3996,10 +3996,11 @@ public class BytecodeInterpreter {
                     if (System.getenv("PJ_INTERPRETER_TEMP_OWNER_TRACE") != null
                             && "Mojolicious::Plugins".equals(code.packageName)
                             && "emit_chain".equals(code.subName)) {
-                        System.err.printf("[EMIT-CHAIN-CLOSURE] closure=%d package=%s sub=%s refCount=%d stash=%d reachable=%s scalarCaptures=%d aggregateCaptures=%d returned=%s%n",
+                        System.err.printf("[EMIT-CHAIN-CLOSURE] closure=%d package=%s sub=%s refCount=%d stash=%d reachable=%s external=%s scalarCaptures=%d aggregateCaptures=%d returned=%s%n",
                                 System.identityHashCode(closure), closure.packageName,
                                 closure.subName, closure.refCount, closure.stashRefCount,
                                 ReachabilityWalker.isReachableFromRoots(closure),
+                                ReachabilityWalker.isReachableFromExternalRoot(closure),
                                 closure.capturedScalars == null ? 0 : closure.capturedScalars.length,
                                 closure.capturedAggregates == null ? 0 : closure.capturedAggregates.length,
                                 frame.returnedClosures != null
@@ -4007,7 +4008,7 @@ public class BytecodeInterpreter {
                     }
                     if ((closure.capturedScalars != null || closure.capturedAggregates != null)
                             && closure.stashRefCount <= 0
-                            && !ReachabilityWalker.isReachableFromRoots(closure)
+                            && !ReachabilityWalker.isReachableFromExternalRoot(closure)
                             && (frame.returnedClosures == null || !frame.returnedClosures.contains(closure))) {
                         closure.releaseCaptures();
                     }
