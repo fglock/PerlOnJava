@@ -26,6 +26,12 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.TIED_SCALAR;
  * using a list of RuntimeScalar objects, which can hold any type of Perl scalar value.
  */
 public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference, DynamicState {
+    private final StackTraceElement[] traceAllocationStack =
+            System.getenv("PJ_REFCOUNT_TRACE") == null ? null : new Throwable().getStackTrace();
+
+    StackTraceElement[] traceAllocationStack() {
+        return traceAllocationStack;
+    }
 
     /** Return an empty lexical cell when control flow skipped its declaration. */
     public static RuntimeArray materializeLexicalCell(RuntimeArray array) {
