@@ -32,6 +32,7 @@ public class Internals extends PerlModuleBase {
         try {
             internals.registerMethod("SvREADONLY", "svReadonly", "\\[$@%];$");
             internals.registerMethod("SvREFCNT", "svRefcount", "$;$");
+            internals.registerMethod("jperl_b_svrefcnt", "jperlBSvrefcnt", "$");
             // Clear placeholder slots in a restricted hash. PerlOnJava doesn't
             // implement Perl's restricted-hash placeholder machinery (used by
             // Hash::Util / fields), so this is a safe no-op. Modules like
@@ -483,10 +484,42 @@ public class Internals extends PerlModuleBase {
      */
     public static RuntimeList svRefcount(RuntimeArray args, int ctx) {
         if (args.size() < 1 || args.size() > 2
-                || (args.size() == 1 && args.get(0) instanceof RuntimeScalarReadOnly)) {
+                || (args.size() == 2 && args.get(0) instanceof RuntimeScalarReadOnly)) {
             WarnDie.die(new RuntimeScalar("Usage: Internals::SvREFCNT(SCALAR[, REFCOUNT])"), new RuntimeScalar(""));
         }
         RuntimeScalar arg = args.get(0);
+        if (args.size() == 2) {
+            int requested = args.get(1).getInt();
+            RuntimeBase referent = arg.value instanceof RuntimeBase value ? value : null;
+            if (referent == null) {
+                arg.refCount = requested;
+                arg.hadCountedReference = requested > 0;
+            } else {
+                int nativeCaptureOwners = referent.nativeCaptureOwnerCount();
+                boolean compileHintsHash = referent == GlobalVariable.getGlobalHash(
+                        GlobalContext.encodeSpecialVar("H"));
+                int extra = (referent.localBindingExists && !compileHintsHash ? 1 : 0)
+                        + referent.foreachAliasCount;
+                int adjust = compileHintsHash || !referent.localBindingExists ? -1 : 0;
+                int rawCount = requested - nativeCaptureOwners - extra - adjust;
+                referent.refCount = rawCount;
+                referent.hadCountedReference = rawCount > 0;
+            }
+            return new RuntimeScalar(requested).getList();
+        }
+        return svRefcountValue(arg, false);
+    }
+
+    /** Internal B::SV query mode; kept separate from Perl's public setter argument. */
+    public static RuntimeList jperlBSvrefcnt(RuntimeArray args, int ctx) {
+        if (args.size() != 1) {
+            WarnDie.die(new RuntimeScalar("Usage: Internals::jperl_b_svrefcnt(SCALAR)"),
+                    new RuntimeScalar(""));
+        }
+        return svRefcountValue(args.get(0), true);
+    }
+
+    private static RuntimeList svRefcountValue(RuntimeScalar arg, boolean bObjectProbe) {
         RuntimeBase base = arg.value instanceof RuntimeBase value ? value : null;
         if (base == null && arg.firstClassRegexScalar && arg.firstClassRegexReferent != null) {
             base = arg.firstClassRegexReferent.get();
@@ -549,8 +582,7 @@ public class Internals extends PerlModuleBase {
             int extra = (base.localBindingExists && !compileHintsHash ? 1 : 0)
                     + base.foreachAliasCount;
             if (rc == 2
-                    && args.size() > 1
-                    && args.get(1).getBoolean()
+                    && bObjectProbe
                     && DestroyDispatch.isInsideDestroy()
                     && !ReachabilityWalker.hasLiveStrongScalarReferentOtherThan(base, arg)) {
                 // B::SV's private hash slot is one of the two selective
@@ -580,7 +612,6 @@ public class Internals extends PerlModuleBase {
                     && !base.localBindingExists
                     && base.hashSlotOwnerCount() > 0
                     && !ReachabilityWalker.hasLiveStrongScalarReferentOtherThan(base, arg);
-            boolean bObjectProbe = args.size() > 1 && args.get(1).getBoolean();
             int adjust = compileHintsHash
                     ? -1
                     : base.localBindingExists || fieldOwnedMethodResult ? 0 : -1;
@@ -594,7 +625,7 @@ public class Internals extends PerlModuleBase {
             }
             return new RuntimeScalar(rc + extra + adjust).getList();
         }
-        return new RuntimeScalar(1).getList();
+        return new RuntimeScalar(arg.refCount >= 0 ? arg.refCount : 1).getList();
     }
 
     /** Return a reference whose displayed address was observed in this runtime. */
