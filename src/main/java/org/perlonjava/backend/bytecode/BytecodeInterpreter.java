@@ -228,13 +228,14 @@ public class BytecodeInterpreter {
         frame.suspended = false;
         frame.suspendedRuntimeDisabledWarningCategories = null;
 
+        InterpretedCode code = frame.code;
+        RuntimeBase[] registers = frame.registers;
+        int firstMyVarReg = 3 + (code.capturedVars != null ? code.capturedVars.length : 0);
         java.util.List<RuntimeCode> abandonedClosures =
                 new java.util.ArrayList<>(frame.createdClosures);
-        // The diagnostic list is only bookkeeping. Remove it from the frame
-        // before the root walk so it cannot keep the closures it is examining
-        // alive by itself.
         frame.createdClosures.clear();
         for (RuntimeCode closure : abandonedClosures) {
+            releaseCurrentFrameClosureSlots(registers, firstMyVarReg, closure);
             if ((closure.capturedScalars != null || closure.capturedAggregates != null)
                     && closure.stashRefCount <= 0
                     && !ReachabilityWalker.isReachableFromExternalRoot(closure)
@@ -244,9 +245,6 @@ public class BytecodeInterpreter {
             }
         }
 
-        InterpretedCode code = frame.code;
-        RuntimeBase[] registers = frame.registers;
-        int firstMyVarReg = 3 + (code.capturedVars != null ? code.capturedVars.length : 0);
         BitSet myVars = code.myVarRegisters;
         boolean needsFlush = false;
         for (int i = myVars.nextSetBit(firstMyVarReg);
@@ -302,35 +300,10 @@ public class BytecodeInterpreter {
         boolean eligible = register >= firstMyVarReg
                 && !code.myVarRegisters.get(register)
                 && !scalar.isPackageGlobalRoot
-                && !hasOwningContainerSlot(scalar)
+                && scalar.getContainerOwner() == null
                 && !(scalar instanceof RuntimeBaseProxy)
                 && !MyVarCleanupStack.isRegistered(scalar);
-        if (System.getenv("PJ_INTERPRETER_TEMP_OWNER_TRACE") != null) {
-            System.err.printf("[INTERPRETER-TEMP-OWNER] scalar=%d register=%d firstMyVar=%d refOwned=%s scopeExited=%s captures=%d registered=%s packageRoot=%s container=%s eligible=%s%n",
-                    System.identityHashCode(scalar), register, firstMyVarReg,
-                    scalar.refCountOwned, scalar.scopeExited, scalar.captureCount,
-                    MyVarCleanupStack.isRegistered(scalar), scalar.isPackageGlobalRoot,
-                    scalar.getContainerOwner() == null ? "none"
-                            : scalar.getContainerOwner().getClass().getSimpleName(), eligible);
-        }
         if (eligible) frame.temporaryScalarOwners.add(scalar);
-    }
-
-    /**
-     * A borrowed {@code @_} entry has a container marker for alias tracking,
-     * but the argument array does not own the scalar slot. Do not let that
-     * marker suppress cleanup of an otherwise temporary interpreter owner.
-     */
-    private static boolean hasOwningContainerSlot(RuntimeScalar scalar) {
-        RuntimeBase owner = scalar.getContainerOwner();
-        if (owner instanceof RuntimeArray array) {
-            return array.elements.contains(scalar)
-                    && (!array.elementsAliased || array.ownsElement(scalar));
-        }
-        if (owner instanceof RuntimeHash hash) {
-            return hash.elements.containsValue(scalar);
-        }
-        return false;
     }
 
     /**
@@ -2330,15 +2303,6 @@ public class BytecodeInterpreter {
                                     callArgs = (RuntimeArray) argsBase;
                                 } else if (argsBase instanceof RuntimeList) {
                                     callArgs = new RuntimeArray();
-                                    if (System.getenv("PJ_REFCOUNT_TRACE") != null
-                                            && "Mojolicious".equals(code.packageName)) {
-                                        ErrorMessageUtil.SourceLocation location =
-                                                InlineOpcodeHandler.sourceLocation(code, callSitePc);
-                                        System.err.printf("[MOJO-INTERPRETER-ARG-ARRAY] array=%d sub=%s::%s source=%s:%d args=%d%n",
-                                                System.identityHashCode(callArgs), code.packageName,
-                                                code.subName, location.fileName(), location.lineNumber(),
-                                                ((RuntimeList) argsBase).elements.size());
-                                    }
                                     argsBase.setArrayOfAlias(callArgs);
                                 } else {
                                     callArgs = new RuntimeArray((RuntimeScalar) argsBase);
@@ -3980,14 +3944,9 @@ public class BytecodeInterpreter {
                 releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
             }
 
-            // Release captures for interpreter closures created in this frame
-            // that were never stored via set() (refCount stayed at 0).
-            // This handles eval STRING map/grep block closures that over-capture
-            // all visible variables but are temporary and should release captures.
-            // Closures retained by a Perl root remain reachable and are skipped.
-            // A positive manual refCount alone is not enough to keep a closure
-            // alive: temporary chained closures can carry stale counts after
-            // their scalar slots have gone away.
+            // Release captures for closures created here that were not stored
+            // outside the frame. Clean their lexical slots first so the active
+            // frame does not make a temporary closure appear externally rooted.
             if (!frame.suspended && !createdClosures.isEmpty()) {
                 java.util.List<RuntimeCode> frameClosures =
                         new java.util.ArrayList<>(createdClosures);
@@ -3995,41 +3954,6 @@ public class BytecodeInterpreter {
                 for (RuntimeCode closure : frameClosures) {
                     releaseCurrentFrameClosureSlots(
                             registers, firstMyVarReg, closure);
-                    if (System.getenv("PJ_INTERPRETER_TEMP_OWNER_TRACE") != null
-                            && "Mojolicious::Plugins".equals(code.packageName)
-                            && "emit_chain".equals(code.subName)) {
-                        java.util.List<String> rootPath = ReachabilityWalker.findPathTo(closure);
-                        StringBuilder localHolders = new StringBuilder();
-                        for (RuntimeScalar candidate : org.perlonjava.runtime.runtimetypes.ScalarRefRegistry.snapshot()) {
-                            if (candidate.value != closure) continue;
-                            int register = -1;
-                            for (int i = firstMyVarReg; i < registers.length; i++) {
-                                if (registers[i] == candidate) {
-                                    register = i;
-                                    break;
-                                }
-                            }
-                            if (localHolders.length() > 0) localHolders.append(',');
-                            localHolders.append(System.identityHashCode(candidate))
-                                    .append("@reg=").append(register)
-                                    .append(" live=").append(MyVarCleanupStack.isLive(candidate))
-                                    .append(" registered=").append(MyVarCleanupStack.isRegistered(candidate))
-                                    .append(" scopeExited=").append(candidate.scopeExited)
-                                    .append(" captures=").append(candidate.captureCount)
-                                    .append(" refOwned=").append(candidate.refCountOwned);
-                        }
-                        System.err.printf("[EMIT-CHAIN-CLOSURE] closure=%d package=%s sub=%s refCount=%d stash=%d reachable=%s external=%s scalarCaptures=%d aggregateCaptures=%d returned=%s path=%s%n",
-                                System.identityHashCode(closure), closure.packageName,
-                                closure.subName, closure.refCount, closure.stashRefCount,
-                                ReachabilityWalker.isReachableFromRoots(closure),
-                                ReachabilityWalker.isReachableFromExternalRoot(closure),
-                                closure.capturedScalars == null ? 0 : closure.capturedScalars.length,
-                                closure.capturedAggregates == null ? 0 : closure.capturedAggregates.length,
-                                frame.returnedClosures != null
-                                        && frame.returnedClosures.contains(closure),
-                                rootPath == null ? "none" : String.join(" -> ", rootPath));
-                        System.err.println("[EMIT-CHAIN-HOLDERS] " + localHolders);
-                    }
                     if ((closure.capturedScalars != null || closure.capturedAggregates != null)
                             && closure.stashRefCount <= 0
                             && !ReachabilityWalker.isReachableFromExternalRoot(closure)
