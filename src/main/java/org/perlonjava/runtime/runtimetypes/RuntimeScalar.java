@@ -603,6 +603,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (captureCount == 0) {
             releaseOneClosureCaptureReferent();
             releaseClosureOwnerSlot();
+            if (scopeExited) MortalList.closureCaptureReleased(this);
         }
     }
 
