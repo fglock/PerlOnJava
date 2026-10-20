@@ -3993,6 +3993,8 @@ public class BytecodeInterpreter {
                         new java.util.ArrayList<>(createdClosures);
                 createdClosures.clear();
                 for (RuntimeCode closure : frameClosures) {
+                    releaseCurrentFrameClosureSlots(
+                            code, registers, firstMyVarReg, closure);
                     if (System.getenv("PJ_INTERPRETER_TEMP_OWNER_TRACE") != null
                             && "Mojolicious::Plugins".equals(code.packageName)
                             && "emit_chain".equals(code.subName)) {
@@ -4105,6 +4107,21 @@ public class BytecodeInterpreter {
             if (!frame.suspended) {
                 code.releaseRegisters();
             }
+        }
+    }
+
+    /** Release lexical slots holding a temporary closure before its root check. */
+    private static void releaseCurrentFrameClosureSlots(
+            InterpretedCode code, RuntimeBase[] registers, int firstMyVarReg,
+            RuntimeCode closure) {
+        for (int i = firstMyVarReg; i < registers.length; i++) {
+            if (!code.myVarRegisters.get(i)) continue;
+            RuntimeBase register = registers[i];
+            if (!(register instanceof RuntimeScalar scalar)
+                    || scalar.value != closure) continue;
+            RuntimeScalar.scopeExitCleanup(scalar);
+            MyVarCleanupStack.unregister(scalar);
+            registers[i] = null;
         }
     }
 
