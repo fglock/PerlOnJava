@@ -2053,6 +2053,14 @@ public class MortalList {
         return ReachabilityWalker.isReachableFromRoots(owner, true, excludedReferent);
     }
 
+    static boolean isRootedOwnerContainer(RuntimeBase owner,
+                                          RuntimeBase excludedReferent) {
+        if (owner instanceof RuntimeHash || owner instanceof RuntimeArray) {
+            return isRootedAggregateOwner(owner, excludedReferent);
+        }
+        return ReachabilityWalker.isReachableFromRoots(owner, true, excludedReferent);
+    }
+
     private static boolean isExplicitAggregateRoot(RuntimeBase aggregate) {
         if (aggregate.semanticCaptureOwnerCount() > 0) return true;
         if (aggregate instanceof RuntimeHash hash && hash.isPackageRootedHash()) return true;

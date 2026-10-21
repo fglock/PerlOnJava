@@ -726,8 +726,7 @@ public class DestroyDispatch {
                 if (ownerSlotsAtStart.contains(ownerSlot)) continue;
                 RuntimeBase ownerContainer = ownerSlot.ownerContainer();
                 if (ownerContainer != null
-                        && ReachabilityWalker.isReachableFromRoots(
-                                ownerContainer, true, referent)) {
+                        && MortalList.isRootedOwnerContainer(ownerContainer, referent)) {
                     return true;
                 }
                 // Closure pads have no aggregate container. When capture
