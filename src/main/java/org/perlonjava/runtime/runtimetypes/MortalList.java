@@ -999,7 +999,9 @@ public class MortalList {
      * StackOverflowError on circular data structures like ExifTool's).
      */
     private static void deferDecrementRecursive(RuntimeScalar scalar) {
-        if (scalar == null || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0) return;
+        if (scalar == null) return;
+        scalar.deferOwnedScalarReferenceContents();
+        if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0) return;
         if (!(scalar.value instanceof RuntimeBase topBase)) return;
 
         // Fast path for leaf references (the overwhelmingly common case):
@@ -1043,7 +1045,9 @@ public class MortalList {
 
         while (!work.isEmpty()) {
             RuntimeScalar s = work.poll();
-            if (s == null || (s.type & RuntimeScalarType.REFERENCE_BIT) == 0) continue;
+            if (s == null) continue;
+            s.deferOwnedScalarReferenceContents();
+            if ((s.type & RuntimeScalarType.REFERENCE_BIT) == 0) continue;
             if (!(s.value instanceof RuntimeBase base)) continue;
             if (!visited.add(base)) continue;  // already visited — cycle
 

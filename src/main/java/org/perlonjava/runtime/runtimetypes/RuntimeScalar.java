@@ -2227,7 +2227,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * constructor, and their refCount was already incremented at creation time.
      */
     public static void incrementRefCountForContainerStore(RuntimeScalar scalar) {
-        if (scalar == null || scalar.refCountOwned
+        if (scalar == null) {
+            return;
+        }
+        // A scalar-reference cell can own a counted referent through the
+        // RuntimeScalar cell it aliases. Container materialization copies the
+        // outer RV wrapper, so each copied aggregate cell must retain those
+        // contents independently instead of relying on the source wrapper's
+        // ownsScalarReferenceContents flag.
+        if (scalar.type == REFERENCE
+                && scalar.value instanceof RuntimeScalar
+                && !scalar.ownsScalarReferenceContents) {
+            scalar.retainScalarReferenceContents(scalar);
+        }
+        if (scalar.refCountOwned
                 || (scalar.type & REFERENCE_BIT) == 0
                 || !(scalar.value instanceof RuntimeBase base)) {
             return;
