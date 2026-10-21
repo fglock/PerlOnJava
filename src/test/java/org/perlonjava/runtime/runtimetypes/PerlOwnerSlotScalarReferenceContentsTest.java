@@ -78,6 +78,123 @@ class PerlOwnerSlotScalarReferenceContentsTest {
     }
 
     @Test
+    void aliasesToOneCellShareOneReferentCountAcrossRetargetAndRelease() {
+        RuntimeHash original = new RuntimeHash();
+        RuntimeHash replacement = new RuntimeHash();
+        original.refCount = 3;
+        replacement.refCount = 3;
+        RuntimeScalar referenceCell = new RuntimeScalar();
+        referenceCell.type = RuntimeScalarType.REFERENCE;
+        referenceCell.value = original;
+        PerlOwnerSlot firstAlias = new PerlOwnerSlot(
+                PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS);
+        PerlOwnerSlot secondAlias = new PerlOwnerSlot(
+                PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS);
+
+        firstAlias.acquireScalarReferenceContents(original, referenceCell);
+        firstAlias.acquireScalarReferenceContents(original, referenceCell);
+        assertEquals(4, original.refCount,
+                "reacquiring the same slot identity does not duplicate its count");
+        secondAlias.acquireScalarReferenceContents(original, referenceCell);
+
+        assertEquals(4, original.refCount,
+                "one scalar cell contributes one referent count regardless of aliases");
+        assertEquals(2, original.ownerSlotCount(
+                PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS));
+
+        firstAlias.retargetScalarReferenceContents(replacement);
+        assertEquals(4, original.refCount,
+                "retargeting one alias preserves the cell's original contents owner");
+        assertEquals(4, replacement.refCount,
+                "the new cell contents acquire one owner");
+
+        secondAlias.retargetScalarReferenceContents(replacement);
+        assertEquals(3, original.refCount,
+                "the final old-target alias releases the old contents exactly once");
+        assertEquals(4, replacement.refCount,
+                "retargeting another alias does not duplicate the new contents owner");
+
+        firstAlias.releaseScalarReferenceContents();
+        assertEquals(4, replacement.refCount,
+                "releasing one alias leaves the shared contents owner active");
+        secondAlias.releaseScalarReferenceContents();
+        assertEquals(3, replacement.refCount,
+                "the final alias releases the shared contents owner exactly once");
+    }
+
+    @Test
+    void deferringOneAliasReleaseLeavesTheSharedContentsOwned() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash referent = new RuntimeHash();
+            referent.refCount = 3;
+            RuntimeScalar referenceCell = new RuntimeScalar();
+            referenceCell.type = RuntimeScalarType.REFERENCE;
+            referenceCell.value = referent;
+            PerlOwnerSlot firstAlias = new PerlOwnerSlot(
+                    PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS);
+            PerlOwnerSlot secondAlias = new PerlOwnerSlot(
+                    PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS);
+            firstAlias.acquireScalarReferenceContents(referent, referenceCell);
+            secondAlias.acquireScalarReferenceContents(referent, referenceCell);
+
+            MortalList.pushMark();
+            PerlOwnerSlot.PendingRelease release = firstAlias.deferScalarReferenceContentsRelease();
+
+            assertNull(release,
+                    "dropping one alias does not enqueue the cell's shared contents release");
+            assertEquals(4, referent.refCount);
+            assertEquals(1, referent.ownerSlotCount(
+                    PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS));
+
+            secondAlias.releaseScalarReferenceContents();
+            assertEquals(3, referent.refCount,
+                    "the remaining alias releases the contents owner exactly once");
+            MortalList.popMark();
+        }
+    }
+
+    @Test
+    void reachableOwnerCountDeduplicatesAliasesToOneScalarCell() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash referent = new RuntimeHash();
+            referent.refCount = 3;
+            RuntimeScalar referenceCell = new RuntimeScalar();
+            referenceCell.type = RuntimeScalarType.REFERENCE;
+            referenceCell.value = referent;
+            RuntimeScalar firstAlias = new RuntimeScalar();
+            RuntimeScalar secondAlias = new RuntimeScalar();
+            firstAlias.type = RuntimeScalarType.REFERENCE;
+            firstAlias.value = referenceCell;
+            secondAlias.type = RuntimeScalarType.REFERENCE;
+            secondAlias.value = referenceCell;
+            MyVarCleanupStack.register(firstAlias);
+            MyVarCleanupStack.register(secondAlias);
+            try {
+                PerlOwnerSlot firstOwner = new PerlOwnerSlot(
+                        PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS,
+                        null, null, firstAlias);
+                PerlOwnerSlot secondOwner = new PerlOwnerSlot(
+                        PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS,
+                        null, null, secondAlias);
+                firstOwner.acquireScalarReferenceContents(referent, referenceCell);
+                secondOwner.acquireScalarReferenceContents(referent, referenceCell);
+
+                assertEquals(1, referent.reachableOwnerCount());
+                firstOwner.releaseScalarReferenceContents();
+                assertEquals(1, referent.reachableOwnerCount(),
+                        "the remaining reachable alias still represents one owner");
+                secondOwner.releaseScalarReferenceContents();
+                assertEquals(0, referent.reachableOwnerCount());
+            } finally {
+                MyVarCleanupStack.unregister(firstAlias);
+                MyVarCleanupStack.unregister(secondAlias);
+            }
+        }
+    }
+
+    @Test
     void deferredReleaseCarriesTheOwnerSlotIdentityUntilDrain() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {

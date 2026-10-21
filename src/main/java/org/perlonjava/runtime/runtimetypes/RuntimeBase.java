@@ -1,7 +1,10 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.Objects;
+import java.util.Set;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
@@ -514,11 +517,19 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 }
             }
         }
+        // Several RV wrappers can alias one scalar cell. They keep separate
+        // slot identities for root proofs, but the cell owns its contents only
+        // once, so only one reachable alias contributes to the count.
+        Set<Object> countedScalarReferenceCells =
+                Collections.newSetFromMap(new IdentityHashMap<>());
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
             if (slot.kind() != PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS
                     || slot.referent() != this) continue;
             RuntimeScalar ownerCell = slot.ownerCell();
-            if (ownerCell != null && ReachabilityWalker.isScalarReachable(ownerCell)) count++;
+            if (ownerCell == null || !ReachabilityWalker.isScalarReachable(ownerCell)) continue;
+            RuntimeScalar referenceCell = slot.scalarReferenceCell();
+            Object ownershipKey = referenceCell == null ? slot : referenceCell;
+            if (countedScalarReferenceCells.add(ownershipKey)) count++;
         }
         return count;
     }

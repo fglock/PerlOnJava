@@ -811,7 +811,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
     }
 
-    private synchronized java.util.List<PerlOwnerSlot> scalarReferenceContentsOwnersSnapshot() {
+    synchronized java.util.List<PerlOwnerSlot> scalarReferenceContentsOwnersSnapshot() {
         return scalarReferenceContentsOwners == null || scalarReferenceContentsOwners.isEmpty()
                 ? java.util.List.of() : java.util.List.copyOf(scalarReferenceContentsOwners);
     }

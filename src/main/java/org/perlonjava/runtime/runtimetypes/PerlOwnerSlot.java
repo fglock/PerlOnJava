@@ -121,6 +121,11 @@ public final class PerlOwnerSlot {
         return reference == null ? null : reference.get();
     }
 
+    RuntimeScalar scalarReferenceCell() {
+        WeakReference<RuntimeScalar> reference = scalarReferenceCell;
+        return reference == null ? null : reference.get();
+    }
+
     boolean isNativeCaptureOwner() {
         return nativeCaptureOwner;
     }
@@ -208,7 +213,11 @@ public final class PerlOwnerSlot {
         transferTo(target);
     }
 
-    /** Attach the identity for a scalar-reference cell's owned contents. */
+    /**
+     * Attach one scalar-reference alias slot to its cell's contents.
+     * Distinct aliases keep distinct reachability identities, while aliases
+     * to the same scalar cell share one referent count.
+     */
     public synchronized void acquireScalarReferenceContents(RuntimeBase target) {
         acquireScalarReferenceContents(target, null);
     }
@@ -224,18 +233,28 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException(
                     "scalar-reference contents require a tracked referent");
         }
-        if (target.refCount == Integer.MAX_VALUE) {
-            throw new IllegalStateException("scalar-reference contents count overflow");
-        }
         if (referent != null && referent != target) {
             throw new IllegalStateException("cannot retarget an active scalar-reference owner");
         }
+        if (referent == target) {
+            RuntimeScalar currentCell = scalarReferenceCell();
+            if (currentCell == referenceCell) return;
+            throw new IllegalStateException(
+                    "an active scalar-reference owner cannot change cells during acquisition");
+        }
+        boolean firstOwnerForCell = !hasSiblingScalarReferenceContentsOwner(
+                referenceCell, target);
+        if (firstOwnerForCell && target.refCount == Integer.MAX_VALUE) {
+            throw new IllegalStateException("scalar-reference contents count overflow");
+        }
         transferTo(target);
-        target.traceRefCount(+1, "PerlOwnerSlot.acquireScalarReferenceContents");
-        target.refCount++;
-        target.hadCountedReference = true;
-        target.acquireTransientTraceOwner(
-                "scalar-reference contents", "PerlOwnerSlot.scalarReferenceContents");
+        if (firstOwnerForCell) {
+            target.traceRefCount(+1, "PerlOwnerSlot.acquireScalarReferenceContents");
+            target.refCount++;
+            target.hadCountedReference = true;
+            target.acquireTransientTraceOwner(
+                    "scalar-reference contents", "PerlOwnerSlot.scalarReferenceContents");
+        }
         scalarReferenceCell = referenceCell == null ? null : new WeakReference<>(referenceCell);
         if (referenceCell != null) referenceCell.registerScalarReferenceContentsOwner(this);
     }
@@ -264,6 +283,7 @@ public final class PerlOwnerSlot {
         scalarReferenceCell = null;
         if (referenceCell != null) referenceCell.unregisterScalarReferenceContentsOwner(this);
         transferTo(null);
+        if (hasSiblingScalarReferenceContentsOwner(referenceCell, target)) return;
         if (target.refCount <= 0) return;
         target.traceRefCount(-1, "PerlOwnerSlot.releaseScalarReferenceContents");
         target.releaseTransientTraceOwner(
@@ -291,6 +311,10 @@ public final class PerlOwnerSlot {
         RuntimeScalar referenceCell = scalarReferenceCell == null ? null : scalarReferenceCell.get();
         scalarReferenceCell = null;
         if (referenceCell != null) referenceCell.unregisterScalarReferenceContentsOwner(this);
+        if (hasSiblingScalarReferenceContentsOwner(referenceCell, target)) {
+            transferTo(null);
+            return null;
+        }
         PendingRelease release = new PendingRelease(identity, ++nextReleaseSequence, kind, this);
         MortalList.deferOwnerSlotDecrement(target, "scalar-reference contents", release);
         return release;
@@ -304,25 +328,31 @@ public final class PerlOwnerSlot {
         }
         RuntimeBase previous = referent;
         if (previous == nextTarget) return;
-        if (nextTarget != null && nextTarget.refCount >= 0) {
-            if (nextTarget.refCount == Integer.MAX_VALUE) {
-                throw new IllegalStateException("scalar-reference contents count overflow");
+        RuntimeScalar referenceCell = scalarReferenceCell == null ? null : scalarReferenceCell.get();
+        boolean firstOwnerForNextTarget = nextTarget != null
+                && !hasSiblingScalarReferenceContentsOwner(referenceCell, nextTarget);
+        if (nextTarget != null) {
+            if (nextTarget.refCount < 0) {
+                nextTarget = null;
+            } else if (firstOwnerForNextTarget) {
+                if (nextTarget.refCount == Integer.MAX_VALUE) {
+                    throw new IllegalStateException("scalar-reference contents count overflow");
+                }
+                nextTarget.traceRefCount(+1, "PerlOwnerSlot.retargetScalarReferenceContents");
+                nextTarget.refCount++;
+                nextTarget.hadCountedReference = true;
+                nextTarget.acquireTransientTraceOwner(
+                        "scalar-reference contents", "PerlOwnerSlot.scalarReferenceContents");
             }
-            nextTarget.traceRefCount(+1, "PerlOwnerSlot.retargetScalarReferenceContents");
-            nextTarget.refCount++;
-            nextTarget.hadCountedReference = true;
-            nextTarget.acquireTransientTraceOwner(
-                    "scalar-reference contents", "PerlOwnerSlot.scalarReferenceContents");
-        } else {
-            nextTarget = null;
         }
         transferTo(nextTarget);
         if (nextTarget == null && scalarReferenceCell != null) {
-            RuntimeScalar referenceCell = scalarReferenceCell.get();
             scalarReferenceCell = null;
             if (referenceCell != null) referenceCell.unregisterScalarReferenceContentsOwner(this);
         }
-        if (previous == null || previous.refCount <= 0) return;
+        if (previous == null
+                || hasSiblingScalarReferenceContentsOwner(referenceCell, previous)
+                || previous.refCount <= 0) return;
         previous.traceRefCount(-1, "PerlOwnerSlot.retargetScalarReferenceContents");
         previous.releaseTransientTraceOwner(
                 "scalar-reference contents", "PerlOwnerSlot.scalarReferenceContents");
@@ -334,6 +364,15 @@ public final class PerlOwnerSlot {
 
     private synchronized void detachAfterDeferredRelease() {
         transferTo(null);
+    }
+
+    private boolean hasSiblingScalarReferenceContentsOwner(
+            RuntimeScalar referenceCell, RuntimeBase target) {
+        if (referenceCell == null || target == null) return false;
+        for (PerlOwnerSlot slot : referenceCell.scalarReferenceContentsOwnersSnapshot()) {
+            if (slot != this && slot.referent() == target) return true;
+        }
+        return false;
     }
 
     /** Queue one closure-pad count release and retain its slot provenance. */
