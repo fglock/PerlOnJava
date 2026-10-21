@@ -13,6 +13,7 @@ priorities and future plans.
 - Ignore commented-out code when checking lexical constant closures for later mutations, preserving BEGIN-time generated constants (#1785).
 - Run standard Perl's `cpan -t Module` for CPAN oracle checks and keep download failures inconclusive instead of reporting missing local modules as Perl failures.
 - Keep lexical-registration membership checks constant-time, avoiding quadratic CPAN index parsing as cleanup stacks grow.
+- Keep a referent alive while another owning array or hash slot still aliases its scalar cell after `pop`, `shift`, or `delete` (#1649).
 - Preserve numeric types of cached read-only scalars in ranges, rejecting unsigned endpoints outside the supported integer range.
 - Improve JVM execution performance for the bit-packed Life example, ordinary scalar assignments, and common blessing lookups.
 - Reuse private one-scalar wrappers when materializing scalar returns, reducing result-list allocations across JVM calls.
