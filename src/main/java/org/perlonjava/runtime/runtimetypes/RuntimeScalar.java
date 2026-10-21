@@ -2938,8 +2938,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // `%hash=()`/`deferDestroyForContainerClear` balance. Other referents at -1
         // stay untracked (e.g. named \@x via local slot).
         boolean newOwned = false;
-        boolean scalarContentsOwnedByEscapedReference = !scalarContentsOwners.isEmpty()
-                && !this.localBindingExists;
+        boolean scalarContentsOwnedByEscapedReference = !scalarContentsOwners.isEmpty();
         if (((value.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 || value.type == RuntimeScalarType.GLOB)
                 && value.value != null) {
