@@ -12,6 +12,8 @@ priorities and future plans.
 - Cover `Test::Needs` prerequisite scanning of quoted module names and Perl version literals (#1396).
 - Preserve reference-valued FETCH results from tied-hash `values()` and retain scalar-reference envelopes in Storable round trips (#1554, #1468).
 - Ignore commented-out code when checking lexical constant closures for later mutations, preserving BEGIN-time generated constants (#1785).
+- Pack the method-dispatch inline-cache guard key into one primitive value while preserving class and method invalidation checks.
+- Keep watcher maps and live `substr`-lvalue observers in lazy scalar extension state, reducing the common `RuntimeScalar` footprint.
 - Run standard Perl's `cpan -t Module` for CPAN oracle checks and keep download failures inconclusive instead of reporting missing local modules as Perl failures.
 - Keep lexical-registration membership checks constant-time, avoiding quadratic CPAN index parsing as cleanup stacks grow.
 - Preserve numeric types of cached read-only scalars in ranges, rejecting unsigned endpoints outside the supported integer range.

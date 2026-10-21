@@ -101,43 +101,53 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /** Number of imprecision diagnostics already emitted for a run of auto-operations. */
     private transient int imprecisionAutoWarningCount;
 
-    /** Live substr lvalues that must be refreshed when this scalar is replaced. */
-    private transient List<WeakReference<RuntimeSubstrLvalue>> substrLvalueObservers;
+    /** Rare scalar metadata kept off the common scalar object until first use. */
+    static final class ExtendedState {
+        /** Live substr lvalues that must be refreshed when this scalar is replaced. */
+        List<WeakReference<RuntimeSubstrLvalue>> substrLvalueObservers;
+        /** Perl magic-style callbacks installed by Scalar::Watcher. */
+        Map<Long, RuntimeScalar> modifiedWatchers;
+        Map<Long, RuntimeScalar> destroyedWatchers;
+    }
 
-    /** Perl magic-style callbacks installed by Scalar::Watcher. */
-    private transient Map<Long, RuntimeScalar> modifiedWatchers;
-    private transient Map<Long, RuntimeScalar> destroyedWatchers;
+    transient ExtendedState extendedState;
     private transient boolean watcherDestroyNotified;
     private transient int watcherMutationDepth;
     private static volatile boolean watcherCleanupNeeded;
 
     public void addModifiedWatcher(long id, RuntimeScalar callback) {
         watcherCleanupNeeded = true;
-        if (modifiedWatchers == null) modifiedWatchers = new LinkedHashMap<>();
-        modifiedWatchers.put(id, callback);
+        ExtendedState state = extendedState();
+        if (state.modifiedWatchers == null) state.modifiedWatchers = new LinkedHashMap<>();
+        state.modifiedWatchers.put(id, callback);
     }
 
     public void addDestroyedWatcher(long id, RuntimeScalar callback) {
         watcherCleanupNeeded = true;
-        if (destroyedWatchers == null) destroyedWatchers = new LinkedHashMap<>();
-        destroyedWatchers.put(id, callback);
+        ExtendedState state = extendedState();
+        if (state.destroyedWatchers == null) state.destroyedWatchers = new LinkedHashMap<>();
+        state.destroyedWatchers.put(id, callback);
     }
 
     public void removeWatcher(long id) {
-        if (modifiedWatchers != null) modifiedWatchers.remove(id);
-        if (destroyedWatchers != null) destroyedWatchers.remove(id);
+        ExtendedState state = extendedState;
+        if (state == null) return;
+        if (state.modifiedWatchers != null) state.modifiedWatchers.remove(id);
+        if (state.destroyedWatchers != null) state.destroyedWatchers.remove(id);
     }
 
     public boolean hasWatchers() {
-        return (modifiedWatchers != null && !modifiedWatchers.isEmpty())
-                || (destroyedWatchers != null && !destroyedWatchers.isEmpty());
+        ExtendedState state = extendedState;
+        return state != null && ((state.modifiedWatchers != null && !state.modifiedWatchers.isEmpty())
+                || (state.destroyedWatchers != null && !state.destroyedWatchers.isEmpty()));
     }
 
     private void notifyModifiedWatchers() {
         if (watcherMutationDepth > 0) return;
-        if (modifiedWatchers == null || modifiedWatchers.isEmpty()) return;
+        ExtendedState state = extendedState;
+        if (state == null || state.modifiedWatchers == null || state.modifiedWatchers.isEmpty()) return;
         RuntimeArray args = new RuntimeArray(this);
-        for (RuntimeScalar callback : new ArrayList<>(modifiedWatchers.values())) {
+        for (RuntimeScalar callback : new ArrayList<>(state.modifiedWatchers.values())) {
             RuntimeCode.apply(callback, args, RuntimeContextType.VOID);
         }
     }
@@ -145,14 +155,25 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     private void notifyDestroyedWatchers() {
         if (watcherDestroyNotified) return;
         watcherDestroyNotified = true;
-        if (destroyedWatchers != null && !destroyedWatchers.isEmpty()) {
+        ExtendedState state = extendedState;
+        if (state == null) return;
+        if (state.destroyedWatchers != null && !state.destroyedWatchers.isEmpty()) {
             RuntimeArray args = new RuntimeArray(this);
-            for (RuntimeScalar callback : new ArrayList<>(destroyedWatchers.values())) {
+            for (RuntimeScalar callback : new ArrayList<>(state.destroyedWatchers.values())) {
                 RuntimeCode.apply(callback, args, RuntimeContextType.VOID);
             }
         }
-        if (modifiedWatchers != null) modifiedWatchers.clear();
-        if (destroyedWatchers != null) destroyedWatchers.clear();
+        if (state.modifiedWatchers != null) state.modifiedWatchers.clear();
+        if (state.destroyedWatchers != null) state.destroyedWatchers.clear();
+    }
+
+    private ExtendedState extendedState() {
+        ExtendedState state = extendedState;
+        if (state == null) {
+            state = new ExtendedState();
+            extendedState = state;
+        }
+        return state;
     }
 
     public static boolean watcherCleanupNeeded() {
@@ -181,21 +202,24 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     void registerSubstrLvalue(RuntimeSubstrLvalue observer) {
-        if (substrLvalueObservers == null) {
-            substrLvalueObservers = new ArrayList<>();
+        ExtendedState state = extendedState();
+        if (state.substrLvalueObservers == null) {
+            state.substrLvalueObservers = new ArrayList<>();
         }
-        substrLvalueObservers.add(new WeakReference<>(observer));
+        state.substrLvalueObservers.add(new WeakReference<>(observer));
     }
 
     public boolean hasLiveSubstrLvalueObservers() {
-        if (substrLvalueObservers == null) return false;
-        substrLvalueObservers.removeIf(reference -> reference.get() == null);
-        return !substrLvalueObservers.isEmpty();
+        ExtendedState state = extendedState;
+        if (state == null || state.substrLvalueObservers == null) return false;
+        state.substrLvalueObservers.removeIf(reference -> reference.get() == null);
+        return !state.substrLvalueObservers.isEmpty();
     }
 
     private void refreshSubstrLvalues() {
-        if (substrLvalueObservers == null) return;
-        substrLvalueObservers.removeIf(reference -> {
+        ExtendedState state = extendedState;
+        if (state == null || state.substrLvalueObservers == null) return;
+        state.substrLvalueObservers.removeIf(reference -> {
             RuntimeSubstrLvalue observer = reference.get();
             if (observer == null) return true;
             observer.refreshFromParent();
@@ -2259,8 +2283,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         formatPictureTainted = value.formatPictureTainted;
         globalCodeRefFqn = value.globalCodeRefFqn;
         if (posCacheEntryCreated) RuntimePosLvalue.invalidatePos(this);
-        if (substrLvalueObservers != null) refreshSubstrLvalues();
-        if (modifiedWatchers != null && !modifiedWatchers.isEmpty()) notifyModifiedWatchers();
+        ExtendedState state = extendedState;
+        if (state != null && state.substrLvalueObservers != null) refreshSubstrLvalues();
+        if (state != null && state.modifiedWatchers != null && !state.modifiedWatchers.isEmpty()) {
+            notifyModifiedWatchers();
+        }
         return this;
     }
 
@@ -2299,8 +2326,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         formatPictureTainted = false;
         globalCodeRefFqn = null;
         if (posCacheEntryCreated) RuntimePosLvalue.invalidatePos(this);
-        if (substrLvalueObservers != null) refreshSubstrLvalues();
-        if (modifiedWatchers != null && !modifiedWatchers.isEmpty()) notifyModifiedWatchers();
+        ExtendedState state = extendedState;
+        if (state != null && state.substrLvalueObservers != null) refreshSubstrLvalues();
+        if (state != null && state.modifiedWatchers != null && !state.modifiedWatchers.isEmpty()) {
+            notifyModifiedWatchers();
+        }
         return this;
     }
 
