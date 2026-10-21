@@ -7,6 +7,8 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.backend.bytecode.VariableCollectorVisitor;
+import org.perlonjava.backend.jvm.astrefactor.BlockRefactor;
+import org.perlonjava.frontend.analysis.BytecodeSizeEstimator;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
@@ -332,6 +334,22 @@ public class EmitSubroutine {
                 interpreted.futureAsyncAwaitSub = true;
                 interpreted.futureAsyncAwaitFutureClass =
                         (String) node.getAnnotation("futureAsyncAwaitFutureClass");
+                throw new InterpreterFallbackException(interpreted, newEnv);
+            }
+            // Existing MethodTooLarge handling falls back to the interpreter,
+            // but it only runs after ASM has built the whole method. Large
+            // generated aggregate literals can exhaust memory in frame
+            // computation before ASM reports that limit. Estimate the body
+            // first and send oversized subroutines through the same fallback.
+            if (node.block != null
+                    && BytecodeSizeEstimator.estimateSnippetSize(node.block)
+                            > BlockRefactor.LARGE_BYTECODE_SIZE) {
+                if (System.getenv("JPERL_SHOW_FALLBACK") != null) {
+                    System.err.println(
+                            "Note: Estimated subroutine too large, using interpreter backend.");
+                }
+                InterpretedCode interpreted = EmitterMethodCreator.compileToInterpreter(
+                        node.block, subCtx, node.useTryCatch);
                 throw new InterpreterFallbackException(interpreted, newEnv);
             }
             Class<?> generatedClass =
