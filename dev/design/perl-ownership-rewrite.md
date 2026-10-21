@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress in [draft PR #1816](https://github.com/PerlOnJava/pull/1816), based on `origin/master` at `162d8eb84`. Code commit `5d9b082b4` passes the full local `nice -n 19 make` gate and HTML::Tree 5.07 on JVM and interpreter (23 files, 989 tests each). Owner slots still bridge to `RuntimeBase.refCount` for dispatch; default owner-slot accounting remains incomplete.
+**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The local candidate is rebased onto `origin/master` at `8bc1c9d17`; code commit `05ca274a6` passes full `nice -n 19 make`, the 29-assertion Mojolicious WebSocket callback regression on JVM and interpreter, and HTML::Tree 5.07 on both backends (23 files, 989 tests each). Owner slots still bridge to `RuntimeBase.refCount` for dispatch; default owner-slot accounting remains incomplete.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
@@ -107,7 +107,7 @@ and first path establish implementation cost.
 
 ### Current status: Phase 2 in progress; Phase 1 merged in PR #1653 as `84f32be179bdc2b351c3eaae1cb26df39964ab6b` (2026-10-07)
 
-The #1794/#1795 candidate and ownership work are published in [draft PR #1816](https://github.com/PerlOnJava/pull/1816). Code commit `5d9b082b4` passes full `nice -n 19 make` in 21m34s. Its 22-assertion cross-container scalar-cell alias regression passes on system Perl 5.34.1, blead Perl 5.45.4, JVM, and interpreter; the pop/delete failures were reproduced on the unfixed parent on both backends. The project-owned HTML::Tree lifecycle reproducers pass on system Perl and both PerlOnJava backends; the unfixed parent leaves two and four elements alive in the respective cases. HTML::Tree 5.07 passes all 989 tests on both backends, including unchanged `t/refloop.t`. The PR's previous head has green Ubuntu and Windows checks; checks for this commit will run after publication. Phase 2 remains incomplete: `refCount` still controls lifecycle dispatch, and general scalar/proxy stores, alias cleanup, and default owner-slot accounting remain unmigrated. Distinct scalar-reference aliases keep separate reachability identities while contributing one referent count per scalar cell. The HTML::Tree result is compatibility evidence, not the Phase 2 owner-slot exit proof.
+The #1794/#1795 candidate and ownership work remain in [draft PR #1816](https://github.com/PerlOnJava/pull/1816); the local candidate is rebased onto `origin/master` at `8bc1c9d17` and is ready for publication after documentation validation. Code commit `05ca274a6` passes full `nice -n 19 make` in 19m15s. The tracked 29-assertion Mojolicious WebSocket callback test exposed an interpreter-only early controller release; the external-root snapshot now follows persistent state and nested callback ownership. The test passes on blead Perl 5.45.4 and both PerlOnJava backends. HTML::Tree 5.07 passes all 23 files and 989 tests on both backends, including unchanged `t/refloop.t`. The earlier 22-assertion cross-container scalar-cell alias regression passes on system Perl 5.34.1, blead Perl 5.45.4, JVM, and interpreter; the pop/delete failures were reproduced on the unfixed parent. Phase 2 remains incomplete: `refCount` still controls lifecycle dispatch, and general scalar/proxy stores, alias cleanup, and default owner-slot accounting remain unmigrated. Distinct scalar-reference aliases keep separate reachability identities while contributing one referent count per scalar cell. The HTML::Tree result is compatibility evidence, not the Phase 2 owner-slot exit proof.
 
 The earlier candidate was based on `origin/master` (`ede542b29`) and passed the full local make in 22m55s, Ubuntu `make ci`, the Ubuntu Perl thread compatibility gate, SBOM generation, Windows `make ci` in about 52 minutes, and the focused Windows thread gate. Windows CI exposed two existing unit tests with POSIX `/tmp` paths; `make ci` now creates the runner's root-relative `tmp` directory before building. On blead Perl 5.45.4, the controller, WebSocket, Catalyst tempfile, owner-release, and writable `Internals::SvREFCNT` regressions pass. The controller regression passes 5/5 on JVM and interpreter; the WebSocket regression passes 6/6 on both; the Catalyst tempfile regression passes 24/24 on both; `refcount/issue_1794_controller_owner_release.t` passes 3/3 on both; and `internals_svrefcnt_write.t` passes 6/6 on both after failing all six assertions on its unfixed parent. The alias-count follow-up rebases onto `origin/master` (`18323a1ac`). Its focused make passes in 50s and its full local make passes in 31m30s on code commit `15e362ddb`.
 
@@ -187,6 +187,14 @@ The earlier candidate was based on `origin/master` (`ede542b29`) and passed the 
   `69d30792f`. Legacy
   `refCount` dispatch remains; the next work is default owner-slot accounting
   across ordinary aggregate stores and cleanup.
+- [x] On 2026-10-22, fixed interpreter WebSocket callback lifetime after the
+  tracked 29-assertion regression showed that an active callback's controller
+  was destroyed early. External-root snapshots now follow persistent scalar,
+  array, and hash state on installed CVs and continue through nested callback
+  code to its captured values. The new Java regression covers that full owner
+  chain; blead Perl 5.45.4 and both PerlOnJava backends pass the WebSocket test.
+  Full `nice -n 19 make` passes in 19m15s, and HTML::Tree 5.07 passes all 989
+  tests on both backends on code commit `05ca274a6`.
 - [x] Re-read the parent issue's implementation contract and reviewed the
   independent lifecycle candidate handoff. Historical candidate test results
   are not treated as current Phase 1 evidence.
@@ -379,19 +387,21 @@ The earlier candidate was based on `origin/master` (`ede542b29`) and passed the 
 
 ### Next steps
 
-1. Continue Phase 2 from slot-registration recovery to default owner-slot
+1. Publish the tested rebase and callback-lifetime fix to draft PR #1816, then
+   verify hosted CI on that exact head.
+2. Continue Phase 2 from slot-registration recovery to default owner-slot
    accounting for ordinary array/hash element stores and scalar proxies. Cover
    acquisition, transfer, replacement, deletion, aliases, and final release
    with oracle-checked refcount, weak-reference, and DESTROY assertions. Keep
    legacy dispatch and reachability bridges only at explicit unmigrated
    boundaries; use unchanged HTML-Tree as the integration guard.
-2. Resolve the strict target failures in the fresh-home CPAN release
+3. Resolve the strict target failures in the fresh-home CPAN release
    acceptance, then rerun that gate on the final candidate. The current run
    distinguishes prerequisite/setup timeouts and missing dependencies from
    runtime assertions; those outcomes do not yet satisfy #1642's acceptance.
-3. Rerun Moo and DBIx::Class after their separate tracked fixes land; classify
+4. Rerun Moo and DBIx::Class after their separate tracked fixes land; classify
    the two DBIx::Class assertions independently.
-4. Run each repository gate from an immutable commit and record before/after
+5. Run each repository gate from an immutable commit and record before/after
    evidence for each enabled path.
 
 ### Open questions and blockers
