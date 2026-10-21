@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress in [PR #1816](https://github.com/PerlOnJava/pull/1816), currently open as a draft based on master `ede542b2901ebb54e7aae293fae74cbbd6af22d7`. The local full `nice -n 19 make` passes with two Gradle workers and a 3 GiB test heap; the PR's Linux and Windows jobs are running. The candidate records hash-entry and array-element owner slots for deferred-release recovery, registers slots after array proxy stores, scalar refaliasing, scalar-reference creation, and aggregate refaliasing, and proves ownership for anonymous arrays reachable through package-rooted hashes while excluding the dying referent. HTML-Tree 5.07 passes. Owner slots still bridge to `RuntimeBase.refCount` for dispatch; this is not the complete Phase 2 ownership migration.
+**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress in [draft PR #1816](https://github.com/PerlOnJava/pull/1816), currently at `ea7b77164` and based on current master `ede542b2901ebb54e7aae293fae74cbbd6af22d7`. The full local `nice -n 19 make` gate passes on the current candidate. Typed hash/array owner slots now prove nested aggregate root chains both during deferred-release recovery and `DESTROY` resurrection checks; focused Java regressions verify zero whole-root queries and snapshots for those paths. The latest hosted workflow is queued behind earlier long-running CI runs. Owner slots still bridge to `RuntimeBase.refCount` for dispatch; scalar/proxy migration and default owner-slot accounting remain incomplete.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
@@ -107,7 +107,7 @@ and first path establish implementation cost.
 
 ### Current status: Phase 2 in progress; Phase 1 merged in PR #1653 as `84f32be179bdc2b351c3eaae1cb26df39964ab6b` (2026-10-07)
 
-The #1794/#1795 candidate and follow-up ownership work are published in [draft PR #1816](https://github.com/PerlOnJava/pull/1816) at head `8a6c5a365ba7bed07bf627414ca3a9685b00a80d`. Ubuntu and Windows CI passed on this head. Phase 2 remains a recovery bridge rather than the completed ownership migration: `refCount` still controls dispatch, and scalar/proxy stores, alias cleanup, and complete default owner-slot accounting remain unmigrated.
+The #1794/#1795 candidate and follow-up ownership work are published in [draft PR #1816](https://github.com/PerlOnJava/pull/1816) at head `ea7b77164cdf35e3c1910c81277579dfb415ade3`. Earlier Ubuntu and Windows CI passed on prior heads; the current head's hosted run is queued. Phase 2 remains a recovery bridge rather than the completed ownership migration: `refCount` still controls dispatch, and scalar/proxy stores, alias cleanup, and complete default owner-slot accounting remain unmigrated.
 
 The rebased candidate is based on `origin/master` (`ede542b29`). Its full local `nice -n 19 make` passed in 22m55s with two Gradle workers and a 3 GiB test heap. Ubuntu `make ci`, the Ubuntu Perl thread compatibility gate, and SBOM generation passed. Windows `make ci` passed in about 52 minutes with four Gradle workers, followed by the focused Windows thread gate. Windows CI exposed two existing unit tests with POSIX `/tmp` paths; `make ci` now creates the runner's root-relative `tmp` directory before building. On blead Perl 5.45.4, the controller, WebSocket, Catalyst tempfile, owner-release, and writable `Internals::SvREFCNT` regressions pass. The controller regression passes 5/5 on JVM and interpreter; the WebSocket regression passes 6/6 on both; the Catalyst tempfile regression passes 24/24 on both; `refcount/issue_1794_controller_owner_release.t` passes 3/3 on both; and `internals_svrefcnt_write.t` passes 6/6 on both after failing all six assertions on its unfixed parent. Continue migrating complete ownership paths through replacement, deletion, aliases, calls, and final release.
 
@@ -134,6 +134,11 @@ The rebased candidate is based on `origin/master` (`ede542b29`). Its full local 
   75-minute budget. The full local `make` passed in 22m55s. Ubuntu and Windows
   make gates, the Ubuntu thread compatibility gate, the Windows focused thread
   gate, and Ubuntu SBOM generation all passed on PR head `8a6c5a365`.
+- [x] On 2026-10-21, followed typed hash/array owner slots through nested
+  aggregate roots during deferred-release recovery and `DESTROY` resurrection
+  checks. Two Java regressions assert the ownership result with zero root
+  queries and snapshots. The full local `nice -n 19 make` passes on
+  `ea7b77164` in 21m11s; hosted CI for this head is queued.
 - [x] Revalidated `ordinary_aggregate_element_owner_refcount.t`: all 11
   standard-Perl count/destruction assertions pass on blead Perl 5.45.4, JVM,
   and interpreter. This covers scalar ownership through array/hash insertion,
