@@ -21,6 +21,14 @@ is(rc($object), 3, 'push adds one independent array-element owner');
 shift @array;
 is(rc($object), 2, 'shift releases only the removed array-element owner');
 
+my $array_replacement = bless {}, 'OrdinaryAggregateOwnerProbe';
+$array[0] = $array_replacement;
+is(rc($object), 1, 'replacing an array value releases the displaced owner');
+is(rc($array_replacement), 2, 'the replacement array value gains one owner');
+$array[0] = $object;
+is(rc($array_replacement), 1, 'replacing an array value releases its previous owner');
+is(rc($object), 2, 'the new array value gains one owner');
+
 my %hash = (left => $object, right => $object);
 is(rc($object), 4, 'two hash entries add two independent owners');
 delete $hash{left};
