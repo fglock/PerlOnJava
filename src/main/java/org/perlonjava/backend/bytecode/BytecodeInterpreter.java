@@ -290,7 +290,7 @@ public class BytecodeInterpreter {
             SuspendedInterpreterFrame frame) {
         boolean released = false;
         for (RuntimeScalar scalar : frame.temporaryScalarOwners) {
-            if (!scalar.ownsScalarReferenceContents) continue;
+            if (!scalar.hasScalarReferenceContentsOwner()) continue;
             scalar.deferOwnedScalarReferenceContents();
             released = true;
         }
@@ -301,7 +301,7 @@ public class BytecodeInterpreter {
     private static void trackTemporaryScalarReferenceContents(
             SuspendedInterpreterFrame frame, InterpretedCode code,
             int register, int firstMyVarReg, RuntimeScalar scalar) {
-        if (scalar == null || !scalar.ownsScalarReferenceContents) return;
+        if (scalar == null || !scalar.hasScalarReferenceContentsOwner()) return;
         boolean eligible = register >= firstMyVarReg
                 && !code.myVarRegisters.get(register)
                 && !scalar.isPackageGlobalRoot

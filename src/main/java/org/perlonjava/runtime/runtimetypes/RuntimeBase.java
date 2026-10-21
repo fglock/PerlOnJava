@@ -491,8 +491,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     /**
-     * D-W6.14: count owners that are reachable from package globals or
-     * live my-vars. This is the strict version used by the production
+     * D-W6.14: count scalar and scalar-content-slot owners that are reachable
+     * from package globals or live my-vars. This is the strict version used by the production
      * rescue at MortalList.flush refCount→0: only objects whose owners
      * can be reached from real roots are kept alive. Phantom owners
      * (scalars that should be dead but haven't been released yet) are
@@ -501,17 +501,24 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      * resolved by user weaken()).
      */
     public int reachableOwnerCount() {
-        if (activeOwners == null) return 0;
         int count = 0;
-        java.util.Iterator<RuntimeScalar> it = activeOwners.iterator();
-        while (it.hasNext()) {
-            RuntimeScalar sc = it.next();
-            if (sc != null && sc.refCountOwned && sc.value == this
-                    && ReachabilityWalker.isScalarReachable(sc)) {
-                count++;
-            } else if (sc == null || !sc.refCountOwned || sc.value != this) {
-                it.remove();
+        if (activeOwners != null) {
+            java.util.Iterator<RuntimeScalar> it = activeOwners.iterator();
+            while (it.hasNext()) {
+                RuntimeScalar sc = it.next();
+                if (sc != null && sc.refCountOwned && sc.value == this
+                        && ReachabilityWalker.isScalarReachable(sc)) {
+                    count++;
+                } else if (sc == null || !sc.refCountOwned || sc.value != this) {
+                    it.remove();
+                }
             }
+        }
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot.kind() != PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS
+                    || slot.referent() != this) continue;
+            RuntimeScalar ownerCell = slot.ownerCell();
+            if (ownerCell != null && ReachabilityWalker.isScalarReachable(ownerCell)) count++;
         }
         return count;
     }
