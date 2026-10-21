@@ -107,9 +107,9 @@ and first path establish implementation cost.
 
 ### Current status: Phase 2 in progress; Phase 1 merged in PR #1653 as `84f32be179bdc2b351c3eaae1cb26df39964ab6b` (2026-10-07)
 
-The #1794/#1795 candidate and follow-up ownership work are published in [draft PR #1816](https://github.com/PerlOnJava/pull/1816) at head `d01080735cb5ee8ca3879a24ab0f72bfaa903dbb`. Phase 2 remains a recovery bridge rather than the completed ownership migration: `refCount` still controls dispatch, and scalar/proxy stores, alias cleanup, and complete default owner-slot accounting remain unmigrated.
+The #1794/#1795 candidate and follow-up ownership work are published in [draft PR #1816](https://github.com/PerlOnJava/pull/1816) at head `8a6c5a365ba7bed07bf627414ca3a9685b00a80d`. Ubuntu and Windows CI passed on this head. Phase 2 remains a recovery bridge rather than the completed ownership migration: `refCount` still controls dispatch, and scalar/proxy stores, alias cleanup, and complete default owner-slot accounting remain unmigrated.
 
-The rebased candidate is based on `origin/master` (`ede542b29`). Its full `nice -n 19 make` passed on `dd368a80a` in 21m03s with two Gradle workers and a 3 GiB test heap. On blead Perl 5.45.4, the controller, WebSocket, Catalyst tempfile, owner-release, and writable `Internals::SvREFCNT` regressions pass. The controller regression passes 5/5 on JVM and interpreter; the WebSocket regression passes 6/6 on both; the Catalyst tempfile regression passes 24/24 on both; `refcount/issue_1794_controller_owner_release.t` passes 3/3 on both; and `internals_svrefcnt_write.t` passes 6/6 on both after failing all six assertions on its unfixed parent. Windows CI exposed two existing unit tests with POSIX `/tmp` paths; PR #1816 now creates the runner's root-relative `tmp` directory before the Windows test gate. The latest hosted checks are pending. Continue migrating complete ownership paths through replacement, deletion, aliases, calls, and final release.
+The rebased candidate is based on `origin/master` (`ede542b29`). Its full local `nice -n 19 make` passed in 22m55s with two Gradle workers and a 3 GiB test heap. Ubuntu `make ci`, the Ubuntu Perl thread compatibility gate, and SBOM generation passed. Windows `make ci` passed in about 52 minutes with four Gradle workers, followed by the focused Windows thread gate. Windows CI exposed two existing unit tests with POSIX `/tmp` paths; `make ci` now creates the runner's root-relative `tmp` directory before building. On blead Perl 5.45.4, the controller, WebSocket, Catalyst tempfile, owner-release, and writable `Internals::SvREFCNT` regressions pass. The controller regression passes 5/5 on JVM and interpreter; the WebSocket regression passes 6/6 on both; the Catalyst tempfile regression passes 24/24 on both; `refcount/issue_1794_controller_owner_release.t` passes 3/3 on both; and `internals_svrefcnt_write.t` passes 6/6 on both after failing all six assertions on its unfixed parent. Continue migrating complete ownership paths through replacement, deletion, aliases, calls, and final release.
 
 ### Completed
 
@@ -125,8 +125,20 @@ The rebased candidate is based on `origin/master` (`ede542b29`). Its full `nice 
   on blead Perl 5.45.4 and both backends and fails on the unfixed parent. The
   complete local `make` gate passes on `dd368a80a`. Windows CI found two
   existing unit scripts that require `/tmp`; the PR prepares the ephemeral
-  Windows runner path without changing those tests. Hosted validation is
-  pending on PR head `d01080735`.
+  Windows runner path without changing those tests. This initial hosted run
+  exposed the workflow's step-order contract and a Windows time-budget issue;
+  both are resolved in the 2026-10-21 entry below.
+- [x] On 2026-10-21, kept the CI workflow's fixed step contract, moved the
+  Windows root-relative temp-directory setup into `make ci`, and configured
+  four Gradle workers only on Windows after the two-worker gate exceeded its
+  75-minute budget. The full local `make` passed in 22m55s. Ubuntu and Windows
+  make gates, the Ubuntu thread compatibility gate, the Windows focused thread
+  gate, and Ubuntu SBOM generation all passed on PR head `8a6c5a365`.
+- [x] Revalidated `ordinary_aggregate_element_owner_refcount.t`: all 11
+  standard-Perl count/destruction assertions pass on blead Perl 5.45.4, JVM,
+  and interpreter. This covers scalar ownership through array/hash insertion,
+  push, shift, delete, replacement, aggregate clear, and final release; Phase 2
+  still requires replacing the legacy counters with default owner-slot paths.
 - [x] Re-read the parent issue's implementation contract and reviewed the
   independent lifecycle candidate handoff. Historical candidate test results
   are not treated as current Phase 1 evidence.
