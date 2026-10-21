@@ -82,6 +82,8 @@ priorities and future plans.
   interpreter (#1646).
 - Buffer file reads while scanning large generated Perl sources in Module::Build,
   and support AF_UNIX datagram sockets through native Unix sockets (#1252, #1272).
+- Keep closure-captured Unix socket handles alive across reads, supporting
+  Log::Fast syslog clients that reconnect their AF_UNIX datagram socket (#1272).
 
 - Preserve tied scalar lvalues returned by `AUTOLOAD` during increment and compound assignment, honor fatal recursion warnings on the interpreter, and accept legacy whitespace-padded module versions and numeric overloads used by Valiemon (#1207, #1222, #1419).
 - Return Perl-compatible `undef` and errno on failed `truncate`, and cover append-mode scalar handles, bareword pipe methods, and scalar-reference output from filehandle input (#1415, #1314, #1216).

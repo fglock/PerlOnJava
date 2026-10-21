@@ -5387,6 +5387,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 || !isUnstashedIoGlob(glob)) {
             return;
         }
+        boolean capturedOwner = owner.captureCount > 0;
         boolean returnedOwner = false;
         if (returned != null) {
             for (RuntimeScalar alias : returnedIoAliases(returned, glob)) {
@@ -5397,7 +5398,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 }
             }
         }
-        if (!returnedOwner) {
+        if (!returnedOwner && !capturedOwner) {
             clearStaleDiagnosticContextForUnaliasedIO(owner);
             releaseIoOwner(owner);
         }
