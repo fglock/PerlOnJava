@@ -3696,6 +3696,25 @@ public class ReachabilityWalker {
                 countedStrongOwners.add(referent);
             }
         }
+        // Scalar-reference contents use a distinct owner slot from the
+        // scalar's direct referent field. When an explicit release triggers a
+        // targeted weak sweep, retain the nested referent if that owner cell
+        // is still a Perl root. Slots whose owner cells live inside the graph
+        // being discarded are internal edges, not independent roots.
+        for (RuntimeBase referent : referents) {
+            for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
+                if (slot.kind() != PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS
+                        || slot.referent() != referent) continue;
+                RuntimeScalar ownerCell = slot.ownerCell();
+                if (ownerCell == null || !live.contains(ownerCell)) continue;
+                if (ownerCell.containerOwner != null
+                        && referents.contains(ownerCell.containerOwner)
+                        && !live.contains(ownerCell.containerOwner)) {
+                    continue;
+                }
+                countedStrongOwners.add(referent);
+            }
+        }
         // Targeted release sweeps run at the same quiet statement boundary as
         // sweepWeakRefs(true). Preserve strong cycle islands here too: Perl's
         // reference counting intentionally keeps an unreachable strong cycle

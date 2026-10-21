@@ -1779,7 +1779,7 @@ public class MortalList {
                 // have a legacy bridge count and retain the old compatibility
                 // sentinel behavior.
                 if (base.nativeCaptureOwnerCount() == 0) base.refCount = 1;
-            } else if (restoreReachableHashEntryOwnerCount(base)) {
+            } else if (restoreReachableAggregateOwnerCount(base)) {
                 // A hash-entry owner has a stable semantic slot identity even
                 // when an unrelated legacy scalar decrement consumes the
                 // selective count. Restore the count from independently owned
@@ -1976,8 +1976,8 @@ public class MortalList {
         }
     }
 
-    /** Restore legacy count for hash-entry owner slots still reachable from Perl roots. */
-    private static boolean restoreReachableHashEntryOwnerCount(RuntimeBase referent) {
+    /** Restore legacy count for aggregate owner slots still reachable from Perl roots. */
+    static boolean restoreReachableAggregateOwnerCount(RuntimeBase referent) {
         Set<RuntimeScalar> rootedHashCells = Collections.newSetFromMap(new IdentityHashMap<>());
         int slotsWithoutCell = 0;
         for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
