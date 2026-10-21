@@ -107,7 +107,7 @@ and first path establish implementation cost.
 
 ### Current status: Phase 2 in progress; Phase 1 merged in PR #1653 as `84f32be179bdc2b351c3eaae1cb26df39964ab6b` (2026-10-07)
 
-The #1794/#1795 candidate and ownership work are published in [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The candidate is based on `origin/master` at `18323a1ac`; code commit `28faab9b9` passes full `nice -n 19 make` in 26m43s. Its 18-assertion cross-container scalar-cell alias regression passes on system Perl 5.34.1, blead Perl 5.45.4, JVM, and interpreter, after failing on the unfixed PerlOnJava parent on both backends. The previous PR head has green Ubuntu and Windows checks; hosted checks for `28faab9b9` are running. Phase 2 remains incomplete: `refCount` still controls lifecycle dispatch, and general scalar/proxy stores, alias cleanup, and default owner-slot accounting remain unmigrated. Distinct scalar-reference aliases keep separate reachability identities while contributing one referent count per scalar cell. HTML::Tree 5.07 passes all 989 tests on both backends, including unchanged `t/refloop.t`; this remains compatibility evidence, not the Phase 2 owner-slot exit proof.
+The #1794/#1795 candidate and ownership work are published in [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The candidate is based on `origin/master` at `162d8eb84`; rebased code commit `69d30792f` passes full `nice -n 19 make` in 31m15s. Its 22-assertion cross-container scalar-cell alias regression passes on system Perl 5.34.1, blead Perl 5.45.4, JVM, and interpreter; the pop/delete failures were reproduced on the unfixed parent on both backends. Hosted checks for the earlier published head are still running; checks for the rebased head will be recorded after publication. Phase 2 remains incomplete: `refCount` still controls lifecycle dispatch, and general scalar/proxy stores, alias cleanup, and default owner-slot accounting remain unmigrated. Distinct scalar-reference aliases keep separate reachability identities while contributing one referent count per scalar cell. HTML::Tree 5.07 passes all 989 tests on both backends, including unchanged `t/refloop.t`; this remains compatibility evidence, not the Phase 2 owner-slot exit proof.
 
 The earlier candidate was based on `origin/master` (`ede542b29`) and passed the full local make in 22m55s, Ubuntu `make ci`, the Ubuntu Perl thread compatibility gate, SBOM generation, Windows `make ci` in about 52 minutes, and the focused Windows thread gate. Windows CI exposed two existing unit tests with POSIX `/tmp` paths; `make ci` now creates the runner's root-relative `tmp` directory before building. On blead Perl 5.45.4, the controller, WebSocket, Catalyst tempfile, owner-release, and writable `Internals::SvREFCNT` regressions pass. The controller regression passes 5/5 on JVM and interpreter; the WebSocket regression passes 6/6 on both; the Catalyst tempfile regression passes 24/24 on both; `refcount/issue_1794_controller_owner_release.t` passes 3/3 on both; and `internals_svrefcnt_write.t` passes 6/6 on both after failing all six assertions on its unfixed parent. The alias-count follow-up rebases onto `origin/master` (`18323a1ac`). Its focused make passes in 50s and its full local make passes in 31m30s on code commit `15e362ddb`.
 
@@ -174,8 +174,9 @@ The earlier candidate was based on `origin/master` (`ede542b29`) and passed the 
   the same scalar cell. Its 22-assertion Perl regression covers those removals
   and array/hash clear with a second owning aggregate. It passes on system Perl
   5.34.1, blead Perl 5.45.4, JVM, and interpreter; the failing pop/delete cases
-  were reproduced on the unfixed parent on both backends. Full
-  `nice -n 19 make` passes in 26m43s on code commit `28faab9b9`. Legacy
+  were reproduced on the unfixed parent on both backends. After rebasing onto
+  `162d8eb84`, full `nice -n 19 make` passes in 31m15s on code commit
+  `69d30792f`. Legacy
   `refCount` dispatch remains; the next work is default owner-slot accounting
   across ordinary aggregate stores and cleanup.
 - [x] Re-read the parent issue's implementation contract and reviewed the
