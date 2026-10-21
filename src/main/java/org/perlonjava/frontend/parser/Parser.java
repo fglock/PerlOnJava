@@ -212,6 +212,8 @@ public class Parser {
     // topicalizer; a deeper given declared inside the eval remains valid.
     public final java.util.ArrayDeque<Integer> evalGivenDepthBaselines = new java.util.ArrayDeque<>();
     public boolean parsingTakeReference = false;
+    /** Keep a heredoc header newline as an expression boundary after `\\&name`. */
+    public boolean deferHeredocAfterCodeReference = false;
     /** Stop a named-unary prototype argument before an adjacent slash pattern. */
     public boolean parsingNamedUnaryPrototypeArgument = false;
     // Format argument lines are parsed by a short-lived child parser.  Record
@@ -560,6 +562,10 @@ public class Parser {
         while (true) {
             // Peek at the next token to determine what to do next.
             LexerToken token = peek(this);
+
+            if (deferHeredocAfterCodeReference && token.type == LexerTokenType.NEWLINE) {
+                break;
+            }
 
             if (token.text.equals("/")
                     && StringParser.isUnterminatedAdjacentSlashPattern(this, tokenIndex)) {

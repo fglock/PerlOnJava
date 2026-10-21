@@ -1765,13 +1765,23 @@ public class StatementResolver {
     }
 
     public static void parseStatementTerminator(Parser parser) {
+        if (parser.deferHeredocAfterCodeReference && peek(parser).text.equals(";")) {
+            consume(parser);
+            parser.deferHeredocAfterCodeReference = false;
+            parser.deferHeredocProcessing = false;
+            return;
+        }
         LexerToken token = peek(parser);
         if (token.type == LexerTokenType.NEWLINE
                 && parser.deferHeredocProcessing
                 && !parser.getHeredocNodes().isEmpty()) {
             // A heredoc body starts at this physical newline. Leave it for
-            // the next statement's normal whitespace pass after the postfix
-            // condition has finished parsing.
+            // the next statement's normal whitespace pass after the current
+            // expression has finished parsing.
+            if (parser.deferHeredocAfterCodeReference) {
+                parser.deferHeredocAfterCodeReference = false;
+                parser.deferHeredocProcessing = false;
+            }
             return;
         }
         if (token.type != LexerTokenType.EOF && !token.text.equals("}") && !token.text.equals(";")) {

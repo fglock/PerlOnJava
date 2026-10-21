@@ -534,6 +534,12 @@ public class ParsePrimary {
                 }
                 // Set flag to prevent &sub from being called during parsing
                 parser.parsingTakeReference = true;
+                if (peek(parser).text.equals("&")
+                        && !parser.getHeredocNodes().isEmpty()
+                        && !parser.deferHeredocProcessing) {
+                    parser.deferHeredocProcessing = true;
+                    parser.deferHeredocAfterCodeReference = true;
+                }
                 operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
                 parser.parsingTakeReference = false;
 
