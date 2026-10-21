@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Avoid heap exhaustion when compiling very large generated subroutines, and preserve heredoc statement boundaries with `\&name` fallbacks (#1252).
 - Cover nested require caller packages and imported `CLASS` constants, and match defer ordering and caller frames around loop `continue` blocks (#1601, #1405, #1383).
 - Apply source filters installed through `Test::More::use_ok` to the caller's remaining source and preserve `print FILEHANDLE (LIST) x N` output (#1375, #1441).
 - Cover `Test::Needs` prerequisite scanning of quoted module names and Perl version literals (#1396).

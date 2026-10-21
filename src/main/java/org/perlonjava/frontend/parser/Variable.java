@@ -1000,7 +1000,7 @@ public class Variable {
                     // createCodeReference will detect the CODE value and return it directly
                     // But if the next token is '(', this is a call, not a reference take
                     if (parser.parsingTakeReference
-                            && (!TokenUtils.peek(parser).text.equals("(")
+                            && (!nextCodeRefTokenIsCall(parser)
                                 || parser.parsingForLoopVariable)) {
                         return new OperatorNode("&", dollarOp, index);
                     }
@@ -1069,7 +1069,7 @@ public class Variable {
         // But if the next token is '(', this is a call like defined(&$sub("args")),
         // so we should parse the arguments and treat it as a call.
         if (parser.parsingTakeReference
-                && (!peek(parser).text.equals("(") || parser.parsingForLoopVariable)) {
+                && (!nextCodeRefTokenIsCall(parser) || parser.parsingForLoopVariable)) {
             return node;
         }
 
@@ -1134,6 +1134,26 @@ public class Variable {
         BinaryOperatorNode callNode = new BinaryOperatorNode("(", node, list, parser.tokenIndex);
         if (shareArgs) callNode.setAnnotation("shareCallerArgs", true);
         return callNode;
+    }
+
+    /**
+     * Checks whether a code-reference term is immediately followed by call
+     * parentheses without asking whitespace skipping to process a heredoc.
+     * Crossing the header newline here can consume the next statement while
+     * the surrounding expression is still being parsed.
+     */
+    private static boolean nextCodeRefTokenIsCall(Parser parser) {
+        if (!parser.deferHeredocAfterCodeReference) {
+            return peek(parser).text.equals("(");
+        }
+        int next = parser.tokenIndex;
+        while (next < parser.tokens.size()
+                && parser.tokens.get(next).type == LexerTokenType.WHITESPACE) {
+            next++;
+        }
+        return next < parser.tokens.size()
+                && parser.tokens.get(next).type == LexerTokenType.OPERATOR
+                && parser.tokens.get(next).text.equals("(");
     }
 
     private static void annotateParseTimeCodeRef(Parser parser, Node node) {
