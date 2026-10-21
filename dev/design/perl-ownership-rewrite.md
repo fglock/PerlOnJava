@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress in [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The scalar-reference alias follow-up is based on `origin/master` at `18323a1ac`; its full local `nice -n 19 make` passes on code commit `15e362ddb`, as does HTML::Tree 5.07 on both JVM and interpreter backends (23 files, 989 tests each). The previously published PR head has green Ubuntu and Windows checks; hosted checks for the follow-up are pending. Owner slots still bridge to `RuntimeBase.refCount` for dispatch; default owner-slot accounting remains incomplete.
+**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress in [draft PR #1816](https://github.com/PerlOnJava/pull/1816), based on `origin/master` at `162d8eb84`. Code commit `5d9b082b4` passes the full local `nice -n 19 make` gate and HTML::Tree 5.07 on JVM and interpreter (23 files, 989 tests each). Owner slots still bridge to `RuntimeBase.refCount` for dispatch; default owner-slot accounting remains incomplete.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
@@ -107,11 +107,19 @@ and first path establish implementation cost.
 
 ### Current status: Phase 2 in progress; Phase 1 merged in PR #1653 as `84f32be179bdc2b351c3eaae1cb26df39964ab6b` (2026-10-07)
 
-The #1794/#1795 candidate and ownership work are published in [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The candidate is based on `origin/master` at `162d8eb84`; rebased code commit `69d30792f` passes full `nice -n 19 make` in 31m15s. Its 22-assertion cross-container scalar-cell alias regression passes on system Perl 5.34.1, blead Perl 5.45.4, JVM, and interpreter; the pop/delete failures were reproduced on the unfixed parent on both backends. Hosted checks for the earlier published head are still running; checks for the rebased head will be recorded after publication. Phase 2 remains incomplete: `refCount` still controls lifecycle dispatch, and general scalar/proxy stores, alias cleanup, and default owner-slot accounting remain unmigrated. Distinct scalar-reference aliases keep separate reachability identities while contributing one referent count per scalar cell. HTML::Tree 5.07 passes all 989 tests on both backends, including unchanged `t/refloop.t`; this remains compatibility evidence, not the Phase 2 owner-slot exit proof.
+The #1794/#1795 candidate and ownership work are published in [draft PR #1816](https://github.com/PerlOnJava/pull/1816). Code commit `5d9b082b4` passes full `nice -n 19 make` in 21m34s. Its 22-assertion cross-container scalar-cell alias regression passes on system Perl 5.34.1, blead Perl 5.45.4, JVM, and interpreter; the pop/delete failures were reproduced on the unfixed parent on both backends. The project-owned HTML::Tree lifecycle reproducers pass on system Perl and both PerlOnJava backends; the unfixed parent leaves two and four elements alive in the respective cases. HTML::Tree 5.07 passes all 989 tests on both backends, including unchanged `t/refloop.t`. The PR's previous head has green Ubuntu and Windows checks; checks for this commit will run after publication. Phase 2 remains incomplete: `refCount` still controls lifecycle dispatch, and general scalar/proxy stores, alias cleanup, and default owner-slot accounting remain unmigrated. Distinct scalar-reference aliases keep separate reachability identities while contributing one referent count per scalar cell. The HTML::Tree result is compatibility evidence, not the Phase 2 owner-slot exit proof.
 
 The earlier candidate was based on `origin/master` (`ede542b29`) and passed the full local make in 22m55s, Ubuntu `make ci`, the Ubuntu Perl thread compatibility gate, SBOM generation, Windows `make ci` in about 52 minutes, and the focused Windows thread gate. Windows CI exposed two existing unit tests with POSIX `/tmp` paths; `make ci` now creates the runner's root-relative `tmp` directory before building. On blead Perl 5.45.4, the controller, WebSocket, Catalyst tempfile, owner-release, and writable `Internals::SvREFCNT` regressions pass. The controller regression passes 5/5 on JVM and interpreter; the WebSocket regression passes 6/6 on both; the Catalyst tempfile regression passes 24/24 on both; `refcount/issue_1794_controller_owner_release.t` passes 3/3 on both; and `internals_svrefcnt_write.t` passes 6/6 on both after failing all six assertions on its unfixed parent. The alias-count follow-up rebases onto `origin/master` (`18323a1ac`). Its focused make passes in 50s and its full local make passes in 31m30s on code commit `15e362ddb`.
 
 ### Completed
+
+- [x] On 2026-10-21, corrected the array pop/shift guard after the rebased
+  aggregate-alias change exposed false retention in HTML::Tree cleanup. Only
+  Perl array lvalue aliases now suppress the removed slot's deferred
+  decrement; internal work-array copies still release it. The existing
+  project-owned HTML::Tree reproducers pass on system Perl, JVM, and
+  interpreter; the full local `make` passes in 21m34s, and HTML::Tree 5.07
+  passes all 23 files and 989 tests on both backends.
 
 - [x] On 2026-10-20, rebased the #1794/#1795 candidate onto current master,
   fixed the remaining interpreter closure-capture and cleanup behavior, and
