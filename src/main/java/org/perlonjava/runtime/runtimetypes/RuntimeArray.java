@@ -894,6 +894,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     // so its elements must NOT be mortal-ized on shift/pop — doing so
                     // would corrupt the caller's refCount tracking.
                     if (runtimeArray.ownsElement(result) && result.refCountOwned
+                            && !result.hasOwningAggregateSlot()
                             && (result.type & RuntimeScalarType.REFERENCE_BIT) != 0
                             && result.value instanceof RuntimeBase base
                             && base.refCount > 0) {
@@ -937,6 +938,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     // If this element owned a refCount, defer the decrement.
                     // See pop() for rationale and elementsOwned guard.
                     if (runtimeArray.ownsElement(result) && result.refCountOwned
+                            && !result.hasOwningAggregateSlot()
                             && (result.type & RuntimeScalarType.REFERENCE_BIT) != 0
                             && result.value instanceof RuntimeBase base
                             && base.refCount > 0) {

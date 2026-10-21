@@ -527,6 +527,21 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (arrayContainerOwners.isEmpty()) arrayContainerOwners = null;
     }
 
+    /**
+     * Whether this scalar cell still occupies a strong slot in an owning
+     * aggregate. Callers use this after removing one slot, when the owning
+     * container registry reflects the remaining slots.
+     */
+    boolean hasOwningAggregateSlot() {
+        for (RuntimeHash owner : hashContainerOwnersSnapshot()) {
+            if (owner.elements.containsValue(this)) return true;
+        }
+        for (RuntimeArray owner : arrayContainerOwnersSnapshot()) {
+            if (owner.elements.contains(this) && owner.ownsElement(this)) return true;
+        }
+        return false;
+    }
+
     private void propagateTiedHandlerMarkerToReferent() {
         if (containerOwner != null && containerOwner.possiblyStoredInTiedHandler
                 && (type & RuntimeScalarType.REFERENCE_BIT) != 0
