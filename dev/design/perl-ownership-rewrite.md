@@ -107,7 +107,7 @@ and first path establish implementation cost.
 
 ### Current status: Phase 2 in progress; Phase 1 merged in PR #1653 as `84f32be179bdc2b351c3eaae1cb26df39964ab6b` (2026-10-07)
 
-The #1794/#1795 candidate and follow-up ownership work are published in [draft PR #1816](https://github.com/PerlOnJava/pull/1816) at head `f0f10ed0ed29d4b83bd8a0ffc3097306d7b8cfa1`. The full local `nice -n 19 make` gate passes on this head; hosted Ubuntu and Windows CI are in progress. Phase 2 remains a recovery bridge rather than the completed ownership migration: `refCount` still controls dispatch, and general scalar/proxy stores, alias cleanup, and complete default owner-slot accounting remain unmigrated. Scalar-reference contents now have an explicit retargetable owner slot, covered by a Perl regression and a Java owner-slot test; this slot still bridges to the legacy referent count.
+The #1794/#1795 candidate and follow-up ownership work are published in [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The full local `nice -n 19 make` gate passes on code head `f0f10ed0e`; HTML::Tree 5.07 also passes all 989 tests, including unchanged `t/refloop.t`. Hosted Ubuntu and Windows CI are running on the latest documentation-only follow-up. Phase 2 remains a recovery bridge rather than the completed ownership migration: `refCount` still controls dispatch, and general scalar/proxy stores, alias cleanup, and complete default owner-slot accounting remain unmigrated. Scalar-reference contents now have an explicit retargetable owner slot, covered by a Perl regression and a Java owner-slot test; this slot still bridges to the legacy referent count. The HTML::Tree pass is compatibility evidence, not the Phase 2 owner-slot exit proof.
 
 The rebased candidate is based on `origin/master` (`ede542b29`). Its full local `nice -n 19 make` passed in 22m55s with two Gradle workers and a 3 GiB test heap. Ubuntu `make ci`, the Ubuntu Perl thread compatibility gate, and SBOM generation passed. Windows `make ci` passed in about 52 minutes with four Gradle workers, followed by the focused Windows thread gate. Windows CI exposed two existing unit tests with POSIX `/tmp` paths; `make ci` now creates the runner's root-relative `tmp` directory before building. On blead Perl 5.45.4, the controller, WebSocket, Catalyst tempfile, owner-release, and writable `Internals::SvREFCNT` regressions pass. The controller regression passes 5/5 on JVM and interpreter; the WebSocket regression passes 6/6 on both; the Catalyst tempfile regression passes 24/24 on both; `refcount/issue_1794_controller_owner_release.t` passes 3/3 on both; and `internals_svrefcnt_write.t` passes 6/6 on both after failing all six assertions on its unfixed parent. Continue migrating complete ownership paths through replacement, deletion, aliases, calls, and final release.
 
@@ -146,6 +146,11 @@ The rebased candidate is based on `origin/master` (`ede542b29`). Its full local 
   direct-store count on the same cell. The focused refcount gate and the full
   local `nice -n 19 make` pass on `f0f10ed0e` (27m56s); hosted Ubuntu and
   Windows CI are running.
+- [x] Re-ran the unchanged HTML::Tree 5.07 suite on code head `f0f10ed0e`:
+  all 23 files and 989 tests pass, including `t/refloop.t`. This confirms the
+  ownership fix preserves the existing integration behavior; the suite still
+  exercises legacy refcount/reachability paths and does not complete the
+  planned default owner-slot migration.
 - [x] Revalidated `ordinary_aggregate_element_owner_refcount.t`: all 11
   standard-Perl count/destruction assertions pass on blead Perl 5.45.4, JVM,
   and interpreter. This covers scalar ownership through array/hash insertion,
