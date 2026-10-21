@@ -11,6 +11,7 @@ import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
 import java.lang.ref.Cleaner;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -216,6 +217,13 @@ public class CustomFileChannel implements IOHandle {
 
     private boolean isEOF;
 
+    // Readline asks for one byte at a time. Buffer physical file reads here so
+    // generated source scans do not issue one FileChannel read per character.
+    private final byte[] readAhead = new byte[8192];
+    private int readAheadPosition;
+    private int readAheadLimit;
+    private boolean physicalEof;
+
     // When true, writes should always occur at end-of-file (Perl's append semantics).
     private boolean appendMode;
 
@@ -340,31 +348,35 @@ public class CustomFileChannel implements IOHandle {
             return new RuntimeScalar();
         }
         try {
-            byte[] buffer = new byte[maxBytes];
-            ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
-            int bytesRead = fileChannel.read(byteBuffer);
-
-            if (bytesRead == -1) {
-                isEOF = true;
-                return new RuntimeScalar("");
-            }
-
-            // Check if we've reached EOF (read less than requested)
-            if (bytesRead < maxBytes) {
-                isEOF = true;
-            }
-
-            // Also treat "at end of file" as EOF for Perl semantics (eof true after last successful read)
-            try {
-                if (fileChannel.position() >= fileChannel.size()) {
-                    isEOF = true;
+            if (maxBytes <= 0) return new RuntimeScalar("");
+            byte[] result = new byte[maxBytes];
+            int bytesRead = 0;
+            while (bytesRead < maxBytes) {
+                if (readAheadPosition >= readAheadLimit) {
+                    if (physicalEof) break;
+                    ByteBuffer byteBuffer = ByteBuffer.wrap(readAhead);
+                    int filled = fileChannel.read(byteBuffer);
+                    if (filled < 0) {
+                        physicalEof = true;
+                        break;
+                    }
+                    if (filled == 0) break;
+                    readAheadPosition = 0;
+                    readAheadLimit = filled;
                 }
-            } catch (IOException e) {
-                // ignore
+                int count = Math.min(maxBytes - bytesRead, readAheadLimit - readAheadPosition);
+                System.arraycopy(readAhead, readAheadPosition, result, bytesRead, count);
+                readAheadPosition += count;
+                bytesRead += count;
             }
-
-            byte[] result = new byte[bytesRead];
-            System.arraycopy(buffer, 0, result, 0, bytesRead);
+            isEOF = physicalEof && readAheadPosition >= readAheadLimit;
+            if (!isEOF && readAheadPosition >= readAheadLimit) {
+                try {
+                    isEOF = fileChannel.position() >= fileChannel.size();
+                } catch (IOException ignored) { }
+            }
+            if (bytesRead == 0) return new RuntimeScalar("");
+            if (bytesRead != result.length) result = java.util.Arrays.copyOf(result, bytesRead);
             return new RuntimeScalar(result);
         } catch (IOException e) {
             String msg = e.getMessage();
@@ -372,6 +384,49 @@ public class CustomFileChannel implements IOHandle {
                 getGlobalVariable("main::!").set(21); // EISDIR
                 return new RuntimeScalar();
             }
+            return handleIOException(e, "Read operation failed");
+        }
+    }
+
+    @Override
+    public RuntimeScalar readUntilCharacter(char separator) {
+        if (filePath != null && Files.isDirectory(filePath)) {
+            getGlobalVariable("main::!").set(21); // EISDIR
+            return new RuntimeScalar();
+        }
+        ByteArrayOutputStream record = new ByteArrayOutputStream();
+        try {
+            while (true) {
+                if (readAheadPosition >= readAheadLimit) {
+                    if (physicalEof) break;
+                    int filled = fileChannel.read(ByteBuffer.wrap(readAhead));
+                    if (filled < 0) {
+                        physicalEof = true;
+                        break;
+                    }
+                    if (filled == 0) break;
+                    readAheadPosition = 0;
+                    readAheadLimit = filled;
+                }
+
+                int end = readAheadLimit;
+                for (int i = readAheadPosition; i < readAheadLimit; i++) {
+                    if ((readAhead[i] & 0xff) == separator) {
+                        end = i + 1;
+                        break;
+                    }
+                }
+                record.write(readAhead, readAheadPosition, end - readAheadPosition);
+                boolean foundSeparator = end < readAheadLimit
+                        || (end > readAheadPosition && (readAhead[end - 1] & 0xff) == separator);
+                readAheadPosition = end;
+                if (foundSeparator) break;
+            }
+
+            isEOF = readAheadPosition >= readAheadLimit
+                    && (physicalEof || fileChannel.position() >= fileChannel.size());
+            return new RuntimeScalar(record.toByteArray());
+        } catch (IOException e) {
             return handleIOException(e, "Read operation failed");
         }
     }
@@ -389,6 +444,11 @@ public class CustomFileChannel implements IOHandle {
     @Override
     public RuntimeScalar write(String string) {
         try {
+            if (readAheadPosition < readAheadLimit) {
+                fileChannel.position(logicalPosition());
+                readAheadPosition = readAheadLimit = 0;
+                physicalEof = false;
+            }
             if (appendMode) {
                 fileChannel.position(fileChannel.size());
             }
@@ -459,7 +519,7 @@ public class CustomFileChannel implements IOHandle {
         // waiting for a read first makes argumentless eof() disagree with
         // standard Perl after STDIN is reopened.
         try {
-            return new RuntimeScalar(fileChannel.position() >= fileChannel.size());
+            return new RuntimeScalar(logicalPosition() >= fileChannel.size());
         } catch (IOException e) {
             return new RuntimeScalar(false);
         }
@@ -473,7 +533,7 @@ public class CustomFileChannel implements IOHandle {
     @Override
     public RuntimeScalar tell() {
         try {
-            return getScalarInt(fileChannel.position());
+            return getScalarInt(logicalPosition());
         } catch (IOException e) {
             handleIOException(e, "tell failed");
             return getScalarInt(-1);
@@ -506,7 +566,7 @@ public class CustomFileChannel implements IOHandle {
                     newPosition = pos;
                     break;
                 case SEEK_CUR: // from current position
-                    newPosition = fileChannel.position() + pos;
+                    newPosition = logicalPosition() + pos;
                     break;
                 case SEEK_END: // from end of file
                     newPosition = fileChannel.size() + pos;
@@ -521,6 +581,8 @@ public class CustomFileChannel implements IOHandle {
             }
 
             fileChannel.position(newPosition);
+            readAheadPosition = readAheadLimit = 0;
+            physicalEof = false;
             // Perl semantics: seeking to EOF sets eof flag, seeking elsewhere clears it.
             try {
                 isEOF = (fileChannel.position() >= fileChannel.size());
@@ -531,6 +593,10 @@ public class CustomFileChannel implements IOHandle {
         } catch (IOException e) {
             return handleIOException(e, "seek failed");
         }
+    }
+
+    private long logicalPosition() throws IOException {
+        return fileChannel.position() - (readAheadLimit - readAheadPosition);
     }
 
     /**
@@ -597,6 +663,8 @@ public class CustomFileChannel implements IOHandle {
                 throw new IllegalArgumentException("Invalid arguments for truncate operation.");
             }
             fileChannel.truncate(length);
+            readAheadPosition = readAheadLimit = 0;
+            physicalEof = false;
             return scalarTrue;
         } catch (IOException e) {
             return handleIOException(e, "truncate failed");
@@ -811,37 +879,17 @@ public class CustomFileChannel implements IOHandle {
 
     @Override
     public RuntimeScalar sysread(int length) {
-        try {
-            ByteBuffer buffer = ByteBuffer.allocate(length);
-            int bytesRead = fileChannel.read(buffer);  // Changed from 'channel' to 'fileChannel'
-
-            if (bytesRead == -1) {
-                // EOF - return empty string
-                return new RuntimeScalar("");
-            }
-
-            buffer.flip();
-            byte[] result = new byte[bytesRead];
-            buffer.get(result);
-
-            return new RuntimeScalar(result);
-        } catch (IOException e) {
-            String msg = e.getMessage();
-            if (msg != null && msg.toLowerCase().contains("is a directory")) {
-                // A failed read from a directory is EISDIR.  Returning an
-                // empty string falsely represents successful EOF and makes
-                // readline return a defined value rather than undef.
-                getGlobalVariable("main::!").set(21);
-                return new RuntimeScalar();
-            }
-            getGlobalVariable("main::!").set(e.getMessage());
-            return new RuntimeScalar(); // undef
-        }
+        return doRead(length, StandardCharsets.ISO_8859_1);
     }
 
     @Override
     public RuntimeScalar syswrite(String data) {
         try {
+            if (readAheadPosition < readAheadLimit) {
+                fileChannel.position(logicalPosition());
+                readAheadPosition = readAheadLimit = 0;
+                physicalEof = false;
+            }
             // Convert string to bytes (each char is a byte 0-255)
             ByteBuffer buffer = ByteBuffer.allocate(data.length());
             for (int i = 0; i < data.length(); i++) {

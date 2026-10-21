@@ -195,6 +195,18 @@ public interface IOHandle {
         return new RuntimeScalar(result.toString());
     }
 
+    /** Read through a record separator. File-backed handles override this to scan buffered bytes. */
+    default RuntimeScalar readUntilCharacter(char separator) {
+        StringBuilder result = new StringBuilder();
+        RuntimeScalar part;
+        while (!(part = read(1)).toString().isEmpty()) {
+            String text = part.toString();
+            result.append(text);
+            if (text.charAt(text.length() - 1) == separator) break;
+        }
+        return new RuntimeScalar(result.toString());
+    }
+
     // Protected method that subclasses should override for actual reading
     default RuntimeScalar doRead(int maxBytes, Charset charset) {
         RuntimeIO.handleIOError(9);

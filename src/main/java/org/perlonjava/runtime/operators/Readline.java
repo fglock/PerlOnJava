@@ -343,30 +343,20 @@ public class Readline {
 
     private static RuntimeScalar readUntilCharacter(RuntimeIO runtimeIO, char separator) {
         boolean isByteMode = runtimeIO.isByteMode();
-        StringBuilder line = new StringBuilder();
-
-        String readChar;
-        while (!(readChar = runtimeIO.ioHandle.read(1).toString()).isEmpty()) {
-            char c = readChar.charAt(0);
-            line.append(c);
-            // Break if we've reached the separator
-            if (c == separator) {
-                break;
-            }
-        }
+        RuntimeScalar line = runtimeIO.ioHandle.readUntilCharacter(separator);
 
         // Increment the line number counter if a line was read
-        if (!line.isEmpty()) {
+        if (!line.toString().isEmpty()) {
             runtimeIO.currentLineNumber++;
         }
 
         // Return undef if we've reached EOF and no characters were read
-        if (line.isEmpty() && (runtimeIO.eof().getBoolean()
+        if (line.toString().isEmpty() && (runtimeIO.eof().getBoolean()
                 || getGlobalVariable("main::!").getInt() == 21)) {
             return externalUndef();
         }
 
-        RuntimeScalar result = new RuntimeScalar(line.toString());
+        RuntimeScalar result = line;
         if (isByteMode) {
             result.type = RuntimeScalarType.BYTE_STRING;
         }

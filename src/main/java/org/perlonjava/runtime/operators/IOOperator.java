@@ -2533,9 +2533,13 @@ public class IOOperator {
                 SocketIO socketIOHandle = new SocketIO(channel, family);
                 socketIO = new RuntimeIO(socketIOHandle);
             } else if (type == 2) { // SOCK_DGRAM (UDP)
-                DatagramChannel channel = DatagramChannel.open(family);
-                SocketIO socketIOHandle = new SocketIO(channel, family);
-                socketIO = new RuntimeIO(socketIOHandle);
+                if (domain == Socket.AF_UNIX) {
+                    socketIO = NativeSocketIOHandle.openUnixDatagram().registerInIOSystem();
+                } else {
+                    DatagramChannel channel = DatagramChannel.open(family);
+                    SocketIO socketIOHandle = new SocketIO(channel, family);
+                    socketIO = new RuntimeIO(socketIOHandle);
+                }
             } else {
                 getGlobalVariable("main::!").set("Unsupported socket type: " + type);
                 return scalarFalse;
@@ -2654,6 +2658,10 @@ public class IOOperator {
             String addressStr = address.toString();
             String unixPath = parseSockaddrUn(addressStr);
             SocketIO unixSocket = socketIO.getSocketHandle();
+            if (unixPath != null && socketIO.ioHandle instanceof NativeSocketIOHandle nativeSocket
+                    && nativeSocket.socketType() == Socket.SOCK_DGRAM) {
+                return nativeSocket.bindUnix(unixPath) ? scalarTrue : scalarFalse;
+            }
             if (unixPath != null && unixSocket != null) {
                 return unixSocket.bindUnix(unixPath);
             }
@@ -2712,6 +2720,10 @@ public class IOOperator {
             String addressStr = address.toString();
             String unixPath = parseSockaddrUn(addressStr);
             SocketIO unixSocket = socketIO.getSocketHandle();
+            if (unixPath != null && socketIO.ioHandle instanceof NativeSocketIOHandle nativeSocket
+                    && nativeSocket.socketType() == Socket.SOCK_DGRAM) {
+                return nativeSocket.connectUnix(unixPath) ? scalarTrue : scalarFalse;
+            }
             if (unixPath != null && unixSocket != null) {
                 return unixSocket.connectUnix(unixPath);
             }
@@ -3302,6 +3314,14 @@ public class IOOperator {
                 return scalarFalse;
             }
 
+            if (socketIO.ioHandle instanceof NativeSocketIOHandle nativeSocket
+                    && nativeSocket.socketType() == Socket.SOCK_DGRAM) {
+                String path = args.length >= 4 ? parseSockaddrUn(args[3].toString()) : null;
+                int sent = nativeSocket.sendUnix(message.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1),
+                        path, flags);
+                return sent < 0 ? scalarUndef : new RuntimeScalar(sent);
+            }
+
             // Check if this is a UDP socket with a TO address (4th arg)
             SocketIO sio = socketIO.getSocketHandle();
             if (sio != null && sio.isDatagramSocket()) {
@@ -3368,6 +3388,22 @@ public class IOOperator {
             if (socketIO == null) {
                 getGlobalVariable("main::!").set("Invalid socket handle for recv");
                 return scalarFalse;
+            }
+
+            if (socketIO.ioHandle instanceof NativeSocketIOHandle nativeSocket
+                    && nativeSocket.socketType() == Socket.SOCK_DGRAM) {
+                org.perlonjava.runtime.nativ.ffm.FFMUnixDatagram.Datagram datagram =
+                        nativeSocket.receiveUnix(length, flags & Socket.MSG_PEEK);
+                if (datagram == null) {
+                    buffer.set("");
+                    return scalarUndef;
+                }
+                buffer.set(new String(datagram.payload(), java.nio.charset.StandardCharsets.ISO_8859_1));
+                byte[] path = datagram.senderPath().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+                byte[] packed = new byte[path.length + 3];
+                packed[1] = 1;
+                System.arraycopy(path, 0, packed, 2, path.length);
+                return new RuntimeScalar(new String(packed, java.nio.charset.StandardCharsets.ISO_8859_1));
             }
 
             // Check if this is a UDP socket
