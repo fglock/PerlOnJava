@@ -14,6 +14,7 @@ priorities and future plans.
 - Ignore commented-out code when checking lexical constant closures for later mutations, preserving BEGIN-time generated constants (#1785).
 - Pack the method-dispatch inline-cache guard key into one primitive value while preserving class and method invalidation checks.
 - Keep watcher maps and live `substr`-lvalue observers in lazy scalar extension state, reducing the common `RuntimeScalar` footprint.
+- Avoid retaining transient arrays and hashes through shared immutable scalar literals while preserving reference ownership tracking.
 - Run standard Perl's `cpan -t Module` for CPAN oracle checks and keep download failures inconclusive instead of reporting missing local modules as Perl failures.
 - Keep lexical-registration membership checks constant-time, avoiding quadratic CPAN index parsing as cleanup stacks grow.
 - Preserve numeric types of cached read-only scalars in ranges, rejecting unsigned endpoints outside the supported integer range.

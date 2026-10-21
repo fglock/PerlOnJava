@@ -430,6 +430,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     void markContainerOwner(RuntimeBase owner) {
+        // Immutable primitive literals are shared from the global scalar
+        // cache. Their owner does not make them writable, but it would keep a
+        // transient argument or container alive as long as the cache entry.
+        // Reference and proxy-backed scalars retain this edge for lifetime
+        // tracking.
+        if (getClass() == RuntimeScalarReadOnly.class
+                && type != RuntimeScalarType.READONLY_SCALAR
+                && (type & RuntimeScalarType.REFERENCE_BIT) == 0
+                && !(value instanceof RuntimeBase)
+                && !firstClassRegexScalar) {
+            return;
+        }
         this.containerOwner = owner;
         propagateTiedHandlerMarkerToReferent();
     }
