@@ -2159,6 +2159,9 @@ public class RuntimeIO extends RuntimeScalar {
         if (socket != null) {
             return socket.getsockname();
         }
+        if (ioHandle instanceof org.perlonjava.runtime.io.NativeSocketIOHandle nativeSocket) {
+            return nativeSocket.getsockname();
+        }
         return scalarUndef;
     }
 
