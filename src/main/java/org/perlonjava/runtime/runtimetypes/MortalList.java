@@ -1979,10 +1979,7 @@ public class MortalList {
         for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
             if (slot.kind() != PerlOwnerSlot.Kind.HASH_ENTRY) continue;
             RuntimeBase owner = slot.ownerContainer();
-            boolean rootedOwner = owner instanceof RuntimeHash
-                    && (owner.semanticCaptureOwnerCount() > 0
-                    || (!owner.scopeExited && MyVarCleanupStack.isRegistered(owner))
-                    || ReachabilityWalker.isReachableFromRoots(owner, true, referent));
+            boolean rootedOwner = isRootedAggregateOwner(owner, referent);
             if (!rootedOwner) continue;
             RuntimeScalar cell = slot.ownerCell();
             if (cell == null) {
@@ -1999,11 +1996,7 @@ public class MortalList {
         for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
             if (slot.kind() != PerlOwnerSlot.Kind.ARRAY_ELEMENT) continue;
             RuntimeBase owner = slot.ownerContainer();
-            if (!(owner instanceof RuntimeArray array)
-                    || (array.semanticCaptureOwnerCount() == 0
-                    && !array.isPackageGlobalRoot
-                    && (array.scopeExited || !MyVarCleanupStack.isRegistered(array))
-                    && !ReachabilityWalker.isReachableFromRoots(array, true, referent))) continue;
+            if (!isRootedAggregateOwner(owner, referent)) continue;
             RuntimeScalar cell = slot.ownerCell();
             if (cell == null) {
                 slotsWithoutCell++;
@@ -2028,6 +2021,57 @@ public class MortalList {
         if (owners == 0) return false;
         referent.refCount = owners;
         return true;
+    }
+
+    /**
+     * Prove aggregate ownership by following registered owner slots toward a
+     * Perl root. Nested hash/array stores already record each direct edge, so
+     * walking that owner chain avoids a whole-root scan for the common case.
+     * Fall back to the graph walker for scalar owners and legacy edges that do
+     * not yet have an explicit container slot.
+     */
+    private static boolean isRootedAggregateOwner(RuntimeBase owner,
+                                                   RuntimeBase excludedReferent) {
+        if (!(owner instanceof RuntimeHash) && !(owner instanceof RuntimeArray)) return false;
+        Set<RuntimeBase> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        ArrayDeque<RuntimeBase> pending = new ArrayDeque<>();
+        pending.add(owner);
+        while (!pending.isEmpty()) {
+            RuntimeBase current = pending.removeFirst();
+            if (current == null || current == excludedReferent || !visited.add(current)) continue;
+            if (isExplicitAggregateRoot(current)) return true;
+            for (PerlOwnerSlot parentSlot : current.ownerSlotSnapshot()) {
+                if (parentSlot.kind() != PerlOwnerSlot.Kind.HASH_ENTRY
+                        && parentSlot.kind() != PerlOwnerSlot.Kind.ARRAY_ELEMENT) continue;
+                if (parentSlot.referent() != current) continue;
+                RuntimeBase parent = parentSlot.ownerContainer();
+                RuntimeScalar cell = parentSlot.ownerCell();
+                if (!isLiveAggregateOwnerEdge(parent, cell, current)) continue;
+                pending.addLast(parent);
+            }
+        }
+        return ReachabilityWalker.isReachableFromRoots(owner, true, excludedReferent);
+    }
+
+    private static boolean isExplicitAggregateRoot(RuntimeBase aggregate) {
+        if (aggregate.semanticCaptureOwnerCount() > 0) return true;
+        if (aggregate instanceof RuntimeHash hash && hash.isPackageRootedHash()) return true;
+        if (aggregate instanceof RuntimeArray && aggregate.isPackageGlobalRoot) return true;
+        return !aggregate.scopeExited && MyVarCleanupStack.isRegistered(aggregate);
+    }
+
+    private static boolean isLiveAggregateOwnerEdge(RuntimeBase parent,
+                                                    RuntimeScalar cell,
+                                                    RuntimeBase referent) {
+        if (parent == null || cell == null || cell.value != referent
+                || WeakRefRegistry.isweak(cell)) return false;
+        if (parent instanceof RuntimeHash hash) {
+            return hash.elements.containsValue(cell);
+        }
+        if (parent instanceof RuntimeArray array) {
+            return array.elements.contains(cell) && array.ownsElement(cell);
+        }
+        return false;
     }
 
     private static boolean blessedClassHasDestroy(RuntimeBase base) {
