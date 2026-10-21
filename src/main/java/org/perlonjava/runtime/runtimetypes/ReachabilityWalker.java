@@ -2729,6 +2729,13 @@ public class ReachabilityWalker {
                 }
             } else if (cur instanceof RuntimeScalar sc) {
                 seedNonLexicalScalar(sc, nonLexicalTodo);
+            } else if (cur instanceof RuntimeCode code) {
+                // Callbacks can be nested several levels below a globally
+                // installed CV's persistent state (for example, a reactor
+                // timer wrapper captures the user callback). Follow the
+                // active semantic owner edges on every reached CV, not only
+                // on the initially installed one.
+                seedGlobalCodeCaptures(code, nonLexicalTodo);
             }
         }
 
@@ -2755,6 +2762,24 @@ public class ReachabilityWalker {
 
         private void seedGlobalCodeCaptures(RuntimeCode code,
                                             java.util.ArrayDeque<RuntimeBase> todo) {
+            // A globally installed CV owns its persistent state variables.
+            // Mojo::IOLoop keeps the singleton reactor in `state $loop`; the
+            // reactor then owns timer records and their callbacks. Omitting
+            // these edges makes an interpreter callback look unrooted when
+            // its creating frame exits, even though the installed CV's state
+            // still reaches it.
+            for (RuntimeScalar state : code.stateVariable.values()) {
+                seedNonLexicalScalar(state, todo);
+                if (!complete) return;
+            }
+            for (RuntimeArray state : code.stateArray.values()) {
+                if (!visitExternalEdge()) return;
+                addNonLexical(state, todo);
+            }
+            for (RuntimeHash state : code.stateHash.values()) {
+                if (!visitExternalEdge()) return;
+                addNonLexical(state, todo);
+            }
             if (code.capturedScalars != null) {
                 for (RuntimeScalar cap : code.capturedScalars) {
                     seedNonLexicalScalar(cap, todo);
