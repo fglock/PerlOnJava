@@ -4,7 +4,7 @@ use B qw(svref_2object);
 use Scalar::Util qw(weaken);
 use feature 'refaliasing';
 no warnings 'experimental::refaliasing';
-use Test::More tests => 18;
+use Test::More tests => 22;
 
 {
     package CrossAggregateAliasLifetime;
@@ -86,5 +86,35 @@ undef $shift_target[0];
 ok(!defined $shift_weak, 'clearing the final shifted alias releases the referent');
 is($CrossAggregateAliasLifetime::destroyed, 3,
     'the shifted cross-container referent is destroyed exactly once');
+
+my @clear_source;
+my @clear_target;
+my $clear_array_object = bless {}, 'CrossAggregateAliasLifetime';
+my $clear_array_weak = $clear_array_object;
+weaken($clear_array_weak);
+$clear_source[0] = $clear_array_object;
+\$clear_target[0] = \$clear_source[0];
+undef $clear_array_object;
+@clear_source = ();
+ok(defined $clear_array_weak,
+    'clearing an array preserves another aggregate alias');
+undef $clear_target[0];
+ok(!defined $clear_array_weak,
+    'clearing the final array alias releases the referent');
+
+my %clear_hash_source;
+my @clear_hash_target;
+my $clear_hash_object = bless {}, 'CrossAggregateAliasLifetime';
+my $clear_hash_weak = $clear_hash_object;
+weaken($clear_hash_weak);
+$clear_hash_source{slot} = $clear_hash_object;
+\$clear_hash_target[0] = \$clear_hash_source{slot};
+undef $clear_hash_object;
+%clear_hash_source = ();
+ok(defined $clear_hash_weak,
+    'clearing a hash preserves another aggregate alias');
+undef $clear_hash_target[0];
+ok(!defined $clear_hash_weak,
+    'clearing the final hash alias releases the referent');
 
 done_testing;

@@ -171,11 +171,13 @@ The earlier candidate was based on `origin/master` (`ede542b29`) and passed the 
   still requires replacing the legacy counters with default owner-slot paths.
 - [x] On 2026-10-21, kept a referent alive when `pop`, `shift`, or hash deletion
   removes one owning aggregate slot while another array/hash slot still aliases
-  the same scalar cell. The 18-assertion Perl regression passes on system Perl
-  5.34.1, blead Perl 5.45.4, JVM, and interpreter, and failed on the unfixed
-  PerlOnJava parent on both backends. Full `nice -n 19 make` passes in 26m43s
-  on code commit `28faab9b9`. Legacy `refCount` dispatch remains; the next work
-  is default owner-slot accounting across ordinary aggregate stores and cleanup.
+  the same scalar cell. Its 22-assertion Perl regression covers those removals
+  and array/hash clear with a second owning aggregate. It passes on system Perl
+  5.34.1, blead Perl 5.45.4, JVM, and interpreter; the failing pop/delete cases
+  were reproduced on the unfixed parent on both backends. Full
+  `nice -n 19 make` passes in 26m43s on code commit `28faab9b9`. Legacy
+  `refCount` dispatch remains; the next work is default owner-slot accounting
+  across ordinary aggregate stores and cleanup.
 - [x] Re-read the parent issue's implementation contract and reviewed the
   independent lifecycle candidate handoff. Historical candidate test results
   are not treated as current Phase 1 evidence.
