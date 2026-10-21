@@ -501,9 +501,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             if (owner.elements.containsValue(this)) return true;
         }
         for (RuntimeArray owner : arrayContainerOwnersSnapshot()) {
+            if (owner.transientListAssignmentRhs) continue;
             if (owner.elements.contains(this) && owner.ownsElement(this)) return true;
         }
         return false;
+    }
+
+    /**
+     * Pop and shift may transfer an owned cell to another aggregate without
+     * decrementing its referent only when the cell was fetched as a Perl array
+     * lvalue. Internal work arrays also reuse scalar cells, but those are value
+     * copies and must not suppress the removed slot's deferred decrement.
+     */
+    boolean hasOwningAggregateSlotForLvalueAlias() {
+        return localArrayOwner != null && hasOwningAggregateSlot();
     }
 
     private void propagateTiedHandlerMarkerToReferent() {
