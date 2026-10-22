@@ -157,31 +157,42 @@ acceptance contract and required diagnostic matrix.
 - The exact parent (`eaf1bfdb697c81999cf8bcc65b75e611fd6ead3b`) and candidate
   JARs were built successfully. Their SHA-256 hashes are respectively
   `e38b5feeda9aaa0fe26b829631f9f900618eda52cade59f757cf9a7d5e2a5bad` and
-  `5bc349231238e4bcbbbd2b097f441d68a2b080c783ef3f0ad6e8f97e1f572e71`.
+  `f3fe24e7f05ca4ac3147e0e244c0701cfa3198cc6bf8068d8c1c6be4e48dd13a`.
   Separate 20-second closure-anchor JFR recordings sampled 288,640,000 parent
   units and 323,760,000 candidate units (12.17% more in these sequential,
-  profiler-instrumented runs). Parent samples included 484 `HashMap.getNode`
-  and 626 `LinkedHashMap.get` frame appearances; the candidate had none. JFR
-  allocation samples included 154 `RuntimeScalar[]` events for the parent and
-  none for the candidate. These profiles support the cache's mechanism but are
-  diagnostic only and do not establish a throughput ratio.
+  profiler-instrumented runs). The candidate JFR used the pre-commit JAR hash
+  `5bc349231238e4bcbbbd2b097f441d68a2b080c783ef3f0ad6e8f97e1f572e71`; it
+  contains the same runtime source but a different injected Git build identity.
+  Parent samples included 484 `HashMap.getNode` and 626 `LinkedHashMap.get`
+  frame appearances; the candidate had none. JFR allocation samples included
+  154 `RuntimeScalar[]` events for the parent and none for the candidate. These
+  profiles support the cache's mechanism but are diagnostic only and do not
+  establish a throughput ratio.
 - The new cache regression passed system Perl, the JVM backend, and the
   interpreter; the full `nice -n 19 make` gate passed on the candidate. A full
   one-second-window comparison remains unscored because shared-host load
   prevented warmup stabilization. No 1:1 throughput acceptance result exists.
+- The runner now randomizes launch order from a recorded seed while balancing
+  which engine starts first. It can also run candidate and reference PerlOnJava
+  JARs in the same paired protocol, recording both paths and hashes. Artifact
+  comparisons remain attribution evidence and are explicitly ineligible for a
+  Perl parity claim.
 
 ### Next steps
 
-1. Run the #1863 anchors against pinned optimized blead and stable Perl builds,
-   with seven stable pairs and verified process priority.
-2. Retain unfixed-parent regression evidence for the capture-cache change and
+1. Use the paired artifact mode for the seven-pair parent/candidate attribution
+   run when host load permits. A one-pair wiring smoke matched checksums, but
+   failed the stability gate and is not throughput evidence.
+2. Build pinned optimized blead from the #1846 reference revision and retain a
+   reproducible build manifest; run stable Perl 5.42.2 separately.
+3. Run the #1863 anchors with seven stable pairs and verified process priority
+   for parent/candidate, integrated candidate/master, and candidate/Perl.
+4. Retain unfixed-parent regression evidence for the capture-cache change and
    run anchor contract checks on both backends.
-3. Repeat the parent/candidate closure comparison without profiling on a quiet
-   host, then collect stable paired method, closure, and Life measurements.
-4. Add allocation, GC, live-heap, and peak-RSS reports to paired evidence.
-5. Continue the general call-boundary profile matrix and validate a broad
-   call-path optimization before collecting another full portfolio.
-6. Collect Processor Trace instruction totals when the host enables tracing.
+5. Add allocation, GC, live-heap, and peak-RSS reports to paired evidence.
+6. Continue the general call-boundary profile matrix and validate a broad
+   call-path optimization before collecting the final portfolio.
+7. Collect Processor Trace instruction totals when the host enables tracing.
 
 ### Open questions
 

@@ -57,12 +57,26 @@ commit. Run the stable Perl release separately and report it as a second
 reference. The runner records the complete Perl `-V` configuration, executable,
 source revision, JVM flags, JAR hash, workload source hashes, commands, process
 priority, warmup windows, measurements, checksums, and paired confidence
-intervals. A requested priority that cannot be verified makes the pair
-ineligible for its summary.
+intervals. Launch order is randomized with a recorded seed and balanced across
+both engines for each workload. A requested priority that cannot be verified
+makes the pair ineligible for its summary.
+
+To attribute a change to exact PerlOnJava artifacts, pin both JARs. The
+candidate and reference JARs run in balanced randomized order in each
+independent pair, and both artifact paths and hashes are recorded. This is
+diagnostic attribution evidence, not Perl parity evidence:
+
+```bash
+python3 dev/bench/performance_over_perl.py \
+  --workloads method_anchor closure_anchor life \
+  --jperl-jar target/perlonjava-5.44.1.jar \
+  --reference-jperl-jar /path/to/parent/perlonjava-5.44.1.jar \
+  --output /tmp/performance-over-perl-parent-candidate.json
+```
 
 The six other diagnostic groups from #1196 remain available alongside the
 method and closure anchors; Life is shared by both sets. The default run covers
-all nine unique groups with seven alternating fresh-process pairs, stabilized
+all nine unique groups with seven balanced randomized fresh-process pairs, stabilized
 warmup, and raw JSON samples. Use smaller window and pair counts only to
 smoke-check the runner; smoke runs are not performance evidence.
 

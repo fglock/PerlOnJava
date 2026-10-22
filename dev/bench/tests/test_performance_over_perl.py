@@ -65,6 +65,31 @@ class ProtocolEligibilityTests(unittest.TestCase):
         self.assertEqual(len(result["reasons"]), 4)
 
 
+class LaunchOrderTests(unittest.TestCase):
+    def test_seeded_order_is_reproducible_and_balanced(self) -> None:
+        first = benchmark.launch_order_schedule("life", 7, 1863)
+        second = benchmark.launch_order_schedule("life", 7, 1863)
+
+        self.assertEqual(first, second)
+        self.assertEqual(len(first), 7)
+        self.assertEqual(first.count(("perl", "jperl")), 4)
+        self.assertEqual(first.count(("jperl", "perl")), 3)
+
+    def test_workloads_get_distinct_randomized_schedules(self) -> None:
+        method = benchmark.launch_order_schedule("method_anchor", 7, 1863)
+        closure = benchmark.launch_order_schedule("closure_anchor", 7, 1863)
+
+        self.assertNotEqual(method, closure)
+
+    def test_supports_named_artifact_comparisons(self) -> None:
+        schedule = benchmark.launch_order_schedule(
+            "closure_anchor", 7, 1863, "candidate", "reference"
+        )
+
+        self.assertEqual(schedule.count(("candidate", "reference")), 4)
+        self.assertEqual(schedule.count(("reference", "candidate")), 3)
+
+
 class SummaryTests(unittest.TestCase):
     def test_summarizes_only_stable_checksum_matching_pairs(self) -> None:
         pairs = [
@@ -106,6 +131,29 @@ class SummaryTests(unittest.TestCase):
 
         self.assertEqual(result["groups"]["life"]["complete_pairs"], 0)
         self.assertIsNone(result["groups"]["life"]["jperl_over_perl_geometric_mean"])
+
+    def test_summarizes_exact_candidate_against_parent_jar(self) -> None:
+        pair = {
+            "workload": "closure_anchor",
+            "pair_number": 1,
+            "engines": {
+                "candidate": run(120.0),
+                "reference": run(100.0),
+            },
+        }
+
+        result = benchmark.summarize(
+            [pair], ("closure_anchor",), "candidate", "reference"
+        )
+
+        self.assertAlmostEqual(
+            result["groups"]["closure_anchor"][
+                "numerator_over_denominator_geometric_mean"
+            ],
+            1.2,
+        )
+        self.assertEqual(result["numerator_engine"], "candidate")
+        self.assertEqual(result["denominator_engine"], "reference")
 
 
 class AnchorWorkerTests(unittest.TestCase):

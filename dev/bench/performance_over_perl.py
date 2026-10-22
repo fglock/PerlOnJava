@@ -57,7 +57,11 @@ def sha256(path: Path) -> str | None:
     return digest.hexdigest()
 
 
-def jar_path() -> Path | None:
+def jar_path(args: argparse.Namespace | None = None) -> Path | None:
+    if args is not None and getattr(args, "jperl_jar", None):
+        return Path(args.jperl_jar).resolve()
+    if os.environ.get("PERLONJAVA_JAR"):
+        return Path(os.environ["PERLONJAVA_JAR"]).resolve()
     target_jar = ROOT / "target/perlonjava-5.44.1.jar"
     if target_jar.is_file():
         return target_jar
@@ -89,7 +93,7 @@ def cpu_model() -> str | None:
 def metadata(args: argparse.Namespace) -> dict[str, Any]:
     java = shutil.which("java")
     perl = shutil.which(args.perl)
-    jar = jar_path()
+    jar = jar_path(args)
     try:
         git_commit = subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, timeout=10
@@ -110,6 +114,14 @@ def metadata(args: argparse.Namespace) -> dict[str, Any]:
         },
         "jar_path": str(jar) if jar else None,
         "jar_sha256": sha256(jar) if jar else None,
+        "comparison_reference_jar": (
+            str(Path(args.reference_jperl_jar).resolve())
+            if getattr(args, "reference_jperl_jar", None) else None
+        ),
+        "comparison_reference_jar_sha256": (
+            sha256(Path(args.reference_jperl_jar).resolve())
+            if getattr(args, "reference_jperl_jar", None) else None
+        ),
         "host": {
             "platform": platform.platform(),
             "system": platform.uname()._asdict(),
@@ -139,6 +151,7 @@ def metadata(args: argparse.Namespace) -> dict[str, Any]:
             "stability_slope_limit": args.stability_slope_limit,
             "stability_cv_limit": args.stability_cv_limit,
             "requested_nice": args.nice if args.nice >= 0 else None,
+            "launch_order_seed": args.launch_order_seed,
         },
         "protocol_eligibility": protocol_eligibility(args),
     }
@@ -215,6 +228,15 @@ def run_engine(engine: str, workload: str, args: argparse.Namespace,
     environment = os.environ.copy()
     environment["PERLONJAVA_REPO_ROOT"] = str(ROOT)
     environment.pop("PERLONJAVA_LIFE_BENCH_LOAD", None)
+    selected_jar = None
+    if engine == "jperl" or engine == "candidate":
+        selected_jar = args.jperl_jar
+    elif engine == "reference":
+        selected_jar = args.reference_jperl_jar
+    if selected_jar:
+        environment["PERLONJAVA_JAR"] = str(Path(selected_jar).resolve())
+    elif engine in {"candidate", "reference"}:
+        environment.pop("PERLONJAVA_JAR", None)
     command = worker_command(engine, workload, args)
     with stderr_path.open("w", encoding="utf-8") as stderr_file:
         process = subprocess.Popen(
@@ -306,7 +328,9 @@ def bootstrap_interval(values: list[float], seed: int = 1196) -> list[float] | N
     return [low, high]
 
 
-def summarize(pairs: list[dict[str, Any]], workloads: tuple[str, ...]) -> dict[str, Any]:
+def summarize(pairs: list[dict[str, Any]], workloads: tuple[str, ...],
+              numerator_engine: str = "jperl",
+              denominator_engine: str = "perl") -> dict[str, Any]:
     group_ratios: dict[str, list[float]] = {name: [] for name in workloads}
     pair_ratios: dict[int, dict[str, float]] = {}
     min_ratio: float | None = None
@@ -314,25 +338,25 @@ def summarize(pairs: list[dict[str, Any]], workloads: tuple[str, ...]) -> dict[s
     for pair in pairs:
         workload = pair["workload"]
         engines = pair["engines"]
-        perl_run = engines.get("perl")
-        jperl_run = engines.get("jperl")
-        if (not perl_run or not jperl_run or not perl_run["stable"]
-                or not jperl_run["stable"]):
+        denominator = engines.get(denominator_engine)
+        numerator = engines.get(numerator_engine)
+        if (not denominator or not numerator or not denominator["stable"]
+                or not numerator["stable"]):
             continue
-        if (not perl_run.get("priority_verified", True)
-                or not jperl_run.get("priority_verified", True)):
+        if (not denominator.get("priority_verified", True)
+                or not numerator.get("priority_verified", True)):
             continue
-        if not perl_run["measurements"] or not jperl_run["measurements"]:
+        if not denominator["measurements"] or not numerator["measurements"]:
             continue
-        if perl_run["checksum"] != jperl_run["checksum"]:
+        if denominator["checksum"] != numerator["checksum"]:
             continue
-        perl_rate = statistics.median(
-            item["work_units_per_second"] for item in perl_run["measurements"]
+        denominator_rate = statistics.median(
+            item["work_units_per_second"] for item in denominator["measurements"]
         )
-        jperl_rate = statistics.median(
-            item["work_units_per_second"] for item in jperl_run["measurements"]
+        numerator_rate = statistics.median(
+            item["work_units_per_second"] for item in numerator["measurements"]
         )
-        ratio = jperl_rate / perl_rate
+        ratio = numerator_rate / denominator_rate
         group_ratios[workload].append(ratio)
         pair_ratios.setdefault(pair["pair_number"], {})[workload] = ratio
         min_ratio = ratio if min_ratio is None else min(min_ratio, ratio)
@@ -349,21 +373,31 @@ def summarize(pairs: list[dict[str, Any]], workloads: tuple[str, ...]) -> dict[s
         values = group_ratios[workload]
         groups[workload] = {
             "complete_pairs": len(values),
-            "jperl_over_perl_geometric_mean": geometric_mean(values),
+            "numerator_over_denominator_geometric_mean": geometric_mean(values),
             "bootstrap_95_percent_interval": bootstrap_interval(values),
             "pair_ratios": values,
         }
+        if numerator_engine == "jperl" and denominator_engine == "perl":
+            groups[workload]["jperl_over_perl_geometric_mean"] = geometric_mean(values)
     return {
         "groups": groups,
         "complete_portfolio_pairs": len(complete_pair_scores),
-        "portfolio_jperl_over_perl_geometric_mean": geometric_mean(complete_pair_scores),
+        "portfolio_numerator_over_denominator_geometric_mean": geometric_mean(complete_pair_scores),
         "portfolio_bootstrap_95_percent_interval": bootstrap_interval(complete_pair_scores),
         "minimum_group_pair_ratio": min_ratio,
+        "numerator_engine": numerator_engine,
+        "denominator_engine": denominator_engine,
+        **({"portfolio_jperl_over_perl_geometric_mean": geometric_mean(complete_pair_scores)}
+           if numerator_engine == "jperl" and denominator_engine == "perl" else {}),
     }
 
 
 def protocol_eligibility(args: argparse.Namespace) -> dict[str, Any]:
     reasons = []
+    if getattr(args, "reference_jperl_jar", None):
+        reasons.append("PerlOnJava artifact comparison is attribution evidence, not Perl parity")
+        if not getattr(args, "jperl_jar", None):
+            reasons.append("candidate JAR is not pinned for artifact comparison")
     if set(args.workloads) != {"method_anchor", "closure_anchor", "life"}:
         reasons.append("workloads are not exactly the #1863 acceptance portfolio")
     if args.pairs < 7:
@@ -377,6 +411,19 @@ def protocol_eligibility(args: argparse.Namespace) -> dict[str, Any]:
     if not args.perl_source_revision:
         reasons.append("reference Perl source revision is not pinned")
     return {"acceptance_protocol": not reasons, "reasons": reasons}
+
+
+def launch_order_schedule(workload: str, pair_count: int, seed: int,
+                          first_engine: str = "perl",
+                          second_engine: str = "jperl") -> list[tuple[str, str]]:
+    """Return a deterministic randomized schedule with balanced first engines."""
+    workload_seed = int(hashlib.sha256(workload.encode("utf-8")).hexdigest()[:8], 16)
+    randomizer = random.Random(seed + workload_seed)
+    first_engine_count = (pair_count + 1) // 2
+    schedule = ([(first_engine, second_engine)] * first_engine_count
+                + [(second_engine, first_engine)] * (pair_count - first_engine_count))
+    randomizer.shuffle(schedule)
+    return schedule
 
 
 def write_result(path: Path, document: dict[str, Any]) -> None:
@@ -395,10 +442,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--perl-source-revision",
                         help="source revision/build identifier for the reference Perl")
     parser.add_argument("--jperl", default="./jperl", help="PerlOnJava executable")
+    parser.add_argument("--jperl-jar", help="pin the PerlOnJava candidate JAR")
+    parser.add_argument("--reference-jperl-jar",
+                        help="also compare against this PerlOnJava JAR in paired runs")
     parser.add_argument("--timeout-command", default="timeout")
     parser.add_argument("--process-timeout-seconds", type=int, default=900)
     parser.add_argument("--nice", type=int, default=19,
                         help="process niceness (use -1 to avoid the nice wrapper)")
+    parser.add_argument("--launch-order-seed", type=int, default=1863,
+                        help="seed for balanced randomized engine launch order")
     parser.add_argument("--workloads", nargs="+", choices=WORKLOADS, default=list(WORKLOADS))
     parser.add_argument("--pairs", type=int, default=7)
     parser.add_argument("--initial-warmup-windows", type=int, default=10)
@@ -428,6 +480,16 @@ def main() -> int:
         raise SystemExit("max warmup windows must be >= initial warmup windows")
     if args.measurement_windows <= 0 or args.window_seconds <= 0:
         raise SystemExit("measurement windows and window seconds must be positive")
+    if args.reference_jperl_jar and not args.jperl_jar:
+        raise SystemExit("--reference-jperl-jar requires --jperl-jar")
+    for configured_jar in (args.jperl_jar, args.reference_jperl_jar):
+        if configured_jar and not Path(configured_jar).is_file():
+            raise SystemExit(f"configured PerlOnJava JAR does not exist: {configured_jar}")
+
+    if args.reference_jperl_jar:
+        numerator_engine, denominator_engine = "candidate", "reference"
+    else:
+        numerator_engine, denominator_engine = "jperl", "perl"
 
     document: dict[str, Any] = {
         "metadata": metadata(args),
@@ -437,8 +499,12 @@ def main() -> int:
     write_result(args.output, document)
 
     for workload in args.workloads:
+        launch_schedule = launch_order_schedule(
+            workload, args.pairs, args.launch_order_seed,
+            numerator_engine, denominator_engine,
+        )
         for pair_number in range(args.pairs):
-            order = ("perl", "jperl") if pair_number % 2 == 0 else ("jperl", "perl")
+            order = launch_schedule[pair_number]
             pair: dict[str, Any] = {
                 "workload": workload,
                 "pair_number": pair_number + 1,
@@ -449,33 +515,45 @@ def main() -> int:
                 print(f"[{workload}] pair {pair_number + 1}/{args.pairs}: {engine}",
                       file=sys.stderr, flush=True)
                 pair["engines"][engine] = run_engine(engine, workload, args, pair_number + 1)
-            perl_run = pair["engines"]["perl"]
-            jperl_run = pair["engines"]["jperl"]
-            perl_checksums = {item["checksum"] for item in perl_run["measurements"]}
-            jperl_checksums = {item["checksum"] for item in jperl_run["measurements"]}
+            denominator_run = pair["engines"][denominator_engine]
+            numerator_run = pair["engines"][numerator_engine]
+            denominator_checksums = {
+                item["checksum"] for item in denominator_run["measurements"]
+            }
+            numerator_checksums = {
+                item["checksum"] for item in numerator_run["measurements"]
+            }
             pair["checksum_match"] = bool(
-                perl_run["stable"] and jperl_run["stable"]
-                and perl_checksums and perl_checksums == jperl_checksums
+                denominator_run["stable"] and numerator_run["stable"]
+                and denominator_checksums and denominator_checksums == numerator_checksums
             )
             pair["measurement_eligible"] = bool(
                 pair["checksum_match"]
-                and perl_run.get("priority_verified", True)
-                and jperl_run.get("priority_verified", True)
+                and denominator_run.get("priority_verified", True)
+                and numerator_run.get("priority_verified", True)
             )
-            perl_rate = statistics.median(
-                [item["work_units_per_second"] for item in perl_run["measurements"]]
-            ) if perl_run["measurements"] else None
-            jperl_rate = statistics.median(
-                [item["work_units_per_second"] for item in jperl_run["measurements"]]
-            ) if jperl_run["measurements"] else None
-            pair["jperl_over_perl"] = (
-                jperl_rate / perl_rate if pair["measurement_eligible"] and perl_rate else None
+            denominator_rate = statistics.median(
+                [item["work_units_per_second"]
+                 for item in denominator_run["measurements"]]
+            ) if denominator_run["measurements"] else None
+            numerator_rate = statistics.median(
+                [item["work_units_per_second"]
+                 for item in numerator_run["measurements"]]
+            ) if numerator_run["measurements"] else None
+            pair["numerator_over_denominator"] = (
+                numerator_rate / denominator_rate
+                if pair["measurement_eligible"] and denominator_rate else None
             )
-            for run in (perl_run, jperl_run):
+            if numerator_engine == "jperl" and denominator_engine == "perl":
+                pair["jperl_over_perl"] = pair["numerator_over_denominator"]
+            for run in (denominator_run, numerator_run):
                 run["checksum"] = (run["measurements"][-1]["checksum"]
                                    if run["measurements"] else None)
             document["pairs"].append(pair)
-            document["summary"] = summarize(document["pairs"], tuple(args.workloads))
+            document["summary"] = summarize(
+                document["pairs"], tuple(args.workloads),
+                numerator_engine, denominator_engine,
+            )
             document["summary"]["evidence_class"] = (
                 "acceptance_candidate"
                 if document["metadata"]["protocol_eligibility"]["acceptance_protocol"]
@@ -485,7 +563,10 @@ def main() -> int:
             write_result(args.output, document)
 
     document["metadata"]["host"]["load_average_after"] = host_load()
-    document["summary"] = summarize(document["pairs"], tuple(args.workloads))
+    document["summary"] = summarize(
+        document["pairs"], tuple(args.workloads),
+        numerator_engine, denominator_engine,
+    )
     document["summary"]["evidence_class"] = (
         "acceptance_candidate"
         if document["metadata"]["protocol_eligibility"]["acceptance_protocol"]
