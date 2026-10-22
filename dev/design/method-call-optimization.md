@@ -1,16 +1,18 @@
 # Method Call Performance Optimization Plan
 
-**Status:** PARTIALLY IMPLEMENTED - Phase 1 (inline caching) is implemented as a runtime global cache in `RuntimeCode.java`. Phases 2-3 (fast hash access, method-specific optimizations) remain unimplemented. Some references below (e.g. `SpillSlotManager`, `RuntimeArrayPool`, `bench_method.pl`) are to planned components that were never created.
+## Current issue status (2026-10-22)
 
-**Goal**: Achieve >340 iterations/sec on `dev/bench/bench_method.pl` (matching or exceeding native Perl performance)
+Issue #1846 remains open. The pruned PR retains changes with concrete memory or allocation benefits: one fewer array header per runtime code cache, two fewer cold reference fields per ordinary scalar, removal of stale container-owner edges from shared immutable scalars, and inline argument slots for common method calls.
 
-**Current Status**: 119 iter/sec (2.87x slower than target)
+The compact argument path's short JFR comparison estimated about 6.6% fewer allocated bytes per method call (about 161 to 151), but the corrected paired benchmark had only two stable pairs of seven. No throughput gain is established, and this pruned combination still needs its own full test gate. Do not present the JFR estimate as a throughput result.
 
-**Target Completion**: 4 weeks
+Next, run a stable method-anchor comparison on the pruned candidate against pinned Perl and a matched `origin/master` build when the host is quiet. Run the portfolio only after the method result is stable, then keep issue #1846 open until its acceptance criteria are met.
+
+The iteration-rate estimates, phase plan, and implementation references below are historical context; several planned components were never created.
 
 ---
 
-## Executive Summary
+## Historical Executive Summary
 
 Analysis reveals that PerlOnJava's closure performance is **2.7x faster than Perl** (1718 vs 638 iter/sec), proving the JVM execution model is fundamentally sound. The method call slowdown is entirely due to **blessed hash access overhead**. The `add()` method performs 4 hash accesses per call, each costing ~38ns vs ~2ns in native Perl.
 

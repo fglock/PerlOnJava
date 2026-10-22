@@ -1057,11 +1057,15 @@ public class Dereference {
                 }
 
                 // Reserve one slot for the invocant added in RuntimeCode.
-                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeArray");
-                mv.visitInsn(Opcodes.DUP);
-                mv.visitInsn(Opcodes.ICONST_0 + argCount + 1);
-                mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeArray", "<init>", "(I)V", false);
+                int argumentCapacity = argCount + 1;
+                if (argumentCapacity <= 5) {
+                    mv.visitInsn(Opcodes.ICONST_0 + argumentCapacity);
+                } else {
+                    mv.visitIntInsn(Opcodes.BIPUSH, argumentCapacity);
+                }
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeArray", "methodCallArguments",
+                        "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
                 mv.visitVarInsn(Opcodes.ASTORE, argsArraySlot);
 
                 for (int index = 0; index < argCount; index++) {
