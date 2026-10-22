@@ -428,7 +428,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         }
     }
 
-    public void activateOwnerTracking() {
+    public synchronized void activateOwnerTracking() {
         if (activeOwners == null) {
             activeOwners = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
             // Note: backfilling from ScalarRefRegistry.snapshot() was
@@ -442,19 +442,19 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         }
     }
 
-    public void recordActiveOwner(RuntimeScalar scalar) {
+    public synchronized void recordActiveOwner(RuntimeScalar scalar) {
         if (activeOwners != null) {
             activeOwners.add(scalar);
         }
     }
 
-    public void releaseActiveOwner(RuntimeScalar scalar) {
+    public synchronized void releaseActiveOwner(RuntimeScalar scalar) {
         if (activeOwners != null) {
             activeOwners.remove(scalar);
         }
     }
 
-    public int activeOwnerCount() {
+    public synchronized int activeOwnerCount() {
         if (activeOwners == null) return 0;
         // Filter for actual still-owning scalars: refCountOwned=true and
         // value==this. Stale entries (overwritten without going through a
@@ -474,7 +474,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     /** Snapshot the currently live scalar owner slots by identity. */
-    public java.util.Set<RuntimeScalar> activeOwnerSnapshot() {
+    public synchronized java.util.Set<RuntimeScalar> activeOwnerSnapshot() {
         if (activeOwnerCount() == 0) return java.util.Collections.emptySet();
         java.util.Set<RuntimeScalar> snapshot = java.util.Collections.newSetFromMap(
                 new java.util.IdentityHashMap<>());
@@ -538,17 +538,24 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 scalarValueCells.add(slot.ownerCell());
             }
         }
-        if (activeOwners != null) {
-            java.util.Iterator<RuntimeScalar> it = activeOwners.iterator();
-            while (it.hasNext()) {
-                RuntimeScalar sc = it.next();
-                if (sc != null && sc.refCountOwned && sc.value == this
-                        && ReachabilityWalker.isScalarReachable(sc)) {
-                    // The explicit scalar value slot is authoritative when
-                    // present; retain activeOwners only as a migration fallback.
-                    if (!scalarValueCells.contains(sc)) count++;
-                } else if (sc == null || !sc.refCountOwned || sc.value != this) {
-                    it.remove();
+        // Snapshot under the same monitor used by register/release operations.
+        // Reachability queries can walk large graphs, so do them after dropping
+        // the monitor; this avoids both fail-fast iteration and lock inversion
+        // between concurrently cleaned referents.
+        java.util.List<RuntimeScalar> legacyOwners;
+        synchronized (this) {
+            legacyOwners = activeOwners == null
+                    ? java.util.List.of() : new java.util.ArrayList<>(activeOwners);
+        }
+        for (RuntimeScalar sc : legacyOwners) {
+            if (sc != null && sc.refCountOwned && sc.value == this
+                    && ReachabilityWalker.isScalarReachable(sc)) {
+                // The explicit scalar value slot is authoritative when
+                // present; retain activeOwners only as a migration fallback.
+                if (!scalarValueCells.contains(sc)) count++;
+            } else if (sc == null || !sc.refCountOwned || sc.value != this) {
+                synchronized (this) {
+                    if (activeOwners != null) activeOwners.remove(sc);
                 }
             }
         }
