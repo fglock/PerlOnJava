@@ -778,12 +778,14 @@ def unitShardTasks = []
         classpath = sourceSets.test.runtimeClasspath
 
         // PerlScriptExecutionTest partitions its parameterized Perl corpus
-        // using test.shard.index.  Other @Tag("unit") Java classes are not
-        // sharded, so running them in every task needlessly starts five copies
-        // of expensive stateful test infrastructure.  Keep them in shard 0;
-        // the remaining shards execute only their assigned Perl scripts.
+        // using test.shard.index. Other @Tag("unit") Java classes are not
+        // sharded, so keep them in shard 0. The launcher home integration
+        // test runs after all shards because it starts a second JVM and can
+        // exceed its timeout when competing with the parallel Perl corpus.
         if (index > 0) {
             include '**/PerlScriptExecutionTest.class'
+        } else {
+            exclude '**/PerlOnJavaHomeIntegrationTest.class'
         }
 
         // testUnitParallel also runs the Joni gate.  It is a separate
@@ -812,12 +814,32 @@ def unitShardTasks = []
     }
 }
 
+// Run the process-launch integration tests after the parallel unit shards.
+// Their child JVMs otherwise compete with several Perl corpus workers for
+// CPU and disk, which can make the Windows launcher probe exceed its timeout.
+def homeIntegrationTask = tasks.register('testPerlOnJavaHomeIntegration', Test) {
+    group = 'verification'
+    description = 'Runs PerlOnJava home launcher integration tests after the unit shards'
+
+    useJUnitPlatform {
+        includeTags 'unit'
+        excludeTags 'full'
+    }
+
+    include '**/PerlOnJavaHomeIntegrationTest.class'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    mustRunAfter unitShardTasks.collect { tasks.named(it) }
+    mustRunAfter tasks.named('testJoni')
+}
+
 tasks.register('testUnitParallel') {
     group = 'verification'
     description = 'Runs unit tests in parallel across multiple JVMs. Usage: gradle testUnitParallel --parallel'
     dependsOn unitShardTasks
     dependsOn testJoni
     dependsOn verifyJoniPackaging
+    dependsOn homeIntegrationTask
 }
 
 // Version catalog update configuration
