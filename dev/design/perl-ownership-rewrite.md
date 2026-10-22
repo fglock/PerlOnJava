@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The candidate is rebased onto `origin/master` at `2c5ae8623`; published head `d0ca1607f` passes hosted run `39808119318` on Linux and Windows. The latest local batch passes full `nice -n 19 make`, `make test-threads` in all three configurations, and the ordinary aggregate ownership regression on blead Perl and both backends. Owner slots still bridge to `RuntimeBase.refCount` for dispatch; default owner-slot accounting remains incomplete.
+**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The candidate is rebased onto `origin/master` at `5a6cf5ed6`; published head `27d6df476` passes hosted run `39844774795` on Linux and Windows. The latest local batch passes full `nice -n 19 make`; owner slots still bridge to `RuntimeBase.refCount` for dispatch, and default owner-slot accounting remains incomplete.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
@@ -107,19 +107,20 @@ and first path establish implementation cost.
 
 ### Current status: Phase 2 in progress; Phase 1 merged in PR #1653 as `84f32be179bdc2b351c3eaae1cb26df39964ab6b` (2026-10-07)
 
-The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The branch is rebased onto `origin/master` at `2c5ae8623`; published head `d0ca1607f` passes hosted run `39808119318` on Linux and Windows, including both thread compatibility gates. The local rebased candidate also passes full `nice -n 19 make`, all three local thread configurations, and the focused lifetime regressions recorded below. The tracked Mojolicious WebSocket callback test passes on blead Perl 5.45.4 and both backends. HTML::Tree 5.07 passes all 23 files and 989 tests on both backends on the preceding ownership candidate. Phase 2 remains incomplete: `refCount` still controls lifecycle dispatch, and the slot ledger is not yet the default accounting source across general scalar/proxy stores, aliases, and cleanup. Distinct scalar-reference aliases keep separate reachability identities while contributing one referent count per scalar cell. The HTML::Tree result is compatibility evidence, not the Phase 2 owner-slot exit proof.
+The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The branch is rebased onto `origin/master` at `5a6cf5ed6`; published head `27d6df476` passes hosted run `39844774795` on Linux and Windows, including both thread compatibility gates and Linux SBOM generation. The local rebased candidate passes full `nice -n 19 make`, all three local thread configurations, and the focused lifetime regressions recorded below. The tracked Mojolicious WebSocket callback test passes on blead Perl 5.45.4 and both backends. HTML::Tree 5.07 passes all 23 files and 989 tests on both backends on the preceding ownership candidate. Phase 2 remains incomplete: `refCount` still controls lifecycle dispatch, and the slot ledger is not yet the default accounting source across general scalar/proxy stores, aliases, and cleanup. Distinct scalar-reference aliases keep separate reachability identities while contributing one referent count per scalar cell. The HTML::Tree result is compatibility evidence, not the Phase 2 owner-slot exit proof.
 
 ### Current batch
 
-- Followed `SCALAR_VALUE` and `SCALAR_REFERENCE_CONTENTS` slots from an
-  aggregate toward their containing aggregate or live lexical root. Deferred
-  aggregate-owner recovery now avoids whole-root walks when the path passes
-  through an ordinary scalar owner. The Java regression proves exact count
-  restoration with zero graph snapshots. Full `nice -n 19 make` passes in
-  17m55s; `make test-threads` passes JVM virtual 1925/1925, interpreter
-  virtual 1925/1925, and platform-focused 485/485. The 15-assertion ordinary
-  aggregate refcount/destruction test passes on blead Perl 5.45.4 and both
-  PerlOnJava backends. Hosted CI for this follow-up is pending.
+- Followed live `SCALAR_VALUE` and `SCALAR_REFERENCE_CONTENTS` slots from an
+  aggregate toward their containing aggregate or lexical root. Deferred
+  aggregate-owner recovery now avoids whole-root walks through these scalar
+  owner paths. Java regressions prove exact count restoration with zero root
+  queries and graph snapshots. Full `nice -n 19 make` passes in 21m54s; the
+  root-chain test class passes 3/3. Hosted CI for head `27d6df476` passes on
+  Linux and Windows, including the platform thread gates.
+- Rebased PR #1816 onto master `5a6cf5ed6` before this batch's one full build.
+  This keeps the validation aligned with current master and avoids rebuilding
+  an obsolete candidate.
 
 The earlier candidate was based on `origin/master` (`ede542b29`) and passed the full local make in 22m55s, Ubuntu `make ci`, the Ubuntu Perl thread compatibility gate, SBOM generation, Windows `make ci` in about 52 minutes, and the focused Windows thread gate. Windows CI exposed two existing unit tests with POSIX `/tmp` paths; `make ci` now creates the runner's root-relative `tmp` directory before building. On blead Perl 5.45.4, the controller, WebSocket, Catalyst tempfile, owner-release, and writable `Internals::SvREFCNT` regressions pass. The controller regression passes 5/5 on JVM and interpreter; the WebSocket regression passes 6/6 on both; the Catalyst tempfile regression passes 24/24 on both; `refcount/issue_1794_controller_owner_release.t` passes 3/3 on both; and `internals_svrefcnt_write.t` passes 6/6 on both after failing all six assertions on its unfixed parent. The alias-count follow-up rebases onto `origin/master` (`18323a1ac`). Its focused make passes in 50s and its full local make passes in 31m30s on code commit `15e362ddb`.
 
@@ -461,9 +462,8 @@ The earlier candidate was based on `origin/master` (`ede542b29`) and passed the 
 
 ### Next steps
 
-1. Publish the tested rebase and callback-lifetime fix to draft PR #1816, then
-   verify hosted CI on that exact head.
-2. Continue Phase 2 from slot-registration recovery to default owner-slot
+1. Keep PR #1816 open/draft while continuing the Phase 2 owner-accounting work.
+2. Continue Phase 2 from reachability recovery to default owner-slot
    accounting for ordinary array/hash element stores and scalar proxies. Cover
    acquisition, transfer, replacement, deletion, aliases, and final release
    with oracle-checked refcount, weak-reference, and DESTROY assertions. Keep
