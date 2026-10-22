@@ -6546,14 +6546,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
 
                 // Add wantarray (element 5): undef for void, 0 for scalar, 1 for list.
-                Integer frameCallContext = getCallContextAt(trackedOriginalFrame);
+                Integer frameCallContext = getCallContextAtCallerFrame(trackedOriginalFrame);
                 if (WarnDie.isInsideUnhandledDieHandler() && syntheticOwnSubFramesBefore > 0) {
-                    Integer activeCallContext = getCallContextAt(trackedActiveCodeFrame);
+                    Integer activeCallContext = getCallContextAtCallerFrame(trackedActiveCodeFrame);
                     if (activeCallContext != null) {
                         frameCallContext = activeCallContext;
                     }
                 } else if (frameCallContext == null && WarnDie.isInsideUnhandledDieHandler()) {
-                    frameCallContext = getCallContextAt(trackedActiveCodeFrame);
+                    frameCallContext = getCallContextAtCallerFrame(trackedActiveCodeFrame);
                 }
                 res.add(callerWantarrayScalar(frameCallContext));
 
