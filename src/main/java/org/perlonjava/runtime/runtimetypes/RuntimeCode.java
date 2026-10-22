@@ -83,6 +83,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static boolean canBorrowReadOnlyArguments(
             RuntimeArray args, int hashArgumentIndex, int integerArgumentIndex,
             String firstHashKey, String secondHashKey, boolean cacheHashFieldCells) {
+        if (args != null && args.getClass() == RuntimeArray.class
+                && hashArgumentIndex >= 0 && hashArgumentIndex < args.size()
+                && args.hasVerifiedMethodHashFields(hashArgumentIndex,
+                        integerArgumentIndex, firstHashKey, secondHashKey,
+                        args.get(hashArgumentIndex))) {
+            return true;
+        }
         if (args == null || args.getClass() != RuntimeArray.class
                 || args.type != RuntimeArray.PLAIN_ARRAY
                 || hashArgumentIndex < 0 || hashArgumentIndex >= args.size()
@@ -117,6 +124,43 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         RuntimeScalar integerArgument = args.get(integerArgumentIndex);
         return integerArgument != null && integerArgument.type == INTEGER;
+    }
+
+    /** Prepare the call-local cell cache and validate the guarded fast path. */
+    public static boolean prepareStableHashMutationMethodArguments(
+            RuntimeArray args, String firstHashKey, String secondHashKey) {
+        if (args != null) args.clearVerifiedMethodHashFields();
+        if (!canBorrowReadOnlyArguments(args, 0, 1, firstHashKey,
+                secondHashKey, true)) {
+            return false;
+        }
+        RuntimeScalar hashArgument = args.get(0);
+        RuntimeScalar integerArgument = args.get(1);
+        RuntimeHash hash = (RuntimeHash) hashArgument.value;
+        RuntimeScalar firstCell = hash.elements.get(firstHashKey);
+        RuntimeScalar secondCell = secondHashKey == null
+                ? null : hash.elements.get(secondHashKey);
+        if (!RuntimeScalar.isCacheableReadOnlyPlainHashMethodField(firstCell)
+                || (secondHashKey != null
+                    && !RuntimeScalar.isCacheableReadOnlyPlainHashMethodField(secondCell))) {
+            return false;
+        }
+        args.cacheVerifiedMethodHashFields(0, 1, firstHashKey, secondHashKey,
+                hashArgument, integerArgument, firstCell, secondCell);
+        return true;
+    }
+
+    /** Return a field cell already validated for this call, or use the normal fast lookup. */
+    public static RuntimeScalar getVerifiedReadOnlyPlainHashMethodField(
+            RuntimeArray args, RuntimeScalar target, String key) {
+        if (args != null && target != null
+                && args.hasVerifiedMethodHashFields(0, 1,
+                        args.verifiedMethodFirstHashKey(),
+                        args.verifiedMethodSecondHashKey(), target)) {
+            RuntimeScalar cell = args.verifiedMethodHashField(key);
+            if (cell != null) return cell;
+        }
+        return RuntimeScalar.getReadOnlyPlainHashMethodField(target, key);
     }
 
     public static void enterSortComparator(RuntimeScalar comparator) {
@@ -723,6 +767,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public void setPristineArgsSnapshotRequired(boolean required) {
         pristineArgsSnapshotRequired = required;
+    }
+
+    public void enableStableHashMutationMethod(List<String> keys) {
+        if (keys == null || keys.isEmpty() || keys.size() > 2) return;
+        stableHashMutationMethodKeys = keys.toArray(String[]::new);
     }
 
     /**
@@ -2250,6 +2299,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         PerlRuntime.current().runtimeCodeState().padConstantsByClassName.put(className, constants);
     }
 
+    public static void registerStableHashMutationMethod(
+            String className, String[] keys) {
+        if (className != null && keys != null && keys.length > 0 && keys.length <= 2) {
+            RuntimeCodeRuntimeState state = PerlRuntime.current().runtimeCodeState();
+            state.stableHashMutationMethodKeysByClassName.put(className, keys.clone());
+        }
+    }
+
+    public static void attachStableHashMutationMethod(String className, RuntimeCode code) {
+        if (className == null || code == null) return;
+        String[] keys = PerlRuntime.current().runtimeCodeState()
+                .stableHashMutationMethodKeysByClassName.remove(className);
+        if (keys != null) code.stableHashMutationMethodKeys = keys;
+    }
+
     public static void registerDisabledWarnings(String className, Set<String> categories) {
         PerlRuntime.current().runtimeCodeState().disabledWarningsByClassName.put(
                 className,
@@ -2263,6 +2327,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private volatile WarningBitsCache warningBitsCache;
     // Functional interface for direct subroutine invocation (preferred for generated classes)
     public PerlSubroutine subroutine;
+    /** Literal keys for the compiler-proven simple hash mutation method path. */
+    public String[] stableHashMutationMethodKeys;
     public boolean isStatic;
     /** True for a `method` declared inside a Perl class. */
     public boolean isClassMethod;
@@ -3038,6 +3104,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.declaredOurVariables = this.declaredOurVariables == null
                 ? null : new java.util.LinkedHashMap<>(this.declaredOurVariables);
         clone.compilerSupplier = this.compilerSupplier;
+        clone.stableHashMutationMethodKeys = this.stableHashMutationMethodKeys;
         clone.jvmClosureFrameRequired = this.jvmClosureFrameRequired;
         clone.activeLexicalFrameRequired = this.activeLexicalFrameRequired;
         clone.callDepthTrackingRequired = this.callDepthTrackingRequired;
@@ -3728,6 +3795,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         code.attributes = codeFrom.attributes;
         code.methodHandle = codeFrom.methodHandle;
         code.subroutine = codeFrom.subroutine;
+        code.stableHashMutationMethodKeys = codeFrom.stableHashMutationMethodKeys;
         code.isStatic = codeFrom.isStatic;
         code.isClassMethod = codeFrom.isClassMethod;
         code.generatedClassConstructor = codeFrom.generatedClassConstructor;
@@ -3755,6 +3823,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         this.methodHandle = codeFrom.methodHandle;
         this.subroutine = codeFrom.subroutine;
+        this.stableHashMutationMethodKeys = codeFrom.stableHashMutationMethodKeys;
         this.isStatic = codeFrom.isStatic;
         this.isClassMethod = codeFrom.isClassMethod;
         this.generatedClassConstructor = codeFrom.generatedClassConstructor;
@@ -5363,6 +5432,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // These track cached string literals referenced via \ inside the sub,
         // needed for optree reaping (clearing weak refs when sub is replaced).
         String internalClassName = clazz.getName().replace('.', '/');
+        String[] stableHashKeys = PerlRuntime.current().runtimeCodeState()
+                .stableHashMutationMethodKeysByClassName.remove(internalClassName);
+        if (stableHashKeys != null) {
+            code.stableHashMutationMethodKeys = stableHashKeys;
+        }
         RuntimeBase[] padConsts = PerlRuntime.current().runtimeCodeState()
                 .padConstantsByClassName.remove(internalClassName);
         if (padConsts != null) {
@@ -5633,15 +5707,81 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             }
 
-            MortalList.pushMark(methodRuntime.lifecycleState);
+            boolean stableHashFastPath = canUseStableHashMutationMethodFastPath(
+                    code, args, callContext, methodRuntime);
+
             try {
-                return applyCachedMethod(code, args, callContext, methodRuntime);
+                MortalList.pushMark(methodRuntime.lifecycleState);
+                try {
+                    if (stableHashFastPath) {
+                        return applyStableHashMutationMethodBody(code, args, callContext);
+                    }
+                    return applyCachedMethod(code, args, callContext, methodRuntime);
+                } finally {
+                    MortalList.popMark(methodRuntime.lifecycleState);
+                }
             } finally {
-                MortalList.popMark(methodRuntime.lifecycleState);
+                if (stableHashFastPath) args.clearVerifiedMethodHashFields();
             }
         } catch (Throwable e) {
             if (e instanceof RuntimeException) throw (RuntimeException) e;
             throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * A narrow fast call boundary for compiler-proven methods that only update
+     * two plain integer hash cells and return their numeric sum.  The analyzer
+     * rejects calls, aliases, and other statements; this runtime guard verifies
+     * the actual receiver and cells before omitting general caller/call-depth
+     * bookkeeping.
+     */
+    private static boolean canUseStableHashMutationMethodFastPath(
+            RuntimeCode code, RuntimeArray args, int callContext, PerlRuntime runtime) {
+        String[] keys = code.stableHashMutationMethodKeys;
+        if (keys == null || keys.length == 0 || keys.length > 2) return false;
+        if (callContext != RuntimeContextType.SCALAR) return false;
+        if (DebugState.isDebugMode()) return false;
+        if (code.boundRuntime != null && code.boundRuntime != runtime) return false;
+        if (code.constantValue != null) return false;
+        if (isLvalueCode(code)) return false;
+        if (code.isMapGrepBlock || code.isTryExpressionWrapper) return false;
+        if (code.requiresJvmClosureFrame()) return false;
+        if (code.signatureSubName != null || code.signaturePositionalCount != 0
+                || !code.signatureNamedParams.isEmpty() || code.signatureSlurpySigil != null) {
+            return false;
+        }
+        if (code.subroutine == null && code.methodHandle == null) return false;
+        return prepareStableHashMutationMethodArguments(
+                args, keys[0], keys.length == 2 ? keys[1] : null);
+    }
+
+    private static RuntimeList applyStableHashMutationMethodBody(
+            RuntimeCode code, RuntimeArray args, int callContext) {
+        int effectiveContext = effectiveCallContext(code, callContext);
+        try {
+            RuntimeList result;
+            if (code.subroutine != null) {
+                result = code.subroutine.apply(args, effectiveContext);
+            } else if (code.isStatic) {
+                result = (RuntimeList) code.methodHandle.invoke(args, effectiveContext);
+            } else {
+                result = (RuntimeList) code.methodHandle.invoke(
+                        code.codeObject, args, effectiveContext);
+            }
+            return code.detachTryExpressionLvalueResult(
+                    coerceScalarCallResult(result, effectiveContext, callContext,
+                            !isLvalueCode(code)),
+                    callContext);
+        } catch (RuntimeException e) {
+            throw WarnDie.maybeInvokeUnhandledDieHandler(e);
+        } catch (Throwable e) {
+            Throwable cause = e instanceof InvocationTargetException invocation
+                    ? invocation.getTargetException() : e;
+            if (cause instanceof RuntimeException runtimeException) {
+                throw WarnDie.maybeInvokeUnhandledDieHandler(runtimeException);
+            }
+            throw new RuntimeException(cause);
         }
     }
 

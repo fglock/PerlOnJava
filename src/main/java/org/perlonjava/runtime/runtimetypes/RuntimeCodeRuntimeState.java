@@ -27,6 +27,8 @@ public final class RuntimeCodeRuntimeState {
     final HashMap<String, EmitterContext> evalContexts = new HashMap<>();
     final ConcurrentHashMap<String, RuntimeBase[]> padConstantsByClassName =
             new ConcurrentHashMap<>();
+    final ConcurrentHashMap<String, String[]> stableHashMutationMethodKeysByClassName =
+            new ConcurrentHashMap<>();
     final ConcurrentHashMap<String, Set<String>> disabledWarningsByClassName =
             new ConcurrentHashMap<>();
 
@@ -77,6 +79,8 @@ public final class RuntimeCodeRuntimeState {
      */
     void snapshotCompiledMetadataInto(RuntimeCodeRuntimeState child) {
         child.evalContexts.putAll(evalContexts);
+        stableHashMutationMethodKeysByClassName.forEach((name, keys) ->
+                child.stableHashMutationMethodKeysByClassName.put(name, keys.clone()));
         disabledWarningsByClassName.forEach((name, categories) ->
                 child.disabledWarningsByClassName.put(name, Set.copyOf(categories)));
         // A child inherits the parent's loaded-module/runtime feature surface.
@@ -117,6 +121,7 @@ public final class RuntimeCodeRuntimeState {
         interpretedSubs.clear();
         evalContexts.clear();
         padConstantsByClassName.clear();
+        stableHashMutationMethodKeysByClassName.clear();
         disabledWarningsByClassName.clear();
         nextMethodCallsiteId = 0;
         clearInlineMethodCache();

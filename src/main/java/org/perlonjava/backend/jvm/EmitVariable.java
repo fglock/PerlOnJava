@@ -987,12 +987,13 @@ public class EmitVariable {
                 for (String key : readOnlyCandidate.hashKeys()) {
                     int slot = ctx.symbolTable.allocateLocalVariable();
                     hashFieldSlots.put(key, slot);
+                    guardedMv.visitVarInsn(Opcodes.ALOAD, 1);
                     guardedMv.visitVarInsn(Opcodes.ALOAD, hashArgumentSlot);
                     guardedMv.visitLdcInsn(key);
                     guardedMv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                            "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                            "getReadOnlyPlainHashMethodField",
-                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                            "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                            "getVerifiedReadOnlyPlainHashMethodField",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                             false);
                     guardedMv.visitVarInsn(Opcodes.ASTORE, slot);
                     guardedMv.visitVarInsn(Opcodes.ALOAD, slot);

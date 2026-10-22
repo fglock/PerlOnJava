@@ -53,7 +53,8 @@ method result against its operation count.
 ```bash
 python3 dev/bench/performance_over_perl.py \
   --workloads method_anchor closure_anchor life \
-  --perl-source-revision v5.42.2 \
+  --perl /path/to/blead-prefix/bin/perl5.45.5 \
+  --perl-source-revision <blead-commit> \
   --output /tmp/performance-over-perl.json
 ```
 
@@ -66,6 +67,13 @@ priority, warmup windows, measurements, checksums, and paired confidence
 intervals. Launch order is randomized with a recorded seed and balanced across
 both engines for each workload. A requested priority that cannot be verified
 makes the pair ineligible for its summary.
+
+The exact `origin/master` directional baseline, the initial inactive fast-path
+experiment, and the corrected fast-path diagnostic comparisons are retained
+under [`reports/`](reports/).
+The macOS runs are diagnostic because this host denied the requested process
+priority; see `dev/design/performance-over-perl.md` for the measured values and
+limitations.
 
 To attribute a change to exact PerlOnJava artifacts, pin both JARs. The
 candidate and reference JARs run in balanced randomized order in each
@@ -88,6 +96,7 @@ smoke-check the runner; smoke runs are not performance evidence.
 
 ## See Also
 
+- `dev/bench/perl-reference-builds.md` — pinned blead and stable Perl builds
 - `dev/design/optimization.md` — optimization design decisions
 - `dev/design/interpreter_benchmarks.md` — interpreter-mode benchmarks
 - `dev/jvm_profiler/` — JFR / async-profiler skill for deeper analysis

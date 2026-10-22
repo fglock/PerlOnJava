@@ -124,6 +124,17 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public boolean lvalueSliceContainer;
     // Iterator for traversing the hash elements
     private Integer eachIteratorIndex;
+    // Per-call proof data for the guarded simple hash-mutation method path.
+    // These fields are populated by RuntimeCode immediately before entering a
+    // compiled method whose body only updates the two proven hash cells.
+    private RuntimeScalar verifiedMethodHashArgument;
+    private RuntimeScalar verifiedMethodIntegerArgument;
+    private RuntimeScalar verifiedMethodFirstHashCell;
+    private RuntimeScalar verifiedMethodSecondHashCell;
+    private int verifiedMethodHashArgumentIndex = -1;
+    private int verifiedMethodIntegerArgumentIndex = -1;
+    private String verifiedMethodFirstHashKey;
+    private String verifiedMethodSecondHashKey;
     // Package arrays named @ISA participate in method resolution.  All writes
     // to their element list must invalidate MRO caches.
     private boolean isaArray;
@@ -158,6 +169,63 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             return new RuntimeArray(true);
         }
         return new RuntimeArray(initialCapacity);
+    }
+
+    void cacheVerifiedMethodHashFields(int hashArgumentIndex, int integerArgumentIndex,
+            String firstKey, String secondKey, RuntimeScalar hashArgument,
+            RuntimeScalar integerArgument, RuntimeScalar firstCell, RuntimeScalar secondCell) {
+        verifiedMethodHashArgumentIndex = hashArgumentIndex;
+        verifiedMethodIntegerArgumentIndex = integerArgumentIndex;
+        verifiedMethodFirstHashKey = firstKey;
+        verifiedMethodSecondHashKey = secondKey;
+        verifiedMethodHashArgument = hashArgument;
+        verifiedMethodIntegerArgument = integerArgument;
+        verifiedMethodFirstHashCell = firstCell;
+        verifiedMethodSecondHashCell = secondCell;
+    }
+
+    void clearVerifiedMethodHashFields() {
+        verifiedMethodHashArgumentIndex = -1;
+        verifiedMethodIntegerArgumentIndex = -1;
+        verifiedMethodFirstHashKey = null;
+        verifiedMethodSecondHashKey = null;
+        verifiedMethodHashArgument = null;
+        verifiedMethodIntegerArgument = null;
+        verifiedMethodFirstHashCell = null;
+        verifiedMethodSecondHashCell = null;
+    }
+
+    boolean hasVerifiedMethodHashFields(int hashArgumentIndex, int integerArgumentIndex,
+            String firstKey, String secondKey, RuntimeScalar hashArgument) {
+        if (hashArgumentIndex < 0 || integerArgumentIndex < 0
+                || verifiedMethodHashArgumentIndex != hashArgumentIndex
+                || verifiedMethodIntegerArgumentIndex != integerArgumentIndex
+                || !Objects.equals(verifiedMethodFirstHashKey, firstKey)
+                || !Objects.equals(verifiedMethodSecondHashKey, secondKey)
+                || verifiedMethodHashArgument != hashArgument
+                || size() <= Math.max(hashArgumentIndex, integerArgumentIndex)) {
+            return false;
+        }
+        return get(hashArgumentIndex) == verifiedMethodHashArgument
+                && get(integerArgumentIndex) == verifiedMethodIntegerArgument;
+    }
+
+    RuntimeScalar verifiedMethodHashField(String key) {
+        if (Objects.equals(verifiedMethodFirstHashKey, key)) {
+            return verifiedMethodFirstHashCell;
+        }
+        if (Objects.equals(verifiedMethodSecondHashKey, key)) {
+            return verifiedMethodSecondHashCell;
+        }
+        return null;
+    }
+
+    String verifiedMethodFirstHashKey() {
+        return verifiedMethodFirstHashKey;
+    }
+
+    String verifiedMethodSecondHashKey() {
+        return verifiedMethodSecondHashKey;
     }
 
     private RuntimeArrayElementList newElementList() {

@@ -318,6 +318,7 @@ public class RuntimeGraphCloner {
         target.setCallDepthTrackingRequired(source.requiresCallDepthTracking());
         target.setPristineArgsSnapshotRequired(
                 source.requiresPristineArgsSnapshot());
+        target.stableHashMutationMethodKeys = source.stableHashMutationMethodKeys;
         target.isClosurePrototype = source.isClosurePrototype;
         target.tracksRuntimeRegexLexicals = source.tracksRuntimeRegexLexicals;
         target.definitionPending = source.definitionPending;
