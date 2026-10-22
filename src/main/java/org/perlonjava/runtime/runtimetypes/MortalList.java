@@ -2043,10 +2043,10 @@ public class MortalList {
 
     /**
      * Prove aggregate ownership by following registered owner slots toward a
-     * Perl root. Nested hash/array stores already record each direct edge, so
-     * walking that owner chain avoids a whole-root scan for the common case.
-     * Fall back to the graph walker for scalar owners and legacy edges that do
-     * not yet have an explicit container slot.
+     * Perl root. Nested hash/array stores and scalar-value slots record direct
+     * edges, so walking that owner chain avoids a whole-root scan for the
+     * common case. Fall back to the graph walker for legacy edges that do not
+     * yet have an explicit owner slot.
      */
     private static boolean isRootedAggregateOwner(RuntimeBase owner,
                                                    RuntimeBase excludedReferent) {
@@ -2059,16 +2059,41 @@ public class MortalList {
             if (current == null || current == excludedReferent || !visited.add(current)) continue;
             if (isExplicitAggregateRoot(current)) return true;
             for (PerlOwnerSlot parentSlot : current.ownerSlotSnapshot()) {
-                if (parentSlot.kind() != PerlOwnerSlot.Kind.HASH_ENTRY
-                        && parentSlot.kind() != PerlOwnerSlot.Kind.ARRAY_ELEMENT) continue;
                 if (parentSlot.referent() != current) continue;
-                RuntimeBase parent = parentSlot.ownerContainer();
-                RuntimeScalar cell = parentSlot.ownerCell();
-                if (!isLiveAggregateOwnerEdge(parent, cell, current)) continue;
-                pending.addLast(parent);
+                if (parentSlot.kind() == PerlOwnerSlot.Kind.HASH_ENTRY
+                        || parentSlot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT) {
+                    RuntimeBase parent = parentSlot.ownerContainer();
+                    RuntimeScalar cell = parentSlot.ownerCell();
+                    if (isLiveAggregateOwnerEdge(parent, cell, current)) {
+                        pending.addLast(parent);
+                    }
+                } else if (parentSlot.kind() == PerlOwnerSlot.Kind.SCALAR_VALUE
+                        || parentSlot.kind() == PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS) {
+                    RuntimeScalar cell = parentSlot.kind()
+                            == PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS
+                            ? parentSlot.scalarReferenceCell() : parentSlot.ownerCell();
+                    if (!isLiveScalarOwnerEdge(cell, current)) continue;
+                    if (isExplicitScalarRoot(cell)) return true;
+                    RuntimeBase parent = cell.containerOwner;
+                    if (isLiveAggregateOwnerEdge(parent, cell, current)) {
+                        pending.addLast(parent);
+                    }
+                }
             }
         }
         return ReachabilityWalker.isReachableFromRoots(owner, true, excludedReferent);
+    }
+
+    private static boolean isLiveScalarOwnerEdge(RuntimeScalar cell, RuntimeBase referent) {
+        return cell != null && cell.value == referent && !WeakRefRegistry.isweak(cell);
+    }
+
+    private static boolean isExplicitScalarRoot(RuntimeScalar cell) {
+        if (!cell.scopeExited && MyVarCleanupStack.isRegistered(cell)) return true;
+        if (cell.isStoredInRegisteredContainerOwner()) return true;
+        return cell.isPackageGlobalRoot
+                && (GlobalVariable.scalarSlots().containsValue(cell)
+                    || GlobalVariable.globalCodeRefs.containsValue(cell));
     }
 
     static boolean isRootedOwnerContainer(RuntimeBase owner,
