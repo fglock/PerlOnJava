@@ -30,8 +30,7 @@ public final class RuntimeCodeRuntimeState {
     final ConcurrentHashMap<String, Set<String>> disabledWarningsByClassName =
             new ConcurrentHashMap<>();
 
-    final int[] inlineCacheBlessId = new int[METHOD_CALL_CACHE_SIZE];
-    final int[] inlineCacheMethodHash = new int[METHOD_CALL_CACHE_SIZE];
+    final long[] inlineCacheKey = new long[METHOD_CALL_CACHE_SIZE];
     final RuntimeCode[] inlineCacheCode = new RuntimeCode[METHOD_CALL_CACHE_SIZE];
 
     private int nextMethodCallsiteId;
@@ -89,22 +88,23 @@ public final class RuntimeCodeRuntimeState {
 
     RuntimeCode cachedInlineMethod(int callsiteId, int blessId, int methodHash) {
         int index = callsiteId & (METHOD_CALL_CACHE_SIZE - 1);
-        return inlineCacheBlessId[index] == blessId
-                && inlineCacheMethodHash[index] == methodHash
+        return inlineCacheKey[index] == inlineMethodCacheKey(blessId, methodHash)
                 ? inlineCacheCode[index]
                 : null;
     }
 
     void cacheInlineMethod(int callsiteId, int blessId, int methodHash, RuntimeCode code) {
         int index = callsiteId & (METHOD_CALL_CACHE_SIZE - 1);
-        inlineCacheBlessId[index] = blessId;
-        inlineCacheMethodHash[index] = methodHash;
+        inlineCacheKey[index] = inlineMethodCacheKey(blessId, methodHash);
         inlineCacheCode[index] = code;
     }
 
+    private static long inlineMethodCacheKey(int blessId, int methodHash) {
+        return ((long) blessId << Integer.SIZE) | (methodHash & 0xffff_ffffL);
+    }
+
     void clearInlineMethodCache() {
-        Arrays.fill(inlineCacheBlessId, 0);
-        Arrays.fill(inlineCacheMethodHash, 0);
+        Arrays.fill(inlineCacheKey, 0L);
         Arrays.fill(inlineCacheCode, null);
     }
 
