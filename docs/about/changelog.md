@@ -1018,6 +1018,9 @@ priorities and future plans.
 - Preserve strict-subs imports for `Compress::Raw::Zlib` constants.
 - Evaluate `ref` operands in scalar context on the interpreter backend.
 - Fix RFC 2047 header decoding for Email::MIME.
+- Load the MIME-Header codec when `Encode::decode` first encounters it.
+- Recognize inherited `fields` entries in typed hash access.
+- Match Storable's default and optional export lists.
 - Fix XML::Parser streaming from native filehandles before `IO::Handle` has
   been explicitly loaded.
 - Bundle the complete CPAN `File::Path` 2.18 implementation, including modern

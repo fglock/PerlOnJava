@@ -43,7 +43,8 @@ public class Storable extends PerlModuleBase {
             storable.registerMethod("dclone", "$");
             storable.registerMethod("last_op_in_netorder", null);
 
-            storable.defineExport("EXPORT", "store", "retrieve", "nstore", "freeze", "thaw", "nfreeze", "dclone");
+            storable.defineExport("EXPORT", "store", "retrieve");
+            storable.defineExport("EXPORT_OK", "nstore", "freeze", "thaw", "nfreeze", "dclone");
 
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Storable method: " + e.getMessage());
