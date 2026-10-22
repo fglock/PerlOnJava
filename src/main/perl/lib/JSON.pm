@@ -154,13 +154,6 @@ sub import {
 *false       = \&JSON::PP::false;
 *null        = sub { undef };
 
-# JSON.pm exposes the same boolean singleton variables as JSON::PP.  Keep
-# these package globals available for callers that compare decoded values
-# with $JSON::true or $JSON::false.
-our ($true, $false);
-$true  = JSON::PP::true();
-$false = JSON::PP::false();
-
 # Backend introspection.  Works both as class and instance method.
 sub backend               { $Backend }
 sub is_xs                 { 0 }
