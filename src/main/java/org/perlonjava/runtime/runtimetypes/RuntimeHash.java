@@ -909,12 +909,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         // Perl warns "Use of uninitialized value in hash element" whenever an
         // undef value is used as a hash key (both read and lvalue/autoviv use
         // this path). Matches perl's behavior under `use warnings`.
-        if (keyScalar != null && keyScalar.type == RuntimeScalarType.UNDEF) {
-            org.perlonjava.runtime.operators.WarnDie.warnWithCategory(
-                    new RuntimeScalar("Use of uninitialized value in hash element"),
-                    RuntimeScalarCache.scalarEmptyString,
-                    "uninitialized");
-        }
+        warnForUninitializedKey(keyScalar, "hash element");
         // An element fetch materializes the parent hash. The element remains
         // lazy through RuntimeHashProxyEntry until it is itself written.
         if (type == AUTOVIVIFY_HASH) {
@@ -986,6 +981,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeScalar indicating whether the key exists.
      */
     public RuntimeScalar exists(RuntimeScalar key) {
+        warnForUninitializedKey(key, "exists");
         if (isEnvironmentHash) key = new RuntimeScalar(normalizeEnvironmentKey(key.toString()));
         return switch (type) {
             case PLAIN_HASH, READONLY_HASH -> new RuntimeScalar(elements.containsKey(key.toString()));
@@ -1040,6 +1036,11 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     public RuntimeScalar deleteInContext(RuntimeScalar key, int callContext) {
+        // An autovivification hash delegates back here after changing itself
+        // into a plain hash, so defer its warning to that terminal call.
+        if (type != AUTOVIVIFY_HASH) {
+            warnForUninitializedKey(key, "delete");
+        }
         if (isEnvironmentHash) key = new RuntimeScalar(normalizeEnvironmentKey(key.toString()));
         return switch (type) {
             case PLAIN_HASH -> {
@@ -1084,6 +1085,15 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
     public RuntimeScalar delete(String key) {
         return deleteInContext(key, RuntimeContextType.LIST);
+    }
+
+    private static void warnForUninitializedKey(RuntimeScalar key, String operation) {
+        if (key != null && key.type == RuntimeScalarType.UNDEF) {
+            org.perlonjava.runtime.operators.WarnDie.warnWithCategory(
+                    new RuntimeScalar("Use of uninitialized value in " + operation),
+                    RuntimeScalarCache.scalarEmptyString,
+                    "uninitialized");
+        }
     }
 
     public RuntimeScalar deleteInContext(String key, int callContext) {

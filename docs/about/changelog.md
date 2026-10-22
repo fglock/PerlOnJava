@@ -38,6 +38,7 @@ priorities and future plans.
   lexical frame instead of a per-runtime deque; cache the live warning-scope
   scalar per runtime and invalidate it when global scalar bindings change.
 - Preserve inherited method dispatch in child threads.
+- Prefer exact root-module package declarations over earlier helper packages, and warn for undefined hash keys used by `exists` and `delete` (#1820, #1645).
 - Add a reproducible, warmup-aware Perl versus PerlOnJava performance runner (#1196).
 - Cover FormState session restoration across requests and HTTP response conversion from callback and streaming PSGI responses; refresh HTTP::Message and LWP compatibility status (#1650, #1651, #1652).
 - Preserve the awaited Future value when its source scalar or aggregate slot changes during suspension, covering PAGI::Server request-body receives (#1818).
