@@ -429,7 +429,7 @@ public class DestroyDispatch {
         Set<PerlOwnerSlot> ownerSlotsAtStart = null;
         if (checkingGlobalOwnerDelta) {
             referent.activateOwnerTracking();
-            activeOwnersAtStart = referent.activeOwnerSnapshot();
+            activeOwnersAtStart = referent.countedScalarOwnerSnapshot();
             ownerSlotsAtStart = referent.ownerSlotSnapshot();
         }
 
@@ -708,7 +708,7 @@ public class DestroyDispatch {
                                                 Set<RuntimeScalar> activeOwnersAtStart,
                                                 Set<PerlOwnerSlot> ownerSlotsAtStart) {
         if (checkingGlobalOwnerDelta) {
-            for (RuntimeScalar owner : referent.activeOwnerSnapshot()) {
+            for (RuntimeScalar owner : referent.countedScalarOwnerSnapshot()) {
                 // DESTROY commonly creates short-lived aliases while it calls
                 // methods on $self. They are new ledger entries, but they do
                 // not resurrect the object if their Perl slots are gone by the

@@ -2028,7 +2028,7 @@ public class MortalList {
         // cells. Exclude cells already counted through their explicit slots,
         // then add other still-reachable scalar owners to avoid losing them
         // when restoring the mixed legacy/native count.
-        for (RuntimeScalar scalar : referent.activeOwnerSnapshot()) {
+        for (RuntimeScalar scalar : referent.countedScalarOwnerSnapshot()) {
             if (scalar == null || rootedHashCells.contains(scalar)
                     || !scalar.refCountOwned || scalar.value != referent
                     || !ReachabilityWalker.isScalarReachable(scalar)) {
