@@ -2069,13 +2069,16 @@ public class MortalList {
                     }
                 } else if (parentSlot.kind() == PerlOwnerSlot.Kind.SCALAR_VALUE
                         || parentSlot.kind() == PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS) {
-                    RuntimeScalar cell = parentSlot.kind()
-                            == PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS
-                            ? parentSlot.scalarReferenceCell() : parentSlot.ownerCell();
-                    if (!isLiveScalarOwnerEdge(cell, current)) continue;
-                    if (isExplicitScalarRoot(cell)) return true;
-                    RuntimeBase parent = cell.containerOwner;
-                    if (isLiveAggregateOwnerEdge(parent, cell, current)) {
+                    RuntimeScalar ownerCell = parentSlot.ownerCell();
+                    if (parentSlot.kind() == PerlOwnerSlot.Kind.SCALAR_VALUE) {
+                        if (!isLiveScalarOwnerEdge(ownerCell, current)) continue;
+                    } else if (!isLiveScalarReferenceContentsEdge(
+                            parentSlot, ownerCell, current)) {
+                        continue;
+                    }
+                    if (isExplicitScalarRoot(ownerCell)) return true;
+                    RuntimeBase parent = ownerCell.containerOwner;
+                    if (isLiveAggregateOwnerCell(parent, ownerCell)) {
                         pending.addLast(parent);
                     }
                 }
@@ -2086,6 +2089,26 @@ public class MortalList {
 
     private static boolean isLiveScalarOwnerEdge(RuntimeScalar cell, RuntimeBase referent) {
         return cell != null && cell.value == referent && !WeakRefRegistry.isweak(cell);
+    }
+
+    private static boolean isLiveScalarReferenceContentsEdge(
+            PerlOwnerSlot slot, RuntimeScalar ownerCell, RuntimeBase referent) {
+        RuntimeScalar contentsCell = slot.scalarReferenceCell();
+        return ownerCell != null
+                && ownerCell.scalarReferenceContentsOwner == slot
+                && !WeakRefRegistry.isweak(ownerCell)
+                && contentsCell != null && contentsCell.value == referent
+                && !WeakRefRegistry.isweak(contentsCell);
+    }
+
+    private static boolean isLiveAggregateOwnerCell(RuntimeBase parent, RuntimeScalar cell) {
+        if (parent instanceof RuntimeHash hash) {
+            return hash.elements.containsValue(cell);
+        }
+        if (parent instanceof RuntimeArray array) {
+            return array.elements.contains(cell) && array.ownsElement(cell);
+        }
+        return false;
     }
 
     private static boolean isExplicitScalarRoot(RuntimeScalar cell) {

@@ -98,6 +98,62 @@ class MortalListAggregateOwnerSlotRootChainTest {
         }
     }
 
+    @Test
+    void scalarReferenceContentsOwnerSlotProvesRootWithoutWholeRootWalk() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            boolean previousActive = MortalList.isActive();
+            RuntimeArray target = new RuntimeArray();
+            RuntimeHash nested = new RuntimeHash();
+            RuntimeArray root = new RuntimeArray();
+            root.elementsOwned = true;
+            root.elements.add(nested.createReference());
+            root.reconcileArrayElementOwnerSlots();
+            RuntimeScalar nestedValue = referenceTo(target);
+            nestedValue.refCountOwned = true;
+            nested.elements.put("target", nestedValue);
+
+            root.refCount = 1;
+            RuntimeScalar contentsCell = referenceTo(root);
+            RuntimeScalar outerReference = new RuntimeScalar();
+            outerReference.type = RuntimeScalarType.REFERENCE;
+            outerReference.value = contentsCell;
+            PerlOwnerSlot contentsOwner = new PerlOwnerSlot(
+                    PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS,
+                    null, null, outerReference);
+            contentsOwner.acquireScalarReferenceContents(root, contentsCell);
+            outerReference.scalarReferenceContentsOwner = contentsOwner;
+            MyVarCleanupStack.register(outerReference);
+
+            RuntimeScalar unrelatedLegacyOwner = referenceTo(target);
+            unrelatedLegacyOwner.refCountOwned = true;
+            target.refCount = 1;
+
+            try {
+                MortalList.setActive(true);
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    MortalList.deferDecrementIfTracked(unrelatedLegacyOwner);
+                    MortalList.flush();
+
+                    assertEquals(1, target.refCount,
+                            "the scalar-reference contents owner keeps the hash slot live");
+                    assertEquals(0, measurement.stats().rootQueries,
+                            "the contents owner slot proves the path to its lexical root");
+                    assertEquals(0, measurement.stats().snapshotsBuilt,
+                            "the contents owner chain avoids a graph snapshot");
+                }
+            } finally {
+                MortalList.setActive(previousActive);
+                MyVarCleanupStack.unregister(outerReference);
+                outerReference.releaseOwnedScalarReferenceContents();
+                root.elements.clear();
+                nested.elements.clear();
+                MortalList.invalidateAllRootSnapshots();
+            }
+        }
+    }
+
     private static RuntimeScalar referenceTo(RuntimeBase referent) {
         RuntimeScalar scalar = new RuntimeScalar();
         scalar.type = RuntimeScalarType.HASHREFERENCE;
