@@ -113,6 +113,16 @@ The earlier candidate was based on `origin/master` (`ede542b29`) and passed the 
 
 ### Completed
 
+- [x] On 2026-10-22, synchronized the per-scalar reverse index of destroyable
+  closure owners. Ithread cloning and parent-side temporary closure release
+  could concurrently mutate its `ArrayList`, producing an intermittent
+  `ConcurrentModificationException` in `threads-shared/t/object.t`. A focused
+  Java regression races reverse-index releases. The external test passed 28/28
+  when rerun alone. The bundled Java regression passes in full `nice -n 19
+  make` (15m59s); `make test-threads` passes JVM virtual 1925/1925, interpreter
+  virtual 1925/1925, and platform-focused 485/485. This batch is pending
+  hosted CI.
+
 - [x] On 2026-10-22, synchronized mutation and snapshot operations on the
   legacy direct-scalar-owner registry and changed `reachableOwnerCount()` to
   snapshot before graph walks. The new Java concurrency regression passes in

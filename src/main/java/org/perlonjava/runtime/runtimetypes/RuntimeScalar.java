@@ -656,7 +656,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         releaseClosureCapture();
     }
 
-    private void recordDestroyableClosureOwner(RuntimeCode closureOwner) {
+    private synchronized void recordDestroyableClosureOwner(RuntimeCode closureOwner) {
         if (closureOwner == null || WeakRefRegistry.isweak(this)
                 || !(value instanceof RuntimeBase referent) || referent.blessId == 0) {
             return;
@@ -677,7 +677,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         destroyableClosureOwners.add(new WeakReference<>(closureOwner));
     }
 
-    private void forgetDestroyableClosureOwner(RuntimeCode closureOwner) {
+    private synchronized void forgetDestroyableClosureOwner(RuntimeCode closureOwner) {
         if (closureOwner == null || destroyableClosureOwners == null) return;
         destroyableClosureOwners.removeIf(reference -> {
             RuntimeCode existing = reference.get();
@@ -688,16 +688,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     boolean releaseUnreachableDestroyableClosureOwners(
             ReachabilityWalker.ScalarRootReachabilitySnapshot roots) {
-        if (roots == null || !roots.complete() || destroyableClosureOwners == null) return false;
         List<RuntimeCode> unreachable = new ArrayList<>();
-        List<WeakReference<RuntimeCode>> retained = new ArrayList<>();
-        for (WeakReference<RuntimeCode> reference : destroyableClosureOwners) {
-            RuntimeCode owner = reference.get();
-            if (owner == null) continue;
-            if (roots.isReachable(owner)) retained.add(reference);
-            else unreachable.add(owner);
+        synchronized (this) {
+            if (roots == null || !roots.complete() || destroyableClosureOwners == null) return false;
+            List<WeakReference<RuntimeCode>> retained = new ArrayList<>();
+            for (WeakReference<RuntimeCode> reference : destroyableClosureOwners) {
+                RuntimeCode owner = reference.get();
+                if (owner == null) continue;
+                if (roots.isReachable(owner)) retained.add(reference);
+                else unreachable.add(owner);
+            }
+            destroyableClosureOwners = retained.isEmpty() ? null : retained;
         }
-        destroyableClosureOwners = retained.isEmpty() ? null : retained;
         for (RuntimeCode owner : unreachable) {
             if (owner.capturedScalars != null || owner.capturedAggregates != null) {
                 owner.releaseCaptures();
