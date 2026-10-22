@@ -21,7 +21,8 @@ public final class PerlOwnerSlot {
         CLOSURE_PAD,
         HASH_ENTRY,
         ARRAY_ELEMENT,
-        SCALAR_REFERENCE_CONTENTS
+        SCALAR_REFERENCE_CONTENTS,
+        SCALAR_VALUE
     }
 
     private final Kind kind;

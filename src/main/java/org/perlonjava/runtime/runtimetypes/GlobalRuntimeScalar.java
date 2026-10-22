@@ -228,7 +228,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                         && localVar.value instanceof RuntimeBase base
                         && base.refCount > 0) {
                     displacedBase = base;
-                    localVar.refCountOwned = false;
+                    localVar.setRefCountOwned(false);
                     displacedBase.releaseActiveOwner(localVar);
                 }
                 if (localVar != null
@@ -283,7 +283,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                         localVar.value = saved.originalVariable.value;
                         localVar.blessId = saved.originalVariable.blessId;
                     }
-                    localVar.refCountOwned = false;
+                    localVar.setRefCountOwned(false);
                 }
                 if (localVar != null) {
                     localVar.scalarReferenceContentsOwner = null;

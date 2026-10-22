@@ -3728,7 +3728,8 @@ public class ReachabilityWalker {
         // being discarded are internal edges, not independent roots.
         for (RuntimeBase referent : referents) {
             for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
-                if (slot.kind() != PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS
+                if ((slot.kind() != PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS
+                        && slot.kind() != PerlOwnerSlot.Kind.SCALAR_VALUE)
                         || slot.referent() != referent) continue;
                 RuntimeScalar ownerCell = slot.ownerCell();
                 if (ownerCell == null || !live.contains(ownerCell)) continue;

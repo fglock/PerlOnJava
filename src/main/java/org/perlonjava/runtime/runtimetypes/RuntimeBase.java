@@ -505,13 +505,23 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      */
     public int reachableOwnerCount() {
         int count = 0;
+        Set<RuntimeScalar> scalarValueCells =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot.kind() == PerlOwnerSlot.Kind.SCALAR_VALUE
+                    && slot.referent() == this && slot.ownerCell() != null) {
+                scalarValueCells.add(slot.ownerCell());
+            }
+        }
         if (activeOwners != null) {
             java.util.Iterator<RuntimeScalar> it = activeOwners.iterator();
             while (it.hasNext()) {
                 RuntimeScalar sc = it.next();
                 if (sc != null && sc.refCountOwned && sc.value == this
                         && ReachabilityWalker.isScalarReachable(sc)) {
-                    count++;
+                    // The explicit scalar value slot is authoritative when
+                    // present; retain activeOwners only as a migration fallback.
+                    if (!scalarValueCells.contains(sc)) count++;
                 } else if (sc == null || !sc.refCountOwned || sc.value != this) {
                     it.remove();
                 }
@@ -523,11 +533,13 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         Set<Object> countedScalarReferenceCells =
                 Collections.newSetFromMap(new IdentityHashMap<>());
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
-            if (slot.kind() != PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS
+            if ((slot.kind() != PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS
+                    && slot.kind() != PerlOwnerSlot.Kind.SCALAR_VALUE)
                     || slot.referent() != this) continue;
             RuntimeScalar ownerCell = slot.ownerCell();
             if (ownerCell == null || !ReachabilityWalker.isScalarReachable(ownerCell)) continue;
-            RuntimeScalar referenceCell = slot.scalarReferenceCell();
+            RuntimeScalar referenceCell = slot.kind() == PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS
+                    ? slot.scalarReferenceCell() : ownerCell;
             Object ownershipKey = referenceCell == null ? slot : referenceCell;
             if (countedScalarReferenceCells.add(ownershipKey)) count++;
         }

@@ -798,7 +798,7 @@ public class RuntimeList extends RuntimeBase {
                         base.releaseOwner(rhsValue, "RuntimeList materialized-copy undo (undef-target)");
                         base.releaseActiveOwner(rhsValue);
                         base.refCount--;
-                        rhsValue.refCountOwned = false;
+                        rhsValue.setRefCountOwned(false);
                     }
                     rhsIndex++;
                 }
@@ -825,7 +825,7 @@ public class RuntimeList extends RuntimeBase {
                     base.releaseOwner(assigned, "RuntimeList materialized-copy undo (scalar-target)");
                     base.releaseActiveOwner(assigned);
                     base.refCount--;
-                    assigned.refCountOwned = false;
+                    assigned.setRefCountOwned(false);
                 }
             } else if (elem instanceof RuntimeArray runtimeArray) {
                 List<RuntimeScalar> remaining = (rhsIndex < rhsSize)
@@ -852,7 +852,7 @@ public class RuntimeList extends RuntimeBase {
                             base.releaseOwner(r, "RuntimeList materialized-copy undo (array-target)");
                             base.releaseActiveOwner(r);
                             base.refCount--;
-                            r.refCountOwned = false;
+                            r.setRefCountOwned(false);
                         }
                     }
                 } else {
@@ -888,7 +888,7 @@ public class RuntimeList extends RuntimeBase {
                         base.releaseOwner(r, "RuntimeList materialized-copy undo (hash-target)");
                         base.releaseActiveOwner(r);
                         base.refCount--;
-                        r.refCountOwned = false;
+                        r.setRefCountOwned(false);
                     }
                 }
                 rhsIndex = rhsSize; // Consume the rest
@@ -1001,7 +1001,7 @@ public class RuntimeList extends RuntimeBase {
             base.releaseOwner(scalar, "RuntimeList materialized-copy undo (simple-scalar-target)");
             base.releaseActiveOwner(scalar);
             base.refCount--;
-            scalar.refCountOwned = false;
+            scalar.setRefCountOwned(false);
         }
     }
 

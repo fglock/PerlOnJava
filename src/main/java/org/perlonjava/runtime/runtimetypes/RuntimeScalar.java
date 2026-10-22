@@ -853,6 +853,40 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public PerlOwnerSlot scalarReferenceContentsOwner;
     private java.util.Set<PerlOwnerSlot> scalarReferenceContentsOwners;
 
+    /** Explicit identity for this scalar cell's counted direct referent edge. */
+    private PerlOwnerSlot scalarValueOwnerSlot;
+
+    /** Stable slot used for the scalar cell's direct referent ownership. */
+    public PerlOwnerSlot scalarValueOwnerSlot() {
+        return scalarValueOwnerSlot;
+    }
+
+    /**
+     * Keep the owner ledger paired with the legacy scalar ownership bit while
+     * the lifecycle bridge is being migrated. This records the scalar-cell
+     * edge without changing the bridge's reference count or dispatch behavior.
+     */
+    public synchronized void setRefCountOwned(boolean owned) {
+        refCountOwned = owned;
+        syncScalarValueOwnerSlot(owned);
+    }
+
+    private void syncScalarValueOwnerSlot(boolean owned) {
+        RuntimeBase referent = owned
+                && ((type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    || type == RuntimeScalarType.GLOB)
+                && value instanceof RuntimeBase base ? base : null;
+        if (referent != null) {
+            if (scalarValueOwnerSlot == null) {
+                scalarValueOwnerSlot = new PerlOwnerSlot(
+                        PerlOwnerSlot.Kind.SCALAR_VALUE, null, null, this);
+            }
+            scalarValueOwnerSlot.transferTo(referent);
+        } else if (scalarValueOwnerSlot != null) {
+            scalarValueOwnerSlot.transferTo(null);
+        }
+    }
+
     public boolean hasScalarReferenceContentsOwner() {
         return scalarReferenceContentsOwner != null
                 && scalarReferenceContentsOwner.isActive();
@@ -2351,7 +2385,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         base.hadCountedReference = true;
         base.recordOwner(scalar, "incrementRefCountForContainerStore");
         base.recordActiveOwner(scalar);
-        scalar.refCountOwned = true;
+        scalar.setRefCountOwned(true);
         // Phase B1 (refcount_alignment_52leaks_plan.md): track the
         // container element so ReachabilityWalker can see it via
         // ScalarRefRegistry.
@@ -3033,6 +3067,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.type = value.type;
         this.value = copyScalarPayload(value.type, value.value);
         this.scalarReferenceContentsOwner = null;
+        // Install the new scalar-cell owner edge before releasing the prior
+        // referent below. DESTROY callbacks must observe the assigned value.
+        syncScalarValueOwnerSlot(newOwned);
         // An explicitly discarded closure can have an inflated CODE refcount,
         // so waiting for callDestroy() leaves its captures alive indefinitely.
         // Release them only after this slot is gone, the code is inactive, and
@@ -3338,7 +3375,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         // Update ownership: this scalar now owns a refCount iff we incremented.
-        this.refCountOwned = newOwned;
+        setRefCountOwned(newOwned);
         retainScalarReferenceContents(value);
 
         if (!scalarContentsOwners.isEmpty()) {
@@ -5192,7 +5229,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             boolean releasedCode = false;
             releaseAllClosureCaptureReferents(code);
             if (this.refCountOwned && code.refCount > 0) {
-                this.refCountOwned = false;
+                this.setRefCountOwned(false);
                 code.releaseActiveOwner(this);
                 if (--code.refCount == 0) {
                     code.refCount = Integer.MIN_VALUE;
@@ -5264,7 +5301,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 oldBase.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(oldBase);
             } else if (this.refCountOwned && oldBase.refCount > 0) {
-                this.refCountOwned = false;
+                this.setRefCountOwned(false);
                 oldBase.releaseActiveOwner(this);
                 if (--oldBase.refCount == 0) {
                     if (oldBase.localBindingExists) {
@@ -6195,9 +6232,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // returned reference becomes the first durable owner.  The
                 // assignment receiving this scalar will balance the temporary
                 // copy, so retain one cleanup token for that returned value.
-                old.refCountOwned = true;
+                old.setRefCountOwned(true);
                 old.postfixReferenceOwnershipTransfer = true;
-                this.refCountOwned = false;
+                this.setRefCountOwned(false);
                 // Check if object is eligible for overloading
                 int blessId = blessedId(this);
                 if (blessId != 0) {
@@ -6506,9 +6543,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             default -> { // All reference types
                 // See postAutoIncrementLarge(): the returned pre-mutation
                 // reference inherits this lvalue's ownership token.
-                old.refCountOwned = true;
+                old.setRefCountOwned(true);
                 old.postfixReferenceOwnershipTransfer = true;
-                this.refCountOwned = false;
+                this.setRefCountOwned(false);
                 // Check if object is eligible for overloading
                 int blessId = blessedId(this);
                 if (blessId != 0) {
@@ -6659,6 +6696,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Copy the current type and value to the new state
         currentState.type = this.type;
         currentState.value = copyScalarPayload(this.type, this.value);
+        currentState.setRefCountOwned(this.refCountOwned);
+        setRefCountOwned(false);
         currentState.blessId = this.blessId;
         currentState.scalarReferenceContentsOwner = this.scalarReferenceContentsOwner;
         if (currentState.scalarReferenceContentsOwner != null) {
@@ -6728,6 +6767,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // Restore the type, value from the saved state
             this.type = previousState.type;
             this.value = copyScalarPayload(previousState.type, previousState.value);
+            setRefCountOwned(previousState.refCountOwned);
+            previousState.setRefCountOwned(false);
             this.blessId = previousState.blessId;
             this.scalarReferenceContentsOwner = previousState.scalarReferenceContentsOwner;
             previousState.scalarReferenceContentsOwner = null;
@@ -6776,6 +6817,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     @Override
     public Object dynamicSuspendState() {
         RuntimeScalar activeState = new RuntimeScalar(this);
+        activeState.setRefCountOwned(this.refCountOwned);
+        setRefCountOwned(false);
         activeState.scalarReferenceContentsOwner = this.scalarReferenceContentsOwner;
         if (activeState.scalarReferenceContentsOwner != null) {
             activeState.scalarReferenceContentsOwner.transferScalarReferenceContentsCell(activeState);
@@ -6791,6 +6834,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (token instanceof RuntimeScalar activeState) {
             this.type = activeState.type;
             this.value = copyScalarPayload(activeState.type, activeState.value);
+            setRefCountOwned(activeState.refCountOwned);
+            activeState.setRefCountOwned(false);
             this.blessId = activeState.blessId;
             this.scalarReferenceContentsOwner = activeState.scalarReferenceContentsOwner;
             activeState.scalarReferenceContentsOwner = null;

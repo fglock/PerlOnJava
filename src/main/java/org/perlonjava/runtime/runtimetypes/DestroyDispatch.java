@@ -533,7 +533,7 @@ public class DestroyDispatch {
                             }
                             base.releaseActiveOwner(elem);
                             base.refCount--;
-                            elem.refCountOwned = false;
+                            elem.setRefCountOwned(false);
                         }
                     }
                     args.elements.clear();

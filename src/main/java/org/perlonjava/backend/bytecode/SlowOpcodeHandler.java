@@ -1355,7 +1355,7 @@ public class SlowOpcodeHandler {
             base.releaseOwner(value, "HASH_SLICE_SET temporary owner transfer");
             base.releaseActiveOwner(value);
             base.refCount--;
-            value.refCountOwned = false;
+            value.setRefCountOwned(false);
         }
     }
 
