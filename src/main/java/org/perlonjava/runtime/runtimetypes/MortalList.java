@@ -2009,6 +2009,20 @@ public class MortalList {
                 rootedHashCells.add(cell);
             }
         }
+        // Standalone scalar slots can predate active-owner tracking, so use
+        // their explicit identity when recovering a displaced legacy count.
+        // Cells stored in aggregates are handled above or by the legacy
+        // reachability fallback to preserve the shared-root snapshot policy.
+        for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
+            if (slot.kind() != PerlOwnerSlot.Kind.SCALAR_VALUE
+                    || slot.referent() != referent) continue;
+            RuntimeScalar cell = slot.ownerCell();
+            if (cell == null || cell.containerOwner != null
+                    || cell.value != referent || !cell.refCountOwned
+                    || WeakRefRegistry.isweak(cell)
+                    || !ReachabilityWalker.isScalarReachable(cell)) continue;
+            rootedHashCells.add(cell);
+        }
         int owners = slotsWithoutCell + rootedHashCells.size();
         // Active scalar owners may include lexical RVs in addition to hash
         // cells. Exclude cells already counted through their explicit slots,
