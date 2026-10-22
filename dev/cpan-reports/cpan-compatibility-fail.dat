@@ -23,6 +23,7 @@ ActiveRecord::Simple	FAIL	169	167	2/169 subtests failed; 4/16 test programs fail
 Affix	FAIL	5		57/58 test programs failed; 0/5 subtests failed	2026-09-30		
 Aion	FAIL	44			2026-10-18		
 Akamai::Edgegrid	FAIL	110		1/9 test programs failed; 0/110 subtests failed	2026-10-06		
+Algorithm::BoostedDecisionTree	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-22		
 Algorithm::DecisionTree	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-30		
 Algorithm::FastPermute	FAIL				2026-10-18		
 Algorithm::Permute	FAIL	1	0	1/1 subtests failed; 3/4 test programs failed	2026-10-19		
@@ -50,7 +51,7 @@ Alien::LibYAML	FAIL	1		3/3 test programs failed; 0/1 subtests failed	2026-10-18
 Alien::Libbz2	FAIL			Make failed	2026-09-18		
 Alien::Libgit2	FAIL			Make failed	2026-09-22		
 Alien::Libxml2	FAIL			Make failed	2026-10-05		
-Alien::Meson	FAIL			Make failed	2026-10-03		
+Alien::Meson	FAIL			Make failed	2026-10-22		
 Alien::Nettle	FAIL	2	1	1/2 subtests failed; 2/2 test programs failed	2026-10-09		
 Alien::Ninja	FAIL			Make failed	2026-10-03		
 Alien::OpenSSL	FAIL	1		1/2 test programs failed; 0/1 subtests failed	2026-10-12		
@@ -87,19 +88,18 @@ Alt::NewRelic::Agent::FFI::Empty	FAIL	10		1/7 test programs failed; 0/10 subtest
 Alt::Params::Util::PLICEASE	FAIL	1		1/2 test programs failed; 0/1 subtests failed	2026-10-07		
 Alzabo	FAIL	1		19/20 test programs failed; 0/1 subtests failed	2026-10-18		
 Amazon::Credentials	FAIL	145	144	1/145 subtests failed; 3/27 test programs failed	2026-10-15		
+Amazon::DynamoDB	FAIL	1	0	1/1 subtests failed; 11/11 test programs failed	2026-10-22		
 Amazon::DynamoDB::Simple	FAIL	1		1 subtests failed in test files	2026-10-05		
 Amon2	FAIL			TIMEOUT (runtime >300s; last output 7s ago)	2026-10-19		
 Amon2::Setup::Asset::Bootstrap	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-03		
 Analizo::Command::dsm	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-09		
 Anonymous::Object	FAIL	1		1 subtests failed in test files	2026-10-18		
-AnyEvent::AIO	FAIL			Configure failed	2026-10-15		
-AnyEvent::Chromi	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-23		
+AnyEvent::AIO	FAIL			Configure failed	2026-10-22		
 AnyEvent::Cron	FAIL	3		1/2 test programs failed; 0/3 subtests failed	2026-10-15		
 AnyEvent::DNS::EtcHosts	FAIL	18		1/3 test programs failed; 0/18 subtests failed	2026-10-05		
 AnyEvent::Discord	FAIL	1	0	1/1 subtests failed; 5/5 test programs failed	2026-10-08		
 AnyEvent::FDpasser	FAIL			9/9 test programs failed; 0/0 subtests failed	2026-10-19		
 AnyEvent::ForkManager	FAIL	1		146 subtests failed in test files	2026-09-26		
-AnyEvent::Gearman	FAIL	38	36	2/38 subtests failed; 3/7 test programs failed	2026-09-27		
 AnyEvent::Gearman::Worker::RetryConnection	FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-10-07		
 AnyEvent::Google::PageRank	FAIL	6		1/3 test programs failed; 0/6 subtests failed	2026-09-27		
 AnyEvent::HTTP::MultiGet	FAIL	63	57	6/63 subtests failed; 6/6 test programs failed	2026-10-18		
@@ -108,7 +108,7 @@ AnyEvent::InfluxDB	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-1
 AnyEvent::JSONRPC::Lite	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 66s)	2026-10-06		
 AnyEvent::MSN	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-08		
 AnyEvent::Mac::Pasteboard	FAIL	1	0	1/1 subtests failed; 3/3 test programs failed	2026-09-24		
-AnyEvent::MockTCPServer	FAIL			5/15 test programs failed; 0/0 subtests failed	2026-09-22		
+AnyEvent::MockTCPServer	FAIL	13	11	2/13 subtests failed; 3/15 test programs failed	2026-10-22		
 AnyEvent::MySQL	FAIL	1		1 subtests failed in test files	2026-10-08		
 AnyEvent::MySQL::ConnPool	FAIL	3	1	2/3 subtests failed; 2/2 test programs failed	2026-10-20		
 AnyEvent::Net::Amazon::S3	FAIL			TIMEOUT (runtime >300s; last output 5s ago)	2026-10-09		
@@ -128,9 +128,9 @@ AnyMQ::AMQP	FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-10-13
 AnyMQ::ZeroMQ	FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-10-12		
 Aozora2Epub	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-21		
 Apache2::AMF51DegreesFilter	FAIL			Unknown test outcome	2026-10-13		
-Apache2::API	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-09-29		
+Apache2::API	FAIL			TIMEOUT (runtime >300s; last output 5s ago)	2026-10-22		
 Apache2::ASP	FAIL	183		18/29 test programs failed; 0/183 subtests failed	2026-10-15		
-Apache2::Access	FAIL			Configure failed	2026-10-21		
+Apache2::Access	FAIL			Configure failed	2026-10-22		
 Apache2::AuthColloquy	FAIL	4	1	3/4 subtests failed; 2/3 test programs failed	2026-10-18		
 Apache2::AuthCookieDBImg	FAIL	6	3	3/6 subtests failed; 1/2 test programs failed	2026-09-30		
 Apache2::AuthNetLDAP	FAIL			No parseable output	2026-09-21		
@@ -145,7 +145,7 @@ Apache2::ImageRenderFilter	FAIL			Unknown test outcome	2026-10-08
 Apache2::Profiler	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-05		
 Apache2::WURFLFilter	FAIL			Unknown test outcome	2026-09-14		
 Apache2::xForwardedFor	FAIL			Unknown test outcome	2026-10-15		
-Apache::ASP	FAIL	311	304	7/311 subtests failed; 6/47 test programs failed	2026-09-24		
+Apache::ASP	FAIL	311	304	7/311 subtests failed; 6/47 test programs failed	2026-10-22		
 Apache::AntiSpam::JavaScript	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-03		
 Apache::AppSamurai	FAIL	37	35	2/37 subtests failed; 3/10 test programs failed	2026-09-21		
 Apache::AuthTicket	FAIL	1		2/5 test programs failed; 0/1 subtests failed	2026-09-23		
@@ -164,7 +164,7 @@ Apache::StickyQuery	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 106s
 Apache::URI	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-20		
 Apache::Voodoo	FAIL	292	287	5/292 subtests failed; 3/9 test programs failed	2026-10-04		
 Apache::XPointer	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-15		
-Apache::iNcom	FAIL			Unknown test outcome	2026-09-23		
+Apache::iNcom	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 92s)	2026-10-21		
 App::AKG	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-15		
 App::Addex	FAIL	12	10	2/12 subtests failed; 5/8 test programs failed	2026-10-07		
 App::AlgorithmDiffUtils	FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-10-04		
@@ -225,7 +225,7 @@ App::Netdisco::SSHCollector::Platform::IOSXEMac	FAIL			No parseable output	2026-
 App::OperaUtils	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-08		
 App::PM::Announce	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-18		
 App::PODUtils	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-09		
-App::PPK	FAIL			Unknown test outcome	2026-10-09		
+App::PPK	FAIL			Unknown test outcome	2026-10-22		
 App::PYX::Optimization	FAIL	14	13	1/14 subtests failed; 1/4 test programs failed	2026-10-03		
 App::PerlReleaseUtils	FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-10-03		
 App::PhoneNumberUtils	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-08		
@@ -243,7 +243,7 @@ App::Ringleader	FAIL			TIMEOUT (runtime >300s; last output 39s ago)	2026-10-13
 App::SSH::SwitchShell	FAIL	41		2/5 test programs failed; 0/41 subtests failed	2026-10-07		
 App::Sandy	FAIL	56		51 subtests failed in test files	2026-10-12		
 App::Scaffolder::Command::html	FAIL	13	10	3/13 subtests failed; 1/10 test programs failed	2026-10-19		
-App::SimulateReads	FAIL	27		23 subtests failed in test files	2026-09-30		
+App::SimulateReads	FAIL	37		33 subtests failed in test files	2026-10-22		
 App::Spanel::BuildBindZonesFromPowerDNSDB	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-08		
 App::Spoor	FAIL	86		6/16 test programs failed; 0/86 subtests failed	2026-10-07		
 App::Standup::Diary	FAIL	1		Syntax error	2026-10-14		
@@ -263,6 +263,7 @@ App::XTermUtils	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-08
 App::Yath::Script	FAIL	56	41	15/56 subtests failed; 2/4 test programs failed	2026-10-03		
 App::adr2org	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-09-20		
 App::ansiexpand	FAIL	1		1 subtests failed in test files	2026-10-05		
+App::ansiprintf	FAIL	12			2026-10-22		
 App::cdif::colors	FAIL			Unknown test outcome	2026-10-20		
 App::coinbasepro::lite	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-06		
 App::column::run	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-06		
@@ -270,13 +271,13 @@ App::corruptor	FAIL			TIMEOUT (runtime >300s; last output 9s ago)	2026-10-06
 App::cpanm::namespace	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 94s)	2026-10-14		
 App::diff_spreadsheets	FAIL			6/8 test programs failed; 0/0 subtests failed	2026-10-13		
 App::docsisious	FAIL	7		2/2 test programs failed; 0/7 subtests failed	2026-10-02		
-App::genpw::wordlist	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-09-27		
+App::genpw::wordlist	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-22		
 App::git::ship	FAIL	103	95	8/103 subtests failed; 6/12 test programs failed	2026-10-04		
 App::github::cmd	FAIL			TIMEOUT (runtime >300s; last output 23s ago)	2026-10-12		
 App::hashdata	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-07		
 App::idxdb	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-13		
 App::imgsize	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-09		
-App::karr	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-09-22		
+App::karr	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-22		
 App::lcpan	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-04		
 App::lcpan::Cmd::bencher_benched_mods	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-08		
 App::lcpan::Cmd::cpantesters_author	FAIL			TIMEOUT (runtime >300s; last output 6s ago)	2026-10-03		
@@ -333,7 +334,6 @@ Authen::Htpasswd	FAIL	42	40	2/42 subtests failed; 2/5 test programs failed	2026-
 Authen::Passphrase	FAIL	683	662	21/683 subtests failed; 13/24 test programs failed	2026-10-18		
 Authen::Radius	FAIL	147	145	2/147 subtests failed; 2/14 test programs failed	2026-10-05		
 Authen::SASL	FAIL	251	244	7/251 subtests failed; 5/17 test programs failed	2026-10-12		
-Authen::SASL::Perl::Layer	FAIL			No parseable output	2026-09-12		
 Authen::Simple	FAIL	54	52	2/54 subtests failed; 1/7 test programs failed	2026-10-17		
 AutoReloader	FAIL	39	38	1/39 subtests failed; 1/4 test programs failed	2026-10-06		
 AutoXS	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-20		
@@ -347,7 +347,7 @@ B::Hooks::OP::Annotation	FAIL	3	2	1/3 subtests failed; 1/2 test programs failed	
 B::Hooks::OP::Check	FAIL	2	1	1/2 subtests failed; 1/2 test programs failed	2026-10-08		
 B::Hooks::OP::PPAddr	FAIL	2	1	1/2 subtests failed; 1/2 test programs failed	2026-10-18		
 B::Hooks::Parser	FAIL	5	1	4/5 subtests failed; 3/4 test programs failed	2026-10-06		
-B::Module::Info	FAIL	111	86	25/111 subtests failed; 3/7 test programs failed	2026-10-20		
+B::Module::Info	FAIL	111	86	25/111 subtests failed; 3/7 test programs failed	2026-10-22		
 B::Tools	FAIL	1		1/2 test programs failed; 0/1 subtests failed	2026-10-07		
 B::Utils1	FAIL	12	10	2/12 subtests failed; 8/29 test programs failed	2026-10-19		
 BATsh	FAIL	2248	2225	23/2248 subtests failed; 8/45 test programs failed	2026-10-04		
@@ -355,7 +355,6 @@ BBackupd	FAIL			No parseable output	2026-09-22
 BERT	FAIL	113	112	1/113 subtests failed; 1/7 test programs failed	2026-10-21		
 BPM::Engine	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-09-23		
 BSD::Resource	FAIL	2	1	1/2 subtests failed; 8/9 test programs failed	2026-09-27		
-Backticks	FAIL	2	1	1/2 subtests failed; 1/1 test programs failed	2026-09-28		
 BackupPC::XS	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-18		
 BadWrapperBlock	FAIL	18	16	2/18 subtests failed; 8/13 test programs failed	2026-10-20		
 Badge::Depot::Plugin::Gratipay	FAIL	3	1	2/3 subtests failed; 2/3 test programs failed	2026-09-26		
@@ -427,7 +426,7 @@ Bitcoin::Crypto	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-15
 Bluesky	FAIL				2026-09-19		
 Bopomofo	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-18		
 Bot::BasicBot::Pluggable::Module::Twitter	FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-10-03		
-Bot::Cobalt::Plugin::SeenURL	FAIL	3	0	3/3 subtests failed; 1/1 test programs failed	2026-09-29		
+Bot::Cobalt::Plugin::SeenURL	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 75s)	2026-10-22		
 Bot::Cobalt::Plugin::URLTitle	FAIL	3	0	3/3 subtests failed; 1/1 test programs failed	2026-10-04		
 Bot::Cobalt::Plugin::Weather	FAIL	3	1	2/3 subtests failed; 1/6 test programs failed	2026-10-02		
 Bot::IKCBot::Pluggable	FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-10-08		
@@ -439,8 +438,9 @@ Box2D	FAIL			Missing: Module/Build.pm	2026-10-18
 Box2D::b2ContactListener	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-19		
 Bread::Board	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 83s)	2026-10-21		
 Business::BR::Ids	FAIL	2953		1/17 test programs failed; 0/2953 subtests failed	2026-09-23		
+Business::BankList::Indonesia	FAIL			TIMEOUT (runtime >300s; last output 6s ago)	2026-10-22		
 Business::CAMT	FAIL	2	1	1/2 subtests failed; 1/1 test programs failed	2026-10-02		
-Business::CCProcessor	FAIL	54	47	7/54 subtests failed; 2/6 test programs failed	2026-09-26		
+Business::CCProcessor	FAIL	54	50	4/54 subtests failed; 2/6 test programs failed	2026-10-22		
 Business::ID::Mandiri	FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-10-02		
 Business::ID::NIK	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-19		
 ButtonsGroups	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 107s)	2026-10-03		
@@ -474,18 +474,17 @@ CGI::Cookie::XS	FAIL	3	1	2/3 subtests failed; 4/5 test programs failed	2026-10-0
 CGI::Deurl::XS	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-19		
 CGI::ExceptionManager	FAIL	13		4 subtests failed in test files	2026-10-08		
 CGI::Fast	FAIL			6/7 test programs failed; 0/0 subtests failed	2026-10-19		
-CGI::MultiValuedHash	FAIL	1		1/1 test programs failed; 0/1 subtests failed	2026-09-20		
 CGI::PathRequest	FAIL	119	117	2/119 subtests failed; 1/5 test programs failed	2026-10-03		
 CGI::Portable	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-03		
 CGI::RSS	FAIL	18		3/8 test programs failed; 0/18 subtests failed	2026-09-24		
 CGI::Session::Auth	FAIL	15		1/2 test programs failed; 0/15 subtests failed	2026-10-06		
 CGI::SpeedyCGI	FAIL			Configure failed	2026-10-08		
-CGI::Tiny	FAIL	35	30	5/35 subtests failed; 2/4 test programs failed	2026-09-28		
+CGI::Tiny	FAIL	35		1/4 test programs failed; 0/35 subtests failed	2026-10-22		
 CGI::Untaint::CountyStateProvince::US	FAIL	28	27	1/28 subtests failed; 1/26 test programs failed	2026-10-07		
 CGI::Untaint::boolean	FAIL	16		1/4 test programs failed; 0/16 subtests failed	2026-10-03		
 CHI	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-06		
 CHI::Driver::Cache::RedisDB	FAIL				2026-10-18		
-CHI::Driver::DBI	FAIL	643	639	4/643 subtests failed; 1/2 test programs failed	2026-09-27		
+CHI::Driver::DBI	FAIL	644	639	5/644 subtests failed; 1/3 test programs failed	2026-10-22		
 CHI::Driver::Elasticache::Memcache	FAIL				2026-10-21		
 CHI::Driver::MemcachedFast	FAIL	1	0	1/1 subtests failed; 2/2 test programs failed	2026-10-21		
 CLI::Driver	FAIL	1		1 subtests failed in test files	2026-10-12		
@@ -495,7 +494,6 @@ CPAN::Dependency	FAIL	6	2	4/6 subtests failed; 10/15 test programs failed	2026-1
 CPAN::Index::API	FAIL	70	58	12/70 subtests failed; 3/5 test programs failed	2026-10-20		
 CPAN::Mirror::Tiny::Util	FAIL			No parseable output	2026-09-20		
 CPAN::Reporter	FAIL	1963	1750	213/1963 subtests failed; 3/41 test programs failed	2026-10-09		
-CPAN::Reporter::History	FAIL			TIMEOUT (runtime >300s; last output 8s ago)	2026-09-09		
 CPAN::Reporter::Smoker::Safer	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-13		
 CPAN::Static	FAIL	32		1 subtests failed in test files	2026-10-20		
 CPAN::Test::Dummy::Perl5::Make::CircDepeOne	FAIL			No parseable output	2026-10-04		
@@ -512,13 +510,13 @@ CPU::Emulator::DCPU16	FAIL	57	52	5/57 subtests failed; 2/7 test programs failed	
 CPU::Emulator::Z80	FAIL	78		15/21 test programs failed; 0/78 subtests failed	2026-09-29		
 CPU::Z80::Assembler	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-07		
 CSS::Inliner	FAIL	27		25/32 test programs failed; 0/27 subtests failed	2026-10-09		
-CSS::Minifier::XS	FAIL	2		1 subtests failed in test files	2026-09-27		
+CSS::Minifier::XS	FAIL	2		1 subtests failed in test files	2026-10-22		
 CSS::SAC	FAIL	23		2/3 test programs failed; 0/23 subtests failed	2026-10-04		
 CSS::SpriteBuilder	FAIL	9	4	5/9 subtests failed; 3/5 test programs failed	2026-10-14		
 CSS::Struct::Output::Structure	FAIL	30		7/11 test programs failed; 0/30 subtests failed	2026-10-17		
 CSV::Reader	FAIL	72	68	4/72 subtests failed; 2/5 test programs failed	2026-10-04		
 CTKlib	FAIL	154	153	1/154 subtests failed; 1/33 test programs failed	2026-09-22		
-CXC::Astro::Regions	FAIL	11		6 subtests failed in test files	2026-09-29		
+CXC::Astro::Regions	FAIL	11		6 subtests failed in test files	2026-10-22		
 CXC::Types::Astro::Coords	FAIL	8		2 subtests failed in test files	2026-10-04		
 Cache	FAIL	56	46	10/56 subtests failed; 11/14 test programs failed	2026-09-28		
 Cache::Elasticache::Memcache	FAIL			3/4 test programs failed; 0/0 subtests failed	2026-10-15		
@@ -526,14 +524,13 @@ Cache::FastMmap::Tie	FAIL	31	27	4/31 subtests failed; 3/5 test programs failed	2
 Cache::Memcached	FAIL	1	0	1/1 subtests failed; 8/8 test programs failed	2026-10-14		
 Cache::Memcached::Tags	FAIL			2/2 test programs failed; 0/0 subtests failed	2026-10-13		
 Cache::Memcached::Tie	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-21		
-Cache::RedisDB	FAIL	28	25	3/28 subtests failed; 3/5 test programs failed	2026-09-23		
+Cache::RedisDB	FAIL	26	25	1/26 subtests failed; 3/5 test programs failed	2026-10-22		
+Call::Context	FAIL	13	12	1/13 subtests failed; 1/3 test programs failed	2026-10-22		
 Callback::Frame	FAIL			10/10 test programs failed; 0/0 subtests failed	2026-10-03		
 Carp::REPL	FAIL	4	3	1/4 subtests failed; 14/15 test programs failed	2026-10-19		
 Cassandra::Client	FAIL	1		1 subtests failed in test files	2026-09-27		
-Catalyst::Action::Fixup::XHTML	FAIL	30	7	23/30 subtests failed; 1/3 test programs failed	2026-09-20		
-Catalyst::ActionRole::NeedsLogin	FAIL	2		1 subtests failed in test files	2026-10-21		
+Catalyst::ActionRole::NeedsLogin	FAIL	2		1 subtests failed in test files	2026-10-22		
 Catalyst::Authentication::Credential::NoPassword	FAIL			Unknown test outcome	2026-10-13		
-Catalyst::Authentication::Store::KiokuDB	FAIL			Make failed	2026-09-27		
 Catalyst::Controller::CRUD	FAIL	8	6	2/8 subtests failed; 1/3 test programs failed	2026-10-21		
 Catalyst::Controller::FormBuilder	FAIL			TIMEOUT (runtime >300s; last output 19s ago)	2026-10-04		
 Catalyst::Controller::FormValidator	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-15		
@@ -554,7 +551,6 @@ Catalyst::Plugin::CRUD	FAIL	8	6	2/8 subtests failed; 1/3 test programs failed	20
 Catalyst::Plugin::Continuation	FAIL	3		2/5 test programs failed; 0/3 subtests failed	2026-09-29		
 Catalyst::Plugin::DBIC::Schema::Profiler	FAIL			TIMEOUT (runtime >300s; last output 12s ago)	2026-10-12		
 Catalyst::Plugin::Images	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-12		
-Catalyst::Plugin::Session::Store::BerkeleyDB	FAIL	2	0	2/2 subtests failed; 2/2 test programs failed	2026-09-23		
 Catalyst::Plugin::Session::Store::TestMemcached	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-07		
 Catalyst::Plugin::VersionedURI	FAIL			TIMEOUT (runtime >300s; last output 10s ago)	2026-10-09		
 Catalyst::View::ByCode	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-14		
@@ -570,7 +566,6 @@ CatalystX::Script::FCGI::Engine	FAIL	1	0	1/1 subtests failed; 1/1 test programs 
 CatalystX::SimpleLogin	FAIL	2		1 subtests failed in test files	2026-09-19		
 Catmandu	FAIL			Unknown test outcome	2026-09-20		
 Catmandu::Activiti	FAIL			TIMEOUT (runtime >300s; last output 4s ago)	2026-10-18		
-Catmandu::Atom	FAIL	5		1/2 test programs failed; 0/5 subtests failed	2026-09-18		
 Catmandu::Breaker	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-19		
 Catmandu::Cmd::data	FAIL			TIMEOUT (runtime >300s; last output 5s ago)	2026-10-03		
 Catmandu::CrossRef	FAIL	7	3	4/7 subtests failed; 1/2 test programs failed	2026-10-04		
@@ -585,11 +580,11 @@ Catmandu::Fix::rkd_name	FAIL	8			2026-10-15
 Catmandu::Importer::Parltrack	FAIL	3	2	1/3 subtests failed; 1/3 test programs failed	2026-10-09		
 Catmandu::Importer::WoS	FAIL			5/6 test programs failed; 0/0 subtests failed	2026-10-09		
 Catmandu::Importer::Zotero	FAIL			Unknown test outcome	2026-10-19		
-Catmandu::Inspire	FAIL	7	2	5/7 subtests failed; 2/3 test programs failed	2026-09-26		
+Catmandu::Inspire	FAIL			TIMEOUT (runtime >300s; last output 10s ago)	2026-10-22		
 Catmandu::MAB2	FAIL	50		6 subtests failed in test files	2026-09-28		
 Catmandu::MARC	FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-10-06		
 Catmandu::PICA	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-05		
-Catmandu::PICAplus	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-09-18		
+Catmandu::PICAplus	FAIL	20		1/4 test programs failed; 0/20 subtests failed	2026-10-22		
 Catmandu::RKD	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-20		
 Catmandu::Store::MongoDB	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-09		
 Catmandu::Store::SBCatDB	FAIL			TIMEOUT (runtime >300s; last output 4s ago)	2026-10-15		
@@ -611,7 +606,8 @@ Char::UHC	FAIL			Unknown test outcome	2026-09-26
 Char::USASCII	FAIL			210/210 test programs failed; 0/0 subtests failed	2026-10-21		
 Char::UTF2	FAIL			312/312 test programs failed; 0/0 subtests failed	2026-10-18		
 Chart::GGPlot	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-04		
-Chart::Graph	FAIL	56	0	56/56 subtests failed; 4/4 test programs failed	2026-09-28		
+Chart::Graph	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 113s)	2026-10-22		
+CheckAncestors	FAIL	129	123	6/129 subtests failed; 6/21 test programs failed	2026-10-21		
 Child::IPC::Socket	FAIL			2/2 test programs failed; 0/0 subtests failed	2026-10-14		
 Child::Socket	FAIL			Unknown test outcome	2026-09-20		
 Chouette	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-15		
@@ -619,7 +615,6 @@ Chucker	FAIL	5		1/2 test programs failed; 0/5 subtests failed	2026-10-12
 Cikl	FAIL	149	141	8/149 subtests failed; 2/13 test programs failed	2026-10-04		
 Cindy	FAIL	1		1/1 test programs failed; 0/1 subtests failed	2026-10-18		
 Cinnamon	FAIL	6		3/7 test programs failed; 0/6 subtests failed	2026-10-04		
-Clarity::XOG::Merge	FAIL	1		2/3 test programs failed; 0/1 subtests failed	2026-09-11		
 Class::ArrayObjects	FAIL	2		1/3 test programs failed; 0/2 subtests failed	2026-10-18		
 Class::AutoDB	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-18		
 Class::AutoDB::BaseTable	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-12		
@@ -638,6 +633,7 @@ Class::Prevayler	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-
 Class::Throwable	FAIL	77	74	3/77 subtests failed; 1/8 test programs failed	2026-10-07		
 Class::XSAccessor::Compat	FAIL	49		4/4 test programs failed; 0/49 subtests failed	2026-09-20		
 Claude::Agent	FAIL	11		5 subtests failed in test files	2026-10-12		
+ClearPress	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-22		
 Clio	FAIL	21	19	2/21 subtests failed; 1/1 test programs failed	2026-10-02		
 Clip	FAIL			No parseable output	2026-10-20		
 Clipboard	FAIL			2/2 test programs failed; 0/0 subtests failed	2026-09-30		
@@ -648,7 +644,6 @@ Clutch	FAIL	1		5/6 test programs failed; 0/1 subtests failed	2026-10-14
 Cnutt::Feed	FAIL	23	15	8/23 subtests failed; 2/4 test programs failed	2026-10-03		
 Code::Crypt	FAIL			1/2 test programs failed; 0/0 subtests failed	2026-10-20		
 Code::DRY	FAIL	9	0	9/9 subtests failed; 5/5 test programs failed	2026-10-04		
-Code::Perl	FAIL	17		1/1 test programs failed; 0/17 subtests failed	2026-09-22		
 Combinator	FAIL	1		1 subtests failed in test files	2026-10-05		
 Combine::Keys	FAIL	1		2/6 test programs failed; 0/1 subtests failed	2026-10-03		
 Command	FAIL			Unknown test outcome	2026-10-18		
@@ -668,19 +663,19 @@ Config::Pit	FAIL	21	19	2/21 subtests failed; 1/3 test programs failed	2026-10-17
 Config::Scoped	FAIL	117		1/19 test programs failed; 0/117 subtests failed	2026-10-13		
 Config_u	FAIL			No parseable output	2026-09-20		
 Const::Exporter	FAIL	28		1/26 test programs failed; 0/28 subtests failed	2026-09-30		
-ControlBreak	FAIL	8	2	6/8 subtests failed; 11/12 test programs failed	2026-09-30		
+ControlBreak	FAIL	8	1	7/8 subtests failed; 11/12 test programs failed	2026-10-22		
 Convert::Base85	FAIL	1		1 subtests failed in test files	2026-10-03		
 Convert::Color::XTerm	FAIL	2	1	1/2 subtests failed; 2/3 test programs failed	2026-10-08		
 Convert::Color::mIRC	FAIL	2	1	1/2 subtests failed; 2/3 test programs failed	2026-10-02		
 CookLang	FAIL	1		2/3 test programs failed; 0/1 subtests failed	2026-10-21		
-Coro	FAIL			Configure failed	2026-10-20		
+Coro	FAIL			Configure failed	2026-10-22		
 Coro::Countdown	FAIL	1		1/3 test programs failed; 0/1 subtests failed	2026-10-04		
 Coro::PatchSet	FAIL	3	1	2/3 subtests failed; 9/10 test programs failed	2026-10-18		
 Coro::Twiggy	FAIL	10	5	5/10 subtests failed; 2/2 test programs failed	2026-10-07		
 Crayon	FAIL	1		8/12 test programs failed; 0/1 subtests failed	2026-09-22		
 Cron::Sequencer	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-09-26		
 Crypt::ASN1	FAIL			Unknown test outcome	2026-10-21		
-Crypt::Bcrypt	FAIL			2/2 test programs failed; 0/0 subtests failed	2026-09-26		
+Crypt::Bcrypt	FAIL			2/2 test programs failed; 0/0 subtests failed	2026-10-22		
 Crypt::Camellia	FAIL	1	0	1/1 subtests failed; 3/4 test programs failed	2026-10-20		
 Crypt::Cipher::AES	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-12		
 Crypt::Cryptoki	FAIL	4	1	3/4 subtests failed; 5/5 test programs failed	2026-10-13		
@@ -732,12 +727,11 @@ DBD::SimpleMock	FAIL			Unknown test outcome	2026-10-09
 DBD::SimpleMock::db	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 92s)	2026-10-06		
 DBD::Sprite	FAIL				2026-10-02		
 DBD::TSM	FAIL	2		1/1 test programs failed; 0/2 subtests failed	2026-10-08		
-DBD::XBase	FAIL	243	227	16/243 subtests failed; 5/18 test programs failed	2026-09-28		
+DBD::XBase	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 81s)	2026-10-22		
 DBD::mysqlPP	FAIL	10		1/2 test programs failed; 0/10 subtests failed	2026-10-14		
 DBG	FAIL	2	1	1/2 subtests failed; 2/6 test programs failed	2026-09-27		
 DBI::Format	FAIL	11	5	6/11 subtests failed; 7/8 test programs failed	2026-10-12		
 DBI::Library	FAIL			Unknown test outcome	2026-10-13		
-DBI::Shell	FAIL	11	5	6/11 subtests failed; 7/8 test programs failed	2026-09-12		
 DBICx::Modeler	FAIL	117	111	6/117 subtests failed; 4/11 test programs failed	2026-10-14		
 DBICx::Sugar	FAIL	15	12	3/15 subtests failed; 3/6 test programs failed	2026-10-03		
 DBICx::TestDatabase	FAIL	2		3/4 test programs failed; 0/2 subtests failed	2026-09-24		
@@ -784,9 +778,9 @@ DBIx::MyParsePP	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	202
 DBIx::NoSQL	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-14		
 DBIx::OracleLogin	FAIL			Unknown test outcome	2026-10-20		
 DBIx::Otogiri	FAIL	38		1 subtests failed in test files	2026-10-20		
-DBIx::Perform	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-19		
+DBIx::Perform	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-22		
 DBIx::PhraseBook	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-20		
-DBIx::Printf::Named	FAIL	23	19	4/23 subtests failed; 1/1 test programs failed	2026-09-22		
+DBIx::Printf::Named	FAIL	23	19	4/23 subtests failed; 1/1 test programs failed	2026-10-22		
 DBIx::Query	FAIL	13	6	7/13 subtests failed; 2/10 test programs failed	2026-10-18		
 DBIx::Raw	FAIL	1		1 subtests failed in test files	2026-10-05		
 DBIx::Recordset	FAIL				2026-09-28		
@@ -796,7 +790,7 @@ DBIx::Simple::Interpol	FAIL	2		1/1 test programs failed; 0/2 subtests failed	202
 DBIx::SimpleMigration	FAIL	3		4 subtests failed in test files	2026-10-19		
 DBIx::SimplePerl	FAIL	26	25	1/26 subtests failed; 1/1 test programs failed	2026-10-07		
 DBIx::Spreadsheet	FAIL	18		1/4 test programs failed; 0/18 subtests failed	2026-09-27		
-DBIx::Squirrel	FAIL	17		3 subtests failed in test files	2026-09-30		
+DBIx::Squirrel	FAIL	56		3 subtests failed in test files	2026-10-22		
 DBIx::Table::TestDataGenerator	FAIL	12	11	1/12 subtests failed; 4/6 test programs failed	2026-10-21		
 DBIx::TempDB	FAIL	40		1/18 test programs failed; 0/40 subtests failed	2026-10-07		
 DBIx::Tracer	FAIL	13		1 subtests failed in test files	2026-09-27		
@@ -804,11 +798,10 @@ DBIx::Transaction	FAIL			2/2 test programs failed; 0/0 subtests failed	2026-10-1
 DBIx::TryAgain	FAIL	11		2/4 test programs failed; 0/11 subtests failed	2026-10-08		
 DBIx::Util::Schema	FAIL	2	1	1/2 subtests failed; 1/6 test programs failed	2026-10-17		
 DBIx::Wizard	FAIL	73		1/11 test programs failed; 0/73 subtests failed	2026-10-04		
-DBMedit	FAIL	4	1	3/4 subtests failed; 6/7 test programs failed	2026-10-21		
 DB_File	FAIL	3	1	2/3 subtests failed; 5/8 test programs failed	2026-10-05		
 DB_File::DB_Database	FAIL	1	0	1/1 subtests failed; 2/2 test programs failed	2026-09-20		
 DB_File::SV18x	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 109s)	2026-10-13		
-DDB_File	FAIL	8		1/1 test programs failed; 0/8 subtests failed	2026-09-29		
+DDB_File	FAIL	8		1/1 test programs failed; 0/8 subtests failed	2026-10-22		
 DDC::Any	FAIL	452	390	62/452 subtests failed; 5/26 test programs failed	2026-10-15		
 DDC::Concordance	FAIL	452	389	63/452 subtests failed; 5/26 test programs failed	2026-09-23		
 DJabberd::Authen::Dovecot	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 85s)	2026-10-19		
@@ -853,6 +846,8 @@ Data::Dumper::Lazy	FAIL			No parseable output	2026-10-17
 Data::Dumper::Simple	FAIL	6		4/6 test programs failed; 0/6 subtests failed	2026-10-06		
 Data::Entropy	FAIL			TIMEOUT (runtime >300s; last output 6s ago)	2026-10-06		
 Data::Fake::CPAN	FAIL	26	25	1/26 subtests failed; 2/9 test programs failed	2026-10-15		
+Data::FastPack	FAIL	1		2/2 test programs failed; 0/1 subtests failed	2026-10-22		
+Data::FormValidator::Filters::HTML::Acid	FAIL	287	33	254/287 subtests failed; 7/16 test programs failed	2026-10-21		
 Data::Format::Pretty::JSON	FAIL			TIMEOUT (runtime >300s; last output 23s ago)	2026-10-13		
 Data::Grid	FAIL	7		1 subtests failed in test files	2026-10-04		
 Data::Grove	FAIL	45	44	1/45 subtests failed; 1/6 test programs failed	2026-10-19		
@@ -861,7 +856,7 @@ Data::ICal::DateTime	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-09-
 Data::Identifier	FAIL	231	229	2/231 subtests failed; 2/8 test programs failed	2026-10-19		
 Data::JPack	FAIL			2/2 test programs failed; 0/0 subtests failed	2026-09-28		
 Data::JSEmail	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-07		
-Data::Mirror	FAIL	5		1/1 test programs failed; 0/5 subtests failed	2026-09-26		
+Data::Mirror	FAIL	5		1/1 test programs failed; 0/5 subtests failed	2026-10-22		
 Data::Money	FAIL	130	129	1/130 subtests failed; 1/10 test programs failed	2026-10-19		
 Data::OFN::Address	FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-09-19		
 Data::ObjectDriver	FAIL	79		681 subtests failed in test files	2026-09-27		
@@ -890,6 +885,7 @@ Data::StreamDeserializer	FAIL	11	4	7/11 subtests failed; 7/7 test programs faile
 Data::Table::Text	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 92s)	2026-10-18		
 Data::TableData::Object	FAIL	6	1	5/6 subtests failed; 5/8 test programs failed	2026-10-09		
 Data::Transpose	FAIL			TIMEOUT (runtime >300s; last output 11s ago)	2026-10-04		
+Data::Tumbler	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 99s)	2026-10-22		
 Data::Unixish	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-19		
 Data::Validate::DNS::TLSA	FAIL	1	0	1/1 subtests failed; 4/7 test programs failed	2026-10-07		
 Data::Validate::URI	FAIL			5/5 test programs failed; 0/0 subtests failed	2026-10-12		
@@ -904,21 +900,20 @@ DataWarehouse::Aggregate	FAIL	18	14	4/18 subtests failed; 1/5 test programs fail
 Database::Abstraction	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-14		
 Datahub::Factory::Importer::TMS::Index	FAIL			TIMEOUT (runtime >300s; last output 4s ago)	2026-10-03		
 Date::Cmp	FAIL	1	0	1/1 subtests failed; 9/15 test programs failed	2026-09-27		
-Date::Extract::P800Picture	FAIL	33	26	7/33 subtests failed; 8/16 test programs failed	2026-09-27		
+Date::Extract::P800Picture	FAIL	28	21	7/28 subtests failed; 8/9 test programs failed	2026-10-22		
 Date::Manip	FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-10-08		
 Date::Simple	FAIL	233	231	2/233 subtests failed; 1/3 test programs failed	2026-10-07		
 Date::Utility	FAIL	29		2 subtests failed in test files	2026-09-27		
-DateTime::Event::Cron::Quartz	FAIL	110	98	12/110 subtests failed; 1/1 test programs failed	2026-09-27		
+DateTime::Event::Cron::Quartz	FAIL	110	98	12/110 subtests failed; 1/1 test programs failed	2026-10-22		
 DateTime::Event::Holiday::US	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-09-27		
 DateTime::Event::ICal	FAIL	80		1/7 test programs failed; 0/80 subtests failed	2026-10-08		
-DateTime::Format::Builder	FAIL	230	229	1/230 subtests failed; 1/26 test programs failed	2026-09-20		
 DateTime::Format::Epoch	FAIL	133	132	1/133 subtests failed; 1/20 test programs failed	2026-10-09		
 DateTime::Format::Flexible	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-20		
 DateTime::Format::ISO8601	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 82s)	2026-10-20		
 DateTime::Format::Pg	FAIL	144		73 subtests failed in test files	2026-10-08		
-DateTime::Lite	FAIL	352	345	7/352 subtests failed; 2/27 test programs failed	2026-09-30		
+DateTime::Lite	FAIL	355	349	6/355 subtests failed; 1/27 test programs failed	2026-10-22		
 DateTime::Set	FAIL	337		1/23 test programs failed; 0/337 subtests failed	2026-10-07		
-Datify	FAIL	246	239	7/246 subtests failed; 2/6 test programs failed	2026-09-26		
+Datify	FAIL	246	243	3/246 subtests failed; 1/6 test programs failed	2026-10-22		
 Debian::Debarnacle::Alternatives	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 112s)	2026-10-07		
 Debug::Trace	FAIL	13	11	2/13 subtests failed; 2/4 test programs failed	2026-10-20		
 Debuggit	FAIL	62	61	1/62 subtests failed; 1/18 test programs failed	2026-10-21		
@@ -932,7 +927,7 @@ Devel::CheckLib	FAIL	25		2/12 test programs failed; 0/25 subtests failed	2026-09
 Devel::CheckOS	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-09		
 Devel::Cover::Report::Clover	FAIL	12		8/10 test programs failed; 0/12 subtests failed	2026-10-15		
 Devel::Cover::Report::Codecov	FAIL			TIMEOUT (runtime >300s; last output 5s ago)	2026-10-12		
-Devel::Cover::Report::Codecov::Service::Snap	FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-09-20		
+Devel::Cover::Report::Codecov::Service::Snap	FAIL	71		1 subtests failed in test files	2026-10-22		
 Devel::Declare	FAIL	2	0	2/2 subtests failed; 32/34 test programs failed	2026-10-21		
 Devel::Declare::Interface	FAIL	8	0	8/8 subtests failed; 5/5 test programs failed	2026-10-20		
 Devel::Declare::Lexer	FAIL			10/10 test programs failed; 0/0 subtests failed	2026-10-14		
@@ -1033,7 +1028,7 @@ Dist::Zilla::Plugin::PERLANCAR::GenTodoMd	FAIL			TIMEOUT (runtime >300s; last ou
 Dist::Zilla::Plugin::Prereqs::FromCPANfile	FAIL			Syntax error	2026-10-03		
 Dist::Zilla::Plugin::Prereqs::MatchInstalled::All	FAIL			TIMEOUT (runtime >300s; last output 6s ago)	2026-10-18		
 Dist::Zilla::Plugin::Prereqs::SyncVersions	FAIL	2	1	1/2 subtests failed; 2/3 test programs failed	2026-10-05		
-Dist::Zilla::Plugin::ReadmeAddDevInfo	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-09-26		
+Dist::Zilla::Plugin::ReadmeAddDevInfo	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-22		
 Dist::Zilla::Plugin::ReadmeFromPod	FAIL			TIMEOUT (runtime >300s; last output 9s ago)	2026-10-20		
 Dist::Zilla::Plugin::RemovePrereqsMatching	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-08		
 Dist::Zilla::Plugin::Rinci::AddPrereqs	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-09-24		
@@ -1066,6 +1061,7 @@ Doubly::Linked	FAIL	1		1 subtests failed in test files	2026-10-18
 Dpkg::Version	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-08		
 Dumbbench	FAIL	2	0	2/2 subtests failed; 3/3 test programs failed	2026-09-27		
 DynGig::CLI::Cluster::Cache	FAIL	33	18	15/33 subtests failed; 1/4 test programs failed	2026-10-21		
+E::Mail	FAIL	27	17	10/27 subtests failed; 1/3 test programs failed	2026-10-22		
 E::Mail::Acme	FAIL	27	17	10/27 subtests failed; 1/3 test programs failed	2026-09-30		
 EAI::Wrap	FAIL			TIMEOUT (runtime >300s; last output 6s ago)	2026-10-20		
 EJS::Template	FAIL	153	129	24/153 subtests failed; 5/8 test programs failed	2026-09-22		
@@ -1082,10 +1078,10 @@ Egg::Plugin::Net::Scan	FAIL			TIMEOUT (runtime >300s; last output 24s ago)	2026-
 Egreek	FAIL			Unknown test outcome	2026-10-19		
 Ekps9566	FAIL			Unknown test outcome	2026-10-19		
 Elatin1	FAIL			212/212 test programs failed; 0/0 subtests failed	2026-10-19		
-Elatin10	FAIL			212/212 test programs failed; 0/0 subtests failed	2026-10-04		
+Elatin10	FAIL			212/212 test programs failed; 0/0 subtests failed	2026-10-21		
 Elatin3	FAIL			212/212 test programs failed; 0/0 subtests failed	2026-10-20		
 Elatin4	FAIL			212/212 test programs failed; 0/0 subtests failed	2026-10-20		
-Elatin7	FAIL			212/212 test programs failed; 0/0 subtests failed	2026-10-09		
+Elatin7	FAIL			212/212 test programs failed; 0/0 subtests failed	2026-10-22		
 Elatin8	FAIL			212/212 test programs failed; 0/0 subtests failed	2026-10-08		
 Elive	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-14		
 Emacs	FAIL	6		6/6 test programs failed; 0/6 subtests failed	2026-10-18		
@@ -1093,13 +1089,12 @@ Emacs::EPL	FAIL	6		6/6 test programs failed; 0/6 subtests failed	2026-09-14
 Email::ARF::Hotmail	FAIL	3	1	2/3 subtests failed; 6/7 test programs failed	2026-10-08		
 Email::AddressParser	FAIL	3	2	1/3 subtests failed; 1/1 test programs failed	2026-10-17		
 Email::MIME	FAIL	252	211	41/252 subtests failed; 2/21 test programs failed	2026-10-17		
-Email::MIME::Encodings	FAIL	13	12	1/13 subtests failed; 1/2 test programs failed	2026-09-26		
 Email::Mailer	FAIL	1	0	1/1 subtests failed; 3/10 test programs failed	2026-10-04		
 Email::Send::Test::DataDumper	FAIL	3	1	2/3 subtests failed; 1/2 test programs failed	2026-10-07		
 Email::Store	FAIL	10		5/7 test programs failed; 0/10 subtests failed	2026-10-12		
 Email::Store::Plucene	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-04		
 Emailesque	FAIL	1	0	1/1 subtests failed; 2/2 test programs failed	2026-10-09		
-Embperl	FAIL				2026-09-28		
+Embperl	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 112s)	2026-10-21		
 EnableModule	FAIL			No parseable output	2026-09-23		
 Encode::Detect	FAIL	2	1	1/2 subtests failed; 2/2 test programs failed	2026-10-07		
 Encode::ISO2022	FAIL			Configure failed	2026-10-21		
@@ -1121,13 +1116,13 @@ Every	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-03
 Ewindows1252	FAIL			212/212 test programs failed; 0/0 subtests failed	2026-10-21		
 Ewindows1257	FAIL			Unknown test outcome	2026-10-20		
 Ewindows1258	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-09-30		
-Exception::Argument	FAIL	2	1	1/2 subtests failed; 1/1 test programs failed	2026-10-20		
+Exception::Argument	FAIL	2	1	1/2 subtests failed; 1/1 test programs failed	2026-10-22		
 ExclusiveLock::Guard	FAIL	4		1 subtests failed in test files	2026-09-22		
 Exobrain::Idonethis	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-09		
 ExportTo	FAIL	12		2/6 test programs failed; 0/12 subtests failed	2026-10-07		
 Exporter	FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-10-14		
 Exporter::Declare	FAIL			11/13 test programs failed; 0/0 subtests failed	2026-10-03		
-Exporter::Easiest	FAIL	72	68	4/72 subtests failed; 1/2 test programs failed	2026-10-18		
+Exporter::Easiest	FAIL	72	68	4/72 subtests failed; 1/2 test programs failed	2026-10-22		
 Exporter::Easy	FAIL	72	68	4/72 subtests failed; 1/2 test programs failed	2026-09-20		
 Exporter::Tidy	FAIL	44	42	2/44 subtests failed; 1/1 test programs failed	2026-10-19		
 ExtUtils::Builder	FAIL	85	84	1/85 subtests failed; 2/11 test programs failed	2026-10-18		
@@ -1139,16 +1134,15 @@ ExtUtils::Typemap::Basic	FAIL	10	0	10/10 subtests failed; 2/2 test programs fail
 Extender	FAIL	25	23	2/25 subtests failed; 1/1 test programs failed	2026-10-20		
 FAIR::Accessor	FAIL			Unknown test outcome	2026-10-17		
 FAIR::Profile	FAIL			TIMEOUT (runtime >300s; last output 12s ago)	2026-10-07		
-FAST	FAIL			Make failed	2026-09-24		
+FAST	FAIL			Make failed	2026-10-21		
 FASTX::XS	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-08		
 FB3::Convert	FAIL	2		2 subtests failed in test files	2026-10-08		
 FBP::Perl	FAIL			TIMEOUT (runtime >300s; last output 10s ago)	2026-10-09		
 FCGI::IIS	FAIL	6	4	2/6 subtests failed; 2/4 test programs failed	2026-10-20		
 FCGI::ProcManager::MaxRequests	FAIL	3		2/5 test programs failed; 0/3 subtests failed	2026-09-20		
-FFI::Build	FAIL			Make failed	2026-10-21		
 FFI::Build::File::VMod	FAIL	1		3/4 test programs failed; 0/1 subtests failed	2026-10-21		
 FFI::C	FAIL	1		13/14 test programs failed; 0/1 subtests failed	2026-10-18		
-FFI::ExtractSymbols	FAIL			Make failed	2026-10-20		
+FFI::ExtractSymbols	FAIL			Make failed	2026-10-22		
 FFI::Platypus	FAIL			Make failed	2026-09-29		
 FFI::Platypus::Declare	FAIL	1		1/2 test programs failed; 0/1 subtests failed	2026-09-20		
 FFI::Platypus::Lang::CPP	FAIL	2	1	1/2 subtests failed; 4/5 test programs failed	2026-10-04		
@@ -1161,12 +1155,12 @@ FLV::Info	FAIL	105		1/8 test programs failed; 0/105 subtests failed	2026-09-24
 FTN::Crypt::Constants	FAIL	5		1 subtests failed in test files	2026-10-04		
 FTN::Nodelist	FAIL	5		5/8 test programs failed; 0/5 subtests failed	2026-10-09		
 Fatal	FAIL			TIMEOUT (runtime >300s; last output 8s ago)	2026-10-13		
-Fatal::Exception	FAIL	2	1	1/2 subtests failed; 1/1 test programs failed	2026-09-23		
+Fatal::Exception	FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-10-22		
 Feature::Compat::Class	FAIL	57	54	3/57 subtests failed; 2/14 test programs failed	2026-10-08		
 Feature::Compat::Defer	FAIL	30	28	2/30 subtests failed; 1/4 test programs failed	2026-09-21		
 Feature::Compat::Try	FAIL	46	45	1/46 subtests failed; 1/11 test programs failed	2026-10-06		
 FeyX::Active	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-09-29		
-File::ANVL	FAIL	209	158	51/209 subtests failed; 2/6 test programs failed	2026-09-27		
+File::ANVL	FAIL	209	158	51/209 subtests failed; 2/6 test programs failed	2026-10-22		
 File::CheckTree	FAIL	23	22	1/23 subtests failed; 1/3 test programs failed	2026-10-07		
 File::DirCompare	FAIL	16	15	1/16 subtests failed; 1/8 test programs failed	2026-10-20		
 File::DirSync	FAIL	44	39	5/44 subtests failed; 2/4 test programs failed	2026-10-09		
@@ -1188,7 +1182,7 @@ File::Stat::Bits	FAIL			Make failed	2026-10-13
 File::Util	FAIL	395	386	9/395 subtests failed; 8/23 test programs failed	2026-10-20		
 File::Write::Rotate	FAIL	35		1/8 test programs failed; 0/35 subtests failed	2026-10-04		
 FileSlurp_12	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 89s)	2026-09-19		
-Filesys::POSIX	FAIL			Make failed	2026-10-09		
+Filesys::POSIX	FAIL			Make failed	2026-10-22		
 Filesys::Restrict	FAIL			6/6 test programs failed; 0/0 subtests failed	2026-10-08		
 Filesys::Virtual::Async::Plain	FAIL	8	4	4/8 subtests failed; 2/2 test programs failed	2026-10-07		
 Filesys::Virtual::Plain	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-05		
@@ -1208,22 +1202,22 @@ Flickr::Tools	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 69s)	2026-
 Fliggy	FAIL			2/2 test programs failed; 0/0 subtests failed	2026-10-13		
 Fluent::Logger	FAIL	28		4 subtests failed in test files	2026-10-03		
 Font::TFM	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-18		
-Foo::Tester	FAIL	4		9/11 test programs failed; 0/4 subtests failed	2026-10-19		
+Foo::Tester	FAIL	4		9/11 test programs failed; 0/4 subtests failed	2026-10-22		
 Footprintless	FAIL	281	280	1/281 subtests failed; 2/20 test programs failed	2026-10-07		
 Fred::Fish::DBUG	FAIL	184	170	14/184 subtests failed; 33/42 test programs failed	2026-10-03		
-FreezeThaw	FAIL	12		1/2 test programs failed; 0/12 subtests failed	2026-09-23		
+FreezeThaw	FAIL	12		1/2 test programs failed; 0/12 subtests failed	2026-10-22		
 Fukurama::Class	FAIL	583		2/17 test programs failed; 0/583 subtests failed	2026-10-18		
 Function::Parameters	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-05		
 FusionInventory::Agent	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-19		
 FusionInventory::Agent::Task::Collect	FAIL			TIMEOUT (runtime >300s; last output 19s ago)	2026-10-12		
-FusqlFS::Backend::MySQL::Events	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-09-30		
 Future::HTTP	FAIL	8		2/14 test programs failed; 0/8 subtests failed	2026-10-14		
-Future::IO::Impl::IOAsync	FAIL			Unknown test outcome	2026-10-13		
+Future::IO::Impl::IOAsync	FAIL			Unknown test outcome	2026-10-22		
 Future::IO::Impl::POE	FAIL			Unknown test outcome	2026-10-05		
 Future::Selector	FAIL	1		6/7 test programs failed; 0/1 subtests failed	2026-10-07		
 Future::Workflow	FAIL	2		6/7 test programs failed; 0/2 subtests failed	2026-10-13		
 GMail::Checker	FAIL	2	0	2/2 subtests failed; 1/1 test programs failed	2026-10-02		
 GO::Basic	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-19		
+GPS::Babel	FAIL	59	57	2/59 subtests failed; 1/6 test programs failed	2026-10-21		
 GPS::Track	FAIL	12	11	1/12 subtests failed; 1/4 test programs failed	2026-10-15		
 GRNOC::Config	FAIL	31	30	1/31 subtests failed; 1/7 test programs failed	2026-10-03		
 GSM::Nbit	FAIL	13		1/6 test programs failed; 0/13 subtests failed	2026-10-14		
@@ -1253,6 +1247,7 @@ Geo::Gpx	FAIL	119		1/15 test programs failed; 0/119 subtests failed	2026-09-29
 Geo::Location::IP	FAIL			28/31 test programs failed; 0/0 subtests failed	2026-10-06		
 GetNum	FAIL	1		1 subtests failed in test files	2026-10-19		
 Getopt::EX	FAIL	45		3 subtests failed in test files	2026-10-07		
+Getopt::EX::i18n	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-22		
 Getopt::Long::Descriptive	FAIL	80	79	1/80 subtests failed; 1/4 test programs failed	2026-10-07		
 Getopt::Long::Dump	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-13		
 Getopt::Mini	FAIL	1	0	1/1 subtests failed; 2/5 test programs failed	2026-10-12		
@@ -1278,7 +1273,7 @@ Graph::Reader::UnicodeTree	FAIL	8		1/4 test programs failed; 0/8 subtests failed
 Graphics::Color	FAIL			TIMEOUT (runtime >300s; last output 14s ago)	2026-10-12		
 Graphics::ColorNames::GrayScale	FAIL	2	1	1/2 subtests failed; 1/1 test programs failed	2026-10-06		
 Graphics::GVG::OpenGLRenderer	FAIL	2	1	1/2 subtests failed; 1/2 test programs failed	2026-10-18		
-Gravatar::URL	FAIL	71		1/6 test programs failed; 0/71 subtests failed	2026-09-28		
+Gravatar::URL	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 107s)	2026-10-22		
 Greek	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-19		
 Grep::Query	FAIL	490	468	22/490 subtests failed; 2/10 test programs failed	2026-10-08		
 GrowthForecast	FAIL			Unknown test outcome	2026-10-15		
@@ -1287,7 +1282,6 @@ Gtk2::Ex::Threads::DBI	FAIL			1/1 test programs failed; 0/0 subtests failed	2026
 Guard	FAIL	1	0	1/1 subtests failed; 4/4 test programs failed	2026-10-17		
 Gx	FAIL	25	24	1/25 subtests failed; 1/1 test programs failed	2026-10-18		
 H	FAIL	8	7	1/8 subtests failed; 1/1 test programs failed	2026-10-09		
-HOP::Parser	FAIL	6	1	5/6 subtests failed; 6/7 test programs failed	2026-09-23		
 HOP::Stream	FAIL	4	1	3/4 subtests failed; 3/4 test programs failed	2026-10-13		
 HPC::Runner::Slurm	FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-10-18		
 HTML5::DOM	FAIL	8	2	6/8 subtests failed; 3/3 test programs failed	2026-10-06		
@@ -1299,6 +1293,7 @@ HTML::DBTable	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 111s)	2026
 HTML::DTD	FAIL	190		1/6 test programs failed; 0/190 subtests failed	2026-10-03		
 HTML::Detergent	FAIL	13		1/7 test programs failed; 0/13 subtests failed	2026-10-14		
 HTML::Display	FAIL	85		1/21 test programs failed; 0/85 subtests failed	2026-10-14		
+HTML::EP	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 110s)	2026-10-22		
 HTML::Embperl::Module	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-03		
 HTML::FormFu::Constraint::DBIC::Unique	FAIL			Unknown test outcome	2026-10-18		
 HTML::FormFu::Constraint::TauStation::DateTime	FAIL	13	11	2/13 subtests failed; 7/8 test programs failed	2026-10-18		
@@ -1309,7 +1304,7 @@ HTML::FormFu::MultiForm	FAIL			TIMEOUT (runtime >300s; last output 8s ago)	2026-
 HTML::FormFu::Role::JQueryValidation	FAIL			2/4 test programs failed; 0/0 subtests failed	2026-10-06		
 HTML::FormFu::TauStation	FAIL	13	11	2/13 subtests failed; 7/8 test programs failed	2026-09-14		
 HTML::FormHandler	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-03		
-HTML::FormHandlerX::Field::URI::HTTP	FAIL	1	0	1/1 subtests failed; 1/3 test programs failed	2026-09-26		
+HTML::FormHandlerX::Field::URI::HTTP	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 182s)	2026-10-22		
 HTML::FormHandlerX::JQueryRemoteValidator	FAIL	1		1 subtests failed in test files	2026-10-09		
 HTML::FromANSI::Tiny	FAIL	141	139	2/141 subtests failed; 1/15 test programs failed	2026-10-19		
 HTML::GenerateUtil	FAIL	5	0	5/5 subtests failed; 6/6 test programs failed	2026-10-03		
@@ -1322,13 +1317,14 @@ HTML::Hyphenate	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-09-30
 HTML::Linear	FAIL	66	7	59/66 subtests failed; 5/20 test programs failed	2026-10-09		
 HTML::Lint	FAIL	357	183	174/357 subtests failed; 35/44 test programs failed	2026-10-08		
 HTML::Make::Calendar	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-08		
+HTML::Mason	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-22		
 HTML::Native	FAIL	313	312	1/313 subtests failed; 4/14 test programs failed	2026-10-18		
 HTML::OSM	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-07		
 HTML::Object::DOM::Node	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-19		
 HTML::Parse	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-09-13		
 HTML::Query	FAIL	1		11/11 test programs failed; 0/1 subtests failed	2026-09-21		
 HTML::Scrubber	FAIL	172	148	24/172 subtests failed; 9/17 test programs failed	2026-10-14		
-HTML::Selector::XPath	FAIL	153		1/9 test programs failed; 0/153 subtests failed	2026-09-20		
+HTML::Selector::XPath	FAIL	299	298	1/299 subtests failed; 1/9 test programs failed	2026-10-22		
 HTML::StripScripts::LibXML	FAIL	217	101	116/217 subtests failed; 4/6 test programs failed	2026-10-08		
 HTML::StripScripts::Parser	FAIL	219	208	11/219 subtests failed; 2/6 test programs failed	2026-10-20		
 HTML::TableParser	FAIL	13		6/9 test programs failed; 0/13 subtests failed	2026-10-20		
@@ -1363,7 +1359,7 @@ HTTP::OAIPMH::Validator	FAIL	178	177	1/178 subtests failed; 1/3 test programs fa
 HTTP::Proxy	FAIL	356	355	1/356 subtests failed; 11/37 test programs failed	2026-10-06		
 HTTP::ProxyPAC	FAIL	1		2/3 test programs failed; 0/1 subtests failed	2026-10-18		
 HTTP::Request::Webpush	FAIL			3/3 test programs failed; 0/0 subtests failed	2026-10-02		
-HTTP::Server::Daemon	FAIL	1		1/2 test programs failed; 0/1 subtests failed	2026-10-19		
+HTTP::Server::Daemon	FAIL	1		1/2 test programs failed; 0/1 subtests failed	2026-10-22		
 HTTP::Server::Encrypt	FAIL	1		1/2 test programs failed; 0/1 subtests failed	2026-09-28		
 HTTP::Server::Simple::Kwiki	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 61s)	2026-10-18		
 HTTP::Session2	FAIL	52		8 subtests failed in test files	2026-10-02		
@@ -1389,12 +1385,12 @@ HiPi::Wiring	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 69s)	2026-1
 HoneyClient::Manager	FAIL	3	2	1/3 subtests failed; 1/1 test programs failed	2026-10-07		
 Hook::AfterRuntime	FAIL			3/3 test programs failed; 0/0 subtests failed	2026-10-08		
 Horus	FAIL	25	0	25/25 subtests failed; 20/20 test programs failed	2026-10-04		
-ICC::Profile	FAIL	83	6	77/83 subtests failed; 43/44 test programs failed	2026-09-27		
-IMDB::BaseClass	FAIL	2	1	1/2 subtests failed; 1/1 test programs failed	2026-10-20		
+ICC::Profile	FAIL	80	5	75/80 subtests failed; 41/42 test programs failed	2026-10-22		
+IMDB::BaseClass	FAIL	2	1	1/2 subtests failed; 1/1 test programs failed	2026-10-22		
 IMS::CP::Manifest	FAIL	7	6	1/7 subtests failed; 1/8 test programs failed	2026-09-23		
 IO::AIO::LoadLimited	FAIL	1		1 subtests failed in test files	2026-10-04		
 IO::All	FAIL	368	364	4/368 subtests failed; 1/58 test programs failed	2026-10-13		
-IO::Async	FAIL	871	868	3/871 subtests failed; 4/64 test programs failed	2026-09-24		
+IO::Async	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-22		
 IO::Async::File	FAIL			TIMEOUT (runtime >300s; last output 35s ago)	2026-10-08		
 IO::Async::Function	FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-10-13		
 IO::Async::Loop::Ppoll	FAIL	1		1 subtests failed in test files	2026-10-06		
@@ -1428,7 +1424,7 @@ IO::Stream	FAIL	1		1 subtests failed in test files	2026-09-28
 IO::Stream::Proxy::HTTPS	FAIL	1			2026-10-19		
 IO::Stream::Proxy::SOCKSv4	FAIL	1		1 subtests failed in test files	2026-10-20		
 IO::Termios	FAIL	1		2/3 test programs failed; 0/1 subtests failed	2026-10-05		
-IO::YAML	FAIL	52		3/10 test programs failed; 0/52 subtests failed	2026-09-27		
+IO::YAML	FAIL	56		2/10 test programs failed; 0/56 subtests failed	2026-10-22		
 IOLayer::Base64	FAIL	22	18	4/22 subtests failed; 1/1 test programs failed	2026-09-23		
 IOas::CP932	FAIL			13/13 test programs failed; 0/0 subtests failed	2026-10-19		
 IOas::CP932IBM	FAIL			13/13 test programs failed; 0/0 subtests failed	2026-10-13		
@@ -1450,9 +1446,8 @@ IS::Init	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 111s)	2026-10-1
 ISO	FAIL			No parseable output	2026-09-26		
 IType::Business	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-20		
 IkuSan	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-26		
-Image::ExifTool	FAIL			Unknown test outcome	2026-09-12		
 Image::PBMlib	FAIL	260		1/14 test programs failed; 0/260 subtests failed	2026-10-04		
-Imager	FAIL			Configure failed	2026-10-21		
+Imager	FAIL			Configure failed	2026-10-22		
 Imager::AverageGray	FAIL	6	4	2/6 subtests failed; 2/4 test programs failed	2026-09-22		
 Imager::Filter::Bakumatsu	FAIL	1		1 subtests failed in test files	2026-10-09		
 Imager::Simple	FAIL	3	1	2/3 subtests failed; 2/3 test programs failed	2026-10-06		
@@ -1471,25 +1466,25 @@ Inline::TT	FAIL	2		3/5 test programs failed; 0/2 subtests failed	2026-10-18
 Inline::Wrapper	FAIL	57	55	2/57 subtests failed; 1/8 test programs failed	2026-10-04		
 Interchange6	FAIL	31		5/10 test programs failed; 0/31 subtests failed	2026-10-04		
 Interchange6::Currency	FAIL	8	6	2/8 subtests failed; 1/7 test programs failed	2026-10-08		
-IsUTF8	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-24		
+IsUTF8	FAIL	2	0	2/2 subtests failed; 1/1 test programs failed	2026-10-21		
 Iter	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 105s)	2026-10-18		
 Iterator::Simple::Lookahead	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 86s)	2026-10-18		
 Ixchel	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-20		
 JCM::Boilerplate	FAIL			TIMEOUT (runtime >300s; last output 12s ago)	2026-10-04		
 JE	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-19		
 JIP::Daemon	FAIL	3	0	3/3 subtests failed; 1/2 test programs failed	2026-10-14		
-JIP::DataPath	FAIL	4	3	1/4 subtests failed; 1/1 test programs failed	2026-09-27		
-JIP::LockSocket	FAIL	2	0	2/2 subtests failed; 1/1 test programs failed	2026-09-20		
+JIP::DataPath	FAIL	4	3	1/4 subtests failed; 1/1 test programs failed	2026-10-22		
+JIP::LockSocket	FAIL	2	0	2/2 subtests failed; 1/1 test programs failed	2026-10-22		
 JIP::Object	FAIL	2	0	2/2 subtests failed; 1/1 test programs failed	2026-10-19		
 JIP::Spy::Events	FAIL	6	4	2/6 subtests failed; 2/2 test programs failed	2026-09-29		
-JKML	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 82s)	2026-10-02		
+JKML	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 90s)	2026-10-22		
 JMAP::Tester::WebSocket	FAIL	2	1	1/2 subtests failed; 1/2 test programs failed	2026-10-09		
 JSON::Create	FAIL	286	281	5/286 subtests failed; 3/25 test programs failed	2026-10-13		
-JSON::JsonModel	FAIL	1		1 subtests failed in test files	2026-09-20		
+JSON::JsonModel	FAIL	1		1 subtests failed in test files	2026-10-22		
 JSON::Relaxed	FAIL			11/11 test programs failed; 0/0 subtests failed	2026-10-18		
 JSON::Schema::Modern::Document::OpenAPI	FAIL	3			2026-10-20		
 JSON::String	FAIL	17	16	1/17 subtests failed; 1/5 test programs failed	2026-10-14		
-JSON::T	FAIL	1		1/1 test programs failed; 0/1 subtests failed	2026-09-19		
+JSON::T	FAIL	1		1/1 test programs failed; 0/1 subtests failed	2026-10-22		
 JSON::Tiny	FAIL	163	162	1/163 subtests failed; 1/11 test programs failed	2026-10-19		
 JSON::Typist	FAIL	20	19	1/20 subtests failed; 1/3 test programs failed	2026-10-07		
 JSON::Validator	FAIL			TIMEOUT (runtime >300s; last output 4s ago)	2026-10-19		
@@ -1500,11 +1495,10 @@ JSON::YAJL	FAIL	3		3/4 test programs failed; 0/3 subtests failed	2026-10-20
 JSONSchema::Validator	FAIL	1156	1141	15/1156 subtests failed; 5/11 test programs failed	2026-09-23		
 JSONY	FAIL	51	36	15/51 subtests failed; 2/7 test programs failed	2026-10-13		
 Jacode4e::RoundTrip	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-20		
-Java::JCR	FAIL			Build failed	2026-09-09		
 JavaScript::Ectype::Handler::Apache2	FAIL	3	1	2/3 subtests failed; 3/4 test programs failed	2026-09-30		
 JavaScript::Engine	FAIL			Unknown test outcome	2026-10-19		
 JavaScript::Minifier::XS	FAIL	2		1 subtests failed in test files	2026-10-04		
-JavaScript::QuickJS	FAIL			21/21 test programs failed; 0/0 subtests failed	2026-09-27		
+JavaScript::QuickJS	FAIL			21/21 test programs failed; 0/0 subtests failed	2026-10-22		
 Jifty::Plugin::AuthzLDAP	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-13		
 Jifty::Plugin::EmailErrors	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-12		
 Jifty::Plugin::GoogleAnalytics	FAIL			TIMEOUT (runtime >300s; last output 4s ago)	2026-10-17		
@@ -1521,18 +1515,18 @@ Kasago	FAIL	6	5	1/6 subtests failed; 1/3 test programs failed	2026-09-27
 Kavorka	FAIL	1	0	1/1 subtests failed; 40/43 test programs failed	2026-10-09		
 Keyword::With	FAIL	1	0	1/1 subtests failed; 2/2 test programs failed	2026-10-08		
 Khonsu	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 86s)	2026-10-12		
-KiokuX::Model	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-09-26		
 KiokuX::User	FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-10-19		
 Kwiki::Atom	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 98s)	2026-10-07		
 Kwiki::Autoformat	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 106s)	2026-10-15		
 Kwiki::DB	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 98s)	2026-10-21		
 Kwiki::ModPerl	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-09-21		
 Kwiki::SOAP::Google	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 96s)	2026-10-20		
+Kwiki::TableOfContents::Print	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 64s)	2026-10-22		
 Kx	FAIL	2	0	2/2 subtests failed; 2/3 test programs failed	2026-10-05		
 LEOCHARRE::Database	FAIL	32		1/3 test programs failed; 0/32 subtests failed	2026-10-21		
 LIMS::Base	FAIL			No parseable output	2026-09-24		
 LS	FAIL	91	83	8/91 subtests failed; 7/11 test programs failed	2026-10-03		
-LWP::AuthenAgent	FAIL				2026-09-23		
+LWP::AuthenAgent	FAIL				2026-10-22		
 LWP::Protocol::AnyEvent::http	FAIL			TIMEOUT (runtime >300s; last output 4s ago)	2026-10-07		
 LWP::Protocol::Net::Curl	FAIL	2	0	2/2 subtests failed; 9/27 test programs failed	2026-10-07		
 LWP::Protocol::ldap	FAIL	268		4/27 test programs failed; 0/268 subtests failed	2026-10-19		
@@ -1544,7 +1538,7 @@ LaTeX::Easy::Templates	FAIL	1		1 subtests failed in test files	2026-10-02
 Labyrinth::PSGI	FAIL	9	7	2/9 subtests failed; 5/6 test programs failed	2026-10-07		
 Labyrinth::Plugin::Core	FAIL	42	16	26/42 subtests failed; 5/6 test programs failed	2026-09-20		
 Labyrinth::Plugin::Release	FAIL	3	1	2/3 subtests failed; 5/6 test programs failed	2026-10-21		
-Labyrinth::Plugin::Review	FAIL	9	7	2/9 subtests failed; 5/6 test programs failed	2026-09-21		
+Labyrinth::Plugin::Review	FAIL	9	7	2/9 subtests failed; 5/6 test programs failed	2026-10-21		
 Langertha::Skeid	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-18		
 Language::BF	FAIL	2	1	1/2 subtests failed; 1/1 test programs failed	2026-10-14		
 Language::Befunge	FAIL	648	645	3/648 subtests failed; 62/76 test programs failed	2026-10-05		
@@ -1552,10 +1546,7 @@ Language::Functional	FAIL	1		1/2 test programs failed; 0/1 subtests failed	2026-
 Language::Lisp	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-08		
 Language::Prolog::Sugar	FAIL	2		1/2 test programs failed; 0/2 subtests failed	2026-10-19		
 Latin1	FAIL			212/212 test programs failed; 0/0 subtests failed	2026-09-28		
-Latin10	FAIL			212/212 test programs failed; 0/0 subtests failed	2026-09-12		
-Latin3	FAIL			212/212 test programs failed; 0/0 subtests failed	2026-09-12		
 Latin4	FAIL			212/212 test programs failed; 0/0 subtests failed	2026-09-27		
-Latin7	FAIL			Unknown test outcome	2026-09-12		
 Latin8	FAIL			212/212 test programs failed; 0/0 subtests failed	2026-09-17		
 Lembas	FAIL	18		3/5 test programs failed; 0/18 subtests failed	2026-10-21		
 Lemonldap::NG::Cli	FAIL			No parseable output	2026-10-14		
@@ -1567,7 +1558,7 @@ Lexical::Hints	FAIL	20	19	1/20 subtests failed; 1/7 test programs failed	2026-09
 Lexical::SealRequireHints	FAIL	424	404	20/424 subtests failed; 8/34 test programs failed	2026-10-14		
 LiBot	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 104s)	2026-10-08		
 Lib::Module	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-04		
-LibUI	FAIL	1		1 subtests failed in test files	2026-09-30		
+LibUI	FAIL	1		1 subtests failed in test files	2026-10-22		
 License::SPDX	FAIL	35	34	1/35 subtests failed; 1/10 test programs failed	2026-10-02		
 Lingua::EN::Inflexion	FAIL	1	0	1/1 subtests failed; 33/33 test programs failed	2026-10-06		
 Lingua::EN::Segment	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 100s)	2026-10-02		
@@ -1585,7 +1576,6 @@ Lingua::ZH::HanConvert	FAIL			No parseable output	2026-10-17
 Lingua::ZH::MacChinese::Traditional	FAIL			2/2 test programs failed; 0/0 subtests failed	2026-09-19		
 Lingua::ZH::Romanize::Pinyin	FAIL	5		4/5 test programs failed; 0/5 subtests failed	2026-09-30		
 Lingua::tlhInganHol::yIghun	FAIL	2	1	1/2 subtests failed; 2/3 test programs failed	2026-10-08		
-Lingy	FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-09-26		
 Linux::Event::Listen	FAIL			No parseable output	2026-09-24		
 List::BinarySearch	FAIL	31	28	3/31 subtests failed; 1/15 test programs failed	2026-10-06		
 List::Sliding::Changes	FAIL	47		1/8 test programs failed; 0/47 subtests failed	2026-10-02		
@@ -1606,7 +1596,6 @@ Locale::CLDR::Locales::Km	FAIL	4	3	1/4 subtests failed; 1/1 test programs failed
 Locale::CLDR::Locales::Kpe	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 103s)	2026-09-29		
 Locale::CLDR::Locales::La	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 90s)	2026-10-19		
 Locale::CLDR::Locales::Lag	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 97s)	2026-10-18		
-Locale::CLDR::Locales::Lmo	FAIL	4	3	1/4 subtests failed; 1/1 test programs failed	2026-09-29		
 Locale::CLDR::Locales::Lrc	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 68s)	2026-10-19		
 Locale::CLDR::Locales::Lu	FAIL	4	3	1/4 subtests failed; 1/1 test programs failed	2026-10-20		
 Locale::CLDR::Locales::Lv	FAIL	4	3	1/4 subtests failed; 1/1 test programs failed	2026-10-14		
@@ -1630,8 +1619,8 @@ Locale::Maketext::Test	FAIL	22	21	1/22 subtests failed; 7/9 test programs failed
 Locale::Maketext::Utils	FAIL	1089	1081	8/1089 subtests failed; 3/18 test programs failed	2026-10-07		
 Locale::TextDomain::OO	FAIL	477	442	35/477 subtests failed; 35/42 test programs failed	2026-10-05		
 Locale::TextDomain::OO::Util	FAIL	45	43	2/45 subtests failed; 2/9 test programs failed	2026-10-02		
+LockFile::Lock	FAIL	12		1/3 test programs failed; 0/12 subtests failed	2026-10-22		
 LockFile::Simple	FAIL	12		1/3 test programs failed; 0/12 subtests failed	2026-09-19		
-Log::Any::Adapter::MojoLog	FAIL				2026-09-22		
 Log::Any::Adapter::OpenTelemetry	FAIL			Unknown test outcome	2026-10-08		
 Log::Dispatch	FAIL	82	81	1/82 subtests failed; 1/13 test programs failed	2026-10-02		
 Log::Fine	FAIL	2383	2380	3/2383 subtests failed; 2/22 test programs failed	2026-10-08		
@@ -1641,6 +1630,7 @@ Log::Log4perl::Layout::XMLLayout	FAIL	13	9	4/13 subtests failed; 1/3 test progra
 Log::MixedColor	FAIL	21	19	2/21 subtests failed; 1/1 test programs failed	2026-10-15		
 Log::Report	FAIL	286	282	4/286 subtests failed; 1/17 test programs failed	2026-09-21		
 Long::Jump	FAIL	28		1/2 test programs failed; 0/28 subtests failed	2026-10-07		
+Lox	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 103s)	2026-10-22		
 Lucy	FAIL			No parseable output	2026-10-06		
 MARC::Convert::Wikidata::Object	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-09		
 MARC::File::MARCXML	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-20		
@@ -1650,7 +1640,6 @@ MARC::Transform	FAIL	28	25	3/28 subtests failed; 1/1 test programs failed	2026-0
 MCE::Shared	FAIL	66		15/15 test programs failed; 0/66 subtests failed	2026-09-30		
 MCP	FAIL			TIMEOUT (runtime >300s; last output 19s ago)	2026-10-19		
 MD5Check	FAIL	1		1 subtests failed in test files	2026-10-04		
-MDV::Distribconf	FAIL	256	246	10/256 subtests failed; 2/5 test programs failed	2026-09-29		
 MDV::Packdrakeng	FAIL	68	63	5/68 subtests failed; 1/2 test programs failed	2026-10-20		
 MIDI::Drummer::Tiny	FAIL	14	11	3/14 subtests failed; 2/9 test programs failed	2026-09-29		
 MIDI::Pitch	FAIL			Make failed	2026-10-15		
@@ -1664,7 +1653,6 @@ MIME::Entity	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 80s)	2026-1
 MIME::Explode	FAIL				2026-10-13		
 MIME::Lite::TT::Japanese	FAIL	4	0	4/4 subtests failed; 2/2 test programs failed	2026-10-18		
 MIME::Mini	FAIL	19	17	2/19 subtests failed; 2/4 test programs failed	2026-10-18		
-MIME::tools	FAIL			Unknown test outcome	2026-09-09		
 MKDoc::Text::Structured	FAIL	130		1/21 test programs failed; 0/130 subtests failed	2026-10-08		
 MLDBM	FAIL	19	16	3/19 subtests failed; 1/5 test programs failed	2026-10-13		
 MMM::Text::Search	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 102s)	2026-10-19		
@@ -1674,6 +1662,7 @@ MP3::Tag::Utils	FAIL	1		1 subtests failed in test files	2026-10-14
 MP4::Info	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 114s)	2026-09-23		
 MR::IProto	FAIL	16	10	6/16 subtests failed; 1/1 test programs failed	2026-10-21		
 MRO::Magic	FAIL	1		6/7 test programs failed; 0/1 subtests failed	2026-10-13		
+MRS::Algorithm	FAIL	12	5	7/12 subtests failed; 5/11 test programs failed	2026-10-22		
 MRS::Client	FAIL	12	8	4/12 subtests failed; 5/11 test programs failed	2026-09-29		
 MToken	FAIL	16	14	2/16 subtests failed; 2/9 test programs failed	2026-10-08		
 Mac::EyeTV	FAIL	8	6	2/8 subtests failed; 1/2 test programs failed	2026-10-07		
@@ -1689,7 +1678,6 @@ Mail::Box::FastScalar	FAIL			Unknown test outcome	2026-10-20
 Mail::CheckUser	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 85s)	2026-10-14		
 Mail::DMARC	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-21		
 Mail::Message	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-20		
-Mail::Qmail::Queue::Error	FAIL	70	66	4/70 subtests failed; 1/6 test programs failed	2026-09-29		
 Mail::SMTP::Honeypot	FAIL			7/7 test programs failed; 0/0 subtests failed	2026-09-26		
 Mail::STS	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 114s)	2026-10-12		
 Mail::SpamAssassin	FAIL			Configure failed	2026-10-13		
@@ -1706,9 +1694,8 @@ MarpaX::Repa	FAIL			2/2 test programs failed; 0/0 subtests failed	2026-10-05
 MarpaX::xPathLike	FAIL	1		1 subtests failed in test files	2026-10-14		
 Mars	FAIL	126	124	2/126 subtests failed; 1/9 test programs failed	2026-10-09		
 Mason::Plugin::PSGIHandler	FAIL	1	0	1/1 subtests failed; 2/2 test programs failed	2026-09-20		
-MasonX::Maypole	FAIL			Unknown test outcome	2026-09-27		
+MasonX::Maypole	FAIL			TIMEOUT (runtime >300s; last output 4s ago)	2026-10-22		
 Math::Algebra::Symbols	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-13		
-Math::Algebra::SymbolsSum	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-09-23		
 Math::BaseCalc	FAIL	78	76	2/78 subtests failed; 1/8 test programs failed	2026-10-21		
 Math::CDF	FAIL				2026-10-17		
 Math::Cephes	FAIL	24	23	1/24 subtests failed; 17/20 test programs failed	2026-10-20		
@@ -1761,7 +1748,6 @@ Method::Generate::Accessor::Role::LvalueAttribute	FAIL	2	1	1/2 subtests failed; 
 Microsoft::AdCenter	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-07		
 MikroTik::API	FAIL	1		1 subtests failed in test files	2026-10-04		
 Minilla	FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-10-03		
-Minion	FAIL	9	8	1/9 subtests failed; 7/11 test programs failed	2026-09-23		
 MiscUtils	FAIL			Configure failed	2026-10-14		
 Mknod	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-05		
 ModTest	FAIL			Configure failed	2026-10-21		
@@ -1801,7 +1787,7 @@ Mojo::UserAgent::Role::Queued	FAIL	11			2026-10-03
 Mojo::UserAgent::Role::Retry	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 108s)	2026-10-06		
 Mojo::WebSocketProxy	FAIL	45	36	9/45 subtests failed; 21/22 test programs failed	2026-10-03		
 Mojo::XMLRPC	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 86s)	2026-10-06		
-MojoX::CPAN::Uploader	FAIL	22	21	1/22 subtests failed; 1/6 test programs failed	2026-09-18		
+MojoX::CPAN::Uploader	FAIL	22	21	1/22 subtests failed; 1/6 test programs failed	2026-10-22		
 MojoX::ConfigAppStart	FAIL	1	0	1/1 subtests failed; 2/9 test programs failed	2026-09-27		
 MojoX::CustomTemplateFileParser	FAIL	4		1/5 test programs failed; 0/4 subtests failed	2026-10-14		
 MojoX::Encode::Gzip	FAIL	16	11	5/16 subtests failed; 1/4 test programs failed	2026-10-04		
@@ -1838,7 +1824,7 @@ MooX::Async::Console	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-0
 MooX::Const	FAIL	65	57	8/65 subtests failed; 4/9 test programs failed	2026-09-28		
 MooX::Keyword	FAIL	1		1 subtests failed in test files	2026-10-21		
 MooX::Keyword::Random	FAIL	1		1 subtests failed in test files	2026-10-08		
-MooX::Keyword::Readonly	FAIL	1		1 subtests failed in test files	2026-09-26		
+MooX::Keyword::Readonly	FAIL	1		1 subtests failed in test files	2026-10-22		
 MooX::LvalueAttribute	FAIL	2	1	1/2 subtests failed; 4/6 test programs failed	2026-09-24		
 MooX::MouseTypeConstraints	FAIL	11		1 subtests failed in test files	2026-10-03		
 MooX::PDL::Role::Proxy	FAIL	2		1 subtests failed in test files	2026-10-08		
@@ -1848,9 +1834,9 @@ MooX::Readonly::Attribute	FAIL	2		1 subtests failed in test files	2026-10-09
 MooX::Role::CachedURL	FAIL	15		1/5 test programs failed; 0/15 subtests failed	2026-10-17		
 MooX::Role::CryptedPassword	FAIL	8	7	1/8 subtests failed; 3/3 test programs failed	2026-10-07		
 MooX::Role::DBIConnection	FAIL	2		2/3 test programs failed; 0/2 subtests failed	2026-10-08		
-MooX::Types::MooseLike	FAIL	171	170	1/171 subtests failed; 5/14 test programs failed	2026-09-30		
+MooX::Types::MooseLike	FAIL	171	170	1/171 subtests failed; 5/14 test programs failed	2026-10-22		
 MooX::ValidateSubs	FAIL	74	62	12/74 subtests failed; 7/14 test programs failed	2026-09-27		
-MooX::VariantAttribute	FAIL	89		3/12 test programs failed; 0/89 subtests failed	2026-09-19		
+MooX::VariantAttribute	FAIL	89		3/12 test programs failed; 0/89 subtests failed	2026-10-22		
 MooX::XSConstructor	FAIL			4/6 test programs failed; 0/0 subtests failed	2026-10-07		
 Mooish::Base	FAIL			5/10 test programs failed; 0/0 subtests failed	2026-10-04		
 Moops	FAIL	3	0	3/3 subtests failed; 28/40 test programs failed	2026-10-05		
@@ -1868,7 +1854,6 @@ MooseX::DeclareX	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	20
 MooseX::Getopt	FAIL	339		9 subtests failed in test files	2026-10-21		
 MooseX::InsideOut	FAIL	57	23	34/57 subtests failed; 1/4 test programs failed	2026-10-17		
 MooseX::InstanceTracking	FAIL	12	11	1/12 subtests failed; 1/5 test programs failed	2026-10-12		
-MooseX::LvalueAttribute	FAIL			4/4 test programs failed; 0/0 subtests failed	2026-09-08		
 MooseX::Method::Signatures	FAIL			TIMEOUT (runtime >300s; last output 9s ago)	2026-10-18		
 MooseX::MethodAttributes::Role::AttrContainer::Inheritable	FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-09-29		
 MooseX::Params	FAIL	25	21	4/25 subtests failed; 14/18 test programs failed	2026-09-26		
@@ -1899,7 +1884,8 @@ MySQL::Admin	FAIL			TIMEOUT (runtime >300s; last output 45s ago)	2026-10-13
 MySQL::Packet	FAIL	6	5	1/6 subtests failed; 1/4 test programs failed	2026-10-04		
 MySQL::TableInfo	FAIL				2026-10-12		
 MySQL::Util::CLI	FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-10-12		
-NBI::EcoScheduler	FAIL	339	337	2/339 subtests failed; 1/27 test programs failed	2026-10-14		
+MySaxHandler	FAIL	4	2	2/4 subtests failed; 2/3 test programs failed	2026-10-22		
+NBI::EcoScheduler	FAIL	339	337	2/339 subtests failed; 1/27 test programs failed	2026-10-22		
 NBI::Slurm	FAIL	339	336	3/339 subtests failed; 2/27 test programs failed	2026-09-23		
 NET::IPFilterSimple_V1.1	FAIL			TIMEOUT (runtime >300s; last output 4s ago)	2026-10-14		
 NOLookup	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-21		
@@ -1908,7 +1894,7 @@ NULL	FAIL			No parseable output	2026-10-03
 NVDefined	FAIL				2026-09-26		
 Nagios::Plugin::ByGmond	FAIL	1		1 subtests failed in test files	2026-10-19		
 Nagios::Plugin::SNMP	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-24		
-Neo4j::Driver	FAIL	205	203	2/205 subtests failed; 2/21 test programs failed	2026-09-30		
+Neo4j::Driver	FAIL	210	209	1/210 subtests failed; 1/21 test programs failed	2026-10-22		
 Neo4j::Types	FAIL	124	122	2/124 subtests failed; 1/6 test programs failed	2026-10-13		
 Net::ACME	FAIL	171	159	12/171 subtests failed; 6/20 test programs failed	2026-10-18		
 Net::ACME2	FAIL	1		1/1 test programs failed; 0/1 subtests failed	2026-09-29		
@@ -1922,20 +1908,21 @@ Net::Async::WebSocket	FAIL	9		3/5 test programs failed; 0/9 subtests failed	2026
 Net::Async::Webservice::DHL	FAIL			4/8 test programs failed; 0/0 subtests failed	2026-10-15		
 Net::DNSBLLookup	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 102s)	2026-10-19		
 Net::DirectConnect	FAIL	9	7	2/9 subtests failed; 1/1 test programs failed	2026-10-21		
-Net::Dropbear	FAIL	2	1	1/2 subtests failed; 14/15 test programs failed	2026-09-30		
+Net::Dropbear	FAIL	2	1	1/2 subtests failed; 14/15 test programs failed	2026-10-21		
 Net::Google::Code	FAIL	196	195	1/196 subtests failed; 1/12 test programs failed	2026-09-27		
-Net::Google::Drive::Simple	FAIL	107	93	14/107 subtests failed; 1/12 test programs failed	2026-09-26		
+Net::Google::Drive::Simple	FAIL	95	93	2/95 subtests failed; 1/12 test programs failed	2026-10-22		
 Net::Google::SafeBrowsing2::Redis	FAIL	2	0	2/2 subtests failed; 1/1 test programs failed	2026-10-03		
 Net::ICAP::Client	FAIL	119	118	1/119 subtests failed; 1/5 test programs failed	2026-10-04		
 Net::IDN::Encode	FAIL	92	74	18/92 subtests failed; 10/14 test programs failed	2026-10-14		
 Net::IP::Match::XS	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-12		
 Net::Ident	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 82s)	2026-10-04		
+Net::LDAP::AutoServer	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 106s)	2026-10-22		
 Net::MovableType	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-20		
 Net::NIS	FAIL	1		6/6 test programs failed; 0/1 subtests failed	2026-10-04		
-Net::Netmask	FAIL	720	713	7/720 subtests failed; 1/15 test programs failed	2026-09-26		
+Net::Netmask	FAIL	720	713	7/720 subtests failed; 1/15 test programs failed	2026-10-22		
 Net::RDAP	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 90s)	2026-10-18		
 Net::RabbitFoot	FAIL	22	12	10/22 subtests failed; 1/2 test programs failed	2026-10-04		
-Net::Radius::Server	FAIL	14		1 subtests failed in test files	2026-09-19		
+Net::Radius::Server	FAIL	364	328	36/364 subtests failed; 11/15 test programs failed	2026-10-22		
 Net::SAJAX	FAIL	1		7 subtests failed in test files	2026-09-14		
 Net::SFTP::Foreign::Backend::Net_SSH2	FAIL	1	0	1/1 subtests failed; 1/2 test programs failed	2026-10-05		
 Net::SIP	FAIL	17	14	3/17 subtests failed; 24/26 test programs failed	2026-10-08		
@@ -1945,10 +1932,10 @@ Net::STF::Client	FAIL	30		1/2 test programs failed; 0/30 subtests failed	2026-09
 Net::Server::POP3	FAIL			No parseable output	2026-10-19		
 Net::Signalet	FAIL	2		1/4 test programs failed; 0/2 subtests failed	2026-10-15		
 Net::Statsd::Server	FAIL	60		7/12 test programs failed; 0/60 subtests failed	2026-10-12		
+Net::Stripe	FAIL	5	0	5/5 subtests failed; 2/2 test programs failed	2026-10-22		
 Net::Telnet::Trango	FAIL	161	160	1/161 subtests failed; 1/13 test programs failed	2026-10-12		
 Net::ThreeScale::Client	FAIL	2	1	1/2 subtests failed; 7/7 test programs failed	2026-09-24		
 Net::VNC	FAIL	3	2	1/3 subtests failed; 1/2 test programs failed	2026-09-27		
-Net::YMSG	FAIL	7	3	4/7 subtests failed; 1/2 test programs failed	2026-09-18		
 NetAddr::IP	FAIL			Unknown test outcome	2026-10-21		
 NetAddr::IP::LazyInit	FAIL	223		18/35 test programs failed; 0/223 subtests failed	2026-10-14		
 NetAddr::IP::Util	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-21		
@@ -1970,7 +1957,7 @@ OAuth2::Google::Plus	FAIL	13	12	1/13 subtests failed; 1/2 test programs failed	2
 OAuth::Consumer	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 90s)	2026-10-20		
 OCR::OcrSpace	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 98s)	2026-09-26		
 ODF::MailMerge	FAIL			4/6 test programs failed; 0/0 subtests failed	2026-10-06		
-ODF::lpOD	FAIL			Unknown test outcome	2026-09-20		
+ODF::lpOD	FAIL			2/2 test programs failed; 0/0 subtests failed	2026-10-22		
 ODF::lpOD::NumberStyle	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-12		
 OPM::Maker	FAIL	177	167	10/177 subtests failed; 10/46 test programs failed	2026-10-18		
 ORLite::Migrate	FAIL	13		1/4 test programs failed; 0/13 subtests failed	2026-10-08		
@@ -1984,6 +1971,7 @@ Object::Proto	FAIL	263	172	91/263 subtests failed; 53/61 test programs failed	20
 ObjectDB	FAIL	209		1 subtests failed in test files	2026-10-03		
 OcToolkit	FAIL	19		1 subtests failed in test files	2026-09-20		
 Ogma	FAIL	1		1 subtests failed in test files	2026-10-19		
+Ontologies	FAIL	45	44	1/45 subtests failed; 7/10 test programs failed	2026-10-22		
 Opcodes	FAIL	2		1/6 test programs failed; 0/2 subtests failed	2026-10-02		
 OpenAPI::Client::OpenAI	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-04		
 OpenAPI::Modern	FAIL	3			2026-09-26		
@@ -1997,7 +1985,7 @@ OpenThought	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 108s)	2026-1
 OpenTracing::Role	FAIL	7	1	6/7 subtests failed; 40/41 test programs failed	2026-09-30		
 OptArgs	FAIL	88	87	1/88 subtests failed; 1/11 test programs failed	2026-09-13		
 OpusVL::SysParams	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-07		
-OrePAN2	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-09-26		
+OrePAN2	FAIL	52		5 subtests failed in test files	2026-10-22		
 OrePAN2::Server	FAIL	3	2	1/3 subtests failed; 1/3 test programs failed	2026-10-03		
 Org::Export::Text	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-09		
 Otogiri	FAIL	38		2 subtests failed in test files	2026-09-29		
@@ -2008,7 +1996,7 @@ PAR::Repository	FAIL	66	37	29/66 subtests failed; 6/10 test programs failed	2026
 PAR::Repository::Client	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-20		
 PApp::Hinduism	FAIL			Unknown test outcome	2026-10-03		
 PApp::SQL	FAIL	2	0	2/2 subtests failed; 2/2 test programs failed	2026-10-03		
-PBJ::JNI	FAIL			Configure failed	2026-09-28		
+PBJ::JNI	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 112s)	2026-10-22		
 PDF::API2	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-03		
 PDF::API3	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 100s)	2026-10-08		
 PDF::Builder	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-04		
@@ -2032,8 +2020,6 @@ PDL::IO::HDF5	FAIL			8/8 test programs failed; 0/0 subtests failed	2026-10-09
 PDL::IO::Matlab	FAIL			Make failed	2026-10-15		
 PDL::IO::Nifti	FAIL	1		1 subtests failed in test files	2026-10-09		
 PDL::Opt::NonLinear	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-04		
-PDL::Primitive	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-09-12		
-PDL::Stats	FAIL	1		4/5 test programs failed; 0/1 subtests failed	2026-09-08		
 PDL::Transform::Color	FAIL			Make failed	2026-10-19		
 PDL::VectorValued	FAIL			Configure failed	2026-10-04		
 PDLDM::Common	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-03		
@@ -2043,15 +2029,14 @@ PGXN::Meta::Validator	FAIL	1	0	1/1 subtests failed; 2/2 test programs failed	202
 PHP::Functions::Mail	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-24		
 PICA::Record	FAIL	272	254	18/272 subtests failed; 3/12 test programs failed	2026-09-29		
 PLP	FAIL	54	51	3/54 subtests failed; 1/7 test programs failed	2026-10-08		
-PLS	FAIL			Unknown test outcome	2026-09-10		
 PLS::Trie	FAIL	69	32	37/69 subtests failed; 3/3 test programs failed	2026-10-03		
 PML	FAIL			Configure failed	2026-10-13		
 POE::Component::Client::Bayeux	FAIL			Unknown test outcome	2026-10-09		
+POE::Component::Client::MPD	FAIL			TIMEOUT (runtime >300s; last output 1916s ago)	2026-10-22		
 POE::Component::Client::NNTP::Tail	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-18		
 POE::Component::Client::Whois	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-06		
 POE::Component::Client::Whois::Smart	FAIL	8	6	2/8 subtests failed; 2/4 test programs failed	2026-10-03		
 POE::Component::IRC::Plugin::Google::Calculator	FAIL			No parseable output	2026-09-27		
-POE::Component::IRC::Plugin::WWW::CPANRatings::RSS	FAIL			No parseable output	2026-09-08		
 POE::Component::IRC::Plugin::WWW::Google::Time	FAIL			No parseable output	2026-09-24		
 POE::Component::Server::Bayeux	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-09		
 POE::Component::Server::Ident	FAIL	16		5/8 test programs failed; 0/16 subtests failed	2026-09-27		
@@ -2062,7 +2047,7 @@ POE::Component::Supervisor	FAIL	6			2026-10-18
 POE::Component::WWW::Google::Calculator	FAIL			No parseable output	2026-09-27		
 POE::Component::WWW::Google::Time	FAIL			No parseable output	2026-09-14		
 POE::Component::WWW::Pastebin::Bot::Pastebot::Create	FAIL			No parseable output	2026-09-17		
-POE::Filter::XML	FAIL	5		2/4 test programs failed; 0/5 subtests failed	2026-09-27		
+POE::Filter::XML	FAIL	5		2/4 test programs failed; 0/5 subtests failed	2026-10-22		
 POE::Future	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 63s)	2026-10-05		
 POE::Stage	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 84s)	2026-10-14		
 POE::Sugar::Args	FAIL	2	1	1/2 subtests failed; 1/1 test programs failed	2026-10-20		
@@ -2079,17 +2064,17 @@ PPM::Make	FAIL	99		2/7 test programs failed; 0/99 subtests failed	2026-10-03
 Package::New	FAIL	36		1/4 test programs failed; 0/36 subtests failed	2026-10-20		
 Package::Tools	FAIL	53		1/4 test programs failed; 0/53 subtests failed	2026-09-21		
 Padre::Plugin::Experimento	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 151s)	2026-10-08		
+PaletteModify	FAIL	9	5	4/9 subtests failed; 25/25 test programs failed	2026-10-22		
 Paludis::ResumeState::Serialization	FAIL	4	1	3/4 subtests failed; 8/9 test programs failed	2026-10-02		
-Panda::Install	FAIL			No parseable output	2026-09-11		
-Pangloss::Apache::Handler	FAIL			No parseable output	2026-09-26		
-Parallel::Async	FAIL	4	3	1/4 subtests failed; 1/7 test programs failed	2026-09-30		
+Pangloss::Apache::Handler	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-22		
+Parallel::Async	FAIL	4	3	1/4 subtests failed; 1/7 test programs failed	2026-10-22		
 Parallel::Iterator	FAIL	21		4/9 test programs failed; 0/21 subtests failed	2026-10-18		
 Parallel::Map::Segmented	FAIL	2		4/6 test programs failed; 0/2 subtests failed	2026-10-06		
 Parallel::Mpich::MPD	FAIL	51	47	4/51 subtests failed; 2/8 test programs failed	2026-10-21		
 Parallel::Pipes	FAIL	3			2026-09-29		
 Params::Get	FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-10-19		
 Params::Validate::Strict	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-14		
-Paranoid	FAIL	549	545	4/549 subtests failed; 2/27 test programs failed	2026-09-20		
+Paranoid	FAIL	1034	1026	8/1034 subtests failed; 5/34 test programs failed	2026-10-22		
 Parley	FAIL			Unknown test outcome	2026-09-23		
 Parqus	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-08		
 Parse::CSV	FAIL	101	100	1/101 subtests failed; 1/6 test programs failed	2026-10-02		
@@ -2112,7 +2097,7 @@ Perl6::Attributes	FAIL	8	1	7/8 subtests failed; 1/1 test programs failed	2026-10
 Perl6::Controls	FAIL	3	1	2/3 subtests failed; 10/11 test programs failed	2026-10-09		
 Perl::Critic::Policy::Variables::ProhibitNumericNamesWithLeadingZero	FAIL	18		1/2 test programs failed; 0/18 subtests failed	2026-10-18		
 Perl::Critic::Policy::logicLAB::RequireVersionFormat	FAIL	6		1/8 test programs failed; 0/6 subtests failed	2026-10-13		
-Perl::LanguageServer	FAIL	1		1 subtests failed in test files	2026-09-20		
+Perl::LanguageServer	FAIL	1		1 subtests failed in test files	2026-10-22		
 Perl::PrereqScanner::Scanner::Catalyst	FAIL	1		1/4 test programs failed; 0/1 subtests failed	2026-10-04		
 Perl::Tags	FAIL	72	41	31/72 subtests failed; 7/11 test programs failed	2026-09-17		
 Perl::Tidy	FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-10-08		
@@ -2131,7 +2116,9 @@ PerlIO::via::StripHTML	FAIL	1		1/1 test programs failed; 0/1 subtests failed	202
 PerlIO::via::Unidecode	FAIL	8	7	1/8 subtests failed; 1/2 test programs failed	2026-10-18		
 PerlIO::via::csv	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 95s)	2026-10-07		
 PerlIO::via::dynamic	FAIL	6	4	2/6 subtests failed; 2/4 test programs failed	2026-10-20		
+PerlQt::ClassInfo	FAIL			Configure failed	2026-10-22		
 PerlX::Assert	FAIL	2	1	1/2 subtests failed; 4/6 test programs failed	2026-10-20		
+PerlX::Assert::PP	FAIL			Unknown test outcome	2026-10-22		
 PerlX::Define	FAIL	2	0	2/2 subtests failed; 3/3 test programs failed	2026-10-20		
 PerlX::Maybe::XS	FAIL	1	0	1/1 subtests failed; 3/3 test programs failed	2026-10-18		
 PerlX::Perform	FAIL	1		2/3 test programs failed; 0/1 subtests failed	2026-10-18		
@@ -2142,7 +2129,7 @@ Perlbal::Plugin::Addheader	FAIL	2	1	1/2 subtests failed; 2/3 test programs faile
 Perlito5	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-09-19		
 PersistentPerl	FAIL			Configure failed	2026-09-16		
 Pgreet	FAIL	7	2	5/7 subtests failed; 1/1 test programs failed	2026-09-27		
-Pheno::Ranker	FAIL	8	2	6/8 subtests failed; 7/7 test programs failed	2026-09-27		
+Pheno::Ranker	FAIL			TIMEOUT (runtime >300s; last output 12s ago)	2026-10-22		
 Photography::EV	FAIL	5	1	4/5 subtests failed; 4/5 test programs failed	2026-10-06		
 Photonic	FAIL	51		49 subtests failed in test files	2026-09-23		
 Pickles	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-02		
@@ -2160,9 +2147,8 @@ Pod::Elemental::Transformer::List	FAIL	2	1	1/2 subtests failed; 2/3 test program
 Pod::Eventual	FAIL	5	1	4/5 subtests failed; 4/5 test programs failed	2026-09-29		
 Pod::HtmlEasy	FAIL	33		3/5 test programs failed; 0/33 subtests failed	2026-10-06		
 Pod::POM	FAIL	134	124	10/134 subtests failed; 1/18 test programs failed	2026-10-02		
-Pod::POM::View::XML	FAIL	2	1	1/2 subtests failed; 4/5 test programs failed	2026-09-22		
+Pod::POM::View::XML	FAIL	2	1	1/2 subtests failed; 4/5 test programs failed	2026-10-21		
 Pod::PerlPoint	FAIL	2	0	2/2 subtests failed; 1/1 test programs failed	2026-09-26		
-Pod::Readme::Brief	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-27		
 Pod::Strip	FAIL	7	6	1/7 subtests failed; 1/3 test programs failed	2026-10-14		
 Pod::Weaver::Plugin::PERLANCAR::SortSections	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-19		
 Pod::Weaver::Plugin::TableData	FAIL	1	0	1/1 subtests failed; 1/4 test programs failed	2026-10-04		
@@ -2185,8 +2171,7 @@ Promise::XS	FAIL			25/25 test programs failed; 0/0 subtests failed	2026-10-12
 Prophet	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-04		
 Protocol::MTProto	FAIL	3		4/6 test programs failed; 0/3 subtests failed	2026-10-07		
 Pulp	FAIL	1		1 subtests failed in test files	2026-10-12		
-Puncheur	FAIL			TIMEOUT (runtime >300s; last output 9s ago)	2026-09-30		
-Pushmi	FAIL	16	5	11/16 subtests failed; 6/6 test programs failed	2026-09-30		
+Pushmi	FAIL	16	5	11/16 subtests failed; 6/6 test programs failed	2026-10-22		
 QBit::WebInterface::Apache2	FAIL			Unknown test outcome	2026-10-21		
 QQ::weixin::work	FAIL			No parseable output	2026-09-26		
 Qt::OpenGL	FAIL			Configure failed	2026-09-30		
@@ -2212,7 +2197,7 @@ RPC::ExtDirect::Server	FAIL			5/8 test programs failed; 0/0 subtests failed	2026
 RPC::XML	FAIL	917	912	5/917 subtests failed; 4/25 test programs failed	2026-09-20		
 RPM::VersionSort	FAIL				2026-10-19		
 RRD::Tweak	FAIL	1		1 subtests failed in test files	2026-10-04		
-RT::Extension::AutomaticAssignment	FAIL			4/4 test programs failed; 0/0 subtests failed	2026-09-08		
+RT::Extension::FormTools	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 221s)	2026-10-22		
 Radial	FAIL			Missing: Imager.pm	2026-10-18		
 Razor2::Client::Agent	FAIL	5		2/2 test programs failed; 0/5 subtests failed	2026-09-22		
 Readonly::Values::Months	FAIL	1		3 subtests failed in test files	2026-10-04		
@@ -2228,12 +2213,11 @@ Regexp::Common::time	FAIL	7202		9/14 test programs failed; 0/7202 subtests faile
 Regexp::Genex	FAIL				2026-09-24		
 Regexp::Grammars	FAIL	1		83/84 test programs failed; 0/1 subtests failed	2026-10-09		
 Regexp::Ignore	FAIL	146		2/2 test programs failed; 0/146 subtests failed	2026-09-27		
-Regexp::Parser	FAIL	1046	867	179/1046 subtests failed; 6/19 test programs failed	2026-09-08		
 Regexp::Pattern::License	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 67s)	2026-10-06		
 Regexp::Util	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-18		
 Renard::Curie	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-03		
 Resource::Silo	FAIL	125	122	3/125 subtests failed; 5/39 test programs failed	2026-10-14		
-ResourcePool::Factory::Alzabo	FAIL			3/3 test programs failed; 0/0 subtests failed	2026-10-20		
+ResourcePool::Factory::Alzabo	FAIL			3/3 test programs failed; 0/0 subtests failed	2026-10-22		
 ResourcePool::Resource::Alzabo	FAIL			3/3 test programs failed; 0/0 subtests failed	2026-09-20		
 ResourcePool::Resource::SOAP::Lite	FAIL			3/3 test programs failed; 0/0 subtests failed	2026-09-14		
 ReverseProxy::FormFiller	FAIL	1		1 subtests failed in test files	2026-10-18		
@@ -2266,7 +2250,7 @@ SExpression::Decode::Marpa	FAIL	1	0	1/1 subtests failed; 1/4 test programs faile
 SMS::Send::TW::PChome	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-20		
 SMS::Send::TW::Socket2Air	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-18		
 SMS::Send::TW::chtsns	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-09		
-SNA::Network	FAIL	40	37	3/40 subtests failed; 15/17 test programs failed	2026-09-19		
+SNA::Network	FAIL	42	39	3/42 subtests failed; 15/17 test programs failed	2026-10-22		
 SNMP::Util	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-27		
 SOAP::Data::Builder	FAIL	1		1/1 test programs failed; 0/1 subtests failed	2026-10-03		
 SOAP::Lite	FAIL	857		2/55 test programs failed; 0/857 subtests failed	2026-09-30		
@@ -2275,7 +2259,7 @@ SOAP::WSDL	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-19
 SPOPS	FAIL	421	418	3/421 subtests failed; 4/35 test programs failed	2026-09-27		
 SPOPSx::Ginsu	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 107s)	2026-10-07		
 SPOPSx::Tool::YAML	FAIL	9	0	9/9 subtests failed; 3/3 test programs failed	2026-09-23		
-SPVM	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-09-23		
+SPVM	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-22		
 SPVM::Digest::MD5	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-13		
 SPVM::Digest::SHA	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-04		
 SPVM::Errno	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-14		
@@ -2288,7 +2272,7 @@ SPVM::Mojo	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-02
 SPVM::Mojo::Cache	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-09-30		
 SPVM::Mojolicious	FAIL			7/7 test programs failed; 0/0 subtests failed	2026-10-02		
 SPVM::Mozilla::CA	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-04		
-SPVM::Re	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-21		
+SPVM::Re	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-22		
 SPVM::Resource::Eigen	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-05		
 SPVM::Resource::SocketUtil	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-05		
 SPVM::Resource::Utf8proc	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-14		
@@ -2300,13 +2284,13 @@ SQL::Interpol	FAIL	65	24	41/65 subtests failed; 1/1 test programs failed	2026-10
 SQL::ReservedWords	FAIL	337	159	178/337 subtests failed; 9/11 test programs failed	2026-10-20		
 SQL::Statement	FAIL	676	674	2/676 subtests failed; 8/17 test programs failed	2026-09-29		
 SQL::Steno	FAIL	12		2/4 test programs failed; 0/12 subtests failed	2026-10-07		
-SQL::Translator::Producer::Teng	FAIL	1	0	1/1 subtests failed; 3/4 test programs failed	2026-09-24		
+SQL::Translator::Producer::Teng	FAIL	1	0	1/1 subtests failed; 3/4 test programs failed	2026-10-22		
 SQLite_File	FAIL	12		136 subtests failed in test files	2026-10-18		
 SRS::EPP::Command	FAIL			TIMEOUT (runtime >300s; last output 6s ago)	2026-10-14		
 SRS::EPP::Proxy	FAIL	118	66	52/118 subtests failed; 12/23 test programs failed	2026-09-22		
 SSH::Batch	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-14		
 SVG::Calendar	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-20		
-SVG::Convert::Driver::XAML	FAIL	3		1/4 test programs failed; 0/3 subtests failed	2026-09-26		
+SVG::Convert::Driver::XAML	FAIL	3		1/4 test programs failed; 0/3 subtests failed	2026-10-22		
 SVG::Plot	FAIL	34	24	10/34 subtests failed; 2/4 test programs failed	2026-10-18		
 SVN::Notify	FAIL	31		6/9 test programs failed; 0/31 subtests failed	2026-10-07		
 SWF::File	FAIL				2026-09-30		
@@ -2314,6 +2298,8 @@ SWISH::Fork	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 108s)	2026-1
 SWISH::Prog::KSx	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 68s)	2026-10-06		
 Safe::Caller	FAIL	15	10	5/15 subtests failed; 1/4 test programs failed	2026-10-18		
 Safe::Hole	FAIL	3	1	2/3 subtests failed; 4/5 test programs failed	2026-10-03		
+Sah::Schema::perl::arraydata::modname	FAIL			Unknown test outcome	2026-10-22		
+Sah::SchemaBundle::ArrayData	FAIL			TIMEOUT (runtime >300s; last output 4s ago)	2026-10-22		
 Sah::SchemaBundle::Collection	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-21		
 Sah::SchemaBundle::CrockfordBase32	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-18		
 Sah::Schemas::Business::ID::NKK	FAIL			TIMEOUT (runtime >300s; last output 6s ago)	2026-10-14		
@@ -2332,7 +2318,7 @@ Search::Sitemap	FAIL	126	124	2/126 subtests failed; 1/5 test programs failed	202
 Search::Tokenizer	FAIL	2		1/1 test programs failed; 0/2 subtests failed	2026-10-04		
 Search::Typesense	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-13		
 SeeAlso::Server	FAIL			Unknown test outcome	2026-09-29		
-Sentinel	FAIL	45	36	9/45 subtests failed; 4/10 test programs failed	2026-09-26		
+Sentinel	FAIL	45	36	9/45 subtests failed; 4/10 test programs failed	2026-10-22		
 Sepia	FAIL	17	5	12/17 subtests failed; 2/4 test programs failed	2026-10-04		
 Sereal::Decoder	FAIL	548	357	191/548 subtests failed; 14/98 test programs failed	2026-10-09		
 Server::Starter	FAIL	4		12/16 test programs failed; 0/4 subtests failed	2026-10-04		
@@ -2340,7 +2326,7 @@ Set::CrossProduct	FAIL	66	65	1/66 subtests failed; 1/13 test programs failed	202
 Set::IntSpan	FAIL	1944		1/20 test programs failed; 0/1944 subtests failed	2026-09-18		
 Set::Light	FAIL	4	1	3/4 subtests failed; 2/17 test programs failed	2026-10-13		
 Set::Scalar	FAIL	254		2/22 test programs failed; 0/254 subtests failed	2026-10-18		
-Shared::Simple	FAIL	3	0	3/3 subtests failed; 3/3 test programs failed	2026-09-20		
+Shared::Simple	FAIL	3	0	3/3 subtests failed; 3/3 test programs failed	2026-10-21		
 Shatterproof	FAIL	23		8/9 test programs failed; 0/23 subtests failed	2026-10-13		
 ShiftJIS::X0213::MapUTF	FAIL			24/24 test programs failed; 0/0 subtests failed	2026-10-03		
 Signal::Mask	FAIL	2	0	2/2 subtests failed; 2/2 test programs failed	2026-10-07		
@@ -2355,7 +2341,7 @@ Smart::Args	FAIL	50		4 subtests failed in test files	2026-10-07
 Smart::Comments::Log4perl	FAIL	1		6/10 test programs failed; 0/1 subtests failed	2026-10-03		
 SmokeRunner::Multi	FAIL	18	14	4/18 subtests failed; 11/16 test programs failed	2026-09-22		
 Snig	FAIL	4	1	3/4 subtests failed; 1/1 test programs failed	2026-10-07		
-Socket::Class	FAIL			5/5 test programs failed; 0/0 subtests failed	2026-09-30		
+Socialtext::Resting	FAIL			No parseable output	2026-10-22		
 Socket::More::Resolver	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-18		
 Socket::MsgHdr	FAIL	3	1	2/3 subtests failed; 5/6 test programs failed	2026-10-21		
 Software::Release::Watch	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-04		
@@ -2368,6 +2354,7 @@ SpamMonkey	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-02
 Spark::Form	FAIL			Unknown test outcome	2026-10-06		
 SparkX::Form::BasicFields	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-06		
 Speak	FAIL	1		1 subtests failed in test files	2026-10-08		
+Specio::Library::Path::Tiny	FAIL	48	39	9/48 subtests failed; 1/2 test programs failed	2026-10-22		
 Spellunker	FAIL			Unknown test outcome	2026-10-14		
 Sphinx::Search	FAIL	32	31	1/32 subtests failed; 1/9 test programs failed	2026-09-18		
 Splunk::Base	FAIL	13	12	1/13 subtests failed; 1/5 test programs failed	2026-10-21		
@@ -2385,13 +2372,14 @@ Statistics::Covid	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-13
 Statistics::DependantTTest	FAIL	1		1/1 test programs failed; 0/1 subtests failed	2026-10-08		
 Statistics::Descriptive::PDL	FAIL	1		1 subtests failed in test files	2026-10-09		
 Statistics::Distribution::Generator	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 69s)	2026-10-03		
-Statistics::R::IO	FAIL			Unknown test outcome	2026-09-21		
+Statistics::R::IO	FAIL	477	467	10/477 subtests failed; 10/38 test programs failed	2026-10-22		
 Statistics::R::REXP::Types	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-13		
 Statistics::Robust	FAIL	11	7	4/11 subtests failed; 3/5 test programs failed	2026-10-05		
 Stats::LikeR	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-04		
 StorageDisplay	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-08		
 StorageDisplay::Elem	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 61s)	2026-10-07		
 Storm	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-04		
+StormX::Query::DeleteWhere	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-22		
 Story::Interact::WWW	FAIL	1		2/3 test programs failed; 0/1 subtests failed	2026-10-13		
 StrTree	FAIL			No parseable output	2026-09-26		
 Strehler::Element::RSS::RSSChannel	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-06		
@@ -2414,19 +2402,19 @@ Sub::Prototype	FAIL	1		1/2 test programs failed; 0/1 subtests failed	2026-10-04
 Sub::Quote	FAIL	5378	5371	7/5378 subtests failed; 5/15 test programs failed	2026-09-30		
 Sub::Uplevel	FAIL	158	156	2/158 subtests failed; 1/10 test programs failed	2026-10-21		
 Sub::WrapPackages	FAIL	6	4	2/6 subtests failed; 22/23 test programs failed	2026-10-14		
-Sublike::Extended	FAIL				2026-10-09		
+Sublike::Extended	FAIL				2026-10-22		
 Switch::Again	FAIL	39	32	7/39 subtests failed; 1/10 test programs failed	2026-09-24		
 Switcheroo	FAIL	1	0	1/1 subtests failed; 5/6 test programs failed	2026-10-19		
 Symbol::Util	FAIL	307	306	1/307 subtests failed; 1/8 test programs failed	2026-10-02		
 Sympatic	FAIL	32	26	6/32 subtests failed; 7/12 test programs failed	2026-10-21		
-Syntax::Feature::QwComments	FAIL	2	1	1/2 subtests failed; 7/13 test programs failed	2026-09-28		
+Syntax::Feature::QwComments	FAIL	2	1	1/2 subtests failed; 7/13 test programs failed	2026-10-22		
 Syntax::Highlight::Engine::Kate	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-19		
 Syntax::Kamelon	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 94s)	2026-10-07		
 Sys::Filesystem	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-19		
 Sys::Mlockall	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-19		
 Sys::RunAlone::Flexible	FAIL	159	108	51/159 subtests failed; 7/10 test programs failed	2026-10-03		
 Sys::RunAlone::Flexible2	FAIL	1	0	1/1 subtests failed; 1/5 test programs failed	2026-09-29		
-Sys::RunUntil	FAIL	18	13	5/18 subtests failed; 1/1 test programs failed	2026-09-19		
+Sys::RunUntil	FAIL	18	13	5/18 subtests failed; 1/1 test programs failed	2026-10-22		
 Sys::SigAction	FAIL	2	0	2/2 subtests failed; 8/8 test programs failed	2026-10-07		
 System2	FAIL				2026-10-17		
 System::InitD	FAIL	19	18	1/19 subtests failed; 1/3 test programs failed	2026-10-04		
@@ -2440,8 +2428,10 @@ TAP::Spec::Parser	FAIL			2/2 test programs failed; 0/0 subtests failed	2026-09-2
 TOML::Parser	FAIL	59		4 subtests failed in test files	2026-10-21		
 TOON::XS	FAIL	3	2	1/3 subtests failed; 15/17 test programs failed	2026-09-27		
 TRD::Watch::Web	FAIL	3	2	1/3 subtests failed; 2/4 test programs failed	2026-10-07		
+TUI::Vision	FAIL			TIMEOUT (runtime >300s; last output 4s ago)	2026-10-22		
 Table::ParentChild	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-15		
 TableData::Business::ID::DGIP::Class	FAIL			Unknown test outcome	2026-10-08		
+TableData::Perl::CPAN::Release::Static	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-22		
 TableData::Size::DisplayResolution	FAIL	1	0	1/1 subtests failed; 1/4 test programs failed	2026-09-24		
 TableDataBundle::Business::ID::DGIP	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-08		
 TableDataBundle::Lingua::Word::EN::Adjective	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-14		
@@ -2462,12 +2452,11 @@ Template::Flute	FAIL			TIMEOUT (runtime >300s; last output 16s ago)	2026-10-13
 Template::Overlay	FAIL			2/5 test programs failed; 0/0 subtests failed	2026-10-21		
 Template::Plex	FAIL	6	5	1/6 subtests failed; 1/4 test programs failed	2026-09-29		
 Template::Plugin::Filter::PlantUML	FAIL	6	5	1/6 subtests failed; 1/5 test programs failed	2026-10-06		
-Template::Plugin::HTML::Strip	FAIL	14	4	10/14 subtests failed; 3/4 test programs failed	2026-09-24		
+Template::Plugin::HTML::Strip	FAIL	14	4	10/14 subtests failed; 3/4 test programs failed	2026-10-22		
 Template::Plugin::Jcode	FAIL	10	5	5/10 subtests failed; 2/2 test programs failed	2026-10-20		
 Template::Plugin::LanguageName	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 86s)	2026-10-04		
 Template::Plugin::POSIX	FAIL	17	14	3/17 subtests failed; 1/3 test programs failed	2026-10-04		
 Template::Replace	FAIL	32	29	3/32 subtests failed; 6/12 test programs failed	2026-10-18		
-Template::Resolver	FAIL			2/5 test programs failed; 0/0 subtests failed	2026-09-10		
 Template::Toolkit	FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-10-07		
 Term::CLI	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-03		
 Term::CLI::PerlFeatures	FAIL	394	388	6/394 subtests failed; 6/19 test programs failed	2026-10-05		
@@ -2479,7 +2468,7 @@ Test2::Plugin::SourceDiag	FAIL	9	6	3/9 subtests failed; 2/4 test programs failed
 Test2::Tools::DOM	FAIL	1		Syntax error	2026-10-04		
 Test2::Tools::FFI	FAIL	2		4/6 test programs failed; 0/2 subtests failed	2026-09-22		
 Test2::Tools::LoadModule	FAIL	80	79	1/80 subtests failed; 2/10 test programs failed	2026-10-04		
-Test2::Tools::PDL	FAIL			4/5 test programs failed; 0/0 subtests failed	2026-09-19		
+Test2::Tools::PDL	FAIL			4/5 test programs failed; 0/0 subtests failed	2026-10-22		
 Test2::Tools::PerlTidy	FAIL	2	1	1/2 subtests failed; 3/4 test programs failed	2026-09-23		
 Test2::Tools::TypeTiny	FAIL	13	11	2/13 subtests failed; 2/7 test programs failed	2026-09-30		
 Test::Alien	FAIL			TIMEOUT (runtime >300s; last output 4s ago)	2026-10-19		
@@ -2504,7 +2493,6 @@ Test::HTTP::MockServer	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 9
 Test::HTTP::Response	FAIL	23	21	2/23 subtests failed; 2/3 test programs failed	2026-09-27		
 Test::Internet	FAIL			No parseable output	2026-09-18		
 Test::IsAny	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-19		
-Test::LectroTest	FAIL	95	93	2/95 subtests failed; 2/12 test programs failed	2026-09-23		
 Test::Metrics::Any	FAIL	1		3/4 test programs failed; 0/1 subtests failed	2026-10-21		
 Test::Mock::Alarm	FAIL	4	2	2/4 subtests failed; 1/2 test programs failed	2026-10-02		
 Test::Mock::HTTP::Tiny	FAIL	8	5	3/8 subtests failed; 1/3 test programs failed	2026-09-24		
@@ -2521,7 +2509,6 @@ Test::Net::LDAP	FAIL	29		13/15 test programs failed; 0/29 subtests failed	2026-1
 Test::Net::RabbitMQ	FAIL	2	1	1/2 subtests failed; 10/20 test programs failed	2026-10-18		
 Test::NoTty	FAIL	10	9	1/10 subtests failed; 2/3 test programs failed	2026-09-19		
 Test::OpenTracing::Integration	FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-09-30		
-Test::Pod::Snippets	FAIL	6		1 subtests failed in test files	2026-09-24		
 Test::PostgreSQL	FAIL	1		1 subtests failed in test files	2026-09-30		
 Test::Proto	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-21		
 Test::Refcount	FAIL	21	20	1/21 subtests failed; 1/6 test programs failed	2026-10-17		
@@ -2571,7 +2558,7 @@ Text::Names	FAIL			4/4 test programs failed; 0/0 subtests failed	2026-09-27
 Text::Shift	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-07		
 Text::Similarity	FAIL	40		4/6 test programs failed; 0/40 subtests failed	2026-09-28		
 Text::TEI::Markup	FAIL	1		1/4 test programs failed; 0/1 subtests failed	2026-10-07		
-Text::Template	FAIL	184	168	16/184 subtests failed; 5/22 test programs failed	2026-09-23		
+Text::Template	FAIL	165	124	41/165 subtests failed; 13/22 test programs failed	2026-10-22		
 Text::Template::Base	FAIL	2		1/1 test programs failed; 0/2 subtests failed	2026-10-19		
 Text::Template::Library	FAIL	1		1/1 test programs failed; 0/1 subtests failed	2026-09-26		
 Text::Transliterator	FAIL	7		1/3 test programs failed; 0/7 subtests failed	2026-10-07		
@@ -2591,7 +2578,7 @@ Thread::State	FAIL	15	11	4/15 subtests failed; 4/4 test programs failed	2026-10-
 ThreatNet	FAIL	109	107	2/109 subtests failed; 3/10 test programs failed	2026-10-04		
 Thrift	FAIL			Make failed	2026-10-07		
 Thrift::XS	FAIL	1	0	1/1 subtests failed; 4/12 test programs failed	2026-10-07		
-Tickit::RenderBuffer	FAIL			No parseable output	2026-09-27		
+Tickit::RenderBuffer	FAIL			No parseable output	2026-10-21		
 Tie::Amazon::S3	FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-10-03		
 Tie::CacheRedisDB	FAIL				2026-10-07		
 Tie::EncryptedHash	FAIL	2		7/7 test programs failed; 0/2 subtests failed	2026-09-19		
@@ -2606,10 +2593,11 @@ Tie::StorableDir	FAIL	16		2/4 test programs failed; 0/16 subtests failed	2026-10
 Tie::Subset	FAIL	185	175	10/185 subtests failed; 1/6 test programs failed	2026-10-19		
 Time::AutoRes	FAIL	23		2/4 test programs failed; 0/23 subtests failed	2026-10-13		
 Time::Format	FAIL	515	509	6/515 subtests failed; 4/26 test programs failed	2026-10-08		
+Time::LeapSecond	FAIL	2118		5/34 test programs failed; 0/2118 subtests failed	2026-10-22		
 Time::Monotonic	FAIL	2	0	2/2 subtests failed; 4/4 test programs failed	2026-09-29		
 Time::Normalize	FAIL	622	574	48/622 subtests failed; 1/11 test programs failed	2026-10-04		
 Time::Piece::MySQL	FAIL			3/3 test programs failed; 0/0 subtests failed	2026-09-26		
-Time::Spec	FAIL	1		1 subtests failed in test files	2026-10-02		
+Time::Spec	FAIL	1		1 subtests failed in test files	2026-10-22		
 Time::Str	FAIL	1305		5/26 test programs failed; 0/1305 subtests failed	2026-09-29		
 TipJar::MTA	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 114s)	2026-10-13		
 Tivoli	FAIL			Syntax error	2026-10-13		
@@ -2641,12 +2629,11 @@ UNIVERSAL::to_yaml	FAIL	2	1	1/2 subtests failed; 1/2 test programs failed	2026-1
 UR	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-10-18		
 UR::Object::Command::Crud	FAIL	2	0	2/2 subtests failed; 13/13 test programs failed	2026-09-30		
 URI::Encode::XS	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-22		
-URI::Escape::XS	FAIL	6	4	2/6 subtests failed; 8/10 test programs failed	2026-09-20		
+URI::Escape::XS	FAIL	6	4	2/6 subtests failed; 8/10 test programs failed	2026-10-22		
 URI::NamespaceMap	FAIL	10	2	8/10 subtests failed; 5/9 test programs failed	2026-09-29		
 URI::Shortener	FAIL	1	0	1/1 subtests failed; 1/16 test programs failed	2026-10-02		
 URI::Template::Restrict	FAIL	147	139	8/147 subtests failed; 1/5 test programs failed	2026-10-03		
 URL::List	FAIL	5		2/4 test programs failed; 0/5 subtests failed	2026-10-19		
-Umlmgr	FAIL	7	5	2/7 subtests failed; 2/2 test programs failed	2026-09-10		
 UnQLite	FAIL	1	0	1/1 subtests failed; 4/4 test programs failed	2026-10-08		
 Unicode::Block	FAIL	6	0	6/6 subtests failed; 12/12 test programs failed	2026-10-04		
 Unicode::CaseFold	FAIL			1/2 test programs failed; 0/0 subtests failed	2026-10-21		
@@ -2703,9 +2690,8 @@ WWW::Search	FAIL	151	146	5/151 subtests failed; 3/10 test programs failed	2026-1
 WWW::Search::DrugBank	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 69s)	2026-10-20		
 WWW::Search::HGNC	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-19		
 WWW::Search::Yahoo::DE	FAIL	11	10	1/11 subtests failed; 1/3 test programs failed	2026-10-20		
-WWW::Shopify::Liquid::Exception::Lexer::UnbalancedTag	FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-09-30		
 WWW::Sitebase	FAIL	12	10	2/12 subtests failed; 2/4 test programs failed	2026-10-02		
-WWW::Suffit::Model	FAIL	3	1	2/3 subtests failed; 2/6 test programs failed	2026-09-22		
+WWW::Suffit::Model	FAIL	4		1/6 test programs failed; 0/4 subtests failed	2026-10-22		
 WWW::URLToys	FAIL			Syntax error	2026-10-02		
 WWW::YahooJapan::Baseball	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 86s)	2026-10-14		
 WWW::Zitadel	FAIL	137	135	2/137 subtests failed; 4/7 test programs failed	2026-10-20		
@@ -2731,7 +2717,7 @@ WebService::CEPH	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-05
 WebService::FuncNet::Predictor	FAIL	13	10	3/13 subtests failed; 3/7 test programs failed	2026-10-06		
 WebService::Gitter	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-15		
 WebService::GoogleAPI::Client	FAIL			3/3 test programs failed; 0/0 subtests failed	2026-10-19		
-WebService::HabitRPG	FAIL	20	19	1/20 subtests failed; 3/8 test programs failed	2026-09-27		
+WebService::HabitRPG	FAIL	20	19	1/20 subtests failed; 3/8 test programs failed	2026-10-22		
 WebService::Hydra	FAIL	42	25	17/42 subtests failed; 4/6 test programs failed	2026-10-14		
 WebService::IFConfig::Client	FAIL	1		1/1 test programs failed; 0/1 subtests failed	2026-10-12		
 WebService::ISBNDB	FAIL	53		7/12 test programs failed; 0/53 subtests failed	2026-10-02		
@@ -2759,7 +2745,7 @@ Wetware::CLI	FAIL	18		1/4 test programs failed; 0/18 subtests failed	2026-10-06
 Whim	FAIL	39	34	5/39 subtests failed; 3/5 test programs failed	2026-10-07		
 Win32::ASP::IO	FAIL			Make failed	2026-10-05		
 Win32::Getppid	FAIL	4	3	1/4 subtests failed; 1/2 test programs failed	2026-10-04		
-Win32::Girder::IEvent::Client	FAIL	13		1/6 test programs failed; 0/13 subtests failed	2026-09-29		
+Win32::Girder::IEvent::Client	FAIL	13		1/6 test programs failed; 0/13 subtests failed	2026-10-22		
 Win32::IIS::Admin	FAIL	7	2	5/7 subtests failed; 5/6 test programs failed	2026-10-03		
 Win32::MCI::Basic	FAIL			No parseable output	2026-10-17		
 Win32::Mock	FAIL	59		1/32 test programs failed; 0/59 subtests failed	2026-10-18		
@@ -2769,13 +2755,13 @@ Win32::TSA::Notify	FAIL			Missing: Win32/PerlExe/Env.pm	2026-10-18
 Windows1252	FAIL			212/212 test programs failed; 0/0 subtests failed	2026-09-27		
 Windows1257	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-20		
 Windows1258	FAIL			Unknown test outcome	2026-09-30		
+Wizard	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 108s)	2026-10-22		
 Wizard::LDAP	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 98s)	2026-10-07		
 WordList::ID::BIP39	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 92s)	2026-10-12		
-WorePAN	FAIL	1		1/15 test programs failed; 0/1 subtests failed	2026-10-02		
+WorePAN	FAIL	1		1/15 test programs failed; 0/1 subtests failed	2026-10-22		
 Workflow	FAIL			TIMEOUT (runtime >300s; last output 7s ago)	2026-10-21		
 Wrangler	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-19		
 Wx::Perl::ListView	FAIL	9	7	2/9 subtests failed; 2/3 test programs failed	2026-10-08		
-Wx::Scintilla	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 88s)	2026-09-10		
 X500::DN	FAIL	54	40	14/54 subtests failed; 1/2 test programs failed	2026-10-21		
 X::Tiny	FAIL	14	13	1/14 subtests failed; 1/4 test programs failed	2026-10-20		
 X::classes	FAIL	103	59	44/103 subtests failed; 28/30 test programs failed	2026-10-18		
@@ -2798,9 +2784,9 @@ XML::Descent	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-1
 XML::Diver	FAIL	5	1	4/5 subtests failed; 2/3 test programs failed	2026-10-03		
 XML::DocStats	FAIL	2		2/3 test programs failed; 0/2 subtests failed	2026-09-30		
 XML::Enc	FAIL	1	0	1/1 subtests failed; 10/17 test programs failed	2026-10-13		
+XML::Feed	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-10-22		
 XML::Filter::ExceptionLocator	FAIL	5		1/2 test programs failed; 0/5 subtests failed	2026-09-13		
 XML::Flow	FAIL	27		1/7 test programs failed; 0/27 subtests failed	2026-10-08		
-XML::Grove	FAIL				2026-09-28		
 XML::Hash::LX	FAIL	44	42	2/44 subtests failed; 1/6 test programs failed	2026-10-20		
 XML::IETF	FAIL	6		1/1 test programs failed; 0/6 subtests failed	2026-10-14		
 XML::LibXML::Debugging	FAIL	3	1	2/3 subtests failed; 1/1 test programs failed	2026-10-04		
@@ -2808,7 +2794,7 @@ XML::LibXML::QuerySelector	FAIL	8	5	3/8 subtests failed; 1/2 test programs faile
 XML::LibXML::Simple	FAIL	45		2/2 test programs failed; 0/45 subtests failed	2026-09-18		
 XML::Minifier	FAIL	102	81	21/102 subtests failed; 15/26 test programs failed	2026-10-03		
 XML::NewsML_G2::Role::Writer_2_17	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-10-04		
-XML::OPDS	FAIL	19		3/9 test programs failed; 0/19 subtests failed	2026-09-30		
+XML::OPDS	FAIL	26	21	5/26 subtests failed; 2/9 test programs failed	2026-10-22		
 XML::PP	FAIL	11	0	11/11 subtests failed; 10/17 test programs failed	2026-10-04		
 XML::RPC::Fast	FAIL	15	9	6/15 subtests failed; 3/10 test programs failed	2026-09-23		
 XML::SAX::Expat::Incremental	FAIL	6		2/2 test programs failed; 0/6 subtests failed	2026-10-07		
@@ -2822,7 +2808,7 @@ XML::TinyXML	FAIL	4	0	4/4 subtests failed; 10/10 test programs failed	2026-10-06
 XML::XML2JSON	FAIL	2	1	1/2 subtests failed; 1/1 test programs failed	2026-10-07		
 XML::XPathScript	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 88s)	2026-10-09		
 XML::XSS	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 73s)	2026-10-15		
-XML::eXistDB	FAIL	9		4/6 test programs failed; 0/9 subtests failed	2026-09-29		
+XML::eXistDB	FAIL	9		4/6 test programs failed; 0/9 subtests failed	2026-10-22		
 XPP::Tie	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-09-29		
 XPlanner	FAIL	6	5	1/6 subtests failed; 2/2 test programs failed	2026-09-13		
 XS::Base	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-10-07		
@@ -2832,17 +2818,16 @@ XS::MRO::Compat	FAIL			Configure failed	2026-10-14
 XS::Parse::Infix	FAIL				2026-10-21		
 XS::Parse::Keyword	FAIL				2026-09-29		
 XS::Parse::Keyword::Builder	FAIL				2026-09-12		
-XS::Parse::Sublike	FAIL				2026-09-08		
 XS::Writer	FAIL	2	1	1/2 subtests failed; 1/2 test programs failed	2026-10-05		
 XS::libgeos	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-10-02		
 XSLT::Cache	FAIL	28	14	14/28 subtests failed; 1/1 test programs failed	2026-10-12		
 Xmms	FAIL			Missing: Xmms/Remote.pm	2026-10-18		
-Xtract	FAIL	107	106	1/107 subtests failed; 2/7 test programs failed	2026-09-29		
+Xtract	FAIL	114	112	2/114 subtests failed; 2/7 test programs failed	2026-10-22		
 YAML::Dump	FAIL	35		8 subtests failed in test files	2026-10-19		
 YAML::LibYAML	FAIL	223	151	72/223 subtests failed; 33/51 test programs failed	2026-09-29		
 YAML::LibYAML::API	FAIL	1		6/7 test programs failed; 0/1 subtests failed	2026-10-21		
 YAML::PP::LibYAML	FAIL	3	0	3/3 subtests failed; 3/3 test programs failed	2026-10-08		
-YAML::PP::Schema::Env	FAIL	2	1	1/2 subtests failed; 1/1 test programs failed	2026-09-29		
+YAML::PP::Schema::Env	FAIL	2	1	1/2 subtests failed; 1/1 test programs failed	2026-10-22		
 YAML::SyckWrapper	FAIL			1/9 test programs failed; 0/0 subtests failed	2026-10-18		
 YAML::Tiny::Color	FAIL	1	0	1/1 subtests failed; 1/4 test programs failed	2026-10-04		
 YAOO	FAIL	20	15	5/20 subtests failed; 5/10 test programs failed	2026-10-08		
