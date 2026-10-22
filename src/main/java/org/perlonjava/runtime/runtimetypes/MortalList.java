@@ -1988,7 +1988,8 @@ public class MortalList {
             RuntimeScalar cell = slot.ownerCell();
             if (cell == null) {
                 slotsWithoutCell++;
-            } else if (cell.value == referent && cell.refCountOwned
+            } else if (cell.value == referent
+                    && (cell.refCountOwned || cell.hasScalarValueOwnerSlotFor(referent))
                     && !WeakRefRegistry.isweak(cell)) {
                 rootedHashCells.add(cell);
             }
@@ -2004,13 +2005,14 @@ public class MortalList {
             RuntimeScalar cell = slot.ownerCell();
             if (cell == null) {
                 slotsWithoutCell++;
-            } else if (cell.value == referent && cell.refCountOwned
+            } else if (cell.value == referent
+                    && (cell.refCountOwned || cell.hasScalarValueOwnerSlotFor(referent))
                     && !WeakRefRegistry.isweak(cell)) {
                 rootedHashCells.add(cell);
             }
         }
-        // Standalone scalar slots can predate active-owner tracking, so use
-        // their explicit identity when recovering a displaced legacy count.
+        // Scalar-value slots can supply their identity even when recovery no
+        // longer relies on the legacy ownership Boolean.
         // Cells stored in aggregates are handled above or by the legacy
         // reachability fallback to preserve the shared-root snapshot policy.
         for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
@@ -2018,7 +2020,8 @@ public class MortalList {
                     || slot.referent() != referent) continue;
             RuntimeScalar cell = slot.ownerCell();
             if (cell == null || cell.containerOwner != null
-                    || cell.value != referent || !cell.refCountOwned
+                    || cell.value != referent
+                    || (!cell.refCountOwned && !cell.hasScalarValueOwnerSlotFor(referent))
                     || WeakRefRegistry.isweak(cell)
                     || !ReachabilityWalker.isScalarReachable(cell)) continue;
             rootedHashCells.add(cell);

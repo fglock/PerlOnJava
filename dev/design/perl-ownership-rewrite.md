@@ -107,7 +107,7 @@ and first path establish implementation cost.
 
 ### Current status: Phase 2 in progress; Phase 1 merged in PR #1653 as `84f32be179bdc2b351c3eaae1cb26df39964ab6b` (2026-10-07)
 
-The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The branch is rebased onto `origin/master` at `5a6cf5ed6`; published head `27d6df476` passes hosted run `39844774795` on Linux and Windows, including both thread compatibility gates and Linux SBOM generation. The local rebased candidate passes full `nice -n 19 make`, all three local thread configurations, and the focused lifetime regressions recorded below. The tracked Mojolicious WebSocket callback test passes on blead Perl 5.45.4 and both backends. HTML::Tree 5.07 passes all 23 files and 989 tests on both backends on the preceding ownership candidate. Phase 2 remains incomplete: `refCount` still controls lifecycle dispatch, and the slot ledger is not yet the default accounting source across general scalar/proxy stores, aliases, and cleanup. Distinct scalar-reference aliases keep separate reachability identities while contributing one referent count per scalar cell. The HTML::Tree result is compatibility evidence, not the Phase 2 owner-slot exit proof.
+The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The branch is rebased onto `origin/master` at `5a6cf5ed6`; published head `27d6df476` passes hosted run `39844774795` on Linux and Windows, including both thread compatibility gates and Linux SBOM generation. The current local candidate passes full `nice -n 19 make`; the preceding ownership candidate passes all three local thread configurations. The focused lifetime regressions recorded below pass on blead Perl 5.45.4 and both backends. HTML::Tree 5.07 passes all 23 files and 989 tests on both backends on the preceding ownership candidate. Phase 2 remains incomplete: `refCount` still controls lifecycle dispatch, and the slot ledger is not yet the default accounting source across general scalar/proxy stores, aliases, and cleanup. Distinct scalar-reference aliases keep separate reachability identities while contributing one referent count per scalar cell. The HTML::Tree result is compatibility evidence, not the Phase 2 owner-slot exit proof.
 
 ### Current batch
 
@@ -121,6 +121,11 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
 - Rebased PR #1816 onto master `5a6cf5ed6` before this batch's one full build.
   This keeps the validation aligned with current master and avoids rebuilding
   an obsolete candidate.
+- On 2026-10-23, allowed scalar owner-slot identity to supply rooted array/hash
+  recovery when the legacy ownership flag is absent, while retaining the flag
+  for cells with no explicit slot. The Java regression covers array and hash
+  owners, restoration, and release after removing their semantic slots. Full
+  `nice -n 19 make` passes in 21m46s; hosted validation is pending.
 
 The earlier candidate was based on `origin/master` (`ede542b29`) and passed the full local make in 22m55s, Ubuntu `make ci`, the Ubuntu Perl thread compatibility gate, SBOM generation, Windows `make ci` in about 52 minutes, and the focused Windows thread gate. Windows CI exposed two existing unit tests with POSIX `/tmp` paths; `make ci` now creates the runner's root-relative `tmp` directory before building. On blead Perl 5.45.4, the controller, WebSocket, Catalyst tempfile, owner-release, and writable `Internals::SvREFCNT` regressions pass. The controller regression passes 5/5 on JVM and interpreter; the WebSocket regression passes 6/6 on both; the Catalyst tempfile regression passes 24/24 on both; `refcount/issue_1794_controller_owner_release.t` passes 3/3 on both; and `internals_svrefcnt_write.t` passes 6/6 on both after failing all six assertions on its unfixed parent. The alias-count follow-up rebases onto `origin/master` (`18323a1ac`). Its focused make passes in 50s and its full local make passes in 31m30s on code commit `15e362ddb`.
 

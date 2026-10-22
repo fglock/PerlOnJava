@@ -863,6 +863,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return scalarValueOwnerSlot;
     }
 
+    boolean hasScalarValueOwnerSlotFor(RuntimeBase referent) {
+        return scalarValueOwnerSlot != null
+                && scalarValueOwnerSlot.referent() == referent;
+    }
+
     /**
      * Keep the owner ledger paired with the legacy scalar ownership bit while
      * the lifecycle bridge is being migrated. This records the scalar-cell
