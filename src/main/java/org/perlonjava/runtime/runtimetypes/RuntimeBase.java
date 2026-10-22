@@ -482,6 +482,31 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return snapshot;
     }
 
+    /**
+     * Snapshot direct scalar owners from both the legacy registry and explicit
+     * scalar-value slots. During migration, a scalar can be present in either
+     * source or both, so the identity set forms their union.
+     */
+    public java.util.Set<RuntimeScalar> countedScalarOwnerSnapshot() {
+        java.util.Set<RuntimeScalar> snapshot = java.util.Collections.newSetFromMap(
+                new java.util.IdentityHashMap<>());
+        snapshot.addAll(activeOwnerSnapshot());
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot.kind() != PerlOwnerSlot.Kind.SCALAR_VALUE
+                    || slot.referent() != this) continue;
+            RuntimeScalar owner = slot.ownerCell();
+            if (owner != null && owner.refCountOwned && owner.value == this) {
+                snapshot.add(owner);
+            }
+        }
+        return snapshot;
+    }
+
+    /** Count direct scalar owners across the legacy and explicit ledgers. */
+    public int countedScalarOwnerCount() {
+        return countedScalarOwnerSnapshot().size();
+    }
+
     /** Snapshot semantic owner-slot identities, including closure pads. */
     public synchronized java.util.Set<PerlOwnerSlot> ownerSlotSnapshot() {
         if (ownerSlots == null || ownerSlots.isEmpty()) {

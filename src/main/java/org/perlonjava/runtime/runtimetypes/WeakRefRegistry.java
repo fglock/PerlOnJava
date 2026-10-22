@@ -290,7 +290,7 @@ public class WeakRefRegistry {
     }
 
     private static boolean codeRefHasCountedOwners(RuntimeBase base) {
-        return base.refCount > 0 || base.activeOwnerCount() > 0
+        return base.refCount > 0 || base.countedScalarOwnerCount() > 0
                 || base.hasSemanticCaptureOwner();
     }
 

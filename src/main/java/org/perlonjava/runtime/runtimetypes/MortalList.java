@@ -1114,7 +1114,7 @@ public class MortalList {
                         continue;
                     }
                     if (!hasCleanupTargets
-                            || base.activeOwnerCount() > 0
+                            || base.countedScalarOwnerCount() > 0
                             || (base.refCount > 1
                             && !hasDirectWeakElementRefs
                             && isReachableFromExternalRootCached(base))) {
@@ -1129,7 +1129,7 @@ public class MortalList {
                     continue;
                 } else if (base.refCount > 0
                         && (!hasCleanupTargets
-                        || base.activeOwnerCount() > 0
+                        || base.countedScalarOwnerCount() > 0
                         || (!hasDirectWeakElementRefs
                         && isReachableFromExternalRootCached(base)))) {
                     // This scalar is a non-owning copy of a still-live container.

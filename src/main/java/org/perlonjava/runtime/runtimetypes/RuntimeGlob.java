@@ -2340,7 +2340,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
         GlobalVariable.invalidatePackageRootSnapshot();
         if (removedLocalCodeForReachabilityCheck != null
-                && removedLocalCodeForReachabilityCheck.activeOwnerCount() == 0
+                && removedLocalCodeForReachabilityCheck.countedScalarOwnerCount() == 0
                 && !ReachabilityWalker.isReachableFromLiveScalarRegistry(removedLocalCodeForReachabilityCheck)
                 && !ReachabilityWalker.isReachableFromLiveCodeCaptures(removedLocalCodeForReachabilityCheck)
                 && !ReachabilityWalker.isReachableFromRoots(removedLocalCodeForReachabilityCheck)) {
