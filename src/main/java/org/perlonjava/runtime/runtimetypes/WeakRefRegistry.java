@@ -145,6 +145,24 @@ public class WeakRefRegistry {
             GlobalVariable.globalCodeRefEdgeRootsView();
         }
 
+        if (base.deferredUnblessedAggregateRootProof) {
+            base.deferredUnblessedAggregateRootProof = false;
+            if (base.refCount == 0) {
+                if (MortalList.isUnblessedAggregateReachableDuringDrain(base)) {
+                    // The aggregate retained a strong root while its count was
+                    // deferred. Re-establish a conservative owner before this
+                    // new weak edge begins participating in cleanup.
+                    base.refCount = 1;
+                } else {
+                    // No strong Perl root remains; this newly installed weak
+                    // edge cannot keep the aggregate alive.
+                    clearWeakRefsTo(base);
+                    base.refCount = Integer.MIN_VALUE;
+                    return;
+                }
+            }
+        }
+
         boolean weakenedLiveLexical = MyVarCleanupStack.isLive(ref);
         boolean weakenedLiveCodeRef = base instanceof RuntimeCode && weakenedLiveLexical;
         boolean weakenedLiveBlessedRef = base.blessId != 0

@@ -1774,15 +1774,25 @@ public class MortalList {
                 // that weak parent and corrupts the context tree.
             } else if (base.blessId == 0
                     && (base instanceof RuntimeArray || base instanceof RuntimeHash)
+                    && !WeakRefRegistry.hasWeakRefsTo(base)
+                    && !hasUnsafeAggregateValues(base)
+                    && RuntimeCode.argsStackDepth() > 1) {
+                // Scalar-only aggregate temporaries cannot own objects whose
+                // DESTROY/weak-link cleanup must run. During nested construction,
+                // defer their root proof until an outer boundary or the first
+                // weak observer instead of rescanning the growing lexical graph.
+                // Aggregates containing references keep the conservative walk
+                // below because dropping them may release user-visible owners.
+                base.deferredUnblessedAggregateRootProof = true;
+            } else if (base.blessId == 0
+                    && (base instanceof RuntimeArray || base instanceof RuntimeHash)
                     && isUnblessedAggregateReachableDuringDrain(base)) {
                 // Unblessed aggregates can reach zero while a parser is
                 // assembling a tree, before it installs the first weak parent
-                // edge. A temporary reference can make the selective count
-                // reach zero even though an enclosing live aggregate already
-                // owns the node. Consult the shared drain snapshot before a
-                // later weaken() sees a destroyed referent. The next cleanup
-                // boundary can still reclaim a tree after its Perl root goes
-                // away.
+                // edge. At the outermost call boundary, a temporary reference
+                // can make the selective count reach zero even though an
+                // enclosing live aggregate already owns the node. Consult the
+                // shared drain snapshot before deciding it is unreachable.
                 base.refCount = 1;
             } else if (hasWeakRefs
                     && base.possiblyStoredInTiedHandler
@@ -1892,6 +1902,36 @@ public class MortalList {
                 DestroyDispatch.callDestroy(base);
             }
         }
+    }
+
+    private static boolean hasUnsafeAggregateValues(RuntimeBase base) {
+        if (base instanceof RuntimeArray array) {
+            if (array.type != RuntimeArray.PLAIN_ARRAY) return true;
+            for (RuntimeScalar value : array.elements) {
+                if (!isPlainScalarValue(value)) return true;
+            }
+            return false;
+        }
+        if (base instanceof RuntimeHash hash) {
+            if (hash.type != RuntimeHash.PLAIN_HASH) return true;
+            for (RuntimeScalar value : hash.elements.values()) {
+                if (!isPlainScalarValue(value)) return true;
+            }
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean isPlainScalarValue(RuntimeScalar value) {
+        if (value == null) return false;
+        int type = value.type;
+        return type == RuntimeScalarType.INTEGER
+                || type == RuntimeScalarType.DOUBLE
+                || type == RuntimeScalarType.STRING
+                || type == RuntimeScalarType.BYTE_STRING
+                || type == RuntimeScalarType.UNDEF
+                || type == RuntimeScalarType.VSTRING
+                || type == RuntimeScalarType.BOOLEAN;
     }
 
     private static boolean blessedClassHasDestroy(RuntimeBase base) {

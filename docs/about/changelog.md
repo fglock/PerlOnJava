@@ -11,6 +11,7 @@ priorities and future plans.
 - Apply source filters installed through `Test::More::use_ok` to the caller's remaining source and preserve `print FILEHANDLE (LIST) x N` output (#1375, #1441).
 - Cover `Test::Needs` prerequisite scanning of quoted module names and Perl version literals (#1396).
 - Preserve reference-valued FETCH results from tied-hash `values()` and retain scalar-reference envelopes in Storable round trips (#1554, #1468).
+- Defer nested root scans for scalar-only unblessed aggregates, checking reachability when a weak observer is later installed (#1860).
 - Ignore commented-out code when checking lexical constant closures for later mutations, preserving BEGIN-time generated constants (#1785).
 - Run standard Perl's `cpan -t Module` for CPAN oracle checks and keep download failures inconclusive instead of reporting missing local modules as Perl failures.
 - Keep lexical-registration membership checks constant-time, avoiding quadratic CPAN index parsing as cleanup stacks grow.

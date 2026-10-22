@@ -215,6 +215,9 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      */
     public boolean clearedOwnedAggregateElement = false;
 
+    /** A scalar-only unblessed aggregate may postpone its first weak-root proof. */
+    public boolean deferredUnblessedAggregateRootProof = false;
+
     /**
      * Number of closures that capture this aggregate lexical directly
      * (currently RuntimeArray / RuntimeHash pads). While positive, scope-exit

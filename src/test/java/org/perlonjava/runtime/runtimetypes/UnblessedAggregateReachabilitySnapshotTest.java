@@ -73,6 +73,97 @@ class UnblessedAggregateReachabilitySnapshotTest {
     }
 
     @Test
+    void scalarOnlyNestedAggregateDefersProofUntilItsFirstWeakObserver() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray global = new RuntimeArray();
+            String globalName =
+                    "UnblessedAggregateReachabilitySnapshotTest::firstWeakObserver";
+            GlobalVariable.globalArrays.put(globalName, global);
+            RuntimeArray target = new RuntimeArray();
+            RuntimeScalar strong = target.createAnonymousReference();
+            RuntimeScalar weak = target.createAnonymousReference();
+            global.elements.add(strong);
+            target.refCount = 1;
+            int originalArgsDepth = RuntimeCode.argsStackDepth();
+
+            try {
+                RuntimeArray firstNestedFrame = new RuntimeArray();
+                RuntimeArray secondNestedFrame = new RuntimeArray();
+                RuntimeCode.pushArgs(firstNestedFrame);
+                RuntimeCode.pushArgs(secondNestedFrame);
+                MortalList.pushMark();
+                MortalList.deferDecrement(target);
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    MortalList.popAndFlush();
+
+                    assertEquals(0, measurement.stats().liveRootSnapshotsBuilt,
+                            "unobserved aggregates do not trigger live-root graph scans");
+                    assertEquals(0, measurement.stats().externalRootSnapshotsBuilt,
+                            "unobserved aggregates do not trigger package-root graph scans");
+                }
+
+                assertEquals(0, target.refCount,
+                        "nested cleanup defers the aggregate root proof without a synthetic owner");
+                RuntimeCode.popArgs();
+                RuntimeCode.popArgs();
+                WeakRefRegistry.weaken(weak);
+                assertTrue(WeakRefRegistry.isweak(weak));
+                assertEquals(1, target.refCount,
+                        "installing the first weak observer proves the live strong root");
+            } finally {
+                while (RuntimeCode.argsStackDepth() > originalArgsDepth) {
+                    RuntimeCode.popArgs();
+                }
+                WeakRefRegistry.unweaken(weak);
+                GlobalVariable.globalArrays.remove(globalName);
+                MortalList.invalidateAllRootSnapshots();
+            }
+        }
+    }
+
+    @Test
+    void deferredScalarOnlyAggregateWithoutStrongRootRejectsFirstWeakObserver() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray target = new RuntimeArray();
+            RuntimeScalar weak = target.createAnonymousReference();
+            target.refCount = 1;
+            int originalArgsDepth = RuntimeCode.argsStackDepth();
+
+            try {
+                RuntimeCode.pushArgs(new RuntimeArray());
+                RuntimeCode.pushArgs(new RuntimeArray());
+                MortalList.pushMark();
+                MortalList.deferDecrement(target);
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    MortalList.popAndFlush();
+                    assertEquals(0, measurement.stats().liveRootSnapshotsBuilt,
+                            "unobserved scalar-only aggregates avoid nested root scans");
+                    assertEquals(0, measurement.stats().externalRootSnapshotsBuilt,
+                            "unobserved scalar-only aggregates avoid package-root scans");
+                }
+
+                assertTrue(target.deferredUnblessedAggregateRootProof);
+                RuntimeCode.popArgs();
+                RuntimeCode.popArgs();
+                WeakRefRegistry.weaken(weak);
+                assertEquals(RuntimeScalarType.UNDEF, weak.type,
+                        "a weak edge cannot keep an unrooted deferred aggregate alive");
+                assertEquals(Integer.MIN_VALUE, target.refCount);
+            } finally {
+                while (RuntimeCode.argsStackDepth() > originalArgsDepth) {
+                    RuntimeCode.popArgs();
+                }
+                WeakRefRegistry.unweaken(weak);
+                MortalList.invalidateAllRootSnapshots();
+            }
+        }
+    }
+
+    @Test
     void liveWeaklyObservedAggregatesSurviveOneSharedRootSnapshotPerDrain() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
