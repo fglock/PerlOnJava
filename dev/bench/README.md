@@ -68,9 +68,9 @@ intervals. Launch order is randomized with a recorded seed and balanced across
 both engines for each workload. A requested priority that cannot be verified
 makes the pair ineligible for its summary.
 
-The exact `origin/master` directional baseline, the initial inactive fast-path
-experiment, and the corrected fast-path diagnostic comparisons are retained
-under [`reports/`](reports/).
+The exact `origin/master` directional baseline, initial inactive fast-path
+experiment, corrected fast-path comparisons, and pooled-argument measurements
+are retained under [`reports/`](reports/).
 The macOS runs are diagnostic because this host denied the requested process
 priority; see `dev/design/performance-over-perl.md` for the measured values and
 limitations.

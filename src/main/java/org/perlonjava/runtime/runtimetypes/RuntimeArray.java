@@ -26,6 +26,8 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.TIED_SCALAR;
  * using a list of RuntimeScalar objects, which can hold any type of Perl scalar value.
  */
 public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference, DynamicState {
+    private static final ThreadLocal<RuntimeArray> RECYCLED_METHOD_CALL_ARGUMENTS =
+            new ThreadLocal<>();
 
     /** Return an empty lexical cell when control flow skipped its declaration. */
     public static RuntimeArray materializeLexicalCell(RuntimeArray array) {
@@ -166,9 +168,47 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public static RuntimeArray methodCallArguments(int initialCapacity) {
         if (initialCapacity < 0) throw new IllegalArgumentException("negative capacity");
         if (initialCapacity <= 2) {
+            RuntimeArray recycled = RECYCLED_METHOD_CALL_ARGUMENTS.get();
+            if (recycled != null) {
+                RECYCLED_METHOD_CALL_ARGUMENTS.remove();
+                recycled.resetRecycledMethodCallArguments();
+                return recycled;
+            }
             return new RuntimeArray(true);
         }
         return new RuntimeArray(initialCapacity);
+    }
+
+    /** Return a compiler-proven non-escaping method argument array to its thread-local pool. */
+    void recycleMethodCallArguments() {
+        if (type != PLAIN_ARRAY || !(elements instanceof InlineMethodArgumentList)
+                || elements.size() > 2 || threadShared) {
+            return;
+        }
+        resetRecycledMethodCallArguments();
+        if (RECYCLED_METHOD_CALL_ARGUMENTS.get() == null) {
+            RECYCLED_METHOD_CALL_ARGUMENTS.set(this);
+        }
+    }
+
+    private void resetRecycledMethodCallArguments() {
+        clearVerifiedMethodHashFields();
+        elements.clear();
+        type = PLAIN_ARRAY;
+        strictAutovivify = false;
+        scalarContextSize = null;
+        elementsOwned = false;
+        elementsAliased = false;
+        elementSlotsAliasedIntoCallFrame = false;
+        activeScalarLocalElements = 0;
+        scalarLocalContainerCleared = false;
+        ownedAliasElements = null;
+        transientListAssignmentRhs = false;
+        lvalueSliceContainer = false;
+        eachIteratorIndex = null;
+        blessId = 0;
+        isaArray = false;
+        isaArrayNames = null;
     }
 
     void cacheVerifiedMethodHashFields(int hashArgumentIndex, int integerArgumentIndex,

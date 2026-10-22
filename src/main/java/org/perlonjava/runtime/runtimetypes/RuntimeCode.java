@@ -108,8 +108,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // overloaded classes need the direct `%{}` lookup; avoiding the
         // overload-context query here keeps the common blessed-hash path
         // from repeating class resolution on every call.
-        int blessId = RuntimeScalarType.blessedId(self);
-        if (blessId < 0 && OverloadContext.hasDirectOverload(self, "(%{}")) {
+        if (!PerlRuntime.current().runtimeCodeState()
+                .stableHashMethodHashDereferenceAllowed(self)) {
             return false;
         }
         if (cacheHashFieldCells) {
@@ -5714,7 +5714,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 MortalList.pushMark(methodRuntime.lifecycleState);
                 try {
                     if (stableHashFastPath) {
-                        return applyStableHashMutationMethodBody(code, args, callContext);
+                        RuntimeList result = applyStableHashMutationMethodBody(
+                                code, args, callContext);
+                        args.recycleMethodCallArguments();
+                        return result;
                     }
                     return applyCachedMethod(code, args, callContext, methodRuntime);
                 } finally {

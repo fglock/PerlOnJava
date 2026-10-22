@@ -205,6 +205,32 @@ remain separate correctness gates. See issue #1196 for its diagnostic matrix.
   integer update/boxing and per-call method/argument guards as the next
   investigation targets. The JFR is retained at
   `dev/bench/reports/issue-1863-method-fastpath-active.jfr`.
+- Cached the validated receiver's hash-dereference overload decision per runtime,
+  invalidating it alongside inline method caches and bless-ID state. This
+  removes repeated `NameNormalizer.getEffectiveBlessId` work from the guarded
+  method path. The following full method-only comparison used seven requested
+  pairs and 15 one-second windows; six checksum-matched pairs were complete.
+  Recomputing those pairs while excluding only the unavailable priority check
+  gives 1.047x over the exact origin JAR (95% interval 0.992–1.088). This was a
+  useful check on the guard but its interval still includes parity.
+- Recycled the small `RuntimeArray` and inline argument storage only after a
+  compiler-proven stable-hash method completed, whose argument array cannot
+  escape. A regression checks that a later ordinary method can return an
+  escaped `@_` array without subsequent calls changing it. The next full
+  method-only comparison had six complete stable pairs; recomputation gives
+  1.113x over exact origin (1.032–1.215) and 0.720x blead (0.677–0.762).
+  Requested priority remained unverifiable, the host load was high, and one
+  candidate/oracle pair did not stabilize, so these are directional results,
+  not acceptance evidence. The candidate was JAR SHA-256
+  `1aaba79da113588d0bdd907d0a4603ca8e30529fca64ea711e078aeccd060a89`.
+  Raw reports are retained in
+  `dev/bench/reports/issue-1863-candidate-pooled-method-args-vs-origin-full-method.json`
+  and `dev/bench/reports/issue-1863-candidate-pooled-method-args-vs-blead-full-method.json`.
+- A 30-second JFR run of the pooled-argument candidate completed 7,347 batches
+  (146,940,000 method calls) with the expected checksum. Its allocation samples
+  had no `RuntimeArray` or `InlineMethodArgumentList` events, unlike the prior
+  profile, which sampled both types repeatedly. The profile is retained at
+  `dev/bench/reports/issue-1863-method-pooled-args-active.jfr`.
 - The closure JFR profile found that the guarded captured-integer addition path
   performs repeated name lookups in `closedOverVariables`; `HashMap.getNode`,
   `LinkedHashMap.get`, and `RuntimeCode.tryDirectLeafIntegerAddition` were
@@ -238,19 +264,18 @@ remain separate correctness gates. See issue #1196 for its diagnostic matrix.
 
 ### Next steps
 
-1. Profile and optimize the method body's integer hash updates and the
-   per-call argument guard, one hypothesis at a time; compare each candidate
-   directly with the pinned origin JAR.
-2. Run the full seven-pair method anchor protocol for a validated candidate
-   on a host where requested process priority can be verified.
-3. Compare each new candidate directly with the pinned origin JAR before
-   collecting another full Perl portfolio.
-4. Rerun the full #1863 portfolio against pinned blead when process priority can
-   be verified and host load is suitable; run stable Perl 5.42.2 separately.
-5. Add allocation, GC, live-heap, and peak-RSS reports to paired evidence.
-6. Continue the general call-boundary profile matrix and validate a broad
+1. Profile the remaining method-body scalar result, arithmetic, and lifecycle
+   costs; try one isolated optimization at a time and compare it with both the
+   exact origin JAR and pinned blead.
+2. Run a seven-pair method-only comparison for the selected candidate when host
+   load is lower, then execute the full #1863 portfolio.
+3. Verify requested process priority on a benchmark host and meet the full
+   seven-pair protocol before making an acceptance claim.
+4. Run stable Perl 5.42.2 separately and add allocation, GC, live-heap, and
+   peak-RSS reports to paired evidence.
+5. Continue the general call-boundary profile matrix and validate a broad
    call-path optimization before collecting the final portfolio.
-7. Collect Processor Trace instruction totals when the host enables tracing.
+6. Collect Processor Trace instruction totals when the host enables tracing.
 
 ### Open questions
 

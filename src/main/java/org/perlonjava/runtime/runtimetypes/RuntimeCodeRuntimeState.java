@@ -37,6 +37,9 @@ public final class RuntimeCodeRuntimeState {
 
     private int nextMethodCallsiteId;
     private int nextRuntimeEvalId = 1;
+    private int lastStableHashMethodBlessId;
+    private boolean lastStableHashMethodBlessIdCached;
+    private boolean lastStableHashMethodHashDereferenceAllowed;
     private final Map<String, Integer> nextRuntimeEvalIdsBySource = new HashMap<>();
     boolean disassemble = System.getenv("JPERL_DISASSEMBLE") != null;
     boolean useInterpreter = System.getenv("JPERL_INTERPRETER") != null;
@@ -110,6 +113,26 @@ public final class RuntimeCodeRuntimeState {
     void clearInlineMethodCache() {
         Arrays.fill(inlineCacheKey, 0L);
         Arrays.fill(inlineCacheCode, null);
+        clearStableHashMethodBlessIdCache();
+    }
+
+    boolean stableHashMethodHashDereferenceAllowed(RuntimeScalar invocant) {
+        int blessId = ((RuntimeBase) invocant.value).blessId;
+        if (lastStableHashMethodBlessIdCached
+                && lastStableHashMethodBlessId == blessId) {
+            return lastStableHashMethodHashDereferenceAllowed;
+        }
+        int effectiveBlessId = NameNormalizer.getEffectiveBlessId(blessId);
+        boolean allowed = effectiveBlessId >= 0
+                || !OverloadContext.hasDirectOverload(invocant, "(%{}");
+        lastStableHashMethodBlessId = blessId;
+        lastStableHashMethodBlessIdCached = true;
+        lastStableHashMethodHashDereferenceAllowed = allowed;
+        return allowed;
+    }
+
+    void clearStableHashMethodBlessIdCache() {
+        lastStableHashMethodBlessIdCached = false;
     }
 
     void clearCaches() {
