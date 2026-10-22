@@ -183,6 +183,12 @@ class AnchorWorkerTests(unittest.TestCase):
                 self.assertTrue(ready["ready"])
                 self.assertEqual(measured["operation_units"], operations)
                 self.assertEqual(measured["checksum"], checksum)
+                self.assertTrue(measured["checksum_verified"])
+                result_checksum = (
+                    str(400_080_000 + (measured["operations"] - 1) * 800_000_000)
+                    if workload == "method_anchor" else checksum
+                )
+                self.assertEqual(measured["result_checksum"], result_checksum)
                 self.assertEqual(measured["work_units"],
                                  measured["operations"] * operations)
 

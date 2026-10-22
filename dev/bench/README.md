@@ -44,6 +44,12 @@ For the #1863 acceptance anchors, compare the original method-call loop, the
 original captured-closure loop, and bit-packed Life. Pin the standard Perl
 source revision (a Perl release tag or a blead commit) in the report:
 
+The method and closure workers load their original benchmark definitions in
+load-only mode. The method receiver resets between measurement windows, outside
+the timed window; the inner loop and sink behavior match the original source.
+Each worker verifies a fixed 20,000-call checksum and the measured-window
+method result against its operation count.
+
 ```bash
 python3 dev/bench/performance_over_perl.py \
   --workloads method_anchor closure_anchor life \

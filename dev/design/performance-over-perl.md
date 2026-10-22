@@ -17,10 +17,12 @@ acceptance portfolio for measured 1:1 throughput: the original 20,000-call
 method loop, the captured-closure loop, and bit-packed Life. Run it with
 `--workloads method_anchor closure_anchor life`. The original method and
 closure benchmark files are hashed into the report. Each worker selects a
-small batch function for its workload so unrelated diagnostic branches do not
-force an acceptance workload through interpreter fallback. The method receiver
-is reset between batches so each batch returns a stable checksum on both
-engines.
+the original benchmark definitions in a load-only mode so unrelated diagnostic
+branches do not force an acceptance workload through interpreter fallback.
+The method receiver resets only between timed windows, outside the scored
+duration; each timed batch otherwise keeps the original loop and sink behavior.
+A fixed 20,000-call checksum is checked on each worker, and the result checksum
+for each measured window is verified against its operation count.
 
 ## Workload portfolio
 
@@ -126,11 +128,11 @@ acceptance contract and required diagnostic matrix.
 ### Completed in this increment
 
 - Added a persistent worker protocol for seven deterministic workload groups.
-- Added warmup stabilization, alternating process-pair order, checksum checks,
+- Added warmup stabilization, balanced randomized process-pair order, checksum checks,
   paired ratios, confidence intervals, metadata, and atomic JSON output.
 - Added a load-only Life entry point that reuses the existing flat64 algorithm.
-- Added the #1863 method and captured-closure acceptance anchors, kept each
-  timed batch in a small selected function, and added unit coverage for anchor
+- Added the #1863 method and captured-closure acceptance anchors by reusing the
+  original benchmark definitions in load-only mode, and added unit coverage for anchor
   checksums, warmup stability, protocol eligibility, priority verification,
   and paired statistics.
 - Found that the earlier worker put all workloads in one closure and triggered

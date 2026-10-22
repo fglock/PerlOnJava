@@ -18,28 +18,23 @@ my $BATCH_SIZE = {
     json => 32,
 }->{$workload} // die "unknown workload: $workload\n";
 
-my ($anchor_a, $anchor_b, $anchor_c) = (1, 2, 3);
-my $anchor_object;
-my $anchor_closure;
+my ($anchor_reset, $anchor_batch, $anchor_checksum);
 if ($workload eq 'method_anchor') {
-    {
-        package PerlOnJava::Bench::MethodAnchor;
-        sub new { return bless { x => 1, y => 2 }, $_[0] }
-        sub add {
-            my ($self, $value) = @_;
-            $self->{x} += $value;
-            $self->{y} += $value;
-            return $self->{x} + $self->{y};
-        }
-    }
-    $anchor_object = PerlOnJava::Bench::MethodAnchor->new();
+    local $ENV{PERLONJAVA_BENCH_LOAD_ONLY} = 1;
+    my $loaded = do "$root/dev/bench/benchmark_method.pl";
+    die "could not load benchmark_method.pl: $@ $!\n" unless $loaded;
+    $anchor_reset = \&main::benchmark_method_reset;
+    $anchor_batch = \&main::benchmark_method_batch;
+    $anchor_reset->();
+    $anchor_checksum = $anchor_batch->();
+    $anchor_reset->();
 }
 elsif ($workload eq 'closure_anchor') {
-    my ($u, $v, $w) = (10 + 1, 20 + 2, 30 + 3);
-    my $closure = sub {
-        return $u + $v + $w + $anchor_a + $anchor_b + $anchor_c;
-    };
-    $anchor_closure = $closure;
+    local $ENV{PERLONJAVA_BENCH_LOAD_ONLY} = 1;
+    my $loaded = do "$root/dev/bench/benchmark_closure.pl";
+    die "could not load benchmark_closure.pl: $@ $!\n" unless $loaded;
+    $anchor_batch = \&main::benchmark_closure_batch;
+    $anchor_checksum = $anchor_batch->();
 }
 
 my $closure_value = 17;
@@ -65,30 +60,6 @@ my $json_source = {
 };
 my $json_text = $json_encoder->encode($json_source);
 
-sub method_anchor_batch {
-    my ($object) = @_;
-    my $sink = 0;
-    $object->{x} = 1;
-    $object->{y} = 2;
-    my $i = 0;
-    while ($i < 20_000) {
-        $sink += $object->add(1);
-        $i++;
-    }
-    return $sink;
-}
-
-sub closure_anchor_batch {
-    my ($code) = @_;
-    my $sink = 0;
-    my $i = 0;
-    while ($i < 20_000) {
-        $sink += $code->();
-        $i++;
-    }
-    return $sink;
-}
-
 if ($workload eq 'life') {
     local $ENV{PERLONJAVA_LIFE_BENCH_LOAD} = 1;
     my $loaded = do "$root/examples/life_bitpacked.pl";
@@ -97,10 +68,10 @@ if ($workload eq 'life') {
 
 my $perform_one;
 if ($workload eq 'method_anchor') {
-    $perform_one = sub { method_anchor_batch($anchor_object) };
+    $perform_one = $anchor_batch;
 }
 elsif ($workload eq 'closure_anchor') {
-    $perform_one = sub { closure_anchor_batch($anchor_closure) };
+    $perform_one = $anchor_batch;
 }
 elsif ($workload eq 'closure') {
     $perform_one = sub { $closure->() };
@@ -158,6 +129,7 @@ while (my $line = <STDIN>) {
         next;
     }
 
+    $anchor_reset->() if $workload eq 'method_anchor';
     my @cpu_before = times();
     my $start = time();
     my $operations = 0;
@@ -172,6 +144,21 @@ while (my $line = <STDIN>) {
     my @cpu_after = times();
     my $cpu_seconds = ($cpu_after[0] + $cpu_after[1])
             - ($cpu_before[0] + $cpu_before[1]);
+    my $checksum_verified = JSON::PP::false;
+    my $reported_checksum = $checksum;
+    if ($workload eq 'method_anchor') {
+        my $expected = 400_080_000 + ($operations - 1) * 800_000_000;
+        die "method anchor checksum mismatch: got $checksum expected $expected\n"
+                unless "$checksum" eq "$expected";
+        $reported_checksum = $anchor_checksum;
+        $checksum_verified = JSON::PP::true;
+    }
+    elsif ($workload eq 'closure_anchor') {
+        die "closure anchor checksum mismatch: got $checksum expected $anchor_checksum\n"
+                unless "$checksum" eq "$anchor_checksum";
+        $reported_checksum = $anchor_checksum;
+        $checksum_verified = JSON::PP::true;
+    }
     my $units_per_operation = $workload eq 'life' ? 50
             : ($workload eq 'method_anchor' || $workload eq 'closure_anchor')
                 ? 20_000 : 1;
@@ -183,6 +170,8 @@ while (my $line = <STDIN>) {
         operations => $operations,
         operation_units => $units_per_operation,
         work_units => $operations * $units_per_operation,
-        checksum => "$checksum",
+        checksum => "$reported_checksum",
+        result_checksum => "$checksum",
+        checksum_verified => $checksum_verified,
     }), "\n";
 }

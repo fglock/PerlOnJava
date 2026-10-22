@@ -25,5 +25,15 @@ sub loop_call_closure {
     }
 }
 
-timethis(5000, sub { $sink = 0; loop_call_closure() });
-print "done $sink\n";
+sub benchmark_closure_batch {
+    $sink = 0;
+    loop_call_closure();
+    return $sink;
+}
+
+unless ($ENV{PERLONJAVA_BENCH_LOAD_ONLY}) {
+    timethis(5000, sub { $sink = 0; loop_call_closure() });
+    print "done $sink\n";
+}
+
+1;
