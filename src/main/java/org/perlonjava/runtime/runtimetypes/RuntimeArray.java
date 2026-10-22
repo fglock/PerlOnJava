@@ -1,11 +1,15 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import java.util.AbstractList;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.RandomAccess;
 import java.util.Set;
 import java.util.Stack;
 
@@ -127,14 +131,33 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
     // Constructor
     public RuntimeArray() {
+        this(false);
+    }
+
+    private RuntimeArray(boolean inlineMethodArguments) {
         type = PLAIN_ARRAY;
-        elements = newElementList();
+        elements = inlineMethodArguments
+                ? new InlineMethodArgumentList(this) : newElementList();
     }
 
     // Constructor with initial capacity
     public RuntimeArray(int initialCapacity) {
         type = PLAIN_ARRAY;
         elements = newElementList(initialCapacity);
+    }
+
+    /**
+     * Creates a method-call argument array with inline storage for up to two
+     * scalar slots. These short-lived arrays are observable as {@code @_}, so the
+     * list view remains fully mutable and promotes to ordinary storage on
+     * growth.
+     */
+    public static RuntimeArray methodCallArguments(int initialCapacity) {
+        if (initialCapacity < 0) throw new IllegalArgumentException("negative capacity");
+        if (initialCapacity <= 2) {
+            return new RuntimeArray(true);
+        }
+        return new RuntimeArray(initialCapacity);
     }
 
     private RuntimeArrayElementList newElementList() {
@@ -330,6 +353,177 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             }
             super.clear();
             owner.validateIsaMutation();
+        }
+    }
+
+    /** Compact backing for the common one-argument method call plus invocant. */
+    private static final class InlineMethodArgumentList extends AbstractList<RuntimeScalar>
+            implements RandomAccess {
+        private final RuntimeArray owner;
+        private RuntimeScalar first;
+        private RuntimeScalar second;
+        private int inlineSize;
+        private ArrayList<RuntimeScalar> expanded;
+
+        private InlineMethodArgumentList(RuntimeArray owner) {
+            this.owner = owner;
+        }
+
+        @Override
+        public RuntimeScalar get(int index) {
+            if (expanded != null) return expanded.get(index);
+            Objects.checkIndex(index, inlineSize);
+            return index == 0 ? first : second;
+        }
+
+        @Override
+        public int size() {
+            return expanded == null ? inlineSize : expanded.size();
+        }
+
+        @Override
+        public RuntimeScalar set(int index, RuntimeScalar element) {
+            RuntimeScalar previous = get(index);
+            prepareStoredValue(previous, element);
+            RuntimeScalar result;
+            if (expanded != null) {
+                result = expanded.set(index, element);
+            } else if (index == 0) {
+                first = element;
+                result = previous;
+            } else {
+                second = element;
+                result = previous;
+            }
+            owner.validateIsaMutation();
+            return result;
+        }
+
+        @Override
+        public void add(int index, RuntimeScalar element) {
+            if (index < 0 || index > size()) throw new IndexOutOfBoundsException(index);
+            prepareStoredValue(null, element);
+            if (expanded != null) {
+                expanded.add(index, element);
+            } else if (inlineSize == 0) {
+                first = element;
+                inlineSize = 1;
+            } else if (inlineSize == 1) {
+                if (index == 0) {
+                    second = first;
+                    first = element;
+                } else {
+                    second = element;
+                }
+                inlineSize = 2;
+            } else {
+                expanded = new ArrayList<>(4);
+                expanded.add(first);
+                expanded.add(second);
+                expanded.add(index, element);
+                first = null;
+                second = null;
+            }
+            modCount++;
+            owner.validateIsaMutation();
+        }
+
+        @Override
+        public boolean addAll(Collection<? extends RuntimeScalar> values) {
+            return addAll(size(), values);
+        }
+
+        @Override
+        public boolean addAll(int index, Collection<? extends RuntimeScalar> values) {
+            if (index < 0 || index > size()) throw new IndexOutOfBoundsException(index);
+            Collection<? extends RuntimeScalar> source = new ArrayList<>(values);
+            if (source.isEmpty()) return false;
+            if (owner.threadShared) {
+                int insertionIndex = index;
+                for (RuntimeScalar value : source) {
+                    add(insertionIndex++, value);
+                }
+                return true;
+            }
+            owner.noteIsaMutation();
+            owner.notePackageRootMutationIf(owner.hasRootEdge(source));
+            for (RuntimeScalar value : source) {
+                if (value != null) value.markContainerOwner(owner);
+                owner.markPackageRootedValue(value);
+            }
+            int insertionIndex = index;
+            for (RuntimeScalar value : source) addRaw(insertionIndex++, value);
+            modCount++;
+            owner.validateIsaMutation();
+            return true;
+        }
+
+        private void addRaw(int index, RuntimeScalar value) {
+            if (expanded != null) {
+                expanded.add(index, value);
+            } else if (inlineSize == 0) {
+                first = value;
+                inlineSize = 1;
+            } else if (inlineSize == 1) {
+                if (index == 0) {
+                    second = first;
+                    first = value;
+                } else {
+                    second = value;
+                }
+                inlineSize = 2;
+            } else {
+                expanded = new ArrayList<>(4);
+                expanded.add(first);
+                expanded.add(second);
+                expanded.add(index, value);
+                first = null;
+                second = null;
+            }
+        }
+
+        @Override
+        public RuntimeScalar remove(int index) {
+            RuntimeScalar previous = get(index);
+            if (expanded != null) {
+                expanded.remove(index);
+            } else if (index == 0) {
+                first = second;
+                second = null;
+                inlineSize--;
+            } else {
+                second = null;
+                inlineSize--;
+            }
+            modCount++;
+            owner.noteIsaMutation();
+            owner.notePackageRootMutation(previous, null);
+            owner.validateIsaMutation();
+            return previous;
+        }
+
+        @Override
+        public void clear() {
+            if (isEmpty()) return;
+            owner.noteIsaMutation();
+            owner.notePackageRootClear(this);
+            if (expanded != null) expanded.clear();
+            first = null;
+            second = null;
+            inlineSize = 0;
+            modCount++;
+            owner.validateIsaMutation();
+        }
+
+        private void prepareStoredValue(RuntimeScalar previous, RuntimeScalar element) {
+            if (owner.threadShared) {
+                SharedPerlStorage.validateStoredValue(element);
+                SharedPerlStorage.publishBlessing(element);
+            }
+            owner.noteIsaMutation();
+            owner.notePackageRootMutation(previous, element);
+            if (element != null) element.markContainerOwner(owner);
+            owner.markPackageRootedValue(element);
         }
     }
 
