@@ -76,6 +76,37 @@ class RuntimeHashElementOwnershipTest {
     }
 
     @Test
+    void proxyStoreCreatesAndTransfersItsHashEntryOwnerSlot() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray first = new RuntimeArray();
+            RuntimeArray second = new RuntimeArray();
+            RuntimeHash hash = new RuntimeHash();
+            RuntimeHashProxyEntry proxy = new RuntimeHashProxyEntry(hash, "value");
+
+            proxy.set(first.createReference());
+
+            PerlOwnerSlot slot = hash.hashEntryOwnerSlot("value");
+            assertEquals(1, first.hashSlotOwnerCount(),
+                    "a proxy store into a new hash must register its referent owner");
+            assertSame(first, slot.referent());
+
+            proxy.set(second.createReference());
+
+            assertSame(slot, hash.hashEntryOwnerSlot("value"),
+                    "replacing through the proxy preserves the key's slot identity");
+            assertEquals(0, first.hashSlotOwnerCount());
+            assertEquals(1, second.hashSlotOwnerCount());
+            assertSame(second, slot.referent());
+
+            hash.elements.remove("value");
+            assertEquals(0, second.hashSlotOwnerCount(),
+                    "deleting the proxy-written entry releases its owner slot");
+            assertNull(hash.hashEntryOwnerSlot("value"));
+        }
+    }
+
+    @Test
     void integerAssignmentReleasesHashEntryReferentOwner() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
