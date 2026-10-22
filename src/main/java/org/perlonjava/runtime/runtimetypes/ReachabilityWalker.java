@@ -3649,13 +3649,24 @@ public class ReachabilityWalker {
                     Collections.emptySet(), 0);
         }
 
-        // A registered, live, nonweak scalar with an owned direct reference is
-        // itself a root in walk(). If every released target has such an owner,
-        // no graph traversal is needed to preserve those targets. This is a
-        // deliberately narrow proof: nested container slots, exited captures,
-        // and uncounted references still use the full reachability walk below.
+        // A live, nonweak scalar value slot is itself a direct owner. Check
+        // explicit slots first so owners created before the first weaken() do
+        // not depend on ScalarRefRegistry's intentionally lazy registration.
+        // The registry remains a migration fallback for older ownership paths.
         Set<RuntimeBase> directlyOwned =
                 Collections.newSetFromMap(new IdentityHashMap<>());
+        for (RuntimeBase referent : pending) {
+            for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
+                if (slot.kind() != PerlOwnerSlot.Kind.SCALAR_VALUE
+                        || slot.referent() != referent) continue;
+                RuntimeScalar owner = slot.ownerCell();
+                if (owner == null || !owner.refCountOwned || owner.scopeExited
+                        || !MyVarCleanupStack.isLive(owner) || WeakRefRegistry.isweak(owner)
+                        || (owner.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                        || owner.value != referent) continue;
+                directlyOwned.add(referent);
+            }
+        }
         for (RuntimeScalar owner : ScalarRefRegistry.snapshot()) {
             if (owner == null || !owner.refCountOwned || owner.scopeExited
                     || !MyVarCleanupStack.isLive(owner) || WeakRefRegistry.isweak(owner)
