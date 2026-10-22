@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Report the caller's scalar context correctly when inspecting frames in overloaded exceptions (#1859).
 - Avoid heap exhaustion when compiling very large generated subroutines, and preserve heredoc statement boundaries with `\&name` fallbacks (#1252).
 - Cover nested require caller packages and imported `CLASS` constants, and match defer ordering and caller frames around loop `continue` blocks (#1601, #1405, #1383).
 - Preserve state variables across file-reading loops and expose the JSON boolean sentinels from the bundled `JSON` dispatcher (#1475, #1392).
@@ -39,6 +40,7 @@ priorities and future plans.
   lexical frame instead of a per-runtime deque; cache the live warning-scope
   scalar per runtime and invalidate it when global scalar bindings change.
 - Preserve inherited method dispatch in child threads.
+- Prefer exact root-module package declarations over earlier helper packages, and warn for undefined hash keys used by `exists` and `delete` (#1820, #1645).
 - Add a reproducible, warmup-aware Perl versus PerlOnJava performance runner (#1196).
 - Cover FormState session restoration across requests and HTTP response conversion from callback and streaming PSGI responses; refresh HTTP::Message and LWP compatibility status (#1650, #1651, #1652).
 - Preserve the awaited Future value when its source scalar or aggregate slot changes during suspension, covering PAGI::Server request-body receives (#1818).

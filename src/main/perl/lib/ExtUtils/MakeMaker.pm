@@ -666,15 +666,26 @@ sub _root_pm_install_path {
         : $file;
 
     open my $fh, '<', $file or return $fallback;
+    my $first_nested_package;
     while (my $line = <$fh>) {
         if ($line =~ /^\s*package\s+([A-Za-z_]\w*(?:::\w+)*)\s*[,;]/) {
             my $package = $1;
-            return $fallback unless index($package, "${name}::") == 0 || $package eq $name;
-            (my $path = $package) =~ s{::}{/}g;
-            return "$path.pm";
+            if ($package eq $name) {
+                close $fh;
+                (my $path = $package) =~ s{::}{/}g;
+                return "$path.pm";
+            }
+            if (!$first_nested_package
+                && index($package, "${name}::") == 0) {
+                $first_nested_package = $package;
+            }
         }
     }
     close $fh;
+    if (defined $first_nested_package) {
+        (my $path = $first_nested_package) =~ s{::}{/}g;
+        return "$path.pm";
+    }
     return $fallback;
 }
 
