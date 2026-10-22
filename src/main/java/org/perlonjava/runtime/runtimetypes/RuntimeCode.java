@@ -2586,11 +2586,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /** Live lexical containers keyed by their Perl pad names for PadWalker. */
     public Map<String, RuntimeBase> closedOverVariables;
+    private volatile long closedOverVariablesVersion;
 
     /** Capability marker for a guarded captured-integer addition closure. */
     public boolean directLeafIntegerAddition;
     /** Captured pad names in the source addition order. */
     private String[] directLeafIntegerAdditionCaptureNames;
+    private volatile DirectLeafIntegerAdditionCaptureCache directLeafIntegerAdditionCaptureCache;
+
+    private record DirectLeafIntegerAdditionCaptureCache(
+            Map<String, RuntimeBase> owner, long version, RuntimeScalar[] cells) { }
+
+    /** Update a closure's named capture map and invalidate cached capture cells. */
+    public synchronized void putClosedOverVariable(String name, RuntimeBase value) {
+        closedOverVariablesVersion++;
+        directLeafIntegerAdditionCaptureCache = null;
+        if (closedOverVariables == null) {
+            closedOverVariables = new LinkedHashMap<>();
+        }
+        closedOverVariables.put(name, value);
+        closedOverVariablesVersion++;
+    }
 
     /** Lexicals declared by this CV, exposed by PadWalker::peek_sub. */
     public Set<String> lexicalVariableNames;
@@ -2639,6 +2655,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (!(code.closedOverVariables.get(captureName) instanceof RuntimeScalar)) return codeRef;
             }
             code.directLeafIntegerAdditionCaptureNames = captureNames.clone();
+            RuntimeScalar[] captures = new RuntimeScalar[captureNames.length];
+            for (int i = 0; i < captureNames.length; i++) {
+                captures[i] = (RuntimeScalar) code.closedOverVariables.get(captureNames[i]);
+            }
+            code.directLeafIntegerAdditionCaptureCache =
+                    new DirectLeafIntegerAdditionCaptureCache(
+                            code.closedOverVariables, code.closedOverVariablesVersion, captures);
             code.directLeafIntegerAddition = true;
         }
         return codeRef;
@@ -3806,6 +3829,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.captureFieldsRecorded = codeFrom.captureFieldsRecorded;
         this.capturedAggregateOwnerSlots = codeFrom.capturedAggregateOwnerSlots;
         this.closedOverVariables = codeFrom.closedOverVariables;
+        this.closedOverVariablesVersion += 2;
+        this.directLeafIntegerAdditionCaptureCache = null;
         this.lexicalVariableNames = codeFrom.lexicalVariableNames;
         this.lexicalHints = codeFrom.lexicalHints;
         this.lexicalDisabledWarningCategories = codeFrom.lexicalDisabledWarningCategories;
@@ -5363,10 +5388,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 RuntimeScalar capturedVar = (RuntimeScalar) f.get(codeObject);
                 if (capturedVar != null) {
                     if (!seenScalars.add(capturedVar)) continue;
-                    if (code.closedOverVariables == null) {
-                        code.closedOverVariables = new LinkedHashMap<>();
-                    }
-                    code.closedOverVariables.put(f.getName(), capturedVar);
+                    code.putClosedOverVariable(f.getName(), capturedVar);
                     captured.add(capturedVar);
                     capturedVar.retainClosureCapture();
                 }
@@ -5374,10 +5396,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 RuntimeBase capturedAggregate = (RuntimeBase) f.get(codeObject);
                 if (capturedAggregate != null) {
                     if (!seenAggregates.add(capturedAggregate)) continue;
-                    if (code.closedOverVariables == null) {
-                        code.closedOverVariables = new LinkedHashMap<>();
-                    }
-                    code.closedOverVariables.put(f.getName(), capturedAggregate);
+                    code.putClosedOverVariable(f.getName(), capturedAggregate);
                     capturedAggregates.add(capturedAggregate);
                     PerlOwnerSlot ownerSlot = capturedAggregate.retainClosureCaptureOwner();
                     capturedAggregateOwnerSlots.add(ownerSlot);
@@ -8209,8 +8228,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /**
      * Return the fresh scalar result for a compiler-proven captured-integer
      * addition closure, or {@code null} when the ordinary Perl call boundary
-     * is required. The capture map is consulted on every call so PadWalker
-     * rebinding cannot leave this path with stale cells.
+     * is required. Cached capture cells are guarded by the live capture-map
+     * identity and revision so PadWalker rebinding falls back to fresh lookup.
      */
     public static RuntimeScalar tryDirectLeafIntegerAddition(RuntimeScalar runtimeScalar) {
         if (runtimeScalar == null || runtimeScalar.type != RuntimeScalarType.CODE
@@ -8219,17 +8238,40 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 || DebugState.isDebugMode() || isLvalueCode(code)
                 || code.directLeafIntegerAdditionCaptureNames == null
                 || code.closedOverVariables == null) return null;
-        RuntimeScalar[] captures = new RuntimeScalar[code.directLeafIntegerAdditionCaptureNames.length];
-        for (int i = 0; i < captures.length; i++) {
-            RuntimeBase value = code.closedOverVariables.get(code.directLeafIntegerAdditionCaptureNames[i]);
-            if (!(value instanceof RuntimeScalar scalar)
-                    || scalar.type != INTEGER || RuntimeScalar.isWideIntegerValue(scalar.value)
+
+        Map<String, RuntimeBase> captureMap = code.closedOverVariables;
+        long captureVersion = code.closedOverVariablesVersion;
+        if ((captureVersion & 1L) != 0) return null;
+        DirectLeafIntegerAdditionCaptureCache cache =
+                code.directLeafIntegerAdditionCaptureCache;
+        RuntimeScalar[] captures;
+        if (cache != null && cache.owner() == captureMap && cache.version() == captureVersion) {
+            captures = cache.cells();
+        } else {
+            captures = new RuntimeScalar[code.directLeafIntegerAdditionCaptureNames.length];
+            for (int i = 0; i < captures.length; i++) {
+                RuntimeBase value = captureMap.get(code.directLeafIntegerAdditionCaptureNames[i]);
+                if (!(value instanceof RuntimeScalar scalar)) return null;
+                captures[i] = scalar;
+            }
+            if (captureMap != code.closedOverVariables
+                    || captureVersion != code.closedOverVariablesVersion) return null;
+            cache = new DirectLeafIntegerAdditionCaptureCache(
+                    captureMap, captureVersion, captures);
+            code.directLeafIntegerAdditionCaptureCache = cache;
+        }
+
+        if (captureMap != code.closedOverVariables
+                || captureVersion != code.closedOverVariablesVersion) return null;
+        for (RuntimeScalar scalar : captures) {
+            if (scalar.type != INTEGER || RuntimeScalar.isWideIntegerValue(scalar.value)
                     || scalar.tainted || scalar.blessId != 0) return null;
-            captures[i] = scalar;
         }
         try {
             long sum = captures[0].getLong();
             for (int i = 1; i < captures.length; i++) sum = Math.addExact(sum, captures[i].getLong());
+            if (captureMap != code.closedOverVariables
+                    || captureVersion != code.closedOverVariablesVersion) return null;
             return new RuntimeScalar(sum);
         } catch (ArithmeticException overflow) {
             return null;

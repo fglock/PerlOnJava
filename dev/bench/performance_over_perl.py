@@ -20,9 +20,14 @@ from pathlib import Path
 from typing import Any
 
 
-WORKLOADS = ("closure", "dispatch", "numeric", "string", "regex", "life", "json")
+WORKLOADS = (
+    "method_anchor", "closure_anchor", "life",
+    "closure", "dispatch", "numeric", "string", "regex", "json",
+)
 WORKER = Path("dev/bench/performance_workload.pl")
 LIFE_SCRIPT = Path("examples/life_bitpacked.pl")
+METHOD_ANCHOR = Path("dev/bench/benchmark_method.pl")
+CLOSURE_ANCHOR = Path("dev/bench/benchmark_closure.pl")
 
 
 def run_text(command: list[str], timeout_seconds: int = 30) -> str:
@@ -99,6 +104,8 @@ def metadata(args: argparse.Namespace) -> dict[str, Any]:
         "source_sha256": {
             str(WORKER): sha256(ROOT / WORKER),
             str(LIFE_SCRIPT): sha256(ROOT / LIFE_SCRIPT),
+            str(METHOD_ANCHOR): sha256(ROOT / METHOD_ANCHOR),
+            str(CLOSURE_ANCHOR): sha256(ROOT / CLOSURE_ANCHOR),
             "dev/bench/performance_over_perl.py": sha256(Path(__file__).resolve()),
         },
         "jar_path": str(jar) if jar else None,
@@ -114,12 +121,14 @@ def metadata(args: argparse.Namespace) -> dict[str, Any]:
         "perl_executable": perl,
         "perl_version": run_text([perl, "-e", "print $^V"] if perl else [args.perl]),
         "perl_configuration": run_text([perl, "-V"] if perl else [args.perl, "-V"]),
+        "perl_source_revision": args.perl_source_revision,
         "java_executable": java,
         "java_version": run_text([java, "-version"] if java else ["java", "-version"]),
         "jperl_executable": args.jperl,
         "jperl_opts": os.environ.get("JPERL_OPTS", ""),
         "java_tool_options": os.environ.get("JAVA_TOOL_OPTIONS", ""),
         "perl5opt": os.environ.get("PERL5OPT", ""),
+        "perl5lib": os.environ.get("PERL5LIB", ""),
         "configuration": {
             "workloads": list(args.workloads),
             "pairs": args.pairs,
@@ -129,7 +138,9 @@ def metadata(args: argparse.Namespace) -> dict[str, Any]:
             "max_warmup_windows": args.max_warmup_windows,
             "stability_slope_limit": args.stability_slope_limit,
             "stability_cv_limit": args.stability_cv_limit,
+            "requested_nice": args.nice if args.nice >= 0 else None,
         },
+        "protocol_eligibility": protocol_eligibility(args),
     }
 
 
@@ -165,6 +176,24 @@ def read_window(process: subprocess.Popen[str], seconds: float) -> dict[str, Any
     return result
 
 
+def process_nice(pid: int) -> int | None:
+    try:
+        result = subprocess.run(
+            ["ps", "-o", "ni=", "-p", str(pid)],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    try:
+        return int(result.stdout.strip()) if result.returncode == 0 else None
+    except ValueError:
+        return None
+
+
 def stability(windows: list[dict[str, Any]]) -> dict[str, Any]:
     if len(windows) < 5:
         return {"stable": False, "slope": None, "coefficient_of_variation": None}
@@ -174,7 +203,7 @@ def stability(windows: list[dict[str, Any]]) -> dict[str, Any]:
         return {"stable": False, "slope": None, "coefficient_of_variation": None}
     slope = (values[-1] - values[0]) / (4 * mean)
     cv = statistics.pstdev(values) / mean
-    return {"stable": abs(slope) < SLOPE_LIMIT, "slope": slope,
+    return {"stable": abs(slope) < SLOPE_LIMIT and cv < CV_LIMIT, "slope": slope,
             "coefficient_of_variation": cv}
 
 
@@ -186,9 +215,10 @@ def run_engine(engine: str, workload: str, args: argparse.Namespace,
     environment = os.environ.copy()
     environment["PERLONJAVA_REPO_ROOT"] = str(ROOT)
     environment.pop("PERLONJAVA_LIFE_BENCH_LOAD", None)
+    command = worker_command(engine, workload, args)
     with stderr_path.open("w", encoding="utf-8") as stderr_file:
         process = subprocess.Popen(
-            worker_command(engine, workload, args),
+            command,
             cwd=ROOT,
             env=environment,
             stdin=subprocess.PIPE,
@@ -204,6 +234,11 @@ def run_engine(engine: str, workload: str, args: argparse.Namespace,
             ready = json.loads(ready_line) if ready_line else None
             if not ready or ready.get("ready") is not True:
                 raise RuntimeError(f"worker did not become ready: {ready_line!r}")
+            requested_nice = args.nice if args.nice >= 0 else None
+            observed_nice = process_nice(process.pid)
+            priority_verified = (
+                requested_nice is None or observed_nice == requested_nice
+            )
 
             warmup: list[dict[str, Any]] = []
             stable_after = None
@@ -211,8 +246,7 @@ def run_engine(engine: str, workload: str, args: argparse.Namespace,
                 warmup.append(read_window(process, args.window_seconds))
                 if window_number >= args.initial_warmup_windows:
                     result = stability(warmup)
-                    if (abs(result["slope"]) < args.stability_slope_limit
-                            and result["coefficient_of_variation"] < args.stability_cv_limit):
+                    if result["stable"]:
                         stable_after = window_number
                         break
 
@@ -231,6 +265,14 @@ def run_engine(engine: str, workload: str, args: argparse.Namespace,
                 "engine": engine,
                 "workload": workload,
                 "stable": stable,
+                "priority_requested": requested_nice,
+                "priority_observed": observed_nice,
+                "priority_verified": priority_verified,
+                "command": command,
+                "ineligible_reason": (
+                    "requested process niceness could not be verified"
+                    if not priority_verified else None
+                ),
                 "stable_after_warmup_windows": stable_after,
                 "final_warmup_stability": stability(warmup),
                 "warmup": warmup,
@@ -277,6 +319,9 @@ def summarize(pairs: list[dict[str, Any]], workloads: tuple[str, ...]) -> dict[s
         if (not perl_run or not jperl_run or not perl_run["stable"]
                 or not jperl_run["stable"]):
             continue
+        if (not perl_run.get("priority_verified", True)
+                or not jperl_run.get("priority_verified", True)):
+            continue
         if not perl_run["measurements"] or not jperl_run["measurements"]:
             continue
         if perl_run["checksum"] != jperl_run["checksum"]:
@@ -317,6 +362,23 @@ def summarize(pairs: list[dict[str, Any]], workloads: tuple[str, ...]) -> dict[s
     }
 
 
+def protocol_eligibility(args: argparse.Namespace) -> dict[str, Any]:
+    reasons = []
+    if set(args.workloads) != {"method_anchor", "closure_anchor", "life"}:
+        reasons.append("workloads are not exactly the #1863 acceptance portfolio")
+    if args.pairs < 7:
+        reasons.append("fewer than seven independent process pairs requested")
+    if args.initial_warmup_windows < 10 or args.max_warmup_windows < 60:
+        reasons.append("warmup window limits are below the #1863 protocol")
+    if args.measurement_windows < 15 or args.window_seconds < 1.0:
+        reasons.append("measurement windows are below the #1863 protocol")
+    if args.nice != 19:
+        reasons.append("requested niceness is not 19")
+    if not args.perl_source_revision:
+        reasons.append("reference Perl source revision is not pinned")
+    return {"acceptance_protocol": not reasons, "reasons": reasons}
+
+
 def write_result(path: Path, document: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -330,6 +392,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", type=Path, required=True,
                         help="JSON result path; raw warmup and measurement windows are retained")
     parser.add_argument("--perl", default="perl", help="system Perl executable")
+    parser.add_argument("--perl-source-revision",
+                        help="source revision/build identifier for the reference Perl")
     parser.add_argument("--jperl", default="./jperl", help="PerlOnJava executable")
     parser.add_argument("--timeout-command", default="timeout")
     parser.add_argument("--process-timeout-seconds", type=int, default=900)
@@ -348,13 +412,16 @@ def parse_args() -> argparse.Namespace:
 
 ROOT = Path(__file__).resolve().parents[2]
 SLOPE_LIMIT = 0.02
+CV_LIMIT = 0.03
 
 
 def main() -> int:
     global SLOPE_LIMIT
+    global CV_LIMIT
     args = parse_args()
     args.output = args.output.resolve()
     SLOPE_LIMIT = args.stability_slope_limit
+    CV_LIMIT = args.stability_cv_limit
     if args.pairs <= 0 or args.initial_warmup_windows < 5:
         raise SystemExit("pairs must be positive and initial warmup windows must be at least five")
     if args.max_warmup_windows < args.initial_warmup_windows:
@@ -390,6 +457,11 @@ def main() -> int:
                 perl_run["stable"] and jperl_run["stable"]
                 and perl_checksums and perl_checksums == jperl_checksums
             )
+            pair["measurement_eligible"] = bool(
+                pair["checksum_match"]
+                and perl_run.get("priority_verified", True)
+                and jperl_run.get("priority_verified", True)
+            )
             perl_rate = statistics.median(
                 [item["work_units_per_second"] for item in perl_run["measurements"]]
             ) if perl_run["measurements"] else None
@@ -397,18 +469,28 @@ def main() -> int:
                 [item["work_units_per_second"] for item in jperl_run["measurements"]]
             ) if jperl_run["measurements"] else None
             pair["jperl_over_perl"] = (
-                jperl_rate / perl_rate if pair["checksum_match"] and perl_rate else None
+                jperl_rate / perl_rate if pair["measurement_eligible"] and perl_rate else None
             )
             for run in (perl_run, jperl_run):
                 run["checksum"] = (run["measurements"][-1]["checksum"]
                                    if run["measurements"] else None)
             document["pairs"].append(pair)
             document["summary"] = summarize(document["pairs"], tuple(args.workloads))
+            document["summary"]["evidence_class"] = (
+                "acceptance_candidate"
+                if document["metadata"]["protocol_eligibility"]["acceptance_protocol"]
+                else "diagnostic_only"
+            )
             document["metadata"]["host"]["load_average_after_pair"] = host_load()
             write_result(args.output, document)
 
     document["metadata"]["host"]["load_average_after"] = host_load()
     document["summary"] = summarize(document["pairs"], tuple(args.workloads))
+    document["summary"]["evidence_class"] = (
+        "acceptance_candidate"
+        if document["metadata"]["protocol_eligibility"]["acceptance_protocol"]
+        else "diagnostic_only"
+    )
     write_result(args.output, document)
     print(args.output)
     return 0

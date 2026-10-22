@@ -40,7 +40,6 @@ public class DevelLexAlias extends PerlModuleBase {
         if (code.closedOverVariables != null
                 && code.closedOverVariables.containsKey(variableName)) {
             Internals.rebindCapturedVariable(code, variableName, replacement);
-            code.closedOverVariables.put(variableName, replacement);
         } else {
             code.setLexicalAlias(variableName, replacement);
         }

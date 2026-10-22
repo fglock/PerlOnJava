@@ -27,6 +27,7 @@ under PerlOnJava (and optionally system Perl for comparison). Use them to:
 | `benchmark_string.pl` | String operations (concat, substr, etc.) |
 | `benchmark_threads.pl` | Ithread snapshot, creation, scheduling, and join overhead |
 | `performance_over_perl.py` | Paired, warmup-aware Perl versus PerlOnJava workload measurements |
+| `tests/test_performance_over_perl.py` | Unit tests for stability, checksums, eligibility, and paired statistics |
 
 ## Running
 
@@ -39,16 +40,31 @@ perl  dev/bench/benchmark_closure.pl
 ./jperl dev/bench/benchmark_closure.pl
 ```
 
-For the controlled Perl comparison protocol, build the repository first and
-run the paired benchmark authority from the repository root:
+For the #1863 acceptance anchors, compare the original method-call loop, the
+original captured-closure loop, and bit-packed Life. Pin the standard Perl
+source revision (a Perl release tag or a blead commit) in the report:
 
 ```bash
-python3 dev/bench/performance_over_perl.py --output /tmp/performance-over-perl.json
+python3 dev/bench/performance_over_perl.py \
+  --workloads method_anchor closure_anchor life \
+  --perl-source-revision v5.42.2 \
+  --output /tmp/performance-over-perl.json
 ```
 
-The default run uses seven workload groups, seven alternating fresh-process
-pairs, stabilized warmup, and raw JSON samples. Use smaller window and pair
-counts only to smoke-check the runner; smoke runs are not performance evidence.
+For the primary method acceptance comparison, set `--perl` to the separately
+built optimized blead executable and `--perl-source-revision` to its exact
+commit. Run the stable Perl release separately and report it as a second
+reference. The runner records the complete Perl `-V` configuration, executable,
+source revision, JVM flags, JAR hash, workload source hashes, commands, process
+priority, warmup windows, measurements, checksums, and paired confidence
+intervals. A requested priority that cannot be verified makes the pair
+ineligible for its summary.
+
+The six other diagnostic groups from #1196 remain available alongside the
+method and closure anchors; Life is shared by both sets. The default run covers
+all nine unique groups with seven alternating fresh-process pairs, stabilized
+warmup, and raw JSON samples. Use smaller window and pair counts only to
+smoke-check the runner; smoke runs are not performance evidence.
 
 ## See Also
 

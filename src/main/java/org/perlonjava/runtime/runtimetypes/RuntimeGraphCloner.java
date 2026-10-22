@@ -420,9 +420,9 @@ public class RuntimeGraphCloner {
         }
 
         if (source.closedOverVariables != null) {
-            target.closedOverVariables = new LinkedHashMap<>();
             for (Map.Entry<String, RuntimeBase> entry : source.closedOverVariables.entrySet()) {
-                target.closedOverVariables.put(entry.getKey(), cloneValue(entry.getValue()));
+                target.putClosedOverVariable(
+                        entry.getKey(), cloneValue(entry.getValue()));
             }
         }
 
