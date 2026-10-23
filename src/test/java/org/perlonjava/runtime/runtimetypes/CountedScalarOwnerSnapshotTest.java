@@ -47,4 +47,31 @@ class CountedScalarOwnerSnapshotTest {
             MortalList.flush();
         }
     }
+
+    @Test
+    void retainsExplicitOwnerWhenLegacyFlagRetires() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            referent.activateOwnerTracking();
+            RuntimeScalar owner = new RuntimeScalar();
+            owner.set(referent.createAnonymousReference());
+            MyVarCleanupStack.register(owner);
+
+            assertEquals(1, referent.countedScalarOwnerCount());
+            owner.refCountOwned = false;
+
+            assertEquals(0, referent.activeOwnerCount(),
+                    "the legacy registry retires the owner with its Boolean flag");
+            assertEquals(1, referent.countedScalarOwnerCount(),
+                    "the active scalar-value slot remains an explicit owner");
+
+            owner.setRefCountOwned(true);
+            MyVarCleanupStack.unregister(owner);
+            MortalList.deferDecrementIfTracked(owner);
+            MortalList.flush();
+            assertEquals(0, referent.countedScalarOwnerCount(),
+                    "releasing the explicit slot removes the counted owner");
+        }
+    }
 }

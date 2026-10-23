@@ -495,7 +495,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             if (slot.kind() != PerlOwnerSlot.Kind.SCALAR_VALUE
                     || slot.referent() != this) continue;
             RuntimeScalar owner = slot.ownerCell();
-            if (owner != null && owner.refCountOwned && owner.value == this) {
+            if (owner != null && owner.value == this) {
                 snapshot.add(owner);
             }
         }
