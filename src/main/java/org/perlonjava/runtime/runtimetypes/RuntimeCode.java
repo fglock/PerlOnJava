@@ -119,6 +119,41 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return integerArgument != null && integerArgument.type == INTEGER;
     }
 
+    /** Runtime guard for the generated read-only array-backed method fast path. */
+    public static boolean canBorrowReadOnlyArrayArguments(
+            RuntimeArray args, int arrayArgumentIndex, int integerArgumentIndex,
+            int firstArrayIndex, int secondArrayIndex, boolean cacheArrayFieldCells) {
+        if (args == null || args.getClass() != RuntimeArray.class
+                || args.type != RuntimeArray.PLAIN_ARRAY
+                || arrayArgumentIndex < 0 || arrayArgumentIndex >= args.size()
+                || integerArgumentIndex < 0 || integerArgumentIndex >= args.size()
+                || firstArrayIndex < 0) {
+            return false;
+        }
+        RuntimeScalar self = args.get(arrayArgumentIndex);
+        if (self == null || self.type != ARRAYREFERENCE
+                || !(self.value instanceof RuntimeArray array)
+                || array.getClass() != RuntimeArray.class
+                || array.type != RuntimeArray.PLAIN_ARRAY) {
+            return false;
+        }
+        int blessId = RuntimeScalarType.blessedId(self);
+        if (blessId < 0 && OverloadContext.hasDirectOverload(self, "(@{}")) {
+            return false;
+        }
+        if (cacheArrayFieldCells && array.threadShared) return false;
+        RuntimeScalar firstValue = array.elements.size() > firstArrayIndex
+                ? array.elements.get(firstArrayIndex) : null;
+        if (firstValue == null || firstValue.type != INTEGER) return false;
+        if (secondArrayIndex >= 0) {
+            RuntimeScalar secondValue = array.elements.size() > secondArrayIndex
+                    ? array.elements.get(secondArrayIndex) : null;
+            if (secondValue == null || secondValue.type != INTEGER) return false;
+        }
+        RuntimeScalar integerArgument = args.get(integerArgumentIndex);
+        return integerArgument != null && integerArgument.type == INTEGER;
+    }
+
     public static void enterSortComparator(RuntimeScalar comparator) {
         sortComparatorDepth.set(sortComparatorDepth.get() + 1);
         RuntimeCode comparatorCode = comparator != null && comparator.value instanceof RuntimeCode code

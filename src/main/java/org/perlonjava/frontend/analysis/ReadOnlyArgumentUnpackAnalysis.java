@@ -1,6 +1,7 @@
 package org.perlonjava.frontend.analysis;
 
 import org.perlonjava.frontend.astnode.BinaryOperatorNode;
+import org.perlonjava.frontend.astnode.ArrayLiteralNode;
 import org.perlonjava.frontend.astnode.BlockNode;
 import org.perlonjava.frontend.astnode.HashLiteralNode;
 import org.perlonjava.frontend.astnode.IdentifierNode;
@@ -31,7 +32,9 @@ public final class ReadOnlyArgumentUnpackAnalysis {
             int integerArgumentIndex,
             List<String> hashKeys,
             boolean freshScalarReturn,
-            boolean stableHashFieldCells) {}
+            boolean stableHashFieldCells,
+            List<Integer> arrayIndices,
+            boolean stableArrayFieldCells) {}
 
     private record Visit(Node node, Node parent) {}
 
@@ -81,6 +84,7 @@ public final class ReadOnlyArgumentUnpackAnalysis {
 
         Map<String, Integer> observedUseKinds = new LinkedHashMap<>();
         Set<String> hashKeys = new LinkedHashSet<>();
+        Set<Integer> arrayIndices = new LinkedHashSet<>();
         int returnStatementCount = 0;
         Node onlyReturnStatement = null;
         Deque<Visit> pending = new ArrayDeque<>();
@@ -100,7 +104,7 @@ public final class ReadOnlyArgumentUnpackAnalysis {
             if (node instanceof BinaryOperatorNode binary) {
                 // A called subroutine could mutate an aliased argument cell.
                 if ("(".equals(binary.operator)) return null;
-                if ("->".equals(binary.operator) && !isHashElementDereference(binary.right)) {
+                if ("->".equals(binary.operator) && !isAggregateElementDereference(binary.right)) {
                     return null;
                 }
                 if (isAssignment(binary.operator)
@@ -138,8 +142,10 @@ public final class ReadOnlyArgumentUnpackAnalysis {
                     if (useKind == 0) return null;
                     if (useKind == 1) {
                         String key = literalHashKey(visit.parent());
-                        if (key == null) return null;
-                        hashKeys.add(key);
+                        Integer index = literalArrayIndex(visit.parent());
+                        if (key != null) hashKeys.add(key);
+                        else if (index != null) arrayIndices.add(index);
+                        else return null;
                     }
                     Integer previous = observedUseKinds.putIfAbsent(name, useKind);
                     if (previous != null && previous != useKind) return null;
@@ -159,7 +165,8 @@ public final class ReadOnlyArgumentUnpackAnalysis {
             if (!Integer.valueOf(2).equals(observedUseKinds.get(entry.getKey()))) return null;
             integerIndex = entry.getValue();
         }
-        if (integerIndex < 0 || hashKeys.isEmpty() || hashKeys.size() > 2) return null;
+        if (integerIndex < 0 || (hashKeys.isEmpty() == arrayIndices.isEmpty())
+                || hashKeys.size() > 2 || arrayIndices.size() > 2) return null;
         boolean freshScalarReturn = false;
         if (returnStatementCount == 1 && onlyReturnStatement instanceof OperatorNode returnNode
                 && returnNode.operand instanceof ListNode returnValues
@@ -169,7 +176,7 @@ public final class ReadOnlyArgumentUnpackAnalysis {
             String hashArgumentName = argumentNameAtIndex(argumentIndices, 0);
             freshScalarReturn = integerArgumentName != null && hashArgumentName != null
                     && isFreshNumericExpression(returnValues.elements.getFirst(),
-                            integerArgumentName, hashArgumentName, hashKeys);
+                            integerArgumentName, hashArgumentName, hashKeys, arrayIndices);
         }
         String integerArgumentName = argumentNameAtIndex(argumentIndices, integerIndex);
         String hashArgumentName = argumentNameAtIndex(argumentIndices, 0);
@@ -177,8 +184,13 @@ public final class ReadOnlyArgumentUnpackAnalysis {
                 && integerArgumentName != null && hashArgumentName != null
                 && hasOnlyStableHashCellStatements(block, assignment, onlyReturnStatement,
                         hashArgumentName, integerArgumentName, hashKeys);
+        boolean stableArrayFieldCells = freshScalarReturn
+                && integerArgumentName != null && hashArgumentName != null
+                && hasOnlyStableArrayCellStatements(block, assignment, onlyReturnStatement,
+                        hashArgumentName, integerArgumentName, arrayIndices);
         return new Candidate(assignment, Map.copyOf(argumentIndices), 0,
-                integerIndex, List.copyOf(hashKeys), freshScalarReturn, stableHashFieldCells);
+                integerIndex, List.copyOf(hashKeys), freshScalarReturn, stableHashFieldCells,
+                List.copyOf(arrayIndices), stableArrayFieldCells);
     }
 
     /**
@@ -198,6 +210,25 @@ public final class ReadOnlyArgumentUnpackAnalysis {
             if (!(statement instanceof BinaryOperatorNode update)
                     || !"+=".equals(update.operator)
                     || !isHashCellForParameter(update.left, hashArgumentName, hashKeys)
+                    || !isIntegerParameter(update.right, integerArgumentName)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Proves cached array slots cannot be structurally replaced in this method. */
+    private static boolean hasOnlyStableArrayCellStatements(
+            BlockNode block, BinaryOperatorNode unpack, Node returnStatement,
+            String arrayArgumentName, String integerArgumentName, Set<Integer> arrayIndices) {
+        if (returnStatement == null || arrayIndices.isEmpty()) return false;
+        for (Node element : block.elements) {
+            Node statement = unwrapSingleElementLists(element);
+            if (statement == unpack || statement == returnStatement) continue;
+            if (statement instanceof ListNode empty && empty.elements.isEmpty()) continue;
+            if (!(statement instanceof BinaryOperatorNode update)
+                    || !"+=".equals(update.operator)
+                    || !isArrayCellForParameter(update.left, arrayArgumentName, arrayIndices)
                     || !isIntegerParameter(update.right, integerArgumentName)) {
                 return false;
             }
@@ -236,7 +267,7 @@ public final class ReadOnlyArgumentUnpackAnalysis {
     private static int parameterUseKind(Node variable, Node parent) {
         if (!(parent instanceof BinaryOperatorNode binary)) return 0;
         if ("->".equals(binary.operator) && binary.left == variable
-                && isHashElementDereference(binary.right)) {
+                && isAggregateElementDereference(binary.right)) {
             return 1;
         }
         if (INTEGER_OPERATORS.contains(binary.operator)
@@ -247,8 +278,8 @@ public final class ReadOnlyArgumentUnpackAnalysis {
         return 0;
     }
 
-    private static boolean isHashElementDereference(Node node) {
-        return node instanceof HashLiteralNode;
+    private static boolean isAggregateElementDereference(Node node) {
+        return node instanceof HashLiteralNode || node instanceof ArrayLiteralNode;
     }
 
     private static String literalHashKey(Node node) {
@@ -268,8 +299,39 @@ public final class ReadOnlyArgumentUnpackAnalysis {
         return null;
     }
 
+    private static Integer literalArrayIndex(Node node) {
+        if (!(node instanceof BinaryOperatorNode arrow)
+                || !"->".equals(arrow.operator)
+                || !(arrow.right instanceof ArrayLiteralNode array)
+                || array.elements.size() != 1
+                || !(array.elements.getFirst() instanceof NumberNode number)
+                || !number.value.matches("[0-9]+")) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(number.value);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private static boolean isArrayCellForParameter(
+            Node node, String arrayArgumentName, Set<Integer> arrayIndices) {
+        if (!(node instanceof BinaryOperatorNode arrow)
+                || !"->".equals(arrow.operator)
+                || !(arrow.left instanceof OperatorNode variable)
+                || !"$".equals(variable.operator)
+                || !(variable.operand instanceof IdentifierNode identifier)
+                || !arrayArgumentName.equals("$" + identifier.name)) {
+            return false;
+        }
+        Integer index = literalArrayIndex(arrow);
+        return index != null && arrayIndices.contains(index);
+    }
+
     private static boolean isFreshNumericExpression(
-            Node node, String integerArgumentName, String hashArgumentName, Set<String> hashKeys) {
+            Node node, String integerArgumentName, String hashArgumentName,
+            Set<String> hashKeys, Set<Integer> arrayIndices) {
         if (node instanceof NumberNode) return true;
         if (node instanceof OperatorNode variable
                 && "$".equals(variable.operator)
@@ -278,17 +340,26 @@ public final class ReadOnlyArgumentUnpackAnalysis {
         }
         if (node instanceof BinaryOperatorNode binary && "+".equals(binary.operator)) {
             return isFreshNumericExpression(binary.left,
-                    integerArgumentName, hashArgumentName, hashKeys)
+                    integerArgumentName, hashArgumentName, hashKeys, arrayIndices)
                     && isFreshNumericExpression(binary.right,
-                    integerArgumentName, hashArgumentName, hashKeys);
+                    integerArgumentName, hashArgumentName, hashKeys, arrayIndices);
         }
         if (node instanceof BinaryOperatorNode arrow && "->".equals(arrow.operator)
+                && arrow.right instanceof HashLiteralNode
                 && arrow.left instanceof OperatorNode self
                 && "$".equals(self.operator)
                 && self.operand instanceof IdentifierNode identifier
                 && hashArgumentName.equals("$" + identifier.name)) {
             String key = literalHashKey(arrow);
             return key != null && hashKeys.contains(key);
+        }
+        if (node instanceof BinaryOperatorNode arrow && "->".equals(arrow.operator)
+                && arrow.left instanceof OperatorNode self
+                && "$".equals(self.operator)
+                && self.operand instanceof IdentifierNode identifier
+                && hashArgumentName.equals("$" + identifier.name)) {
+            Integer index = literalArrayIndex(arrow);
+            return index != null && arrayIndices.contains(index);
         }
         return false;
     }
