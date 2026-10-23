@@ -112,6 +112,12 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         return map;
     }
 
+    /** Revision for stable-method cell caching, or -1 after an untracked map view is exposed. */
+    long stableMethodFieldCacheRevision() {
+        return elements instanceof RuntimeHashElementMap map
+                ? map.stableMethodFieldCacheRevision() : -1;
+    }
+
     /** Enforce Hash::Util restricted-key access at every Perl hash operation. */
     public void validateHashKey(String key, String operation) {
         if (legalHashKeys != null && !legalHashKeys.contains(key)) {
@@ -185,6 +191,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     private static final class RuntimeHashElementMap extends StableHashMap<String, RuntimeScalar> {
         private final RuntimeHash owner;
         private long stableMethodFieldCacheRevision;
+        private boolean stableMethodFieldCacheable = true;
+        private transient Collection<RuntimeScalar> trackedValuesView;
 
         private RuntimeHashElementMap(RuntimeHash owner) {
             this.owner = owner;
@@ -269,21 +277,167 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             if (!isEmpty()) {
                 stableMethodFieldCacheRevision++;
                 if (owner.isHintHash && !owner.suppressHintHashLifecycleCleanup) {
-                    MortalList.deferDestroyForContainerClear(values());
+                    MortalList.deferDestroyForContainerClear(super.values());
                 }
-                owner.notePackageRootClear(values());
+                owner.notePackageRootClear(super.values());
             }
             super.clear();
         }
 
         private long stableMethodFieldCacheRevision() {
-            return stableMethodFieldCacheRevision;
+            return stableMethodFieldCacheable ? stableMethodFieldCacheRevision : -1;
         }
-    }
 
-    long stableMethodFieldCacheRevision() {
-        return elements instanceof RuntimeHashElementMap map
-                ? map.stableMethodFieldCacheRevision() : -1;
+        private void disableStableMethodFieldCaching() {
+            stableMethodFieldCacheable = false;
+        }
+
+        private Set<Map.Entry<String, RuntimeScalar>> rawEntrySet() {
+            return super.entrySet();
+        }
+
+        private boolean rawContainsValue(Object value) {
+            return super.containsValue(value);
+        }
+
+        // These Map APIs can mutate without passing through this wrapper's put/remove hooks.
+        // Keep the existing Map behavior, but force stable methods back to checked lookups.
+        @Override
+        public RuntimeScalar putIfAbsent(String key, RuntimeScalar value) {
+            disableStableMethodFieldCaching();
+            return super.putIfAbsent(key, value);
+        }
+
+        @Override
+        public boolean remove(Object key, Object value) {
+            disableStableMethodFieldCaching();
+            return super.remove(key, value);
+        }
+
+        @Override
+        public boolean replace(String key, RuntimeScalar oldValue, RuntimeScalar newValue) {
+            disableStableMethodFieldCaching();
+            return super.replace(key, oldValue, newValue);
+        }
+
+        @Override
+        public RuntimeScalar replace(String key, RuntimeScalar value) {
+            disableStableMethodFieldCaching();
+            return super.replace(key, value);
+        }
+
+        @Override
+        public void replaceAll(java.util.function.BiFunction<? super String,
+                ? super RuntimeScalar, ? extends RuntimeScalar> function) {
+            disableStableMethodFieldCaching();
+            super.replaceAll(function);
+        }
+
+        @Override
+        public RuntimeScalar computeIfAbsent(String key,
+                java.util.function.Function<? super String, ? extends RuntimeScalar> function) {
+            disableStableMethodFieldCaching();
+            return super.computeIfAbsent(key, function);
+        }
+
+        @Override
+        public RuntimeScalar computeIfPresent(String key,
+                java.util.function.BiFunction<? super String, ? super RuntimeScalar,
+                        ? extends RuntimeScalar> function) {
+            disableStableMethodFieldCaching();
+            return super.computeIfPresent(key, function);
+        }
+
+        @Override
+        public RuntimeScalar compute(String key,
+                java.util.function.BiFunction<? super String, ? super RuntimeScalar,
+                        ? extends RuntimeScalar> function) {
+            disableStableMethodFieldCaching();
+            return super.compute(key, function);
+        }
+
+        @Override
+        public RuntimeScalar merge(String key, RuntimeScalar value,
+                java.util.function.BiFunction<? super RuntimeScalar, ? super RuntimeScalar,
+                        ? extends RuntimeScalar> function) {
+            disableStableMethodFieldCaching();
+            return super.merge(key, value, function);
+        }
+
+        @Override
+        public Set<Map.Entry<String, RuntimeScalar>> entrySet() {
+            disableStableMethodFieldCaching();
+            return super.entrySet();
+        }
+
+        @Override
+        public Set<String> keySet() {
+            disableStableMethodFieldCaching();
+            return super.keySet();
+        }
+
+        @Override
+        public Collection<RuntimeScalar> values() {
+            if (trackedValuesView == null) {
+                trackedValuesView = new AbstractCollection<>() {
+                    @Override
+                    public int size() {
+                        return RuntimeHashElementMap.this.size();
+                    }
+
+                    @Override
+                    public boolean contains(Object value) {
+                        return RuntimeHashElementMap.this.rawContainsValue(value);
+                    }
+
+                    @Override
+                    public Iterator<RuntimeScalar> iterator() {
+                        Iterator<Map.Entry<String, RuntimeScalar>> entries =
+                                RuntimeHashElementMap.this.rawEntrySet().iterator();
+                        return new Iterator<>() {
+                            private Map.Entry<String, RuntimeScalar> current;
+
+                            @Override
+                            public boolean hasNext() {
+                                return entries.hasNext();
+                            }
+
+                            @Override
+                            public RuntimeScalar next() {
+                                current = entries.next();
+                                return current.getValue();
+                            }
+
+                            @Override
+                            public void remove() {
+                                if (current == null) throw new IllegalStateException();
+                                String key = current.getKey();
+                                RuntimeScalar previous = current.getValue();
+                                entries.remove();
+                                recordViewRemoval(key, previous);
+                                current = null;
+                            }
+                        };
+                    }
+
+                    @Override
+                    public void clear() {
+                        RuntimeHashElementMap.this.clear();
+                    }
+                };
+            }
+            return trackedValuesView;
+        }
+
+        private void recordViewRemoval(String key, RuntimeScalar previous) {
+            stableMethodFieldCacheRevision++;
+            if (owner.isHintHash && !owner.suppressHintHashLifecycleCleanup
+                    && previous != null) {
+                MortalList.deferDestroyForContainerClear(
+                        java.util.Collections.singletonList(previous));
+            }
+            owner.notePackageRootMutation(previous, null);
+        }
     }
 
     private boolean hasDurableElementLifetime() {

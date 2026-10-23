@@ -29,11 +29,11 @@ class RuntimeHashStableMethodFieldCacheTest {
         assertTrue(afterRemove > afterPutAll);
 
         hash.elements.clear();
-        assertEquals(-1, hash.stableMethodFieldCacheRevision());
+        assertTrue(hash.stableMethodFieldCacheRevision() > afterRemove);
     }
 
     @Test
-    void exposingMutableMapViewsDisablesStableMethodFieldCaching() {
+    void entryAndKeyViewsDisableCachingButValuesIterationRemainsTracked() {
         RuntimeHash entrySetHash = new RuntimeHash();
         entrySetHash.elements.entrySet();
         assertEquals(-1, entrySetHash.stableMethodFieldCacheRevision());
@@ -43,8 +43,18 @@ class RuntimeHashStableMethodFieldCacheTest {
         assertEquals(-1, keySetHash.stableMethodFieldCacheRevision());
 
         RuntimeHash valuesHash = new RuntimeHash();
-        valuesHash.elements.values();
-        assertEquals(-1, valuesHash.stableMethodFieldCacheRevision());
+        long revision = valuesHash.stableMethodFieldCacheRevision();
+        RuntimeScalar value = new RuntimeScalar(1);
+        valuesHash.elements.put("x", value);
+        long afterPut = valuesHash.stableMethodFieldCacheRevision();
+        assertTrue(afterPut > revision);
+        var values = valuesHash.elements.values().iterator();
+        assertEquals(value, values.next());
+        assertEquals(afterPut, valuesHash.stableMethodFieldCacheRevision());
+
+        values.remove();
+        assertTrue(valuesHash.stableMethodFieldCacheRevision() > afterPut);
+        assertEquals(0, valuesHash.elements.size());
     }
 
     @Test
