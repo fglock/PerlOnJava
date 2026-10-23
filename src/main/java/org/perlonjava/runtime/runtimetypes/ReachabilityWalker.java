@@ -324,7 +324,13 @@ public class ReachabilityWalker {
                     visitScalar(value, todo);
                 }
             } else if (cur instanceof RuntimeArray array) {
-                for (RuntimeScalar value : array.elements) {
+                // A child thread can run this lifecycle walk while another
+                // thread mutates a shared array. Iterating the live ArrayList
+                // leaks its fail-fast ConcurrentModificationException into
+                // thread teardown (seen in threads/t/free2.t). Traverse a
+                // point-in-time copy instead; the graph walk is advisory and
+                // must tolerate concurrent updates to shared Perl values.
+                for (RuntimeScalar value : array.elements.toArray(RuntimeScalar[]::new)) {
                     addReachable(value, todo);
                     visitScalar(value, todo);
                 }
@@ -373,7 +379,11 @@ public class ReachabilityWalker {
                 if (a.elements instanceof TieArray tieArray) {
                     visitScalar(tieArray.getSelf(), todo);
                 }
-                for (RuntimeScalar v : a.elements) {
+                // This broader weak-reference walk can also run during a
+                // child thread's teardown while another thread mutates a
+                // shared array. Never expose ArrayList's fail-fast iterator
+                // to concurrent Perl updates.
+                for (RuntimeScalar v : a.elements.toArray(RuntimeScalar[]::new)) {
                     recordWeakArraySlotWitness(a, v);
                     addReachable(v, todo);
                     visitScalar(v, todo);

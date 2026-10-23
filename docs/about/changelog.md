@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Snapshot mutable array entries while marking package roots and during reachability walks so concurrent thread teardown cannot fail with `ConcurrentModificationException`.
+
 - Enforce restricted-hash key access and implement `Hash::Util` key, value, and hash locking (#1502, #1172).
 - Report the caller's scalar context correctly when inspecting frames in overloaded exceptions (#1859).
 - Avoid heap exhaustion when compiling very large generated subroutines, and preserve heredoc statement boundaries with `\&name` fallbacks (#1252).

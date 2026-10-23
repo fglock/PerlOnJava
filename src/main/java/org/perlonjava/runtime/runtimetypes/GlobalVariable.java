@@ -750,7 +750,11 @@ public class GlobalVariable {
                 hash.markPackageRootedValue(value);
             }
         } else if (root instanceof RuntimeArray array) {
-            for (RuntimeScalar value : array.elements) {
+            // Package-root marking may race with another thread mutating a
+            // shared array. This is bookkeeping, so mark the values from a
+            // best-effort snapshot instead of leaking ArrayList's
+            // fail-fast ConcurrentModificationException into Perl code.
+            for (RuntimeScalar value : array.elements.toArray(RuntimeScalar[]::new)) {
                 array.markPackageRootedValue(value);
             }
         }
