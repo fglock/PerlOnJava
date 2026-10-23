@@ -12,12 +12,11 @@ XSLoader::load('Storable', $VERSION);
 # Export the main functions
 use Exporter 'import';
 our @EXPORT = qw(
-    store retrieve nstore
-    freeze thaw nfreeze
-    dclone
+    store retrieve
 );
 
 our @EXPORT_OK = qw(
+    nstore freeze thaw nfreeze dclone
     store_fd nstore_fd fd_retrieve retrieve_fd
     lock_store lock_retrieve lock_nstore
     file_magic read_magic

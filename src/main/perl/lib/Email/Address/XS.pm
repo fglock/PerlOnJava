@@ -86,7 +86,23 @@ sub parse_email_addresses {
         s/^\s+|\s+$//g;
         next unless length;
         my ($phrase, $address);
-        if (/\A(.*?)\s*<([^>]+)>/) {
+        my ($quoted, $comment) = (0, 0);
+        my $open_at;
+        for my $i (0 .. length($_) - 1) {
+            my $char = substr($_, $i, 1);
+            next if $i && substr($_, $i - 1, 1) eq '\\';
+            if ($char eq '"' && !$comment) { $quoted = !$quoted; next }
+            if (!$quoted && $char eq '(') { $comment++; next }
+            if (!$quoted && $char eq ')' && $comment) { $comment--; next }
+            next if $quoted || $comment;
+            if ($char eq '<') { $open_at = $i; last }
+        }
+        if (defined $open_at && substr($_, $open_at + 1) =~ /\A([^>]*)>/) {
+            $phrase = substr($_, 0, $open_at);
+            $address = $1;
+            $phrase =~ s/^\s+|\s+$//g;
+            $phrase =~ s/\A"(.*)"\z/$1/s;
+        } elsif (/\A(.*?)\s*<([^>]+)>/) {
             ($phrase, $address) = ($1, $2);
             $phrase =~ s/^\s+|\s+$//g;
             $phrase =~ s/\A"(.*)"\z/$1/;
@@ -100,7 +116,65 @@ sub parse_email_addresses {
 
 sub parse_email_groups {
     my ($string, $class) = @_;
-    return (undef, [parse_email_addresses($string, $class)]);
+    $class ||= __PACKAGE__;
+    return (undef, []) unless defined $string;
+    return (undef, [$string]) if $class->is_obj($string);
+    my (@groups, $part, $group_name, $group_addresses, $ungrouped_addresses,
+        $quoted, $comment, $angle);
+    $part = '';
+    $ungrouped_addresses = [];
+    for my $i (0 .. length($string) - 1) {
+        my $char = substr($string, $i, 1);
+        my $escaped = $i && substr($string, $i - 1, 1) eq '\\';
+        if (!$escaped && $char eq '"' && !$comment) {
+            $quoted = !$quoted;
+            $part .= $char;
+            next;
+        }
+        if (!$quoted && !$escaped && $char eq '(') { $comment++; $part .= $char; next }
+        if (!$quoted && !$escaped && $char eq ')' && $comment) { $comment--; $part .= $char; next }
+        if (!$quoted && !$comment) {
+            $angle++ if $char eq '<';
+            $angle-- if $char eq '>' && $angle;
+            if (!$angle && $char eq ':' && !defined $group_name) {
+                if (@$ungrouped_addresses) {
+                    push @groups, undef, $ungrouped_addresses;
+                    $ungrouped_addresses = [];
+                }
+                $group_name = $part;
+                $group_name =~ s/^\s+|\s+$//g;
+                $group_name =~ s/\A"(.*)"\z/$1/s;
+                $group_addresses = [];
+                $part = '';
+                next;
+            }
+            if (!$angle && ($char eq ',' || $char eq ';')) {
+                my @addresses = parse_email_addresses($part, $class);
+                if (defined $group_name) {
+                    push @$group_addresses, @addresses;
+                    if ($char eq ';') {
+                        push @groups, $group_name, $group_addresses;
+                        undef $group_name;
+                        undef $group_addresses;
+                    }
+                } else {
+                    push @$ungrouped_addresses, @addresses;
+                }
+                $part = '';
+                next;
+            }
+        }
+        $part .= $char;
+    }
+    my @addresses = parse_email_addresses($part, $class);
+    if (defined $group_name) {
+        push @$group_addresses, @addresses;
+        push @groups, $group_name, $group_addresses;
+    } elsif (@addresses) {
+        push @$ungrouped_addresses, @addresses;
+    }
+    push @groups, undef, $ungrouped_addresses if @$ungrouped_addresses;
+    return @groups ? @groups : (undef, []);
 }
 
 sub parse {
@@ -122,7 +196,12 @@ sub format_email_groups {
     while (@args) {
         my ($name, $addresses) = splice @args, 0, 2;
         my $formatted = format_email_addresses(@$addresses);
-        push @groups, defined($name) ? "$name: $formatted;" : $formatted;
+        if (defined $name) {
+            $name = qq{"$name"} if $name =~ /[:,;"<>]/;
+            push @groups, length($formatted) ? "$name: $formatted;" : "$name:;";
+        } else {
+            push @groups, $formatted;
+        }
     }
     return join ', ', @groups;
 }
@@ -134,7 +213,7 @@ sub format {
     my $result = $address;
     if (defined $self->{phrase} && length $self->{phrase}) {
         my $phrase = $self->{phrase};
-        $phrase = qq{"$phrase"} if $phrase =~ /[",]/;
+        $phrase = qq{"$phrase"} if $phrase =~ /[,:;"<>]/;
         $result = "$phrase <$address>";
     }
     $result .= " ($self->{comment})"
@@ -165,6 +244,11 @@ sub address {
     return compose_address(@{$self}{qw(user host)});
 }
 sub as_string { $_[0]->format }
+sub as_mime_string {
+    my ($self, $options) = @_;
+    require Email::MIME::Header::AddressList;
+    return Email::MIME::Header::AddressList->new($self)->as_mime_string($options);
+}
 sub original { $_[0]->{original} }
 sub is_obj { ref($_[1]) && eval { $_[1]->isa(__PACKAGE__) } }
 sub purge_cache { }

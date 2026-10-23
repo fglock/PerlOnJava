@@ -4,6 +4,12 @@ use Test::More;
 use Encode qw(decode find_encoding);
 use utf8;
 
+is(
+    decode('MIME-Header', '=?UTF-8?B?RMO2eQ==?= <test@example.com>'),
+    'Döy <test@example.com>',
+    'decode autoloads the MIME-Header codec on first use',
+);
+
 my $codec = find_encoding('MIME-Header');
 ok(defined $codec, 'MIME-Header codec is autoloaded by find_encoding');
 

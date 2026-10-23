@@ -559,7 +559,7 @@ public class Encode extends PerlModuleBase {
 
         // Check %Encode::Encoding for Perl-registered encodings
         String encodingName = encodingArg.toString();
-        RuntimeScalar perlEncObj = lookupPerlEncoding(encodingName);
+        RuntimeScalar perlEncObj = lookupOperationEncoding(encodingName);
         if (perlEncObj != null) {
             return dispatchToEncodingObject(perlEncObj, "encode", args, 1, 2, ctx);
         }
@@ -680,7 +680,7 @@ public class Encode extends PerlModuleBase {
 
         // Check %Encode::Encoding for Perl-registered encodings
         String encodingName = encodingArg.toString();
-        RuntimeScalar perlEncObj = lookupPerlEncoding(encodingName);
+        RuntimeScalar perlEncObj = lookupOperationEncoding(encodingName);
         if (perlEncObj != null) {
             return dispatchToEncodingObject(perlEncObj, "decode", args, 1, 2, ctx);
         }
@@ -1249,6 +1249,28 @@ public class Encode extends PerlModuleBase {
             }
         }
         return null;
+    }
+
+    /**
+     * Resolve codecs used by encode/decode through Perl's public lookup path
+     * when they are lazily loaded. In particular, Encode::MIME::Header
+     * registers itself from the Perl find_encoding wrapper; bypassing that
+     * wrapper here makes decode("MIME-Header", ...) fail on first use.
+     */
+    private static RuntimeScalar lookupOperationEncoding(String encodingName) {
+        RuntimeScalar encoding = lookupPerlEncoding(encodingName);
+        if (encoding != null || !encodingName.toLowerCase(Locale.ROOT).startsWith("mime-")) {
+            return encoding;
+        }
+
+        String finderName = "Encode::find_encoding";
+        if (!GlobalVariable.existsGlobalCodeRef(finderName)) return null;
+        RuntimeArray finderArgs = new RuntimeArray();
+        finderArgs.push(new RuntimeScalar(encodingName));
+        RuntimeList result = RuntimeCode.apply(
+                GlobalVariable.getGlobalCodeRef(finderName), finderArgs, RuntimeContextType.SCALAR);
+        RuntimeScalar found = result.scalar();
+        return found != null && RuntimeScalarType.isReference(found) ? found : null;
     }
 
     /**
