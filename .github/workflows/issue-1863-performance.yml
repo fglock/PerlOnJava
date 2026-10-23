@@ -1,9 +1,8 @@
 name: Issue 1863 performance
 
 on:
-  pull_request:
-    branches: [master]
-    types: [opened, synchronize, reopened]
+  push:
+    branches: [perf/issue-1863-throughput]
     paths:
       - 'src/main/java/**'
       - 'src/test/java/**'
@@ -14,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: issue-1863-performance-${{ github.event.pull_request.number }}
+  group: issue-1863-performance-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -32,7 +31,7 @@ jobs:
       - name: Check out the exact PR head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Set up JDK 24
@@ -76,12 +75,17 @@ jobs:
       - name: Build exact parent and master JARs
         timeout-minutes: 90
         env:
-          PR_PARENT: ${{ github.event.pull_request.head.sha }}
+          PR_PARENT: ${{ github.sha }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
           PARENT_COMMIT=$(git rev-parse "${PR_PARENT}^1")
-          MASTER_COMMIT=$(git merge-base "$PR_PARENT" "$PR_BASE")
+          if [ -n "${PR_BASE:-}" ]; then
+            MASTER_COMMIT=$(git merge-base "$PR_PARENT" "$PR_BASE")
+          else
+            git fetch origin master
+            MASTER_COMMIT=$(git merge-base "$PR_PARENT" origin/master)
+          fi
           printf 'PR parent: %s\nMaster base: %s\n' "$PARENT_COMMIT" "$MASTER_COMMIT" \
             > dev/bench/reports/ci-issue1863-source-commits.txt
           for ref in parent master; do
@@ -245,7 +249,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: issue-1863-performance-${{ github.event.pull_request.head.sha }}
+          name: issue-1863-performance-${{ github.sha }}
           path: |
             dev/bench/reports/ci-issue1863-*
           if-no-files-found: warn
