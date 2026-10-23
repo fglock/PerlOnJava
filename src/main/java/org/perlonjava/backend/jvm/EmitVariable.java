@@ -1004,21 +1004,36 @@ public class EmitVariable {
                 guardedMv.visitLabel(genericGuard);
             }
             guardedMv.visitVarInsn(Opcodes.ALOAD, 1);
-            guardedMv.visitLdcInsn(readOnlyCandidate.hashArgumentIndex());
-            guardedMv.visitLdcInsn(readOnlyCandidate.integerArgumentIndex());
-            guardedMv.visitLdcInsn(readOnlyCandidate.hashKeys().getFirst());
-            if (readOnlyCandidate.hashKeys().size() > 1) {
-                guardedMv.visitLdcInsn(readOnlyCandidate.hashKeys().get(1));
+            boolean arrayBackedCandidate = !readOnlyCandidate.arrayIndices().isEmpty();
+            if (arrayBackedCandidate) {
+                guardedMv.visitLdcInsn(readOnlyCandidate.hashArgumentIndex());
+                guardedMv.visitLdcInsn(readOnlyCandidate.integerArgumentIndex());
+                guardedMv.visitLdcInsn(readOnlyCandidate.arrayIndices().getFirst());
+                guardedMv.visitLdcInsn(readOnlyCandidate.arrayIndices().size() > 1
+                        ? readOnlyCandidate.arrayIndices().get(1) : -1);
+                guardedMv.visitInsn(readOnlyCandidate.stableArrayFieldCells()
+                        ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+                guardedMv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "canBorrowReadOnlyArrayArguments",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;IIIIZ)Z", false);
             } else {
-                guardedMv.visitInsn(Opcodes.ACONST_NULL);
+                guardedMv.visitLdcInsn(readOnlyCandidate.hashArgumentIndex());
+                guardedMv.visitLdcInsn(readOnlyCandidate.integerArgumentIndex());
+                guardedMv.visitLdcInsn(readOnlyCandidate.hashKeys().getFirst());
+                if (readOnlyCandidate.hashKeys().size() > 1) {
+                    guardedMv.visitLdcInsn(readOnlyCandidate.hashKeys().get(1));
+                } else {
+                    guardedMv.visitInsn(Opcodes.ACONST_NULL);
+                }
+                guardedMv.visitInsn(readOnlyCandidate.stableHashFieldCells()
+                        ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+                guardedMv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "canBorrowReadOnlyArguments",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;IILjava/lang/String;Ljava/lang/String;Z)Z",
+                        false);
             }
-            guardedMv.visitInsn(readOnlyCandidate.stableHashFieldCells()
-                    ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
-            guardedMv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "canBorrowReadOnlyArguments",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;IILjava/lang/String;Ljava/lang/String;Z)Z",
-                    false);
             guardedMv.visitVarInsn(Opcodes.ISTORE, flagSlot);
             guardedMv.visitVarInsn(Opcodes.ILOAD, flagSlot);
             guardedMv.visitJumpInsn(Opcodes.IFEQ, fallback);
@@ -1053,6 +1068,40 @@ public class EmitVariable {
                             "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Z", false);
                     guardedMv.visitJumpInsn(Opcodes.IFEQ, fallback);
                 }
+                guardedMv.visitInsn(Opcodes.ICONST_1);
+                guardedMv.visitVarInsn(Opcodes.ISTORE, flagSlot);
+            } else if (readOnlyCandidate.stableArrayFieldCells()) {
+                guardedMv.visitInsn(Opcodes.ICONST_0);
+                guardedMv.visitVarInsn(Opcodes.ISTORE, flagSlot);
+                String arrayArgumentName = null;
+                for (Map.Entry<String, Integer> entry
+                        : readOnlyCandidate.argumentIndices().entrySet()) {
+                    if (entry.getValue() == readOnlyCandidate.hashArgumentIndex()) {
+                        arrayArgumentName = entry.getKey();
+                        break;
+                    }
+                }
+                Integer arrayArgumentSlot = borrowedSlots.get(arrayArgumentName);
+                Map<Integer, Integer> arrayFieldSlots = new java.util.LinkedHashMap<>();
+                for (int index : readOnlyCandidate.arrayIndices()) {
+                    int slot = ctx.symbolTable.allocateLocalVariable();
+                    arrayFieldSlots.put(index, slot);
+                    guardedMv.visitVarInsn(Opcodes.ALOAD, arrayArgumentSlot);
+                    guardedMv.visitLdcInsn(index);
+                    guardedMv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                            "getReadOnlyPlainArrayMethodField",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                            false);
+                    guardedMv.visitVarInsn(Opcodes.ASTORE, slot);
+                    guardedMv.visitVarInsn(Opcodes.ALOAD, slot);
+                    guardedMv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                            "isCacheableReadOnlyPlainHashMethodField",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Z", false);
+                    guardedMv.visitJumpInsn(Opcodes.IFEQ, fallback);
+                }
+                ctx.javaClassInfo.readOnlyArgumentArrayFieldSlots = arrayFieldSlots;
                 guardedMv.visitInsn(Opcodes.ICONST_1);
                 guardedMv.visitVarInsn(Opcodes.ISTORE, flagSlot);
             }

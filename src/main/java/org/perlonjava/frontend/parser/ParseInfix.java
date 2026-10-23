@@ -23,6 +23,8 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 import static org.perlonjava.frontend.parser.OperatorParser.ensureOneOperand;
 import static org.perlonjava.frontend.parser.PrototypeArgs.consumeArgsWithPrototype;
@@ -69,17 +71,38 @@ public class ParseInfix {
         // key as an unknown class field.
         if (!GlobalVariable.existsGlobalHash(fieldsName)
                 && !GlobalVariable.isDeclaredGlobalHash(fieldsName)) return;
-        RuntimeHash fields = GlobalVariable.getGlobalHash(fieldsName);
         for (Node key : keys.elements) {
             String name = key instanceof StringNode string ? string.value
                     : key instanceof IdentifierNode id ? id.name : null;
-            if (name != null && !fields.containsKey(name)) {
+            if (name != null && !hasFieldInClassHierarchy(typeName, name, new HashSet<>())) {
                 throw PerlCompilerException.withSourceLocation(tokenIndex,
                         "No such class field \"" + name + "\" in variable $"
                                 + identifier.name + " of type " + typeName,
                         parser.ctx.errorUtil);
             }
         }
+    }
+
+    /**
+     * `fields` declarations are inherited through @ISA. A typed variable of
+     * a child class may therefore access fields declared by any ancestor,
+     * even though those names are absent from the child's own %FIELDS hash.
+     */
+    private static boolean hasFieldInClassHierarchy(String className, String fieldName,
+            Set<String> visited) {
+        if (!visited.add(className)) return false;
+
+        String fieldsName = className + "::FIELDS";
+        if ((GlobalVariable.existsGlobalHash(fieldsName)
+                || GlobalVariable.isDeclaredGlobalHash(fieldsName))
+                && GlobalVariable.getGlobalHash(fieldsName).containsKey(fieldName)) {
+            return true;
+        }
+
+        for (RuntimeScalar parent : GlobalVariable.getGlobalArray(className + "::ISA").elements) {
+            if (hasFieldInClassHierarchy(parent.toString(), fieldName, visited)) return true;
+        }
+        return false;
     }
 
     // Non-chainable comparison operators (cannot be chained with any operator)

@@ -5,6 +5,8 @@ use Test::More;
 
 # Skip on Windows (different shell semantics)
 my $is_windows = ($^O eq 'MSWin32' || $^O eq 'cygwin');
+plan skip_all => 'Windows shell and process-pipe select semantics differ'
+    if $is_windows;
 
 subtest 'IPC::Open3 basic stdout capture with readline' => sub {
     use IPC::Open3;

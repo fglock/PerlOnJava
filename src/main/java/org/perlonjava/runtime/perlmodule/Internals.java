@@ -32,11 +32,9 @@ public class Internals extends PerlModuleBase {
         try {
             internals.registerMethod("SvREADONLY", "svReadonly", "\\[$@%];$");
             internals.registerMethod("SvREFCNT", "svRefcount", "$;$");
-            // Clear placeholder slots in a restricted hash. PerlOnJava doesn't
-            // implement Perl's restricted-hash placeholder machinery (used by
-            // Hash::Util / fields), so this is a safe no-op. Modules like
-            // Const::Fast call it when sealing a hash readonly; failing here
-            // breaks loading the whole module.
+            // Clear placeholder slots in a restricted hash. PerlOnJava tracks
+            // allowed-but-absent keys separately, so there are no physical
+            // placeholder entries to remove.
             internals.registerMethod("hv_clear_placeholders", "hvClearPlaceholders", "\\%");
             // Phase 0 diagnostic: expose PerlOnJava-internal refcount state
             // (refCount, flags, tracking mode) for differential testing
@@ -980,7 +978,7 @@ public class Internals extends PerlModuleBase {
                 // Check hash reference
                 if (effectiveScalar.type == RuntimeScalarType.HASHREFERENCE
                         && effectiveScalar.value instanceof RuntimeHash hash) {
-                    return new RuntimeScalar(hash.type == RuntimeHash.READONLY_HASH).getList();
+                    return new RuntimeScalar(hash.type == RuntimeHash.READONLY_HASH || hash.isHashRestricted()).getList();
                 }
                 // Check scalar reference: SvREADONLY checks whether SvRV(arg) has readonly flag
                 if (effectiveScalar.type == RuntimeScalarType.REFERENCE

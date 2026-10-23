@@ -1361,6 +1361,33 @@ public class Dereference {
         if (right.elements.size() == 1 && !isSingleRange) {
             // Single index: use get/delete/exists methods
             Node elem = right.elements.getFirst();
+            Integer cachedArrayFieldSlot = null;
+            var readOnlyCandidate = emitterVisitor.ctx.javaClassInfo.readOnlyArgumentCandidate;
+            if ("get".equals(arrayOperation)
+                    && readOnlyCandidate != null
+                    && readOnlyCandidate.freshScalarReturn()
+                    && readOnlyCandidate.stableArrayFieldCells()
+                    && emitterVisitor.ctx.javaClassInfo.readOnlyArgumentFlagSlot >= 0
+                    && !emitterVisitor.ctx.javaClassInfo.emittingReadOnlyArgumentFallback
+                    && elem instanceof NumberNode number
+                    && number.value.matches("[0-9]+")
+                    && node.left instanceof OperatorNode scalar
+                    && "$".equals(scalar.operator)
+                    && scalar.operand instanceof IdentifierNode identifier) {
+                try {
+                    int index = Integer.parseInt(number.value);
+                    Integer argumentIndex = readOnlyCandidate.argumentIndices()
+                            .get("$" + identifier.name);
+                    if (argumentIndex != null
+                            && argumentIndex == readOnlyCandidate.hashArgumentIndex()
+                            && readOnlyCandidate.arrayIndices().contains(index)) {
+                        cachedArrayFieldSlot = emitterVisitor.ctx.javaClassInfo
+                                .readOnlyArgumentArrayFieldSlots.get(index);
+                    }
+                } catch (NumberFormatException ignored) {
+                    // Large array indices use the normal dereference path.
+                }
+            }
             if (arrayOperation.equals("get")
                     && elem instanceof BinaryOperatorNode adjustedIndex
                     && (adjustedIndex.operator.equals("+") || adjustedIndex.operator.equals("-"))
@@ -1422,6 +1449,19 @@ public class Dereference {
             }
             emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, indexSlot);
 
+            Label ordinaryArrayDereference = null;
+            Label arrayDereferenceDone = null;
+            if (cachedArrayFieldSlot != null) {
+                ordinaryArrayDereference = new Label();
+                arrayDereferenceDone = new Label();
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ILOAD,
+                        emitterVisitor.ctx.javaClassInfo.readOnlyArgumentFlagSlot);
+                emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.IFEQ, ordinaryArrayDereference);
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, cachedArrayFieldSlot);
+                emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.GOTO, arrayDereferenceDone);
+                emitterVisitor.ctx.mv.visitLabel(ordinaryArrayDereference);
+            }
+
             emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
             emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, indexSlot);
 
@@ -1452,6 +1492,10 @@ public class Dereference {
                 emitterVisitor.pushCurrentPackage();
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
                         methodName, "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+            }
+
+            if (cachedArrayFieldSlot != null) {
+                emitterVisitor.ctx.mv.visitLabel(arrayDereferenceDone);
             }
 
             if (pooledIndex) {

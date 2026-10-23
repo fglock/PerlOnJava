@@ -3673,6 +3673,21 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return null;
     }
 
+    /** Fetch an existing literal array cell for a compiler-proven guarded method body. */
+    public static RuntimeScalar getReadOnlyPlainArrayMethodField(
+            RuntimeScalar target, int index) {
+        if (target != null && target.type == ARRAYREFERENCE
+                && target.value != null
+                && target.value.getClass() == RuntimeArray.class) {
+            RuntimeArray array = (RuntimeArray) target.value;
+            if (array.type == RuntimeArray.PLAIN_ARRAY && !array.threadShared
+                    && index >= 0 && index < array.elements.size()) {
+                return array.elements.get(index);
+            }
+        }
+        return null;
+    }
+
     /** Whether a field cell can be reused without bypassing scalar magic. */
     public static boolean isCacheableReadOnlyPlainHashMethodField(RuntimeScalar value) {
         return value != null

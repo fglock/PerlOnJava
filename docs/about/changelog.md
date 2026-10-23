@@ -6,11 +6,17 @@ priorities and future plans.
 
 ## Work in progress
 
+- Snapshot mutable array entries while marking package roots and during reachability walks so concurrent thread teardown cannot fail with `ConcurrentModificationException`.
+
+- Enforce restricted-hash key access and implement `Hash::Util` key, value, and hash locking (#1502, #1172).
+- Report the caller's scalar context correctly when inspecting frames in overloaded exceptions (#1859).
 - Avoid heap exhaustion when compiling very large generated subroutines, and preserve heredoc statement boundaries with `\&name` fallbacks (#1252).
 - Cover nested require caller packages and imported `CLASS` constants, and match defer ordering and caller frames around loop `continue` blocks (#1601, #1405, #1383).
+- Preserve state variables across file-reading loops and expose the JSON boolean sentinels from the bundled `JSON` dispatcher (#1475, #1392).
 - Apply source filters installed through `Test::More::use_ok` to the caller's remaining source and preserve `print FILEHANDLE (LIST) x N` output (#1375, #1441).
 - Cover `Test::Needs` prerequisite scanning of quoted module names and Perl version literals (#1396).
 - Preserve reference-valued FETCH results from tied-hash `values()` and retain scalar-reference envelopes in Storable round trips (#1554, #1468).
+- Release temporary files once an exited closure capture retaining a Catalyst request context no longer has a live Perl root.
 - Ignore commented-out code when checking lexical constant closures for later mutations, preserving BEGIN-time generated constants (#1785).
 - Pack the method-dispatch inline-cache guard key into one primitive value while preserving class and method invalidation checks.
 - Keep watcher maps and live `substr`-lvalue observers in lazy scalar extension state, reducing the common `RuntimeScalar` footprint.
@@ -39,7 +45,10 @@ priorities and future plans.
   when updating the internal caller-package tracker; keep one reusable active
   lexical frame instead of a per-runtime deque; cache the live warning-scope
   scalar per runtime and invalidate it when global scalar bindings change.
+- Cache stable integer array-field cells in eligible blessed-array arithmetic
+  methods, matching the hash-backed method specialization (#1854).
 - Preserve inherited method dispatch in child threads.
+- Prefer exact root-module package declarations over earlier helper packages, and warn for undefined hash keys used by `exists` and `delete` (#1820, #1645).
 - Add a reproducible, warmup-aware Perl versus PerlOnJava performance runner (#1196).
 - Cover FormState session restoration across requests and HTTP response conversion from callback and streaming PSGI responses; refresh HTTP::Message and LWP compatibility status (#1650, #1651, #1652).
 - Preserve the awaited Future value when its source scalar or aggregate slot changes during suspension, covering PAGI::Server request-body receives (#1818).
@@ -1017,6 +1026,10 @@ priorities and future plans.
 - Preserve strict-subs imports for `Compress::Raw::Zlib` constants.
 - Evaluate `ref` operands in scalar context on the interpreter backend.
 - Fix RFC 2047 header decoding for Email::MIME.
+- Load the MIME-Header codec when `Encode::decode` first encounters it.
+- Parse quoted display names and address groups in the Email::Address shim.
+- Recognize inherited `fields` entries in typed hash access.
+- Match Storable's default and optional export lists.
 - Fix XML::Parser streaming from native filehandles before `IO::Handle` has
   been explicitly loaded.
 - Bundle the complete CPAN `File::Path` 2.18 implementation, including modern

@@ -478,6 +478,7 @@ public class EmitterMethodCreator implements Opcodes {
         ctx.javaClassInfo.readOnlyArgumentFlagSlot = -1;
         ctx.javaClassInfo.readOnlyArgumentSlots = java.util.Collections.emptyMap();
         ctx.javaClassInfo.readOnlyArgumentHashFieldSlots = java.util.Collections.emptyMap();
+        ctx.javaClassInfo.readOnlyArgumentArrayFieldSlots = java.util.Collections.emptyMap();
         ctx.javaClassInfo.readOnlyArgumentFreshScalarReturn =
                 ctx.javaClassInfo.readOnlyArgumentCandidate != null
                         && ctx.javaClassInfo.readOnlyArgumentCandidate.freshScalarReturn();
