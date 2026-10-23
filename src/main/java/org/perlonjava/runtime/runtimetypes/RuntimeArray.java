@@ -911,9 +911,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                             && result.value instanceof RuntimeBase base
                             && result.ownsCountedReferent(base)
                             && base.refCount > 0) {
-                        result.setRefCountOwned(false);
                         runtimeArray.forgetOwnedAliasElement(result);
-                        base.releaseActiveOwner(result);
                         MortalList.requestWeakSweepsForDestroyedContainer(base);
                         MortalList.deferDecrementFromArraySlot(
                                 base, result, "RuntimeArray.pop");
@@ -956,9 +954,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                             && result.value instanceof RuntimeBase base
                             && result.ownsCountedReferent(base)
                             && base.refCount > 0) {
-                        result.setRefCountOwned(false);
                         runtimeArray.forgetOwnedAliasElement(result);
-                        base.releaseActiveOwner(result);
                         MortalList.requestWeakSweepsForDestroyedContainer(base);
                         MortalList.deferDecrementFromArraySlot(
                                 base, result, "RuntimeArray.shift");

@@ -67,4 +67,34 @@ class PerlOwnerSlotLegacyBridgeTest {
             MortalList.popMark();
         }
     }
+
+    @Test
+    void queuedScalarValueReleaseRetainsSlotProvenanceUntilDrain() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            RuntimeScalar scalar = new RuntimeScalar();
+            scalar.set(referent.createReference());
+            PerlOwnerSlot slot = scalar.scalarValueOwnerSlot();
+            long identity = slot.identity();
+
+            MortalList.pushMark();
+            PerlOwnerSlot.PendingRelease release =
+                    scalar.deferScalarValueOwnerCount(referent);
+            assertNotNull(release);
+            assertEquals(PerlOwnerSlot.Kind.SCALAR_VALUE, release.kind());
+            assertEquals(identity, release.ownerSlotIdentity());
+            assertEquals(1, referent.refCount,
+                    "deferral preserves the bridged count until the mortal drain");
+            assertFalse(slot.isActive(),
+                    "the semantic scalar owner retires when its release is queued");
+
+            MortalList.deferOwnerSlotDecrement(referent, null, release);
+            MortalList.flushAboveMark();
+
+            assertEquals(0, referent.refCount);
+            assertTrue(release.isCompleted());
+            MortalList.popMark();
+        }
+    }
 }

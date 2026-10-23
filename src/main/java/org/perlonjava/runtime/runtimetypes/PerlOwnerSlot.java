@@ -391,6 +391,20 @@ public final class PerlOwnerSlot {
         return true;
     }
 
+    /** Detach a scalar-value owner and preserve its identity for deferred release. */
+    synchronized PendingRelease deferScalarValueCountRelease(RuntimeBase expectedTarget) {
+        if (kind != Kind.SCALAR_VALUE) {
+            throw new IllegalStateException(
+                    "scalar-value release requires a SCALAR_VALUE slot");
+        }
+        if (referent != expectedTarget || expectedTarget == null) return null;
+        PendingRelease release = new PendingRelease(identity, ++nextReleaseSequence, kind);
+        RuntimeScalar scalar = ownerCell();
+        if (scalar != null) scalar.refCountOwned = false;
+        release();
+        return release;
+    }
+
     private synchronized void detachAfterDeferredRelease() {
         transferTo(null);
     }

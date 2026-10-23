@@ -238,14 +238,32 @@ public class MortalList {
     /** Queue the deferred release together with the array scalar that owned it. */
     public static void deferDecrementFromArraySlot(
             RuntimeBase base, RuntimeScalar ownerScalar, String releaseSite) {
-        if (base.refCountTrace) {
-            base.traceRefCount(0, releaseSite + " (array-slot decrement queued)");
-        }
         LifecycleRuntimeState state = state();
         markBoundaryWork(state);
         RuntimeBase.PendingOwnerRelease ownerRelease =
-                base.queueOwnerRelease(ownerScalar, releaseSite);
+                queueScalarOwnerRelease(base, ownerScalar, releaseSite);
         queueDeferredBase(state, base, ownerRelease, null, ownerScalar);
+    }
+
+    /** Detach a scalar owner and queue its count release with slot provenance. */
+    private static RuntimeBase.PendingOwnerRelease queueScalarOwnerRelease(
+            RuntimeBase base, RuntimeScalar scalar, String releaseSite) {
+        PerlOwnerSlot.PendingRelease slotRelease =
+                scalar.deferScalarValueOwnerCount(base);
+        if (slotRelease != null) {
+            base.traceRefCount(0, releaseSite + " (scalar-value slot decrement queued)");
+            base.releaseActiveOwner(scalar);
+            return base.queueOwnerSlotRelease(slotRelease);
+        }
+
+        // Compatibility path for a count that predates explicit SCALAR_VALUE
+        // slots. The slot path above retires the identity itself and does not
+        // depend on refCountOwned to decide which scalar owns this release.
+        scalar.setRefCountOwned(false);
+        base.traceRefCount(0, releaseSite + " (scalar decrement queued)");
+        base.releaseOwner(scalar, releaseSite);
+        base.releaseActiveOwner(scalar);
+        return base.queueOwnerRelease(scalar, releaseSite);
     }
 
     /** Queue a closure-capture bridge decrement with owner-slot provenance. */
@@ -573,15 +591,10 @@ public class MortalList {
                 && scalar.value instanceof RuntimeBase base) {
             if (!scalar.ownsCountedReferent(base)) return;
             if (base.refCount > 0) {
-                scalar.setRefCountOwned(false);
-                if (base.refCountTrace) {
-                    base.traceRefCount(0, "MortalList.deferDecrementIfTracked (queued, scalar.refCountOwned->false)");
-                }
-                base.releaseActiveOwner(scalar);
                 LifecycleRuntimeState state = state();
                 markBoundaryWork(state);
-                RuntimeBase.PendingOwnerRelease ownerRelease = base.queueOwnerRelease(
-                        scalar, "MortalList.deferDecrementIfTracked");
+                RuntimeBase.PendingOwnerRelease ownerRelease = queueScalarOwnerRelease(
+                        base, scalar, "MortalList.deferDecrementIfTracked");
                 queueDeferredBase(state, base, ownerRelease, null, scalar);
             } else if (base.refCount == 0
                     && base.clearedOwnedAggregateElement
@@ -1056,19 +1069,15 @@ public class MortalList {
             if (base.blessId != 0) {
                 boolean releasingLastOwner = false;
                 if (s.ownsCountedReferent(base) && base.refCount > 0) {
-                    s.setRefCountOwned(false);
-                    if (base.refCountTrace) {
-                        base.traceRefCount(0, "MortalList.deferDecrementRecursive (blessed, queued)");
-                        base.releaseOwner(s, "deferDecrementRecursive blessed");
-                    }
-                    base.releaseActiveOwner(s);
+                    RuntimeBase.PendingOwnerRelease ownerRelease = queueScalarOwnerRelease(
+                            base, s, "MortalList.deferDecrementRecursive (blessed)");
                     // refCount is the authoritative ownership count here.
                     // activeOwners is diagnostic and can retain a stale
                     // call-frame alias until the enclosing sub returns.
                     releasingLastOwner = base.refCount == 1;
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
-                    queueDeferredBase(state, base, null, null, s);
+                    queueDeferredBase(state, base, ownerRelease, null, s);
                 } else if (base.refCount == 0) {
                     if (base.refCountTrace) {
                         base.traceRefCount(+1, "MortalList.deferDecrementRecursive (blessed never-stored bump+queue)");
@@ -1104,14 +1113,11 @@ public class MortalList {
                 boolean hasCleanupTargets = hasDirectWeakElementRefs
                         || containerMayContainCleanupTargets(base);
                 if (s.ownsCountedReferent(base) && base.refCount > 0) {
-                    s.setRefCountOwned(false);
-                    if (base.refCountTrace) {
-                        base.traceRefCount(0, "MortalList.deferDecrementRecursive (unblessed container, queued)");
-                    }
-                    base.releaseActiveOwner(s);
+                    RuntimeBase.PendingOwnerRelease ownerRelease = queueScalarOwnerRelease(
+                            base, s, "MortalList.deferDecrementRecursive (unblessed container)");
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
-                    queueDeferredBase(state, base, null, null, s);
+                    queueDeferredBase(state, base, ownerRelease, null, s);
                     if (!WeakRefRegistry.weakRefsExist() && base.refCount > 1) {
                         continue;
                     }
