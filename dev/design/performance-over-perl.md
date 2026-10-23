@@ -231,6 +231,15 @@ remain separate correctness gates. See issue #1196 for its diagnostic matrix.
   had no `RuntimeArray` or `InlineMethodArgumentList` events, unlike the prior
   profile, which sampled both types repeatedly. The profile is retained at
   `dev/bench/reports/issue-1863-method-pooled-args-active.jfr`.
+- Ran all three #1863 workloads with seven randomized pairs and 15 one-second
+  measurement windows. Every pair was stable and checksum-matched, but macOS
+  again could not verify the requested priority. Recomputing the paired
+  results while excluding only that priority check gives method 0.745x blead
+  (95% interval 0.721–0.776), closure 1.545x (1.498–1.603), Life 1.071x
+  (1.007–1.149), and portfolio 1.072x (1.048–1.101). This is directional
+  evidence only; method performance remains about 25% below blead and prevents
+  a 1:1 result. Raw windows are in
+  `dev/bench/reports/issue-1863-current-candidate-pooled-full-portfolio-blead.json`.
 - The closure JFR profile found that the guarded captured-integer addition path
   performs repeated name lookups in `closedOverVariables`; `HashMap.getNode`,
   `LinkedHashMap.get`, and `RuntimeCode.tryDirectLeafIntegerAddition` were
@@ -267,10 +276,9 @@ remain separate correctness gates. See issue #1196 for its diagnostic matrix.
 1. Profile the remaining method-body scalar result, arithmetic, and lifecycle
    costs; try one isolated optimization at a time and compare it with both the
    exact origin JAR and pinned blead.
-2. Run a seven-pair method-only comparison for the selected candidate when host
-   load is lower, then execute the full #1863 portfolio.
-3. Verify requested process priority on a benchmark host and meet the full
-   seven-pair protocol before making an acceptance claim.
+2. Find a method optimization that closes the remaining method gap, then run
+   the full portfolio on a host with verified priority and suitable load.
+3. Meet the full seven-pair protocol before making an acceptance claim.
 4. Run stable Perl 5.42.2 separately and add allocation, GC, live-heap, and
    peak-RSS reports to paired evidence.
 5. Continue the general call-boundary profile matrix and validate a broad
