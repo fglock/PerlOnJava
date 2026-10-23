@@ -568,10 +568,10 @@ public class MortalList {
      */
     public static void deferDecrementIfTracked(RuntimeScalar scalar) {
         if (!isActive() || scalar == null) return;
-        if (!scalar.refCountOwned) return;
         if (((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 || scalar.type == RuntimeScalarType.GLOB)
                 && scalar.value instanceof RuntimeBase base) {
+            if (!scalar.ownsCountedReferent(base)) return;
             if (base.refCount > 0) {
                 scalar.setRefCountOwned(false);
                 if (base.refCountTrace) {
@@ -611,7 +611,6 @@ public class MortalList {
     /** Release the tracked owner held by a scope-exited closure capture. */
     public static void releaseCapturedDecrement(RuntimeScalar scalar) {
         if (!isActive() || scalar == null) return;
-        if (!scalar.refCountOwned) return;
         deferDecrementIfTracked(scalar);
     }
 

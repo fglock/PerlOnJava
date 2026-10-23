@@ -136,6 +136,10 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   slot removes the counted owner. Full `nice -n 19 make` passes in 22m49s;
   hosted run `39880315002` passes on Linux and Windows, including both thread
   compatibility gates.
+- The next cleanup tranche lets deferred scalar release recognize that same
+  explicit slot after the legacy flag retires. Its Java regression verifies
+  slot retirement and the deferred legacy bridge decrement; validation is
+  pending.
 
 The earlier candidate was based on `origin/master` (`ede542b29`) and passed the full local make in 22m55s, Ubuntu `make ci`, the Ubuntu Perl thread compatibility gate, SBOM generation, Windows `make ci` in about 52 minutes, and the focused Windows thread gate. Windows CI exposed two existing unit tests with POSIX `/tmp` paths; `make ci` now creates the runner's root-relative `tmp` directory before building. On blead Perl 5.45.4, the controller, WebSocket, Catalyst tempfile, owner-release, and writable `Internals::SvREFCNT` regressions pass. The controller regression passes 5/5 on JVM and interpreter; the WebSocket regression passes 6/6 on both; the Catalyst tempfile regression passes 24/24 on both; `refcount/issue_1794_controller_owner_release.t` passes 3/3 on both; and `internals_svrefcnt_write.t` passes 6/6 on both after failing all six assertions on its unfixed parent. The alias-count follow-up rebases onto `origin/master` (`18323a1ac`). Its focused make passes in 50s and its full local make passes in 31m30s on code commit `15e362ddb`.
 

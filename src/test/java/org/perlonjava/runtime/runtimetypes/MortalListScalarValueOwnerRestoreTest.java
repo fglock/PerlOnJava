@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
@@ -29,6 +30,34 @@ class MortalListScalarValueOwnerRestoreTest {
             } finally {
                 MyVarCleanupStack.unregister(owner);
                 MortalList.deferDecrementIfTracked(owner);
+                MortalList.flush();
+            }
+        }
+    }
+
+    @Test
+    void deferredReleaseUsesExplicitScalarOwnerAfterLegacyFlagRetires() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            RuntimeScalar owner = new RuntimeScalar();
+            owner.set(referent.createAnonymousReference());
+            MyVarCleanupStack.register(owner);
+            int originalRefCount = referent.refCount;
+
+            owner.refCountOwned = false;
+            assertTrue(owner.hasScalarValueOwnerSlotFor(referent));
+
+            try {
+                MortalList.deferDecrementIfTracked(owner);
+                assertFalse(owner.hasScalarValueOwnerSlotFor(referent),
+                        "deferred cleanup retires the explicit scalar slot");
+                MyVarCleanupStack.unregister(owner);
+                MortalList.flush();
+                assertTrue(referent.refCount < originalRefCount,
+                        "the deferred bridge decrement is released");
+            } finally {
+                MyVarCleanupStack.unregister(owner);
                 MortalList.flush();
             }
         }
