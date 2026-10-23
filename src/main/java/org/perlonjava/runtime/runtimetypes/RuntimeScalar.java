@@ -5511,9 +5511,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // - no scalar-value owner exists → deferDecrementIfTracked returns immediately
         // - captureCount=0 → capture handling branch not taken
         boolean ownsCurrentReferent = scalar.refCountOwned
-                || ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                    && scalar.value instanceof RuntimeBase base
-                    && scalar.ownsCountedReferent(base));
+                || scalar.ownsCurrentCountedReferent();
         if (!ownsCurrentReferent && scalar.captureCount == 0 && !scalar.ioOwner
                 && !scalar.hasScalarReferenceContentsOwner()
                 && scalar.type != RuntimeScalarType.TIED_SCALAR) {

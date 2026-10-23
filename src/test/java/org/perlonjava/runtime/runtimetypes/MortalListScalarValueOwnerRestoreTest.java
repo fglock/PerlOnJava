@@ -67,6 +67,33 @@ class MortalListScalarValueOwnerRestoreTest {
     }
 
     @Test
+    void scopeExitFastPathRecognizesExplicitGlobOwnerAfterLegacyFlagRetires() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeGlob referent = new RuntimeGlob("OwnerSlot::HANDLE");
+            referent.refCount = 1;
+            RuntimeScalar owner = new RuntimeScalar();
+            owner.type = RuntimeScalarType.GLOB;
+            owner.value = referent;
+            owner.setRefCountOwned(true);
+            owner.refCountOwned = false;
+            MyVarCleanupStack.register(owner);
+
+            try {
+                RuntimeScalar.scopeExitCleanup(owner);
+                MortalList.flush();
+
+                assertFalse(owner.scalarValueOwnerSlot().isActive());
+                assertTrue(referent.refCount < 1,
+                        "scope exit reaches GLOB cleanup through the explicit owner slot");
+            } finally {
+                MyVarCleanupStack.unregister(owner);
+                MortalList.flush();
+            }
+        }
+    }
+
+    @Test
     void explicitUndefReleasesScalarOwnerAfterLegacyFlagRetires() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
