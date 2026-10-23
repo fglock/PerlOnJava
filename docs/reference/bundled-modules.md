@@ -242,7 +242,7 @@ These are loaded automatically or via `use`:
 | `Scalar::Readonly` | Java + Perl | Scalar read-only query, enable, and disable operations replacing the CPAN XS implementation |
 | `Scalar::Type` | Java + Perl | Scalar storage-type introspection without native XS |
 | `List::Util` | Java | `reduce`, `first`, `min`, `max`, `sum`, `mesh`/`zip`, etc. |
-| `Hash::Util` | Java | `lock_keys`, `lock_hash`, etc. |
+| `Hash::Util` | Java | Restricted-key enforcement and key/value/hash locks; `lock_keys`, `lock_keys_plus`, inspection helpers, and `lock_hash` are implemented. |
 
 ### File & I/O
 

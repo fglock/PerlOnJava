@@ -46,7 +46,7 @@ sub import {
         my $fno = $fields->{$f};
         # PerlOnJava: simplified - just record the field, skip validation.
         # The original checks for field reuse and module reloading are
-        # not needed since PerlOnJava doesn't support restricted hashes.
+        # omitted; fields::new uses Hash::Util to restrict instance keys.
         unless ($fno) {
             $fields->{$f} = $next;
             $fattr->[$next] = ($f =~ /^_/) ? PRIVATE : PUBLIC;

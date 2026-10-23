@@ -376,8 +376,8 @@ my @copy = @{$z};         # ERROR
 - ✅  **Array delete**: `delete` for array indexes is implemented.
 - ✅  **Tied Arrays**: Tied arrays are implemented. See also [Tied Scalars](#scalars), [Tied Hashes](#arrays-hashes-and-lists), [Tied Handles](#io-operations).
 - ✅  **Tied Hashes**: Tied hashes are implemented. See also [Tied Scalars](#scalars), [Tied Arrays](#arrays-hashes-and-lists), [Tied Handles](#io-operations).
-- 🟡 **Restricted hashes**: `Hash::Util` supplies compatibility entry points,
-  but lock/unlock helpers do not enforce native Perl hash restrictions.
+- ✅ **Restricted hashes**: `Hash::Util` enforces allowed-key access and
+  supports key/value/hash locking, unlocking, and restriction inspection.
 
 ---
 
