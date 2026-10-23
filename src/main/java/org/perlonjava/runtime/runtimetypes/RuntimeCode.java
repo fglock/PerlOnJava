@@ -35,6 +35,7 @@ import org.perlonjava.runtime.CoreSubroutineGenerator;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.math.BigInteger;
@@ -64,6 +65,31 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             ThreadLocal.withInitial(ArrayDeque::new);
     private static final ThreadLocal<Map<EvalBeginLexicalKey, Integer>> EVAL_BEGIN_LEXICAL_IDS =
             ThreadLocal.withInitial(HashMap::new);
+
+    private static final class StableHashMethodFieldCellCache {
+        private final WeakReference<RuntimeHash> hash;
+        private final WeakReference<java.util.Map<String, RuntimeScalar>> elements;
+        private final WeakReference<RuntimeScalar> firstCell;
+        private final WeakReference<RuntimeScalar> secondCell;
+        private final long revision;
+
+        private StableHashMethodFieldCellCache(RuntimeHash hash,
+                java.util.Map<String, RuntimeScalar> elements, RuntimeScalar firstCell,
+                RuntimeScalar secondCell, long revision) {
+            this.hash = new WeakReference<>(hash);
+            this.elements = new WeakReference<>(elements);
+            this.firstCell = new WeakReference<>(firstCell);
+            this.secondCell = new WeakReference<>(secondCell);
+            this.revision = revision;
+        }
+
+        private boolean matches(RuntimeHash candidateHash,
+                java.util.Map<String, RuntimeScalar> candidateElements,
+                long candidateRevision) {
+            return revision == candidateRevision && hash.get() == candidateHash
+                    && elements.get() == candidateElements;
+        }
+    }
 
     /** Active eval STRING BEGIN bodies follow the Java thread across runtime bindings. */
     private static final ThreadLocal<Integer> evalBeginExecutionDepth =
@@ -143,7 +169,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /** Prepare the call-local cell cache and validate the guarded fast path. */
     private static boolean prepareStableHashMutationMethodArguments(
-            RuntimeArray args, String firstHashKey, String secondHashKey, PerlRuntime runtime) {
+            RuntimeCode code, RuntimeArray args, String firstHashKey,
+            String secondHashKey, PerlRuntime runtime) {
+        if (args != null) args.clearVerifiedMethodHashFields();
         if (args == null || args.getClass() != RuntimeArray.class
                 || args.type != RuntimeArray.PLAIN_ARRAY || args.size() < 2
                 || firstHashKey == null) {
@@ -161,13 +189,30 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         .stableHashMethodHashDereferenceAllowed(hashArgument)) {
             return false;
         }
-        RuntimeScalar firstCell = hash.elements.get(firstHashKey);
-        RuntimeScalar secondCell = secondHashKey == null
-                ? null : hash.elements.get(secondHashKey);
+        long revision = hash.stableMethodFieldCacheRevision();
+        StableHashMethodFieldCellCache cache = code.stableHashMethodFieldCellCache;
+        RuntimeScalar firstCell = null;
+        RuntimeScalar secondCell = null;
+        boolean cacheHit = revision >= 0 && cache != null
+                && cache.matches(hash, hash.elements, revision);
+        if (cacheHit) {
+            firstCell = cache.firstCell.get();
+            secondCell = cache.secondCell.get();
+            cacheHit = firstCell != null && (secondHashKey == null || secondCell != null);
+        }
+        if (!cacheHit) {
+            firstCell = hash.elements.get(firstHashKey);
+            secondCell = secondHashKey == null ? null : hash.elements.get(secondHashKey);
+        }
         if (!RuntimeScalar.isCacheableReadOnlyPlainHashMethodField(firstCell)
                 || (secondHashKey != null
                     && !RuntimeScalar.isCacheableReadOnlyPlainHashMethodField(secondCell))) {
             return false;
+        }
+        long currentRevision = hash.stableMethodFieldCacheRevision();
+        if (!cacheHit && revision >= 0 && currentRevision == revision) {
+            code.stableHashMethodFieldCellCache = new StableHashMethodFieldCellCache(
+                    hash, hash.elements, firstCell, secondCell, revision);
         }
         args.cacheVerifiedMethodHashFields(0, 1, firstHashKey, secondHashKey,
                 hashArgument, integerArgument, firstCell, secondCell);
@@ -2404,6 +2449,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public PerlSubroutine subroutine;
     /** Literal keys for the compiler-proven simple hash mutation method path. */
     public String[] stableHashMutationMethodKeys;
+    private volatile StableHashMethodFieldCellCache stableHashMethodFieldCellCache;
     /** Immutable method-shape guard finalized once after compiled metadata is attached. */
     private boolean stableHashMutationShapeFinalized;
     private boolean stableHashMutationShapeEligible;
@@ -5853,7 +5899,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (isLvalueCode(code)) return false;
         String[] keys = code.stableHashMutationMethodKeys;
         return prepareStableHashMutationMethodArguments(
-                args, keys[0], keys.length == 2 ? keys[1] : null, runtime);
+                code, args, keys[0], keys.length == 2 ? keys[1] : null, runtime);
     }
 
     private static RuntimeList applyStableHashMutationMethodBody(

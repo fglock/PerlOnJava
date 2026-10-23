@@ -184,6 +184,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
     private static final class RuntimeHashElementMap extends StableHashMap<String, RuntimeScalar> {
         private final RuntimeHash owner;
+        private long stableMethodFieldCacheRevision;
 
         private RuntimeHashElementMap(RuntimeHash owner) {
             this.owner = owner;
@@ -214,6 +215,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             owner.markPackageRootedValue(value);
             RuntimeScalar result = super.put(key, value);
+            stableMethodFieldCacheRevision++;
             updateReferentHashSlotOwnership(previous, value);
             return result;
         }
@@ -246,12 +248,14 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 owner.markPackageRootedValue(value);
             }
             super.putAll(m);
+            if (!m.isEmpty()) stableMethodFieldCacheRevision++;
         }
 
         @Override
         public RuntimeScalar remove(Object key) {
             RuntimeScalar previous = super.remove(key);
             if (previous != null) {
+                stableMethodFieldCacheRevision++;
                 if (owner.isHintHash && !owner.suppressHintHashLifecycleCleanup) {
                     MortalList.deferDestroyForContainerClear(java.util.Collections.singletonList(previous));
                 }
@@ -263,6 +267,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         @Override
         public void clear() {
             if (!isEmpty()) {
+                stableMethodFieldCacheRevision++;
                 if (owner.isHintHash && !owner.suppressHintHashLifecycleCleanup) {
                     MortalList.deferDestroyForContainerClear(values());
                 }
@@ -270,6 +275,15 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             super.clear();
         }
+
+        private long stableMethodFieldCacheRevision() {
+            return stableMethodFieldCacheRevision;
+        }
+    }
+
+    long stableMethodFieldCacheRevision() {
+        return elements instanceof RuntimeHashElementMap map
+                ? map.stableMethodFieldCacheRevision() : -1;
     }
 
     private boolean hasDurableElementLifetime() {
