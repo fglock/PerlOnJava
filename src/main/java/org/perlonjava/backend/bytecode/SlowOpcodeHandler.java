@@ -1349,9 +1349,9 @@ public class SlowOpcodeHandler {
 
     /** Release a compiler-only RHS slice scalar after its durable hash copy exists. */
     private static void releaseHashSliceTemporaryOwner(RuntimeScalar value) {
-        if (value != null && value.refCountOwned
-                && RuntimeScalarType.isReference(value)
-                && value.value instanceof RuntimeBase base && base.refCount > 0) {
+        if (value != null && RuntimeScalarType.isReference(value)
+                && value.value instanceof RuntimeBase base
+                && value.ownsCountedReferent(base) && base.refCount > 0) {
             base.releaseOwner(value, "HASH_SLICE_SET temporary owner transfer");
             base.releaseActiveOwner(value);
             base.refCount--;

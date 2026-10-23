@@ -136,11 +136,11 @@ public class BytecodeInterpreter {
         if (!(temp instanceof RuntimeScalar tempScalar)
                 || !(target instanceof RuntimeScalar targetScalar)
                 || tempScalar == targetScalar
-                || !tempScalar.refCountOwned
                 || !RuntimeScalarType.isReference(tempScalar)
                 || tempScalar.type != targetScalar.type
                 || tempScalar.value != targetScalar.value
                 || !(tempScalar.value instanceof RuntimeBase base)
+                || !tempScalar.ownsCountedReferent(base)
                 || base.refCount <= 0) {
             return;
         }
@@ -4047,7 +4047,7 @@ public class BytecodeInterpreter {
             if (!(register instanceof RuntimeScalar scalar)
                     || scalar.value != closure
                     || !MyVarCleanupStack.isRegistered(scalar)) continue;
-            if (scalar.refCountOwned) {
+            if (scalar.ownsCountedReferent(closure)) {
                 RuntimeScalar.scopeExitCleanup(scalar);
             } else {
                 // Non-owning CODE wrappers can still be the only local root
