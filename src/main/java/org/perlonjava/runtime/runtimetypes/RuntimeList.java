@@ -792,9 +792,10 @@ public class RuntimeList extends RuntimeBase {
                     // branch below). Without this, `my (undef, $name) = @_;` patterns
                     // leak +1 refCount per call on the discarded first arg — visible
                     // in op/inccode.t "no leaks" tests #61, #63 (bug perl #92252).
-                    if (rhsValue != null && rhsValue.refCountOwned
+                    if (rhsValue != null
                             && (rhsValue.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                            && rhsValue.value instanceof RuntimeBase base && base.refCount > 0) {
+                            && rhsValue.value instanceof RuntimeBase base
+                            && rhsValue.ownsCountedReferent(base) && base.refCount > 0) {
                         base.releaseOwner(rhsValue, "RuntimeList materialized-copy undo (undef-target)");
                         base.releaseActiveOwner(rhsValue);
                         base.refCount--;
@@ -819,9 +820,10 @@ public class RuntimeList extends RuntimeBase {
                 // sits in the local `rhs` array which is never scope-exit-cleaned).
                 // Array/hash targets take direct ownership of materialized copies, so only
                 // scalar targets need this correction.
-                if (assigned != null && assigned.refCountOwned
+                if (assigned != null
                         && (assigned.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                        && assigned.value instanceof RuntimeBase base && base.refCount > 0) {
+                        && assigned.value instanceof RuntimeBase base
+                        && assigned.ownsCountedReferent(base) && base.refCount > 0) {
                     base.releaseOwner(assigned, "RuntimeList materialized-copy undo (scalar-target)");
                     base.releaseActiveOwner(assigned);
                     base.refCount--;
@@ -847,8 +849,9 @@ public class RuntimeList extends RuntimeBase {
                     // the materialized rhs elements' increments are now redundant.
                     for (RuntimeScalar r : remaining) {
                         r.releaseOwnedScalarReferenceContents();
-                        if (r.refCountOwned && (r.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                                && r.value instanceof RuntimeBase base && base.refCount > 0) {
+                        if ((r.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                                && r.value instanceof RuntimeBase base
+                                && r.ownsCountedReferent(base) && base.refCount > 0) {
                             base.releaseOwner(r, "RuntimeList materialized-copy undo (array-target)");
                             base.releaseActiveOwner(r);
                             base.refCount--;
@@ -883,8 +886,9 @@ public class RuntimeList extends RuntimeBase {
                 // nobody decrements them.
                 for (RuntimeScalar r : remainingArr.elements) {
                     r.releaseOwnedScalarReferenceContents();
-                    if (r.refCountOwned && (r.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                            && r.value instanceof RuntimeBase base && base.refCount > 0) {
+                    if ((r.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                            && r.value instanceof RuntimeBase base
+                            && r.ownsCountedReferent(base) && base.refCount > 0) {
                         base.releaseOwner(r, "RuntimeList materialized-copy undo (hash-target)");
                         base.releaseActiveOwner(r);
                         base.refCount--;
@@ -994,9 +998,9 @@ public class RuntimeList extends RuntimeBase {
     private static void releaseDiscardedMaterializedScalar(RuntimeScalar scalar) {
         if (scalar == null) return;
         scalar.releaseOwnedScalarReferenceContents();
-        if (scalar.refCountOwned
-                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+        if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && scalar.value instanceof RuntimeBase base
+                && scalar.ownsCountedReferent(base)
                 && base.refCount > 0) {
             base.releaseOwner(scalar, "RuntimeList materialized-copy undo (simple-scalar-target)");
             base.releaseActiveOwner(scalar);

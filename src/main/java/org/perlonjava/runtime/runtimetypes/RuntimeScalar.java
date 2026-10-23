@@ -869,12 +869,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     /** Whether the legacy count bridge or its explicit slot still owns a referent. */
-    synchronized boolean ownsCountedReferent(RuntimeBase referent) {
+    public synchronized boolean ownsCountedReferent(RuntimeBase referent) {
         return value == referent
                 && (refCountOwned || hasScalarValueOwnerSlotFor(referent));
     }
 
-    private boolean ownsCurrentCountedReferent() {
+    boolean ownsCurrentCountedReferent() {
         return value instanceof RuntimeBase base && ownsCountedReferent(base);
     }
 

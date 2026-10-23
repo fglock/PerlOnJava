@@ -139,7 +139,7 @@ public class ReachabilityWalker {
 
     private static boolean hasCapturedAggregateElementOwner(RuntimeBase referent) {
         for (RuntimeScalar owner : ScalarRefRegistry.snapshot()) {
-            if (owner == null || !owner.refCountOwned || owner.value != referent) continue;
+            if (owner == null || !owner.ownsCountedReferent(referent)) continue;
             RuntimeBase container = owner.containerOwner;
             if (container instanceof RuntimeArray array
                     && array.captureCount > 0 && array.elements.contains(owner)) {
@@ -1480,7 +1480,8 @@ public class ReachabilityWalker {
             for (RuntimeScalar scalar : ScalarRefRegistry.snapshot()) {
                 if (!budget.visitEdge()) break rootScan;
                 if (scalar == null || scalar.captureCount > 0 || WeakRefRegistry.isweak(scalar)
-                        || (!MyVarCleanupStack.isLive(scalar) && !scalar.refCountOwned)
+                        || (!MyVarCleanupStack.isLive(scalar)
+                            && !scalar.ownsCurrentCountedReferent())
                         || scalar.scopeExited) continue;
                 if (includeOwnedCapturePads) seedTarget(scalar, null, seen, todo, stats);
                 else seedTargetIncludingCode(scalar, null, seen, todo, stats);
@@ -2306,7 +2307,7 @@ public class ReachabilityWalker {
                 if (sc == null) continue;
                 if (sc.captureCount > 0) continue;
                 if (WeakRefRegistry.isweak(sc)) continue;
-                if (!MyVarCleanupStack.isLive(sc) && !sc.refCountOwned) continue;
+                if (!MyVarCleanupStack.isLive(sc) && !sc.ownsCurrentCountedReferent()) continue;
                 if (sc.scopeExited) continue;
                 seedTargetExcluding(sc, target, seen, todo, stats, excludedReferent);
                 if (seen.contains(target)) return true;
@@ -2617,7 +2618,7 @@ public class ReachabilityWalker {
             if (sc.captureCount > 0) continue;
             if (WeakRefRegistry.isweak(sc)) continue;
             if (sc.scopeExited) continue;
-            if (!MyVarCleanupStack.isLive(sc) && !sc.refCountOwned) continue;
+            if (!MyVarCleanupStack.isLive(sc) && !sc.ownsCurrentCountedReferent()) continue;
             if (followScalar(sc, target, seen, todo)) return true;
         }
         for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {

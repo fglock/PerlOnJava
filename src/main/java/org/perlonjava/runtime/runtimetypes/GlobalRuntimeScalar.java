@@ -212,9 +212,9 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                 // release its fields while another Perl owner can still use
                 // them (Dancer2 uploads keep their File::Temp handle there).
                 boolean releasesLastContainerOwner = localVar != null
-                        && localVar.refCountOwned
                         && (localVar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                         && localVar.value instanceof RuntimeBase localBase
+                        && localVar.ownsCountedReferent(localBase)
                         && localBase.refCount == 1
                         && !localBase.localBindingExists;
                 if (releasesLastContainerOwner && localVar.value instanceof RuntimeHash localHash) {
@@ -223,9 +223,9 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                     MortalList.deferDestroyForContainerClear(localArray.elements);
                 }
                 if (localVar != null
-                        && localVar.refCountOwned
                         && (localVar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                         && localVar.value instanceof RuntimeBase base
+                        && localVar.ownsCountedReferent(base)
                         && base.refCount > 0) {
                     displacedBase = base;
                     localVar.setRefCountOwned(false);

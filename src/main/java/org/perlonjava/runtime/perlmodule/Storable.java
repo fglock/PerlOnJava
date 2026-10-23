@@ -347,7 +347,8 @@ public class Storable extends PerlModuleBase {
         if (args == null || args.elements == null) return;
         for (RuntimeScalar elem : args.elements) {
             if (elem == null) continue;
-            if (elem.refCountOwned && elem.value instanceof RuntimeBase base
+            if (elem.value instanceof RuntimeBase base
+                    && elem.ownsCountedReferent(base)
                     && base.refCount > 0) {
                 base.releaseOwner(elem, "Storable.releaseApplyArgs");
                 base.releaseActiveOwner(elem);
