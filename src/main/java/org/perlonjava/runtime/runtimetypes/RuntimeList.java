@@ -859,9 +859,10 @@ public class RuntimeList extends RuntimeBase {
                         }
                     }
                 } else {
-                    // Plain array: directly reuse the materialized copies.
-                    // Their refCountOwned=true transfers to the array elements.
-                    runtimeArray.elements = remaining;
+                    // Plain arrays can take the materialized cells directly,
+                    // but must transfer them through the array's owning-store
+                    // path so old values are released and new slots are tracked.
+                    runtimeArray.replaceWithTransferredListAssignmentCells(remaining);
                 }
                 result.elements.addAll(remaining);  // Use original references
                 rhsIndex = rhsSize; // Consume the rest

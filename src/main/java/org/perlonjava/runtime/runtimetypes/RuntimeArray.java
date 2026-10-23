@@ -360,6 +360,18 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
 
         @Override
+        public RuntimeScalar removeFirst() {
+            if (isEmpty()) throw new java.util.NoSuchElementException();
+            return remove(0);
+        }
+
+        @Override
+        public RuntimeScalar removeLast() {
+            if (isEmpty()) throw new java.util.NoSuchElementException();
+            return remove(size() - 1);
+        }
+
+        @Override
         public boolean remove(Object o) {
             int index = indexOf(o);
             if (index < 0) return false;
@@ -1928,6 +1940,34 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             case READONLY_ARRAY -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + type);
         };
+    }
+
+    /**
+     * Replace a plain array with already-materialized list-assignment cells.
+     * Normalize each scalar owner idempotently, then transfer the cells using
+     * the normal mutation hooks so displaced values and structural slots are
+     * released consistently.
+     */
+    void replaceWithTransferredListAssignmentCells(List<RuntimeScalar> replacements) {
+        if (type != PLAIN_ARRAY) {
+            throw new IllegalStateException("transferred list-assignment cells require a plain array");
+        }
+        eachIteratorIndex = null;
+        notePackageRootMutation();
+        MortalList.deferDestroyForContainerClear(elements);
+        elements.clear();
+        elementsOwned = true;
+        elementsAliased = false;
+        ownedAliasElements = null;
+        elements.addAll(replacements);
+        for (RuntimeScalar element : replacements) {
+            markPackageRootedValue(element);
+            if (hasDurableElementLifetime()) {
+                RuntimeScalar.retainUnstashedIoForDurableSlot(element);
+            }
+            RuntimeScalar.incrementRefCountForContainerStore(element);
+        }
+        reconcileArrayElementOwnerSlots();
     }
 
     /**

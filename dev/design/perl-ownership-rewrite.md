@@ -119,6 +119,13 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
 
 ### Current batch
 
+- Plain-array tails in nested list assignment now transfer materialized cells
+  through the array's owning-store path. This releases displaced values,
+  acquires scalar ownership idempotently, and registers the array-element
+  slots. `removeFirst()` and `removeLast()` route through the structural
+  mutation hooks so `shift` and `pop` retire those slots. A Java regression
+  covers replacement and final release; a Perl-level regression passes on
+  system Perl and both PerlOnJava backends. Full local Make passes in 15m23s.
 - Followed live `SCALAR_VALUE` and `SCALAR_REFERENCE_CONTENTS` slots from an
   aggregate toward their containing aggregate or lexical root. Deferred
   aggregate-owner recovery now avoids whole-root walks through these scalar

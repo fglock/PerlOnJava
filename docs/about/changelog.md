@@ -22,6 +22,7 @@ priorities and future plans.
 - Run standard Perl's `cpan -t Module` for CPAN oracle checks and keep download failures inconclusive instead of reporting missing local modules as Perl failures.
 - Keep lexical-registration membership checks constant-time, avoiding quadratic CPAN index parsing as cleanup stacks grow.
 - Keep scalar-slot owners authoritative across stores, container copies, scalar references, closure captures, lexical scope exit, overwrites, and explicit `undef` after legacy tracking retires; preserve aliases through `pop`, `shift`, or `delete` (#1649).
+- Transfer plain-array list-assignment tails through normal owner-slot and displaced-value cleanup paths, including `pop` and `shift` release (#1649).
 - Synchronize the destroyable-closure reverse index so ithread capture cloning and release can update it safely.
 - Follow scalar owner slots during aggregate lifetime recovery, avoiding a whole-root walk for nested scalar-owned containers.
 - Preserve numeric types of cached read-only scalars in ranges, rejecting unsigned endpoints outside the supported integer range.
