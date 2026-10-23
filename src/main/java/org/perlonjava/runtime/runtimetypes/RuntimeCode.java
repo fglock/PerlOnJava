@@ -1983,20 +1983,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return coerceScalarCallResult(result, effectiveContext, originalContext, true);
     }
 
-    static RuntimeList coerceStableHashMutationMethodResult(
-            RuntimeList result, int effectiveContext, int originalContext) {
-        if (result != null && result.freshScalarResult
-                && effectiveContext == RuntimeContextType.SCALAR
-                && originalContext == RuntimeContextType.SCALAR
-                && result.elements.size() == 1
-                && result.elements.getFirst() instanceof RuntimeScalar scalar
-                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0) {
-            MortalList.popTemporaryRoot(result);
-            return result;
-        }
-        return coerceScalarCallResult(result, effectiveContext, originalContext, true);
-    }
-
     public static RuntimeList coerceScalarCallResult(RuntimeList result, int effectiveContext,
                                                      int originalContext, boolean copyCapturedScalars) {
         try {
@@ -5828,8 +5814,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 result = (RuntimeList) code.methodHandle.invoke(
                         code.codeObject, args, effectiveContext);
             }
-            return coerceStableHashMutationMethodResult(
-                    result, effectiveContext, callContext);
+            return code.detachTryExpressionLvalueResult(
+                    coerceScalarCallResult(result, effectiveContext, callContext,
+                            !isLvalueCode(code)),
+                    callContext);
         } catch (RuntimeException e) {
             throw WarnDie.maybeInvokeUnhandledDieHandler(e);
         } catch (Throwable e) {
