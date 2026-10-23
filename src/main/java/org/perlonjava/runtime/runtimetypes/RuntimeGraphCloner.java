@@ -580,7 +580,8 @@ public class RuntimeGraphCloner {
     }
 
     private void restoreScalarReferenceOwnership(RuntimeScalar source, RuntimeScalar target) {
-        if (!source.refCountOwned
+        if (!(source.value instanceof RuntimeBase sourceReferent)
+                || !source.ownsCountedReferent(sourceReferent)
                 || (target.type & RuntimeScalarType.REFERENCE_BIT) == 0
                 || !(target.value instanceof RuntimeBase referent)) {
             return;

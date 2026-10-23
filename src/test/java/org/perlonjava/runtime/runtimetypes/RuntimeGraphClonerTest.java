@@ -91,6 +91,27 @@ class RuntimeGraphClonerTest {
     }
 
     @Test
+    void restoresClonedOwnershipFromExplicitSourceSlotAfterLegacyFlagRetires() {
+        PerlRuntime sourceRuntime = new PerlRuntime();
+        PerlRuntime targetRuntime = new PerlRuntime();
+        RuntimeArray referent = new RuntimeArray();
+        RuntimeScalar source = new RuntimeScalar();
+        try (PerlRuntime.Binding ignored = sourceRuntime.bind()) {
+            source.set(referent.createAnonymousReference());
+            source.refCountOwned = false;
+        }
+        assertTrue(source.scalarValueOwnerSlot().isActive());
+
+        RuntimeScalar cloned = (RuntimeScalar) new RuntimeGraphCloner(
+                sourceRuntime, targetRuntime).cloneGraph(source);
+
+        RuntimeArray clonedReferent = (RuntimeArray) cloned.value;
+        assertEquals(1, clonedReferent.refCount);
+        assertTrue(cloned.refCountOwned);
+        assertTrue(cloned.scalarValueOwnerSlot().isActive());
+    }
+
+    @Test
     void normalizesClearedReferencePayloadWithoutMutatingSource() {
         PerlRuntime sourceRuntime = new PerlRuntime();
         PerlRuntime targetRuntime = new PerlRuntime();

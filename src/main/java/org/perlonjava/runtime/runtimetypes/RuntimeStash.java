@@ -262,7 +262,7 @@ public class RuntimeStash extends RuntimeHash {
                 // Safe because unblessed objects have no DESTROY side effects.
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(base);
-            } else if (base.refCount > 0 && savedScalar.refCountOwned) {
+            } else if (base.refCount > 0 && savedScalar.ownsCountedReferent(base)) {
                 // Tracked object: decrement refCount (the stash was holding a strong ref).
                 savedScalar.setRefCountOwned(false);
                 base.releaseActiveOwner(savedScalar);

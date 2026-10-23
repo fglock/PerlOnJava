@@ -360,7 +360,7 @@ public class MyVarCleanupStack {
                     && (scalar.type == RuntimeScalarType.GLOB
                         || scalar.type == RuntimeScalarType.GLOBREFERENCE)
                     && scalar.value == glob
-                    && !scalar.refCountOwned
+                    && !scalar.ownsCountedReferent(referent)
                     && seen.put(scalar, Boolean.TRUE) == null) {
                 scalar.setRefCountOwned(true);
                 referent.recordOwner(scalar, "blessed glob lexical alias");
@@ -375,7 +375,7 @@ public class MyVarCleanupStack {
                     && (scalar.type == RuntimeScalarType.GLOB
                     || scalar.type == RuntimeScalarType.GLOBREFERENCE)
                     && scalar.value == glob
-                    && !scalar.refCountOwned
+                    && !scalar.ownsCountedReferent(referent)
                     && seen.put(scalar, Boolean.TRUE) == null) {
                 scalar.setRefCountOwned(true);
                 referent.recordOwner(scalar, "blessed glob package alias");

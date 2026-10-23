@@ -526,8 +526,8 @@ public class DestroyDispatch {
                     // avoids recursively entering callDestroy while the same
                     // referent is still in its DESTROY frame.
                     for (RuntimeScalar elem : args.elements) {
-                        if (elem != null && elem.refCountOwned
-                                && elem.value instanceof RuntimeBase base
+                        if (elem != null && elem.value instanceof RuntimeBase base
+                                && elem.ownsCountedReferent(base)
                                 && base.refCount > 0) {
                             if (base.refCountTrace) {
                                 base.releaseOwner(elem, "doCallDestroy args balance");
