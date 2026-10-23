@@ -240,6 +240,17 @@ remain separate correctness gates. See issue #1196 for its diagnostic matrix.
   evidence only; method performance remains about 25% below blead and prevents
   a 1:1 result. Raw windows are in
   `dev/bench/reports/issue-1863-current-candidate-pooled-full-portfolio-blead.json`.
+- The method JFR also sampled repeated checks of call-local hash cells in the
+  guarded generated body. The candidate now reads a cell directly after the
+  call boundary has validated and cached it; ordinary calls retain the checked
+  lookup. `nice -n 19 make` passed. Seven stable, checksum-matched method pairs
+  measured 1.137x the exact origin JAR (95% interval 1.064–1.191), but only
+  0.743x blead (0.712–0.773). The JAR SHA-256 is
+  `4bf3bbd3432211d853319466924699b2fc12188d804d7bef77804f47e6a58e16`. The
+  requested priority remained unverifiable and host load was high, so these
+  results are diagnostic. They do not close the method gap. Raw reports are
+  `dev/bench/reports/issue-1863-candidate-active-verified-cells-method.json`
+  and `dev/bench/reports/issue-1863-candidate-active-verified-cells-blead-method.json`.
 - The closure JFR profile found that the guarded captured-integer addition path
   performs repeated name lookups in `closedOverVariables`; `HashMap.getNode`,
   `LinkedHashMap.get`, and `RuntimeCode.tryDirectLeafIntegerAddition` were
@@ -276,14 +287,17 @@ remain separate correctness gates. See issue #1196 for its diagnostic matrix.
 1. Profile the remaining method-body scalar result, arithmetic, and lifecycle
    costs; try one isolated optimization at a time and compare it with both the
    exact origin JAR and pinned blead.
-2. Find a method optimization that closes the remaining method gap, then run
-   the full portfolio on a host with verified priority and suitable load.
-3. Meet the full seven-pair protocol before making an acceptance claim.
-4. Run stable Perl 5.42.2 separately and add allocation, GC, live-heap, and
+2. Determine whether the guarded stable-hash method path can safely avoid
+   repeated generic call and result-coercion work, then test one measured
+   change at a time.
+3. Once method throughput improves materially, run the full portfolio on a
+   host with verified priority and suitable load.
+4. Meet the full seven-pair protocol before making an acceptance claim.
+5. Run stable Perl 5.42.2 separately and add allocation, GC, live-heap, and
    peak-RSS reports to paired evidence.
-5. Continue the general call-boundary profile matrix and validate a broad
+6. Continue the general call-boundary profile matrix and validate a broad
    call-path optimization before collecting the final portfolio.
-6. Collect Processor Trace instruction totals when the host enables tracing.
+7. Collect Processor Trace instruction totals when the host enables tracing.
 
 ### Open questions
 

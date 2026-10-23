@@ -130,6 +130,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     // These fields are populated by RuntimeCode immediately before entering a
     // compiled method whose body only updates the two proven hash cells.
     private RuntimeScalar verifiedMethodHashArgument;
+    private boolean verifiedMethodHashFieldsActive;
     private RuntimeScalar verifiedMethodIntegerArgument;
     private RuntimeScalar verifiedMethodFirstHashCell;
     private RuntimeScalar verifiedMethodSecondHashCell;
@@ -222,9 +223,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         verifiedMethodIntegerArgument = integerArgument;
         verifiedMethodFirstHashCell = firstCell;
         verifiedMethodSecondHashCell = secondCell;
+        verifiedMethodHashFieldsActive = true;
     }
 
     void clearVerifiedMethodHashFields() {
+        verifiedMethodHashFieldsActive = false;
         verifiedMethodHashArgumentIndex = -1;
         verifiedMethodIntegerArgumentIndex = -1;
         verifiedMethodFirstHashKey = null;
@@ -255,6 +258,20 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             return verifiedMethodFirstHashCell;
         }
         if (Objects.equals(verifiedMethodSecondHashKey, key)) {
+            return verifiedMethodSecondHashCell;
+        }
+        return null;
+    }
+
+    RuntimeScalar activeVerifiedMethodHashField(RuntimeScalar hashArgument, String key) {
+        if (!verifiedMethodHashFieldsActive || verifiedMethodHashArgument != hashArgument) {
+            return null;
+        }
+        if (verifiedMethodFirstHashKey == key || verifiedMethodFirstHashKey.equals(key)) {
+            return verifiedMethodFirstHashCell;
+        }
+        if (verifiedMethodSecondHashKey == key || (verifiedMethodSecondHashKey != null
+                && verifiedMethodSecondHashKey.equals(key))) {
             return verifiedMethodSecondHashCell;
         }
         return null;

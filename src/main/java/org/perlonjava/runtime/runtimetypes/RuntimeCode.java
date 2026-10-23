@@ -153,6 +153,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /** Return a field cell already validated for this call, or use the normal fast lookup. */
     public static RuntimeScalar getVerifiedReadOnlyPlainHashMethodField(
             RuntimeArray args, RuntimeScalar target, String key) {
+        if (args != null && target != null) {
+            RuntimeScalar activeCell = args.activeVerifiedMethodHashField(target, key);
+            if (activeCell != null) return activeCell;
+        }
         if (args != null && target != null
                 && args.hasVerifiedMethodHashFields(0, 1,
                         args.verifiedMethodFirstHashKey(),
