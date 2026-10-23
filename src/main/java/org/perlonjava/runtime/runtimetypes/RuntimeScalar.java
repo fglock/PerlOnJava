@@ -6720,7 +6720,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Copy the current type and value to the new state
         currentState.type = this.type;
         currentState.value = copyScalarPayload(this.type, this.value);
-        currentState.setRefCountOwned(this.refCountOwned);
+        currentState.setRefCountOwned(ownsCurrentCountedReferent());
         setRefCountOwned(false);
         currentState.blessId = this.blessId;
         currentState.scalarReferenceContentsOwner = this.scalarReferenceContentsOwner;
@@ -6791,7 +6791,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // Restore the type, value from the saved state
             this.type = previousState.type;
             this.value = copyScalarPayload(previousState.type, previousState.value);
-            setRefCountOwned(previousState.refCountOwned);
+            setRefCountOwned(previousState.ownsCurrentCountedReferent());
             previousState.setRefCountOwned(false);
             this.blessId = previousState.blessId;
             this.scalarReferenceContentsOwner = previousState.scalarReferenceContentsOwner;
@@ -6841,7 +6841,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     @Override
     public Object dynamicSuspendState() {
         RuntimeScalar activeState = new RuntimeScalar(this);
-        activeState.setRefCountOwned(this.refCountOwned);
+        activeState.setRefCountOwned(ownsCurrentCountedReferent());
         setRefCountOwned(false);
         activeState.scalarReferenceContentsOwner = this.scalarReferenceContentsOwner;
         if (activeState.scalarReferenceContentsOwner != null) {
@@ -6858,7 +6858,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (token instanceof RuntimeScalar activeState) {
             this.type = activeState.type;
             this.value = copyScalarPayload(activeState.type, activeState.value);
-            setRefCountOwned(activeState.refCountOwned);
+            setRefCountOwned(activeState.ownsCurrentCountedReferent());
             activeState.setRefCountOwned(false);
             this.blessId = activeState.blessId;
             this.scalarReferenceContentsOwner = activeState.scalarReferenceContentsOwner;
