@@ -27,6 +27,14 @@ slots, closure pads, and mortal temporaries have different ownership rules.
 Every path must state whether it creates an owner, borrows a cell, transfers an
 owner, or creates a deferred mortal owner.
 
+During migration, `activeOwnerCount()` and `activeOwnerSnapshot()` describe
+only the compatibility `activeOwners` registry. They must not be widened to
+include explicit slots: several recovery and diagnostics paths need to tell
+whether the legacy registry itself recorded an owner. Use
+`countedScalarOwnerCount()` / `countedScalarOwnerSnapshot()` when the caller
+needs the identity-deduplicated union of legacy entries and `SCALAR_VALUE`
+slots. Keep that distinction until the compatibility registry is removed.
+
 ## Baseline ownership map
 
 | Concern | Current implementation | Phase 1 implication |
