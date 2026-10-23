@@ -638,8 +638,9 @@ public class MortalList {
     /**
      * Defer DESTROY for tracked blessed refs in a collection being cleared.
      * <p>
-     * Only decrements elements that own a refCount (refCountOwned == true).
-     * Elements stored via copy constructor (no setLarge) are skipped.
+     * Only decrements elements that own a counted reference, through either
+     * the legacy flag or an explicit scalar-value owner slot. Non-owning
+     * copies remain skipped.
      * Never-stored blessed objects (refCount == 0) are bumped to ensure DESTROY fires.
      */
     public static void deferDestroyForContainerClear(Iterable<RuntimeScalar> elements) {
@@ -730,7 +731,7 @@ public class MortalList {
         for (RuntimeScalar val : hash.elements.values()) {
             if (val != null && (val.type & RuntimeScalarType.REFERENCE_BIT) != 0
                     && val.value instanceof RuntimeBase rb) {
-                if (rb.blessId != 0 || rb.refCount >= 0) {
+                if (val.ownsCountedReferent(rb) || rb.blessId != 0 || rb.refCount >= 0) {
                     needsWalk = true;
                     break;
                 }
@@ -849,7 +850,7 @@ public class MortalList {
             return;
         }
         // Quick scan: check if any element either:
-        //   1. Owns a refCount (was assigned via setLarge with a tracked referent), OR
+        //   1. Owns a counted referent through a legacy flag or scalar-value slot, OR
         //   2. Is a direct blessed reference (blessId != 0), OR
         //   3. Is a container (array/hash ref) that might hold nested blessed refs
         // For case 3, we peek one level deep to avoid false positives for arrays
@@ -857,9 +858,11 @@ public class MortalList {
         boolean needsWalk = RuntimeScalar.watcherCleanupNeeded();
         for (RuntimeScalar elem : arr.elements) {
             if (elem == null || (elem.type & RuntimeScalarType.REFERENCE_BIT) == 0) continue;
-            // Fast check: refCountOwned means this ref was properly tracked via setLarge
-            if (elem.refCountOwned) { needsWalk = true; break; }
             if (!(elem.value instanceof RuntimeBase rb)) continue;
+            // The explicit scalar slot can outlive the legacy ownership flag
+            // during the bridge migration, so either identity source needs the
+            // recursive release walk.
+            if (elem.ownsCountedReferent(rb)) { needsWalk = true; break; }
             // Direct blessed ref
             if (rb.blessId != 0 || rb.refCount >= 0) { needsWalk = true; break; }
             // Container ref — peek at children for reference-type elements
@@ -913,9 +916,9 @@ public class MortalList {
         for (RuntimeScalar scalar : args.elements) {
             if (scalar == null
                     || !args.ownsElement(scalar)
-                    || !scalar.refCountOwned
                     || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
                     || !(scalar.value instanceof RuntimeBase base)
+                    || !scalar.ownsCountedReferent(base)
                     || base.refCount != 1) {
                 continue;
             }
@@ -926,9 +929,9 @@ public class MortalList {
     public static void releaseTailCallCodeRef(RuntimeScalar codeRef) {
         if (codeRef == null
                 || !isActive()
-                || !codeRef.refCountOwned
                 || codeRef.type != RuntimeScalarType.CODE
                 || !(codeRef.value instanceof RuntimeCode code)
+                || !codeRef.ownsCountedReferent(code)
                 || code.refCount <= 0) {
             return;
         }
@@ -958,9 +961,9 @@ public class MortalList {
 
     private static void releaseTailCallArgElement(RuntimeScalar scalar) {
         if (scalar == null
-                || !scalar.refCountOwned
                 || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
                 || !(scalar.value instanceof RuntimeBase base)
+                || !scalar.ownsCountedReferent(base)
                 || base.refCount <= 0) {
             return;
         }
@@ -1052,7 +1055,7 @@ public class MortalList {
 
             if (base.blessId != 0) {
                 boolean releasingLastOwner = false;
-                if (s.refCountOwned && base.refCount > 0) {
+                if (s.ownsCountedReferent(base) && base.refCount > 0) {
                     s.setRefCountOwned(false);
                     if (base.refCountTrace) {
                         base.traceRefCount(0, "MortalList.deferDecrementRecursive (blessed, queued)");
@@ -1100,7 +1103,7 @@ public class MortalList {
                 boolean hasDirectWeakElementRefs = containerHasWeakElementRefs(base);
                 boolean hasCleanupTargets = hasDirectWeakElementRefs
                         || containerMayContainCleanupTargets(base);
-                if (s.refCountOwned && base.refCount > 0) {
+                if (s.ownsCountedReferent(base) && base.refCount > 0) {
                     s.setRefCountOwned(false);
                     if (base.refCountTrace) {
                         base.traceRefCount(0, "MortalList.deferDecrementRecursive (unblessed container, queued)");
@@ -1225,7 +1228,8 @@ public class MortalList {
                 boolean reachableCodeRef = base instanceof RuntimeCode
                         && scalar.isStoredInRegisteredContainerOwner()
                         && ReachabilityWalker.isScalarReachable(scalar);
-                if (scalar.refCountOwned && base.refCount > 0 && unblessedDiscardableContainer
+                if (scalar.ownsCountedReferent(base) && base.refCount > 0
+                        && unblessedDiscardableContainer
                         && !reachableCodeRef) {
                     scalar.setRefCountOwned(false);
                     if (base.refCountTrace) {
@@ -2032,7 +2036,7 @@ public class MortalList {
         // when restoring the mixed legacy/native count.
         for (RuntimeScalar scalar : referent.countedScalarOwnerSnapshot()) {
             if (scalar == null || rootedHashCells.contains(scalar)
-                    || !scalar.refCountOwned || scalar.value != referent
+                    || !scalar.ownsCountedReferent(referent)
                     || !ReachabilityWalker.isScalarReachable(scalar)) {
                 continue;
             }
