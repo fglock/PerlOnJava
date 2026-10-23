@@ -130,7 +130,7 @@ remain separate correctness gates. See issue #1196 for its diagnostic matrix.
 
 ## Progress tracking
 
-### Current status: Hosted exact-baseline attribution is repeatable; the method anchor remains below 1:1
+### Current status: Thread-local reuse improved the method anchor; it remains below 1:1
 
 ### Completed in this increment
 
@@ -368,22 +368,31 @@ remain separate correctness gates. See issue #1196 for its diagnostic matrix.
   against that experiment (0.977–1.010), consistent with no attributable
   change. The first completed hosted report is in GitHub Actions run
   `39955805968`; the cleaned report is in run `39973954089`.
+- Reused the existing `ThreadLocalMap.Entry` for stable-method argument-array
+  recycling by leaving its value null while the array is borrowed. The JFR
+  allocation samples had attributed repeated `ThreadLocalMap.Entry` allocation
+  to `RuntimeArray.recycleMethodCallArguments`. The full `nice -n 19 make` gate
+  passed. In the seven-pair hosted comparison against the exact preceding
+  candidate, method measured 1.094x (95% interval 1.020–1.223) and portfolio
+  1.044x (1.001–1.098), supporting retention. Against pinned blead, method is
+  0.719x (0.707–0.731), closure 1.315x (1.273–1.365), Life 0.812x
+  (0.806–0.818), and portfolio 0.915x (0.904–0.929). The method anchor
+  remains about 28% below parity. Raw results are in Actions run
+  `39993853491`; the reported JAR SHA-256 is
+  `188ff8d1992966f49990c85cca739cf3a53fadbc1b1e70729165981232a5a284`.
 
 ### Next steps
 
-1. Use the retained method profiles to prioritize integer-result mutation,
-   runtime lookup, and call-return work; collect a fresh profile on the
-   reference runner when shared-host load permits.
-2. Test isolated changes against the exact origin JAR and pinned blead; method
-   throughput is still below the 1.00x acceptance threshold.
-3. Rerun the full portfolio on a host with verified priority and suitable load
-   before making an acceptance claim.
-4. Meet the full seven-pair protocol before making an acceptance claim.
-5. Run stable Perl 5.42.2 separately and add allocation, GC, live-heap, and
-   peak-RSS reports to paired evidence.
-6. Continue the general call-boundary profile matrix and validate a broad
-   call-path optimization before collecting the final portfolio.
-7. Collect Processor Trace instruction totals when the host enables tracing.
+1. Collect a fresh method-anchor JFR on the verified-priority runner; isolate
+   remaining integer-result allocation, hash-field lookup, and call-boundary
+   costs after the ThreadLocal entry allocation is removed.
+2. Measure allocation per operation, GC, live heap, and peak RSS for the
+   baseline and retained candidate; current CI evidence covers throughput only.
+3. Continue isolated experiments against the exact previous candidate and
+   pinned blead. The method anchor at 0.719x remains below the 1.00x threshold.
+4. Keep the verified-priority seven-pair full-portfolio run as the acceptance
+   gate for each final candidate.
+5. Collect Processor Trace instruction totals when the host enables tracing.
 
 ### Open questions
 
