@@ -51,6 +51,28 @@ jobs:
           set -o pipefail
           nice -n 19 make 2>&1 | tee dev/bench/reports/ci-issue1863-candidate-make.log
 
+      - name: Capture an unscored method anchor JFR
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          profile_path="$GITHUB_WORKSPACE/dev/bench/reports/ci-issue1863-method-anchor.jfr"
+          profile_status=0
+          JPERL_OPTS="-XX:StartFlightRecording=duration=30s,filename=$profile_path" \
+            nice -n 19 timeout 50 ./jperl dev/bench/benchmark_method.pl \
+            > "$profile_path.log" 2>&1 || profile_status=$?
+          if [ "$profile_status" -ne 124 ]; then
+            cat "$profile_path.log"
+            echo "Expected the 50-second profiling command to be stopped by timeout; got $profile_status" >&2
+            exit 1
+          fi
+          test -s "$profile_path"
+          "$JAVA_HOME/bin/jfr" summary "$profile_path" \
+            > dev/bench/reports/ci-issue1863-method-anchor-jfr-summary.txt
+          "$JAVA_HOME/bin/jfr" print \
+            --events jdk.ExecutionSample,jdk.ObjectAllocationSample \
+            --stack-depth 20 "$profile_path" \
+            > dev/bench/reports/ci-issue1863-method-anchor-jfr-samples.txt
+
       - name: Build exact parent and master JARs
         timeout-minutes: 90
         env:
