@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The candidate is based on `origin/master` at `5a6cf5ed6`; published head `84ddd5b45` passes hosted run `39895645097` on Linux and Windows, including both thread gates. Current local candidate `5578d44bd` passes full `nice -n 19 make` in 33m11s; hosted validation is pending. The preceding head's one hosted Linux failure in `dbic_deep_cycle_weak_shift_regression.t` did not recur in local filtered/full-shard gates or the hosted rerun. Owner slots still bridge to `RuntimeBase.refCount` for dispatch, and default owner-slot accounting remains incomplete.
+**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816), now reconciled with `origin/master` through `aeda28344`. Candidate `9c93d5922` passes full `nice -n 19 make` in 19m53s, including the GLOB scope-exit regression. Hosted run `39991272777` passes on Linux and Windows, including both thread gates, for preceding head `c1167ffbd`; validation of the latest head is pending. Owner slots still bridge to `RuntimeBase.refCount` for dispatch, and default owner-slot accounting remains incomplete.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
@@ -107,7 +107,7 @@ and first path establish implementation cost.
 
 ### Current status: Phase 2 in progress; Phase 1 merged in PR #1653 as `84f32be179bdc2b351c3eaae1cb26df39964ab6b` (2026-10-07)
 
-The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The branch is based on `origin/master` at `5a6cf5ed6`; published head `84ddd5b45` passes hosted run `39895645097` on Linux and Windows, including both thread gates. Current local candidate `5578d44bd` passes full `nice -n 19 make` in 33m11s; hosted validation is pending. The preceding head's one hosted Linux failure in `dbic_deep_cycle_weak_shift_regression.t` did not recur in local filtered/full-shard gates or the hosted rerun. The preceding ownership candidate passes all three local thread configurations. The focused lifetime regressions recorded below pass on blead Perl 5.45.4 and both backends. HTML::Tree 5.07 passes all 23 files and 989 tests on both backends on the preceding ownership candidate. Phase 2 remains incomplete: `refCount` still controls lifecycle dispatch, and the slot ledger is not yet the default accounting source across general scalar/proxy stores, aliases, and cleanup. Distinct scalar-reference aliases keep separate reachability identities while contributing one referent count per scalar cell. The HTML::Tree result is compatibility evidence, not the Phase 2 owner-slot exit proof.
+The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The branch includes the current-master merge at `aeda28344`; head `9c93d5922` passes the full local Make gate, and hosted run `39991272777` passes on both platforms for its preceding head. The focused lifetime regressions recorded below pass on blead Perl 5.45.4 and both backends. HTML::Tree 5.07 passes all 23 files and 989 tests on both backends on the preceding ownership candidate. Phase 2 remains incomplete: `refCount` still controls lifecycle dispatch, and the slot ledger is not yet the default accounting source across general scalar/proxy stores, aliases, and cleanup. Distinct scalar-reference aliases keep separate reachability identities while contributing one referent count per scalar cell. The HTML::Tree result is compatibility evidence, not the Phase 2 owner-slot exit proof.
 
 ### Current batch
 
@@ -166,6 +166,14 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   candidate in 20m47s, including the Catalyst lifetime test (1 test, 0 failures)
   and all owner-slot regressions. `make check-links` passes; hosted validation
   is pending.
+- Follow-up batches now use explicit scalar slots through weak release,
+  reachability, stash deletion, graph cloning, DESTROY argument balancing,
+  blessed glob retention, list-copy cleanup, localized globals, Storable
+  arguments, bytecode temporaries, dynamic state save/restore, and GLOB scope
+  exit. Focused Java regressions cover retired-flag cases. The full local Make
+  gate passes on candidate `9c93d5922` in 19m53s; hosted validation for that
+  head is pending. The slot ledger remains a bridge to selective `refCount`,
+  so Phase 2 is not complete.
 
 The earlier candidate was based on `origin/master` (`ede542b29`) and passed the full local make in 22m55s, Ubuntu `make ci`, the Ubuntu Perl thread compatibility gate, SBOM generation, Windows `make ci` in about 52 minutes, and the focused Windows thread gate. Windows CI exposed two existing unit tests with POSIX `/tmp` paths; `make ci` now creates the runner's root-relative `tmp` directory before building. On blead Perl 5.45.4, the controller, WebSocket, Catalyst tempfile, owner-release, and writable `Internals::SvREFCNT` regressions pass. The controller regression passes 5/5 on JVM and interpreter; the WebSocket regression passes 6/6 on both; the Catalyst tempfile regression passes 24/24 on both; `refcount/issue_1794_controller_owner_release.t` passes 3/3 on both; and `internals_svrefcnt_write.t` passes 6/6 on both after failing all six assertions on its unfixed parent. The alias-count follow-up rebases onto `origin/master` (`18323a1ac`). Its focused make passes in 50s and its full local make passes in 31m30s on code commit `15e362ddb`.
 
