@@ -40,6 +40,8 @@ priorities and future plans.
   when updating the internal caller-package tracker; keep one reusable active
   lexical frame instead of a per-runtime deque; cache the live warning-scope
   scalar per runtime and invalidate it when global scalar bindings change.
+- Cache stable integer array-field cells in eligible blessed-array arithmetic
+  methods, matching the hash-backed method specialization (#1854).
 - Preserve inherited method dispatch in child threads.
 - Prefer exact root-module package declarations over earlier helper packages, and warn for undefined hash keys used by `exists` and `delete` (#1820, #1645).
 - Add a reproducible, warmup-aware Perl versus PerlOnJava performance runner (#1196).
