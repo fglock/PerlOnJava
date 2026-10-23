@@ -130,7 +130,7 @@ remain separate correctness gates. See issue #1196 for its diagnostic matrix.
 
 ## Progress tracking
 
-### Current status: The exact `origin/master` baseline is recorded; the method anchor remains well below 1:1
+### Current status: Hosted exact-baseline attribution is repeatable; the method anchor remains below 1:1
 
 ### Completed in this increment
 
@@ -352,11 +352,28 @@ remain separate correctness gates. See issue #1196 for its diagnostic matrix.
   JARs in the same paired protocol, recording both paths and hashes. Artifact
   comparisons remain attribution evidence and are explicitly ineligible for a
   Perl parity claim.
+- Added a hosted issue #1863 workflow that builds the candidate, exact PR parent,
+  exact `origin/master` base, optimized blead, and stable Perl 5.42.2; it runs
+  seven paired measurements for the fixed portfolio with verified nice 19 and
+  retains raw reports as a 90-day artifact. The clean candidate
+  `85487069bf773710f2a385632b7bb5e3e342f4ad` passed `nice -n 19 make` and the
+  hosted run. It measured method 0.684x blead (95% interval 0.669–0.697),
+  closure 1.272x (1.245–1.313), Life 0.828x (0.812–0.852), and portfolio
+  0.896x (0.881–0.913). Against exact `origin/master`, method was 1.393x
+  (1.371–1.413) and portfolio 1.181x (1.154–1.207). The method remains about
+  31.6% below blead, so parity is not met.
+- The fresh-scalar result fast path measured 0.996x the exact preceding
+  candidate on the method anchor (95% interval 0.965–1.036), with no
+  demonstrated gain; it was removed. The clean-candidate rerun measured 0.993x
+  against that experiment (0.977–1.010), consistent with no attributable
+  change. The first completed hosted report is in GitHub Actions run
+  `39955805968`; the cleaned report is in run `39973954089`.
 
 ### Next steps
 
-1. Profile the remaining integer-result mutation, runtime lookup, and call
-   return work in the method anchor.
+1. Use the retained method profiles to prioritize integer-result mutation,
+   runtime lookup, and call-return work; collect a fresh profile on the
+   reference runner when shared-host load permits.
 2. Test isolated changes against the exact origin JAR and pinned blead; method
    throughput is still below the 1.00x acceptance threshold.
 3. Rerun the full portfolio on a host with verified priority and suitable load

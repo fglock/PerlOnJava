@@ -172,7 +172,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         if (initialCapacity <= 2) {
             RuntimeArray recycled = RECYCLED_METHOD_CALL_ARGUMENTS.get();
             if (recycled != null) {
-                RECYCLED_METHOD_CALL_ARGUMENTS.remove();
+                // Keep the ThreadLocalMap entry so recycling can update it without a new entry.
+                RECYCLED_METHOD_CALL_ARGUMENTS.set(null);
                 recycled.resetRecycledMethodCallArguments();
                 return recycled;
             }
