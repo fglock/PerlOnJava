@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816), now reconciled with `origin/master` through `aeda28344`. Candidate `85daddac0` passes full `nice -n 19 make` in 17m20s, including both array- and hash-tail ownership regressions. Hosted run `39991272777` passes on Linux and Windows, including both thread gates, for preceding head `c1167ffbd`; validation of the latest head is pending. Owner slots still bridge to `RuntimeBase.refCount` for dispatch, and default owner-slot accounting remains incomplete.
+**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816), now reconciled with `origin/master` through `aeda28344`. Candidate `85daddac0` passes full `nice -n 19 make` in 17m20s, including the array- and hash-tail ownership regressions. The pushed head is `993d5875e`; hosted validation is pending. Hosted run `39991272777` passes on Linux and Windows, including both thread gates, for preceding head `c1167ffbd`. Owner slots still bridge to `RuntimeBase.refCount` for dispatch, and default owner-slot accounting remains incomplete.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
@@ -115,7 +115,7 @@ and first path establish implementation cost.
 
 ### Current status: Phase 2 in progress; Phase 1 merged in PR #1653 as `84f32be179bdc2b351c3eaae1cb26df39964ab6b` (2026-10-07)
 
-The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The branch includes the current-master merge at `aeda28344`; head `85daddac0` passes the full local Make gate, and hosted run `39991272777` passes on both platforms for its preceding head. The focused lifetime regressions recorded below pass on blead Perl 5.45.4 and both backends. HTML::Tree 5.07 passes all 23 files and 989 tests on both backends on the preceding ownership candidate. Phase 2 remains incomplete: `refCount` still controls lifecycle dispatch, and the slot ledger is not yet the default accounting source across general scalar/proxy stores, aliases, and cleanup. Distinct scalar-reference aliases keep separate reachability identities while contributing one referent count per scalar cell. The HTML-Tree result is compatibility evidence, not the Phase 2 owner-slot exit proof.
+The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The branch includes the current-master merge at `aeda28344`; code head `85daddac0` passes the full local Make gate, and pushed head `993d5875e` contains the follow-up validation record. Hosted run `39991272777` passes on both platforms for its preceding head. The focused lifetime regressions recorded below pass on blead Perl 5.45.4 and both backends. HTML::Tree 5.07 passes all 23 files and 989 tests on both backends on the preceding ownership candidate. Phase 2 remains incomplete: `refCount` still controls lifecycle dispatch, and the slot ledger is not yet the default accounting source across general scalar/proxy stores, aliases, and cleanup. Distinct scalar-reference aliases keep separate reachability identities while contributing one referent count per scalar cell. The HTML-Tree result is compatibility evidence, not the Phase 2 owner-slot exit proof.
 
 ### Current batch
 
@@ -128,6 +128,9 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   passes 4/4 on system Perl, JVM, and interpreter, and fails all four assertions
   on the unfixed JVM and interpreter parent. Immutable code commit
   `85daddac0` passes full `nice -n 19 make` in 17m20s.
+- The hash-tail validation record was pushed in `993d5875e`. Both JVM and
+  interpreter regressions pass 4/4 after the fix; the unfixed parent fails
+  4/4 on each backend. The latest PR head has no hosted checks attached yet.
 - The preceding array-tail fix routes `removeFirst()` and `removeLast()` through
   structural mutation hooks so `shift` and `pop` retire array slots. Its
   immutable code commit `ecc5efd37` passes full `nice -n 19 make` in 13m34s,
