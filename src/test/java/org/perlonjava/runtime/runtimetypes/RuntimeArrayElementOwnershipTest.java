@@ -263,4 +263,44 @@ class RuntimeArrayElementOwnershipTest {
             assertSame(retained, array.arrayElementOwnerSlot(0));
         }
     }
+
+    @Test
+    void popReleasesAnExplicitScalarOwnerAfterLegacyFlagRetires() {
+        assertRemovedElementOwnerIsReleased(true);
+    }
+
+    @Test
+    void shiftReleasesAnExplicitScalarOwnerAfterLegacyFlagRetires() {
+        assertRemovedElementOwnerIsReleased(false);
+    }
+
+    private static void assertRemovedElementOwnerIsReleased(boolean pop) {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            RuntimeScalar cell = new RuntimeScalar();
+            cell.set(referent.createAnonymousReference());
+            RuntimeArray array = new RuntimeArray();
+            array.elements.add(cell);
+            array.elementsOwned = true;
+            array.reconcileArrayElementOwnerSlots();
+            MyVarCleanupStack.register(array);
+            int originalRefCount = referent.refCount;
+            cell.refCountOwned = false;
+
+            try {
+                RuntimeScalar removed = pop ? RuntimeArray.pop(array) : RuntimeArray.shift(array);
+                assertSame(cell, removed);
+                assertFalse(cell.hasScalarValueOwnerSlotFor(referent),
+                        "removing the element retires its explicit scalar slot");
+                MyVarCleanupStack.unregister(array);
+                MortalList.flush();
+                assertTrue(referent.refCount < originalRefCount,
+                        "the removed element's deferred count is released");
+            } finally {
+                MyVarCleanupStack.unregister(array);
+                MortalList.flush();
+            }
+        }
+    }
 }

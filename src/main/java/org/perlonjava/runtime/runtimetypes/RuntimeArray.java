@@ -893,10 +893,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     // @_ uses aliasing (setArrayOfAlias) without refCount increments,
                     // so its elements must NOT be mortal-ized on shift/pop — doing so
                     // would corrupt the caller's refCount tracking.
-                    if (runtimeArray.ownsElement(result) && result.refCountOwned
+                    if (runtimeArray.ownsElement(result)
                             && !result.hasOwningAggregateSlotForLvalueAlias()
                             && (result.type & RuntimeScalarType.REFERENCE_BIT) != 0
                             && result.value instanceof RuntimeBase base
+                            && result.ownsCountedReferent(base)
                             && base.refCount > 0) {
                         result.setRefCountOwned(false);
                         runtimeArray.forgetOwnedAliasElement(result);
@@ -937,10 +938,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 if (result != null) {
                     // If this element owned a refCount, defer the decrement.
                     // See pop() for rationale and elementsOwned guard.
-                    if (runtimeArray.ownsElement(result) && result.refCountOwned
+                    if (runtimeArray.ownsElement(result)
                             && !result.hasOwningAggregateSlotForLvalueAlias()
                             && (result.type & RuntimeScalarType.REFERENCE_BIT) != 0
                             && result.value instanceof RuntimeBase base
+                            && result.ownsCountedReferent(base)
                             && base.refCount > 0) {
                         result.setRefCountOwned(false);
                         runtimeArray.forgetOwnedAliasElement(result);

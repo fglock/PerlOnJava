@@ -37,6 +37,15 @@ class MortalListScalarValueOwnerRestoreTest {
 
     @Test
     void deferredReleaseUsesExplicitScalarOwnerAfterLegacyFlagRetires() {
+        assertExplicitScalarOwnerRelease(false);
+    }
+
+    @Test
+    void capturedReleaseUsesExplicitScalarOwnerAfterLegacyFlagRetires() {
+        assertExplicitScalarOwnerRelease(true);
+    }
+
+    private static void assertExplicitScalarOwnerRelease(boolean captured) {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeArray referent = new RuntimeArray();
@@ -49,7 +58,11 @@ class MortalListScalarValueOwnerRestoreTest {
             assertTrue(owner.hasScalarValueOwnerSlotFor(referent));
 
             try {
-                MortalList.deferDecrementIfTracked(owner);
+                if (captured) {
+                    MortalList.releaseCapturedDecrement(owner);
+                } else {
+                    MortalList.deferDecrementIfTracked(owner);
+                }
                 assertFalse(owner.hasScalarValueOwnerSlotFor(referent),
                         "deferred cleanup retires the explicit scalar slot");
                 MyVarCleanupStack.unregister(owner);
