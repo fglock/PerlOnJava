@@ -253,6 +253,22 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 && get(integerArgumentIndex) == verifiedMethodIntegerArgument;
     }
 
+    boolean hasActiveVerifiedMethodHashFields(int hashArgumentIndex, int integerArgumentIndex,
+            String firstKey, String secondKey) {
+        if (!verifiedMethodHashFieldsActive || hashArgumentIndex < 0 || integerArgumentIndex < 0
+                || verifiedMethodHashArgumentIndex != hashArgumentIndex
+                || verifiedMethodIntegerArgumentIndex != integerArgumentIndex
+                || !(verifiedMethodFirstHashKey == firstKey
+                    || Objects.equals(verifiedMethodFirstHashKey, firstKey))
+                || !(verifiedMethodSecondHashKey == secondKey
+                    || Objects.equals(verifiedMethodSecondHashKey, secondKey))
+                || size() <= Math.max(hashArgumentIndex, integerArgumentIndex)) {
+            return false;
+        }
+        return get(hashArgumentIndex) == verifiedMethodHashArgument
+                && get(integerArgumentIndex) == verifiedMethodIntegerArgument;
+    }
+
     RuntimeScalar verifiedMethodHashField(String key) {
         if (Objects.equals(verifiedMethodFirstHashKey, key)) {
             return verifiedMethodFirstHashCell;

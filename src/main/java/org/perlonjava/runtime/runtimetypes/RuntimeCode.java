@@ -126,6 +126,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return integerArgument != null && integerArgument.type == INTEGER;
     }
 
+    /** True when the caller already validated this exact stable-hash argument frame. */
+    public static boolean hasActiveVerifiedMethodHashFields(RuntimeArray args,
+            int hashArgumentIndex, int integerArgumentIndex,
+            String firstHashKey, String secondHashKey) {
+        return args != null && args.getClass() == RuntimeArray.class
+                && args.hasActiveVerifiedMethodHashFields(hashArgumentIndex,
+                        integerArgumentIndex, firstHashKey, secondHashKey);
+    }
+
+    /** Read a cached field cell on the generated method's prevalidated entry path. */
+    public static RuntimeScalar getActiveVerifiedReadOnlyPlainHashMethodField(
+            RuntimeArray args, RuntimeScalar hashArgument, String key) {
+        return args == null ? null : args.activeVerifiedMethodHashField(hashArgument, key);
+    }
+
     /** Prepare the call-local cell cache and validate the guarded fast path. */
     public static boolean prepareStableHashMutationMethodArguments(
             RuntimeArray args, String firstHashKey, String secondHashKey) {

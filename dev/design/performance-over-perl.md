@@ -251,6 +251,24 @@ remain separate correctness gates. See issue #1196 for its diagnostic matrix.
   results are diagnostic. They do not close the method gap. Raw reports are
   `dev/bench/reports/issue-1863-candidate-active-verified-cells-method.json`
   and `dev/bench/reports/issue-1863-candidate-active-verified-cells-blead-method.json`.
+- The generated method entry guard was still repeating the generic argument
+  and field checks after the call boundary had established the same proof. It
+  now checks that the active proof matches the exact indices and keys, then
+  loads the cached cells directly. `nice -n 19 make` passed. A seven-pair
+  method-only run measured 1.225x the exact origin JAR (95% interval
+  1.180–1.286) and 0.790x blead (0.771–0.814). The full 21-pair portfolio on
+  this JAR measured method 0.773x blead (0.759–0.786), closure 1.638x
+  (1.609–1.671), Life 1.154x (1.059–1.334), and portfolio 1.134x
+  (1.095–1.200). All pairs were stable and checksum-matched, but priority was
+  unverifiable and shared-host load rose substantially. Treat these as
+  diagnostic only; method performance remains about 23% below blead. The JAR
+  SHA-256 is `af0dd535614a9afa91da9aa36ccfa81c3e351ed1a03941d431dc92d74b111131`.
+  Raw reports are `dev/bench/reports/issue-1863-candidate-active-entry-guard-origin-method.json`,
+  `dev/bench/reports/issue-1863-candidate-active-entry-guard-blead-method.json`,
+  and `dev/bench/reports/issue-1863-candidate-active-entry-guard-full-portfolio-blead.json`.
+  The post-change profile is `dev/bench/reports/issue-1863-method-active-entry-guard.jfr`;
+  its execution samples no longer show `canBorrowReadOnlyArguments` or the
+  repeated verified-cell getter.
 - The closure JFR profile found that the guarded captured-integer addition path
   performs repeated name lookups in `closedOverVariables`; `HashMap.getNode`,
   `LinkedHashMap.get`, and `RuntimeCode.tryDirectLeafIntegerAddition` were
@@ -284,14 +302,13 @@ remain separate correctness gates. See issue #1196 for its diagnostic matrix.
 
 ### Next steps
 
-1. Profile the remaining method-body scalar result, arithmetic, and lifecycle
-   costs; try one isolated optimization at a time and compare it with both the
-   exact origin JAR and pinned blead.
-2. Determine whether the guarded stable-hash method path can safely avoid
-   repeated generic call and result-coercion work, then test one measured
-   change at a time.
-3. Once method throughput improves materially, run the full portfolio on a
-   host with verified priority and suitable load.
+1. Profile method return arithmetic and runtime lifecycle work; current JFR
+   samples concentrate on integer-result mutation, runtime lookup, and method
+   argument preparation.
+2. Test isolated changes against the exact origin JAR and pinned blead; method
+   throughput is still below the 1.00x acceptance threshold.
+3. Rerun the full portfolio on a host with verified priority and suitable load
+   before making an acceptance claim.
 4. Meet the full seven-pair protocol before making an acceptance claim.
 5. Run stable Perl 5.42.2 separately and add allocation, GC, live-heap, and
    peak-RSS reports to paired evidence.
