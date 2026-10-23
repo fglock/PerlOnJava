@@ -41,6 +41,12 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public int type;
     // Map to store the elements of the hash
     public Map<String, RuntimeScalar> elements;
+    /** Null when ordinary hashes accept arbitrary keys; otherwise legal key set. */
+    public Set<String> legalHashKeys;
+    /** Values individually locked by Hash::Util. */
+    public Set<String> lockedHashValues;
+    /** Hash::Util lock_hash locks every current value as well as the key set. */
+    public boolean allHashValuesLocked;
     /** True only for Perl's compile-time %^H hash. */
     public boolean isHintHash;
     /** True for Perl's runtime %{^HOOK} hash. */
@@ -104,6 +110,32 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         RuntimeHashElementMap map = new RuntimeHashElementMap(this);
         map.putAll(values);
         return map;
+    }
+
+    /** Enforce Hash::Util restricted-key access at every Perl hash operation. */
+    public void validateHashKey(String key, String operation) {
+        if (legalHashKeys != null && !legalHashKeys.contains(key)) {
+            String message = switch (operation) {
+                case "delete" -> "Attempt to delete disallowed key '" + key + "' from a restricted hash";
+                default -> "Attempt to access disallowed key '" + key + "' in a restricted hash";
+            };
+            throw new PerlCompilerException(message);
+        }
+    }
+
+    public boolean isHashRestricted() {
+        return legalHashKeys != null;
+    }
+
+    public boolean isHashReadOnly() {
+        return type == READONLY_HASH || isHashRestricted();
+    }
+
+    private void validateHashDelete(String key) {
+        validateHashKey(key, "delete");
+        if (allHashValuesLocked || (lockedHashValues != null && lockedHashValues.contains(key))) {
+            throw new PerlCompilerException("Attempt to delete readonly key '" + key + "' from a restricted hash");
+        }
     }
 
     void resetElementMapAfterAutovivification() {
@@ -462,6 +494,27 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeArray containing this hash (for method chaining or further operations).
      */
     public RuntimeArray setFromList(RuntimeList value) {
+        if (allHashValuesLocked || type == READONLY_HASH) {
+            throw new PerlCompilerException("Modification of a read-only value attempted");
+        }
+        if (legalHashKeys != null) {
+            Set<String> assignedKeys = new HashSet<>();
+            Iterator<RuntimeScalar> keys = value.iterator();
+            while (keys.hasNext()) {
+                String key = keys.next().toString();
+                validateHashKey(key, "write");
+                assignedKeys.add(key);
+                if (keys.hasNext()) keys.next();
+            }
+            if (lockedHashValues != null) {
+                for (String lockedKey : lockedHashValues) {
+                    if (elements.containsKey(lockedKey) && !assignedKeys.contains(lockedKey)) {
+                        throw new PerlCompilerException("Attempt to delete readonly key '" + lockedKey
+                                + "' from a restricted hash");
+                    }
+                }
+            }
+        }
         return switch (type) {
             case PLAIN_HASH -> {
                 // First, fully materialize the right-hand side list BEFORE clearing
@@ -586,6 +639,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @param value The value for the hash entry.
      */
     public void put(String key, RuntimeScalar value) {
+        validateHashKey(key, "write");
+        if (allHashValuesLocked || (lockedHashValues != null && lockedHashValues.contains(key))) {
+            throw new PerlCompilerException("Modification of a read-only value attempted");
+        }
         validateRequireHookAssignment(key, value);
         switch (type) {
             case PLAIN_HASH -> {
@@ -712,6 +769,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * semantics to the already-cloned value.
      */
     public void putClonedElement(String key, RuntimeScalar value) {
+        validateHashKey(key, "write");
+        if (allHashValuesLocked || (lockedHashValues != null && lockedHashValues.contains(key))) {
+            throw new PerlCompilerException("Modification of a read-only value attempted");
+        }
         elements.put(key, value == null ? new RuntimeScalar() : value);
         if (value != null) {
             value.markContainerOwner(this);
@@ -830,6 +891,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public RuntimeScalar get(String key) {
 
         if (isEnvironmentHash) key = normalizeEnvironmentKey(key);
+        validateHashKey(key, "read");
 
         if (type == TIED_HASH) {
             return get(new RuntimeScalar(key));
@@ -863,6 +925,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeScalar getForLocal(String key) {
         if (isEnvironmentHash) key = normalizeEnvironmentKey(key);
+        validateHashKey(key, "read");
         if (type == TIED_HASH) {
             return new RuntimeTiedHashProxyEntry(this, new RuntimeScalar(key));
         }
@@ -890,6 +953,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             return new RuntimeTiedHashProxyEntry(this, keyScalar);
         }
         String key = isEnvironmentHash ? normalizeEnvironmentKey(keyScalar.toString()) : keyScalar.toString();
+        validateHashKey(key, "read");
         boolean isByteKey = keyScalar.type == BYTE_STRING;
         RuntimeHashProxyEntry proxy = new RuntimeHashProxyEntry(this, key, isByteKey);
         RuntimeScalar existing = elements.get(key);
@@ -918,6 +982,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         return switch (this.type) {
             case PLAIN_HASH, AUTOVIVIFY_HASH, READONLY_HASH -> {
                 String key = isEnvironmentHash ? normalizeEnvironmentKey(keyScalar.toString()) : keyScalar.toString();
+                validateHashKey(key, "read");
                 var value = elements.get(key);
                 if (value != null) {
                     // Update the key's byte/UTF-8 flag to match the accessing key's type.
@@ -983,6 +1048,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public RuntimeScalar exists(RuntimeScalar key) {
         warnForUninitializedKey(key, "exists");
         if (isEnvironmentHash) key = new RuntimeScalar(normalizeEnvironmentKey(key.toString()));
+        validateHashKey(key.toString(), "read");
         return switch (type) {
             case PLAIN_HASH, READONLY_HASH -> new RuntimeScalar(elements.containsKey(key.toString()));
             // exists does not create its final key, but it does materialize a
@@ -999,6 +1065,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
     public RuntimeScalar exists(String key) {
         if (isEnvironmentHash) key = normalizeEnvironmentKey(key);
+        validateHashKey(key, "read");
         return switch (type) {
             case PLAIN_HASH, READONLY_HASH -> new RuntimeScalar(elements.containsKey(key));
             case AUTOVIVIFY_HASH -> {
@@ -1012,6 +1079,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
     public boolean containsKey(String key) {
         if (isEnvironmentHash) key = normalizeEnvironmentKey(key);
+        validateHashKey(key, "read");
         return elements.containsKey(key);
     }
 
@@ -1042,6 +1110,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             warnForUninitializedKey(key, "delete");
         }
         if (isEnvironmentHash) key = new RuntimeScalar(normalizeEnvironmentKey(key.toString()));
+        validateHashDelete(key.toString());
         return switch (type) {
             case PLAIN_HASH -> {
                 String k = key.toString();
@@ -1097,6 +1166,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     public RuntimeScalar deleteInContext(String key, int callContext) {
+        if (isEnvironmentHash) key = normalizeEnvironmentKey(key);
+        validateHashDelete(key);
         return switch (type) {
             case PLAIN_HASH -> {
                 var value = elements.remove(key);

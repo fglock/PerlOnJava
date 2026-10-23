@@ -1008,6 +1008,21 @@ public class PrototypeArgs {
         }
 
         ListNode argList = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
+        if ("all_keys".equals(operatorName) || (operatorName != null && operatorName.endsWith("::all_keys"))) {
+            // Hash::Util::all_keys has two output arrays after its hash
+            // argument. Preserve those lvalues as references for its XS-like
+            // Java implementation instead of flattening their current values.
+            for (Node node : argList.elements) {
+                if (node instanceof OperatorNode sigil && sigil.operator.equals("@")) {
+                    Node reference = new OperatorNode("\\", node, node.getIndex());
+                    reference.setAnnotation("context", "SCALAR");
+                    args.elements.add(reference);
+                } else {
+                    args.elements.add(node);
+                }
+            }
+            return;
+        }
         // @ and % consume remaining arguments in LIST context
 //        for (Node element : argList.elements) {
 //            element.setAnnotation("context", "LIST");

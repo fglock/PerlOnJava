@@ -36,6 +36,16 @@ public class HashUtil extends PerlModuleBase {
             hashUtil.registerMethod("unlock_keys", "unlock_keys", "\\%@");
             hashUtil.registerMethod("lock_hash", "lock_hash", "\\%");
             hashUtil.registerMethod("unlock_hash", "unlock_hash", "\\%");
+            hashUtil.registerMethod("lock_value", "lock_value", "\\%$");
+            hashUtil.registerMethod("unlock_value", "unlock_value", "\\%$");
+            hashUtil.registerMethod("lock_keys_plus", "lock_keys_plus", "\\%;@");
+            hashUtil.registerMethod("hashref_locked", "hashref_locked", null);
+            hashUtil.registerMethod("hash_locked", "hash_locked", "\\%");
+            hashUtil.registerMethod("hash_unlocked", "hash_unlocked", "\\%");
+            hashUtil.registerMethod("legal_keys", "legal_keys", "\\%");
+            hashUtil.registerMethod("all_keys", "all_keys", "\\%@@");
+            hashUtil.registerMethod("hidden_keys", "hidden_keys", "\\%");
+            hashUtil.registerMethod("legal_ref_keys", "legal_ref_keys", "$");
             hashUtil.registerMethod("hash_seed", "hash_seed", null);
             hashUtil.registerMethod("num_buckets", "num_buckets", "\\%");
 
@@ -185,28 +195,82 @@ public class HashUtil extends PerlModuleBase {
     // Placeholder implementations for other Hash::Util functions
 
     public static RuntimeList lock_keys(RuntimeArray args, int ctx) {
-        // TODO: Implement hash key locking
-        if (args.size() > 0) {
-            return args.get(0).getList();  // Return the hash reference
-        }
-        return RuntimeScalarCache.scalarUndef.getList();
+        if (args.size() == 0) return RuntimeScalarCache.scalarUndef.getList();
+        RuntimeHash hash = hashArgument(args.get(0));
+        lockKeys(hash, args, 1);
+        return args.get(0).getList();
     }
 
     public static RuntimeList unlock_keys(RuntimeArray args, int ctx) {
-        // TODO: Implement hash key unlocking
-        if (args.size() > 0) {
-            return args.get(0).getList();  // Return the hash reference
+        if (args.size() == 0) return RuntimeScalarCache.scalarUndef.getList();
+        hashArgument(args.get(0)).legalHashKeys = null;
+        return args.get(0).getList();
+    }
+
+    private static void lockKeys(RuntimeHash hash, RuntimeArray args, int firstKey) {
+        java.util.LinkedHashSet<String> allowed = new java.util.LinkedHashSet<>();
+        if (args.size() == firstKey) {
+            allowed.addAll(hash.elements.keySet());
+        } else {
+            for (int i = firstKey; i < args.size(); i++) allowed.add(args.get(i).toString());
+            for (String existing : hash.elements.keySet()) {
+                if (!allowed.contains(existing)) {
+                    throw new PerlCompilerException("Hash has key '" + existing + "' which is not in the new key set");
+                }
+            }
         }
-        return RuntimeScalarCache.scalarUndef.getList();
+        hash.legalHashKeys = allowed;
+    }
+
+    public static RuntimeList lock_keys_plus(RuntimeArray args, int ctx) {
+        if (args.size() == 0) return RuntimeScalarCache.scalarUndef.getList();
+        RuntimeHash hash = hashArgument(args.get(0));
+        java.util.LinkedHashSet<String> allowed = new java.util.LinkedHashSet<>(hash.elements.keySet());
+        for (int i = 1; i < args.size(); i++) allowed.add(args.get(i).toString());
+        hash.legalHashKeys = allowed;
+        return args.get(0).getList();
+    }
+
+    public static RuntimeList lock_value(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return RuntimeScalarCache.scalarUndef.getList();
+        RuntimeHash hash = hashArgument(args.get(0));
+        if (!hash.isHashRestricted()) {
+            throw new PerlCompilerException("Cannot usefully lock values in an unlocked hash");
+        }
+        String key = args.get(1).toString();
+        hash.validateHashKey(key, "read");
+        hash.lockedHashValues = hash.lockedHashValues == null ? new java.util.HashSet<>() : hash.lockedHashValues;
+        hash.lockedHashValues.add(key);
+        RuntimeScalar value = hash.elements.get(key);
+        if (value != null) makeScalarReadOnly(value);
+        return hash.get(key).getList();
+    }
+
+    public static RuntimeList unlock_value(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return RuntimeScalarCache.scalarUndef.getList();
+        RuntimeHash hash = hashArgument(args.get(0));
+        String key = args.get(1).toString();
+        if (hash.lockedHashValues != null) hash.lockedHashValues.remove(key);
+        RuntimeScalar value = hash.elements.get(key);
+        if (value != null) makeScalarWritable(value);
+        return hash.get(key).getList();
+    }
+
+    private static void makeScalarWritable(RuntimeScalar scalar) {
+        if (scalar.type == RuntimeScalarType.READONLY_SCALAR && scalar.value instanceof RuntimeScalar inner) {
+            scalar.type = inner.type;
+            scalar.value = inner.value;
+        }
     }
 
     public static RuntimeList lock_hash(RuntimeArray args, int ctx) {
         if (args.size() > 0) {
             RuntimeHash hash = hashArgument(args.get(0));
+            hash.legalHashKeys = new java.util.LinkedHashSet<>(hash.elements.keySet());
+            hash.allHashValuesLocked = true;
             for (RuntimeScalar scalar : hash.elements.values()) {
                 makeScalarReadOnly(scalar);
             }
-            hash.type = RuntimeHash.READONLY_HASH;
             return args.get(0).getList();  // Return the hash reference
         }
         return RuntimeScalarCache.scalarUndef.getList();
@@ -215,6 +279,9 @@ public class HashUtil extends PerlModuleBase {
     public static RuntimeList unlock_hash(RuntimeArray args, int ctx) {
         if (args.size() > 0) {
             RuntimeHash hash = hashArgument(args.get(0));
+            hash.legalHashKeys = null;
+            hash.lockedHashValues = null;
+            hash.allHashValuesLocked = false;
             for (RuntimeScalar scalar : hash.elements.values()) {
                 if (scalar.type == RuntimeScalarType.READONLY_SCALAR
                         && scalar.value instanceof RuntimeScalar inner) {
@@ -222,7 +289,6 @@ public class HashUtil extends PerlModuleBase {
                     scalar.value = inner.value;
                 }
             }
-            hash.type = RuntimeHash.PLAIN_HASH;
             return args.get(0).getList();  // Return the hash reference
         }
         return RuntimeScalarCache.scalarUndef.getList();
@@ -233,6 +299,69 @@ public class HashUtil extends PerlModuleBase {
             return hash;
         }
         return arg.hashDeref();
+    }
+
+    public static RuntimeList hashref_locked(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(args.size() > 0 && hashArgument(args.get(0)).isHashRestricted()).getList();
+    }
+
+    public static RuntimeList hash_locked(RuntimeArray args, int ctx) {
+        if (args.size() == 0) return new RuntimeScalar(false).getList();
+        RuntimeHash hash = hashArgument(args.get(0));
+        return new RuntimeScalar(hash.isHashRestricted() || hash.allHashValuesLocked
+                || (hash.lockedHashValues != null && !hash.lockedHashValues.isEmpty())).getList();
+    }
+
+    public static RuntimeList hash_unlocked(RuntimeArray args, int ctx) {
+        if (args.size() == 0) return new RuntimeScalar(true).getList();
+        RuntimeHash hash = hashArgument(args.get(0));
+        boolean locked = hash.isHashRestricted() || hash.allHashValuesLocked
+                || (hash.lockedHashValues != null && !hash.lockedHashValues.isEmpty());
+        return new RuntimeScalar(!locked).getList();
+    }
+
+    public static RuntimeList legal_keys(RuntimeArray args, int ctx) { return keyList(args, true); }
+    public static RuntimeList all_keys(RuntimeArray args, int ctx) {
+        if (args.size() == 0) return new RuntimeList();
+        RuntimeHash hash = hashArgument(args.get(0));
+        RuntimeArray visible = outputArray(args, 1);
+        RuntimeArray hidden = outputArray(args, 2);
+        if (visible != null) visible.elements.clear();
+        if (hidden != null) hidden.elements.clear();
+        for (String key : hash.elements.keySet()) {
+            if (visible != null) visible.elements.add(new RuntimeScalar(key));
+        }
+        if (hash.legalHashKeys != null) for (String key : hash.legalHashKeys) {
+            if (!hash.elements.containsKey(key) && hidden != null) hidden.elements.add(new RuntimeScalar(key));
+        }
+        return args.get(0).getList();
+    }
+    public static RuntimeList hidden_keys(RuntimeArray args, int ctx) {
+        if (args.size() == 0) return new RuntimeList();
+        RuntimeHash hash = hashArgument(args.get(0));
+        RuntimeArray result = new RuntimeArray();
+        if (hash.legalHashKeys != null) for (String key : hash.legalHashKeys) {
+            if (!hash.elements.containsKey(key)) result.elements.add(new RuntimeScalar(key));
+        }
+        return result.getList();
+    }
+    public static RuntimeList legal_ref_keys(RuntimeArray args, int ctx) { return keyList(args, true); }
+    private static RuntimeArray outputArray(RuntimeArray args, int index) {
+        if (index >= args.size()) return null;
+        RuntimeScalar scalar = args.get(index);
+        if (scalar.type == RuntimeScalarType.ARRAYREFERENCE && scalar.value instanceof RuntimeArray array) return array;
+        return null;
+    }
+    private static RuntimeList keyList(RuntimeArray args, boolean legalOnly) {
+        if (args.size() == 0) return new RuntimeList();
+        RuntimeHash hash = hashArgument(args.get(0));
+        RuntimeArray result = new RuntimeArray();
+        if (legalOnly && hash.legalHashKeys != null) {
+            for (String key : hash.legalHashKeys) result.elements.add(new RuntimeScalar(key));
+        } else {
+            for (String key : hash.elements.keySet()) result.elements.add(new RuntimeScalar(key));
+        }
+        return result.getList();
     }
 
     private static void makeScalarReadOnly(RuntimeScalar scalar) {
