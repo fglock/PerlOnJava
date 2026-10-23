@@ -13,6 +13,7 @@ priorities and future plans.
 - Apply source filters installed through `Test::More::use_ok` to the caller's remaining source and preserve `print FILEHANDLE (LIST) x N` output (#1375, #1441).
 - Cover `Test::Needs` prerequisite scanning of quoted module names and Perl version literals (#1396).
 - Preserve reference-valued FETCH results from tied-hash `values()` and retain scalar-reference envelopes in Storable round trips (#1554, #1468).
+- Release temporary files once an exited closure capture retaining a Catalyst request context no longer has a live Perl root.
 - Ignore commented-out code when checking lexical constant closures for later mutations, preserving BEGIN-time generated constants (#1785).
 - Pack the method-dispatch inline-cache guard key into one primitive value while preserving class and method invalidation checks.
 - Keep watcher maps and live `substr`-lvalue observers in lazy scalar extension state, reducing the common `RuntimeScalar` footprint.
