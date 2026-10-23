@@ -363,6 +363,34 @@ public final class PerlOwnerSlot {
         }
     }
 
+    /**
+     * Release the legacy counted edge represented by a direct scalar-value
+     * slot. The caller retains lifecycle policy (for example, whether a
+     * lexical binding suppresses DESTROY) after receiving the decremented
+     * count. This makes explicit slot identity the authority for the scalar
+     * owner's release while the referent counter remains the dispatch bridge.
+     */
+    synchronized boolean releaseScalarValueCount(RuntimeBase expectedTarget, String releaseSite) {
+        if (kind != Kind.SCALAR_VALUE) {
+            throw new IllegalStateException(
+                    "scalar-value release requires a SCALAR_VALUE slot");
+        }
+        if (referent != expectedTarget || expectedTarget == null
+                || expectedTarget.refCount <= 0) {
+            return false;
+        }
+        RuntimeScalar scalar = ownerCell();
+        transferTo(null);
+        if (scalar != null) scalar.refCountOwned = false;
+        expectedTarget.traceRefCount(-1, releaseSite);
+        if (scalar != null) {
+            expectedTarget.releaseOwner(scalar, releaseSite);
+            expectedTarget.releaseActiveOwner(scalar);
+        }
+        expectedTarget.refCount--;
+        return true;
+    }
+
     private synchronized void detachAfterDeferredRelease() {
         transferTo(null);
     }

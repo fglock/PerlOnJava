@@ -904,6 +904,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
     }
 
+    boolean releaseScalarValueOwnerCount(RuntimeBase expectedReferent, String releaseSite) {
+        PerlOwnerSlot slot = scalarValueOwnerSlot;
+        return slot != null && slot.releaseScalarValueCount(expectedReferent, releaseSite);
+    }
+
     public boolean hasScalarReferenceContentsOwner() {
         return scalarReferenceContentsOwner != null
                 && scalarReferenceContentsOwner.isActive();
@@ -5321,9 +5326,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 oldBase.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(oldBase);
             } else if (oldBaseOwnedByScalar && oldBase.refCount > 0) {
-                this.setRefCountOwned(false);
-                oldBase.releaseActiveOwner(this);
-                if (--oldBase.refCount == 0) {
+                boolean releasedExplicitSlot =
+                        releaseScalarValueOwnerCount(oldBase, "RuntimeScalar.undefine");
+                if (!releasedExplicitSlot) {
+                    // Compatibility fallback for scalar owners created before
+                    // SCALAR_VALUE slots were installed.
+                    this.setRefCountOwned(false);
+                    oldBase.releaseActiveOwner(this);
+                    oldBase.refCount--;
+                }
+                if (oldBase.refCount == 0) {
                     if (oldBase.localBindingExists) {
                         // Named container: local variable may still exist. Skip callDestroy.
                     } else {

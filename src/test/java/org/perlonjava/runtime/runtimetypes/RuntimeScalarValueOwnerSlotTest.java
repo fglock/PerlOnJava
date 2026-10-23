@@ -62,4 +62,24 @@ class RuntimeScalarValueOwnerSlotTest {
             assertSame(original, scalar.scalarValueOwnerSlot().referent());
         }
     }
+
+    @Test
+    void explicitUndefReleasesTheScalarValueSlotAndItsCountTogether() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            RuntimeScalar scalar = new RuntimeScalar();
+            scalar.set(referent.createReference());
+
+            assertEquals(1, referent.refCount);
+            assertEquals(1, referent.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_VALUE));
+
+            scalar.undefine();
+
+            assertEquals(0, referent.refCount,
+                    "explicit undef decrements the count represented by the scalar slot");
+            assertEquals(0, referent.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_VALUE),
+                    "the scalar slot is retired with its count");
+        }
+    }
 }
