@@ -13,6 +13,7 @@ priorities and future plans.
 - Apply source filters installed through `Test::More::use_ok` to the caller's remaining source and preserve `print FILEHANDLE (LIST) x N` output (#1375, #1441).
 - Cover `Test::Needs` prerequisite scanning of quoted module names and Perl version literals (#1396).
 - Preserve reference-valued FETCH results from tied-hash `values()` and retain scalar-reference envelopes in Storable round trips (#1554, #1468).
+- Release temporary files once an exited closure capture retaining a Catalyst request context no longer has a live Perl root.
 - Ignore commented-out code when checking lexical constant closures for later mutations, preserving BEGIN-time generated constants (#1785).
 - Pack the method-dispatch inline-cache guard key into one primitive value while preserving class and method invalidation checks.
 - Keep watcher maps and live `substr`-lvalue observers in lazy scalar extension state, reducing the common `RuntimeScalar` footprint.
@@ -1024,6 +1025,10 @@ priorities and future plans.
 - Preserve strict-subs imports for `Compress::Raw::Zlib` constants.
 - Evaluate `ref` operands in scalar context on the interpreter backend.
 - Fix RFC 2047 header decoding for Email::MIME.
+- Load the MIME-Header codec when `Encode::decode` first encounters it.
+- Parse quoted display names and address groups in the Email::Address shim.
+- Recognize inherited `fields` entries in typed hash access.
+- Match Storable's default and optional export lists.
 - Fix XML::Parser streaming from native filehandles before `IO::Handle` has
   been explicitly loaded.
 - Bundle the complete CPAN `File::Path` 2.18 implementation, including modern

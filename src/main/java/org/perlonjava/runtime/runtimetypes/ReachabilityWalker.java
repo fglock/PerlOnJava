@@ -639,10 +639,15 @@ public class ReachabilityWalker {
      * what data structure keeps an object alive at the Perl level.
      */
     public static java.util.List<String> findPathTo(RuntimeBase target) {
-        return findPathTo(target, false);
+        return findPathTo(target, false, true);
     }
 
     public static java.util.List<String> findPathTo(RuntimeBase target, boolean skipLexicalSeeds) {
+        return findPathTo(target, skipLexicalSeeds, true);
+    }
+
+    private static java.util.List<String> findPathTo(
+            RuntimeBase target, boolean skipLexicalSeeds, boolean forceJvmGc) {
         java.util.IdentityHashMap<RuntimeBase, String> howReached = new java.util.IdentityHashMap<>();
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
         // Seed from roots with labels
@@ -691,6 +696,13 @@ public class ReachabilityWalker {
             }
             activeArgsIdx++;
         }
+        int activeSuspendedIdx = 0;
+        for (RuntimeBase suspended : MortalList.snapshotSuspendedRoots()) {
+            if (howReached.putIfAbsent(suspended,
+                    "<active-suspended#" + (activeSuspendedIdx++) + ">") == null) {
+                todo.add(suspended);
+            }
+        }
         // Phase B1: seed from ScalarRefRegistry (same as walk()) so the
         // trace matches what sweepWeakRefs sees.
         // Phase I: force GC before snapshotting so stale
@@ -700,7 +712,10 @@ public class ReachabilityWalker {
         // through Perl-semantic data (globals/stash/rescued) only.
         int scIdx = 0;
         if (!skipLexicalSeeds) {
-            for (RuntimeScalar sc : ScalarRefRegistry.forceGcAndSnapshot()) {
+            java.util.List<RuntimeScalar> lexicalScalars = forceJvmGc
+                    ? ScalarRefRegistry.forceGcAndSnapshot()
+                    : ScalarRefRegistry.snapshot();
+            for (RuntimeScalar sc : lexicalScalars) {
                 if (sc == null) continue;
                 if (sc.captureCount > 0) continue;
                 if (WeakRefRegistry.isweak(sc)) continue;
@@ -772,17 +787,35 @@ public class ReachabilityWalker {
                 return r;
             }
             if (cur instanceof RuntimeHash h) {
+                if (h.elements instanceof TieHash tieHash) {
+                    visitScalarPath(tieHash.getSelf(), curPath + "<tie-self>", howReached, todo);
+                }
                 for (Map.Entry<String, RuntimeScalar> ent : h.elements.entrySet()) {
                     visitScalarPath(ent.getValue(), curPath + "{" + ent.getKey() + "}", howReached, todo);
                 }
             } else if (cur instanceof RuntimeArray a) {
                 int idx = 0;
+                if (a.elements instanceof TieArray tieArray) {
+                    visitScalarPath(tieArray.getSelf(), curPath + "<tie-self>", howReached, todo);
+                }
                 for (RuntimeScalar v : a.elements) {
                     visitScalarPath(v, curPath + "[" + (idx++) + "]", howReached, todo);
                 }
             } else if (cur instanceof RuntimeScalar scalar) {
                 visitScalarPath(scalar, curPath, howReached, todo);
             } else if (cur instanceof RuntimeCode code) {
+                if (code.closedOverVariables != null) {
+                    for (Map.Entry<String, RuntimeBase> captured
+                            : code.closedOverVariables.entrySet()) {
+                        String path = curPath + "<closed-over " + captured.getKey() + ">";
+                        RuntimeBase value = captured.getValue();
+                        if (value instanceof RuntimeScalar scalar) {
+                            visitScalarPath(scalar, path, howReached, todo);
+                        } else if (howReached.putIfAbsent(value, path) == null) {
+                            todo.add(value);
+                        }
+                    }
+                }
                 int stateIdx = 0;
                 for (Map.Entry<String, RuntimeScalar> state : code.stateVariable.entrySet()) {
                     visitScalarPath(state.getValue(), curPath + "<state " + state.getKey()
@@ -836,9 +869,22 @@ public class ReachabilityWalker {
                 final int[] reflectiveBaseIdx = {0};
                 visitReflectiveCodeBases(code, captured -> {
                     String path = curPath + "<closure " + name + "::" + sub
-                            + " field-base#" + (reflectiveBaseIdx[0]++) + ">";
+                            + " base-cap#" + (reflectiveBaseIdx[0]++) + ">";
                     if (howReached.putIfAbsent(captured, path) == null) todo.add(captured);
                 });
+            } else if (cur instanceof RuntimeScalar scalar
+                    && !WeakRefRegistry.isweak(scalar)
+                    && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    && scalar.value instanceof RuntimeBase referent) {
+                if (howReached.putIfAbsent(referent, curPath + "->") == null) {
+                    todo.add(referent);
+                }
+            } else if (cur instanceof RuntimeRegex regex) {
+                int callbackIdx = 0;
+                for (RuntimeCode callback : regex.executableCallbackCodes()) {
+                    String path = curPath + "<regex callback#" + (callbackIdx++) + ">";
+                    if (howReached.putIfAbsent(callback, path) == null) todo.add(callback);
+            }
             }
         }
         return null;
@@ -951,10 +997,6 @@ public class ReachabilityWalker {
         if (s == null) return;
         if (WeakRefRegistry.isweak(s)) return;
         if (howReached.putIfAbsent(s, label) == null) todo.add(s);
-        if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && s.value instanceof RuntimeBase b) {
-            if (howReached.putIfAbsent(b, label) == null) todo.add(b);
-        }
     }
 
     private static void visitScalarPath(RuntimeScalar s, String path,
@@ -963,10 +1005,6 @@ public class ReachabilityWalker {
         if (s == null) return;
         if (WeakRefRegistry.isweak(s)) return;
         if (howReached.putIfAbsent(s, path) == null) todo.add(s);
-        if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && s.value instanceof RuntimeBase b) {
-            if (howReached.putIfAbsent(b, path) == null) todo.add(b);
-        }
     }
 
     private void visitScalar(RuntimeScalar s, java.util.ArrayDeque<RuntimeBase> todo) {
@@ -2129,6 +2167,7 @@ public class ReachabilityWalker {
             RuntimeBase base, Set<RuntimeBase> seen, Set<RuntimeScalar> reachableScalars,
             java.util.ArrayDeque<RuntimeBase> todo, ReachabilityQueryStats stats,
             RuntimeBase excludedReferent) {
+        if (base instanceof RuntimeScalar scalar && WeakRefRegistry.isweak(scalar)) return;
         if (base != null && base != excludedReferent && seen.add(base)) {
             todo.addLast(base);
             if (stats != null) stats.rootsSeeded++;
@@ -3555,6 +3594,13 @@ public class ReachabilityWalker {
      */
     static void releaseUnreachableScopeExitedCaptureOwners(
             List<RuntimeBase> weakReferents, Set<RuntimeBase> endReachable) {
+        releaseUnreachableScopeExitedCaptureOwners(weakReferents, endReachable, null);
+    }
+
+    private static void releaseUnreachableScopeExitedCaptureOwners(
+            List<RuntimeBase> weakReferents,
+            Set<RuntimeBase> endReachable,
+            Set<RuntimeBase> statementBoundaryCandidates) {
         Set<RuntimeBase> retainedByEnd = endReachable;
         ScalarRootReachabilitySnapshot scalarRoots = null;
         for (RuntimeBase referent : weakReferents) {
@@ -3564,9 +3610,16 @@ public class ReachabilityWalker {
                     continue;
                 }
                 if (retainedByEnd == null) retainedByEnd = walkEndBlockRoots();
-                if (retainedByEnd.contains(padCell) || retainedByEnd.contains(referent)) continue;
+                boolean padInEnd = retainedByEnd.contains(padCell);
+                boolean referentInEnd = retainedByEnd.contains(referent);
                 if (scalarRoots == null) scalarRoots = completeScalarReachabilitySnapshot();
-                if (scalarRoots.isReachable(padCell)) continue;
+                boolean padInScalarRoots = scalarRoots.isReachable(padCell);
+                if (padInScalarRoots && statementBoundaryCandidates != null
+                        && containsAnyCandidate(referent, statementBoundaryCandidates)
+                        && findPathTo(padCell, false, false) == null) {
+                    padInScalarRoots = false;
+                }
+                if (padInEnd || referentInEnd || padInScalarRoots) continue;
                 padCell.releaseUnreachableDestroyableClosureOwners(scalarRoots);
                 if (WALKER_TRACE_CLASS != null && !WALKER_TRACE_CLASS.isEmpty()) {
                     String className = NameNormalizer.getBlessStr(referent.blessId);
@@ -3582,6 +3635,48 @@ public class ReachabilityWalker {
                 padCell.releaseUnreachableSemanticCaptureOwner();
             }
         }
+    }
+
+    private static boolean containsAnyCandidate(
+            RuntimeBase root, Set<RuntimeBase> candidates) {
+        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+        todo.add(root);
+        while (!todo.isEmpty()) {
+            RuntimeBase current = todo.removeFirst();
+            if (!seen.add(current)) continue;
+            if (candidates.contains(current)) return true;
+            if (current instanceof RuntimeHash hash) {
+                for (RuntimeScalar value : hash.elements.values()) {
+                    if (value != null) todo.addLast(value);
+                }
+            } else if (current instanceof RuntimeArray array) {
+                for (RuntimeScalar value : array.elements) {
+                    if (value != null) todo.addLast(value);
+                }
+            } else if (current instanceof RuntimeScalar scalar) {
+                if (!WeakRefRegistry.isweak(scalar)
+                        && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && scalar.value instanceof RuntimeBase referent) {
+                    todo.addLast(referent);
+                }
+            } else if (current instanceof RuntimeCode code) {
+                if (code.closedOverVariables != null) {
+                    todo.addAll(code.closedOverVariables.values());
+                }
+                if (code.capturedScalars != null) {
+                    Collections.addAll(todo, code.capturedScalars);
+                }
+                if (code.capturedAggregates != null) {
+                    Collections.addAll(todo, code.capturedAggregates);
+                }
+                visitReflectiveCodeScalars(code, todo::addLast);
+                visitReflectiveCodeBases(code, todo::addLast);
+            } else if (current instanceof RuntimeRegex regex) {
+                todo.addAll(regex.executableCallbackCodes());
+            }
+        }
+        return false;
     }
 
     private static void traceWeakReferent(
@@ -3852,7 +3947,13 @@ public class ReachabilityWalker {
         // gone away. Retire such dead capture edges before the root walk so
         // statement-boundary DESTROY matches Perl without waiting for a weak
         // reference sweep or an explicit jperl_gc().
-        releaseUnreachableScopeExitedCaptureOwners(candidates, null);
+        Set<RuntimeBase> candidateSet = Collections.newSetFromMap(new IdentityHashMap<>());
+        candidateSet.addAll(candidates);
+        Set<RuntimeBase> weakReferentSet = Collections.newSetFromMap(new IdentityHashMap<>());
+        weakReferentSet.addAll(PerlRuntime.snapshotOwnerSlotReferents());
+        weakReferentSet.addAll(candidates);
+        releaseUnreachableScopeExitedCaptureOwners(
+                new ArrayList<>(weakReferentSet), null, candidateSet);
         Set<RuntimeBase> live = new ReachabilityWalker().walk();
         return destroyUnreachableDestroyables(candidates, live);
     }
