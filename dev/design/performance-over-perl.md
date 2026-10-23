@@ -269,6 +269,24 @@ remain separate correctness gates. See issue #1196 for its diagnostic matrix.
   The post-change profile is `dev/bench/reports/issue-1863-method-active-entry-guard.jfr`;
   its execution samples no longer show `canBorrowReadOnlyArguments` or the
   repeated verified-cell getter.
+- The remaining method profile sampled full-root-snapshot reachability checks
+  when adding the blessed invocant to, and clearing, the temporary two-slot
+  argument array. For compiler-proven stable methods, that array now suppresses
+  root-mutation tracking during the guarded non-escaping call; a failed runtime
+  guard resumes tracking before the generic fallback, and exceptional exits
+  also restore it. `nice -n 19 make` passed. The new JFR contains no
+  `MortalList.invalidateFullRootSnapshotIfReachable` samples from this path.
+  Seven stable, checksum-matched method pairs measured 1.376x the exact origin
+  JAR (95% interval 1.273–1.493) and 0.866x blead (0.847–0.887). In a separate
+  full portfolio run, method measured 0.845x blead (0.829–0.862), closure
+  1.598x (1.509–1.693), Life 1.073x (1.055–1.089), and portfolio 1.132x
+  (1.105–1.160). All 28 pairs were stable and checksum-matched; priority was
+  unverifiable, with high host load during the origin comparison. These remain
+  diagnostic, and method is about 15% below blead. Candidate JAR SHA-256:
+  `3a98fe0aa492f7a5fda7b1ab8d31e8c21e868959448278952e51208f2ac2d0ec`. Reports:
+  `dev/bench/reports/issue-1863-candidate-arg-root-track-origin-method.json`,
+  `dev/bench/reports/issue-1863-candidate-arg-root-track-full-portfolio-blead.json`,
+  and `dev/bench/reports/issue-1863-method-args-root-tracking.jfr`.
 - The closure JFR profile found that the guarded captured-integer addition path
   performs repeated name lookups in `closedOverVariables`; `HashMap.getNode`,
   `LinkedHashMap.get`, and `RuntimeCode.tryDirectLeafIntegerAddition` were
@@ -302,9 +320,8 @@ remain separate correctness gates. See issue #1196 for its diagnostic matrix.
 
 ### Next steps
 
-1. Profile method return arithmetic and runtime lifecycle work; current JFR
-   samples concentrate on integer-result mutation, runtime lookup, and method
-   argument preparation.
+1. Profile the remaining integer-result mutation, runtime lookup, and call
+   return work in the method anchor.
 2. Test isolated changes against the exact origin JAR and pinned blead; method
    throughput is still below the 1.00x acceptance threshold.
 3. Rerun the full portfolio on a host with verified priority and suitable load

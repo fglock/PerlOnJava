@@ -131,6 +131,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     // compiled method whose body only updates the two proven hash cells.
     private RuntimeScalar verifiedMethodHashArgument;
     private boolean verifiedMethodHashFieldsActive;
+    private boolean suppressMethodArgumentRootTracking;
     private RuntimeScalar verifiedMethodIntegerArgument;
     private RuntimeScalar verifiedMethodFirstHashCell;
     private RuntimeScalar verifiedMethodSecondHashCell;
@@ -195,6 +196,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     private void resetRecycledMethodCallArguments() {
         clearVerifiedMethodHashFields();
         elements.clear();
+        suppressMethodArgumentRootTracking = false;
         type = PLAIN_ARRAY;
         strictAutovivify = false;
         scalarContextSize = null;
@@ -210,6 +212,21 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         blessId = 0;
         isaArray = false;
         isaArrayNames = null;
+    }
+
+    boolean suppressRootTrackingForStableMethodArguments() {
+        if (type != PLAIN_ARRAY || !(elements instanceof InlineMethodArgumentList)
+                || elements.size() > 2 || threadShared) {
+            return false;
+        }
+        suppressMethodArgumentRootTracking = true;
+        return true;
+    }
+
+    void resumeMethodArgumentRootTracking() {
+        if (!suppressMethodArgumentRootTracking) return;
+        suppressMethodArgumentRootTracking = false;
+        notePackageRootClear(elements);
     }
 
     void cacheVerifiedMethodHashFields(int hashArgumentIndex, int integerArgumentIndex,
@@ -647,7 +664,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         public void clear() {
             if (isEmpty()) return;
             owner.noteIsaMutation();
-            owner.notePackageRootClear(this);
+            if (!owner.suppressMethodArgumentRootTracking) {
+                owner.notePackageRootClear(this);
+            }
             if (expanded != null) expanded.clear();
             first = null;
             second = null;
@@ -662,7 +681,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 SharedPerlStorage.publishBlessing(element);
             }
             owner.noteIsaMutation();
-            owner.notePackageRootMutation(previous, element);
+            if (!owner.suppressMethodArgumentRootTracking) {
+                owner.notePackageRootMutation(previous, element);
+            }
             if (element != null) element.markContainerOwner(owner);
             owner.markPackageRootedValue(element);
         }

@@ -5714,36 +5714,49 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             PerlRuntime methodRuntime) {
         try {
             RuntimeArray args = methodArgs;
-            args.elements.add(0, methodInvocantArgument(runtimeScalar));
-
-            String autoloadVariableName = code.autoloadVariableName;
-            if (autoloadVariableName != null) {
-                String methodName = method.toString();
-                if (!methodName.equals("AUTOLOAD")) {
-                    String perlClassName = NameNormalizer.getBlessStr(blessId);
-                    String fullMethodName = qualifyAutoloadMethodName(methodName, perlClassName);
-                    setAutoloadMethodName(autoloadVariableName, fullMethodName, method);
-                }
-            }
-
-            boolean stableHashFastPath = canUseStableHashMutationMethodFastPath(
-                    code, args, callContext, methodRuntime);
-
+            String[] stableHashKeys = code.stableHashMutationMethodKeys;
+            boolean suppressRootTracking = callContext == RuntimeContextType.SCALAR
+                    && stableHashKeys != null && stableHashKeys.length > 0
+                    && stableHashKeys.length <= 2 && code.autoloadVariableName == null
+                    && !DebugState.isDebugMode()
+                    && args.suppressRootTrackingForStableMethodArguments();
             try {
-                MortalList.pushMark(methodRuntime.lifecycleState);
-                try {
-                    if (stableHashFastPath) {
-                        RuntimeList result = applyStableHashMutationMethodBody(
-                                code, args, callContext);
-                        args.recycleMethodCallArguments();
-                        return result;
+                args.elements.add(0, methodInvocantArgument(runtimeScalar));
+
+                String autoloadVariableName = code.autoloadVariableName;
+                if (autoloadVariableName != null) {
+                    String methodName = method.toString();
+                    if (!methodName.equals("AUTOLOAD")) {
+                        String perlClassName = NameNormalizer.getBlessStr(blessId);
+                        String fullMethodName = qualifyAutoloadMethodName(methodName, perlClassName);
+                        setAutoloadMethodName(autoloadVariableName, fullMethodName, method);
                     }
-                    return applyCachedMethod(code, args, callContext, methodRuntime);
+                }
+
+                boolean stableHashFastPath = canUseStableHashMutationMethodFastPath(
+                        code, args, callContext, methodRuntime);
+                if (!stableHashFastPath && suppressRootTracking) {
+                    args.resumeMethodArgumentRootTracking();
+                }
+
+                try {
+                    MortalList.pushMark(methodRuntime.lifecycleState);
+                    try {
+                        if (stableHashFastPath) {
+                            RuntimeList result = applyStableHashMutationMethodBody(
+                                    code, args, callContext);
+                            args.recycleMethodCallArguments();
+                            return result;
+                        }
+                        return applyCachedMethod(code, args, callContext, methodRuntime);
+                    } finally {
+                        MortalList.popMark(methodRuntime.lifecycleState);
+                    }
                 } finally {
-                    MortalList.popMark(methodRuntime.lifecycleState);
+                    if (stableHashFastPath) args.clearVerifiedMethodHashFields();
                 }
             } finally {
-                if (stableHashFastPath) args.clearVerifiedMethodHashFields();
+                if (suppressRootTracking) args.resumeMethodArgumentRootTracking();
             }
         } catch (Throwable e) {
             if (e instanceof RuntimeException) throw (RuntimeException) e;
