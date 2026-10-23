@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 19;
+use Test::More tests => 24;
 use Scalar::Util qw(refaddr);
 
 {
@@ -78,6 +78,12 @@ is_deeply(\@list_result, [2027], 'list context preserves the one-value method re
 $counter->add(2);
 is($counter->{x}, 24, 'void context still applies the first field update');
 is($counter->{y}, 2007, 'void context still applies the second field update');
+
+my $recycled_counter = bless { x => 0, y => 0 }, 'StableHashMethod::Counter';
+for my $amount (1 .. 5) {
+    is($recycled_counter->add($amount), $amount * ($amount + 1),
+            'reused method arguments carry the current call value');
+}
 
 my $overloaded = StableHashMethod::OverloadedCounter->new({ x => 5, y => 8 });
 is($overloaded->add(2), 17,

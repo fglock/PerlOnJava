@@ -195,7 +195,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
     private void resetRecycledMethodCallArguments() {
         clearVerifiedMethodHashFields();
-        elements.clear();
+        if (suppressMethodArgumentRootTracking
+                && elements instanceof InlineMethodArgumentList inlineArguments) {
+            inlineArguments.clearForStableMethodRecycle();
+        } else {
+            elements.clear();
+        }
         suppressMethodArgumentRootTracking = false;
         type = PLAIN_ARRAY;
         strictAutovivify = false;
@@ -216,7 +221,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
     boolean suppressRootTrackingForStableMethodArguments() {
         if (type != PLAIN_ARRAY || !(elements instanceof InlineMethodArgumentList)
-                || elements.size() > 2 || threadShared) {
+                || elements.size() > 2 || threadShared || isPackageGlobalRoot) {
             return false;
         }
         suppressMethodArgumentRootTracking = true;
@@ -673,6 +678,14 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             inlineSize = 0;
             modCount++;
             if (owner.isaArray) owner.validateIsaMutation();
+        }
+
+        private void clearForStableMethodRecycle() {
+            expanded = null;
+            first = null;
+            second = null;
+            inlineSize = 0;
+            modCount++;
         }
 
         private void prepareStoredValue(RuntimeScalar previous, RuntimeScalar element) {
