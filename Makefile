@@ -1,7 +1,14 @@
 .PHONY: all clean test test-unit test-cpan-tester test-interpreter check-thread-test-sources check-thread-core-test-sources check-thread-ecosystem-test-sources check-thread-regex-test-sources test-thread-tooling test-threads test-threads-core test-threads-core-platform test-threads-core-mode test-threads-windows test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-cpan-release-acceptance test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links perl5-update perl5-sync perl5-sync-check
 
 PERL ?= perl
-GRADLE_ARGS ?=
+ifeq ($(OS),Windows_NT)
+# The Windows unit shards each take longer than the 75-minute CI step budget
+# when only two Gradle workers are available. Run the five balanced shards
+# concurrently on the hosted runner while keeping the existing per-worker heap cap.
+GRADLE_ARGS ?= --max-workers=4
+else
+GRADLE_ARGS ?= --max-workers=2
+endif
 # A persistent daemon keeps the priority from the invocation that first
 # started it. Use a single-use Gradle process so workers inherit the
 # launcher's niceness (for example, `nice -n 19 make`).
@@ -123,11 +130,21 @@ perl5-sync-check:
 	$(PERL) dev/import-perl5/update_perl5.pl --sync --verify-idempotent $(if $(FILTER),--filter "$(FILTER)",)
 
 # CI build - optimized for CI/CD environments
-ci: check-java-gradle
+ci: prepare-windows-posix-tmp check-java-gradle
 ifeq ($(OS),Windows_NT)
 	gradlew.bat $(GRADLE_LAUNCH_ARGS) build -x test testUnitParallel --parallel --stacktrace
 else
 	./gradlew $(GRADLE_LAUNCH_ARGS) build -x test testUnitParallel --parallel --stacktrace
+endif
+
+# Some Perl unit scripts use POSIX /tmp paths. On Windows, Java resolves
+# these as root-relative paths on the current drive; create that directory on
+# the runner before compiling and executing the suite.
+prepare-windows-posix-tmp:
+ifeq ($(OS),Windows_NT)
+	powershell -NoProfile -NonInteractive -Command "New-Item -ItemType Directory -Force -Path (Join-Path ([System.IO.Path]::GetPathRoot((Get-Location).Path)) 'tmp') | Out-Null"
+else
+	@:
 endif
 
 # Check Java/Gradle compatibility and fix if needed

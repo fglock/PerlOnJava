@@ -1107,11 +1107,11 @@ public class OpcodeHandlerExtended {
             if (captured instanceof RuntimeScalar s) {
                 if (!seenScalars.add(s)) continue;
                 capturedScalars.add(s);
-                s.retainClosureCapture();
+                s.retainClosureCapture(closureCode);
             } else if (captured instanceof RuntimeArray || captured instanceof RuntimeHash) {
                 if (!seenAggregates.add(captured)) continue;
                 capturedAggregates.add(captured);
-                PerlOwnerSlot ownerSlot = captured.retainClosureCaptureOwner();
+                PerlOwnerSlot ownerSlot = captured.retainClosureCaptureOwner(closureCode);
                 capturedAggregateOwnerSlots.add(ownerSlot);
             }
         }

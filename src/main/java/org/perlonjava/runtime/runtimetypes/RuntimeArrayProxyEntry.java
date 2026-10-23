@@ -79,6 +79,11 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
         RuntimeScalar result = super.set(value);
         if (!parent.elementsAliased) {
             parent.elementsOwned = true;
+            // Vivification can insert the lvalue while this array is still
+            // marked non-owning. The element-list mutation then cannot create
+            // an ARRAY_ELEMENT owner slot, so reconcile after the proxy store
+            // promotes the array to an owning aggregate.
+            parent.reconcileArrayElementOwnerSlots();
         }
         return result;
     }
@@ -105,6 +110,7 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
         this.firstClassRegexValue = referent.firstClassRegexValue;
         if (!parent.elementsAliased) {
             parent.elementsOwned = true;
+            parent.reconcileArrayElementOwnerSlots();
         }
         return referent;
     }
@@ -124,6 +130,10 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
         this.lvalue = reference;
         this.type = reference.type;
         this.value = reference.value;
+        if (!parent.elementsAliased) {
+            parent.elementsOwned = true;
+            parent.reconcileArrayElementOwnerSlots();
+        }
         return reference;
     }
 
@@ -155,7 +165,15 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
                 vivify();
             }
         }
-        return lvalue.createReference();
+        RuntimeScalar reference = lvalue.createReference();
+        if (!parent.elementsAliased) {
+            // Taking a reference vivifies an ordinary array slot without
+            // going through set(). Promote the parent now so later writes
+            // through the scalar reference update an ARRAY_ELEMENT owner slot.
+            parent.elementsOwned = true;
+            parent.reconcileArrayElementOwnerSlots();
+        }
+        return reference;
     }
 
     /**

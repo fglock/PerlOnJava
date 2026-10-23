@@ -1,0 +1,164 @@
+package org.perlonjava.runtime.runtimetypes;
+
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+@Tag("unit")
+class MortalListAggregateArrayOwnerSlotTest {
+    @Test
+    void arrayElementOwnerSurvivesWhenAnonymousArrayIsNestedInPackageRootedHash() {
+        PerlRuntime runtime = new PerlRuntime();
+        String rootName = "MortalListAggregateArrayOwnerSlotTest::nested_root";
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            boolean previousActive = MortalList.isActive();
+            RuntimeHash referent = new RuntimeHash();
+            RuntimeArray nestedArray = new RuntimeArray();
+            RuntimeScalar arrayElement = referenceTo(referent);
+            arrayElement.refCountOwned = true;
+            nestedArray.elements.add(arrayElement);
+            nestedArray.elementsOwned = true;
+            nestedArray.reconcileArrayElementOwnerSlots();
+
+            RuntimeHash packageRoot = new RuntimeHash();
+            packageRoot.elements.put("nested", nestedArray.createAnonymousReference());
+            GlobalVariable.aliasGlobalHash(rootName, packageRoot);
+
+            RuntimeScalar unrelatedLegacyOwner = referenceTo(referent);
+            unrelatedLegacyOwner.refCountOwned = true;
+            referent.refCount = 1;
+
+            try {
+                MortalList.setActive(true);
+                MortalList.deferDecrementIfTracked(unrelatedLegacyOwner);
+                MortalList.flush();
+
+                assertEquals(RuntimeBase.PerlLifecycleState.LIVE,
+                        referent.perlLifecycleState(),
+                        "the nested array's strong element remains owned through the rooted hash");
+                assertEquals(1, referent.refCount,
+                        "the nested array element restores one referent owner at legacy zero");
+            } finally {
+                packageRoot.elements.clear();
+                GlobalVariable.globalHashes.remove(rootName);
+                nestedArray.elements.clear();
+                if (arrayElement.refCountOwned) {
+                    MortalList.deferDecrementIfTracked(arrayElement);
+                    MortalList.flush();
+                }
+                MortalList.setActive(previousActive);
+            }
+        }
+    }
+
+    @Test
+    void directlyRootedArrayElementRestoresItsStrongOwnerAtLegacyZero() {
+        PerlRuntime runtime = new PerlRuntime();
+        String className = "MortalListAggregateArrayOwnerSlotTest::Tracked";
+        String rootName = "MortalListAggregateArrayOwnerSlotTest::root";
+        String weakRootName = "MortalListAggregateArrayOwnerSlotTest::weak_root";
+        String weakHashName = "MortalListAggregateArrayOwnerSlotTest::weak_hash";
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            boolean previousActive = MortalList.isActive();
+            RuntimeHash referent = new RuntimeHash();
+            referent.blessId = NameNormalizer.getBlessId(className);
+            referent.refCount = 1;
+            installDestroy(className);
+
+            RuntimeArray root = new RuntimeArray();
+            root.push(referenceTo(referent));
+            GlobalVariable.aliasGlobalArray(rootName, root);
+            RuntimeArray lexicalRoot = new RuntimeArray();
+            lexicalRoot.push(referenceTo(referent));
+            PerlOwnerSlot lexicalArrayCapture = lexicalRoot.retainClosureCaptureOwner();
+            lexicalRoot.scopeExited = true;
+            RuntimeArray weakRoot = new RuntimeArray();
+            weakRoot.push(referenceTo(referent));
+            RuntimeScalar weakEntry = weakRoot.elements.get(0);
+            WeakRefRegistry.weaken(weakEntry);
+            GlobalVariable.aliasGlobalArray(weakRootName, weakRoot);
+            RuntimeHash weakHash = new RuntimeHash();
+            RuntimeScalar weakHashEntry = referenceTo(referent);
+            weakHash.elements.put("value", weakHashEntry);
+            WeakRefRegistry.weaken(weakHashEntry);
+            GlobalVariable.aliasGlobalHash(weakHashName, weakHash);
+
+            RuntimeScalar lexicalOwner = referenceTo(referent);
+            lexicalOwner.refCountOwned = true;
+            referent.activateOwnerTracking();
+            referent.recordActiveOwner(lexicalOwner);
+            MyVarCleanupStack.register(lexicalOwner);
+
+            RuntimeScalar unrelatedLegacyOwner = referenceTo(referent);
+            unrelatedLegacyOwner.refCountOwned = true;
+            referent.refCount = 1;
+
+            try {
+                MortalList.setActive(true);
+                MortalList.deferDecrementIfTracked(unrelatedLegacyOwner);
+                MortalList.flush();
+
+                assertEquals(RuntimeBase.PerlLifecycleState.LIVE,
+                        referent.perlLifecycleState(),
+                        "a package-rooted strong array element retains its referent");
+                assertEquals(3, referent.refCount,
+                        "package and closure-owned array elements plus the scalar owner are restored");
+
+                // Keep the weak edge in place for the count assertion, then
+                // remove its diagnostic root before proving final destruction.
+                weakRoot.elements.clear();
+                GlobalVariable.globalArrays.remove(weakRootName);
+                weakHash.elements.clear();
+                GlobalVariable.globalHashes.remove(weakHashName);
+                WeakRefRegistry.clearWeakRefsTo(referent);
+
+                RuntimeScalar removed = root.elements.remove(0);
+                MortalList.deferDecrementIfTracked(removed);
+                MortalList.flush();
+
+                assertEquals(RuntimeBase.PerlLifecycleState.LIVE,
+                        referent.perlLifecycleState());
+                assertEquals(2, referent.refCount,
+                        "the registered lexical array and scalar owner remain");
+
+                lexicalRoot.releaseClosureCaptureOwner(lexicalArrayCapture);
+                MortalList.flush();
+                assertEquals(1, referent.refCount,
+                        "releasing the final array capture preserves the scalar owner");
+
+                MortalList.deferDecrementIfTracked(lexicalOwner);
+                MortalList.flush();
+
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED,
+                        referent.perlLifecycleState(),
+                        "releasing the final owner permits destruction");
+            } finally {
+                if (lexicalArrayCapture.isActive()) {
+                    lexicalRoot.releaseClosureCaptureOwner(lexicalArrayCapture);
+                }
+                MortalList.setActive(previousActive);
+                MyVarCleanupStack.unregister(lexicalOwner);
+                GlobalVariable.globalArrays.remove(rootName);
+                GlobalVariable.globalArrays.remove(weakRootName);
+                GlobalVariable.globalHashes.remove(weakHashName);
+                GlobalVariable.removeGlobalCodeRefForStashDelete(className + "::DESTROY");
+            }
+        }
+    }
+
+    private static RuntimeScalar referenceTo(RuntimeBase referent) {
+        RuntimeScalar scalar = new RuntimeScalar();
+        scalar.type = RuntimeScalarType.HASHREFERENCE;
+        scalar.value = referent;
+        return scalar;
+    }
+
+    private static void installDestroy(String className) {
+        RuntimeCode code = new RuntimeCode((args, context) -> new RuntimeScalar().getList(), null);
+        int separator = className.lastIndexOf("::");
+        code.packageName = className.substring(0, separator);
+        code.subName = "DESTROY";
+        GlobalVariable.getGlobalCodeRef(className + "::DESTROY").set(new RuntimeScalar(code));
+    }
+}

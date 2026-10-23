@@ -1098,7 +1098,8 @@ public class IOOperator {
             if (lexicalName != null && lexicalName.startsWith("$")) {
                 // A lexical filehandle is an anonymous GV, but Perl retains
                 // its pad name for stringification across recursive calls.
-                anonGlob.setStringificationName("main::" + lexicalName);
+                anonGlob.setStringificationName(
+                        RuntimeCode.getCurrentPackage() + lexicalName);
             }
             newGlob.value = anonGlob;
             // Register for GC-based fd recycling (mimics Perl's DESTROY on scope exit)
@@ -2028,6 +2029,17 @@ public class IOOperator {
             RuntimeScalar newGlob = new RuntimeScalar();
             newGlob.type = RuntimeScalarType.GLOBREFERENCE;
             RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(fh);
+            String lexicalName = RuntimeCode.findActiveLexicalName(fileHandle);
+            if (lexicalName == null) {
+                lexicalName = fileHandle.lexicalDisplayName;
+            }
+            if (lexicalName != null && lexicalName.startsWith("$")) {
+                // sysopen creates an anonymous GV for lexical filehandles just
+                // like open(). Preserve its lexical name so modules such as
+                // File::Temp can serialize and recreate the handle correctly.
+                anonGlob.setStringificationName(
+                        RuntimeCode.getCurrentPackage() + lexicalName);
+            }
             newGlob.value = anonGlob;
             RuntimeIO.registerGlobForFdRecycling(anonGlob, fh);
             fileHandle.set(newGlob);

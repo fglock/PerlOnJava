@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 closure-pad path is implemented and validated on both backends. Full UAT comparison, local gates, selected CPAN workloads, and PR CI pass. PR #1653 remains a draft pending review.
+**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The candidate is based on `origin/master` at `5a6cf5ed6`; published head `84ddd5b45` passes hosted run `39895645097` on Linux and Windows, including both thread gates. Current local candidate `5578d44bd` passes full `nice -n 19 make` in 33m11s; hosted validation is pending. The preceding head's one hosted Linux failure in `dbic_deep_cycle_weak_shift_regression.t` did not recur in local filtered/full-shard gates or the hosted rerun. Owner slots still bridge to `RuntimeBase.refCount` for dispatch, and default owner-slot accounting remains incomplete.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
@@ -54,8 +54,11 @@ destruction while a legacy owner still exists.
 
 This finding rules out treating a scalar-only migration as a fix for #1618.
 The reduced reproducer crosses closure pads and aggregate slots, so Phase 2
-must cover those boundaries before HTML::Tree can pass. `undef $sub` is a
-scalar slot overwrite, not the separate `undef &sub` CV-body operation.
+must cover those boundaries in the ownership model. The current branch now
+passes HTML::Tree's integration tests with the existing selective-count and
+reachability machinery; that result is useful compatibility evidence, but it
+does not prove the planned owner-slot migration. `undef $sub` is a scalar slot
+overwrite, not the separate `undef &sub` CV-body operation.
 
 The first verified fix is at the reachability boundary. The interpreter's
 `capturedVars` array is execution metadata and can still contain a pad after
@@ -102,10 +105,216 @@ and first path establish implementation cost.
 
 ## Progress tracking
 
-### Current status: Phase 1 complete; merged in PR #1653 as `84f32be179bdc2b351c3eaae1cb26df39964ab6b` (2026-10-07)
+### Current status: Phase 2 in progress; Phase 1 merged in PR #1653 as `84f32be179bdc2b351c3eaae1cb26df39964ab6b` (2026-10-07)
+
+The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The branch is based on `origin/master` at `5a6cf5ed6`; published head `84ddd5b45` passes hosted run `39895645097` on Linux and Windows, including both thread gates. Current local candidate `5578d44bd` passes full `nice -n 19 make` in 33m11s; hosted validation is pending. The preceding head's one hosted Linux failure in `dbic_deep_cycle_weak_shift_regression.t` did not recur in local filtered/full-shard gates or the hosted rerun. The preceding ownership candidate passes all three local thread configurations. The focused lifetime regressions recorded below pass on blead Perl 5.45.4 and both backends. HTML::Tree 5.07 passes all 23 files and 989 tests on both backends on the preceding ownership candidate. Phase 2 remains incomplete: `refCount` still controls lifecycle dispatch, and the slot ledger is not yet the default accounting source across general scalar/proxy stores, aliases, and cleanup. Distinct scalar-reference aliases keep separate reachability identities while contributing one referent count per scalar cell. The HTML::Tree result is compatibility evidence, not the Phase 2 owner-slot exit proof.
+
+### Current batch
+
+- Followed live `SCALAR_VALUE` and `SCALAR_REFERENCE_CONTENTS` slots from an
+  aggregate toward their containing aggregate or lexical root. Deferred
+  aggregate-owner recovery now avoids whole-root walks through these scalar
+  owner paths. Java regressions prove exact count restoration with zero root
+  queries and graph snapshots. Full `nice -n 19 make` passes in 21m54s; the
+  root-chain test class passes 3/3. Hosted CI for head `27d6df476` passes on
+  Linux and Windows, including the platform thread gates.
+- Rebased PR #1816 onto master `5a6cf5ed6` before this batch's one full build.
+  This keeps the validation aligned with current master and avoids rebuilding
+  an obsolete candidate.
+- On 2026-10-23, allowed scalar owner-slot identity to supply rooted array/hash
+  recovery when the legacy ownership flag is absent, while retaining the flag
+  for cells with no explicit slot. The Java regression covers array and hash
+  owners, restoration, and release after removing their semantic slots. Full
+  `nice -n 19 make` passes in 21m46s. The first hosted run had one failure in
+  `dbic_deep_cycle_weak_shift_regression.t` (assertion 10) in shard 3. The
+  regression passes in the filtered DBI/DBIC make and in shard 3's full normal
+  order (14m34s); hosted rerun `39861290618` passes on Linux and Windows,
+  including the platform thread gates.
+- On 2026-10-23, direct scalar-owner snapshots began trusting the active
+  `SCALAR_VALUE` slot when the legacy Boolean has retired. The Java regression
+  checks the legacy registry and slot union, then verifies that releasing the
+  slot removes the counted owner. Full `nice -n 19 make` passes in 22m49s;
+  hosted run `39880315002` passes on Linux and Windows, including both thread
+  compatibility gates.
+- The next cleanup tranche lets deferred scalar release, captured release, and
+  array `pop`/`shift` recognize the explicit scalar slot after the legacy flag
+  retires. Java regressions verify slot retirement and the deferred legacy
+  bridge decrement for each cleanup path. Full `nice -n 19 make` passes in
+  22m25s on `759302bb7`; hosted run `39895645097` passes on Linux and Windows,
+  including both thread compatibility gates.
+- The following tranche extends the same scalar-slot predicate through
+  recursive container clear, tail-call argument release, and void-result
+  cleanup paths. Java regressions cover recursive and tail-call release;
+  full `nice -n 19 make` passes in 33m11s on `5578d44bd`; hosted validation is
+  pending.
+- Lexical scope exit now recognizes an active scalar-value owner slot after
+  `refCountOwned` retires. The focused Java regression passes as part of full
+  `nice -n 19 make` (23m57s); documentation links pass. A follow-up inspection
+  found the same retired-flag gap in explicit `undef`, including named CODE
+  slots. That path now checks the scalar slot before clearing the cell, with a
+  Java regression; full `nice -n 19 make` passes in 15m40s. The next bundled
+  tranche extends slot authority through scalar overwrite, container-copy
+  accounting, scalar-reference contents, closure-capture acquisition, and
+  deferred captured cleanup. Java regressions cover these boundaries. Its
+  full validation is pending. This branch began at `origin/master` commit
+  `5a6cf5ed6`; `origin/master` advanced to `aeda28344`, including the Catalyst
+  upload cleanup for #1795. The master changes were merged without rewriting
+  the published ownership commits. The overlapping reachability changes were
+  combined so statement-boundary candidates and active owner-slot roots both
+  participate in capture pruning; the broader multipart and request-context
+  regression remains in place. Full `nice -n 19 make` passes on the merged
+  candidate in 20m47s, including the Catalyst lifetime test (1 test, 0 failures)
+  and all owner-slot regressions. `make check-links` passes; hosted validation
+  is pending.
+
+The earlier candidate was based on `origin/master` (`ede542b29`) and passed the full local make in 22m55s, Ubuntu `make ci`, the Ubuntu Perl thread compatibility gate, SBOM generation, Windows `make ci` in about 52 minutes, and the focused Windows thread gate. Windows CI exposed two existing unit tests with POSIX `/tmp` paths; `make ci` now creates the runner's root-relative `tmp` directory before building. On blead Perl 5.45.4, the controller, WebSocket, Catalyst tempfile, owner-release, and writable `Internals::SvREFCNT` regressions pass. The controller regression passes 5/5 on JVM and interpreter; the WebSocket regression passes 6/6 on both; the Catalyst tempfile regression passes 24/24 on both; `refcount/issue_1794_controller_owner_release.t` passes 3/3 on both; and `internals_svrefcnt_write.t` passes 6/6 on both after failing all six assertions on its unfixed parent. The alias-count follow-up rebases onto `origin/master` (`18323a1ac`). Its focused make passes in 50s and its full local make passes in 31m30s on code commit `15e362ddb`.
 
 ### Completed
 
+- [x] On 2026-10-22, synchronized the per-scalar reverse index of destroyable
+  closure owners. Ithread cloning and parent-side temporary closure release
+  could concurrently mutate its `ArrayList`, producing an intermittent
+  `ConcurrentModificationException` in `threads-shared/t/object.t`. A focused
+  Java regression races reverse-index releases. The external test passed 28/28
+  when rerun alone. The bundled Java regression passes in full `nice -n 19
+  make` (15m59s); `make test-threads` passes JVM virtual 1925/1925, interpreter
+  virtual 1925/1925, and platform-focused 485/485. This batch is pending
+  hosted CI.
+
+- [x] On 2026-10-22, synchronized mutation and snapshot operations on the
+  legacy direct-scalar-owner registry and changed `reachableOwnerCount()` to
+  snapshot before graph walks. The new Java concurrency regression passes in
+  the full `nice -n 19 make` (22m39s). The same candidate passes `make
+  test-threads` in all three configurations: JVM virtual 1925/1925,
+  interpreter virtual 1925/1925, and platform-focused 485/485. The first local
+  thread-gate attempt lacked write access to the external Perl checkout; the
+  passing rerun used extended access. The published PR head's CI rerun also
+  passes on both platforms; this local batch still needs hosted validation.
+
+- [x] On 2026-10-22, used the scalar-owner identity union in global
+  destruction owner-delta checks and `MortalList` deferred-count restoration.
+  The new Java regression proves that a package-rooted scalar slot still
+  counts when its legacy registry entry is missing. Full `nice -n 19 make`
+  passes in 56m43s; the global-destruction, tempfile, and controller-owner
+  regressions pass 36/36 on both JVM and interpreter backends.
+
+- [x] On 2026-10-22, unified direct scalar-owner queries across explicit
+  `SCALAR_VALUE` slots and the legacy active-owner registry, deduplicating by
+  scalar-cell identity. Cleanup guards, weak CODE checks, and localized CODE
+  cleanup now see owners that predate legacy tracking. The two focused Java
+  tests pass in the full `nice -n 19 make`; `make test-threads` passes JVM
+  virtual 1925/1925, interpreter virtual 1925/1925, and platform-focused
+  485/485. Eight focused lifetime regressions pass 79/79 on JVM and 73/73 on
+  the interpreter.
+
+- [x] On 2026-10-22, restore undercounted referents from a reachable standalone
+  `SCALAR_VALUE` slot even when the scalar predates activation of the legacy
+  `activeOwners` registry. The Java regression proves count restoration from
+  the slot with no active-owner entry. Full `nice -n 19 make` passes in 19m26s.
+  The lifecycle bridge still dispatches through `refCount`.
+
+- [x] On 2026-10-22, made the targeted weak-release direct-owner proof consult
+  explicit `SCALAR_VALUE` slots before the lazily populated scalar registry.
+  A new Java regression creates the strong scalar owner before the first
+  `weaken()` and verifies the slot preserves its referent without a root
+  snapshot. Full `nice -n 19 make` passes in 18m12s. Local
+  `nice -n 19 timeout 1800 make test-threads` passes all three configurations:
+  JVM virtual 1925/1925, interpreter virtual 1925/1925, and platform-focused
+  485/485. Hosted CI for the preceding commit had one `free2.t` failure; the
+  follow-up hosted run is pending.
+
+- [x] On 2026-10-22, added stable `SCALAR_VALUE` owner slots for direct scalar
+  referents and synchronized them through assignment, postfix ownership
+  transfer, dynamic localization, and release. Reachable-owner recovery and
+  targeted weak sweeps recognize the new slot while preserving legacy
+  refcount dispatch and aggregate root-query fast paths. Two focused Java tests
+  cover stable slot transfer and localized-value restoration. Full
+  `nice -n 19 make` passes in 20m56s; the currently published PR head's Linux,
+  Windows, and thread compatibility checks pass. The default slot migration
+  remains incomplete.
+
+- [x] On 2026-10-21, corrected the array pop/shift guard after the rebased
+  aggregate-alias change exposed false retention in HTML::Tree cleanup. Only
+  Perl array lvalue aliases now suppress the removed slot's deferred
+  decrement; internal work-array copies still release it. The existing
+  project-owned HTML::Tree reproducers pass on system Perl, JVM, and
+  interpreter; the full local `make` passes in 21m34s, and HTML::Tree 5.07
+  passes all 23 files and 989 tests on both backends.
+
+- [x] On 2026-10-20, rebased the #1794/#1795 candidate onto current master,
+  fixed the remaining interpreter closure-capture and cleanup behavior, and
+  validated the controller (5/5), WebSocket (6/6), Catalyst tempfile (24/24),
+  and owner-release (3/3) regressions on both backends. The full `make` gate
+  passes with the new two-worker and 3 GiB worker settings. Standard Perl
+  5.45.4 passes the Perl-level regressions. Published the rebased candidate to
+  PR #1816 as a draft; its Linux and Windows CI jobs are pending.
+- [x] On 2026-10-20, added writable `Internals::SvREFCNT` behavior with a
+  separate B::SV query path, plus a six-assertion Perl regression that passes
+  on blead Perl 5.45.4 and both backends and fails on the unfixed parent. The
+  complete local `make` gate passes on `dd368a80a`. Windows CI found two
+  existing unit scripts that require `/tmp`; the PR prepares the ephemeral
+  Windows runner path without changing those tests. This initial hosted run
+  exposed the workflow's step-order contract and a Windows time-budget issue;
+  both are resolved in the 2026-10-21 entry below.
+- [x] On 2026-10-21, kept the CI workflow's fixed step contract, moved the
+  Windows root-relative temp-directory setup into `make ci`, and configured
+  four Gradle workers only on Windows after the two-worker gate exceeded its
+  75-minute budget. The full local `make` passed in 22m55s. Ubuntu and Windows
+  make gates, the Ubuntu thread compatibility gate, the Windows focused thread
+  gate, and Ubuntu SBOM generation all passed on PR head `8a6c5a365`.
+- [x] On 2026-10-21, followed typed hash/array owner slots through nested
+  aggregate roots during deferred-release recovery and `DESTROY` resurrection
+  checks. Two Java regressions assert the ownership result with zero root
+  queries and snapshots. The full local `nice -n 19 make` passes on
+  `ea7b77164` in 21m11s; hosted CI for this head is queued.
+- [x] On 2026-10-21, added an explicit scalar-reference contents owner slot
+  that follows a referenced scalar cell when it is overwritten. The Perl
+  regression verifies replacement and final `DESTROY`/weak clearing; the Java
+  test covers slot accounting. Testing exposed and fixed a duplicate legacy
+  direct-store count on the same cell. The focused refcount gate and the full
+  local `nice -n 19 make` pass on `f0f10ed0e` (27m56s); hosted Ubuntu and
+  Windows CI are running.
+- [x] Re-ran the unchanged HTML::Tree 5.07 suite on code head `f0f10ed0e`:
+  all 23 files and 989 tests pass, including `t/refloop.t`. This confirms the
+  ownership fix preserves the existing integration behavior; the suite still
+  exercises legacy refcount/reachability paths and does not complete the
+  planned default owner-slot migration.
+- [x] On 2026-10-21, ran HTML::Tree 5.07 under the interpreter backend on code
+  head `f0f10ed0e`; all 23 files and 989 tests pass, including `t/refloop.t`.
+  PR #1816 remains open as a draft at `4eebdf5c4`, with hosted Ubuntu and
+  Windows checks still in progress.
+- [x] On 2026-10-21, added a 12-assertion scalar-reference alias test. B::SV
+  reports one contents owner for two references to the same scalar cell on
+  system Perl 5.34.1 and blead Perl 5.45.4. The pre-fix parent reports two on
+  both backends; the rebased fix passes all 12 assertions on JVM and
+  interpreter. The owner-slot Java tests cover alias acquisition, idempotent
+  acquisition, retargeting, reachable-owner deduplication, and deferred and
+  final release. Full `nice -n 19 make` passes in 31m30s on code commit
+  `15e362ddb`; unchanged HTML::Tree 5.07 passes all 23 files and 989 tests on
+  both backends, including `t/refloop.t`.
+- [x] Revalidated `ordinary_aggregate_element_owner_refcount.t`: all 11
+  standard-Perl count/destruction assertions pass on blead Perl 5.45.4, JVM,
+  and interpreter. This covers scalar ownership through array/hash insertion,
+  push, shift, delete, replacement, aggregate clear, and final release; Phase 2
+  still requires replacing the legacy counters with default owner-slot paths.
+- [x] On 2026-10-21, kept a referent alive when `pop`, `shift`, or hash deletion
+  removes one owning aggregate slot while another array/hash slot still aliases
+  the same scalar cell. Its 22-assertion Perl regression covers those removals
+  and array/hash clear with a second owning aggregate. It passes on system Perl
+  5.34.1, blead Perl 5.45.4, JVM, and interpreter; the failing pop/delete cases
+  were reproduced on the unfixed parent on both backends. After rebasing onto
+  `162d8eb84`, full `nice -n 19 make` passes in 31m15s on code commit
+  `69d30792f`. Legacy
+  `refCount` dispatch remains; the next work is default owner-slot accounting
+  across ordinary aggregate stores and cleanup.
+- [x] On 2026-10-22, fixed interpreter WebSocket callback lifetime after the
+  tracked 29-assertion regression showed that an active callback's controller
+  was destroyed early. External-root snapshots now follow persistent scalar,
+  array, and hash state on installed CVs and continue through nested callback
+  code to its captured values. The new Java regression covers that full owner
+  chain; blead Perl 5.45.4 and both PerlOnJava backends pass the WebSocket test.
+  Full `nice -n 19 make` passes in 19m15s, and HTML::Tree 5.07 passes all 989
+  tests on both backends on code commit `05ca274a6`.
 - [x] Re-read the parent issue's implementation contract and reviewed the
   independent lifecycle candidate handoff. Historical candidate test results
   are not treated as current Phase 1 evidence.
@@ -298,16 +507,20 @@ and first path establish implementation cost.
 
 ### Next steps
 
-1. Extend the ownership path through scalar proxies and ordinary array/hash
-   slots in Phase 2, then resolve the HTML::Tree teardown failures and verify
-   unchanged `t/refloop.t`.
-2. Resolve the strict target failures in the fresh-home CPAN release
+1. Keep PR #1816 open/draft while continuing the Phase 2 owner-accounting work.
+2. Continue Phase 2 from reachability recovery to default owner-slot
+   accounting for ordinary array/hash element stores and scalar proxies. Cover
+   acquisition, transfer, replacement, deletion, aliases, and final release
+   with oracle-checked refcount, weak-reference, and DESTROY assertions. Keep
+   legacy dispatch and reachability bridges only at explicit unmigrated
+   boundaries; use unchanged HTML-Tree as the integration guard.
+3. Resolve the strict target failures in the fresh-home CPAN release
    acceptance, then rerun that gate on the final candidate. The current run
    distinguishes prerequisite/setup timeouts and missing dependencies from
    runtime assertions; those outcomes do not yet satisfy #1642's acceptance.
-3. Rerun Moo and DBIx::Class after their separate tracked fixes land; classify
+4. Rerun Moo and DBIx::Class after their separate tracked fixes land; classify
    the two DBIx::Class assertions independently.
-4. Run each repository gate from an immutable commit and record before/after
+5. Run each repository gate from an immutable commit and record before/after
    evidence for each enabled path.
 
 ### Open questions and blockers
@@ -339,10 +552,15 @@ and first path establish implementation cost.
   `cpan/Scalar-List-Utils/lib` added to `@INC`; the checkout remains untouched.
   The prior Perl 5.44.0 build remains the oracle for historical HTML-Tree
   integration results.
-- The focused `new_from_lol` regression now passes, but HTML-Tree 5.07's
-  content and incremental parser cases still retain two and three elements at
-  the immediate release assertion on both PerlOnJava backends; Perl 5.44 passes
-  all cases. The new parser lifecycle reproducer records this open failure.
+- On commit `4cad02e3b`, the focused `new_from_lol` and content/incremental
+  parser lifecycle reproducers pass on system Perl, JVM, and interpreter. The
+  upstream `timeout 1800 ./jcpan -t HTML::Tree` run passes all 23 files and 989
+  tests, including `t/refloop.t`; standalone system Perl 5.42.2 passes the
+  unchanged `t/refloop.t` 8/8. This closes the observed HTML-Tree behavior
+  failure on this candidate, but does not complete Phase 2: owner slots still
+  cover closure pads only, and cleanup still relies on selective counts and
+  reachability walks. Revalidate the upstream suite after the scalar/proxy and
+  array/hash ownership path is migrated.
 - The Dancer2-Plugin-DBIx-Class `t/01_both_using_rsnames.t` workload now passes
   all six assertions and exits on both backends. The interpreter first exposed
   a `caller->isa` scalar-context bug, fixed in this follow-up, then exceeded a

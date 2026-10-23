@@ -113,7 +113,13 @@ public class MortalList {
 
     public static void pushTemporaryRoot(RuntimeBase root) {
         if (root != null) {
-            state().temporaryRoots.push(root);
+            ArrayDeque<RuntimeBase> roots = state().temporaryRoots;
+            if (root instanceof RuntimeList) {
+                for (RuntimeBase existing : roots) {
+                    if (existing == root) return;
+                }
+            }
+            roots.push(root);
         }
     }
 
@@ -318,6 +324,16 @@ public class MortalList {
         noteDeferredScopeExitCaptureCandidate(state(), scalar);
     }
 
+    /** Recheck a scope-exited referent when its final closure owner is released. */
+    public static void closureCaptureReleased(RuntimeScalar scalar) {
+        if (scalar == null || !scalar.scopeExited
+                || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                || !(scalar.value instanceof RuntimeBase base)
+                || !isDeferredScopeExitCandidate(base)) return;
+        noteDeferredScopeExitCaptureCandidate(state(), scalar);
+        requestImmediateWeakSweep();
+    }
+
     private static void noteDeferredScopeExitCaptureCandidate(
             LifecycleRuntimeState state, RuntimeScalar scalar) {
         if (scalar.value instanceof RuntimeBase base && isDeferredScopeExitCandidate(base)) {
@@ -332,6 +348,19 @@ public class MortalList {
         return className != null && DestroyDispatch.classHasDestroy(base.blessId, className);
     }
 
+    private static boolean containerDirectlyOwnsReferent(
+            RuntimeBase container, RuntimeBase referent) {
+        if (container instanceof RuntimeArray array) {
+            return array.elements.stream().anyMatch(scalar -> scalar != null
+                    && scalar.value == referent);
+        }
+        if (container instanceof RuntimeHash hash) {
+            return hash.elements.values().stream().anyMatch(scalar -> scalar != null
+                    && scalar.value == referent);
+        }
+        return false;
+    }
+
     /**
      * Release eval STRING over-captures whose declaring scope just exited and
      * which cannot be reached by live code or an END block. Reachability sweeps
@@ -342,12 +371,33 @@ public class MortalList {
     private static void processUnreachableScopeExitCaptureCandidates(
             LifecycleRuntimeState state) {
         if (state.deferredScopeExitCaptureCandidates.isEmpty()) return;
-
+        // Nested Perl frames can still own transient callback and request
+        // state through active call arguments. Keep candidates queued until
+        // an outer statement boundary can inspect the completed owner graph.
+        if (RuntimeCode.argsStackDepth() > 1) return;
         Set<RuntimeBase> endReachable = ReachabilityWalker.walkEndBlockRoots();
         Set<RuntimeBase> cycleProtected = ReachabilityWalker.strongCycleProtectedReferents();
+        Set<RuntimeBase> candidateReferents =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+        for (RuntimeScalar scalar : state.deferredScopeExitCaptureCandidates) {
+            if (scalar.scopeExited && scalar.value instanceof RuntimeBase base) {
+                candidateReferents.add(base);
+            }
+        }
+        List<RuntimeBase> captureOwnerReferents = new ArrayList<>(candidateReferents);
+        for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotReferents()) {
+            if (candidateReferents.stream().anyMatch(
+                    candidate -> containerDirectlyOwnsReferent(ownerReferent, candidate))) {
+                captureOwnerReferents.add(ownerReferent);
+            }
+        }
+        ReachabilityWalker.releaseUnreachableScopeExitedCaptureOwners(
+                captureOwnerReferents, endReachable);
         boolean found = false;
         for (RuntimeScalar scalar : new ArrayList<>(state.deferredScopeExitCaptureCandidates)) {
-            if (!scalar.scopeExited) continue;
+            if (!scalar.scopeExited) {
+                continue;
+            }
             RuntimeBase base = scalar.value instanceof RuntimeBase value ? value : null;
             boolean scalarReachable = ReachabilityWalker.isScalarReachable(scalar)
                     || ReachabilityWalker.isReachableFromRoots(scalar);
@@ -518,12 +568,12 @@ public class MortalList {
      */
     public static void deferDecrementIfTracked(RuntimeScalar scalar) {
         if (!isActive() || scalar == null) return;
-        if (!scalar.refCountOwned) return;
         if (((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 || scalar.type == RuntimeScalarType.GLOB)
                 && scalar.value instanceof RuntimeBase base) {
+            if (!scalar.ownsCountedReferent(base)) return;
             if (base.refCount > 0) {
-                scalar.refCountOwned = false;
+                scalar.setRefCountOwned(false);
                 if (base.refCountTrace) {
                     base.traceRefCount(0, "MortalList.deferDecrementIfTracked (queued, scalar.refCountOwned->false)");
                 }
@@ -542,7 +592,7 @@ public class MortalList {
                 // that stale ownership marker and ask the reachability walker to
                 // decide at the next safe (non-nested) boundary whether the weak
                 // observers should be cleared.
-                scalar.refCountOwned = false;
+                scalar.setRefCountOwned(false);
                 if (base.refCountTrace) {
                     base.releaseOwner(scalar, "deferDecrementIfTracked zero-count owner");
                 }
@@ -561,7 +611,6 @@ public class MortalList {
     /** Release the tracked owner held by a scope-exited closure capture. */
     public static void releaseCapturedDecrement(RuntimeScalar scalar) {
         if (!isActive() || scalar == null) return;
-        if (!scalar.refCountOwned) return;
         deferDecrementIfTracked(scalar);
     }
 
@@ -589,8 +638,9 @@ public class MortalList {
     /**
      * Defer DESTROY for tracked blessed refs in a collection being cleared.
      * <p>
-     * Only decrements elements that own a refCount (refCountOwned == true).
-     * Elements stored via copy constructor (no setLarge) are skipped.
+     * Only decrements elements that own a counted reference, through either
+     * the legacy flag or an explicit scalar-value owner slot. Non-owning
+     * copies remain skipped.
      * Never-stored blessed objects (refCount == 0) are bumped to ensure DESTROY fires.
      */
     public static void deferDestroyForContainerClear(Iterable<RuntimeScalar> elements) {
@@ -662,7 +712,10 @@ public class MortalList {
         // data), we must still cascade decrements so their weak-ref entries
         // can be cleared when the referent's refCount reaches 0.
         if (!RuntimeBase.blessedObjectExists() && !WeakRefRegistry.weakRefsExist()
-                && !RuntimeScalar.watcherCleanupNeeded()) return;
+                && !RuntimeScalar.watcherCleanupNeeded()) {
+            hash.releaseHashEntryOwnerSlots();
+            return;
+        }
         // If the hash has outstanding references (e.g., from \%hash stored elsewhere),
         // do NOT clean up elements — the hash is still alive and its elements are
         // accessible through the reference. Cleanup will happen when the last
@@ -678,7 +731,7 @@ public class MortalList {
         for (RuntimeScalar val : hash.elements.values()) {
             if (val != null && (val.type & RuntimeScalarType.REFERENCE_BIT) != 0
                     && val.value instanceof RuntimeBase rb) {
-                if (rb.blessId != 0 || rb.refCount >= 0) {
+                if (val.ownsCountedReferent(rb) || rb.blessId != 0 || rb.refCount >= 0) {
                     needsWalk = true;
                     break;
                 }
@@ -701,7 +754,10 @@ public class MortalList {
                 if (needsWalk) break;
             }
         }
-        if (!needsWalk) return;
+        if (!needsWalk) {
+            hash.releaseHashEntryOwnerSlots();
+            return;
+        }
         // Refcount drift can miss an escaped hash reference. DBIC's
         // source_registrations hash is assigned into the live schema while the
         // original hash later exits; walking it here would destroy ResultSources
@@ -715,6 +771,7 @@ public class MortalList {
         for (RuntimeScalar val : valuesInDestructionOrder) {
             deferDecrementRecursive(val);
         }
+        hash.releaseHashEntryOwnerSlots();
     }
 
     /**
@@ -754,6 +811,7 @@ public class MortalList {
         // must not retain this Java RuntimeArray merely through its backing
         // reference.  A real escaped \@array has refCount > 0 above.
         arr.orphanArraySizeLvalues();
+        arr.releaseArrayElementOwnerSlots();
         if (!arr.elementsAliased) {
             for (RuntimeScalar elem : arr.elements) {
                 if (returned == null) RuntimeScalar.releaseIoOwner(elem);
@@ -792,7 +850,7 @@ public class MortalList {
             return;
         }
         // Quick scan: check if any element either:
-        //   1. Owns a refCount (was assigned via setLarge with a tracked referent), OR
+        //   1. Owns a counted referent through a legacy flag or scalar-value slot, OR
         //   2. Is a direct blessed reference (blessId != 0), OR
         //   3. Is a container (array/hash ref) that might hold nested blessed refs
         // For case 3, we peek one level deep to avoid false positives for arrays
@@ -800,9 +858,11 @@ public class MortalList {
         boolean needsWalk = RuntimeScalar.watcherCleanupNeeded();
         for (RuntimeScalar elem : arr.elements) {
             if (elem == null || (elem.type & RuntimeScalarType.REFERENCE_BIT) == 0) continue;
-            // Fast check: refCountOwned means this ref was properly tracked via setLarge
-            if (elem.refCountOwned) { needsWalk = true; break; }
             if (!(elem.value instanceof RuntimeBase rb)) continue;
+            // The explicit scalar slot can outlive the legacy ownership flag
+            // during the bridge migration, so either identity source needs the
+            // recursive release walk.
+            if (elem.ownsCountedReferent(rb)) { needsWalk = true; break; }
             // Direct blessed ref
             if (rb.blessId != 0 || rb.refCount >= 0) { needsWalk = true; break; }
             // Container ref — peek at children for reference-type elements
@@ -856,9 +916,9 @@ public class MortalList {
         for (RuntimeScalar scalar : args.elements) {
             if (scalar == null
                     || !args.ownsElement(scalar)
-                    || !scalar.refCountOwned
                     || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
                     || !(scalar.value instanceof RuntimeBase base)
+                    || !scalar.ownsCountedReferent(base)
                     || base.refCount != 1) {
                 continue;
             }
@@ -869,14 +929,14 @@ public class MortalList {
     public static void releaseTailCallCodeRef(RuntimeScalar codeRef) {
         if (codeRef == null
                 || !isActive()
-                || !codeRef.refCountOwned
                 || codeRef.type != RuntimeScalarType.CODE
                 || !(codeRef.value instanceof RuntimeCode code)
+                || !codeRef.ownsCountedReferent(code)
                 || code.refCount <= 0) {
             return;
         }
 
-        codeRef.refCountOwned = false;
+        codeRef.setRefCountOwned(false);
         if (code.refCountTrace) {
             code.traceRefCount(-1, "MortalList.releaseTailCallCodeRef");
             code.releaseOwner(codeRef, "releaseTailCallCodeRef");
@@ -901,14 +961,14 @@ public class MortalList {
 
     private static void releaseTailCallArgElement(RuntimeScalar scalar) {
         if (scalar == null
-                || !scalar.refCountOwned
                 || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
                 || !(scalar.value instanceof RuntimeBase base)
+                || !scalar.ownsCountedReferent(base)
                 || base.refCount <= 0) {
             return;
         }
 
-        scalar.refCountOwned = false;
+        scalar.setRefCountOwned(false);
         if (base.refCountTrace) {
             base.traceRefCount(-1, "MortalList.releaseTailCallArgElement");
             base.releaseOwner(scalar, "releaseTailCallArgElement");
@@ -941,7 +1001,9 @@ public class MortalList {
      * StackOverflowError on circular data structures like ExifTool's).
      */
     private static void deferDecrementRecursive(RuntimeScalar scalar) {
-        if (scalar == null || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0) return;
+        if (scalar == null) return;
+        scalar.deferOwnedScalarReferenceContents();
+        if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0) return;
         if (!(scalar.value instanceof RuntimeBase topBase)) return;
 
         // Fast path for leaf references (the overwhelmingly common case):
@@ -985,14 +1047,16 @@ public class MortalList {
 
         while (!work.isEmpty()) {
             RuntimeScalar s = work.poll();
-            if (s == null || (s.type & RuntimeScalarType.REFERENCE_BIT) == 0) continue;
+            if (s == null) continue;
+            s.deferOwnedScalarReferenceContents();
+            if ((s.type & RuntimeScalarType.REFERENCE_BIT) == 0) continue;
             if (!(s.value instanceof RuntimeBase base)) continue;
             if (!visited.add(base)) continue;  // already visited — cycle
 
             if (base.blessId != 0) {
                 boolean releasingLastOwner = false;
-                if (s.refCountOwned && base.refCount > 0) {
-                    s.refCountOwned = false;
+                if (s.ownsCountedReferent(base) && base.refCount > 0) {
+                    s.setRefCountOwned(false);
                     if (base.refCountTrace) {
                         base.traceRefCount(0, "MortalList.deferDecrementRecursive (blessed, queued)");
                         base.releaseOwner(s, "deferDecrementRecursive blessed");
@@ -1039,8 +1103,8 @@ public class MortalList {
                 boolean hasDirectWeakElementRefs = containerHasWeakElementRefs(base);
                 boolean hasCleanupTargets = hasDirectWeakElementRefs
                         || containerMayContainCleanupTargets(base);
-                if (s.refCountOwned && base.refCount > 0) {
-                    s.refCountOwned = false;
+                if (s.ownsCountedReferent(base) && base.refCount > 0) {
+                    s.setRefCountOwned(false);
                     if (base.refCountTrace) {
                         base.traceRefCount(0, "MortalList.deferDecrementRecursive (unblessed container, queued)");
                     }
@@ -1052,7 +1116,7 @@ public class MortalList {
                         continue;
                     }
                     if (!hasCleanupTargets
-                            || base.activeOwnerCount() > 0
+                            || base.countedScalarOwnerCount() > 0
                             || (base.refCount > 1
                             && !hasDirectWeakElementRefs
                             && isReachableFromExternalRootCached(base))) {
@@ -1067,7 +1131,7 @@ public class MortalList {
                     continue;
                 } else if (base.refCount > 0
                         && (!hasCleanupTargets
-                        || base.activeOwnerCount() > 0
+                        || base.countedScalarOwnerCount() > 0
                         || (!hasDirectWeakElementRefs
                         && isReachableFromExternalRootCached(base)))) {
                     // This scalar is a non-owning copy of a still-live container.
@@ -1164,9 +1228,10 @@ public class MortalList {
                 boolean reachableCodeRef = base instanceof RuntimeCode
                         && scalar.isStoredInRegisteredContainerOwner()
                         && ReachabilityWalker.isScalarReachable(scalar);
-                if (scalar.refCountOwned && base.refCount > 0 && unblessedDiscardableContainer
+                if (scalar.ownsCountedReferent(base) && base.refCount > 0
+                        && unblessedDiscardableContainer
                         && !reachableCodeRef) {
-                    scalar.refCountOwned = false;
+                    scalar.setRefCountOwned(false);
                     if (base.refCountTrace) {
                         base.traceRefCount(0, "MortalList.mortalizeForVoidDiscard (queued owned container discard)");
                         base.releaseOwner(scalar, "mortalizeForVoidDiscard container");
@@ -1616,7 +1681,8 @@ public class MortalList {
         if (container instanceof RuntimeHash hash) {
             containsScalar = hash.elements.containsValue(scalar);
         } else if (container instanceof RuntimeArray array) {
-            containsScalar = array.elements.contains(scalar);
+            containsScalar = array.elements.contains(scalar)
+                    && (!array.elementsAliased || array.ownsElement(scalar));
         } else {
             containsScalar = false;
         }
@@ -1716,6 +1782,25 @@ public class MortalList {
                 // have a legacy bridge count and retain the old compatibility
                 // sentinel behavior.
                 if (base.nativeCaptureOwnerCount() == 0) base.refCount = 1;
+            } else if (restoreReachableAggregateOwnerCount(base)) {
+                // A hash-entry owner has a stable semantic slot identity even
+                // when an unrelated legacy scalar decrement consumes the
+                // selective count. Restore the count from independently owned
+                // hash slots that still lead from live Perl roots. Hash entries
+                // are copied SV slots; borrowed array aliases are deliberately
+                // excluded here and remain on their legacy path.
+                //
+                // This is a migration bridge: the owner slot is authoritative
+                // for whether the entry still exists, while refCount remains
+                // the dispatch counter until all aggregate stores are migrated.
+            } else if (base instanceof RuntimeCode code
+                    && ReachabilityWalker.isCodeReachableFromRoots(code)) {
+                // A callback stored in a long-lived Perl container can have
+                // its selective CV count consumed by a temporary invocation
+                // alias. The container is still a strong owner even when no
+                // weak references point at the CODE object. Preserve the CV
+                // and its lexical captures until the last Perl root is gone.
+                base.refCount = 1;
             } else if (base.localBindingExists) {
                 if (base instanceof RuntimeScalar scalar
                         && scalar.referencedByScalarReference
@@ -1892,6 +1977,181 @@ public class MortalList {
                 DestroyDispatch.callDestroy(base);
             }
         }
+    }
+
+    /** Restore legacy count for aggregate owner slots still reachable from Perl roots. */
+    static boolean restoreReachableAggregateOwnerCount(RuntimeBase referent) {
+        Set<RuntimeScalar> rootedHashCells = Collections.newSetFromMap(new IdentityHashMap<>());
+        int slotsWithoutCell = 0;
+        for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
+            if (slot.kind() != PerlOwnerSlot.Kind.HASH_ENTRY) continue;
+            RuntimeBase owner = slot.ownerContainer();
+            boolean rootedOwner = isRootedAggregateOwner(owner, referent);
+            if (!rootedOwner) continue;
+            RuntimeScalar cell = slot.ownerCell();
+            if (cell == null) {
+                slotsWithoutCell++;
+            } else if (cell.value == referent
+                    && (cell.refCountOwned || cell.hasScalarValueOwnerSlotFor(referent))
+                    && !WeakRefRegistry.isweak(cell)) {
+                rootedHashCells.add(cell);
+            }
+        }
+        // Array slots are restored only when the array has a live semantic
+        // owner or can be reached independently from package roots. Excluding
+        // the referent from that walk prevents an owner proof through the
+        // object whose pending release triggered this recovery.
+        for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
+            if (slot.kind() != PerlOwnerSlot.Kind.ARRAY_ELEMENT) continue;
+            RuntimeBase owner = slot.ownerContainer();
+            if (!isRootedAggregateOwner(owner, referent)) continue;
+            RuntimeScalar cell = slot.ownerCell();
+            if (cell == null) {
+                slotsWithoutCell++;
+            } else if (cell.value == referent
+                    && (cell.refCountOwned || cell.hasScalarValueOwnerSlotFor(referent))
+                    && !WeakRefRegistry.isweak(cell)) {
+                rootedHashCells.add(cell);
+            }
+        }
+        // Scalar-value slots can supply their identity even when recovery no
+        // longer relies on the legacy ownership Boolean.
+        // Cells stored in aggregates are handled above or by the legacy
+        // reachability fallback to preserve the shared-root snapshot policy.
+        for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
+            if (slot.kind() != PerlOwnerSlot.Kind.SCALAR_VALUE
+                    || slot.referent() != referent) continue;
+            RuntimeScalar cell = slot.ownerCell();
+            if (cell == null || cell.containerOwner != null
+                    || cell.value != referent
+                    || (!cell.refCountOwned && !cell.hasScalarValueOwnerSlotFor(referent))
+                    || WeakRefRegistry.isweak(cell)
+                    || !ReachabilityWalker.isScalarReachable(cell)) continue;
+            rootedHashCells.add(cell);
+        }
+        int owners = slotsWithoutCell + rootedHashCells.size();
+        // Active scalar owners may include lexical RVs in addition to hash
+        // cells. Exclude cells already counted through their explicit slots,
+        // then add other still-reachable scalar owners to avoid losing them
+        // when restoring the mixed legacy/native count.
+        for (RuntimeScalar scalar : referent.countedScalarOwnerSnapshot()) {
+            if (scalar == null || rootedHashCells.contains(scalar)
+                    || !scalar.ownsCountedReferent(referent)
+                    || !ReachabilityWalker.isScalarReachable(scalar)) {
+                continue;
+            }
+            owners++;
+        }
+        if (owners == 0) return false;
+        referent.refCount = owners;
+        return true;
+    }
+
+    /**
+     * Prove aggregate ownership by following registered owner slots toward a
+     * Perl root. Nested hash/array stores and scalar-value slots record direct
+     * edges, so walking that owner chain avoids a whole-root scan for the
+     * common case. Fall back to the graph walker for legacy edges that do not
+     * yet have an explicit owner slot.
+     */
+    private static boolean isRootedAggregateOwner(RuntimeBase owner,
+                                                   RuntimeBase excludedReferent) {
+        if (!(owner instanceof RuntimeHash) && !(owner instanceof RuntimeArray)) return false;
+        Set<RuntimeBase> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        ArrayDeque<RuntimeBase> pending = new ArrayDeque<>();
+        pending.add(owner);
+        while (!pending.isEmpty()) {
+            RuntimeBase current = pending.removeFirst();
+            if (current == null || current == excludedReferent || !visited.add(current)) continue;
+            if (isExplicitAggregateRoot(current)) return true;
+            for (PerlOwnerSlot parentSlot : current.ownerSlotSnapshot()) {
+                if (parentSlot.referent() != current) continue;
+                if (parentSlot.kind() == PerlOwnerSlot.Kind.HASH_ENTRY
+                        || parentSlot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT) {
+                    RuntimeBase parent = parentSlot.ownerContainer();
+                    RuntimeScalar cell = parentSlot.ownerCell();
+                    if (isLiveAggregateOwnerEdge(parent, cell, current)) {
+                        pending.addLast(parent);
+                    }
+                } else if (parentSlot.kind() == PerlOwnerSlot.Kind.SCALAR_VALUE
+                        || parentSlot.kind() == PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS) {
+                    RuntimeScalar ownerCell = parentSlot.ownerCell();
+                    if (parentSlot.kind() == PerlOwnerSlot.Kind.SCALAR_VALUE) {
+                        if (!isLiveScalarOwnerEdge(ownerCell, current)) continue;
+                    } else if (!isLiveScalarReferenceContentsEdge(
+                            parentSlot, ownerCell, current)) {
+                        continue;
+                    }
+                    if (isExplicitScalarRoot(ownerCell)) return true;
+                    RuntimeBase parent = ownerCell.containerOwner;
+                    if (isLiveAggregateOwnerCell(parent, ownerCell)) {
+                        pending.addLast(parent);
+                    }
+                }
+            }
+        }
+        return ReachabilityWalker.isReachableFromRoots(owner, true, excludedReferent);
+    }
+
+    private static boolean isLiveScalarOwnerEdge(RuntimeScalar cell, RuntimeBase referent) {
+        return cell != null && cell.value == referent && !WeakRefRegistry.isweak(cell);
+    }
+
+    private static boolean isLiveScalarReferenceContentsEdge(
+            PerlOwnerSlot slot, RuntimeScalar ownerCell, RuntimeBase referent) {
+        RuntimeScalar contentsCell = slot.scalarReferenceCell();
+        return ownerCell != null
+                && ownerCell.scalarReferenceContentsOwner == slot
+                && !WeakRefRegistry.isweak(ownerCell)
+                && contentsCell != null && contentsCell.value == referent
+                && !WeakRefRegistry.isweak(contentsCell);
+    }
+
+    private static boolean isLiveAggregateOwnerCell(RuntimeBase parent, RuntimeScalar cell) {
+        if (parent instanceof RuntimeHash hash) {
+            return hash.elements.containsValue(cell);
+        }
+        if (parent instanceof RuntimeArray array) {
+            return array.elements.contains(cell) && array.ownsElement(cell);
+        }
+        return false;
+    }
+
+    private static boolean isExplicitScalarRoot(RuntimeScalar cell) {
+        if (!cell.scopeExited && MyVarCleanupStack.isRegistered(cell)) return true;
+        if (cell.isStoredInRegisteredContainerOwner()) return true;
+        return cell.isPackageGlobalRoot
+                && (GlobalVariable.scalarSlots().containsValue(cell)
+                    || GlobalVariable.globalCodeRefs.containsValue(cell));
+    }
+
+    static boolean isRootedOwnerContainer(RuntimeBase owner,
+                                          RuntimeBase excludedReferent) {
+        if (owner instanceof RuntimeHash || owner instanceof RuntimeArray) {
+            return isRootedAggregateOwner(owner, excludedReferent);
+        }
+        return ReachabilityWalker.isReachableFromRoots(owner, true, excludedReferent);
+    }
+
+    private static boolean isExplicitAggregateRoot(RuntimeBase aggregate) {
+        if (aggregate.semanticCaptureOwnerCount() > 0) return true;
+        if (aggregate instanceof RuntimeHash hash && hash.isPackageRootedHash()) return true;
+        if (aggregate instanceof RuntimeArray && aggregate.isPackageGlobalRoot) return true;
+        return !aggregate.scopeExited && MyVarCleanupStack.isRegistered(aggregate);
+    }
+
+    private static boolean isLiveAggregateOwnerEdge(RuntimeBase parent,
+                                                    RuntimeScalar cell,
+                                                    RuntimeBase referent) {
+        if (parent == null || cell == null || cell.value != referent
+                || WeakRefRegistry.isweak(cell)) return false;
+        if (parent instanceof RuntimeHash hash) {
+            return hash.elements.containsValue(cell);
+        }
+        if (parent instanceof RuntimeArray array) {
+            return array.elements.contains(cell) && array.ownsElement(cell);
+        }
+        return false;
     }
 
     private static boolean blessedClassHasDestroy(RuntimeBase base) {

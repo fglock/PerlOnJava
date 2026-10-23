@@ -2761,11 +2761,11 @@ public class SubroutineParser {
             }
             if (value instanceof RuntimeScalar scalar) {
                 capturedScalars.add(scalar);
-                scalar.retainClosureCapture();
+                scalar.retainClosureCapture(code);
             } else if (value instanceof RuntimeArray || value instanceof RuntimeHash) {
                 RuntimeBase aggregate = (RuntimeBase) value;
                 capturedAggregates.add(aggregate);
-                capturedAggregateOwnerSlots.add(aggregate.retainClosureCaptureOwner());
+                capturedAggregateOwnerSlots.add(aggregate.retainClosureCaptureOwner(code));
             }
         }
         if (!capturedScalars.isEmpty()) {

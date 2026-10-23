@@ -250,6 +250,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         && closure.refCount == 0
                         && closure.stashRefCount <= 0
                         && !closure.localBindingExists
+                        && !ReachabilityWalker.isReachableFromRoots(closure)
                         && (frame.returned == null || !frame.returned.containsKey(closure))) {
                     closure.releaseCaptures();
                 }
@@ -2871,7 +2872,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeScalar[] scalars = capturedScalars;
             capturedScalars = null;  // null out first to prevent re-entry
             for (RuntimeScalar s : scalars) {
-                s.releaseClosureCapture();
+                s.releaseClosureCapture(this);
                 if (s.captureCount == 0) {
                     // If the captured scalar itself holds an unowned CODE ref with
                     // captures, release those recursively (handles nested closures).
@@ -5368,7 +5369,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     code.closedOverVariables.put(f.getName(), capturedVar);
                     captured.add(capturedVar);
-                    capturedVar.retainClosureCapture();
+                    capturedVar.retainClosureCapture(code);
                 }
             } else if (f.getType() == RuntimeArray.class || f.getType() == RuntimeHash.class) {
                 RuntimeBase capturedAggregate = (RuntimeBase) f.get(codeObject);
@@ -5379,7 +5380,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     code.closedOverVariables.put(f.getName(), capturedAggregate);
                     capturedAggregates.add(capturedAggregate);
-                    PerlOwnerSlot ownerSlot = capturedAggregate.retainClosureCaptureOwner();
+                    PerlOwnerSlot ownerSlot = capturedAggregate.retainClosureCaptureOwner(code);
                     capturedAggregateOwnerSlots.add(ownerSlot);
                 }
             }
@@ -6043,7 +6044,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         bound.refCount = 0;
         bound.capturedScalars = new RuntimeScalar[] { new RuntimeScalar(codeRef), invocant };
         for (RuntimeScalar captured : bound.capturedScalars) {
-            captured.retainClosureCapture();
+            captured.retainClosureCapture(bound);
         }
         registerJvmClosure(bound);
         return new RuntimeScalar(bound).getList();

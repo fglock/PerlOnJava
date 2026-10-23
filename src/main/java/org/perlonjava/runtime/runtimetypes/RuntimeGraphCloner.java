@@ -439,7 +439,7 @@ public class RuntimeGraphCloner {
             }
             try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
                 for (RuntimeScalar captured : target.capturedScalars) {
-                    captured.retainThreadCloneClosureCapture();
+                    captured.retainThreadCloneClosureCapture(target);
                 }
             }
         }
@@ -453,7 +453,7 @@ public class RuntimeGraphCloner {
                         new PerlOwnerSlot[target.capturedAggregates.length];
                 for (int i = 0; i < target.capturedAggregates.length; i++) {
                     target.capturedAggregateOwnerSlots[i] =
-                            target.capturedAggregates[i].retainClosureCaptureOwner();
+                            target.capturedAggregates[i].retainClosureCaptureOwner(target);
                 }
             }
         }
@@ -580,7 +580,8 @@ public class RuntimeGraphCloner {
     }
 
     private void restoreScalarReferenceOwnership(RuntimeScalar source, RuntimeScalar target) {
-        if (!source.refCountOwned
+        if (!(source.value instanceof RuntimeBase sourceReferent)
+                || !source.ownsCountedReferent(sourceReferent)
                 || (target.type & RuntimeScalarType.REFERENCE_BIT) == 0
                 || !(target.value instanceof RuntimeBase referent)) {
             return;
@@ -596,7 +597,7 @@ public class RuntimeGraphCloner {
         referent.recordActiveOwner(target);
         referent.refCount++;
         referent.hadCountedReference = true;
-        target.refCountOwned = true;
+        target.setRefCountOwned(true);
         try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
             ScalarRefRegistry.registerRef(target);
         }

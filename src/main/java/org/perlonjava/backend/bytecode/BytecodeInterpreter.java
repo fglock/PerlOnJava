@@ -136,16 +136,16 @@ public class BytecodeInterpreter {
         if (!(temp instanceof RuntimeScalar tempScalar)
                 || !(target instanceof RuntimeScalar targetScalar)
                 || tempScalar == targetScalar
-                || !tempScalar.refCountOwned
                 || !RuntimeScalarType.isReference(tempScalar)
                 || tempScalar.type != targetScalar.type
                 || tempScalar.value != targetScalar.value
                 || !(tempScalar.value instanceof RuntimeBase base)
+                || !tempScalar.ownsCountedReferent(base)
                 || base.refCount <= 0) {
             return;
         }
 
-        tempScalar.refCountOwned = false;
+        tempScalar.setRefCountOwned(false);
         if (base.refCountTrace) {
             base.traceRefCount(-1, "BytecodeInterpreter.releaseConsumedTemp");
             base.releaseOwner(tempScalar, "releaseConsumedTemp");
@@ -167,6 +167,11 @@ public class BytecodeInterpreter {
         if (value instanceof RuntimeScalar scalar) {
             if (scalar.type == RuntimeScalarType.CODE && scalar.value instanceof RuntimeCode code) {
                 closures.put(code, Boolean.TRUE);
+            } else if (scalar.type == RuntimeScalarType.REGEX
+                    && scalar.value instanceof RuntimeRegex regex) {
+                for (RuntimeCode callback : regex.executableCallbackCodes()) {
+                    closures.put(callback, Boolean.TRUE);
+                }
             }
             return;
         }
@@ -228,19 +233,23 @@ public class BytecodeInterpreter {
         frame.suspended = false;
         frame.suspendedRuntimeDisabledWarningCategories = null;
 
-        for (RuntimeCode closure : frame.createdClosures) {
+        InterpretedCode code = frame.code;
+        RuntimeBase[] registers = frame.registers;
+        int firstMyVarReg = 3 + (code.capturedVars != null ? code.capturedVars.length : 0);
+        java.util.List<RuntimeCode> abandonedClosures =
+                new java.util.ArrayList<>(frame.createdClosures);
+        frame.createdClosures.clear();
+        for (RuntimeCode closure : abandonedClosures) {
+            releaseCurrentFrameClosureSlots(registers, firstMyVarReg, closure);
             if ((closure.capturedScalars != null || closure.capturedAggregates != null)
-                    && closure.refCount == 0
                     && closure.stashRefCount <= 0
+                    && !ReachabilityWalker.isReachableFromExternalRoot(closure)
                     && (frame.returnedClosures == null
                         || !frame.returnedClosures.contains(closure))) {
                 closure.releaseCaptures();
             }
         }
 
-        InterpretedCode code = frame.code;
-        RuntimeBase[] registers = frame.registers;
-        int firstMyVarReg = 3 + (code.capturedVars != null ? code.capturedVars.length : 0);
         BitSet myVars = code.myVarRegisters;
         boolean needsFlush = false;
         for (int i = myVars.nextSetBit(firstMyVarReg);
@@ -261,10 +270,45 @@ public class BytecodeInterpreter {
             MyVarCleanupStack.unregister(reg);
             registers[i] = null;
         }
+        if (releaseTemporaryScalarReferenceContents(frame)) {
+            needsFlush = true;
+        }
         if (needsFlush) {
             MortalList.flush();
         }
         code.releaseRegisters();
+    }
+
+    /**
+     * Release nested referent ownership held by interpreter-created scalar
+     * temporaries. These cells are intentionally not sent through full lexical
+     * cleanup: a temporary register can alias an lvalue or aggregate element.
+     * The nested owner is distinct and can be deferred safely so a returned
+     * scalar reference is retained by its caller before the decrement drains.
+     */
+    private static boolean releaseTemporaryScalarReferenceContents(
+            SuspendedInterpreterFrame frame) {
+        boolean released = false;
+        for (RuntimeScalar scalar : frame.temporaryScalarOwners) {
+            if (!scalar.hasScalarReferenceContentsOwner()) continue;
+            scalar.deferOwnedScalarReferenceContents();
+            released = true;
+        }
+        frame.temporaryScalarOwners.clear();
+        return released;
+    }
+
+    private static void trackTemporaryScalarReferenceContents(
+            SuspendedInterpreterFrame frame, InterpretedCode code,
+            int register, int firstMyVarReg, RuntimeScalar scalar) {
+        if (scalar == null || !scalar.hasScalarReferenceContentsOwner()) return;
+        boolean eligible = register >= firstMyVarReg
+                && !code.myVarRegisters.get(register)
+                && !scalar.isPackageGlobalRoot
+                && scalar.getContainerOwner() == null
+                && !(scalar instanceof RuntimeBaseProxy)
+                && !MyVarCleanupStack.isRegistered(scalar);
+        if (eligible) frame.temporaryScalarOwners.add(scalar);
     }
 
     /**
@@ -1474,6 +1518,8 @@ public class BytecodeInterpreter {
                                     }
                                 }
                                 RuntimeScalar.assignTo(registers[rs], rdScalar);
+                                trackTemporaryScalarReferenceContents(
+                                        frame, code, rd, firstMyVarReg, rdScalar);
                             }
 
                             case Opcodes.COPY_DO_BLOCK_RESULT -> {
@@ -3903,19 +3949,19 @@ public class BytecodeInterpreter {
                 releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
             }
 
-            // Release captures for interpreter closures created in this frame
-            // that were never stored via set() (refCount stayed at 0).
-            // This handles eval STRING map/grep block closures that over-capture
-            // all visible variables but are temporary and should release captures.
-            // Closures stored via set() have refCount > 0 and are skipped.
-            // This matches the JVM-compiled path where scopeExitCleanup releases
-            // captures for CODE refs with refCount=0 (see RuntimeScalar.java
-            // scopeExitCleanup special case for CODE refs).
+            // Release captures for closures created here that were not stored
+            // outside the frame. Clean their lexical slots first so the active
+            // frame does not make a temporary closure appear externally rooted.
             if (!frame.suspended && !createdClosures.isEmpty()) {
-                for (RuntimeCode closure : createdClosures) {
+                java.util.List<RuntimeCode> frameClosures =
+                        new java.util.ArrayList<>(createdClosures);
+                createdClosures.clear();
+                for (RuntimeCode closure : frameClosures) {
+                    releaseCurrentFrameClosureSlots(
+                            registers, firstMyVarReg, closure);
                     if ((closure.capturedScalars != null || closure.capturedAggregates != null)
-                            && closure.refCount == 0
                             && closure.stashRefCount <= 0
+                            && !ReachabilityWalker.isReachableFromExternalRoot(closure)
                             && (frame.returnedClosures == null || !frame.returnedClosures.contains(closure))) {
                         closure.releaseCaptures();
                     }
@@ -3956,6 +4002,10 @@ public class BytecodeInterpreter {
                 }
             }
 
+            if (!frame.suspended) {
+                releaseTemporaryScalarReferenceContents(frame);
+            }
+
             // Outer finally: restore interpreter state saved at method entry.
             // Unwinds all `local` variables pushed during this frame, restores
             // the current package, and pops the InterpreterState call stack.
@@ -3986,6 +4036,28 @@ public class BytecodeInterpreter {
             if (!frame.suspended) {
                 code.releaseRegisters();
             }
+        }
+    }
+
+    /** Release lexical slots holding a temporary closure before its root check. */
+    private static void releaseCurrentFrameClosureSlots(
+            RuntimeBase[] registers, int firstMyVarReg, RuntimeCode closure) {
+        for (int i = firstMyVarReg; i < registers.length; i++) {
+            RuntimeBase register = registers[i];
+            if (!(register instanceof RuntimeScalar scalar)
+                    || scalar.value != closure
+                    || !MyVarCleanupStack.isRegistered(scalar)) continue;
+            if (scalar.ownsCountedReferent(closure)) {
+                RuntimeScalar.scopeExitCleanup(scalar);
+            } else {
+                // Non-owning CODE wrappers can still be the only local root
+                // seen by the conservative reachability walk. Mark the slot
+                // exited without releasing captures before the external-root
+                // check (for example, a RuntimeRegex may still own the CV).
+                scalar.scopeExited = true;
+            }
+            MyVarCleanupStack.unregister(scalar);
+            registers[i] = null;
         }
     }
 

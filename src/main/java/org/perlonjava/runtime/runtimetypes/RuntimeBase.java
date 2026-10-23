@@ -1,7 +1,10 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.Objects;
+import java.util.Set;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
@@ -192,14 +195,6 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public boolean storedInPackageGlobal = false;
 
     /**
-     * Number of live hash-element slots that directly own this referent.
-     * This is separate from selective refCount because a returned method
-     * value can be detached from its slot while the hash remains an owner.
-     */
-    public int hashSlotOwnerCount = 0;
-
-
-    /**
      * Marks a scalar/container whose contents are reachable from package
      * globals. Mutating such an object can change cached root-reachability
      * answers, so mutation paths invalidate MortalList's external-root
@@ -237,6 +232,11 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     /** Retain one aggregate pad capture through an explicit owner slot. */
     public PerlOwnerSlot retainClosureCaptureOwner() {
+        return retainClosureCaptureOwner(null);
+    }
+
+    /** Retain this aggregate pad through the semantic edge from its closure. */
+    public PerlOwnerSlot retainClosureCaptureOwner(RuntimeCode closureOwner) {
         // A closure-pad slot is a semantic Perl owner even though it does not
         // contribute to the legacy selective refcount. A targeted weak sweep
         // can therefore leave an unblessed aggregate's legacy count at the
@@ -248,7 +248,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             refCount = 0;
         }
         PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
-        ownerSlot.acquireCapture(this);
+        ownerSlot.acquireCapture(this, closureOwner);
         retainClosureCapture();
         return ownerSlot;
     }
@@ -315,6 +315,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     /** Identity ledger for migrated slots; selective refCount remains the
      * lifecycle bridge while owner families move to this API. */
     private java.util.Set<PerlOwnerSlot> ownerSlots = null;
+    /** Legacy-only hash slots shared across runtime wrappers. */
+    private int sharedHashSlotOwnerCount;
 
     synchronized void addOwnerSlot(PerlOwnerSlot slot) {
         if (ownerSlots == null) {
@@ -347,6 +349,20 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return ownerSlotCount(PerlOwnerSlot.Kind.CLOSURE_PAD);
     }
 
+    /** Number of live ordinary hash-entry slots that directly own this referent. */
+    public int hashSlotOwnerCount() {
+        return ownerSlotCount(PerlOwnerSlot.Kind.HASH_ENTRY) + sharedHashSlotOwnerCount;
+    }
+
+    /** Number of live ordinary array-element slots that directly own this referent. */
+    public int arraySlotOwnerCount() {
+        return ownerSlotCount(PerlOwnerSlot.Kind.ARRAY_ELEMENT);
+    }
+
+    synchronized void adjustSharedHashSlotOwnerCount(int delta) {
+        sharedHashSlotOwnerCount = Math.max(0, sharedHashSlotOwnerCount + delta);
+    }
+
     /** Count captured aggregate pads whose lifetime is owned natively by slots. */
     public synchronized int nativeCaptureOwnerCount() {
         if (ownerSlots == null) return 0;
@@ -358,6 +374,17 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             }
         }
         return count;
+    }
+
+    /** Whether an active captured-pad slot has no owning closure edge recorded. */
+    synchronized boolean hasUnassociatedClosureCaptureOwner() {
+        if (ownerSlots == null) return false;
+        for (PerlOwnerSlot slot : ownerSlots) {
+            if (slot.kind() == PerlOwnerSlot.Kind.CLOSURE_PAD
+                    && slot.isNativeCaptureOwner()
+                    && slot.closureOwner() == null) return true;
+        }
+        return false;
     }
 
     // Conservative gate for the tied-handler reachability fallback. Once a
@@ -401,7 +428,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         }
     }
 
-    public void activateOwnerTracking() {
+    public synchronized void activateOwnerTracking() {
         if (activeOwners == null) {
             activeOwners = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
             // Note: backfilling from ScalarRefRegistry.snapshot() was
@@ -415,19 +442,19 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         }
     }
 
-    public void recordActiveOwner(RuntimeScalar scalar) {
+    public synchronized void recordActiveOwner(RuntimeScalar scalar) {
         if (activeOwners != null) {
             activeOwners.add(scalar);
         }
     }
 
-    public void releaseActiveOwner(RuntimeScalar scalar) {
+    public synchronized void releaseActiveOwner(RuntimeScalar scalar) {
         if (activeOwners != null) {
             activeOwners.remove(scalar);
         }
     }
 
-    public int activeOwnerCount() {
+    public synchronized int activeOwnerCount() {
         if (activeOwners == null) return 0;
         // Filter for actual still-owning scalars: refCountOwned=true and
         // value==this. Stale entries (overwritten without going through a
@@ -447,12 +474,37 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     /** Snapshot the currently live scalar owner slots by identity. */
-    public java.util.Set<RuntimeScalar> activeOwnerSnapshot() {
+    public synchronized java.util.Set<RuntimeScalar> activeOwnerSnapshot() {
         if (activeOwnerCount() == 0) return java.util.Collections.emptySet();
         java.util.Set<RuntimeScalar> snapshot = java.util.Collections.newSetFromMap(
                 new java.util.IdentityHashMap<>());
         snapshot.addAll(activeOwners);
         return snapshot;
+    }
+
+    /**
+     * Snapshot direct scalar owners from both the legacy registry and explicit
+     * scalar-value slots. During migration, a scalar can be present in either
+     * source or both, so the identity set forms their union.
+     */
+    public java.util.Set<RuntimeScalar> countedScalarOwnerSnapshot() {
+        java.util.Set<RuntimeScalar> snapshot = java.util.Collections.newSetFromMap(
+                new java.util.IdentityHashMap<>());
+        snapshot.addAll(activeOwnerSnapshot());
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot.kind() != PerlOwnerSlot.Kind.SCALAR_VALUE
+                    || slot.referent() != this) continue;
+            RuntimeScalar owner = slot.ownerCell();
+            if (owner != null && owner.value == this) {
+                snapshot.add(owner);
+            }
+        }
+        return snapshot;
+    }
+
+    /** Count direct scalar owners across the legacy and explicit ledgers. */
+    public int countedScalarOwnerCount() {
+        return countedScalarOwnerSnapshot().size();
     }
 
     /** Snapshot semantic owner-slot identities, including closure pads. */
@@ -467,8 +519,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     /**
-     * D-W6.14: count owners that are reachable from package globals or
-     * live my-vars. This is the strict version used by the production
+     * D-W6.14: count scalar and scalar-content-slot owners that are reachable
+     * from package globals or live my-vars. This is the strict version used by the production
      * rescue at MortalList.flush refCount→0: only objects whose owners
      * can be reached from real roots are kept alive. Phantom owners
      * (scalars that should be dead but haven't been released yet) are
@@ -477,17 +529,51 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      * resolved by user weaken()).
      */
     public int reachableOwnerCount() {
-        if (activeOwners == null) return 0;
         int count = 0;
-        java.util.Iterator<RuntimeScalar> it = activeOwners.iterator();
-        while (it.hasNext()) {
-            RuntimeScalar sc = it.next();
+        Set<RuntimeScalar> scalarValueCells =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot.kind() == PerlOwnerSlot.Kind.SCALAR_VALUE
+                    && slot.referent() == this && slot.ownerCell() != null) {
+                scalarValueCells.add(slot.ownerCell());
+            }
+        }
+        // Snapshot under the same monitor used by register/release operations.
+        // Reachability queries can walk large graphs, so do them after dropping
+        // the monitor; this avoids both fail-fast iteration and lock inversion
+        // between concurrently cleaned referents.
+        java.util.List<RuntimeScalar> legacyOwners;
+        synchronized (this) {
+            legacyOwners = activeOwners == null
+                    ? java.util.List.of() : new java.util.ArrayList<>(activeOwners);
+        }
+        for (RuntimeScalar sc : legacyOwners) {
             if (sc != null && sc.refCountOwned && sc.value == this
                     && ReachabilityWalker.isScalarReachable(sc)) {
-                count++;
+                // The explicit scalar value slot is authoritative when
+                // present; retain activeOwners only as a migration fallback.
+                if (!scalarValueCells.contains(sc)) count++;
             } else if (sc == null || !sc.refCountOwned || sc.value != this) {
-                it.remove();
+                synchronized (this) {
+                    if (activeOwners != null) activeOwners.remove(sc);
+                }
             }
+        }
+        // Several RV wrappers can alias one scalar cell. They keep separate
+        // slot identities for root proofs, but the cell owns its contents only
+        // once, so only one reachable alias contributes to the count.
+        Set<Object> countedScalarReferenceCells =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if ((slot.kind() != PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS
+                    && slot.kind() != PerlOwnerSlot.Kind.SCALAR_VALUE)
+                    || slot.referent() != this) continue;
+            RuntimeScalar ownerCell = slot.ownerCell();
+            if (ownerCell == null || !ReachabilityWalker.isScalarReachable(ownerCell)) continue;
+            RuntimeScalar referenceCell = slot.kind() == PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS
+                    ? slot.scalarReferenceCell() : ownerCell;
+            Object ownershipKey = referenceCell == null ? slot : referenceCell;
+            if (countedScalarReferenceCells.add(ownershipKey)) count++;
         }
         return count;
     }
@@ -806,7 +892,9 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             }
             result.append(']');
         }
-        result.append(" semanticCaptureOwners=").append(semanticCaptureOwnerCount());
+        result.append(" semanticCaptureOwners=").append(semanticCaptureOwnerCount())
+                .append(" hashEntryOwners=").append(hashSlotOwnerCount())
+                .append(" arrayElementOwners=").append(arraySlotOwnerCount());
         return result.toString();
     }
 

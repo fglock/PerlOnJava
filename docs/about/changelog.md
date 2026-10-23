@@ -21,6 +21,9 @@ priorities and future plans.
 - Avoid retaining transient arrays and hashes through shared immutable scalar literals while preserving reference ownership tracking.
 - Run standard Perl's `cpan -t Module` for CPAN oracle checks and keep download failures inconclusive instead of reporting missing local modules as Perl failures.
 - Keep lexical-registration membership checks constant-time, avoiding quadratic CPAN index parsing as cleanup stacks grow.
+- Keep scalar-slot owners authoritative across stores, container copies, scalar references, closure captures, lexical scope exit, overwrites, and explicit `undef` after legacy tracking retires; preserve aliases through `pop`, `shift`, or `delete` (#1649).
+- Synchronize the destroyable-closure reverse index so ithread capture cloning and release can update it safely.
+- Follow scalar owner slots during aggregate lifetime recovery, avoiding a whole-root walk for nested scalar-owned containers.
 - Preserve numeric types of cached read-only scalars in ranges, rejecting unsigned endpoints outside the supported integer range.
 - Improve JVM execution performance for the bit-packed Life example, ordinary scalar assignments, and common blessing lookups.
 - Reuse private one-scalar wrappers when materializing scalar returns, reducing result-list allocations across JVM calls.
@@ -43,6 +46,9 @@ priorities and future plans.
 - Preserve inherited method dispatch in child threads.
 - Prefer exact root-module package declarations over earlier helper packages, and warn for undefined hash keys used by `exists` and `delete` (#1820, #1645).
 - Add a reproducible, warmup-aware Perl versus PerlOnJava performance runner (#1196).
+- Preserve CODE callback captures while Perl container slots still own the callback; restore rooted hash-entry and package-rooted, registered lexical, or closure-captured array-element owners when a legacy deferred decrement undercounts them; register array-element owners after lvalue-proxy stores, scalar and aggregate refaliasing, and scalar-reference creation into new arrays; count scalar-reference contents once when multiple references alias the same scalar cell; release closure-captured request graphs once their scopes end, even when large root walks exceed the cached-snapshot limit; avoid false global-destruction resurrection warnings when bounded owner proofs scan large package graphs; keep stat's filehandle cache from extending temporary glob lifetimes (#1649, #1794, #1795).
+- Serialize legacy scalar-owner registry updates and snapshots so concurrent thread cleanup cannot invalidate owner-ledger iteration (#1649).
+- Implement Perl's writable `Internals::SvREFCNT` form while keeping B::SV's private query mode separate (#1649).
 - Cover FormState session restoration across requests and HTTP response conversion from callback and streaming PSGI responses; refresh HTTP::Message and LWP compatibility status (#1650, #1651, #1652).
 - Preserve the awaited Future value when its source scalar or aggregate slot changes during suspension, covering PAGI::Server request-body receives (#1818).
 - Preserve escaped byte strings in interpreter closures and `bytes::substr`, honor requested CRLF output in `MIME::QuotedPrint`, and cover URI Basic Auth byte-string userinfo (#1275, #1313, #1341).

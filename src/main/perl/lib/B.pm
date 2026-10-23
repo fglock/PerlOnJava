@@ -88,7 +88,7 @@ package B::SV {
         # B's C implementation inspects the referent without creating a Perl
         # owner. Ask the runtime to compensate for an independently live
         # lexical owner that selective refcounting may not have counted.
-        Internals::SvREFCNT($_[0]->{ref}, 1);
+        Internals::jperl_b_svrefcnt($_[0]->{ref});
     }
 
     sub object_2svref {

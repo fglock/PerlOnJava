@@ -781,18 +781,25 @@ public class RuntimeList extends RuntimeBase {
                 result.elements.add(useAlias ? rhsAlias : rhsValue);
 
                 if (rhsIndex < rhsSize) {
+                    // The alias, when selected, is the original source cell.
+                    // The materialized RHS copy is discarded and must release
+                    // any nested owner held by a scalar reference.
+                    if (useAlias && rhsValue != null) {
+                        rhsValue.releaseOwnedScalarReferenceContents();
+                    }
                     // Undo the materialized copy's refCount increment for the consumed
                     // RHS value (mirrors the corresponding fix in the assigned-scalar
                     // branch below). Without this, `my (undef, $name) = @_;` patterns
                     // leak +1 refCount per call on the discarded first arg — visible
                     // in op/inccode.t "no leaks" tests #61, #63 (bug perl #92252).
-                    if (rhsValue != null && rhsValue.refCountOwned
+                    if (rhsValue != null
                             && (rhsValue.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                            && rhsValue.value instanceof RuntimeBase base && base.refCount > 0) {
+                            && rhsValue.value instanceof RuntimeBase base
+                            && rhsValue.ownsCountedReferent(base) && base.refCount > 0) {
                         base.releaseOwner(rhsValue, "RuntimeList materialized-copy undo (undef-target)");
                         base.releaseActiveOwner(rhsValue);
                         base.refCount--;
-                        rhsValue.refCountOwned = false;
+                        rhsValue.setRefCountOwned(false);
                     }
                     rhsIndex++;
                 }
@@ -803,6 +810,9 @@ public class RuntimeList extends RuntimeBase {
                 RuntimeScalar assigned = (rhsIndex < rhsSize) ? rhsElements.get(rhsIndex++) : null;
                 runtimeScalar.set(assigned != null ? assigned : new RuntimeScalar());
                 result.elements.add(runtimeScalar);  // Add reference to the variable itself
+                // set() has acquired a new nested scalar-reference owner on the
+                // destination. The materialized RHS cell is discarded here.
+                if (assigned != null) assigned.releaseOwnedScalarReferenceContents();
                 // Undo the materialized copy's refCount increment.
                 // The materialization (addToArray → addToScalar → set → setLarge) incremented
                 // refCount on the copy. The target's set() above created its own increment.
@@ -810,13 +820,14 @@ public class RuntimeList extends RuntimeBase {
                 // sits in the local `rhs` array which is never scope-exit-cleaned).
                 // Array/hash targets take direct ownership of materialized copies, so only
                 // scalar targets need this correction.
-                if (assigned != null && assigned.refCountOwned
+                if (assigned != null
                         && (assigned.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                        && assigned.value instanceof RuntimeBase base && base.refCount > 0) {
+                        && assigned.value instanceof RuntimeBase base
+                        && assigned.ownsCountedReferent(base) && base.refCount > 0) {
                     base.releaseOwner(assigned, "RuntimeList materialized-copy undo (scalar-target)");
                     base.releaseActiveOwner(assigned);
                     base.refCount--;
-                    assigned.refCountOwned = false;
+                    assigned.setRefCountOwned(false);
                 }
             } else if (elem instanceof RuntimeArray runtimeArray) {
                 List<RuntimeScalar> remaining = (rhsIndex < rhsSize)
@@ -837,12 +848,14 @@ public class RuntimeList extends RuntimeBase {
                     // setFromList creates new copies via incrementRefCountForContainerStore;
                     // the materialized rhs elements' increments are now redundant.
                     for (RuntimeScalar r : remaining) {
-                        if (r.refCountOwned && (r.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                                && r.value instanceof RuntimeBase base && base.refCount > 0) {
+                        r.releaseOwnedScalarReferenceContents();
+                        if ((r.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                                && r.value instanceof RuntimeBase base
+                                && r.ownsCountedReferent(base) && base.refCount > 0) {
                             base.releaseOwner(r, "RuntimeList materialized-copy undo (array-target)");
                             base.releaseActiveOwner(r);
                             base.refCount--;
-                            r.refCountOwned = false;
+                            r.setRefCountOwned(false);
                         }
                     }
                 } else {
@@ -872,12 +885,14 @@ public class RuntimeList extends RuntimeBase {
                 // via addToArray -> setLarge) are now redundant and would leak since
                 // nobody decrements them.
                 for (RuntimeScalar r : remainingArr.elements) {
-                    if (r.refCountOwned && (r.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                            && r.value instanceof RuntimeBase base && base.refCount > 0) {
+                    r.releaseOwnedScalarReferenceContents();
+                    if ((r.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                            && r.value instanceof RuntimeBase base
+                            && r.ownsCountedReferent(base) && base.refCount > 0) {
                         base.releaseOwner(r, "RuntimeList materialized-copy undo (hash-target)");
                         base.releaseActiveOwner(r);
                         base.refCount--;
-                        r.refCountOwned = false;
+                        r.setRefCountOwned(false);
                     }
                 }
                 rhsIndex = rhsSize; // Consume the rest
@@ -947,6 +962,9 @@ public class RuntimeList extends RuntimeBase {
                     if (lhs.isKeysLvalue()) lhs.rejectKeysLvalueListAssignment();
                     RuntimeScalar rhs = i < rhsSize ? rhsElements.get(i) : null;
                     lhs.set(rhs == null ? new RuntimeScalar() : rhs);
+                    if (rhsArray.transientListAssignmentRhs && rhs != null) {
+                        releaseDiscardedMaterializedScalar(rhs);
+                    }
                     if (result != null) result.elements.add(lhs);
                 }
                 return result;
@@ -965,11 +983,29 @@ public class RuntimeList extends RuntimeBase {
                 RuntimeScalar lhs = (RuntimeScalar) elements.get(i);
                 if (lhs.isKeysLvalue()) lhs.rejectKeysLvalueListAssignment();
                 lhs.set(i < rhsValues.length ? rhsValues[i] : new RuntimeScalar());
+                if (rhsArray.transientListAssignmentRhs && i < rhsSize) {
+                    releaseDiscardedMaterializedScalar(rhsElements.get(i));
+                }
                 if (result != null) result.elements.add(lhs);
             }
             return result;
         } finally {
             MortalList.suppressFlush(wasFlushing);
+        }
+    }
+
+    /** Release the ownership held by a materialized RHS cell after scalar assignment copied it. */
+    private static void releaseDiscardedMaterializedScalar(RuntimeScalar scalar) {
+        if (scalar == null) return;
+        scalar.releaseOwnedScalarReferenceContents();
+        if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && scalar.value instanceof RuntimeBase base
+                && scalar.ownsCountedReferent(base)
+                && base.refCount > 0) {
+            base.releaseOwner(scalar, "RuntimeList materialized-copy undo (simple-scalar-target)");
+            base.releaseActiveOwner(scalar);
+            base.refCount--;
+            scalar.setRefCountOwned(false);
         }
     }
 

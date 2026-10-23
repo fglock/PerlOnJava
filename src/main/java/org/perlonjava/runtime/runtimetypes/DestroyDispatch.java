@@ -33,6 +33,15 @@ public class DestroyDispatch {
         return state().currentDestroyTarget;
     }
 
+    static boolean isInGlobalDestructionPhase() {
+        String phase = GlobalVariable.getGlobalVariable(GlobalContext.GLOBAL_PHASE).toString();
+        return "DESTRUCT".equals(phase);
+    }
+
+    static boolean isCheckingGlobalOwnerDelta() {
+        return isInGlobalDestructionPhase() || MortalList.isDrainingTopLevelTemporary();
+    }
+
     static void markDestroyTargetRescued() {
         LifecycleRuntimeState state = state();
         state.destroyTargetRescued = true;
@@ -416,15 +425,12 @@ public class DestroyDispatch {
         // can be distinguished from real resurrection during teardown. There
         // is intentionally no backfill: package roots are themselves being
         // dismantled, while any new owner created by DESTROY is recorded.
-        String globalPhase = GlobalVariable.getGlobalVariable(
-                GlobalContext.GLOBAL_PHASE).toString();
-        boolean checkingGlobalOwnerDelta = "DESTRUCT".equals(globalPhase)
-                || MortalList.isDrainingTopLevelTemporary();
+        boolean checkingGlobalOwnerDelta = isCheckingGlobalOwnerDelta();
         Set<RuntimeScalar> activeOwnersAtStart = null;
         Set<PerlOwnerSlot> ownerSlotsAtStart = null;
         if (checkingGlobalOwnerDelta) {
             referent.activateOwnerTracking();
-            activeOwnersAtStart = referent.activeOwnerSnapshot();
+            activeOwnersAtStart = referent.countedScalarOwnerSnapshot();
             ownerSlotsAtStart = referent.ownerSlotSnapshot();
         }
 
@@ -520,15 +526,15 @@ public class DestroyDispatch {
                     // avoids recursively entering callDestroy while the same
                     // referent is still in its DESTROY frame.
                     for (RuntimeScalar elem : args.elements) {
-                        if (elem != null && elem.refCountOwned
-                                && elem.value instanceof RuntimeBase base
+                        if (elem != null && elem.value instanceof RuntimeBase base
+                                && elem.ownsCountedReferent(base)
                                 && base.refCount > 0) {
                             if (base.refCountTrace) {
                                 base.releaseOwner(elem, "doCallDestroy args balance");
                             }
                             base.releaseActiveOwner(elem);
                             base.refCount--;
-                            elem.refCountOwned = false;
+                            elem.setRefCountOwned(false);
                         }
                     }
                     args.elements.clear();
@@ -698,23 +704,49 @@ public class DestroyDispatch {
      * those aliases are not resurrection. Objects which have not activated
      * owner tracking retain the legacy count-based behavior.
      */
-    private static boolean hasEscapedPerlOwner(RuntimeBase referent,
+    static boolean hasEscapedPerlOwner(RuntimeBase referent,
                                                 boolean checkingGlobalOwnerDelta,
                                                 Set<RuntimeScalar> activeOwnersAtStart,
                                                 Set<PerlOwnerSlot> ownerSlotsAtStart) {
         if (checkingGlobalOwnerDelta) {
-            for (RuntimeScalar owner : referent.activeOwnerSnapshot()) {
+            for (RuntimeScalar owner : referent.countedScalarOwnerSnapshot()) {
                 // DESTROY commonly creates short-lived aliases while it calls
                 // methods on $self. They are new ledger entries, but they do
                 // not resurrect the object if their Perl slots are gone by the
                 // time the destructor returns. During global teardown, package
                 // roots are still available to the reachability walker, so
                 // require a new scalar owner to remain rooted before warning.
-                if (!activeOwnersAtStart.contains(owner)
-                        && ReachabilityWalker.isScalarReachable(owner)) return true;
+                if (owner.isRetiredBorrowedArrayAlias()) continue;
+                if (!activeOwnersAtStart.contains(owner)) {
+                    boolean rooted = ReachabilityWalker.isScalarReachableFromPackageRoots(
+                            owner, referent);
+                    if (rooted) return true;
+                }
             }
             for (PerlOwnerSlot ownerSlot : referent.ownerSlotSnapshot()) {
-                if (!ownerSlotsAtStart.contains(ownerSlot)) return true;
+                if (ownerSlotsAtStart.contains(ownerSlot)) continue;
+                RuntimeBase ownerContainer = ownerSlot.ownerContainer();
+                if (ownerContainer != null
+                        && MortalList.isRootedOwnerContainer(ownerContainer, referent)) {
+                    return true;
+                }
+                // Closure pads have no aggregate container. When capture
+                // provenance identifies the owning CODE, require that CODE to
+                // remain rooted before treating the new pad edge as escape.
+                if (ownerSlot.kind() == PerlOwnerSlot.Kind.CLOSURE_PAD) {
+                    RuntimeCode closureOwner = ownerSlot.closureOwner();
+                    if (closureOwner == null
+                            || ReachabilityWalker.isCodeReachableFromRoots(closureOwner)) {
+                        if (closureOwner == null && ownerSlot.padCell() != null) {
+                            if (ReachabilityWalker.isScalarReachableFromPackageRoots(
+                                    ownerSlot.padCell(), referent)) {
+                                return true;
+                            }
+                        } else {
+                            return true;
+                        }
+                    }
+                }
             }
             return false;
         }

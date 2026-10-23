@@ -151,19 +151,19 @@ public class WeakRefRegistry {
                 && !(base instanceof RuntimeCode)
                 && weakenedLiveLexical;
 
-        if (base.refCount > 0 && ref.refCountOwned) {
+        if (base.refCount > 0 && ref.ownsCountedReferent(base)) {
             // Tracked object with a properly-counted reference:
             // decrement strong count (weak ref doesn't count).
-            // Only decrement if refCountOwned=true, meaning the hash element
-            // or variable's creation incremented the referent's refCount via
+            // Only decrement if the legacy ownership token or explicit scalar
+            // value slot proves that this cell acquired the referent's count via
             // setLargeRefCounted or incrementRefCountForContainerStore.
             // If refCountOwned=false (e.g., element in an untracked anonymous
             // hash like `{ weakref => $target }`), the store never incremented
             // refCount, so weaken must not decrement either — otherwise we
             // get a double-decrement that causes premature destruction.
-            // Clear refCountOwned because weaken's DEC consumes the ownership —
+            // Clear the owner slot and legacy bridge because weaken's DEC consumes the ownership —
             // the weak scalar should not trigger another DEC on scope exit or overwrite.
-            ref.refCountOwned = false;
+            ref.setRefCountOwned(false);
             base.traceRefCount(-1, "WeakRefRegistry.weaken (decrement on weakening)");
             base.releaseOwner(ref, "weaken");
             base.releaseActiveOwner(ref);
@@ -236,7 +236,7 @@ public class WeakRefRegistry {
             // is still alive in the stash. This breaks Sub::Quote/Sub::Defer
             // (which use weaken() for back-references) and cascades to break
             // Moo's accessor inlining (51 test failures). See §15.
-            ref.refCountOwned = false;
+            ref.setRefCountOwned(false);
             if (base.blessId == 0
                     && (base instanceof RuntimeArray || base instanceof RuntimeHash)
                     && ReachabilityWalker.isReachableFromRoots(base)) {
@@ -290,7 +290,7 @@ public class WeakRefRegistry {
     }
 
     private static boolean codeRefHasCountedOwners(RuntimeBase base) {
-        return base.refCount > 0 || base.activeOwnerCount() > 0
+        return base.refCount > 0 || base.countedScalarOwnerCount() > 0
                 || base.hasSemanticCaptureOwner();
     }
 
@@ -318,7 +318,7 @@ public class WeakRefRegistry {
             if (base.refCount >= 0) {
                 base.traceRefCount(+1, "WeakRefRegistry.unweaken (restore strong count)");
                 base.refCount++;  // restore strong count
-                ref.refCountOwned = true;  // restore ownership
+                ref.setRefCountOwned(true);  // restore ownership
                 base.hadCountedReference = true;
                 base.recordOwner(ref, "WeakRefRegistry.unweaken");
                 base.recordActiveOwner(ref);

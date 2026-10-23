@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
@@ -54,6 +55,44 @@ class ReachabilityWalkerCapturedAggregateReleaseTest {
 
             captured.releaseClosureCaptureOwner(secondOwner);
             captured.releaseClosureCaptureOwner(firstOwner);
+        }
+    }
+
+    @Test
+    void capturedAggregateIsReachedThroughItsLiveClosureNotAsAnIndependentRoot() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash capturedValue = new RuntimeHash();
+            RuntimeScalar weakProbe = capturedValue.createReference();
+            WeakRefRegistry.weaken(weakProbe);
+            RuntimeArray capturedPad = new RuntimeArray();
+            capturedPad.elements.add(capturedValue.createReference());
+            capturedPad.elementsOwned = true;
+            capturedPad.reconcileArrayElementOwnerSlots();
+
+            RuntimeCode closure = new RuntimeCode((String) null, java.util.List.of());
+            closure.capturedAggregates = new RuntimeBase[] {capturedPad};
+            PerlOwnerSlot captureOwner = capturedPad.retainClosureCaptureOwner(closure);
+            closure.capturedAggregateOwnerSlots = new PerlOwnerSlot[] {captureOwner};
+
+            assertTrue(runtime.retainsPositiveOwnerSlotReferent(capturedPad));
+            assertTrue(ReachabilityWalker.isReachableFromRoots(capturedValue),
+                    "ordinary cleanup still treats the captured pad as a semantic owner");
+            assertFalse(ReachabilityWalker.isCodeReachableFromRoots(closure),
+                    "the closure must not be rescued through its own captured aggregate pad");
+
+            RuntimeScalar closureOwner = new RuntimeScalar(closure);
+            closureOwner.refCountOwned = true;
+            ScalarRefRegistry.registerRef(closureOwner);
+            MyVarCleanupStack.register(closureOwner);
+            try {
+                assertTrue(ReachabilityWalker.isCodeReachableFromRoots(closure),
+                        "a live Perl closure remains rooted through its lexical owner");
+            } finally {
+                MyVarCleanupStack.unregister(closureOwner);
+            }
+
+            closure.releaseCaptures();
         }
     }
 }

@@ -32,6 +32,7 @@ public class Internals extends PerlModuleBase {
         try {
             internals.registerMethod("SvREADONLY", "svReadonly", "\\[$@%];$");
             internals.registerMethod("SvREFCNT", "svRefcount", "$;$");
+            internals.registerMethod("jperl_b_svrefcnt", "jperlBSvrefcnt", "$");
             // Clear placeholder slots in a restricted hash. PerlOnJava doesn't
             // implement Perl's restricted-hash placeholder machinery (used by
             // Hash::Util / fields), so this is a safe no-op. Modules like
@@ -384,12 +385,13 @@ public class Internals extends PerlModuleBase {
             RuntimeCode code, RuntimeBase previous, RuntimeBase replacement) {
         if (previous == replacement) return;
 
-        if (previous instanceof RuntimeScalar && replacement instanceof RuntimeScalar scalar
+        if (previous instanceof RuntimeScalar previousScalar
+                && replacement instanceof RuntimeScalar scalar
                 && code.capturedScalars != null) {
             for (int i = 0; i < code.capturedScalars.length; i++) {
-                if (code.capturedScalars[i] == previous) {
-                    scalar.retainClosureCapture();
-                    previous.releaseClosureCapture();
+                if (code.capturedScalars[i] == previousScalar) {
+                    scalar.retainClosureCapture(code);
+                    previousScalar.releaseClosureCapture(code);
                     code.capturedScalars[i] = scalar;
                     return;
                 }
@@ -401,7 +403,7 @@ public class Internals extends PerlModuleBase {
             for (int i = 0; i < code.capturedAggregates.length; i++) {
                 if (code.capturedAggregates[i] == previous) {
                     PerlOwnerSlot replacementOwner =
-                            replacement.retainClosureCaptureOwner();
+                            replacement.retainClosureCaptureOwner(code);
                     PerlOwnerSlot[] ownerSlots = code.capturedAggregateOwnerSlots;
                     PerlOwnerSlot previousOwner = ownerSlots != null
                                     && i < ownerSlots.length
@@ -486,6 +488,38 @@ public class Internals extends PerlModuleBase {
             WarnDie.die(new RuntimeScalar("Usage: Internals::SvREFCNT(SCALAR[, REFCOUNT])"), new RuntimeScalar(""));
         }
         RuntimeScalar arg = args.get(0);
+        if (args.size() == 2) {
+            int requested = args.get(1).getInt();
+            RuntimeBase referent = arg.value instanceof RuntimeBase value ? value : null;
+            if (referent == null) {
+                arg.refCount = requested;
+                arg.hadCountedReference = requested > 0;
+            } else {
+                int nativeCaptureOwners = referent.nativeCaptureOwnerCount();
+                boolean compileHintsHash = referent == GlobalVariable.getGlobalHash(
+                        GlobalContext.encodeSpecialVar("H"));
+                int extra = (referent.localBindingExists && !compileHintsHash ? 1 : 0)
+                        + referent.foreachAliasCount;
+                int adjust = compileHintsHash || !referent.localBindingExists ? -1 : 0;
+                int rawCount = requested - nativeCaptureOwners - extra - adjust;
+                referent.refCount = rawCount;
+                referent.hadCountedReference = rawCount > 0;
+            }
+            return new RuntimeScalar(requested).getList();
+        }
+        return svRefcountValue(arg, false);
+    }
+
+    /** Internal B::SV query mode; kept separate from Perl's public setter argument. */
+    public static RuntimeList jperlBSvrefcnt(RuntimeArray args, int ctx) {
+        if (args.size() != 1) {
+            WarnDie.die(new RuntimeScalar("Usage: Internals::jperl_b_svrefcnt(SCALAR)"),
+                    new RuntimeScalar(""));
+        }
+        return svRefcountValue(args.get(0), true);
+    }
+
+    private static RuntimeList svRefcountValue(RuntimeScalar arg, boolean bObjectProbe) {
         RuntimeBase base = arg.value instanceof RuntimeBase value ? value : null;
         if (base == null && arg.firstClassRegexScalar && arg.firstClassRegexReferent != null) {
             base = arg.firstClassRegexReferent.get();
@@ -548,8 +582,7 @@ public class Internals extends PerlModuleBase {
             int extra = (base.localBindingExists && !compileHintsHash ? 1 : 0)
                     + base.foreachAliasCount;
             if (rc == 2
-                    && args.size() > 1
-                    && args.get(1).getBoolean()
+                    && bObjectProbe
                     && DestroyDispatch.isInsideDestroy()
                     && !ReachabilityWalker.hasLiveStrongScalarReferentOtherThan(base, arg)) {
                 // B::SV's private hash slot is one of the two selective
@@ -577,9 +610,8 @@ public class Internals extends PerlModuleBase {
             // selective refCount owner. Do not discount that real owner.
             boolean fieldOwnedMethodResult = rc == 1
                     && !base.localBindingExists
-                    && base.hashSlotOwnerCount > 0
+                    && base.hashSlotOwnerCount() > 0
                     && !ReachabilityWalker.hasLiveStrongScalarReferentOtherThan(base, arg);
-            boolean bObjectProbe = args.size() > 1 && args.get(1).getBoolean();
             int adjust = compileHintsHash
                     ? -1
                     : base.localBindingExists || fieldOwnedMethodResult ? 0 : -1;
@@ -593,7 +625,7 @@ public class Internals extends PerlModuleBase {
             }
             return new RuntimeScalar(rc + extra + adjust).getList();
         }
-        return new RuntimeScalar(1).getList();
+        return new RuntimeScalar(arg.refCount >= 0 ? arg.refCount : 1).getList();
     }
 
     /** Return a reference whose displayed address was observed in this runtime. */
@@ -808,6 +840,7 @@ public class Internals extends PerlModuleBase {
             }
             System.err.println("  total direct holders=" + matchIdx
                     + " total lexicals scanned=" + totalLexIdx);
+            ReachabilityWalker.dumpCaptureOwnersForTrace(base);
             if (matchIdx == 0 && !parentScalars.isEmpty()) {
                 System.err.println("  --- parent-holder candidates ("
                         + parentScalars.size() + ") ---");
