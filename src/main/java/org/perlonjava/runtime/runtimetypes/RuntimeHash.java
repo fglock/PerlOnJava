@@ -108,6 +108,37 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         return map;
     }
 
+    /**
+     * Transfer an already-built plain-hash assignment into this hash while
+     * keeping this instance's owner-aware map and slot identities. Values are
+     * already counted by the temporary assignment hash, so only the
+     * structural HASH_ENTRY slots move here.
+     */
+    void replaceWithTransferredAssignmentHash(RuntimeHash replacement) {
+        if (type != PLAIN_HASH || replacement == this || replacement.type != PLAIN_HASH) {
+            throw new IllegalStateException("transferred assignment requires distinct plain hashes");
+        }
+        Set<String> replacementByteKeys = replacement.byteKeys == null
+                ? null : new HashSet<>(replacement.byteKeys);
+        notePackageRootMutation();
+        MortalList.deferDestroyForContainerClear(elements.values());
+        elements.clear();
+        if (byteKeys != null) byteKeys.clear();
+        hashIterator = null;
+
+        // This map belongs to the destination, so putAll establishes the
+        // correct per-entry callbacks, package-root marks, and owner slots.
+        // The scalar cells already own their referents; do not increment them.
+        elements.putAll(replacement.elements);
+        byteKeys = replacementByteKeys;
+
+        // The cells now belong to this hash. Retire only the temporary hash's
+        // structural slots, leaving the transferred scalar owners intact.
+        replacement.elements.clear();
+        replacement.byteKeys = null;
+        replacement.hashIterator = null;
+    }
+
     void resetElementMapAfterAutovivification() {
         elements = newElementMap();
     }

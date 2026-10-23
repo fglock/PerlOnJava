@@ -872,19 +872,25 @@ public class RuntimeList extends RuntimeBase {
                         ? new ArrayList<>(rhsElements.subList(rhsIndex, rhsSize))
                         : new ArrayList<>();
 
-                RuntimeHash hash = RuntimeHash.createHashForAssignment(remainingArr);
-                runtimeHash.elements = hash.elements;
-                // Add lvalue references to hash elements for list assignment
-                for (Map.Entry<String, RuntimeScalar> entry : hash.elements.entrySet()) {
-                    result.elements.add(new RuntimeScalar(entry.getKey()));
-                    result.elements.add(entry.getValue());  // Add reference to hash value
+                if (runtimeHash.type == RuntimeHash.PLAIN_HASH) {
+                    RuntimeHash hash = RuntimeHash.createHashForAssignment(remainingArr);
+                    runtimeHash.replaceWithTransferredAssignmentHash(hash);
+                    // Add lvalue references to hash elements for list assignment.
+                    for (Map.Entry<String, RuntimeScalar> entry : runtimeHash.elements.entrySet()) {
+                        result.elements.add(new RuntimeScalar(entry.getKey()));
+                        result.elements.add(entry.getValue());
+                    }
+                } else {
+                    // Tied and autovivifying hashes must keep their own map
+                    // implementation and receive stores through setFromList.
+                    RuntimeList remainingList = new RuntimeList();
+                    remainingList.elements.addAll(remainingArr.elements);
+                    RuntimeArray assignedValues = runtimeHash.setFromList(remainingList);
+                    result.elements.addAll(assignedValues.elements);
                 }
                 // Undo materialized copies' refCount increments.
-                // createHashForAssignment creates new RuntimeScalars for hash values
-                // and gives those hash slots their own container-store ownership.
-                // The original rhs elements' refCount increments (from materialization
-                // via addToArray -> setLarge) are now redundant and would leak since
-                // nobody decrements them.
+                // The destination hash has its own copied scalar cells; these
+                // materialized RHS cells are redundant after either transfer.
                 for (RuntimeScalar r : remainingArr.elements) {
                     r.releaseOwnedScalarReferenceContents();
                     if ((r.type & RuntimeScalarType.REFERENCE_BIT) != 0
