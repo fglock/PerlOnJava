@@ -303,6 +303,25 @@ remain separate correctness gates. See issue #1196 for its diagnostic matrix.
   `dev/bench/reports/issue-1863-candidate-inline-isa-check-origin-method.json`,
   `dev/bench/reports/issue-1863-candidate-inline-isa-check-full-portfolio-blead.json`,
   and `dev/bench/reports/issue-1863-method-inline-isa-check.jfr`.
+- For compiler-proven non-escaping stable methods, recycled inline argument
+  arrays now clear their two slots directly when root tracking was suppressed;
+  all other arrays retain the ordinary mutation-aware clear path, and package
+  roots cannot enter this optimization. The regression now performs repeated
+  calls with changing values to exercise argument-array reuse. The 24 checks
+  pass on system Perl, JVM, and interpreter, and the exact committed source
+  passed `nice -n 19 make`. Candidate JAR SHA-256 is
+  `2b527ef3cb3eff880c196f61941aba8091da60e3f6adcdddb7903aa45251649e`.
+  Seven stable, checksum-matched method pairs measured 0.9028x blead (95%
+  interval 0.8892–0.9180), while a paired comparison to the exact origin JAR
+  measured 1.3491x (1.3249–1.3753). The full portfolio measured method 0.9028x
+  (0.8892–0.9180), closure 1.5522x (1.5354–1.5725), Life 1.0642x
+  (1.0462–1.0802), and portfolio 1.1425x (1.1322–1.1531), with seven complete
+  pairs per workload. These runs omitted requested priority because macOS
+  reports a different niceness value for a `nice -n 19` child; the full
+  portfolio therefore remains diagnostic rather than acceptance evidence.
+  The method anchor remains about 9.7% below blead. Raw reports are
+  `dev/bench/reports/issue-1863-cc2d6155-blead-full-portfolio.json` and
+  `dev/bench/reports/issue-1863-cc2d6155-vs-origin-method.json`.
 - The closure JFR profile found that the guarded captured-integer addition path
   performs repeated name lookups in `closedOverVariables`; `HashMap.getNode`,
   `LinkedHashMap.get`, and `RuntimeCode.tryDirectLeafIntegerAddition` were
