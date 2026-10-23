@@ -147,6 +147,19 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   cleanup paths. Java regressions cover recursive and tail-call release;
   full `nice -n 19 make` passes in 33m11s on `5578d44bd`; hosted validation is
   pending.
+- Lexical scope exit now recognizes an active scalar-value owner slot after
+  `refCountOwned` retires. The focused Java regression passes as part of full
+  `nice -n 19 make` (23m57s); documentation links pass. A follow-up inspection
+  found the same retired-flag gap in explicit `undef`, including named CODE
+  slots. That path now checks the scalar slot before clearing the cell, with a
+  Java regression; full `nice -n 19 make` passes in 15m40s. The next bundled
+  tranche extends slot authority through scalar overwrite, container-copy
+  accounting, scalar-reference contents, closure-capture acquisition, and
+  deferred captured cleanup. Java regressions cover these boundaries. Its
+  full validation is pending. This branch began at `origin/master` commit
+  `5a6cf5ed6`; live `origin/master` has since advanced to `aeda28344`, including
+  the Catalyst upload cleanup for #1795. Reconcile that change before the next
+  hosted validation, preserving the broader local lifetime regression.
 
 The earlier candidate was based on `origin/master` (`ede542b29`) and passed the full local make in 22m55s, Ubuntu `make ci`, the Ubuntu Perl thread compatibility gate, SBOM generation, Windows `make ci` in about 52 minutes, and the focused Windows thread gate. Windows CI exposed two existing unit tests with POSIX `/tmp` paths; `make ci` now creates the runner's root-relative `tmp` directory before building. On blead Perl 5.45.4, the controller, WebSocket, Catalyst tempfile, owner-release, and writable `Internals::SvREFCNT` regressions pass. The controller regression passes 5/5 on JVM and interpreter; the WebSocket regression passes 6/6 on both; the Catalyst tempfile regression passes 24/24 on both; `refcount/issue_1794_controller_owner_release.t` passes 3/3 on both; and `internals_svrefcnt_write.t` passes 6/6 on both after failing all six assertions on its unfixed parent. The alias-count follow-up rebases onto `origin/master` (`18323a1ac`). Its focused make passes in 50s and its full local make passes in 31m30s on code commit `15e362ddb`.
 

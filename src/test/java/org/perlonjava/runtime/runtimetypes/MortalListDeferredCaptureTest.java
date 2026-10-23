@@ -53,6 +53,33 @@ class MortalListDeferredCaptureTest {
     }
 
     @Test
+    void unreachableBlessedCaptureUsesExplicitScalarSlotAfterLegacyFlagRetires() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            String className = "DeferredCaptureBoundary::ExplicitSlot";
+            RuntimeHash referent = new RuntimeHash();
+            referent.blessId = NameNormalizer.getBlessId(className);
+            referent.refCount = 1;
+            installDestroy(className);
+
+            RuntimeScalar pad = referenceTo(referent);
+            pad.setRefCountOwned(true);
+            pad.refCountOwned = false;
+            pad.retainClosureCapture();
+
+            MortalList.flush();
+
+            MortalList.pushMark();
+            RuntimeScalar.scopeExitCleanup(pad);
+            MortalList.popAndFlush();
+
+            assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED,
+                    referent.perlLifecycleState());
+            GlobalVariable.removeGlobalCodeRefForStashDelete(className + "::DESTROY");
+        }
+    }
+
+    @Test
     void unreachableBlessedCaptureWithWeakObserverReleasesAtItsScopeBoundary() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
@@ -80,6 +107,26 @@ class MortalListDeferredCaptureTest {
             assertEquals(RuntimeScalarType.UNDEF, weak.type,
                     "the weak observer clears before the next Perl operation");
             GlobalVariable.removeGlobalCodeRefForStashDelete(className + "::DESTROY");
+        }
+    }
+
+    @Test
+    void closureCaptureDoesNotDoubleCountExplicitScalarOwnerAfterLegacyFlagRetires() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash referent = new RuntimeHash();
+            referent.refCount = 1;
+            RuntimeScalar pad = referenceTo(referent);
+            pad.setRefCountOwned(true);
+            pad.refCountOwned = false;
+
+            pad.retainClosureCapture();
+
+            assertEquals(1, referent.refCount,
+                    "the explicit scalar slot already accounts for the referent");
+            assertEquals(0, pad.captureRefCountOwned(),
+                    "capture metadata must not add a second legacy bridge owner");
+            pad.releaseClosureCapture();
         }
     }
 

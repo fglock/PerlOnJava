@@ -41,6 +41,73 @@ class MortalListScalarValueOwnerRestoreTest {
     }
 
     @Test
+    void scopeExitReleasesExplicitScalarOwnerAfterLegacyFlagRetires() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            RuntimeScalar owner = new RuntimeScalar();
+            owner.set(referent.createAnonymousReference());
+            MyVarCleanupStack.register(owner);
+            int originalRefCount = referent.refCount;
+            owner.refCountOwned = false;
+
+            try {
+                RuntimeScalar.scopeExitCleanup(owner);
+                assertFalse(owner.hasScalarValueOwnerSlotFor(referent),
+                        "scope exit retires the explicit scalar slot");
+                MyVarCleanupStack.unregister(owner);
+                MortalList.flush();
+                assertTrue(referent.refCount < originalRefCount,
+                        "scope exit queues the explicit owner's decrement");
+            } finally {
+                MyVarCleanupStack.unregister(owner);
+                MortalList.flush();
+            }
+        }
+    }
+
+    @Test
+    void explicitUndefReleasesScalarOwnerAfterLegacyFlagRetires() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            RuntimeScalar owner = new RuntimeScalar();
+            owner.set(referent.createAnonymousReference());
+            int originalRefCount = referent.refCount;
+            owner.refCountOwned = false;
+
+            owner.undefine();
+
+            assertFalse(owner.hasScalarValueOwnerSlotFor(referent),
+                    "explicit undef retires the scalar owner slot");
+            assertTrue(referent.refCount < originalRefCount,
+                    "explicit undef releases the slot's counted owner");
+        }
+    }
+
+    @Test
+    void scalarOverwriteReleasesExplicitOwnerAfterLegacyFlagRetires() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray previous = new RuntimeArray();
+            RuntimeArray replacement = new RuntimeArray();
+            RuntimeScalar owner = new RuntimeScalar();
+            owner.set(previous.createAnonymousReference());
+            int originalRefCount = previous.refCount;
+            owner.refCountOwned = false;
+
+            owner.set(replacement.createAnonymousReference());
+
+            assertFalse(owner.hasScalarValueOwnerSlotFor(previous),
+                    "overwrite retires the previous scalar owner slot");
+            assertTrue(previous.refCount < originalRefCount,
+                    "overwrite releases the previous slot's counted owner");
+            assertTrue(owner.hasScalarValueOwnerSlotFor(replacement),
+                    "overwrite installs the replacement scalar owner slot");
+        }
+    }
+
+    @Test
     void capturedReleaseUsesExplicitScalarOwnerAfterLegacyFlagRetires() {
         assertExplicitScalarOwnerRelease(true);
     }

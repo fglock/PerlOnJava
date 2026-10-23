@@ -274,6 +274,48 @@ class RuntimeArrayElementOwnershipTest {
         assertRemovedElementOwnerIsReleased(false);
     }
 
+    @Test
+    void containerStoreDoesNotDoubleCountExplicitScalarOwnerAfterLegacyFlagRetires() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            referent.refCount = 1;
+            RuntimeScalar cell = new RuntimeScalar();
+            cell.type = RuntimeScalarType.ARRAYREFERENCE;
+            cell.value = referent;
+            cell.setRefCountOwned(true);
+            cell.refCountOwned = false;
+
+            RuntimeScalar.incrementRefCountForContainerStore(cell);
+
+            assertEquals(1, referent.refCount,
+                    "container materialization recognizes the active scalar slot");
+            assertEquals(1, referent.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_VALUE));
+        }
+    }
+
+    @Test
+    void containerStoreStillCountsASeparateCellWhenSourceOwnerIsExplicit() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            referent.refCount = 1;
+            RuntimeScalar source = new RuntimeScalar();
+            source.type = RuntimeScalarType.ARRAYREFERENCE;
+            source.value = referent;
+            source.setRefCountOwned(true);
+            source.refCountOwned = false;
+            RuntimeScalar storedCopy = new RuntimeScalar(source);
+
+            RuntimeScalar.incrementRefCountForContainerStore(storedCopy);
+
+            assertEquals(2, referent.refCount,
+                    "a separate aggregate cell acquires its own owner");
+            assertEquals(2, referent.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_VALUE),
+                    "the source and copied cell have distinct scalar owner slots");
+        }
+    }
+
     private static void assertRemovedElementOwnerIsReleased(boolean pop) {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {

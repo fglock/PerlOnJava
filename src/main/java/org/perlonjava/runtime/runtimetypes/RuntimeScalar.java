@@ -607,7 +607,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         boolean firstCapture = captureCount++ == 0;
         if (firstCapture && type == RuntimeScalarType.CODE) {
             retainClosureCaptureReferent();
-        } else if (firstCapture && !refCountOwned) {
+        } else if (firstCapture && !ownsCurrentCountedReferent()) {
             // A captured lexical is a Perl owner even when this scalar is a
             // borrowed copy of the pad slot and therefore has no ordinary
             // refCountOwned token of its own. Keep the referent alive for the
@@ -636,7 +636,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // An owning lexical slot already protects its referent. Borrowed
         // argument aliases do not, and the source runtime's other owners are
         // not a lifetime guarantee in the cloned runtime.
-        if (!refCountOwned) retainClosureCaptureReferent();
+        if (!ownsCurrentCountedReferent()) retainClosureCaptureReferent();
         recordDestroyableClosureOwner(closureOwner);
     }
 
@@ -872,6 +872,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     synchronized boolean ownsCountedReferent(RuntimeBase referent) {
         return value == referent
                 && (refCountOwned || hasScalarValueOwnerSlotFor(referent));
+    }
+
+    private boolean ownsCurrentCountedReferent() {
+        return value instanceof RuntimeBase base && ownsCountedReferent(base);
     }
 
     /**
@@ -2352,9 +2356,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * (to avoid over-counting for temporary copies). This method should be called
      * after storing a tracked reference in a container, if MortalList is active.
      * <p>
-     * Skips elements that already have {@code refCountOwned == true}, meaning they
-     * were created via {@code set()} / {@code setLarge()} rather than the copy
-     * constructor, and their refCount was already incremented at creation time.
+     * Skips elements that already have an explicit scalar owner slot or legacy
+     * owner token, meaning their refCount was already incremented at creation.
      */
     public static void incrementRefCountForContainerStore(RuntimeScalar scalar) {
         if (scalar == null) {
@@ -2370,9 +2373,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && !scalar.hasScalarReferenceContentsOwner()) {
             scalar.retainScalarReferenceContents(scalar);
         }
-        if (scalar.refCountOwned
-                || (scalar.type & REFERENCE_BIT) == 0
-                || !(scalar.value instanceof RuntimeBase base)) {
+        if ((scalar.type & REFERENCE_BIT) == 0
+                || !(scalar.value instanceof RuntimeBase base)
+                || scalar.ownsCountedReferent(base)) {
             return;
         }
         // Destroyed / weaken sentinel states must not be reactivated here.
@@ -2442,9 +2445,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && value.type == REFERENCE
                 && value.value instanceof RuntimeScalar scalarReferent
                 && !WeakRefRegistry.isweak(scalarReferent)
-                && !scalarReferent.refCountOwned
                 && (scalarReferent.type & REFERENCE_BIT) != 0
                 && scalarReferent.value instanceof RuntimeBase inner
+                && !scalarReferent.ownsCountedReferent(inner)
                 && inner.refCount >= 0;
     }
 
@@ -2878,7 +2881,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && this.value instanceof RuntimeBase oldReferent
                 && (oldReferent instanceof RuntimeHash || oldReferent instanceof RuntimeArray);
         if (!scalarRefContentTrackingNeeded
-                && !this.refCountOwned && this.captureCount == 0 && this.captureRefCountOwned() == 0
+                && !this.ownsCurrentCountedReferent()
+                && this.captureCount == 0 && this.captureRefCountOwned() == 0
                 && !WeakRefRegistry.isweak(this)
                 && !droppingAggregateWithWeakRefs
                 && this.type != GLOBREFERENCE && value.type != GLOBREFERENCE) {
@@ -3019,6 +3023,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // scalarReferenceContents.  Assigning through $$ref transfers that
         // ownership to the new contents, so the old referent must be released
         // even though this scalar did not itself record a direct store owner.
+        boolean oldOwnedByScalarValue = oldBase != null
+                && ownsCountedReferent(oldBase);
         boolean oldOwnedByScalarReference = oldBase != null
                 && referencedByScalarReference
                 && scalarReferenceContentsOwnersSnapshot().isEmpty()
@@ -3222,7 +3228,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Decrement old value's refCount AFTER assignment (skip for weak refs
         // and for scalars that didn't own a refCount increment).
         if (oldBase != null && !thisWasWeak
-                && (this.refCountOwned || oldOwnedByScalarReference)) {
+                && (oldOwnedByScalarValue || oldOwnedByScalarReference)) {
             if (oldBase.refCount > 0) {
                 oldBase.traceRefCount(-1, "RuntimeScalar.setLargeRefCounted (decrement on overwrite)");
                 oldBase.releaseOwner(this, "setLargeRefCounted overwrite");
@@ -5241,7 +5247,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (type == RuntimeScalarType.CODE && value instanceof RuntimeCode code && globalCodeRefFqn != null) {
             boolean releasedCode = false;
             releaseAllClosureCaptureReferents(code);
-            if (this.refCountOwned && code.refCount > 0) {
+            if (this.ownsCountedReferent(code) && code.refCount > 0) {
                 this.setRefCountOwned(false);
                 code.releaseActiveOwner(this);
                 if (--code.refCount == 0) {
@@ -5287,6 +5293,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (oldBase != null && this.captureRefCountOwned() > 0) {
             releaseAllClosureCaptureReferents(oldBase);
         }
+        boolean oldBaseOwnedByScalar = oldBase != null && ownsCountedReferent(oldBase);
 
         // Close IO handles when dropping a glob reference.
         // This mimics Perl's internal sv_clear behavior where IO handles are closed
@@ -5313,7 +5320,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // but safe since unblessed objects have no DESTROY.
                 oldBase.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(oldBase);
-            } else if (this.refCountOwned && oldBase.refCount > 0) {
+            } else if (oldBaseOwnedByScalar && oldBase.refCount > 0) {
                 this.setRefCountOwned(false);
                 oldBase.releaseActiveOwner(this);
                 if (--oldBase.refCount == 0) {
@@ -5349,7 +5356,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     }
                 }
             } else if (oldBase.blessId != 0 && WeakRefRegistry.weakRefsExist()) {
-                // Phase D: no owned-count decrement (refCountOwned was false, or
+                // Phase D: no owned-count decrement (no scalar owner slot existed, or
                 // refCount was already 0 from prior selective drift). The
                 // object is blessed — if its class has DESTROY, let the walker
                 // decide whether this undef just released the last live lexical
@@ -5500,10 +5507,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         // Fast path: skip if no special state (most common case for integer/string vars).
-        // When all three conditions are true, the entire method body is a no-op:
-        // - refCountOwned=false → deferDecrementIfTracked returns immediately
+        // When all conditions are true, the entire method body is a no-op:
+        // - no scalar-value owner exists → deferDecrementIfTracked returns immediately
         // - captureCount=0 → capture handling branch not taken
-        if (!scalar.refCountOwned && scalar.captureCount == 0 && !scalar.ioOwner
+        boolean ownsCurrentReferent = scalar.refCountOwned
+                || ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    && scalar.value instanceof RuntimeBase base
+                    && scalar.ownsCountedReferent(base));
+        if (!ownsCurrentReferent && scalar.captureCount == 0 && !scalar.ioOwner
                 && !scalar.hasScalarReferenceContentsOwner()
                 && scalar.type != RuntimeScalarType.TIED_SCALAR) {
             // Special case: CODE refs with unreleased captures that were never
@@ -5590,7 +5601,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // At inner scope exit we can't decrement (closures in outer scopes
                 // may legitimately keep the object alive), but after the main
                 // script finishes ALL scopes have exited, so it's safe.
-                if (scalar.refCountOwned
+                if (scalar.ownsCurrentCountedReferent()
                         && ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                             || scalar.type == RuntimeScalarType.GLOB)
                         && scalar.value instanceof RuntimeBase rb

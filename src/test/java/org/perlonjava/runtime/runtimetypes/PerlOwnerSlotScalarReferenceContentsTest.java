@@ -78,6 +78,30 @@ class PerlOwnerSlotScalarReferenceContentsTest {
     }
 
     @Test
+    void scalarReferenceCopyDoesNotDoubleCountExplicitlyOwnedCellContents() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash referent = new RuntimeHash();
+            referent.refCount = 3;
+            RuntimeScalar scalarReferent = new RuntimeScalar();
+            scalarReferent.type = RuntimeScalarType.REFERENCE;
+            scalarReferent.value = referent;
+            scalarReferent.setRefCountOwned(true);
+            scalarReferent.refCountOwned = false;
+
+            RuntimeScalar outerReference = new RuntimeScalar();
+            outerReference.type = RuntimeScalarType.REFERENCE;
+            outerReference.value = scalarReferent;
+            RuntimeScalar.incrementRefCountForContainerStore(outerReference);
+
+            assertEquals(3, referent.refCount,
+                    "the copied scalar reference does not duplicate its cell's owner");
+            assertEquals(0, referent.ownerSlotCount(
+                    PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS));
+        }
+    }
+
+    @Test
     void aliasesToOneCellShareOneReferentCountAcrossRetargetAndRelease() {
         RuntimeHash original = new RuntimeHash();
         RuntimeHash replacement = new RuntimeHash();
