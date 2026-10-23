@@ -151,17 +151,17 @@ public class WeakRefRegistry {
                 && !(base instanceof RuntimeCode)
                 && weakenedLiveLexical;
 
-        if (base.refCount > 0 && ref.refCountOwned) {
+        if (base.refCount > 0 && ref.ownsCountedReferent(base)) {
             // Tracked object with a properly-counted reference:
             // decrement strong count (weak ref doesn't count).
-            // Only decrement if refCountOwned=true, meaning the hash element
-            // or variable's creation incremented the referent's refCount via
+            // Only decrement if the legacy ownership token or explicit scalar
+            // value slot proves that this cell acquired the referent's count via
             // setLargeRefCounted or incrementRefCountForContainerStore.
             // If refCountOwned=false (e.g., element in an untracked anonymous
             // hash like `{ weakref => $target }`), the store never incremented
             // refCount, so weaken must not decrement either — otherwise we
             // get a double-decrement that causes premature destruction.
-            // Clear refCountOwned because weaken's DEC consumes the ownership —
+            // Clear the owner slot and legacy bridge because weaken's DEC consumes the ownership —
             // the weak scalar should not trigger another DEC on scope exit or overwrite.
             ref.setRefCountOwned(false);
             base.traceRefCount(-1, "WeakRefRegistry.weaken (decrement on weakening)");

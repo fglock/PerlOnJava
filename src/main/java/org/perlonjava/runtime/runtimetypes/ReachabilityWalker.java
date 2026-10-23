@@ -3755,7 +3755,7 @@ public class ReachabilityWalker {
                 if (slot.kind() != PerlOwnerSlot.Kind.SCALAR_VALUE
                         || slot.referent() != referent) continue;
                 RuntimeScalar owner = slot.ownerCell();
-                if (owner == null || !owner.refCountOwned || owner.scopeExited
+                if (owner == null || !owner.ownsCountedReferent(referent) || owner.scopeExited
                         || !MyVarCleanupStack.isLive(owner) || WeakRefRegistry.isweak(owner)
                         || (owner.type & RuntimeScalarType.REFERENCE_BIT) == 0
                         || owner.value != referent) continue;
@@ -3763,10 +3763,10 @@ public class ReachabilityWalker {
             }
         }
         for (RuntimeScalar owner : ScalarRefRegistry.snapshot()) {
-            if (owner == null || !owner.refCountOwned || owner.scopeExited
+            if (owner == null || !(owner.value instanceof RuntimeBase target)
+                    || !owner.ownsCountedReferent(target) || owner.scopeExited
                     || !MyVarCleanupStack.isLive(owner) || WeakRefRegistry.isweak(owner)
-                    || (owner.type & RuntimeScalarType.REFERENCE_BIT) == 0
-                    || !(owner.value instanceof RuntimeBase target)) {
+                    || (owner.type & RuntimeScalarType.REFERENCE_BIT) == 0) {
                 continue;
             }
             if (pending.contains(target)) directlyOwned.add(target);
@@ -3813,7 +3813,9 @@ public class ReachabilityWalker {
         Set<RuntimeBase> countedStrongOwners =
                 Collections.newSetFromMap(new IdentityHashMap<>());
         for (RuntimeScalar owner : ScalarRefRegistry.snapshot()) {
-            if (owner == null || !owner.refCountOwned || WeakRefRegistry.isweak(owner)) continue;
+            if (owner == null || !(owner.value instanceof RuntimeBase referent)
+                    || !owner.ownsCountedReferent(referent)
+                    || WeakRefRegistry.isweak(owner)) continue;
             // Hash/array slots in a discarded aggregate are internal owners of
             // that graph, not independent roots. Keep their referents only when
             // the containing aggregate is still reachable or was not part of
@@ -3823,7 +3825,7 @@ public class ReachabilityWalker {
                     && !live.contains(owner.containerOwner)) {
                 continue;
             }
-            if (owner.value instanceof RuntimeBase referent && referents.contains(referent)) {
+            if (referents.contains(referent)) {
                 countedStrongOwners.add(referent);
             }
         }
