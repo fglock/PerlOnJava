@@ -143,15 +143,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /** Prepare the call-local cell cache and validate the guarded fast path. */
     public static boolean prepareStableHashMutationMethodArguments(
-            RuntimeArray args, String firstHashKey, String secondHashKey) {
+            RuntimeArray args, String firstHashKey, String secondHashKey, PerlRuntime runtime) {
         if (args != null) args.clearVerifiedMethodHashFields();
-        if (!canBorrowReadOnlyArguments(args, 0, 1, firstHashKey,
-                secondHashKey, true)) {
+        if (args == null || args.getClass() != RuntimeArray.class
+                || args.type != RuntimeArray.PLAIN_ARRAY || args.size() < 2
+                || firstHashKey == null) {
             return false;
         }
         RuntimeScalar hashArgument = args.get(0);
         RuntimeScalar integerArgument = args.get(1);
-        RuntimeHash hash = (RuntimeHash) hashArgument.value;
+        if (hashArgument == null || hashArgument.type != HASHREFERENCE
+                || !(hashArgument.value instanceof RuntimeHash hash)
+                || hash.getClass() != RuntimeHash.class
+                || hash.type != RuntimeHash.PLAIN_HASH
+                || hash.threadShared || hash.isEnvironmentHash
+                || integerArgument == null || integerArgument.type != INTEGER
+                || runtime == null || !runtime.runtimeCodeState()
+                        .stableHashMethodHashDereferenceAllowed(hashArgument)) {
+            return false;
+        }
         RuntimeScalar firstCell = hash.elements.get(firstHashKey);
         RuntimeScalar secondCell = secondHashKey == null
                 ? null : hash.elements.get(secondHashKey);
@@ -5788,7 +5798,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         if (code.subroutine == null && code.methodHandle == null) return false;
         return prepareStableHashMutationMethodArguments(
-                args, keys[0], keys.length == 2 ? keys[1] : null);
+                args, keys[0], keys.length == 2 ? keys[1] : null, runtime);
     }
 
     private static RuntimeList applyStableHashMutationMethodBody(

@@ -287,6 +287,22 @@ remain separate correctness gates. See issue #1196 for its diagnostic matrix.
   `dev/bench/reports/issue-1863-candidate-arg-root-track-origin-method.json`,
   `dev/bench/reports/issue-1863-candidate-arg-root-track-full-portfolio-blead.json`,
   and `dev/bench/reports/issue-1863-method-args-root-tracking.jfr`.
+- Consolidated stable-method argument preparation so it performs the existing
+  receiver, overload, hash-cell, and integer checks directly with the current
+  runtime, then skipped no-op `@ISA` validation calls for inline argument-list
+  mutations. `nice -n 19 make` passed. The post-change profile has no
+  `RuntimeArray.validateIsaMutation` leaf samples. This JAR
+  (`f46459af66fa1400314cff03f46790f0e07900ece0315dc044bbddd0fe2c8bc7`) measured
+  0.881x blead (95% interval 0.872–0.890) in a standalone method run and 1.343x
+  the exact origin JAR (1.275–1.417) in a separate seven-pair comparison. A
+  full portfolio run measured method 0.866x (0.836–0.891), closure 1.464x
+  (1.311–1.561), Life 1.103x (1.005–1.187), and portfolio 1.133x
+  (1.085–1.171). One closure pair was unstable, leaving six complete portfolio
+  pairs; host load rose sharply during the run. Priority was unverifiable, so
+  these are diagnostics only. Raw files are
+  `dev/bench/reports/issue-1863-candidate-inline-isa-check-origin-method.json`,
+  `dev/bench/reports/issue-1863-candidate-inline-isa-check-full-portfolio-blead.json`,
+  and `dev/bench/reports/issue-1863-method-inline-isa-check.jfr`.
 - The closure JFR profile found that the guarded captured-integer addition path
   performs repeated name lookups in `closedOverVariables`; `HashMap.getNode`,
   `LinkedHashMap.get`, and `RuntimeCode.tryDirectLeafIntegerAddition` were

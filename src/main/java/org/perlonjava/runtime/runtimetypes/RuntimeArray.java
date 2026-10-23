@@ -553,7 +553,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 second = element;
                 result = previous;
             }
-            owner.validateIsaMutation();
+            if (owner.isaArray) owner.validateIsaMutation();
             return result;
         }
 
@@ -583,7 +583,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 second = null;
             }
             modCount++;
-            owner.validateIsaMutation();
+            if (owner.isaArray) owner.validateIsaMutation();
         }
 
         @Override
@@ -603,7 +603,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 }
                 return true;
             }
-            owner.noteIsaMutation();
+            if (owner.isaArray) owner.noteIsaMutation();
             owner.notePackageRootMutationIf(owner.hasRootEdge(source));
             for (RuntimeScalar value : source) {
                 if (value != null) value.markContainerOwner(owner);
@@ -612,7 +612,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             int insertionIndex = index;
             for (RuntimeScalar value : source) addRaw(insertionIndex++, value);
             modCount++;
-            owner.validateIsaMutation();
+            if (owner.isaArray) owner.validateIsaMutation();
             return true;
         }
 
@@ -654,16 +654,16 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 inlineSize--;
             }
             modCount++;
-            owner.noteIsaMutation();
+            if (owner.isaArray) owner.noteIsaMutation();
             owner.notePackageRootMutation(previous, null);
-            owner.validateIsaMutation();
+            if (owner.isaArray) owner.validateIsaMutation();
             return previous;
         }
 
         @Override
         public void clear() {
             if (isEmpty()) return;
-            owner.noteIsaMutation();
+            if (owner.isaArray) owner.noteIsaMutation();
             if (!owner.suppressMethodArgumentRootTracking) {
                 owner.notePackageRootClear(this);
             }
@@ -672,7 +672,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             second = null;
             inlineSize = 0;
             modCount++;
-            owner.validateIsaMutation();
+            if (owner.isaArray) owner.validateIsaMutation();
         }
 
         private void prepareStoredValue(RuntimeScalar previous, RuntimeScalar element) {
