@@ -22,6 +22,23 @@ public class MortalList {
     private static final int MAX_UNBLESSED_AGGREGATE_DRAIN_ROOTS = 50_000;
     private static final AtomicInteger runtimesWithBoundaryWork = new AtomicInteger();
 
+    static final class DeferredArgumentOwnerRelease {
+        final RuntimeBase base;
+        final RuntimeBase.PendingOwnerRelease ownerRelease;
+        final String transientOwnerKind;
+        final java.lang.ref.WeakReference<RuntimeScalar> ownerScalar;
+
+        DeferredArgumentOwnerRelease(RuntimeBase base,
+                                     RuntimeBase.PendingOwnerRelease ownerRelease,
+                                     String transientOwnerKind,
+                                     RuntimeScalar ownerScalar) {
+            this.base = base;
+            this.ownerRelease = ownerRelease;
+            this.transientOwnerKind = transientOwnerKind;
+            this.ownerScalar = new java.lang.ref.WeakReference<>(ownerScalar);
+        }
+    }
+
     static final class ReachabilityQueryMeasurement implements AutoCloseable {
         private final LifecycleRuntimeState state;
         private final ReachabilityQueryStats stats;
@@ -1220,8 +1237,19 @@ public class MortalList {
                     RuntimeBase.PendingOwnerRelease ownerRelease =
                             state.pendingOwnerReleases.get(pendingIdx);
                     String transientOwnerKind = state.pendingTransientOwnerKinds.get(pendingIdx);
-                    processDeferredBase(state.pending.get(pendingIdx++), false, ownerRelease,
-                            transientOwnerKind);
+                    RuntimeBase base = state.pending.get(pendingIdx);
+                    java.lang.ref.WeakReference<RuntimeScalar> ownerRef =
+                            state.pendingOwnerScalars.get(pendingIdx++);
+                    RuntimeScalar ownerScalar = ownerRef == null ? null : ownerRef.get();
+                    if (base.blessId != 0
+                            && WeakRefRegistry.hasWeakRefsTo(base)
+                            && RuntimeCode.hasActiveArgumentOwner(ownerScalar)) {
+                        state.deferredArgumentOwnerReleases.add(
+                                new DeferredArgumentOwnerRelease(base, ownerRelease,
+                                        transientOwnerKind, ownerScalar));
+                    } else {
+                        processDeferredBase(base, false, ownerRelease, transientOwnerKind);
+                    }
                 }
                 while (ioReleaseIdx < state.pendingIoReleases.size()) {
                     RuntimeScalar.releaseIoOwner(state.pendingIoReleases.get(ioReleaseIdx++));
@@ -1230,6 +1258,24 @@ public class MortalList {
         } finally {
             state.reachabilityDrainDepth--;
             state.deferCaptureReachabilityToBoundarySweep = previousCaptureSweepDeferral;
+        }
+        drainDeferredArgumentOwnerReleases();
+    }
+
+    static void drainDeferredArgumentOwnerReleases() {
+        LifecycleRuntimeState state = state();
+        if (state.deferredArgumentOwnerReleases.isEmpty()) return;
+        ArrayList<DeferredArgumentOwnerRelease> pending =
+                new ArrayList<>(state.deferredArgumentOwnerReleases);
+        state.deferredArgumentOwnerReleases.clear();
+        for (DeferredArgumentOwnerRelease deferred : pending) {
+            RuntimeScalar ownerScalar = deferred.ownerScalar.get();
+            if (RuntimeCode.hasActiveArgumentOwner(ownerScalar)) {
+                state.deferredArgumentOwnerReleases.add(deferred);
+            } else {
+                processDeferredBase(deferred.base, false, deferred.ownerRelease,
+                        deferred.transientOwnerKind);
+            }
         }
     }
 

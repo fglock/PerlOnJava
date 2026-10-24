@@ -6,8 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Keep nested Rose::HTML::Objects form results alive with counted argument owners so weak parent links and qualified field names survive argument evaluation (#1851).
+- Warn for undefined right operands of `.=` while keeping an undefined left operand quiet (#1382).
 - Fix bundled IO, nested launcher, locale, and core user/group database module compatibility.
-
 - Snapshot mutable array entries while marking package roots and during reachability walks so concurrent thread teardown cannot fail with `ConcurrentModificationException`.
 
 - Enforce restricted-hash key access and implement `Hash::Util` key, value, and hash locking (#1502, #1172).

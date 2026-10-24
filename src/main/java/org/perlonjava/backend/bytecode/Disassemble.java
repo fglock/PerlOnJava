@@ -1263,6 +1263,20 @@ public class Disassemble {
                         sb.append("]\n");
                         break;
                     }
+                    case Opcodes.NEW_CALL_ARGUMENTS: {
+                        rd = interpretedCode.bytecode[pc++];
+                        int argumentCapacity = interpretedCode.bytecode[pc++];
+                        sb.append("NEW_CALL_ARGUMENTS r").append(rd)
+                                .append(" capacity=").append(argumentCapacity).append("\n");
+                        break;
+                    }
+                    case Opcodes.ADD_CALL_ARGUMENT: {
+                        int stagedArgsReg = interpretedCode.bytecode[pc++];
+                        int stagedValueReg = interpretedCode.bytecode[pc++];
+                        sb.append("ADD_CALL_ARGUMENT r").append(stagedArgsReg)
+                                .append(" <- r").append(stagedValueReg).append("\n");
+                        break;
+                    }
                     case Opcodes.CALL_SUB:
                     case Opcodes.CALL_SUB_SHARE_ARGS:
                         rd = interpretedCode.bytecode[pc++];
