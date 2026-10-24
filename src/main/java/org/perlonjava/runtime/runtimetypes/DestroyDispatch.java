@@ -529,12 +529,7 @@ public class DestroyDispatch {
                         if (elem != null && elem.value instanceof RuntimeBase base
                                 && elem.ownsCountedReferent(base)
                                 && base.refCount > 0) {
-                            if (base.refCountTrace) {
-                                base.releaseOwner(elem, "doCallDestroy args balance");
-                            }
-                            base.releaseActiveOwner(elem);
-                            base.refCount--;
-                            elem.setRefCountOwned(false);
+                            balanceDestroyArgumentOwner(elem, base);
                         }
                     }
                     args.elements.clear();
@@ -695,6 +690,16 @@ public class DestroyDispatch {
                 ReachabilityWalker.sweepWeakRefs(false, false);
             }
         }
+    }
+
+    /** Balance the temporary scalar owner installed by {@code args.push(self)}. */
+    static void balanceDestroyArgumentOwner(RuntimeScalar scalar, RuntimeBase referent) {
+        String releaseSite = "doCallDestroy args balance";
+        if (scalar.releaseScalarValueOwnerCount(referent, releaseSite)) return;
+        if (referent.refCountTrace) referent.releaseOwner(scalar, releaseSite);
+        referent.releaseActiveOwner(scalar);
+        referent.refCount--;
+        scalar.setRefCountOwned(false);
     }
 
     /**

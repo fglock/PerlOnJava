@@ -7,10 +7,31 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
 class DestroyDispatchScalarSlotRootTest {
+    @Test
+    void destroyArgumentBalanceReleasesDirectScalarSlotAfterLegacyFlagRetires() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            referent.activateOwnerTracking();
+            RuntimeScalar argument = new RuntimeScalar();
+            argument.set(referent.createReference());
+            PerlOwnerSlot slot = argument.scalarValueOwnerSlot();
+            argument.refCountOwned = false;
+
+            DestroyDispatch.balanceDestroyArgumentOwner(argument, referent);
+
+            assertEquals(0, referent.refCount);
+            assertEquals(0, referent.activeOwnerCount());
+            assertEquals(0, referent.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_VALUE));
+            assertFalse(slot.isActive());
+        }
+    }
+
     @Test
     void packageRootedScalarSlotCountsWhenLegacyOwnerEntryIsMissing() {
         PerlRuntime runtime = new PerlRuntime();
