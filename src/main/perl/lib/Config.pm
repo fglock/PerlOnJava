@@ -207,6 +207,18 @@ my $startperl = $is_windows
     d_fchdir => 'define',
     d_fchmod => 'define',
 
+    # User::pwent uses these Configure probes to expose only fields supported
+    # by the active passwd structure. PerlOnJava's FFM adapter provides the
+    # portable passwd fields and does not expose platform-specific extensions.
+    d_pwage => undef,
+    d_pwchange => undef,
+    d_pwclass => undef,
+    d_pwcomment => undef,
+    d_pwexpire => undef,
+    d_pwgecos => 'define',
+    d_pwpasswd => 'define',
+    d_pwquota => undef,
+
     # PerlOnJava specific
     perlonjava => '5.44.1',
     java_version => $java_version,
