@@ -47,7 +47,12 @@ public class AutovivificationArray extends ArrayList<RuntimeScalar> {
 
             RuntimeScalar referent = arrayProxy.scalarToAutovivify;
             if (referent instanceof RuntimeBaseProxy proxy) {
-                proxy.set(array.createReference());
+                // A proxy is an aggregate element slot, not the local pad
+                // binding for a named @array.  Marking this array as
+                // localBindingExists would keep it alive after its hash/array
+                // slot is replaced, so captured callbacks in the old array
+                // would never be released.
+                proxy.set(array.createAnonymousReference());
             } else {
                 referent.value = array;
                 referent.type = RuntimeScalarType.ARRAYREFERENCE;
