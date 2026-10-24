@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Warn for undefined right operands of `.=` while keeping an undefined left operand quiet (#1382).
 - Snapshot mutable array entries while marking package roots and during reachability walks so concurrent thread teardown cannot fail with `ConcurrentModificationException`.
 
 - Enforce restricted-hash key access and implement `Hash::Util` key, value, and hash locking (#1502, #1172).
