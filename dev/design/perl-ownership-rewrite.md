@@ -162,6 +162,18 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   that the recovery scan can be removed. The remaining investigation is the
   interpreter's direct ownership accounting for captured aggregate pads and
   scalar cells across recursive closure execution and lexical cleanup.
+- A second focused reducer,
+  `issue_1649_captured_scalar_array_argument.t`, isolates the same class of
+  lifetime error: a closure writes a blessed object to a captured scalar while
+  receiving an array-reference argument, then the closure and returned owner
+  are released. System Perl and the JVM pass both assertions; the interpreter
+  fails the weak-observer release assertion with aggregate recovery both on and
+  off, while `DESTROY` fires once. In a temporary `Internals::SvREFCNT` probe,
+  Perl reports 2 owners after the closure call and 1 after closure release;
+  the interpreter reports 0 at both points. This confirms a premature
+  interpreter count transition in this call shape, separate from the recovery
+  scan. The next trace target is the returned captured scalar's owner transfer
+  across `BytecodeInterpreter` return cleanup and argument-frame teardown.
 - On 2026-10-24, the temporary scalar owner installed for `DESTROY`'s self
   argument now balances through the `SCALAR_VALUE` slot API without invoking
   destruction recursively inside the active DESTROY frame. A focused Java test
