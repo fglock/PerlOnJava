@@ -33,6 +33,12 @@ public class RuntimeScalarCache {
     static int maxInt = 1024;
     // Array to store cached RuntimeScalarReadOnly objects for integers
     static RuntimeScalarReadOnly[] scalarInt = new RuntimeScalarReadOnly[maxInt - minInt + 1];
+    // A direct-mapped cache of immutable Java Integer payloads. RuntimeScalar
+    // remains a fresh writable Perl scalar; only its immutable boxed payload
+    // is shared. Entries are lazily populated, and benign races can only
+    // reduce hit rate because every hit checks the stored numeric value.
+    private static final int BOXED_INTEGER_CACHE_SIZE = 1 << 16;
+    private static final Integer[] boxedIntegerCache = new Integer[BOXED_INTEGER_CACHE_SIZE];
     private static volatile RuntimeScalarReadOnly[] scalarByteString = new RuntimeScalarReadOnly[INITIAL_STRING_CACHE_SIZE];
     private static volatile RuntimeScalarReadOnly[] scalarString = new RuntimeScalarReadOnly[INITIAL_STRING_CACHE_SIZE];
 
@@ -51,6 +57,18 @@ public class RuntimeScalarCache {
         scalarOne = new RuntimeScalarReadOnly(1);
 
         // Don't pre-register strings - let them be added naturally
+    }
+
+    /** Reuse the immutable Java payload without sharing Perl scalar identity. */
+    static Integer getBoxedInteger(int value) {
+        int slot = value & (BOXED_INTEGER_CACHE_SIZE - 1);
+        Integer cached = boxedIntegerCache[slot];
+        if (cached != null && cached.intValue() == value) {
+            return cached;
+        }
+        Integer created = Integer.valueOf(value);
+        boxedIntegerCache[slot] = created;
+        return created;
     }
 
     /**

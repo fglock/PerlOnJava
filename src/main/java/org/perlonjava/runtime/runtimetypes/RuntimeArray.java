@@ -26,6 +26,8 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.TIED_SCALAR;
  * using a list of RuntimeScalar objects, which can hold any type of Perl scalar value.
  */
 public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference, DynamicState {
+    private static final ThreadLocal<RuntimeArray> RECYCLED_METHOD_CALL_ARGUMENTS =
+            new ThreadLocal<>();
 
     /** Return an empty lexical cell when control flow skipped its declaration. */
     public static RuntimeArray materializeLexicalCell(RuntimeArray array) {
@@ -124,6 +126,19 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public boolean lvalueSliceContainer;
     // Iterator for traversing the hash elements
     private Integer eachIteratorIndex;
+    // Per-call proof data for the guarded simple hash-mutation method path.
+    // These fields are populated by RuntimeCode immediately before entering a
+    // compiled method whose body only updates the two proven hash cells.
+    private RuntimeScalar verifiedMethodHashArgument;
+    private boolean verifiedMethodHashFieldsActive;
+    private boolean suppressMethodArgumentRootTracking;
+    private RuntimeScalar verifiedMethodIntegerArgument;
+    private RuntimeScalar verifiedMethodFirstHashCell;
+    private RuntimeScalar verifiedMethodSecondHashCell;
+    private int verifiedMethodHashArgumentIndex = -1;
+    private int verifiedMethodIntegerArgumentIndex = -1;
+    private String verifiedMethodFirstHashKey;
+    private String verifiedMethodSecondHashKey;
     // Package arrays named @ISA participate in method resolution.  All writes
     // to their element list must invalidate MRO caches.
     private boolean isaArray;
@@ -155,9 +170,158 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public static RuntimeArray methodCallArguments(int initialCapacity) {
         if (initialCapacity < 0) throw new IllegalArgumentException("negative capacity");
         if (initialCapacity <= 2) {
+            RuntimeArray recycled = RECYCLED_METHOD_CALL_ARGUMENTS.get();
+            if (recycled != null) {
+                // Keep the ThreadLocalMap entry so recycling can update it without a new entry.
+                RECYCLED_METHOD_CALL_ARGUMENTS.set(null);
+                recycled.resetRecycledMethodCallArguments();
+                return recycled;
+            }
             return new RuntimeArray(true);
         }
         return new RuntimeArray(initialCapacity);
+    }
+
+    /** Return a compiler-proven non-escaping method argument array to its thread-local pool. */
+    void recycleMethodCallArguments() {
+        if (type != PLAIN_ARRAY || !(elements instanceof InlineMethodArgumentList)
+                || elements.size() > 2 || threadShared) {
+            return;
+        }
+        resetRecycledMethodCallArguments();
+        if (RECYCLED_METHOD_CALL_ARGUMENTS.get() == null) {
+            RECYCLED_METHOD_CALL_ARGUMENTS.set(this);
+        }
+    }
+
+    private void resetRecycledMethodCallArguments() {
+        clearVerifiedMethodHashFields();
+        if (suppressMethodArgumentRootTracking
+                && elements instanceof InlineMethodArgumentList inlineArguments) {
+            inlineArguments.clearForStableMethodRecycle();
+        } else {
+            elements.clear();
+        }
+        suppressMethodArgumentRootTracking = false;
+        type = PLAIN_ARRAY;
+        strictAutovivify = false;
+        scalarContextSize = null;
+        elementsOwned = false;
+        elementsAliased = false;
+        elementSlotsAliasedIntoCallFrame = false;
+        activeScalarLocalElements = 0;
+        scalarLocalContainerCleared = false;
+        ownedAliasElements = null;
+        transientListAssignmentRhs = false;
+        lvalueSliceContainer = false;
+        eachIteratorIndex = null;
+        blessId = 0;
+        isaArray = false;
+        isaArrayNames = null;
+    }
+
+    boolean suppressRootTrackingForStableMethodArguments() {
+        if (type != PLAIN_ARRAY || !(elements instanceof InlineMethodArgumentList)
+                || elements.size() > 2 || threadShared || isPackageGlobalRoot) {
+            return false;
+        }
+        suppressMethodArgumentRootTracking = true;
+        return true;
+    }
+
+    void resumeMethodArgumentRootTracking() {
+        if (!suppressMethodArgumentRootTracking) return;
+        suppressMethodArgumentRootTracking = false;
+        notePackageRootClear(elements);
+    }
+
+    void cacheVerifiedMethodHashFields(int hashArgumentIndex, int integerArgumentIndex,
+            String firstKey, String secondKey, RuntimeScalar hashArgument,
+            RuntimeScalar integerArgument, RuntimeScalar firstCell, RuntimeScalar secondCell) {
+        verifiedMethodHashArgumentIndex = hashArgumentIndex;
+        verifiedMethodIntegerArgumentIndex = integerArgumentIndex;
+        verifiedMethodFirstHashKey = firstKey;
+        verifiedMethodSecondHashKey = secondKey;
+        verifiedMethodHashArgument = hashArgument;
+        verifiedMethodIntegerArgument = integerArgument;
+        verifiedMethodFirstHashCell = firstCell;
+        verifiedMethodSecondHashCell = secondCell;
+        verifiedMethodHashFieldsActive = true;
+    }
+
+    void clearVerifiedMethodHashFields() {
+        verifiedMethodHashFieldsActive = false;
+        verifiedMethodHashArgumentIndex = -1;
+        verifiedMethodIntegerArgumentIndex = -1;
+        verifiedMethodFirstHashKey = null;
+        verifiedMethodSecondHashKey = null;
+        verifiedMethodHashArgument = null;
+        verifiedMethodIntegerArgument = null;
+        verifiedMethodFirstHashCell = null;
+        verifiedMethodSecondHashCell = null;
+    }
+
+    boolean hasVerifiedMethodHashFields(int hashArgumentIndex, int integerArgumentIndex,
+            String firstKey, String secondKey, RuntimeScalar hashArgument) {
+        if (hashArgumentIndex < 0 || integerArgumentIndex < 0
+                || verifiedMethodHashArgumentIndex != hashArgumentIndex
+                || verifiedMethodIntegerArgumentIndex != integerArgumentIndex
+                || !Objects.equals(verifiedMethodFirstHashKey, firstKey)
+                || !Objects.equals(verifiedMethodSecondHashKey, secondKey)
+                || verifiedMethodHashArgument != hashArgument
+                || size() <= Math.max(hashArgumentIndex, integerArgumentIndex)) {
+            return false;
+        }
+        return get(hashArgumentIndex) == verifiedMethodHashArgument
+                && get(integerArgumentIndex) == verifiedMethodIntegerArgument;
+    }
+
+    boolean hasActiveVerifiedMethodHashFields(int hashArgumentIndex, int integerArgumentIndex,
+            String firstKey, String secondKey) {
+        if (!verifiedMethodHashFieldsActive || hashArgumentIndex < 0 || integerArgumentIndex < 0
+                || verifiedMethodHashArgumentIndex != hashArgumentIndex
+                || verifiedMethodIntegerArgumentIndex != integerArgumentIndex
+                || !(verifiedMethodFirstHashKey == firstKey
+                    || Objects.equals(verifiedMethodFirstHashKey, firstKey))
+                || !(verifiedMethodSecondHashKey == secondKey
+                    || Objects.equals(verifiedMethodSecondHashKey, secondKey))
+                || size() <= Math.max(hashArgumentIndex, integerArgumentIndex)) {
+            return false;
+        }
+        return get(hashArgumentIndex) == verifiedMethodHashArgument
+                && get(integerArgumentIndex) == verifiedMethodIntegerArgument;
+    }
+
+    RuntimeScalar verifiedMethodHashField(String key) {
+        if (Objects.equals(verifiedMethodFirstHashKey, key)) {
+            return verifiedMethodFirstHashCell;
+        }
+        if (Objects.equals(verifiedMethodSecondHashKey, key)) {
+            return verifiedMethodSecondHashCell;
+        }
+        return null;
+    }
+
+    RuntimeScalar activeVerifiedMethodHashField(RuntimeScalar hashArgument, String key) {
+        if (!verifiedMethodHashFieldsActive || verifiedMethodHashArgument != hashArgument) {
+            return null;
+        }
+        if (verifiedMethodFirstHashKey == key || verifiedMethodFirstHashKey.equals(key)) {
+            return verifiedMethodFirstHashCell;
+        }
+        if (verifiedMethodSecondHashKey == key || (verifiedMethodSecondHashKey != null
+                && verifiedMethodSecondHashKey.equals(key))) {
+            return verifiedMethodSecondHashCell;
+        }
+        return null;
+    }
+
+    String verifiedMethodFirstHashKey() {
+        return verifiedMethodFirstHashKey;
+    }
+
+    String verifiedMethodSecondHashKey() {
+        return verifiedMethodSecondHashKey;
     }
 
     private RuntimeArrayElementList newElementList() {
@@ -395,7 +559,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 second = element;
                 result = previous;
             }
-            owner.validateIsaMutation();
+            if (owner.isaArray) owner.validateIsaMutation();
             return result;
         }
 
@@ -425,7 +589,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 second = null;
             }
             modCount++;
-            owner.validateIsaMutation();
+            if (owner.isaArray) owner.validateIsaMutation();
         }
 
         @Override
@@ -445,7 +609,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 }
                 return true;
             }
-            owner.noteIsaMutation();
+            if (owner.isaArray) owner.noteIsaMutation();
             owner.notePackageRootMutationIf(owner.hasRootEdge(source));
             for (RuntimeScalar value : source) {
                 if (value != null) value.markContainerOwner(owner);
@@ -454,7 +618,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             int insertionIndex = index;
             for (RuntimeScalar value : source) addRaw(insertionIndex++, value);
             modCount++;
-            owner.validateIsaMutation();
+            if (owner.isaArray) owner.validateIsaMutation();
             return true;
         }
 
@@ -496,23 +660,33 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 inlineSize--;
             }
             modCount++;
-            owner.noteIsaMutation();
+            if (owner.isaArray) owner.noteIsaMutation();
             owner.notePackageRootMutation(previous, null);
-            owner.validateIsaMutation();
+            if (owner.isaArray) owner.validateIsaMutation();
             return previous;
         }
 
         @Override
         public void clear() {
             if (isEmpty()) return;
-            owner.noteIsaMutation();
-            owner.notePackageRootClear(this);
+            if (owner.isaArray) owner.noteIsaMutation();
+            if (!owner.suppressMethodArgumentRootTracking) {
+                owner.notePackageRootClear(this);
+            }
             if (expanded != null) expanded.clear();
             first = null;
             second = null;
             inlineSize = 0;
             modCount++;
-            owner.validateIsaMutation();
+            if (owner.isaArray) owner.validateIsaMutation();
+        }
+
+        private void clearForStableMethodRecycle() {
+            expanded = null;
+            first = null;
+            second = null;
+            inlineSize = 0;
+            modCount++;
         }
 
         private void prepareStoredValue(RuntimeScalar previous, RuntimeScalar element) {
@@ -521,7 +695,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 SharedPerlStorage.publishBlessing(element);
             }
             owner.noteIsaMutation();
-            owner.notePackageRootMutation(previous, element);
+            if (!owner.suppressMethodArgumentRootTracking) {
+                owner.notePackageRootMutation(previous, element);
+            }
             if (element != null) element.markContainerOwner(owner);
             owner.markPackageRootedValue(element);
         }

@@ -26,5 +26,20 @@ sub loop_method_call {
     }
 }
 
-timethis(500, sub { $sink = 0; loop_method_call() });
-print "done $sink\n";
+sub benchmark_method_reset {
+    $o->{x} = 1;
+    $o->{y} = 2;
+}
+
+sub benchmark_method_batch {
+    $sink = 0;
+    loop_method_call();
+    return $sink;
+}
+
+unless ($ENV{PERLONJAVA_BENCH_LOAD_ONLY}) {
+    timethis(500, sub { $sink = 0; loop_method_call() });
+    print "done $sink\n";
+}
+
+1;

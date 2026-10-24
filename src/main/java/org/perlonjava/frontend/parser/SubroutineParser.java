@@ -2474,6 +2474,8 @@ public class SubroutineParser {
             }
             RuntimeCode runtimeCode =
                     EmitterMethodCreator.createRuntimeCode(newCtx, compilationBlock, false);
+            placeholder.stableHashMutationMethodKeys =
+                    runtimeCode.stableHashMutationMethodKeys;
             placeholder.setJvmClosureFrameRequired(
                     runtimeCode.requiresJvmClosureFrame());
             placeholder.setPristineArgsSnapshotRequired(

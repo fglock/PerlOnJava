@@ -53,4 +53,16 @@ class RuntimeArrayMethodCallArgumentsTest {
         assertTrue(arguments.elements instanceof ArrayList,
                 "larger argument lists should keep the existing storage implementation");
     }
+
+    @Test
+    void recycledMethodArgumentsAreReusedAfterTheirValuesAreCleared() {
+        RuntimeArray arguments = RuntimeArray.methodCallArguments(2);
+        arguments.elements.add(new RuntimeScalar("stale"));
+        arguments.recycleMethodCallArguments();
+
+        RuntimeArray reused = RuntimeArray.methodCallArguments(2);
+
+        assertSame(arguments, reused);
+        assertTrue(reused.elements.isEmpty());
+    }
 }

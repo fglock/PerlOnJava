@@ -28,6 +28,8 @@ priorities and future plans.
 - Keep lexical-registration membership checks constant-time, avoiding quadratic CPAN index parsing as cleanup stacks grow.
 - Preserve numeric types of cached read-only scalars in ranges, rejecting unsigned endpoints outside the supported integer range.
 - Improve JVM execution performance for the bit-packed Life example, ordinary scalar assignments, and common blessing lookups.
+- Add method-call, captured-closure, and bit-packed Life anchors to the reproducible Perl throughput runner, with balanced randomized ordering and exact-JAR candidate comparisons; exclude measurements whose requested process priority was not applied (#1863).
+- Cache capture cells for guarded integer-addition closures, invalidating on capture-map rebinding while preserving the ordinary call fallback (#1863).
 - Reuse private one-scalar wrappers when materializing scalar returns, reducing result-list allocations across JVM calls.
 - Cache out-of-range boxed integer literals per generated code object, avoiding repeated allocation during loop evaluation while preserving read-only literal behavior.
 - Improve JVM method-call throughput with guarded argument unpacking,

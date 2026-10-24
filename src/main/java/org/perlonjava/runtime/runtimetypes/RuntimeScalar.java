@@ -833,7 +833,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     public RuntimeScalar(int value) {
         this.type = RuntimeScalarType.INTEGER;
-        this.value = value;
+        this.value = RuntimeScalarCache.getBoxedInteger(value);
     }
 
     public RuntimeScalar(Integer value) {
@@ -1177,7 +1177,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     private void setIntegerValue(long integerValue) {
         this.type = RuntimeScalarType.INTEGER;
         if (integerValue >= Integer.MIN_VALUE && integerValue <= Integer.MAX_VALUE) {
-            this.value = Integer.valueOf((int) integerValue);
+            this.value = RuntimeScalarCache.getBoxedInteger((int) integerValue);
         } else {
             this.value = Long.valueOf(integerValue);
         }
@@ -3181,7 +3181,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             throw new PerlCompilerException("Modification of a read-only value attempted");
         }
         this.type = RuntimeScalarType.INTEGER;
-        this.value = value;
+        this.value = RuntimeScalarCache.getBoxedInteger(value);
         this.tainted = false;
         this.numericLiteralText = null;
         this.numericContextSeen = false;

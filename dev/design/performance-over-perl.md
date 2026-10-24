@@ -12,6 +12,18 @@ Each engine stays alive for its warmup and measurement windows. Inputs are
 deterministic, operation counts and checksums are emitted for every window, and
 the runner retains all raw samples in JSON.
 
+Issue [#1863](https://github.com/fglock/PerlOnJava/issues/1863) adds a separate
+acceptance portfolio for measured 1:1 throughput: the original 20,000-call
+method loop, the captured-closure loop, and bit-packed Life. Run it with
+`--workloads method_anchor closure_anchor life`. The original method and
+closure benchmark files are hashed into the report. Each worker loads the
+original benchmark definitions in a load-only mode so unrelated diagnostic
+branches do not force an acceptance workload through interpreter fallback.
+The method receiver resets only between timed windows, outside the scored
+duration; each timed batch otherwise keeps the original loop and sink behavior.
+A fixed 20,000-call checksum is checked on each worker, and the result checksum
+for each measured window is verified against its operation count.
+
 ## Workload portfolio
 
 Each group has equal weight in the portfolio score.
@@ -48,13 +60,33 @@ The default is seven fresh-process pairs. The report calculates paired
 PerlOnJava-over-Perl speedups, equal-weight geometric means, and deterministic
 bootstrap 95% intervals. It also records the git commit, source/JAR hashes,
 engine versions and flags, host details, load average, launch order, stderr
-paths, and the full raw windows.
+paths, worker commands, requested and observed process priority, reference Perl
+source revision, and the full raw windows. A pair whose requested niceness
+cannot be verified is retained in the raw report but excluded from summaries.
+Reports also label a run `diagnostic_only` unless it requested the exact three
+#1863 workloads, at least seven pairs, the full warmup and measurement windows,
+niceness 19, and a pinned Perl source revision.
+Pass `--perl-source-revision` with a release tag for the stable Perl reference
+or the exact source commit for optimized blead. Keep the stable-release run and
+blead run as separate reports.
 
 Run from the repository root after building the current JAR:
 
 ```sh
 python3 dev/bench/performance_over_perl.py \
   --output /tmp/performance-over-perl.json
+```
+
+For the #1863 acceptance anchors, pin the Perl source used by the executable.
+The primary comparison uses an optimized build of blead at an exact commit;
+stable Perl 5.42.2 is a separate context report:
+
+```sh
+python3 dev/bench/performance_over_perl.py \
+  --workloads method_anchor closure_anchor life \
+  --perl /path/to/blead/bin/perl5.45.5 \
+  --perl-source-revision <blead-commit> \
+  --output /tmp/performance-over-perl-anchors.json
 ```
 
 For a bounded smoke run, select one workload and fewer windows. Such a run is
@@ -85,33 +117,282 @@ template reports sampled bottleneck data and is not an instruction count.
 
 ## Acceptance
 
-The benchmark is complete only when the seven-group portfolio geometric mean
-is at least 1.05x Perl with a 95% interval entirely above 1.00x, both closure
-and Life anchors meet that rule individually, and no scored workload is below
-0.90x Perl. Behavior, JVM/interpreter parity, memory safety, and lifecycle
-semantics remain separate correctness gates. See issue #1196 for the complete
-acceptance contract and required diagnostic matrix.
+Issue #1863's 1:1 throughput criterion is met only when the method anchor's
+paired speedup against optimized blead is at least 1.00x and the lower bound of
+its 95% interval is at least 1.00x. Closure and Life must meet that same
+criterion before claiming parity for the full #1863 portfolio. Stable Perl
+5.42.2 is reported separately and does not substitute for blead. The broader
+#1196 contract remains a distinct goal: its seven-group portfolio geometric
+mean must be at least 1.05x with a 95% interval entirely above 1.00x, closure
+and Life must meet that rule individually, and no scored workload may be below
+0.90x. Behavior, JVM/interpreter parity, memory safety, and lifecycle semantics
+remain separate correctness gates. See issue #1196 for its diagnostic matrix.
 
 ## Progress tracking
 
-### Current status: Phase 1 in progress
+### Current status: Thread-local reuse improved the method anchor; it remains below 1:1
 
 ### Completed in this increment
 
 - Added a persistent worker protocol for seven deterministic workload groups.
-- Added warmup stabilization, alternating process-pair order, checksum checks,
+- Added warmup stabilization, balanced randomized process-pair order, checksum checks,
   paired ratios, confidence intervals, metadata, and atomic JSON output.
 - Added a load-only Life entry point that reuses the existing flat64 algorithm.
+- Added the #1863 method and captured-closure acceptance anchors by reusing the
+  original benchmark definitions in load-only mode, and added unit coverage for anchor
+  checksums, warmup stability, protocol eligibility, priority verification,
+  and paired statistics.
+- Found that the earlier worker put all workloads in one closure and triggered
+  method-size fallback to the bytecode interpreter. The corrected worker
+  matches the Perl checksums under system Perl and both PerlOnJava backends.
+  Initial short-window ratios are not retained as performance evidence because
+  they can stop before later JVM optimization.
+- A JFR profile of the corrected method anchor samples
+  `RuntimeCode.applyCachedMethod`, `ExecutionRuntimeState.callDepth`, generated
+  code invocation, and scalar result coercion among dominant runtime costs.
+  This points to per-call boundary work for the next optimization; it does not
+  quantify inclusive costs or allocation per operation.
+- Earlier full-window runs were excluded when they did not reach the declared
+  stability limits. The current exact-origin run completed seven stable pairs
+  per workload, but macOS denied `setpriority`, so the harness marked every pair
+  ineligible rather than treating the requested nice level as verified.
+- Captured the directional `origin/master` baseline at
+  `eaf1bfdb697c81999cf8bcc65b75e611fd6ead3b`, using JAR SHA-256
+  `e38b5feeda9aaa0fe26b829631f9f900618eda52cade59f757cf9a7d5e2a5bad`, against
+  optimized blead `83a6c8b26a8823eb966652414864eb07a3d2c6d4`. Recomputing paired
+  ratios from the stable, checksum-matched windows while excluding only the
+  unavailable priority check gives method 0.672x (95% bootstrap interval
+  0.646–0.702), closure 1.309x (1.263–1.363), Life 1.051x (0.989–1.098), and
+  portfolio 0.974x (0.957–0.996). These are diagnostic comparisons, not
+  acceptance results; shared-host load rose during the run and priority could
+  not be verified. Raw windows are retained in
+  `dev/bench/reports/issue-1863-origin-master-eaf1bfdb-blead-83a6c8b.json`.
+- The experimental method-fast-path candidate JAR (SHA-256
+  `515d3056fee9835ed192199faeadf8881663b58a3d65f6696c43cbb4a22e4734`) measured
+  0.644x on the method anchor (0.641–0.647) against blead. A same-run
+  candidate-versus-origin artifact comparison measured 0.986x (0.965–1.005),
+  showing no demonstrated improvement from the new method fast path. These runs
+  have the same priority-verification limitation. Raw windows are retained in
+  `dev/bench/reports/issue-1863-candidate-fastpath-blead-83a6c8b.json` and
+  `dev/bench/reports/issue-1863-candidate-fastpath-vs-origin-method.json`.
+- A 30-second profile of that experimental JAR produced 8,256 method batches
+  (165,120,000 calls) with the expected checksum. Its sampled stacks still
+  included `RuntimeCode.applyCachedMethod`; no experimental fast-path body frame
+  appeared. That first fast-path attempt was removed because it showed no
+  measurable gain. This profile does not distinguish whether the guard was not reached or
+  whether its cost offset any saved work. The JFR is retained at
+  `dev/bench/reports/issue-1863-method-fastpath.jfr` for follow-up diagnosis.
+- Reworked the method fast path so compiler-proven hash keys propagate from the
+  lazily compiled backend object to the stable named-sub placeholder. A scalar
+  diagnostic call confirms that the guarded path activates. The candidate JAR
+  (`4aaed76f272844d53dc6db293ccc8278d8bedee849a3eb54ae8b4ada8248784b`) measured
+  0.683x against blead over three short stable pairs, versus the exact origin
+  artifact at 1.007x in a same-run three-pair comparison. Since the baseline
+  was 0.672x and all these runs could not verify requested process priority,
+  this is only a small directional improvement, not accepted performance
+  evidence. Raw samples are retained in
+  `dev/bench/reports/issue-1863-candidate-registered-fastpath-blead-method.json`
+  and `dev/bench/reports/issue-1863-candidate-registered-fastpath-method.json`.
+  The full `nice -n 19 make` gate passed after the handoff and diagnostic-code
+  cleanup.
+- A 30-second JFR run of the corrected candidate completed 8,625 method
+  batches (172,500,000 calls) with the expected checksum. Execution samples
+  include the active `applyStableHashMutationMethodBody` path and no
+  `applyCachedMethod` frames, confirming that the boundary fast path is used.
+  Remaining samples include `MathOperators.addAssignIntegerInPlace`,
+  `RuntimeScalar.setArithmeticIntegerResult`, `RuntimeCode.invokeCachedMethodHit`,
+  and `RuntimeCode.prepareStableHashMutationMethodArguments`; these point to
+  integer update/boxing and per-call method/argument guards as the next
+  investigation targets. The JFR is retained at
+  `dev/bench/reports/issue-1863-method-fastpath-active.jfr`.
+- Cached the validated receiver's hash-dereference overload decision per runtime,
+  invalidating it alongside inline method caches and bless-ID state. This
+  removes repeated `NameNormalizer.getEffectiveBlessId` work from the guarded
+  method path. The following full method-only comparison used seven requested
+  pairs and 15 one-second windows; six checksum-matched pairs were complete.
+  Recomputing those pairs while excluding only the unavailable priority check
+  gives 1.047x over the exact origin JAR (95% interval 0.992–1.088). This was a
+  useful check on the guard but its interval still includes parity.
+- Recycled the small `RuntimeArray` and inline argument storage only after a
+  compiler-proven stable-hash method completed, whose argument array cannot
+  escape. A regression checks that a later ordinary method can return an
+  escaped `@_` array without subsequent calls changing it. The next full
+  method-only comparison had six complete stable pairs; recomputation gives
+  1.113x over exact origin (1.032–1.215) and 0.720x blead (0.677–0.762).
+  Requested priority remained unverifiable, the host load was high, and one
+  candidate/oracle pair did not stabilize, so these are directional results,
+  not acceptance evidence. The candidate was JAR SHA-256
+  `1aaba79da113588d0bdd907d0a4603ca8e30529fca64ea711e078aeccd060a89`.
+  Raw reports are retained in
+  `dev/bench/reports/issue-1863-candidate-pooled-method-args-vs-origin-full-method.json`
+  and `dev/bench/reports/issue-1863-candidate-pooled-method-args-vs-blead-full-method.json`.
+- A 30-second JFR run of the pooled-argument candidate completed 7,347 batches
+  (146,940,000 method calls) with the expected checksum. Its allocation samples
+  had no `RuntimeArray` or `InlineMethodArgumentList` events, unlike the prior
+  profile, which sampled both types repeatedly. The profile is retained at
+  `dev/bench/reports/issue-1863-method-pooled-args-active.jfr`.
+- Ran all three #1863 workloads with seven randomized pairs and 15 one-second
+  measurement windows. Every pair was stable and checksum-matched, but macOS
+  again could not verify the requested priority. Recomputing the paired
+  results while excluding only that priority check gives method 0.745x blead
+  (95% interval 0.721–0.776), closure 1.545x (1.498–1.603), Life 1.071x
+  (1.007–1.149), and portfolio 1.072x (1.048–1.101). This is directional
+  evidence only; method performance remains about 25% below blead and prevents
+  a 1:1 result. Raw windows are in
+  `dev/bench/reports/issue-1863-current-candidate-pooled-full-portfolio-blead.json`.
+- The method JFR also sampled repeated checks of call-local hash cells in the
+  guarded generated body. The candidate now reads a cell directly after the
+  call boundary has validated and cached it; ordinary calls retain the checked
+  lookup. `nice -n 19 make` passed. Seven stable, checksum-matched method pairs
+  measured 1.137x the exact origin JAR (95% interval 1.064–1.191), but only
+  0.743x blead (0.712–0.773). The JAR SHA-256 is
+  `4bf3bbd3432211d853319466924699b2fc12188d804d7bef77804f47e6a58e16`. The
+  requested priority remained unverifiable and host load was high, so these
+  results are diagnostic. They do not close the method gap. Raw reports are
+  `dev/bench/reports/issue-1863-candidate-active-verified-cells-method.json`
+  and `dev/bench/reports/issue-1863-candidate-active-verified-cells-blead-method.json`.
+- The generated method entry guard was still repeating the generic argument
+  and field checks after the call boundary had established the same proof. It
+  now checks that the active proof matches the exact indices and keys, then
+  loads the cached cells directly. `nice -n 19 make` passed. A seven-pair
+  method-only run measured 1.225x the exact origin JAR (95% interval
+  1.180–1.286) and 0.790x blead (0.771–0.814). The full 21-pair portfolio on
+  this JAR measured method 0.773x blead (0.759–0.786), closure 1.638x
+  (1.609–1.671), Life 1.154x (1.059–1.334), and portfolio 1.134x
+  (1.095–1.200). All pairs were stable and checksum-matched, but priority was
+  unverifiable and shared-host load rose substantially. Treat these as
+  diagnostic only; method performance remains about 23% below blead. The JAR
+  SHA-256 is `af0dd535614a9afa91da9aa36ccfa81c3e351ed1a03941d431dc92d74b111131`.
+  Raw reports are `dev/bench/reports/issue-1863-candidate-active-entry-guard-origin-method.json`,
+  `dev/bench/reports/issue-1863-candidate-active-entry-guard-blead-method.json`,
+  and `dev/bench/reports/issue-1863-candidate-active-entry-guard-full-portfolio-blead.json`.
+  The post-change profile is `dev/bench/reports/issue-1863-method-active-entry-guard.jfr`;
+  its execution samples no longer show `canBorrowReadOnlyArguments` or the
+  repeated verified-cell getter.
+- The remaining method profile sampled full-root-snapshot reachability checks
+  when adding the blessed invocant to, and clearing, the temporary two-slot
+  argument array. For compiler-proven stable methods, that array now suppresses
+  root-mutation tracking during the guarded non-escaping call; a failed runtime
+  guard resumes tracking before the generic fallback, and exceptional exits
+  also restore it. `nice -n 19 make` passed. The new JFR contains no
+  `MortalList.invalidateFullRootSnapshotIfReachable` samples from this path.
+  Seven stable, checksum-matched method pairs measured 1.376x the exact origin
+  JAR (95% interval 1.273–1.493) and 0.866x blead (0.847–0.887). In a separate
+  full portfolio run, method measured 0.845x blead (0.829–0.862), closure
+  1.598x (1.509–1.693), Life 1.073x (1.055–1.089), and portfolio 1.132x
+  (1.105–1.160). All 28 pairs were stable and checksum-matched; priority was
+  unverifiable, with high host load during the origin comparison. These remain
+  diagnostic, and method is about 15% below blead. Candidate JAR SHA-256:
+  `3a98fe0aa492f7a5fda7b1ab8d31e8c21e868959448278952e51208f2ac2d0ec`. Reports:
+  `dev/bench/reports/issue-1863-candidate-arg-root-track-origin-method.json`,
+  `dev/bench/reports/issue-1863-candidate-arg-root-track-full-portfolio-blead.json`,
+  and `dev/bench/reports/issue-1863-method-args-root-tracking.jfr`.
+- Consolidated stable-method argument preparation so it performs the existing
+  receiver, overload, hash-cell, and integer checks directly with the current
+  runtime, then skipped no-op `@ISA` validation calls for inline argument-list
+  mutations. `nice -n 19 make` passed. The post-change profile has no
+  `RuntimeArray.validateIsaMutation` leaf samples. This JAR
+  (`f46459af66fa1400314cff03f46790f0e07900ece0315dc044bbddd0fe2c8bc7`) measured
+  0.881x blead (95% interval 0.872–0.890) in a standalone method run and 1.343x
+  the exact origin JAR (1.275–1.417) in a separate seven-pair comparison. A
+  full portfolio run measured method 0.866x (0.836–0.891), closure 1.464x
+  (1.311–1.561), Life 1.103x (1.005–1.187), and portfolio 1.133x
+  (1.085–1.171). One closure pair was unstable, leaving six complete portfolio
+  pairs; host load rose sharply during the run. Priority was unverifiable, so
+  these are diagnostics only. Raw files are
+  `dev/bench/reports/issue-1863-candidate-inline-isa-check-origin-method.json`,
+  `dev/bench/reports/issue-1863-candidate-inline-isa-check-full-portfolio-blead.json`,
+  and `dev/bench/reports/issue-1863-method-inline-isa-check.jfr`.
+- For compiler-proven non-escaping stable methods, recycled inline argument
+  arrays now clear their two slots directly when root tracking was suppressed;
+  all other arrays retain the ordinary mutation-aware clear path, and package
+  roots cannot enter this optimization. The regression now performs repeated
+  calls with changing values to exercise argument-array reuse. The 24 checks
+  pass on system Perl, JVM, and interpreter, and the exact committed source
+  passed `nice -n 19 make`. Candidate JAR SHA-256 is
+  `2b527ef3cb3eff880c196f61941aba8091da60e3f6adcdddb7903aa45251649e`.
+  Seven stable, checksum-matched method pairs measured 0.9028x blead (95%
+  interval 0.8892–0.9180), while a paired comparison to the exact origin JAR
+  measured 1.3491x (1.3249–1.3753). The full portfolio measured method 0.9028x
+  (0.8892–0.9180), closure 1.5522x (1.5354–1.5725), Life 1.0642x
+  (1.0462–1.0802), and portfolio 1.1425x (1.1322–1.1531), with seven complete
+  pairs per workload. These runs omitted requested priority because macOS
+  reports a different niceness value for a `nice -n 19` child; the full
+  portfolio therefore remains diagnostic rather than acceptance evidence.
+  The method anchor remains about 9.7% below blead. Raw reports are
+  `dev/bench/reports/issue-1863-cc2d6155-blead-full-portfolio.json` and
+  `dev/bench/reports/issue-1863-cc2d6155-vs-origin-method.json`.
+- The closure JFR profile found that the guarded captured-integer addition path
+  performs repeated name lookups in `closedOverVariables`; `HashMap.getNode`,
+  `LinkedHashMap.get`, and `RuntimeCode.tryDirectLeafIntegerAddition` were
+  among its most frequent samples. A candidate caches the captured scalar cell
+  array against the map identity and revision, invalidating it whenever capture
+  bindings change. The new Perl-level regression covers in-place mutation and
+  `PadWalker::set_closed_over` rebinding.
+- The exact parent (`eaf1bfdb697c81999cf8bcc65b75e611fd6ead3b`) and candidate
+  JARs were built successfully. Their SHA-256 hashes are respectively
+  `e38b5feeda9aaa0fe26b829631f9f900618eda52cade59f757cf9a7d5e2a5bad` and
+  `f3fe24e7f05ca4ac3147e0e244c0701cfa3198cc6bf8068d8c1c6be4e48dd13a`.
+  Separate 20-second closure-anchor JFR recordings sampled 288,640,000 parent
+  units and 323,760,000 candidate units (12.17% more in these sequential,
+  profiler-instrumented runs). The candidate JFR used the pre-commit JAR hash
+  `5bc349231238e4bcbbbd2b097f441d68a2b080c783ef3f0ad6e8f97e1f572e71`; it
+  contains the same runtime source but a different injected Git build identity.
+  Parent samples included 484 `HashMap.getNode` and 626 `LinkedHashMap.get`
+  frame appearances; the candidate had none. JFR allocation samples included
+  154 `RuntimeScalar[]` events for the parent and none for the candidate. These
+  profiles support the cache's mechanism but are diagnostic only and do not
+  establish a throughput ratio.
+- The new cache regression passed system Perl, the JVM backend, and the
+  interpreter; the full `nice -n 19 make` gate passed on the candidate. A full
+  one-second-window comparison remains unscored because shared-host load
+  prevented warmup stabilization. No 1:1 throughput acceptance result exists.
+- The runner now randomizes launch order from a recorded seed while balancing
+  which engine starts first. It can also run candidate and reference PerlOnJava
+  JARs in the same paired protocol, recording both paths and hashes. Artifact
+  comparisons remain attribution evidence and are explicitly ineligible for a
+  Perl parity claim.
+- Added a hosted issue #1863 workflow that builds the candidate, exact PR parent,
+  exact `origin/master` base, optimized blead, and stable Perl 5.42.2; it runs
+  seven paired measurements for the fixed portfolio with verified nice 19 and
+  retains raw reports as a 90-day artifact. The clean candidate
+  `85487069bf773710f2a385632b7bb5e3e342f4ad` passed `nice -n 19 make` and the
+  hosted run. It measured method 0.684x blead (95% interval 0.669–0.697),
+  closure 1.272x (1.245–1.313), Life 0.828x (0.812–0.852), and portfolio
+  0.896x (0.881–0.913). Against exact `origin/master`, method was 1.393x
+  (1.371–1.413) and portfolio 1.181x (1.154–1.207). The method remains about
+  31.6% below blead, so parity is not met.
+- The fresh-scalar result fast path measured 0.996x the exact preceding
+  candidate on the method anchor (95% interval 0.965–1.036), with no
+  demonstrated gain; it was removed. The clean-candidate rerun measured 0.993x
+  against that experiment (0.977–1.010), consistent with no attributable
+  change. The first completed hosted report is in GitHub Actions run
+  `39955805968`; the cleaned report is in run `39973954089`.
+- Reused the existing `ThreadLocalMap.Entry` for stable-method argument-array
+  recycling by leaving its value null while the array is borrowed. The JFR
+  allocation samples had attributed repeated `ThreadLocalMap.Entry` allocation
+  to `RuntimeArray.recycleMethodCallArguments`. The full `nice -n 19 make` gate
+  passed. In the seven-pair hosted comparison against the exact preceding
+  candidate, method measured 1.094x (95% interval 1.020–1.223) and portfolio
+  1.044x (1.001–1.098), supporting retention. Against pinned blead, method is
+  0.719x (0.707–0.731), closure 1.315x (1.273–1.365), Life 0.812x
+  (0.806–0.818), and portfolio 0.915x (0.904–0.929). The method anchor
+  remains about 28% below parity. Raw results are in Actions run
+  `39993853491`; the reported JAR SHA-256 is
+  `188ff8d1992966f49990c85cca739cf3a53fadbc1b1e70729165981232a5a284`.
 
 ### Next steps
 
-1. Run the smoke protocol on system Perl and both PerlOnJava backends.
-2. Add profiler summaries for allocation rate and GC time without profiling the
-   scored windows.
-3. Collect Processor Trace instruction totals when the host enables tracing.
-4. Run the full seven-group, seven-pair protocol and store the raw baseline.
-5. Update this document with the baseline and hotspot attribution before
-   selecting another production optimization.
+1. Collect a fresh method-anchor JFR on the verified-priority runner; isolate
+   remaining integer-result allocation, hash-field lookup, and call-boundary
+   costs after the ThreadLocal entry allocation is removed.
+2. Measure allocation per operation, GC, live heap, and peak RSS for the
+   baseline and retained candidate; current CI evidence covers throughput only.
+3. Continue isolated experiments against the exact previous candidate and
+   pinned blead. The method anchor at 0.719x remains below the 1.00x threshold.
+4. Keep the verified-priority seven-pair full-portfolio run as the acceptance
+   gate for each final candidate.
+5. Collect Processor Trace instruction totals when the host enables tracing.
 
 ### Open questions
 

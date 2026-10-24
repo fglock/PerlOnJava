@@ -27,6 +27,8 @@ public final class RuntimeCodeRuntimeState {
     final HashMap<String, EmitterContext> evalContexts = new HashMap<>();
     final ConcurrentHashMap<String, RuntimeBase[]> padConstantsByClassName =
             new ConcurrentHashMap<>();
+    final ConcurrentHashMap<String, String[]> stableHashMutationMethodKeysByClassName =
+            new ConcurrentHashMap<>();
     final ConcurrentHashMap<String, Set<String>> disabledWarningsByClassName =
             new ConcurrentHashMap<>();
 
@@ -35,6 +37,9 @@ public final class RuntimeCodeRuntimeState {
 
     private int nextMethodCallsiteId;
     private int nextRuntimeEvalId = 1;
+    private int lastStableHashMethodBlessId;
+    private boolean lastStableHashMethodBlessIdCached;
+    private boolean lastStableHashMethodHashDereferenceAllowed;
     private final Map<String, Integer> nextRuntimeEvalIdsBySource = new HashMap<>();
     boolean disassemble = System.getenv("JPERL_DISASSEMBLE") != null;
     boolean useInterpreter = System.getenv("JPERL_INTERPRETER") != null;
@@ -77,6 +82,8 @@ public final class RuntimeCodeRuntimeState {
      */
     void snapshotCompiledMetadataInto(RuntimeCodeRuntimeState child) {
         child.evalContexts.putAll(evalContexts);
+        stableHashMutationMethodKeysByClassName.forEach((name, keys) ->
+                child.stableHashMutationMethodKeysByClassName.put(name, keys.clone()));
         disabledWarningsByClassName.forEach((name, categories) ->
                 child.disabledWarningsByClassName.put(name, Set.copyOf(categories)));
         // A child inherits the parent's loaded-module/runtime feature surface.
@@ -106,6 +113,26 @@ public final class RuntimeCodeRuntimeState {
     void clearInlineMethodCache() {
         Arrays.fill(inlineCacheKey, 0L);
         Arrays.fill(inlineCacheCode, null);
+        clearStableHashMethodBlessIdCache();
+    }
+
+    boolean stableHashMethodHashDereferenceAllowed(RuntimeScalar invocant) {
+        int blessId = ((RuntimeBase) invocant.value).blessId;
+        if (lastStableHashMethodBlessIdCached
+                && lastStableHashMethodBlessId == blessId) {
+            return lastStableHashMethodHashDereferenceAllowed;
+        }
+        int effectiveBlessId = NameNormalizer.getEffectiveBlessId(blessId);
+        boolean allowed = effectiveBlessId >= 0
+                || !OverloadContext.hasDirectOverload(invocant, "(%{}");
+        lastStableHashMethodBlessId = blessId;
+        lastStableHashMethodBlessIdCached = true;
+        lastStableHashMethodHashDereferenceAllowed = allowed;
+        return allowed;
+    }
+
+    void clearStableHashMethodBlessIdCache() {
+        lastStableHashMethodBlessIdCached = false;
     }
 
     void clearCaches() {
@@ -117,6 +144,7 @@ public final class RuntimeCodeRuntimeState {
         interpretedSubs.clear();
         evalContexts.clear();
         padConstantsByClassName.clear();
+        stableHashMutationMethodKeysByClassName.clear();
         disabledWarningsByClassName.clear();
         nextMethodCallsiteId = 0;
         clearInlineMethodCache();
