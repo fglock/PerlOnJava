@@ -6833,6 +6833,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     && this.value instanceof RuntimeBase base) {
                 displacedBase = base;
             }
+            boolean releasedDisplacedScalarSlot = displacedBase != null
+                    && releaseScalarValueOwnerCount(
+                            displacedBase, "RuntimeScalar.dynamicRestoreState");
             PerlOwnerSlot displacedScalarReferenceContentsOwner =
                     this.scalarReferenceContentsOwner;
 
@@ -6878,8 +6881,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // Decrement refCount of the value displaced by local restoration
             // after restoring the old scalar state, so DESTROY sees the restored
             // variable rather than the dying localized value.
-            if (displacedBase != null
-                    && displacedBase.refCount > 0 && --displacedBase.refCount == 0) {
+            boolean displacedReferentReachedZero = displacedBase != null
+                    && (releasedDisplacedScalarSlot
+                        ? displacedBase.refCount == 0
+                        : displacedBase.refCount > 0 && --displacedBase.refCount == 0);
+            if (displacedReferentReachedZero) {
                 displacedBase.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(displacedBase);
             }
