@@ -909,6 +909,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return slot != null && slot.releaseScalarValueCount(expectedReferent, releaseSite);
     }
 
+    boolean acquireScalarValueOwnerCount(RuntimeBase referent, String acquireSite) {
+        if (scalarValueOwnerSlot == null) {
+            scalarValueOwnerSlot = new PerlOwnerSlot(
+                    PerlOwnerSlot.Kind.SCALAR_VALUE, null, null, this);
+        }
+        return scalarValueOwnerSlot.acquireScalarValueCount(referent, acquireSite);
+    }
+
     PerlOwnerSlot.PendingRelease deferScalarValueOwnerCount(RuntimeBase expectedReferent) {
         PerlOwnerSlot slot = scalarValueOwnerSlot;
         return slot != null

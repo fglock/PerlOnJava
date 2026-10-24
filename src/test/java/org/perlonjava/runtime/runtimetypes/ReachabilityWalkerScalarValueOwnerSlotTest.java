@@ -76,4 +76,38 @@ class ReachabilityWalkerScalarValueOwnerSlotTest {
             }
         }
     }
+
+    @Test
+    void unweakeningRestoresDirectOwnerThroughScalarValueSlot() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray target = new RuntimeArray();
+            RuntimeScalar strongOwner = new RuntimeScalar();
+            strongOwner.set(target.createAnonymousReference());
+            MyVarCleanupStack.register(strongOwner);
+
+            RuntimeScalar weakObserver = new RuntimeScalar();
+            weakObserver.set(target.createAnonymousReference());
+            WeakRefRegistry.weaken(weakObserver);
+            assertEquals(1, target.refCount);
+            assertFalse(weakObserver.scalarValueOwnerSlot().isActive());
+
+            try {
+                WeakRefRegistry.unweaken(weakObserver);
+
+                assertEquals(2, target.refCount,
+                        "unweakening restores the direct scalar owner count");
+                assertTrue(weakObserver.ownsCountedReferent(target));
+                assertTrue(weakObserver.scalarValueOwnerSlot().isActive(),
+                        "unweakening restores ownership through the explicit slot");
+            } finally {
+                if (WeakRefRegistry.isweak(weakObserver)) {
+                    WeakRefRegistry.unweaken(weakObserver);
+                }
+                weakObserver.undefine();
+                strongOwner.undefine();
+                MyVarCleanupStack.unregister(strongOwner);
+            }
+        }
+    }
 }

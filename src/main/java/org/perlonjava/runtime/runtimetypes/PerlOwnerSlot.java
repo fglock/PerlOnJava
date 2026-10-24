@@ -363,6 +363,34 @@ public final class PerlOwnerSlot {
         }
     }
 
+    /** Acquire one tracked direct-scalar owner through this slot. */
+    synchronized boolean acquireScalarValueCount(RuntimeBase target, String acquireSite) {
+        if (kind != Kind.SCALAR_VALUE) {
+            throw new IllegalStateException(
+                    "scalar-value acquisition requires a SCALAR_VALUE slot");
+        }
+        Objects.requireNonNull(target, "target");
+        if (referent == target) return true;
+        if (referent != null) {
+            throw new IllegalStateException("cannot retarget an active scalar-value owner");
+        }
+        if (target.refCount < 0) return false;
+        if (target.refCount == Integer.MAX_VALUE) {
+            throw new IllegalStateException("scalar-value owner count overflow");
+        }
+        target.traceRefCount(+1, acquireSite);
+        target.refCount++;
+        target.hadCountedReference = true;
+        RuntimeScalar scalar = ownerCell();
+        if (scalar != null) {
+            scalar.refCountOwned = true;
+            target.recordOwner(scalar, acquireSite);
+            target.recordActiveOwner(scalar);
+        }
+        transferTo(target);
+        return true;
+    }
+
     /**
      * Release the legacy counted edge represented by a direct scalar-value
      * slot. The caller retains lifecycle policy (for example, whether a
