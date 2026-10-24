@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816), now reconciled with `origin/master` through `aeda28344`. Code commit `29372cac0` passes full `nice -n 19 make` in 23m10s for explicit-undef release, `2c05509e6` passes in 16m10s for deferred scalar-slot release, and local candidate `fad2199eb` passes in 18m28s for immediate tail-call release. The latest confirmed push to the PR branch is `da2c8a0f1`; hosted validation of newer commits is pending. Hosted run `39991272777` passes on Linux and Windows, including both thread gates, for preceding head `c1167ffbd`. Owner slots still bridge to `RuntimeBase.refCount` for dispatch, and default owner-slot accounting remains incomplete.
+**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816), now reconciled with `origin/master` through `aeda28344`. Code commit `29372cac0` passes full `nice -n 19 make` in 23m10s for explicit-undef release, `2c05509e6` passes in 16m10s for deferred scalar-slot release, `fad2199eb` passes in 18m28s for immediate tail-call release, and local candidate `ca58da7c4` passes in 28m41s for aggregate-owner proof reuse. The latest confirmed push to the PR branch is `7d8502900`; hosted validation of newer commits is pending. Hosted run `39991272777` passes on Linux and Windows, including both thread gates, for preceding head `c1167ffbd`. Owner slots still bridge to `RuntimeBase.refCount` for dispatch, and default owner-slot accounting remains incomplete.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
@@ -115,7 +115,7 @@ and first path establish implementation cost.
 
 ### Current status: Phase 2 in progress; Phase 1 merged in PR #1653 as `84f32be179bdc2b351c3eaae1cb26df39964ab6b` (2026-10-07)
 
-The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The branch includes the current-master merge at `aeda28344`; code commits `29372cac0`, `2c05509e6`, and `fad2199eb` pass their full Make gates. The latest confirmed pushed head is `da2c8a0f1`; hosted validation of newer commits is pending. Focused Mojolicious controller/WebSocket and Catalyst tempfile regressions pass on both backends with loopback access. On the tail-call candidate, the interpreter tempfile test exceeded a 180-second run but completed 24/24 within a 240-second JFR run; samples concentrate in existing external-root reachability snapshots and aggregate-owner recovery. HTML::Tree 5.07 passes all 23 files and 989 tests on both backends on the preceding ownership candidate. Phase 2 remains incomplete: `refCount` still controls lifecycle dispatch, and the slot ledger is not yet the default accounting source across general scalar/proxy stores, aliases, and cleanup. Distinct scalar-reference aliases keep separate reachability identities while contributing one referent count per scalar cell. The HTML-Tree result is compatibility evidence, not the Phase 2 owner-slot exit proof.
+The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The branch includes the current-master merge at `aeda28344`; code commits `29372cac0`, `2c05509e6`, `fad2199eb`, and `ca58da7c4` pass their full Make gates. The latest confirmed pushed head is `7d8502900`; hosted validation of newer commits is pending. Focused Mojolicious controller/WebSocket and Catalyst tempfile regressions pass on both backends with loopback access. On the tail-call candidate, the interpreter tempfile test exceeded a 180-second run but completed 24/24 within a 240-second JFR run; a later 240-second profile after owner-proof caching emitted no TAP, while an unprofiled run completed 24/24 within the 600-second limit. Sampled `isRootedAggregateOwner` frames declined from 517 to 190, with 112 cache-hit frames; the profiled runs had different total sample counts, so wall-clock attribution remains inconclusive. HTML::Tree 5.07 passes all 23 files and 989 tests on both backends on the preceding ownership candidate. Phase 2 remains incomplete: `refCount` still controls lifecycle dispatch, and the slot ledger is not yet the default accounting source across general scalar/proxy stores, aliases, and cleanup. Distinct scalar-reference aliases keep separate reachability identities while contributing one referent count per scalar cell. The HTML-Tree result is compatibility evidence, not the Phase 2 owner-slot exit proof.
 
 ### Current batch
 
@@ -156,6 +156,15 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   interpreter Catalyst tempfile file requiring a 240-second limit after a
   180-second run stopped at assertion 13. Its JFR samples show external-root
   snapshot construction and aggregate-owner recovery as the dominant work.
+- Aggregate owner recovery now memoizes root proofs by owner identity for the
+  duration of one restore call. The same excluded referent and graph remain
+  fixed throughout that scan. A deterministic test with 64 hash-entry slots
+  verifies that all 64 owners are restored with one proof and 63 cache hits.
+  Full `nice -n 19 make` passes in 28m41s on `ca58da7c4`. The interpreter
+  Catalyst tempfile regression passes 24/24 without profiling. JFR sampled
+  `isRootedAggregateOwner` 517 times before and 190 times after the change,
+  plus 112 cache-hit frames; the profiled after-run hit its 240-second limit
+  before TAP output, so these samples do not establish a wall-clock speedup.
 - The preceding array-tail fix routes `removeFirst()` and `removeLast()` through
   structural mutation hooks so `shift` and `pop` retire array slots. Its
   immutable code commit `ecc5efd37` passes full `nice -n 19 make` in 13m34s,
