@@ -189,6 +189,16 @@ jobs:
             --workloads $WORKLOADS --pairs 7 --nice 19 \
             --output dev/bench/reports/ci-issue1863-candidate-vs-blead.json
 
+      - name: Compare exact master with optimized blead
+        timeout-minutes: 60
+        run: |
+          env -u PERL5LIB -u PERL5OPT python3 dev/bench/performance_over_perl.py \
+            --perl "$RUNNER_TEMP/perl-blead/bin/perl5.45.5" \
+            --perl-source-revision "$BLEAD_COMMIT" \
+            --jperl-jar "$RUNNER_TEMP/perlonjava-master.jar" \
+            --workloads $WORKLOADS --pairs 7 --nice 19 \
+            --output dev/bench/reports/ci-issue1863-master-vs-blead.json
+
       - name: Compare candidate with stable Perl
         timeout-minutes: 60
         run: |
@@ -209,6 +219,7 @@ jobs:
               ("exact parent", "ci-issue1863-candidate-vs-parent.json"),
               ("master", "ci-issue1863-candidate-vs-master.json"),
               ("optimized blead", "ci-issue1863-candidate-vs-blead.json"),
+              ("exact master vs blead", "ci-issue1863-master-vs-blead.json"),
               ("stable Perl", "ci-issue1863-candidate-vs-stable.json"),
           ]
           print("## Issue #1863 benchmark results\n")
