@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816), now reconciled with `origin/master` through `aeda28344`. Code commit `29372cac0` passes full `nice -n 19 make` in 23m10s for explicit-undef release, `2c05509e6` passes in 16m10s for deferred scalar-slot release, `fad2199eb` passes in 18m28s for immediate tail-call release, and local candidate `ca58da7c4` passes in 28m41s for aggregate-owner proof reuse. The latest confirmed push to the PR branch is `7d8502900`; hosted validation of newer commits is pending. Hosted run `39991272777` passes on Linux and Windows, including both thread gates, for preceding head `c1167ffbd`. Owner slots still bridge to `RuntimeBase.refCount` for dispatch, and default owner-slot accounting remains incomplete.
+**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816), now reconciled with `origin/master` through `aeda28344`. Code commit `29372cac0` passes full `nice -n 19 make` in 23m10s for explicit-undef release, `2c05509e6` passes in 16m10s for deferred scalar-slot release, `fad2199eb` passes in 18m28s for immediate tail-call release, `ca58da7c4` passes in 28m41s for aggregate-owner proof reuse, and `6730377d1` passes in 15m56s for single-pass aggregate-owner recovery. The latest confirmed push to the PR branch is `2fde9560d`; hosted validation of newer commits is pending. Hosted run `39991272777` passes on Linux and Windows, including both thread gates, for preceding head `c1167ffbd`. Owner slots still bridge to `RuntimeBase.refCount` for dispatch, and default owner-slot accounting remains incomplete.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
@@ -165,6 +165,15 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   `isRootedAggregateOwner` 517 times before and 190 times after the change,
   plus 112 cache-hit frames; the profiled after-run hit its 240-second limit
   before TAP output, so these samples do not establish a wall-clock speedup.
+- On 2026-10-24, aggregate-owner recovery now takes one owner-slot snapshot and
+  classifies each slot in a single pass, combining hash, array, and scalar-value
+  recovery. A deterministic counter verifies all 128 slots in the mixed test
+  graph are inspected once, replacing three full scans. Full `nice -n 19 make`
+  passes in 15m56s on `6730377d1`. The Catalyst tempfile test passes 24/24 and
+  controller-owner release passes 3/3 on both backends; the WebSocket
+  controller-release regression passes 6/6 on both backends with loopback
+  access. This reduces snapshot allocation and slot traversal; it does not
+  replace the legacy `refCount` dispatch bridge.
 - The preceding array-tail fix routes `removeFirst()` and `removeLast()` through
   structural mutation hooks so `shift` and `pop` retire array slots. Its
   immutable code commit `ecc5efd37` passes full `nice -n 19 make` in 13m34s,
