@@ -2022,9 +2022,10 @@ public class MortalList {
             releasedTargets = Collections.newSetFromMap(new IdentityHashMap<>());
             for (RuntimeBase referent : new ArrayList<>(state.targetedWeakSweepReferents)) {
                 // Keep a target only while that target is actually reachable
-                // from a temporary root. Unrelated temporary values must not
-                // delay request cleanup until global destruction.
-                if (ReachabilityWalker.isReachableFromTemporaryRoots(referent)) continue;
+                // from any current Perl root. Unrelated temporary values must
+                // not delay request cleanup, but a lexical/package owner that
+                // appeared after the request must still protect the referent.
+                if (isReachableFromExternalRootCached(referent)) continue;
                 releasedTargets.add(referent);
                 state.targetedWeakSweepReferents.remove(referent);
             }
