@@ -161,13 +161,19 @@ public class WeakRefRegistry {
             // hash like `{ weakref => $target }`), the store never incremented
             // refCount, so weaken must not decrement either — otherwise we
             // get a double-decrement that causes premature destruction.
-            // Clear the owner slot and legacy bridge because weaken's DEC consumes the ownership —
-            // the weak scalar should not trigger another DEC on scope exit or overwrite.
-            ref.setRefCountOwned(false);
-            base.traceRefCount(-1, "WeakRefRegistry.weaken (decrement on weakening)");
-            base.releaseOwner(ref, "weaken");
-            base.releaseActiveOwner(ref);
-            if (--base.refCount == 0) {
+            // The scalar-value slot owns this release when present. Older
+            // cells retain the explicit legacy bridge until their ownership
+            // path is migrated.
+            boolean releasedBySlot = ref.releaseScalarValueOwnerCount(
+                    base, "WeakRefRegistry.weaken (decrement on weakening)");
+            if (!releasedBySlot) {
+                ref.setRefCountOwned(false);
+                base.traceRefCount(-1, "WeakRefRegistry.weaken (decrement on weakening)");
+                base.releaseOwner(ref, "weaken");
+                base.releaseActiveOwner(ref);
+                base.refCount--;
+            }
+            if (base.refCount == 0) {
                 if (base.hasSemanticCaptureOwner()) {
                     // A captured pad is an authoritative Perl owner even when
                     // the weak probe being weakened held the last ordinary
