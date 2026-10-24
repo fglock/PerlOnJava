@@ -517,15 +517,18 @@ public class POSIX extends PerlModuleBase {
         int category = args.isEmpty() ? 0 : args.get(0).getInt();
         RuntimeLocaleState localeState = PerlRuntime.current().regexState().localeState;
         if (args.size() < 2) {
-            return new RuntimeScalar(localeState.currentCtype()).getList();
+            String current = switch (category) {
+                case 0 -> localeState.currentCtype();
+                case 5 -> localeState.currentTime();
+                default -> localeState.currentCtype();
+            };
+            return new RuntimeScalar(current).getList();
         }
         String requested = args.get(1).toString();
         if (!isSupportedLocale(requested)) return RuntimeScalarCache.scalarUndef.getList();
-        // LC_ALL (0) publication includes LC_CTYPE.  The remaining categories
-        // have no regex effect, but return the same validated locale as POSIX.
-        if (category == 0 || category == 2) {
-            return new RuntimeScalar(localeState.publishCtype(requested)).getList();
-        }
+        if (category == 0) return new RuntimeScalar(localeState.publishAll(requested)).getList();
+        if (category == 2) return new RuntimeScalar(localeState.publishCtype(requested)).getList();
+        if (category == 5) return new RuntimeScalar(localeState.publishTime(requested)).getList();
         return new RuntimeScalar(requested).getList();
     }
 

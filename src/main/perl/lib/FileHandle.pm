@@ -51,6 +51,10 @@ sub pipe {
 #
 IO::Handle->import( grep { !defined(&$_) && $_ ne 'pipe' } @EXPORT, @EXPORT_OK );
 
+# FileHandle also aliases methods from IO::Seekable below.  Load it directly
+# here instead of relying on IO::File's transitive import ordering.
+require IO::Seekable;
+
 #
 # Some people call "FileHandle::function", so all the functions
 # that were in the old FileHandle class must be imported, too.

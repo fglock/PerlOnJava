@@ -14,4 +14,3 @@ seek $capture, 0, 0 or die "seek capture file: $!";
 my $captured = <$capture>;
 is($captured, "captured through localized STDOUT\n",
     'implicit print follows a localized and reopened STDOUT glob');
-

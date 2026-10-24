@@ -225,6 +225,11 @@ public class Encode extends PerlModuleBase {
             encode.registerMethod("resolve_alias", null);
             encode.registerMethod("perlio_ok", null);
             encode.registerMethod("find_mime_encoding", null);
+            // Perl 5.42+ Encode.pm calls this XS bootstrap callback after
+            // XSLoader::load. Its BOOT work is already performed by this
+            // Java initializer, but the callback must exist before the Perl
+            // source reaches the strict-subs checked `onBOOT;` call.
+            encode.registerMethod("onBOOT", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Encode method: " + e.getMessage());
         }
@@ -258,6 +263,11 @@ public class Encode extends PerlModuleBase {
         } catch (NoSuchMethodException | IllegalAccessException e) {
             System.err.println("Warning: Missing Encode::Encoding method: " + e.getMessage());
         }
+    }
+
+    /** Encode.pm's XS BOOT initialization is completed by {@link #initialize()}. */
+    public static RuntimeList onBOOT(RuntimeArray args, int ctx) {
+        return new RuntimeList();
     }
 
     // --- Constant accessor methods ---

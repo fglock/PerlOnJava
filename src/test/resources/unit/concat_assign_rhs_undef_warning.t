@@ -42,4 +42,3 @@ my $fatal_error;
 }
 like($fatal_error, qr/Use of uninitialized value.*concatenation/,
     'fatal uninitialized warning from .= throws');
-

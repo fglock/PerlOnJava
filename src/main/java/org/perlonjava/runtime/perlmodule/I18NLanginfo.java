@@ -190,7 +190,14 @@ public class I18NLanginfo extends PerlModuleBase {
             item = args.get(0).getInt();
         }
         
-        Locale locale = Locale.getDefault();
+        String timeLocale = org.perlonjava.runtime.runtimetypes.PerlRuntime.current()
+                .regexState().localeState.currentTime();
+        String languageTag = timeLocale.trim().replace('_', '-').replaceFirst("\\..*$", "")
+                .replaceFirst("@.*$", "");
+        Locale locale = "C".equalsIgnoreCase(languageTag)
+                || "POSIX".equalsIgnoreCase(languageTag)
+                ? Locale.US : Locale.forLanguageTag(languageTag);
+        if (locale.getLanguage().isEmpty()) locale = Locale.US;
         DateFormatSymbols dateSymbols = DateFormatSymbols.getInstance(locale);
         DecimalFormatSymbols decimalSymbols = DecimalFormatSymbols.getInstance(locale);
         
