@@ -195,8 +195,14 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   `nice -n 19 make` passes in 13m09s. The #1794 controller-owner regression
   passes 3/3 and the #1795 Catalyst tempfile regression passes 24/24 on both
   backends. The WebSocket integration test skipped because loopback sockets
-  are unavailable in this environment. Recovery remains enabled by default;
-  its two production callers still need independent direct-accounting proof.
+  were unavailable in the sandbox, then passed with extended access: the
+  WebSocket controller test passes 6/6 and callback/long-poll lifetime passes
+  29/29 on both backends. With aggregate-owner recovery disabled, the #1794
+  controller, both WebSocket tests, #1795 tempfile test, void-context hash
+  owner test, captured scalar/array argument test, and aggregate-capture owner
+  test all pass on both backends. Recovery remains enabled by default; its two
+  production callers still need independent direct-accounting proof, and the
+  synthetic Java tests still directly require the recovery behavior.
 - A second focused reducer,
   `issue_1649_captured_scalar_array_argument.t`, isolates the same class of
   lifetime error: a closure writes a blessed object to a captured scalar while
