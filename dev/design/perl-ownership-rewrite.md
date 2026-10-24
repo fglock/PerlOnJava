@@ -119,6 +119,15 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
 
 ### Current batch
 
+- On 2026-10-24, `dynamicRestoreState()` now retires a displaced localized
+  referent through its `SCALAR_VALUE` owner slot before restoring the saved
+  scalar state, while preserving post-restore `DESTROY` dispatch. A focused
+  Java regression covers a retired legacy `refCountOwned` flag with an active
+  slot and verifies that the restored referent remains owned. Full
+  `nice -n 19 make` passes in 17m on this batch. The Catalyst tempfile file
+  passes 24/24, the #1794 controller-owner file 3/3, and the Mojolicious
+  WebSocket release file 6/6 on both JVM and interpreter. The prior ownership
+  cases and lifecycle bridge remain open; Phase 2 is incomplete.
 - Array and hash tails in nested list assignment transfer materialized cells
   through their owning-store paths. This releases displaced values, acquires
   scalar ownership idempotently, and registers structural slots on the
