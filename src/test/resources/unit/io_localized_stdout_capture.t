@@ -12,5 +12,6 @@ my ($capture, $path) = tempfile(UNLINK => 1);
 
 seek $capture, 0, 0 or die "seek capture file: $!";
 my $captured = <$capture>;
+$captured =~ s/\r\n/\n/g if defined $captured;
 is($captured, "captured through localized STDOUT\n",
     'implicit print follows a localized and reopened STDOUT glob');
