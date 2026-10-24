@@ -132,6 +132,12 @@ public class BytecodeInterpreter {
         return elem.blessId != 0 || elem.refCount >= 0;
     }
 
+    private static boolean capturedLexicalOwnerStillRegistered(
+            InterpretedCode code, int register, RuntimeBase slot, int frameCleanupMark) {
+        return slot != null && code.isCapturedVarRegister(register)
+                && MyVarCleanupStack.isRegisteredBefore(frameCleanupMark, slot);
+    }
+
     private static void releaseConsumedTemp(RuntimeBase temp, RuntimeBase target) {
         if (!(temp instanceof RuntimeScalar tempScalar)
                 || !(target instanceof RuntimeScalar targetScalar)
@@ -195,7 +201,7 @@ public class BytecodeInterpreter {
      * @return RuntimeList containing the result (may be RuntimeControlFlowList)
      */
     public static RuntimeList execute(InterpretedCode code, RuntimeArray args, int callContext) {
-        return execute(code, args, callContext, null);
+        return execute(code, args, callContext, null, MyVarCleanupStack.currentSize());
     }
 
     /**
@@ -208,9 +214,14 @@ public class BytecodeInterpreter {
      * @return RuntimeList containing the result (may be RuntimeControlFlowList)
      */
     public static RuntimeList execute(InterpretedCode code, RuntimeArray args, int callContext, String subroutineName) {
+        return execute(code, args, callContext, subroutineName, MyVarCleanupStack.currentSize());
+    }
+
+    public static RuntimeList execute(InterpretedCode code, RuntimeArray args, int callContext,
+                                      String subroutineName, int frameCleanupMark) {
         RuntimeBase[] registers = code.getRegisters();
         SuspendedInterpreterFrame frame = new SuspendedInterpreterFrame(
-                code, registers, callContext, subroutineName);
+                code, registers, callContext, subroutineName, frameCleanupMark);
 
         // Initialize special registers (same as compiler).
         registers[0] = code;
@@ -402,6 +413,7 @@ public class BytecodeInterpreter {
     private static RuntimeList execute(SuspendedInterpreterFrame frame) {
         InterpretedCode code = frame.code;
         int callContext = frame.callContext;
+        int frameCleanupMark = frame.frameCleanupMark;
         // Track interpreter state for stack traces
         String framePackageName = code.packageName != null ? code.packageName : "main";
         if (code.isQuotedRegexCallback) {
@@ -650,7 +662,9 @@ public class BytecodeInterpreter {
                                 int reg = bytecode[pc++];
                                 int returnReg = bytecode[pc++];
                                 RuntimeBase slot = registers[reg];
-                                if (slot instanceof RuntimeScalar rs) {
+                                if (slot instanceof RuntimeScalar rs
+                                        && !capturedLexicalOwnerStillRegistered(
+                                                code, reg, slot, frameCleanupMark)) {
                                     RuntimeScalar.releaseOrTransferSocketIoOwnerOnReturn(
                                             rs, registers[returnReg]);
                                     MortalList.deferDecrementIfNotCaptured(rs);
@@ -743,7 +757,9 @@ public class BytecodeInterpreter {
                             case Opcodes.RETURN_SCOPE_CLEANUP_HASH -> {
                                 int reg = bytecode[pc++];
                                 RuntimeBase slot = registers[reg];
-                                if (slot instanceof RuntimeHash rh) {
+                                if (slot instanceof RuntimeHash rh
+                                        && !capturedLexicalOwnerStillRegistered(
+                                                code, reg, slot, frameCleanupMark)) {
                                     MortalList.scopeExitCleanupHash(rh);
                                 }
                             }
@@ -789,7 +805,9 @@ public class BytecodeInterpreter {
                                 int reg = bytecode[pc++];
                                 int returnReg = bytecode[pc++];
                                 RuntimeBase slot = registers[reg];
-                                if (slot instanceof RuntimeArray ra) {
+                                if (slot instanceof RuntimeArray ra
+                                        && !capturedLexicalOwnerStillRegistered(
+                                                code, reg, slot, frameCleanupMark)) {
                                     MortalList.scopeExitCleanupArray(ra, registers[returnReg]);
                                 }
                             }

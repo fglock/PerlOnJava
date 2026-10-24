@@ -68,6 +68,21 @@ public class MyVarCleanupStack {
         return registeredCounts().containsKey(var);
     }
 
+    /** True when {@code var} was registered before the current frame mark. */
+    public static boolean isRegisteredBefore(int mark, Object var) {
+        if (var == null) return false;
+        ArrayList<Object> current = stack();
+        int limit = Math.min(Math.max(mark, 0), current.size());
+        for (int i = limit - 1; i >= 0; i--) {
+            if (current.get(i) == var) return true;
+        }
+        return false;
+    }
+
+    public static int currentSize() {
+        return stack().size();
+    }
+
     /**
      * Snapshot the currently-live my-variables. Used by the
      * reachability walker's per-object query

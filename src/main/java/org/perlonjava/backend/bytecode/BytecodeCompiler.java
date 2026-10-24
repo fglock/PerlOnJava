@@ -1635,6 +1635,13 @@ public class BytecodeCompiler implements Visitor {
                 evalSitePragmaFlags.isEmpty() ? null : evalSitePragmaFlags,
                 warningBitsString
         );
+        if (capturedVars != null && capturedVars.length > 0) {
+            BitSet capturedRegisters = new BitSet();
+            for (int index = 0; index < capturedVars.length; index++) {
+                capturedRegisters.set(3 + index);
+            }
+            code.setCapturedVarRegisters(capturedRegisters);
+        }
         if (metadataScope != null) {
             code.setLexicalDisabledWarningCategories(
                     metadataScope.getDisabledWarningCategories());

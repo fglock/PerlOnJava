@@ -26,6 +26,7 @@ public final class SuspendedInterpreterFrame {
     final RuntimeBase[] registers;
     final int callContext;
     final String subroutineName;
+    final int frameCleanupMark;
 
     int pc;
     int virtualEvalFrameDepth;
@@ -59,10 +60,12 @@ public final class SuspendedInterpreterFrame {
     Set<String> suspendedRuntimeDisabledWarningCategories;
 
     SuspendedInterpreterFrame(InterpretedCode code, RuntimeBase[] registers,
-                              int callContext, String subroutineName) {
+                              int callContext, String subroutineName,
+                              int frameCleanupMark) {
         this.code = code;
         this.registers = registers;
         this.callContext = callContext;
         this.subroutineName = subroutineName;
+        this.frameCleanupMark = frameCleanupMark;
     }
 }

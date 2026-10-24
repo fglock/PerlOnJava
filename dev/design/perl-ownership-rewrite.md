@@ -141,10 +141,27 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   tests directly construct scalar cells, mark them owned, then force the
   referent count below the live owners; the reachability-cost tests queue more
   decrements than they acquired owners. These fixtures do not identify a
-  missing Perl store operation. The JVM global-destruction wrapper timed out
-  its nested child at 300 seconds, while the underlying Catalyst lifetime test
-  passed directly and the wrapper passed on the interpreter; this result is
-  inconclusive. The two production scan callers remain in
+  missing Perl store operation. Concretely, the six are
+  `MortalListAggregateOwnerSlotRootChainTest` (two cases),
+  `MortalListAggregateOwnerSlotTest.rootedHashEntrySlotRestoresAnUnderflowedLegacyCountUntilEntryRemoval`,
+  `ReachabilityQueryCostTest.deferredOwnerChecksShareOneRootSnapshotPerDrain`,
+  and two `UnblessedAggregateReachabilitySnapshotTest` cases. The first three
+  assign an artificially low `refCount` after constructing active owner slots;
+  the last three add three counted owners and then queue three generic
+  referent decrements without releasing those owners. The JVM
+  global-destruction wrapper timed out its nested child at 300 seconds, while
+  the underlying Catalyst lifetime test passed directly and the wrapper passed
+  on the interpreter; that wrapper result is inconclusive.
+
+  The recovery scan has two production callers. In
+  `MortalList.processDeferredBase`, a queued slot release is completed, any
+  transient trace owner is retired, and the legacy `refCount` is decremented;
+  if it reaches zero, recovery rebuilds the count from rooted aggregate slots,
+  scalar-value slots, tie wrappers, and reachable counted scalar owners before
+  lifecycle dispatch. In `RuntimeScalar.setLargeRefCounted`, overwriting a
+  scalar releases the displaced scalar-value owner and decrements the old
+  referent; at zero, the same recovery protects any still-rooted aggregate
+  owners. The two production scan callers remain in
   `MortalList.processDeferredBase` and `RuntimeScalar.setLargeRefCounted`.
   Removing the scan is blocked on real operations that can produce these
   mismatches and on direct accounting for aggregate slots and
@@ -182,17 +199,18 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   recursive-builder release check (five weakly observed nodes remained instead
   of two). Limiting metadata to the actual capture count compiled and passed
   the full `make`, but still missed both interpreter reproductions because
-  captured registers are filled later by `withCapturedVars`. The active
-  candidate marked those registers when the closure copy received its capture
-  array. The new scalar regression and the 24-assertion Catalyst interpreter
-  test passed, but the recursive-builder check still retained five nodes
-  instead of two. Narrowing the guard to captured scalar cells kept those two
-  results but the full `make` failed `catalyst_request_body_tempfile_global_destroy.t`:
-  its nested test process exceeded the 300-second harness timeout. The scalar
-  cleanup guard has been removed. No cleanup candidate yet passes all three
-  interpreter checks; the next step is tracing which captured cell and owner
-  slot each return path releases in both reducers. The earlier static filter
-  also caused unrelated cleanup failures; aggregate recovery remains enabled.
+  captured registers are filled later by `withCapturedVars`. Marking those
+  registers when the closure copy receives its capture array fixes the scalar
+  regression. This all-type frame-aware patch passed full `make` in 14m27s, the
+  scalar interpreter test, and Catalyst 24/24. The recursive-builder
+  interpreter test still fails (five nodes remain rather than two) with
+  recovery enabled and disabled, so it is a separate existing failure. A
+  scalar-only variant retained the scalar and Catalyst passes but made
+  `catalyst_request_body_tempfile_global_destroy.t` exceed its 300-second child
+  timeout; that variant was discarded. The all-type patch is restored in the
+  current worktree; a new gate on this exact branch head remains pending. The
+  earlier static filter also caused unrelated cleanup failures. Aggregate
+  recovery remains enabled.
 - On 2026-10-24, the temporary scalar owner installed for `DESTROY`'s self
   argument now balances through the `SCALAR_VALUE` slot API without invoking
   destruction recursively inside the active DESTROY frame. A focused Java test

@@ -55,6 +55,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     public final int maxRegisters;         // Number of registers needed
     public final RuntimeBase[] capturedVars; // Closure support (captured from outer scope)
     public final Map<String, Integer> variableRegistry; // Variable name → register index (for eval STRING)
+    private BitSet capturedVarRegisters = new BitSet();
     public final List<Map<String, Integer>> evalSiteRegistries; // Per-eval-site variable registries
     public final List<Map<String, OperatorNode>> evalSiteLexicalSubroutineBindings;
     public final List<int[]> evalSitePragmaFlags; // [strict, features, evalbytes, warningBitsPoolIndex, regexDebug, enhancedXx]
@@ -451,7 +452,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             // Preserve the declared sub name for interpreter stack traces while
             // retaining async initial-result wrapping from master.
             RuntimeList result = BytecodeInterpreter.execute(
-                    this, args, effectiveContext, this.subName);
+                    this, args, effectiveContext, this.subName, cleanupMark);
             result = RuntimeCode.handleEscapingLoopControl(
                     result, generatedClassConstructor, classAdjustBlock);
             if (isSortComparator && result instanceof RuntimeControlFlowList flow) {
@@ -540,7 +541,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         try {
             validateNamedSignatureArguments(args);
             RuntimeList result = BytecodeInterpreter.execute(
-                    this, args, effectiveContext, subroutineName);
+                    this, args, effectiveContext, subroutineName, cleanupMark);
             if (futureAsyncAwaitSub) {
                 return FutureAsyncAwaitRuntime.wrapInitialResult(
                         effectiveContext, callContext, result, futureAsyncAwaitFutureClass);
@@ -617,6 +618,12 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                 true,
                 this.deparseSourceText
         );
+        copy.capturedVarRegisters = (BitSet) this.capturedVarRegisters.clone();
+        if (capturedVars != null) {
+            for (int index = 0; index < capturedVars.length; index++) {
+                copy.capturedVarRegisters.set(3 + index);
+            }
+        }
         copy.prototype = this.prototype;
         copy.isConstantCv = this.isConstantCv;
         copy.isLexicalConstantCv = this.isLexicalConstantCv;
@@ -681,6 +688,14 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         copy.signaturePositionalCount = this.signaturePositionalCount;
         copy.signatureSlurpySigil = this.signatureSlurpySigil;
         return copy;
+    }
+
+    void setCapturedVarRegisters(BitSet registers) {
+        capturedVarRegisters = registers == null ? new BitSet() : (BitSet) registers.clone();
+    }
+
+    boolean isCapturedVarRegister(int register) {
+        return capturedVarRegisters.get(register);
     }
 
     private void validateAsyncSignature(RuntimeArray args) {
