@@ -237,8 +237,7 @@ public class CompileBinaryOperator {
                 bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.SCALAR);
                 int coderefReg = bytecodeCompiler.lastResultReg;
 
-                bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
-                int argsReg = bytecodeCompiler.lastResultReg;
+                int argsReg = bytecodeCompiler.compileCallArguments(node.right);
 
                 // Allocate result register
                 int rd = bytecodeCompiler.allocateOutputRegister();
@@ -344,8 +343,7 @@ public class CompileBinaryOperator {
                     bytecodeCompiler.emit(subIdx);
 
                     // Compile arguments in list context
-                    bytecodeCompiler.compileNode(argsNode, -1, RuntimeContextType.LIST);
-                    int argsReg = bytecodeCompiler.lastResultReg;
+                    int argsReg = bytecodeCompiler.compileCallArguments(argsNode);
 
                     // Allocate result register
                     int rd = bytecodeCompiler.allocateOutputRegister();
@@ -574,12 +572,12 @@ public class CompileBinaryOperator {
             if (savedCallerLineOverride <= 0 && node.left != null && node.left.getIndex() > 0) {
                 bytecodeCompiler.callerLineTokenOverride = node.left.getIndex();
             }
+            int rs2;
             try {
-                bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
+                rs2 = bytecodeCompiler.compileCallArguments(node.right);
             } finally {
                 bytecodeCompiler.callerLineTokenOverride = savedCallerLineOverride;
             }
-            int rs2 = bytecodeCompiler.lastResultReg;
 
             // Check if this is a &func (no parens) call that should share caller's @_
             boolean shareCallerArgs = node.getBooleanAnnotation("shareCallerArgs");

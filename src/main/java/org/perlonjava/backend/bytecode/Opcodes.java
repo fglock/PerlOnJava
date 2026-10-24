@@ -2148,6 +2148,12 @@ public class Opcodes {
      */
     public static final short CALL_SUB_SHARE_ARGS = 401;
 
+    /** Start collecting evaluated call arguments with temporary lifetimes. */
+    public static final short NEW_CALL_ARGUMENTS = 637;
+
+    /** Append one evaluated expression to a staged call-argument list. */
+    public static final short ADD_CALL_ARGUMENT = 638;
+
     // Missing system operators needed for interpreter fallback of large files (e.g. taint.t)
     public static final short SYMLINK = 402;
     public static final short CHROOT = 403;

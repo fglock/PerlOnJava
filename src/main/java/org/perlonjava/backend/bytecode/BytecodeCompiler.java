@@ -6738,6 +6738,23 @@ public class BytecodeCompiler implements Visitor {
         }
     }
 
+    int compileCallArguments(Node argsNode) {
+        List<Node> arguments = argsNode instanceof ListNode list
+                ? list.elements : (argsNode == null ? List.of() : List.of(argsNode));
+        int argsReg = allocateRegister();
+        emit(Opcodes.NEW_CALL_ARGUMENTS);
+        emitReg(argsReg);
+        emit(arguments.size());
+        for (Node argument : arguments) {
+            compileNode(argument, -1, RuntimeContextType.LIST);
+            int valueReg = lastResultReg;
+            emit(Opcodes.ADD_CALL_ARGUMENT);
+            emitReg(argsReg);
+            emitReg(valueReg);
+        }
+        return argsReg;
+    }
+
     void compileNode(Node node, int targetReg, int callContext) {
         if (node == null) {
             // Skip null nodes (e.g., from format declarations that produce empty statements)

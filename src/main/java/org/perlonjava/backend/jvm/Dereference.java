@@ -1084,8 +1084,9 @@ public class Dereference {
             } else {
                 if (argCount <= 127) mv.visitIntInsn(Opcodes.BIPUSH, argCount);
                 else mv.visitIntInsn(Opcodes.SIPUSH, argCount);
-                mv.visitTypeInsn(Opcodes.ANEWARRAY,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeBase");
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode", "newCallArguments",
+                        "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeCode$CallArguments;", false);
                 mv.visitVarInsn(Opcodes.ASTORE, argsArraySlot);
 
                 for (int index = 0; index < argCount; index++) {
@@ -1095,10 +1096,10 @@ public class Dereference {
                     paramList.elements.get(index).accept(listVisitor);
                     mv.visitVarInsn(Opcodes.ASTORE, argSlot);
                     mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
-                    if (index <= 127) mv.visitIntInsn(Opcodes.BIPUSH, index);
-                    else mv.visitIntInsn(Opcodes.SIPUSH, index);
                     mv.visitVarInsn(Opcodes.ALOAD, argSlot);
-                    mv.visitInsn(Opcodes.AASTORE);
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeCode$CallArguments", "add",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V", false);
                     if (pooledArg) emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
                 }
             }
@@ -1147,7 +1148,7 @@ public class Dereference {
             }
             String argsDescriptor = directRuntimeArray
                     ? "Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;"
-                    : "[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;";
+                    : "Lorg/perlonjava/runtime/runtimetypes/RuntimeCode$CallArguments;";
             mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",

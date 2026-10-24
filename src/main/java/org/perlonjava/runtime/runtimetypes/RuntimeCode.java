@@ -75,6 +75,128 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static final ThreadLocal<ArrayDeque<SortComparatorFrame>> sortComparatorFrames =
             ThreadLocal.withInitial(ArrayDeque::new);
 
+    /** Values staged while a JVM call site's argument expressions are evaluated. */
+    public static final class CallArguments extends RuntimeScalar {
+        private final RuntimeBase[] values;
+        private final java.util.ArrayList<RuntimeScalar> listResultOwners = new java.util.ArrayList<>();
+        private int size;
+        private final ExecutionRuntimeState ownerState;
+        private final java.lang.ref.WeakReference<CallArguments> registration;
+
+        private CallArguments(int capacity) {
+            values = new RuntimeBase[Math.max(0, capacity)];
+            ownerState = PerlRuntime.current().executionState();
+            registration = new java.lang.ref.WeakReference<>(this);
+            ownerState.callArgumentFrames.add(registration);
+        }
+
+        public void add(RuntimeBase value) {
+            if (size == values.length) {
+                throw new IllegalStateException("too many call arguments");
+            }
+            values[size++] = value;
+            // A list-valued call result can hold a fresh object returned by
+            // an inline constructor. The Java staging array keeps that list
+            // reachable, but it is not a Perl owner and cannot protect the
+            // returned object's weak observers when later arguments run.
+            // Give strong references in staged list results ordinary scalar
+            // owner slots until the enclosing call has consumed its arguments.
+            if (size < values.length && value instanceof RuntimeList) {
+                retainListResultOwners(value);
+            }
+        }
+
+        private void retainListResultOwners(RuntimeBase value) {
+            if (value instanceof RuntimeList list) {
+                for (RuntimeBase element : list.elements) {
+                    retainListResultOwners(element);
+                }
+            } else if (value instanceof RuntimeScalar scalar
+                    && scalar.value instanceof RuntimeBase base
+                    && base.blessId != 0
+                    && WeakRefRegistry.hasWeakRefsTo(base)
+                    && !WeakRefRegistry.isweak(scalar)) {
+                RuntimeScalar owner = new RuntimeScalar();
+                owner.set(scalar);
+                listResultOwners.add(owner);
+            }
+        }
+
+        private boolean containsReferent(RuntimeBase referent) {
+            for (int i = 0; i < size; i++) {
+                RuntimeBase value = values[i];
+                if (argumentValueOwnsReferent(value, referent)) return true;
+            }
+            return false;
+        }
+
+        private boolean argumentValueOwnsReferent(RuntimeBase value, RuntimeBase referent) {
+            if (value instanceof RuntimeScalar scalar) {
+                return scalar.value == referent && !WeakRefRegistry.isweak(scalar);
+            }
+            if (value instanceof RuntimeList list) {
+                for (RuntimeBase element : list.elements) {
+                    if (argumentValueOwnsReferent(element, referent)) return true;
+                }
+            } else if (value instanceof RuntimeArray array) {
+                for (RuntimeScalar element : array.elements) {
+                    if (argumentValueOwnsReferent(element, referent)) return true;
+                }
+            } else if (value instanceof RuntimeHash hash) {
+                for (RuntimeScalar element : hash.elements.values()) {
+                    if (argumentValueOwnsReferent(element, referent)) return true;
+                }
+            }
+            return false;
+        }
+
+        private RuntimeBase[] argumentValues() {
+            return Arrays.copyOf(values, size);
+        }
+
+        public RuntimeArray toRuntimeArray() {
+            RuntimeArray args = new RuntimeArray(size);
+            for (RuntimeBase value : argumentValues()) {
+                value.setArrayOfAlias(args);
+            }
+            return args;
+        }
+
+        public void finish() {
+            ownerState.callArgumentFrames.remove(registration);
+            for (RuntimeScalar owner : listResultOwners) {
+                owner.set((RuntimeScalar) null);
+            }
+            listResultOwners.clear();
+            MortalList.drainDeferredArgumentOwnerReleases();
+        }
+    }
+
+    static boolean hasActiveArgumentOwner(RuntimeScalar scalar) {
+        if (scalar == null || !(scalar.value instanceof RuntimeBase referent)) return false;
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        for (RuntimeArray args : state.argsStack) {
+            for (RuntimeScalar element : args.elements) {
+                if (element != null && element.value == referent
+                        && !WeakRefRegistry.isweak(element)) return true;
+            }
+        }
+        for (int i = state.callArgumentFrames.size() - 1; i >= 0; i--) {
+            java.lang.ref.WeakReference<CallArguments> reference = state.callArgumentFrames.get(i);
+            CallArguments frame = reference.get();
+            if (frame == null) {
+                state.callArgumentFrames.remove(i);
+            } else if (frame.containsReferent(referent)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static CallArguments newCallArguments(int capacity) {
+        return new CallArguments(capacity);
+    }
+
     /**
      * Guard for the generated read-only parameter-unpack fast path. The
      * runtime validates the argument/hash shape and overload state; stable
@@ -1389,6 +1511,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (!pStack.isEmpty()) {
             pStack.pop();
         }
+        MortalList.drainDeferredArgumentOwnerReleases();
         cleanupOwnedArgumentAliases(exitedArgs);
         drainDeferredArgumentAggregateCleanup(executionState);
         Deque<Boolean> haStack = executionState.hasArgsStack;
@@ -5533,6 +5656,33 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 methodArgs, callContext);
     }
 
+    public static RuntimeList call(RuntimeScalar runtimeScalar,
+                                   RuntimeScalar method,
+                                   RuntimeScalar currentSub,
+                                   CallArguments args,
+                                   int callContext) {
+        try {
+            return call(runtimeScalar, method, currentSub, args.argumentValues(), callContext);
+        } finally {
+            args.finish();
+        }
+    }
+
+    /** Cached method-call entry for call-site values protected during evaluation. */
+    public static RuntimeList callCached(int callsiteId,
+                                         RuntimeScalar runtimeScalar,
+                                         RuntimeScalar method,
+                                         RuntimeScalar currentSub,
+                                         CallArguments args,
+                                         int callContext) {
+        try {
+            return callCached(callsiteId, runtimeScalar, method, currentSub,
+                    args.argumentValues(), callContext);
+        } finally {
+            args.finish();
+        }
+    }
+
     /**
      * Cached method-call entry for JVM call sites that have already expanded
      * evaluated arguments into their Perl {@code @_} array.
@@ -7920,6 +8070,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         } // end while(true)
     }
 
+    /** Interpreter entry for arguments staged as their expressions were evaluated. */
+    public static RuntimeList apply(RuntimeScalar runtimeScalar,
+                                    CallArguments args,
+                                    int callContext) {
+        try {
+            return apply(runtimeScalar, args.toRuntimeArray(), callContext);
+        } finally {
+            args.finish();
+        }
+    }
+
     /** Marks a direct {@code @array} argument source before a generated call. */
     public static RuntimeBase markDirectArrayCallArgument(RuntimeBase argument) {
         if (argument instanceof RuntimeArray array) {
@@ -8597,6 +8758,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         throw invalidCodeReference(runtimeScalar);
+    }
+
+    /** Interpreter entry for an explicitly named call with staged arguments. */
+    public static RuntimeList apply(RuntimeScalar runtimeScalar,
+                                    String subroutineName,
+                                    CallArguments args,
+                                    int callContext) {
+        try {
+            return apply(runtimeScalar, subroutineName, args.argumentValues(), callContext);
+        } finally {
+            args.finish();
+        }
     }
 
     /**

@@ -594,9 +594,9 @@ public class StringOperators {
 
     /**
      * Implements {@code .=}. Perl treats an undefined left operand as the empty
-     * string without issuing the uninitialized warning that ordinary {@code .}
-     * emits. Keep this as a distinct entry point so eval-time warning changes do
-     * not turn concat-assignment into warning-aware concatenation.
+     * string without a warning, but still warns when the right operand is
+     * undefined. Keep the two warning checks separate from ordinary {@code .}
+     * so eval-time warning changes preserve that distinction.
      */
     public static RuntimeScalar stringConcatAssign(RuntimeScalar runtimeScalar, RuntimeScalar b) {
         // Typeglobs stringify when merely observed, but they cannot be used as
@@ -626,7 +626,7 @@ public class StringOperators {
                     && runtimeScalar.type != RuntimeScalarType.BYTE_STRING)
                 || (b.type != RuntimeScalarType.STRING
                     && b.type != RuntimeScalarType.BYTE_STRING)) {
-            return stringConcat(runtimeScalar, b, false);
+            return stringConcat(runtimeScalar, b, false, true);
         }
 
         String bStr = b.toString();
@@ -640,6 +640,12 @@ public class StringOperators {
 
     private static RuntimeScalar stringConcat(RuntimeScalar runtimeScalar, RuntimeScalar b,
                                               boolean warnUninitialized) {
+        return stringConcat(runtimeScalar, b, warnUninitialized, warnUninitialized);
+    }
+
+    private static RuntimeScalar stringConcat(RuntimeScalar runtimeScalar, RuntimeScalar b,
+                                              boolean warnLeftUninitialized,
+                                              boolean warnRightUninitialized) {
         RuntimeScalar overloaded = tryStringConcatOverload(runtimeScalar, b);
         if (overloaded != null) return overloaded;
 
@@ -654,8 +660,9 @@ public class StringOperators {
         boolean callSiteWarnsUninitialized = callSiteWarningBits == null
                 || WarningFlags.areWarningsForcedOn()
                 || WarningFlags.isEnabledInBits(callSiteWarningBits, "uninitialized");
-        if (warnUninitialized && callSiteWarnsUninitialized
-                && (!aResolved.getDefinedBoolean() || !bResolved.getDefinedBoolean())) {
+        boolean leftIsUndefined = warnLeftUninitialized && !aResolved.getDefinedBoolean();
+        boolean rightIsUndefined = warnRightUninitialized && !bResolved.getDefinedBoolean();
+        if (callSiteWarnsUninitialized && (leftIsUndefined || rightIsUndefined)) {
             WarnDie.warnWithCategory(
                     new RuntimeScalar("Use of uninitialized value in concatenation (.)"),
                     RuntimeScalarCache.scalarEmptyString, "uninitialized");

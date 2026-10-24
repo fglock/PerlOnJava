@@ -2056,9 +2056,14 @@ public class BytecodeInterpreter {
                                 }
 
                                 RuntimeBase argsBase = registers[argsReg];
+                                RuntimeCode.CallArguments stagedArgs =
+                                        argsBase instanceof RuntimeCode.CallArguments staged
+                                                ? staged : null;
 
                                 RuntimeArray callArgs;
-                                if (argsBase instanceof RuntimeArray) {
+                                if (stagedArgs != null) {
+                                    callArgs = null;
+                                } else if (argsBase instanceof RuntimeArray) {
                                     callArgs = (RuntimeArray) argsBase;
                                 } else if (argsBase instanceof RuntimeList) {
                                     if (((RuntimeList) argsBase).elements.size() == 1
@@ -2083,7 +2088,11 @@ public class BytecodeInterpreter {
                                     // establishes mortal marks, warning/hint stacks, args-stack state,
                                     // and void-result cleanup. Bypassing it keeps scope temporaries alive
                                     // in large-code interpreter fallbacks (Net::LDAP ref-loop cleanup).
-                                    if (shareArgs) {
+                                    if (stagedArgs != null) {
+                                        result = shareArgs
+                                                ? RuntimeCode.apply(codeRef, stagedArgs, context)
+                                                : RuntimeCode.apply(codeRef, "", stagedArgs, context);
+                                    } else if (shareArgs) {
                                         result = RuntimeCode.apply(codeRef, callArgs, context);
                                     } else {
                                         result = RuntimeCode.apply(codeRef, "", callArgs, context);
@@ -2256,9 +2265,14 @@ public class BytecodeInterpreter {
                                 RuntimeScalar method = registers[methodReg].scalar();
                                 RuntimeScalar currentSub = registers[currentSubReg].scalar();
                                 RuntimeBase argsBase = registers[argsReg];
+                                RuntimeCode.CallArguments stagedArgs =
+                                        argsBase instanceof RuntimeCode.CallArguments staged
+                                                ? staged : null;
 
                                 RuntimeArray callArgs;
-                                if (argsBase instanceof RuntimeArray) {
+                                if (stagedArgs != null) {
+                                    callArgs = null;
+                                } else if (argsBase instanceof RuntimeArray) {
                                     callArgs = (RuntimeArray) argsBase;
                                 } else if (argsBase instanceof RuntimeList) {
                                     callArgs = new RuntimeArray();
@@ -2274,7 +2288,9 @@ public class BytecodeInterpreter {
                                 CallerStack.pushLazy(lazyPkg, () -> getCallSiteInfo(code, lazyPc, lazyPkg));
                                 RuntimeList result;
                                 try {
-                                    result = RuntimeCode.call(invocant, method, currentSub, callArgs, context);
+                                    result = stagedArgs == null
+                                            ? RuntimeCode.call(invocant, method, currentSub, callArgs, context)
+                                            : RuntimeCode.call(invocant, method, currentSub, stagedArgs, context);
 
                                     // Keep method calls on the shared tail-call handoff as well.
                                     result = RuntimeCode.resolveTailCalls(result, context);
@@ -3018,6 +3034,19 @@ public class BytecodeInterpreter {
 
                             case Opcodes.CREATE_LIST -> {
                                 pc = InlineOpcodeHandler.executeCreateList(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.NEW_CALL_ARGUMENTS -> {
+                                int rd = bytecode[pc++];
+                                int capacity = bytecode[pc++];
+                                registers[rd] = RuntimeCode.newCallArguments(capacity);
+                            }
+
+                            case Opcodes.ADD_CALL_ARGUMENT -> {
+                                int argsReg = bytecode[pc++];
+                                int valueReg = bytecode[pc++];
+                                ((RuntimeCode.CallArguments) registers[argsReg])
+                                        .add((RuntimeBase) registers[valueReg]);
                             }
 
                             case Opcodes.SCALAR_IF_WANTARRAY -> {
