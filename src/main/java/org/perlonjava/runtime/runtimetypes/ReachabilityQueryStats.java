@@ -21,4 +21,6 @@ final class ReachabilityQueryStats {
     long unblessedAggregateDrainPositiveProofsCached;
     long scalarReachabilityQueries;
     long scalarReachabilityRootWalks;
+    long aggregateOwnerRootProofs;
+    long aggregateOwnerRootProofCacheHits;
 }

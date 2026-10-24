@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -1989,11 +1990,15 @@ public class MortalList {
     /** Restore legacy count for aggregate owner slots still reachable from Perl roots. */
     static boolean restoreReachableAggregateOwnerCount(RuntimeBase referent) {
         Set<RuntimeScalar> rootedHashCells = Collections.newSetFromMap(new IdentityHashMap<>());
+        // The referent exclusion and Perl graph stay fixed throughout this
+        // synchronous scan, so multiple slots in one aggregate share a proof.
+        Map<RuntimeBase, Boolean> rootedAggregateOwners = new IdentityHashMap<>();
         int slotsWithoutCell = 0;
         for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
             if (slot.kind() != PerlOwnerSlot.Kind.HASH_ENTRY) continue;
             RuntimeBase owner = slot.ownerContainer();
-            boolean rootedOwner = isRootedAggregateOwner(owner, referent);
+            boolean rootedOwner = isRootedAggregateOwnerCached(
+                    owner, referent, rootedAggregateOwners);
             if (!rootedOwner) continue;
             RuntimeScalar cell = slot.ownerCell();
             if (cell == null) {
@@ -2011,7 +2016,7 @@ public class MortalList {
         for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
             if (slot.kind() != PerlOwnerSlot.Kind.ARRAY_ELEMENT) continue;
             RuntimeBase owner = slot.ownerContainer();
-            if (!isRootedAggregateOwner(owner, referent)) continue;
+            if (!isRootedAggregateOwnerCached(owner, referent, rootedAggregateOwners)) continue;
             RuntimeScalar cell = slot.ownerCell();
             if (cell == null) {
                 slotsWithoutCell++;
@@ -2052,6 +2057,21 @@ public class MortalList {
         if (owners == 0) return false;
         referent.refCount = owners;
         return true;
+    }
+
+    private static boolean isRootedAggregateOwnerCached(
+            RuntimeBase owner, RuntimeBase excludedReferent,
+            Map<RuntimeBase, Boolean> rootedAggregateOwners) {
+        if (rootedAggregateOwners.containsKey(owner)) {
+            ReachabilityQueryStats stats = activeReachabilityQueryStats();
+            if (stats != null) stats.aggregateOwnerRootProofCacheHits++;
+            return rootedAggregateOwners.get(owner);
+        }
+        ReachabilityQueryStats stats = activeReachabilityQueryStats();
+        if (stats != null) stats.aggregateOwnerRootProofs++;
+        boolean rooted = isRootedAggregateOwner(owner, excludedReferent);
+        rootedAggregateOwners.put(owner, rooted);
+        return rooted;
     }
 
     /**

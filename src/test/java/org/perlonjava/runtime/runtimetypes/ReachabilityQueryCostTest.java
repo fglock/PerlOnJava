@@ -53,6 +53,49 @@ class ReachabilityQueryCostTest {
     }
 
     @Test
+    void aggregateOwnerRecoveryChecksEachSharedContainerOnce() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            RuntimeHash owner = new RuntimeHash();
+            ArrayList<RuntimeScalar> cells = new ArrayList<>();
+            for (int i = 0; i < 64; i++) {
+                RuntimeScalar cell = new RuntimeScalar();
+                cell.type = RuntimeScalarType.ARRAYREFERENCE;
+                cell.value = referent;
+                cell.setRefCountOwned(true);
+                cell.refCountOwned = false;
+                owner.elements.put("slot" + i, cell);
+                cells.add(cell);
+            }
+            referent.refCount = 0;
+            MyVarCleanupStack.register(owner);
+            try {
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    assertTrue(MortalList.restoreReachableAggregateOwnerCount(referent));
+
+                    assertEquals(64, referent.refCount,
+                            "every rooted hash-entry cell remains an owner");
+                    assertEquals(1, measurement.stats().aggregateOwnerRootProofs,
+                            "one owner-container proof covers all entries in the same hash");
+                    assertEquals(63, measurement.stats().aggregateOwnerRootProofCacheHits,
+                            "the remaining entry slots reuse that proof");
+                }
+            } finally {
+                MyVarCleanupStack.unregister(owner);
+                owner.elements.clear();
+                for (RuntimeScalar cell : cells) {
+                    if (cell.scalarValueOwnerSlot() != null) {
+                        cell.scalarValueOwnerSlot().release();
+                    }
+                }
+                referent.refCount = 0;
+            }
+        }
+    }
+
+    @Test
     void scopeExitedCaptureOwnersShareOneScalarRootSnapshot() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
