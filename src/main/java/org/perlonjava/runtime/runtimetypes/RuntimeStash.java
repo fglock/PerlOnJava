@@ -263,10 +263,18 @@ public class RuntimeStash extends RuntimeHash {
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(base);
             } else if (base.refCount > 0 && savedScalar.ownsCountedReferent(base)) {
-                // Tracked object: decrement refCount (the stash was holding a strong ref).
-                savedScalar.setRefCountOwned(false);
-                base.releaseActiveOwner(savedScalar);
-                if (--base.refCount == 0) {
+                // Tracked object: release the stash's direct scalar owner.
+                // Cells without a slot keep the legacy bridge path.
+                boolean releasedScalarSlot = savedScalar.releaseScalarValueOwnerCount(
+                        base, "RuntimeStash.delete");
+                if (!releasedScalarSlot) {
+                    savedScalar.setRefCountOwned(false);
+                    base.traceRefCount(-1, "RuntimeStash.delete");
+                    base.releaseOwner(savedScalar, "RuntimeStash.delete");
+                    base.releaseActiveOwner(savedScalar);
+                    base.refCount--;
+                }
+                if (base.refCount == 0) {
                     base.refCount = Integer.MIN_VALUE;
                     DestroyDispatch.callDestroy(base);
                 }

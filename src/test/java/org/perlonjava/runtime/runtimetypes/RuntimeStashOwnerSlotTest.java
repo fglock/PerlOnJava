@@ -27,6 +27,8 @@ class RuntimeStashOwnerSlotTest {
 
                 assertEquals(Integer.MIN_VALUE, referent.refCount);
                 assertFalse(owner.scalarValueOwnerSlot().isActive());
+                assertEquals(0, referent.activeOwnerCount());
+                assertEquals(0, referent.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_VALUE));
             } finally {
                 GlobalVariable.scalarSlots().remove(name);
             }
