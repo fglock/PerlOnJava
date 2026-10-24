@@ -118,6 +118,41 @@ class MortalListDeferredCaptureTest {
         }
     }
 
+    @Test
+    void targetedWeakSweepPreservesReferentThatGainsALiveRootBeforeBoundary() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash referent = new RuntimeHash();
+            referent.refCount = 1;
+            RuntimeScalar weak = referenceTo(referent);
+            WeakRefRegistry.weaken(weak);
+            RuntimeScalar lexicalOwner = referenceTo(referent);
+            RuntimeHash unrelatedTemporary = new RuntimeHash();
+
+            MyVarCleanupStack.register(lexicalOwner);
+            MyVarCleanupStack.snapshotStackToLiveCounts();
+            MortalList.invalidateAllRootSnapshots();
+            try {
+                MortalList.requestTargetedWeakSweep(referent);
+                MortalList.pushTemporaryRoot(unrelatedTemporary);
+                try {
+                    MortalList.flushAboveMark();
+
+                    assertTrue(MortalList.isReachableFromPersistentRootCached(referent),
+                            "the lexical owner remains a current Perl root");
+                    assertEquals(RuntimeScalarType.HASHREFERENCE, weak.type,
+                            "an unrelated temporary root must not cause a live referent to be swept");
+                } finally {
+                    MortalList.popTemporaryRoot(unrelatedTemporary);
+                }
+            } finally {
+                MyVarCleanupStack.unregister(lexicalOwner);
+                WeakRefRegistry.unweaken(weak);
+                MortalList.invalidateAllRootSnapshots();
+            }
+        }
+    }
+
     private static RuntimeScalar referenceTo(RuntimeBase referent) {
         RuntimeScalar scalar = new RuntimeScalar();
         scalar.type = RuntimeScalarType.HASHREFERENCE;
