@@ -207,10 +207,13 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   recovery enabled and disabled, so it is a separate existing failure. A
   scalar-only variant retained the scalar and Catalyst passes but made
   `catalyst_request_body_tempfile_global_destroy.t` exceed its 300-second child
-  timeout; that variant was discarded. The all-type patch is restored in the
-  current worktree; a new gate on this exact branch head remains pending. The
+  timeout; that variant was discarded. The all-type fix was committed as
+  `9adc112aa`; its final `nice -n 19 make` passed in 31m15s. The permanent
+  regression passes with system Perl and the interpreter, and Catalyst passes
+  24/24 on the interpreter. The recursive-builder failure remains open. The
   earlier static filter also caused unrelated cleanup failures. Aggregate
-  recovery remains enabled.
+  recovery remains enabled while its two production callers await direct
+  ownership accounting.
 - On 2026-10-24, the temporary scalar owner installed for `DESTROY`'s self
   argument now balances through the `SCALAR_VALUE` slot API without invoking
   destruction recursively inside the active DESTROY frame. A focused Java test
