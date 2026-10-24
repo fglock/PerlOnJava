@@ -3,7 +3,10 @@ package org.perlonjava.runtime.runtimetypes;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
@@ -65,6 +68,56 @@ class MortalListDeferredCaptureTest {
         }
     }
 
+    @Test
+    void temporaryOnlyRootDefersDestroyUntilTheNextStatementBoundary() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            String className = "Issue1794::RequestTransaction";
+            AtomicInteger destroyCalls = new AtomicInteger();
+            RuntimeHash transaction = new RuntimeHash();
+            transaction.blessId = NameNormalizer.getBlessId(className);
+            transaction.refCount = 1;
+            installDestroy(className, (args, context) -> {
+                destroyCalls.incrementAndGet();
+                return new RuntimeScalar().getList();
+            });
+
+            RuntimeScalar weak = referenceTo(transaction);
+            WeakRefRegistry.weaken(weak);
+            assertFalse(MortalList.isReachableFromPersistentRootCached(transaction),
+                    "the weak observer is not a persistent owner");
+            RuntimeHash unrelatedRoot = new RuntimeHash();
+            MortalList.pushTemporaryRoot(unrelatedRoot);
+            try {
+                MortalList.pushTemporaryRoot(transaction);
+                try {
+                    MortalList.deferDecrement(transaction);
+                    MortalList.flush();
+
+                    assertEquals(0, destroyCalls.get(),
+                            "an active temporary root delays destruction during nested cleanup");
+                    assertEquals(1, transaction.refCount,
+                            "the referent stays available until its temporary root is removed");
+                    assertEquals(RuntimeScalarType.HASHREFERENCE, weak.type);
+                } finally {
+                    MortalList.popTemporaryRoot(transaction);
+                }
+
+                MortalList.flushAboveMark();
+
+                assertEquals(1, destroyCalls.get(),
+                        "the temporary-only owner is rechecked despite unrelated temporary roots");
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED,
+                        transaction.perlLifecycleState());
+                assertEquals(RuntimeScalarType.UNDEF, weak.type,
+                        "the weak observer clears when the request transaction is destroyed");
+            } finally {
+                MortalList.popTemporaryRoot(unrelatedRoot);
+                GlobalVariable.removeGlobalCodeRefForStashDelete(className + "::DESTROY");
+            }
+        }
+    }
+
     private static RuntimeScalar referenceTo(RuntimeBase referent) {
         RuntimeScalar scalar = new RuntimeScalar();
         scalar.type = RuntimeScalarType.HASHREFERENCE;
@@ -73,7 +126,11 @@ class MortalListDeferredCaptureTest {
     }
 
     private static void installDestroy(String className) {
-        RuntimeCode code = new RuntimeCode((args, context) -> new RuntimeScalar().getList(), null);
+        installDestroy(className, (args, context) -> new RuntimeScalar().getList());
+    }
+
+    private static void installDestroy(String className, PerlSubroutine body) {
+        RuntimeCode code = new RuntimeCode(body, null);
         int separator = className.lastIndexOf("::");
         code.packageName = className.substring(0, separator);
         code.subName = "DESTROY";

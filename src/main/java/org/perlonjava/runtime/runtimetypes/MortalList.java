@@ -1853,6 +1853,13 @@ public class MortalList {
                 // namespace. Preserve only objects proven reachable from a
                 // live Perl root; final owner removal still destroys them at
                 // a later boundary.
+                if (!isReachableFromPersistentRootCached(base)) {
+                    // The full walker can see conservative in-flight roots
+                    // that the persistent snapshot cannot classify. Recheck
+                    // this target at the next statement boundary, once those
+                    // transient owners unwind.
+                    requestTargetedWeakSweep(base);
+                }
                 base.refCount = 1;
             } else if (base.blessId != 0
                     && hasWeakRefs
@@ -2011,12 +2018,20 @@ public class MortalList {
         if (state.weakSweepSuppressionDepth > 0) return;
         Set<RuntimeBase> releasedTargets = Collections.emptySet();
         ReachabilityWalker.ReleasedWeakSweepResult releasedSweepResult = null;
-        if (!state.targetedWeakSweepReferents.isEmpty() && state.temporaryRoots.isEmpty()) {
+        if (!state.targetedWeakSweepReferents.isEmpty()) {
             releasedTargets = Collections.newSetFromMap(new IdentityHashMap<>());
-            releasedTargets.addAll(state.targetedWeakSweepReferents);
-            state.targetedWeakSweepReferents.clear();
-            releasedSweepResult =
-                    ReachabilityWalker.sweepReleasedWeakReferents(releasedTargets);
+            for (RuntimeBase referent : new ArrayList<>(state.targetedWeakSweepReferents)) {
+                // Keep a target only while that target is actually reachable
+                // from a temporary root. Unrelated temporary values must not
+                // delay request cleanup until global destruction.
+                if (ReachabilityWalker.isReachableFromTemporaryRoots(referent)) continue;
+                releasedTargets.add(referent);
+                state.targetedWeakSweepReferents.remove(referent);
+            }
+            if (!releasedTargets.isEmpty()) {
+                releasedSweepResult =
+                        ReachabilityWalker.sweepReleasedWeakReferents(releasedTargets);
+            }
         }
         if (topLevel) {
             maybeAutoSweep(state, releasedTargets, releasedSweepResult);
