@@ -2917,6 +2917,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         if (this.value != value.value) {
             MortalList.invalidateFullRootSnapshotIfReachable(this);
+            if (this.value instanceof RuntimeBase displacedReferent) {
+                MortalList.invalidateFullRootSnapshotIfReachable(displacedReferent);
+            }
             if (containerOwner != null) {
                 MortalList.invalidateFullRootSnapshotIfReachable(containerOwner);
             }

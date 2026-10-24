@@ -179,6 +179,24 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   that the recovery scan can be removed. The remaining investigation is the
   interpreter's direct ownership accounting for captured aggregate pads and
   scalar cells across recursive closure execution and lexical cleanup.
+- On 2026-10-25, a two-node reducer narrowed a related interpreter failure to
+  replacing the final lexical root with `undef` when the child has a weak
+  parent edge. System Perl passes, and lexical scope exit releases the same
+  tree under the interpreter; explicit assignment leaves both weak observers
+  alive. The failure also reproduces with aggregate-owner recovery disabled.
+  Existing `weak_blessed_tree_descendant_cleanup.t` and `weaken_destroy.t`
+  exercise scope exit, so the new project-owned regression covers explicit
+  replacement. A refstate diagnostic call changes the timing and makes the
+  test pass, so its count output is not a reliable oracle for the missing edge.
+  Invalidating cached reachability for the displaced referent as well as its
+  scalar cell fixes the focused reducer and the existing recursive-builder
+  regression. Both pass on JVM and interpreter with aggregate-owner recovery
+  disabled; system Perl passes the new four-assertion reducer. Full
+  `nice -n 19 make` passes in 13m09s. The #1794 controller-owner regression
+  passes 3/3 and the #1795 Catalyst tempfile regression passes 24/24 on both
+  backends. The WebSocket integration test skipped because loopback sockets
+  are unavailable in this environment. Recovery remains enabled by default;
+  its two production callers still need independent direct-accounting proof.
 - A second focused reducer,
   `issue_1649_captured_scalar_array_argument.t`, isolates the same class of
   lifetime error: a closure writes a blessed object to a captured scalar while
