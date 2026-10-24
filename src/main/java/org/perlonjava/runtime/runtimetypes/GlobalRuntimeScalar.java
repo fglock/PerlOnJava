@@ -204,6 +204,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                 GlobalVariable.clearForeachGlobalAlias(saved.fullName);
                 RuntimeScalar localVar = saved.localizedVariable;
                 RuntimeBase displacedBase = null;
+                boolean releasedDisplacedScalarSlot = false;
                 RuntimeScalar scalarReferenceContents = null;
                 PerlOwnerSlot scalarContentsOwner = null;
                 // Release container-owned values only when this localized
@@ -228,8 +229,14 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                         && localVar.ownsCountedReferent(base)
                         && base.refCount > 0) {
                     displacedBase = base;
-                    localVar.setRefCountOwned(false);
-                    displacedBase.releaseActiveOwner(localVar);
+                    releasedDisplacedScalarSlot = localVar.releaseScalarValueOwnerCount(
+                            base, "GlobalRuntimeScalar.dynamicRestoreState");
+                    if (!releasedDisplacedScalarSlot) {
+                        // Compatibility path for localized cells created
+                        // before direct scalar owner slots were installed.
+                        localVar.setRefCountOwned(false);
+                        displacedBase.releaseActiveOwner(localVar);
+                    }
                 }
                 if (localVar != null
                         && localVar.hasScalarReferenceContentsOwner()
@@ -264,7 +271,9 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                 // Decrement refCount of the displaced local value after restoring
                 // the global slot, so DESTROY sees the restored variable state.
                 boolean displacedWillDestroy = false;
-                if (displacedBase != null && displacedBase.refCount == 1) {
+                if (displacedBase != null
+                        && (releasedDisplacedScalarSlot
+                            ? displacedBase.refCount == 0 : displacedBase.refCount == 1)) {
                     String className = NameNormalizer.getBlessStr(displacedBase.blessId);
                     displacedWillDestroy = className != null && !className.isEmpty()
                             && DestroyDispatch.classHasDestroy(displacedBase.blessId, className);
@@ -293,8 +302,11 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                 } else {
                     RuntimeScalar.releaseScalarReferenceContents(scalarReferenceContents);
                 }
-                if (displacedBase != null && displacedBase.refCount > 0
-                        && --displacedBase.refCount == 0) {
+                boolean displacedReferentReachedZero = displacedBase != null
+                        && (releasedDisplacedScalarSlot
+                            ? displacedBase.refCount == 0
+                            : displacedBase.refCount > 0 && --displacedBase.refCount == 0);
+                if (displacedReferentReachedZero) {
                     displacedBase.refCount = Integer.MIN_VALUE;
                     DestroyDispatch.callDestroy(displacedBase);
                 }
