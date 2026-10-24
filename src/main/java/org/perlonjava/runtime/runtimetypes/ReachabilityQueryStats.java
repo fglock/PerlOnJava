@@ -23,4 +23,5 @@ final class ReachabilityQueryStats {
     long scalarReachabilityRootWalks;
     long aggregateOwnerRootProofs;
     long aggregateOwnerRootProofCacheHits;
+    long aggregateOwnerSlotsInspected;
 }

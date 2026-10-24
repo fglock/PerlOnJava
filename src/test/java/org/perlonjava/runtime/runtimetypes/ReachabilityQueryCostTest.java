@@ -81,6 +81,8 @@ class ReachabilityQueryCostTest {
                             "one owner-container proof covers all entries in the same hash");
                     assertEquals(63, measurement.stats().aggregateOwnerRootProofCacheHits,
                             "the remaining entry slots reuse that proof");
+                    assertEquals(128, measurement.stats().aggregateOwnerSlotsInspected,
+                            "each referent owner slot is inspected once during recovery");
                 }
             } finally {
                 MyVarCleanupStack.unregister(owner);

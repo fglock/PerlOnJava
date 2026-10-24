@@ -1994,52 +1994,40 @@ public class MortalList {
         // synchronous scan, so multiple slots in one aggregate share a proof.
         Map<RuntimeBase, Boolean> rootedAggregateOwners = new IdentityHashMap<>();
         int slotsWithoutCell = 0;
-        for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
-            if (slot.kind() != PerlOwnerSlot.Kind.HASH_ENTRY) continue;
-            RuntimeBase owner = slot.ownerContainer();
-            boolean rootedOwner = isRootedAggregateOwnerCached(
-                    owner, referent, rootedAggregateOwners);
-            if (!rootedOwner) continue;
-            RuntimeScalar cell = slot.ownerCell();
-            if (cell == null) {
-                slotsWithoutCell++;
-            } else if (cell.value == referent
-                    && (cell.refCountOwned || cell.hasScalarValueOwnerSlotFor(referent))
-                    && !WeakRefRegistry.isweak(cell)) {
-                rootedHashCells.add(cell);
+        Set<PerlOwnerSlot> ownerSlots = referent.ownerSlotSnapshot();
+        ReachabilityQueryStats stats = activeReachabilityQueryStats();
+        for (PerlOwnerSlot slot : ownerSlots) {
+            if (stats != null) stats.aggregateOwnerSlotsInspected++;
+            if (slot.kind() == PerlOwnerSlot.Kind.HASH_ENTRY
+                    || slot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT) {
+                // Excluding the referent prevents an owner proof through the
+                // object whose pending release triggered this recovery.
+                RuntimeBase owner = slot.ownerContainer();
+                if (!isRootedAggregateOwnerCached(owner, referent, rootedAggregateOwners)) {
+                    continue;
+                }
+                RuntimeScalar cell = slot.ownerCell();
+                if (cell == null) {
+                    slotsWithoutCell++;
+                } else if (cell.value == referent
+                        && (cell.refCountOwned || cell.hasScalarValueOwnerSlotFor(referent))
+                        && !WeakRefRegistry.isweak(cell)) {
+                    rootedHashCells.add(cell);
+                }
+            } else if (slot.kind() == PerlOwnerSlot.Kind.SCALAR_VALUE
+                    && slot.referent() == referent) {
+                // Scalar-value slots can supply identity when the legacy
+                // ownership Boolean has already retired. Aggregate cells are
+                // handled by their structural slot above or legacy fallback.
+                RuntimeScalar cell = slot.ownerCell();
+                if (cell != null && cell.containerOwner == null
+                        && cell.value == referent
+                        && (cell.refCountOwned || cell.hasScalarValueOwnerSlotFor(referent))
+                        && !WeakRefRegistry.isweak(cell)
+                        && ReachabilityWalker.isScalarReachable(cell)) {
+                    rootedHashCells.add(cell);
+                }
             }
-        }
-        // Array slots are restored only when the array has a live semantic
-        // owner or can be reached independently from package roots. Excluding
-        // the referent from that walk prevents an owner proof through the
-        // object whose pending release triggered this recovery.
-        for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
-            if (slot.kind() != PerlOwnerSlot.Kind.ARRAY_ELEMENT) continue;
-            RuntimeBase owner = slot.ownerContainer();
-            if (!isRootedAggregateOwnerCached(owner, referent, rootedAggregateOwners)) continue;
-            RuntimeScalar cell = slot.ownerCell();
-            if (cell == null) {
-                slotsWithoutCell++;
-            } else if (cell.value == referent
-                    && (cell.refCountOwned || cell.hasScalarValueOwnerSlotFor(referent))
-                    && !WeakRefRegistry.isweak(cell)) {
-                rootedHashCells.add(cell);
-            }
-        }
-        // Scalar-value slots can supply their identity even when recovery no
-        // longer relies on the legacy ownership Boolean.
-        // Cells stored in aggregates are handled above or by the legacy
-        // reachability fallback to preserve the shared-root snapshot policy.
-        for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
-            if (slot.kind() != PerlOwnerSlot.Kind.SCALAR_VALUE
-                    || slot.referent() != referent) continue;
-            RuntimeScalar cell = slot.ownerCell();
-            if (cell == null || cell.containerOwner != null
-                    || cell.value != referent
-                    || (!cell.refCountOwned && !cell.hasScalarValueOwnerSlotFor(referent))
-                    || WeakRefRegistry.isweak(cell)
-                    || !ReachabilityWalker.isScalarReachable(cell)) continue;
-            rootedHashCells.add(cell);
         }
         int owners = slotsWithoutCell + rootedHashCells.size();
         // Active scalar owners may include lexical RVs in addition to hash
