@@ -909,7 +909,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return slot != null && slot.releaseScalarValueCount(expectedReferent, releaseSite);
     }
 
-    boolean acquireScalarValueOwnerCount(RuntimeBase referent, String acquireSite) {
+    synchronized boolean acquireScalarValueOwnerCount(RuntimeBase referent, String acquireSite) {
         if (scalarValueOwnerSlot == null) {
             scalarValueOwnerSlot = new PerlOwnerSlot(
                     PerlOwnerSlot.Kind.SCALAR_VALUE, null, null, this);
@@ -2416,12 +2416,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             base.refCount = 0;
         }
-        base.traceRefCount(+1, "RuntimeScalar.incrementRefCountForContainerStore");
-        base.refCount++;
-        base.hadCountedReference = true;
-        base.recordOwner(scalar, "incrementRefCountForContainerStore");
-        base.recordActiveOwner(scalar);
-        scalar.setRefCountOwned(true);
+        if (!scalar.acquireScalarValueOwnerCount(
+                base, "RuntimeScalar.incrementRefCountForContainerStore")) {
+            return;
+        }
         // Phase B1 (refcount_alignment_52leaks_plan.md): track the
         // container element so ReachabilityWalker can see it via
         // ScalarRefRegistry.
