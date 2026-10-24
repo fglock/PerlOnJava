@@ -79,6 +79,17 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     /** Values stored in Perl's magical %ENV are byte-oriented strings. */
     public boolean isEnvironmentHash = false;
 
+    // A single cached pair for the guarded plain-hash method path. Hash-cell
+    // values are mutated in place, so repeated method calls can reuse them as
+    // long as the backing map and its key/value bindings have not changed.
+    private RuntimeHashElementMap stableMethodFieldCacheMap;
+    private long stableMethodFieldCacheVersion;
+    private String stableMethodFieldCacheFirstKey;
+    private String stableMethodFieldCacheSecondKey;
+    private RuntimeScalar stableMethodFieldCacheFirstCell;
+    private RuntimeScalar stableMethodFieldCacheSecondCell;
+    private boolean stableMethodFieldCacheValid;
+
     /**
      * Constructor for RuntimeHash.
      * Initializes an empty hash map to store elements.
@@ -110,6 +121,46 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         RuntimeHashElementMap map = new RuntimeHashElementMap(this);
         map.putAll(values);
         return map;
+    }
+
+    /** Prepare or reuse the cached cells for a compiler-proven method shape. */
+    boolean prepareStableMethodFieldCache(String firstKey, String secondKey) {
+        if (!(elements instanceof RuntimeHashElementMap map) || !map.stableMethodCacheAllowed()) {
+            return false;
+        }
+        map.enableStableMethodCacheTracking();
+        long version = map.stableMethodMutationVersion();
+        if (!stableMethodFieldCacheValid
+                || stableMethodFieldCacheMap != map
+                || stableMethodFieldCacheVersion != version
+                || !Objects.equals(stableMethodFieldCacheFirstKey, firstKey)
+                || !Objects.equals(stableMethodFieldCacheSecondKey, secondKey)) {
+            stableMethodFieldCacheFirstCell = map.get(firstKey);
+            stableMethodFieldCacheSecondCell = secondKey == null ? null : map.get(secondKey);
+            stableMethodFieldCacheMap = map;
+            stableMethodFieldCacheVersion = version;
+            stableMethodFieldCacheFirstKey = firstKey;
+            stableMethodFieldCacheSecondKey = secondKey;
+            stableMethodFieldCacheValid = true;
+        }
+        return true;
+    }
+
+    RuntimeScalar stableMethodFieldCacheFirstCell() {
+        return stableMethodFieldCacheFirstCell;
+    }
+
+    RuntimeScalar stableMethodFieldCacheSecondCell() {
+        return stableMethodFieldCacheSecondCell;
+    }
+
+    private void invalidateStableMethodFieldCache() {
+        stableMethodFieldCacheValid = false;
+        stableMethodFieldCacheMap = null;
+        stableMethodFieldCacheFirstKey = null;
+        stableMethodFieldCacheSecondKey = null;
+        stableMethodFieldCacheFirstCell = null;
+        stableMethodFieldCacheSecondCell = null;
     }
 
     /** Enforce Hash::Util restricted-key access at every Perl hash operation. */
@@ -184,9 +235,42 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
     private static final class RuntimeHashElementMap extends StableHashMap<String, RuntimeScalar> {
         private final RuntimeHash owner;
+        private long stableMethodMutationVersion;
+        private boolean stableMethodCacheAllowed = true;
+        private boolean stableMethodCacheTracking;
 
         private RuntimeHashElementMap(RuntimeHash owner) {
             this.owner = owner;
+        }
+
+        private long stableMethodMutationVersion() {
+            return stableMethodMutationVersion;
+        }
+
+        private boolean stableMethodCacheAllowed() {
+            return stableMethodCacheAllowed;
+        }
+
+        private void enableStableMethodCacheTracking() {
+            stableMethodCacheTracking = true;
+        }
+
+        private void noteStableMethodMutation() {
+            if (stableMethodCacheTracking) {
+                stableMethodMutationVersion++;
+                if (owner.stableMethodFieldCacheMap == this) {
+                    owner.invalidateStableMethodFieldCache();
+                }
+            }
+        }
+
+        private void disableStableMethodCache() {
+            if (stableMethodCacheAllowed) {
+                stableMethodCacheAllowed = false;
+                if (owner.stableMethodFieldCacheMap == this) {
+                    owner.invalidateStableMethodFieldCache();
+                }
+            }
         }
 
         @Override
@@ -214,12 +298,14 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             owner.markPackageRootedValue(value);
             RuntimeScalar result = super.put(key, value);
+            noteStableMethodMutation();
             updateReferentHashSlotOwnership(previous, value);
             return result;
         }
 
         @Override
         public void putAll(Map<? extends String, ? extends RuntimeScalar> m) {
+            noteStableMethodMutation();
             if (owner.threadShared) {
                 for (Map.Entry<? extends String, ? extends RuntimeScalar> entry
                         : new StableHashMap<>(m).entrySet()) {
@@ -250,7 +336,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
         @Override
         public RuntimeScalar remove(Object key) {
+            boolean contained = super.containsKey(key);
             RuntimeScalar previous = super.remove(key);
+            if (contained) noteStableMethodMutation();
             if (previous != null) {
                 if (owner.isHintHash && !owner.suppressHintHashLifecycleCleanup) {
                     MortalList.deferDestroyForContainerClear(java.util.Collections.singletonList(previous));
@@ -267,8 +355,84 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     MortalList.deferDestroyForContainerClear(values());
                 }
                 owner.notePackageRootClear(values());
+                noteStableMethodMutation();
             }
             super.clear();
+        }
+
+        // Live views permit mutation paths (Entry.setValue, iterator removal,
+        // and bulk collection operations) that bypass this map's put/remove
+        // overrides. Once exposed, keep using ordinary lookups for safety.
+        @Override public Set<Map.Entry<String, RuntimeScalar>> entrySet() {
+            disableStableMethodCache();
+            return super.entrySet();
+        }
+
+        @Override public Set<String> keySet() {
+            disableStableMethodCache();
+            return super.keySet();
+        }
+
+        @Override public Collection<RuntimeScalar> values() {
+            disableStableMethodCache();
+            return super.values();
+        }
+
+        // HashMap's specialized implementations may mutate internal nodes
+        // without dispatching through our put/remove overrides.
+        @Override public RuntimeScalar putIfAbsent(String key, RuntimeScalar value) {
+            disableStableMethodCache();
+            return super.putIfAbsent(key, value);
+        }
+
+        @Override public boolean remove(Object key, Object value) {
+            disableStableMethodCache();
+            return super.remove(key, value);
+        }
+
+        @Override public boolean replace(String key, RuntimeScalar oldValue, RuntimeScalar newValue) {
+            disableStableMethodCache();
+            return super.replace(key, oldValue, newValue);
+        }
+
+        @Override public RuntimeScalar replace(String key, RuntimeScalar value) {
+            disableStableMethodCache();
+            return super.replace(key, value);
+        }
+
+        @Override public void replaceAll(
+                java.util.function.BiFunction<? super String, ? super RuntimeScalar,
+                        ? extends RuntimeScalar> function) {
+            disableStableMethodCache();
+            super.replaceAll(function);
+        }
+
+        @Override public RuntimeScalar computeIfAbsent(
+                String key, java.util.function.Function<? super String, ? extends RuntimeScalar> function) {
+            disableStableMethodCache();
+            return super.computeIfAbsent(key, function);
+        }
+
+        @Override public RuntimeScalar computeIfPresent(
+                String key, java.util.function.BiFunction<? super String, ? super RuntimeScalar,
+                        ? extends RuntimeScalar> function) {
+            disableStableMethodCache();
+            return super.computeIfPresent(key, function);
+        }
+
+        @Override public RuntimeScalar compute(
+                String key, java.util.function.BiFunction<? super String, ? super RuntimeScalar,
+                        ? extends RuntimeScalar> function) {
+            disableStableMethodCache();
+            return super.compute(key, function);
+        }
+
+        @Override public RuntimeScalar merge(
+                String key, RuntimeScalar value,
+                java.util.function.BiFunction<? super RuntimeScalar, ? super RuntimeScalar,
+                        ? extends RuntimeScalar> function) {
+            disableStableMethodCache();
+            return super.merge(key, value, function);
         }
     }
 
