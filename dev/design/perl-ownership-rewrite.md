@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816), now reconciled with `origin/master` through `aeda28344`. Code commit `29372cac0` passes full `nice -n 19 make` in 23m10s for explicit-undef release, `2c05509e6` passes in 16m10s for deferred scalar-slot release, `fad2199eb` passes in 18m28s for immediate tail-call release, `ca58da7c4` passes in 28m41s for aggregate-owner proof reuse, `6730377d1` passes in 15m56s for single-pass aggregate-owner recovery, and `c21116699` passes in 31m48s for weakening-time scalar-slot release. The latest confirmed push to the PR branch is `c8a9e6679`; hosted validation of newer commits is pending. Hosted run `39991272777` passes on Linux and Windows, including both thread gates, for preceding head `c1167ffbd`. Owner slots still bridge to `RuntimeBase.refCount` for dispatch, and default owner-slot accounting remains incomplete.
+**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816), now reconciled with `origin/master` through `aeda28344`. Code commit `29372cac0` passes full `nice -n 19 make` in 23m10s for explicit-undef release, `2c05509e6` passes in 16m10s for deferred scalar-slot release, `fad2199eb` passes in 18m28s for immediate tail-call release, `ca58da7c4` passes in 28m41s for aggregate-owner proof reuse, `6730377d1` passes in 15m56s for single-pass aggregate-owner recovery, `c21116699` passes in 31m48s for weakening-time scalar-slot release, and `6a4d65840` passes in 26m14s for paired weaken/unweaken slot accounting. The latest confirmed push to the PR branch is `4780b80e6`; hosted validation of newer commits is pending. Hosted run `39991272777` passes on Linux and Windows, including both thread gates, for preceding head `c1167ffbd`. Owner slots still bridge to `RuntimeBase.refCount` for dispatch, and default owner-slot accounting remains incomplete.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
@@ -182,6 +182,12 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   `nice -n 19 make` passes in 31m48s on `c21116699`. Catalyst tempfile (24/24),
   controller-owner release (3/3), and WebSocket controller release (6/6) pass
   on both backends; the WebSocket run used loopback access.
+- On 2026-10-24, `WeakRefRegistry.unweaken()` now restores the strong count and
+  owner ledger through the scalar-value slot acquisition API. The new Java
+  regression covers the full weaken/unweaken cycle, including count restoration
+  and slot reactivation. Full `nice -n 19 make` passes in 26m14s on
+  `6a4d65840`. The bridge still updates `refCount` because lifecycle dispatch
+  has not yet moved to the explicit owner ledger.
 - The preceding array-tail fix routes `removeFirst()` and `removeLast()` through
   structural mutation hooks so `shift` and `pop` retire array slots. Its
   immutable code commit `ecc5efd37` passes full `nice -n 19 make` in 13m34s,
