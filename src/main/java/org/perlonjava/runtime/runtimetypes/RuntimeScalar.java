@@ -909,6 +909,28 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return slot != null && slot.releaseScalarValueCount(expectedReferent, releaseSite);
     }
 
+    /** Release a localized scalar's direct owner, retaining the legacy bridge fallback. */
+    static void releaseDynamicRestoreScalarValueOwner(RuntimeScalar cell, String releaseSite) {
+        if (cell == null
+                || (cell.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                || !(cell.value instanceof RuntimeBase referent)
+                || referent.refCount <= 0) {
+            return;
+        }
+        boolean releasedSlot = cell.releaseScalarValueOwnerCount(referent, releaseSite);
+        boolean reachedZero;
+        if (releasedSlot) {
+            reachedZero = referent.refCount == 0;
+        } else {
+            referent.traceRefCount(-1, releaseSite);
+            reachedZero = --referent.refCount == 0;
+        }
+        if (reachedZero) {
+            referent.refCount = Integer.MIN_VALUE;
+            DestroyDispatch.callDestroy(referent);
+        }
+    }
+
     synchronized boolean acquireScalarValueOwnerCount(RuntimeBase referent, String acquireSite) {
         if (scalarValueOwnerSlot == null) {
             scalarValueOwnerSlot = new PerlOwnerSlot(

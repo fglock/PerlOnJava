@@ -284,13 +284,8 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
                 parent.notePackageRootMutation();
                 // Element didn't exist before.
                 // Decrement refCount of the current value being displaced.
-                if (this.lvalue != null
-                        && (this.lvalue.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                        && this.lvalue.value instanceof RuntimeBase displacedBase
-                        && displacedBase.refCount > 0 && --displacedBase.refCount == 0) {
-                    displacedBase.refCount = Integer.MIN_VALUE;
-                    DestroyDispatch.callDestroy(displacedBase);
-                }
+                RuntimeScalar.releaseDynamicRestoreScalarValueOwner(
+                        this.lvalue, "RuntimeArrayProxyEntry.dynamicRestoreState");
                 this.lvalue = null;
                 this.type = RuntimeScalarType.UNDEF;
                 this.value = null;
