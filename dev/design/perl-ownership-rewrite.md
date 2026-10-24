@@ -167,13 +167,32 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   lifetime error: a closure writes a blessed object to a captured scalar while
   receiving an array-reference argument, then the closure and returned owner
   are released. System Perl and the JVM pass both assertions; the interpreter
-  fails the weak-observer release assertion with aggregate recovery both on and
-  off, while `DESTROY` fires once. In a temporary `Internals::SvREFCNT` probe,
-  Perl reports 2 owners after the closure call and 1 after closure release;
-  the interpreter reports 0 at both points. This confirms a premature
-  interpreter count transition in this call shape, separate from the recovery
-  scan. The next trace target is the returned captured scalar's owner transfer
-  across `BytecodeInterpreter` return cleanup and argument-frame teardown.
+  failed the weak-observer release assertion with aggregate recovery both on
+  and off, while `DESTROY` fired once. A temporary `Internals::SvREFCNT` probe
+  showed Perl reporting 2 owners after the closure call and 1 after closure
+  release; the interpreter reported 0 at both points. The trace narrowed the
+  transition to return cleanup emitted for a captured lexical register. A
+  permanent test now reproduces this on the unfixed interpreter parent and
+  passes on system Perl and the JVM. A runtime frame-mark guard around return
+  cleanup also makes the focused interpreter test and the 24-assertion
+  Catalyst tempfile interpreter test pass, and its consolidated
+  `nice -n 19 make` passed in 35m17s, including the Mojolicious lifetime tests.
+  The first guard marked compiler register-index metadata as captured, but that
+  metadata also contains non-capture entries. It failed the interpreter's
+  recursive-builder release check (five weakly observed nodes remained instead
+  of two). Limiting metadata to the actual capture count compiled and passed
+  the full `make`, but still missed both interpreter reproductions because
+  captured registers are filled later by `withCapturedVars`. The active
+  candidate marked those registers when the closure copy received its capture
+  array. The new scalar regression and the 24-assertion Catalyst interpreter
+  test passed, but the recursive-builder check still retained five nodes
+  instead of two. Narrowing the guard to captured scalar cells kept those two
+  results but the full `make` failed `catalyst_request_body_tempfile_global_destroy.t`:
+  its nested test process exceeded the 300-second harness timeout. The scalar
+  cleanup guard has been removed. No cleanup candidate yet passes all three
+  interpreter checks; the next step is tracing which captured cell and owner
+  slot each return path releases in both reducers. The earlier static filter
+  also caused unrelated cleanup failures; aggregate recovery remains enabled.
 - On 2026-10-24, the temporary scalar owner installed for `DESTROY`'s self
   argument now balances through the `SCALAR_VALUE` slot API without invoking
   destruction recursively inside the active DESTROY frame. A focused Java test
