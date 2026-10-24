@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816), now reconciled with `origin/master` through `aeda28344`. Code commit `29372cac0` passes full `nice -n 19 make` in 23m10s for explicit-undef release, and local candidate `2c05509e6` passes full `nice -n 19 make` in 16m10s for deferred scalar-slot release. The latest confirmed push to the PR branch is `4b3c26e95`; hosted validation of newer commits is pending. Hosted run `39991272777` passes on Linux and Windows, including both thread gates, for preceding head `c1167ffbd`. Owner slots still bridge to `RuntimeBase.refCount` for dispatch, and default owner-slot accounting remains incomplete.
+**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816), now reconciled with `origin/master` through `aeda28344`. Code commit `29372cac0` passes full `nice -n 19 make` in 23m10s for explicit-undef release, `2c05509e6` passes in 16m10s for deferred scalar-slot release, and local candidate `fad2199eb` passes in 18m28s for immediate tail-call release. The latest confirmed push to the PR branch is `da2c8a0f1`; hosted validation of newer commits is pending. Hosted run `39991272777` passes on Linux and Windows, including both thread gates, for preceding head `c1167ffbd`. Owner slots still bridge to `RuntimeBase.refCount` for dispatch, and default owner-slot accounting remains incomplete.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
@@ -115,7 +115,7 @@ and first path establish implementation cost.
 
 ### Current status: Phase 2 in progress; Phase 1 merged in PR #1653 as `84f32be179bdc2b351c3eaae1cb26df39964ab6b` (2026-10-07)
 
-The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The branch includes the current-master merge at `aeda28344`; code commit `29372cac0` and local candidate `2c05509e6` pass their full Make gates. The latest confirmed pushed head is `4b3c26e95`; hosted validation of newer commits is pending. The focused Mojolicious controller/WebSocket and Catalyst tempfile lifetime regressions pass on both backends with loopback access, including a rerun against the deferred-release candidate. HTML::Tree 5.07 passes all 23 files and 989 tests on both backends on the preceding ownership candidate. Phase 2 remains incomplete: `refCount` still controls lifecycle dispatch, and the slot ledger is not yet the default accounting source across general scalar/proxy stores, aliases, and cleanup. Distinct scalar-reference aliases keep separate reachability identities while contributing one referent count per scalar cell. The HTML-Tree result is compatibility evidence, not the Phase 2 owner-slot exit proof.
+The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The branch includes the current-master merge at `aeda28344`; code commits `29372cac0`, `2c05509e6`, and `fad2199eb` pass their full Make gates. The latest confirmed pushed head is `da2c8a0f1`; hosted validation of newer commits is pending. Focused Mojolicious controller/WebSocket and Catalyst tempfile regressions pass on both backends with loopback access. On the tail-call candidate, the interpreter tempfile test exceeded a 180-second run but completed 24/24 within a 240-second JFR run; samples concentrate in existing external-root reachability snapshots and aggregate-owner recovery. HTML::Tree 5.07 passes all 23 files and 989 tests on both backends on the preceding ownership candidate. Phase 2 remains incomplete: `refCount` still controls lifecycle dispatch, and the slot ledger is not yet the default accounting source across general scalar/proxy stores, aliases, and cleanup. Distinct scalar-reference aliases keep separate reachability identities while contributing one referent count per scalar cell. The HTML-Tree result is compatibility evidence, not the Phase 2 owner-slot exit proof.
 
 ### Current batch
 
@@ -148,6 +148,14 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   and delayed decrement. Full `nice -n 19 make` passes in 16m10s on
   `2c05509e6`. The Mojolicious, Catalyst tempfile, and controller-owner
   lifetime files pass on JVM and interpreter after this change.
+- Immediate tail-call cleanup now uses the scalar slot release API for both
+  argument cells and CODE references. Existing stash, local-binding,
+  reachability, and DESTROY decisions remain in `MortalList`; a Java regression
+  covers final CODE release. Full `nice -n 19 make` passes in 18m28s on
+  `fad2199eb`. The focused lifetime files pass on both backends, with the
+  interpreter Catalyst tempfile file requiring a 240-second limit after a
+  180-second run stopped at assertion 13. Its JFR samples show external-root
+  snapshot construction and aggregate-owner recovery as the dominant work.
 - The preceding array-tail fix routes `removeFirst()` and `removeLast()` through
   structural mutation hooks so `shift` and `pop` retire array slots. Its
   immutable code commit `ecc5efd37` passes full `nice -n 19 make` in 13m34s,
