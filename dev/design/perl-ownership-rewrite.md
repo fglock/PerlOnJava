@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816), now reconciled with `origin/master` through `aeda28344`. Code commit `29372cac0` passes full `nice -n 19 make` in 23m10s for explicit-undef release, `2c05509e6` passes in 16m10s for deferred scalar-slot release, `fad2199eb` passes in 18m28s for immediate tail-call release, `ca58da7c4` passes in 28m41s for aggregate-owner proof reuse, `6730377d1` passes in 15m56s for single-pass aggregate-owner recovery, `c21116699` passes in 31m48s for weakening-time scalar-slot release, `6a4d65840` passes in 26m14s for paired weaken/unweaken slot accounting, `09988c53e` passes in 23m54s for aggregate-store scalar-slot acquisition, and `2a2b9fe3b` passes in 16m12s for scalar-store slot acquisition. The latest confirmed push to the PR branch is `cb46e56fe`; hosted validation of newer commits is pending. Hosted run `39991272777` passes on Linux and Windows, including both thread gates, for preceding head `c1167ffbd`. Owner slots still bridge to `RuntimeBase.refCount` for dispatch, and default owner-slot accounting remains incomplete.
+**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816), now reconciled with `origin/master` through `aeda28344`. Code commit `29372cac0` passes full `nice -n 19 make` in 23m10s for explicit-undef release, `2c05509e6` passes in 16m10s for deferred scalar-slot release, `fad2199eb` passes in 18m28s for immediate tail-call release, `ca58da7c4` passes in 28m41s for aggregate-owner proof reuse, `6730377d1` passes in 15m56s for single-pass aggregate-owner recovery, `c21116699` passes in 31m48s for weakening-time scalar-slot release, `6a4d65840` passes in 26m14s for paired weaken/unweaken slot accounting, `09988c53e` passes in 23m54s for aggregate-store scalar-slot acquisition, `2a2b9fe3b` passes in 16m12s for scalar-store slot acquisition, and `e626aaddc` passes in 20m05s for scalar-overwrite slot release. The latest confirmed push to the PR branch is `723e56dba`; hosted validation of newer commits is pending. Hosted run `39991272777` passes on Linux and Windows, including both thread gates, for preceding head `c1167ffbd`. Owner slots still bridge to `RuntimeBase.refCount` for dispatch, and default owner-slot accounting remains incomplete.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
@@ -199,6 +199,13 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   remain at one. Full `nice -n 19 make` passes in 16m12s on `2a2b9fe3b`. The
   Catalyst tempfile, controller-owner, and WebSocket controller-release files
   pass on both backends; WebSocket ran with loopback access.
+- On 2026-10-24, scalar overwrite now releases the displaced direct owner
+  through its `SCALAR_VALUE` slot, then reuses the stable slot for the new
+  referent. Lifecycle dispatch remains after the assignment's existing rescue
+  and reachability checks. A Java regression retires the legacy Boolean before
+  overwrite and verifies old/new counts, registries, and slot identity. Full
+  `nice -n 19 make` passes in 20m05s; Catalyst tempfile, controller-owner, and
+  WebSocket controller-release regressions pass on both backends.
 - The preceding array-tail fix routes `removeFirst()` and `removeLast()` through
   structural mutation hooks so `shift` and `pop` retire array slots. Its
   immutable code commit `ecc5efd37` passes full `nice -n 19 make` in 13m34s,
