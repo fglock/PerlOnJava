@@ -192,6 +192,28 @@ class MortalListScalarValueOwnerRestoreTest {
     }
 
     @Test
+    void tailCallCodeReleaseUsesExplicitScalarOwnerSlot() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeCode code = new RuntimeCode((String) null, null);
+            code.refCount = 1;
+            RuntimeScalar codeRef = new RuntimeScalar(code);
+            codeRef.setRefCountOwned(true);
+
+            try {
+                MortalList.releaseTailCallCodeRef(codeRef);
+
+                assertFalse(codeRef.hasScalarValueOwnerSlotFor(code),
+                        "tail-call release retires the direct CODE owner slot");
+                assertEquals(Integer.MIN_VALUE, code.refCount,
+                        "the last tail-call CODE owner reaches the lifecycle dispatcher");
+            } finally {
+                MortalList.flush();
+            }
+        }
+    }
+
+    @Test
     void voidResultCleanupUsesExplicitScalarOwnerAfterLegacyFlagRetires() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {

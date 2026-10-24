@@ -949,14 +949,8 @@ public class MortalList {
             return;
         }
 
-        codeRef.setRefCountOwned(false);
-        if (code.refCountTrace) {
-            code.traceRefCount(-1, "MortalList.releaseTailCallCodeRef");
-            code.releaseOwner(codeRef, "releaseTailCallCodeRef");
-        }
-        code.releaseActiveOwner(codeRef);
-
-        if (--code.refCount > 0) return;
+        releaseScalarValueCount(code, codeRef, "MortalList.releaseTailCallCodeRef");
+        if (code.refCount > 0) return;
 
         if (code.stashRefCount > 0) {
             code.refCount = 0;
@@ -981,14 +975,8 @@ public class MortalList {
             return;
         }
 
-        scalar.setRefCountOwned(false);
-        if (base.refCountTrace) {
-            base.traceRefCount(-1, "MortalList.releaseTailCallArgElement");
-            base.releaseOwner(scalar, "releaseTailCallArgElement");
-        }
-        base.releaseActiveOwner(scalar);
-
-        if (--base.refCount > 0) return;
+        releaseScalarValueCount(base, scalar, "MortalList.releaseTailCallArgElement");
+        if (base.refCount > 0) return;
 
         if (base.localBindingExists || reachableTailCallArgReferent(base)) {
             base.refCount = 1;
@@ -997,6 +985,19 @@ public class MortalList {
 
         base.refCount = Integer.MIN_VALUE;
         DestroyDispatch.callDestroy(base);
+    }
+
+    /** Release an immediate scalar-value owner through its explicit slot when present. */
+    private static void releaseScalarValueCount(
+            RuntimeBase base, RuntimeScalar scalar, String releaseSite) {
+        if (scalar.releaseScalarValueOwnerCount(base, releaseSite)) return;
+        scalar.setRefCountOwned(false);
+        if (base.refCountTrace) {
+            base.traceRefCount(-1, releaseSite);
+            base.releaseOwner(scalar, releaseSite);
+        }
+        base.releaseActiveOwner(scalar);
+        base.refCount--;
     }
 
     private static boolean reachableTailCallArgReferent(RuntimeBase base) {
