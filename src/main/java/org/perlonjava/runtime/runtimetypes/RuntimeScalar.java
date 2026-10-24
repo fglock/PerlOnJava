@@ -577,11 +577,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     /** Whether this scalar is backed by durable Perl storage for lvalue use. */
     boolean hasDurableLvalueStorage() {
-        return isPackageGlobalRoot
+        if (isPackageGlobalRoot
                 || MyVarCleanupStack.isRegistered(this)
                 || isStoredInRegisteredContainerOwner()
-                || containerOwner == RuntimeCode.getCurrentArgs()
-                || this instanceof RuntimeBaseProxy;
+                || (containerOwner != null
+                    && containerOwner == RuntimeCode.getCurrentArgs())
+                || this instanceof RuntimeBaseProxy) {
+            return true;
+        }
+        RuntimeBase owner = containerOwner;
+        if (owner instanceof RuntimeHash hash) {
+            return hash.isPackageRootedHash() && hash.elements.containsValue(this);
+        }
+        if (owner instanceof RuntimeArray array) {
+            return array.isPackageGlobalRoot && array.elements.contains(this)
+                    && (!array.elementsAliased || array.ownsElement(this));
+        }
+        return false;
     }
 
     /** True when a container removal returned this scalar slot as a loose value. */

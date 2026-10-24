@@ -1218,10 +1218,10 @@ public class MortalList {
     }
 
     /**
-     * Mortal-ize blessed refs with refCount==0 in a RuntimeList that will be
-     * discarded (void-context call result). Without this, objects that were
-     * blessed but never stored in a named variable would leak.
-     * Only processes elements with refCount==0 (never-stored objects).
+     * Release owned aggregate refs and mortal-ize never-stored blessed refs
+     * in a RuntimeList discarded by a void-context call. A returned scalar may
+     * still be the same Perl cell stored in a global, live lexical, or owning
+     * container; dropping the call result must not release that cell's owner.
      */
     public static void mortalizeForVoidDiscard(RuntimeList result) {
         if (!isActive() || result == null) return;
@@ -1236,9 +1236,10 @@ public class MortalList {
                 boolean reachableCodeRef = base instanceof RuntimeCode
                         && scalar.isStoredInRegisteredContainerOwner()
                         && ReachabilityWalker.isScalarReachable(scalar);
+                boolean hasOtherPerlOwner = scalar.hasDurableLvalueStorage();
                 if (scalar.ownsCountedReferent(base) && base.refCount > 0
                         && unblessedDiscardableContainer
-                        && !reachableCodeRef) {
+                        && !reachableCodeRef && !hasOtherPerlOwner) {
                     scalar.setRefCountOwned(false);
                     if (base.refCountTrace) {
                         base.traceRefCount(0, "MortalList.mortalizeForVoidDiscard (queued owned container discard)");
