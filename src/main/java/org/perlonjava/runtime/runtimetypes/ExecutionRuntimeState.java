@@ -72,6 +72,9 @@ public final class ExecutionRuntimeState {
     public final Deque<RuntimeCode.EvalSourceFrame> activeEvalSources = new ArrayDeque<>();
     public final ArrayDeque<ArrayList<String>> syntheticCallerFrames = new ArrayDeque<>();
     public final Deque<RuntimeArray> argsStack = new ArrayDeque<>();
+    /** Weak roots for JVM call arguments while their expressions are evaluated. */
+    final ArrayList<java.lang.ref.WeakReference<RuntimeCode.CallArguments>> callArgumentFrames =
+            new ArrayList<>();
     public final Deque<RuntimeCode> activeCodeStack = new ArrayDeque<>();
     /** Perl source callsites aligned with the active Perl code frames. */
     public final Deque<CallerStack.CallerInfo> activeCodeCallSites = new ArrayDeque<>();

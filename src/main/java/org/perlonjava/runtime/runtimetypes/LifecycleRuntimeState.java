@@ -27,6 +27,8 @@ final class LifecycleRuntimeState {
     // Parallel to pending. A non-scalar transient owner kind is recorded only
     // for trace attribution; it never changes runtime reachability.
     final ArrayList<String> pendingTransientOwnerKinds = new ArrayList<>();
+    final ArrayList<MortalList.DeferredArgumentOwnerRelease> deferredArgumentOwnerReleases =
+            new ArrayList<>();
     final ArrayList<TiedVariableBase> pendingTiedReleases = new ArrayList<>();
     final ArrayList<RuntimeScalar> pendingIoReleases = new ArrayList<>();
     final ArrayList<RuntimeScalar> deferredCaptures = new ArrayList<>();
