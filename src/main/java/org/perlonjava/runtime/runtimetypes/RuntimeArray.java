@@ -26,12 +26,8 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.TIED_SCALAR;
  * using a list of RuntimeScalar objects, which can hold any type of Perl scalar value.
  */
 public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference, DynamicState {
-    private static final ThreadLocal<MethodCallArgumentPool> METHOD_CALL_ARGUMENT_POOL =
+    private static final ThreadLocal<RuntimeArray> RECYCLED_METHOD_CALL_ARGUMENTS =
             new ThreadLocal<>();
-
-    private static final class MethodCallArgumentPool {
-        private RuntimeArray available;
-    }
 
     /** Return an empty lexical cell when control flow skipped its declaration. */
     public static RuntimeArray materializeLexicalCell(RuntimeArray array) {
@@ -174,14 +170,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public static RuntimeArray methodCallArguments(int initialCapacity) {
         if (initialCapacity < 0) throw new IllegalArgumentException("negative capacity");
         if (initialCapacity <= 2) {
-            MethodCallArgumentPool pool = METHOD_CALL_ARGUMENT_POOL.get();
-            if (pool == null) {
-                pool = new MethodCallArgumentPool();
-                METHOD_CALL_ARGUMENT_POOL.set(pool);
-            }
-            RuntimeArray recycled = pool.available;
+            RuntimeArray recycled = RECYCLED_METHOD_CALL_ARGUMENTS.get();
             if (recycled != null) {
-                pool.available = null;
+                // Keep the ThreadLocalMap entry so recycling can update it without a new entry.
+                RECYCLED_METHOD_CALL_ARGUMENTS.set(null);
                 recycled.resetRecycledMethodCallArguments();
                 return recycled;
             }
@@ -197,13 +189,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             return;
         }
         resetRecycledMethodCallArguments();
-        MethodCallArgumentPool pool = METHOD_CALL_ARGUMENT_POOL.get();
-        if (pool == null) {
-            pool = new MethodCallArgumentPool();
-            METHOD_CALL_ARGUMENT_POOL.set(pool);
-        }
-        if (pool.available == null) {
-            pool.available = this;
+        if (RECYCLED_METHOD_CALL_ARGUMENTS.get() == null) {
+            RECYCLED_METHOD_CALL_ARGUMENTS.set(this);
         }
     }
 
