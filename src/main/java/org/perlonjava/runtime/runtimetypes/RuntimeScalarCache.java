@@ -30,7 +30,7 @@ public class RuntimeScalarCache {
     public static RuntimeScalarReadOnly scalarOne;
     // Range of integers to cache
     static int minInt = -100;
-    static int maxInt = 65_535;
+    static int maxInt = 1024;
     // Array to store cached RuntimeScalarReadOnly objects for integers
     static RuntimeScalarReadOnly[] scalarInt = new RuntimeScalarReadOnly[maxInt - minInt + 1];
     private static volatile RuntimeScalarReadOnly[] scalarByteString = new RuntimeScalarReadOnly[INITIAL_STRING_CACHE_SIZE];
