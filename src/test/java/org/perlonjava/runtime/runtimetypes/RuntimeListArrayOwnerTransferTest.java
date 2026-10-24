@@ -4,11 +4,33 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
 class RuntimeListArrayOwnerTransferTest {
+    @Test
+    void materializedCopyReleaseUsesScalarSlotAfterLegacyFlagRetires() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            referent.activateOwnerTracking();
+            RuntimeScalar materialized = new RuntimeScalar();
+            materialized.set(referent.createAnonymousReference());
+            PerlOwnerSlot slot = materialized.scalarValueOwnerSlot();
+            materialized.refCountOwned = false;
+
+            RuntimeList.releaseMaterializedScalarOwner(
+                    materialized, "RuntimeListArrayOwnerTransferTest");
+
+            assertEquals(0, referent.refCount);
+            assertEquals(0, referent.activeOwnerCount());
+            assertEquals(0, referent.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_VALUE));
+            assertFalse(slot.isActive());
+        }
+    }
+
     @Test
     void listAssignmentTransfersOwnedCellsAndReleasesDisplacedArrayValues() {
         PerlRuntime runtime = new PerlRuntime();

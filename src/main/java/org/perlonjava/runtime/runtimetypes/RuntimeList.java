@@ -796,10 +796,8 @@ public class RuntimeList extends RuntimeBase {
                             && (rhsValue.type & RuntimeScalarType.REFERENCE_BIT) != 0
                             && rhsValue.value instanceof RuntimeBase base
                             && rhsValue.ownsCountedReferent(base) && base.refCount > 0) {
-                        base.releaseOwner(rhsValue, "RuntimeList materialized-copy undo (undef-target)");
-                        base.releaseActiveOwner(rhsValue);
-                        base.refCount--;
-                        rhsValue.setRefCountOwned(false);
+                        releaseMaterializedScalarOwner(
+                                rhsValue, "RuntimeList materialized-copy undo (undef-target)");
                     }
                     rhsIndex++;
                 }
@@ -824,10 +822,8 @@ public class RuntimeList extends RuntimeBase {
                         && (assigned.type & RuntimeScalarType.REFERENCE_BIT) != 0
                         && assigned.value instanceof RuntimeBase base
                         && assigned.ownsCountedReferent(base) && base.refCount > 0) {
-                    base.releaseOwner(assigned, "RuntimeList materialized-copy undo (scalar-target)");
-                    base.releaseActiveOwner(assigned);
-                    base.refCount--;
-                    assigned.setRefCountOwned(false);
+                    releaseMaterializedScalarOwner(
+                            assigned, "RuntimeList materialized-copy undo (scalar-target)");
                 }
             } else if (elem instanceof RuntimeArray runtimeArray) {
                 List<RuntimeScalar> remaining = (rhsIndex < rhsSize)
@@ -852,10 +848,8 @@ public class RuntimeList extends RuntimeBase {
                         if ((r.type & RuntimeScalarType.REFERENCE_BIT) != 0
                                 && r.value instanceof RuntimeBase base
                                 && r.ownsCountedReferent(base) && base.refCount > 0) {
-                            base.releaseOwner(r, "RuntimeList materialized-copy undo (array-target)");
-                            base.releaseActiveOwner(r);
-                            base.refCount--;
-                            r.setRefCountOwned(false);
+                            releaseMaterializedScalarOwner(
+                                    r, "RuntimeList materialized-copy undo (array-target)");
                         }
                     }
                 } else {
@@ -896,10 +890,8 @@ public class RuntimeList extends RuntimeBase {
                     if ((r.type & RuntimeScalarType.REFERENCE_BIT) != 0
                             && r.value instanceof RuntimeBase base
                             && r.ownsCountedReferent(base) && base.refCount > 0) {
-                        base.releaseOwner(r, "RuntimeList materialized-copy undo (hash-target)");
-                        base.releaseActiveOwner(r);
-                        base.refCount--;
-                        r.setRefCountOwned(false);
+                        releaseMaterializedScalarOwner(
+                                r, "RuntimeList materialized-copy undo (hash-target)");
                     }
                 }
                 rhsIndex = rhsSize; // Consume the rest
@@ -1002,18 +994,26 @@ public class RuntimeList extends RuntimeBase {
     }
 
     /** Release the ownership held by a materialized RHS cell after scalar assignment copied it. */
-    private static void releaseDiscardedMaterializedScalar(RuntimeScalar scalar) {
+    static void releaseMaterializedScalarOwner(RuntimeScalar scalar, String releaseSite) {
         if (scalar == null) return;
-        scalar.releaseOwnedScalarReferenceContents();
         if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && scalar.value instanceof RuntimeBase base
                 && scalar.ownsCountedReferent(base)
                 && base.refCount > 0) {
-            base.releaseOwner(scalar, "RuntimeList materialized-copy undo (simple-scalar-target)");
-            base.releaseActiveOwner(scalar);
-            base.refCount--;
-            scalar.setRefCountOwned(false);
+            if (!scalar.releaseScalarValueOwnerCount(base, releaseSite)) {
+                base.releaseOwner(scalar, releaseSite);
+                base.releaseActiveOwner(scalar);
+                base.refCount--;
+                scalar.setRefCountOwned(false);
+            }
         }
+    }
+
+    private static void releaseDiscardedMaterializedScalar(RuntimeScalar scalar) {
+        if (scalar == null) return;
+        scalar.releaseOwnedScalarReferenceContents();
+        releaseMaterializedScalarOwner(
+                scalar, "RuntimeList materialized-copy undo (simple-scalar-target)");
     }
 
     /**
