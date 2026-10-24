@@ -64,6 +64,36 @@ class RuntimeScalarValueOwnerSlotTest {
     }
 
     @Test
+    void scalarOverwriteReleasesDisplacedSlotAfterLegacyFlagRetires() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray first = new RuntimeArray();
+            RuntimeArray second = new RuntimeArray();
+            first.activateOwnerTracking();
+            second.activateOwnerTracking();
+            RuntimeScalar scalar = new RuntimeScalar();
+            scalar.set(first.createReference());
+            PerlOwnerSlot slot = scalar.scalarValueOwnerSlot();
+            scalar.refCountOwned = false;
+
+            scalar.set(second.createReference());
+
+            assertEquals(0, first.refCount,
+                    "overwriting the cell releases the referent recorded by its slot");
+            assertEquals(0, first.activeOwnerCount(),
+                    "the displaced cell is removed from the compatibility owner registry");
+            assertEquals(1, second.refCount);
+            assertEquals(1, second.activeOwnerCount());
+            assertEquals(0, first.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_VALUE));
+            assertEquals(1, second.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_VALUE));
+            assertSame(slot, scalar.scalarValueOwnerSlot());
+            assertSame(second, slot.referent());
+
+            scalar.undefine();
+        }
+    }
+
+    @Test
     void localizedScalarValueKeepsItsOwnerUntilRestore() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {

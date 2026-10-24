@@ -3099,10 +3099,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.type = value.type;
         this.value = copyScalarPayload(value.type, value.value);
         this.scalarReferenceContentsOwner = null;
-        // Install the new scalar-cell owner edge before releasing the prior
-        // referent below. DESTROY callbacks must observe the assigned value.
-        syncScalarValueOwnerSlot(false);
-        if (newOwned) {
+        // A self-assignment keeps its existing slot/count. Otherwise release
+        // the displaced scalar slot before reusing its stable identity for the
+        // assigned value. No lifecycle callback runs until the new edge is
+        // installed and the release policy below decides whether to dispatch.
+        boolean preservedExistingScalarValueOwner = newOwned
+                && this.value instanceof RuntimeBase assignedReferent
+                && hasScalarValueOwnerSlotFor(assignedReferent);
+        boolean releasedOldScalarValueSlot = false;
+        if (!preservedExistingScalarValueOwner) {
+            if (oldOwnedByScalarValue && oldBase != null && !thisWasWeak) {
+                releasedOldScalarValueSlot = releaseScalarValueOwnerCount(
+                        oldBase,
+                        "RuntimeScalar.setLargeRefCounted (decrement on overwrite)");
+            }
+            syncScalarValueOwnerSlot(false);
+        }
+        if (newOwned && !preservedExistingScalarValueOwner) {
             if (!(this.value instanceof RuntimeBase newReferent)
                     || !acquireScalarValueOwnerCount(
                             newReferent, "RuntimeScalar.setLargeRefCounted (increment on store)")) {
@@ -3250,14 +3263,21 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // and for scalars that didn't own a refCount increment).
         if (oldBase != null && !thisWasWeak
                 && (oldOwnedByScalarValue || oldOwnedByScalarReference)) {
-            if (oldBase.refCount > 0) {
+            if (preservedExistingScalarValueOwner) {
+                // The same scalar slot still owns the same referent; assignment
+                // introduced no displaced count to release.
+            } else if (oldBase.refCount > 0 && !releasedOldScalarValueSlot) {
                 oldBase.traceRefCount(-1, "RuntimeScalar.setLargeRefCounted (decrement on overwrite)");
                 if (!(oldOwnedByScalarValue && oldBase == this.value && newOwned)) {
                     oldBase.releaseOwner(this, "setLargeRefCounted overwrite");
                     oldBase.releaseActiveOwner(this);
                 }
             }
-            if (oldBase.refCount > 0 && --oldBase.refCount == 0) {
+            boolean oldReferentReachedZero = !preservedExistingScalarValueOwner
+                    && (releasedOldScalarValueSlot
+                        ? oldBase.refCount == 0
+                        : oldBase.refCount > 0 && --oldBase.refCount == 0);
+            if (oldReferentReachedZero) {
                 int rootedScalarContentsOwners = oldBase.ownerSlotCount(
                         PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS) == 0
                         ? 0 : oldBase.reachableOwnerCount();
