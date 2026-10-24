@@ -384,9 +384,17 @@ test {
 // Provider we already record as an input so configuration-cache invalidation
 // stays correct when the env var changes between invocations.
 def jperlTestFilterProp = providers.environmentVariable('JPERL_TEST_FILTER').orElse('')
+def disableAggregateOwnerRecoveryProp = providers.environmentVariable(
+        'JPERL_TEST_DISABLE_AGGREGATE_OWNER_RECOVERY').map {
+    it.equalsIgnoreCase('true') || it == '1'
+}.orElse(false)
 tasks.withType(Test).configureEach { t ->
     t.inputs.property('jperlTestFilter', jperlTestFilterProp)
     t.environment('JPERL_TEST_FILTER', jperlTestFilterProp.get())
+    t.inputs.property('disableAggregateOwnerRecovery', disableAggregateOwnerRecoveryProp)
+    if (disableAggregateOwnerRecoveryProp.get()) {
+        t.systemProperty('perlonjava.test.disableAggregateOwnerRecovery', 'true')
+    }
 }
 
 // Fast unit tests only (tests in unit/ directory)

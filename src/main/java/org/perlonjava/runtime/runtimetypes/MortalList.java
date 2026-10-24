@@ -1790,7 +1790,8 @@ public class MortalList {
                 // have a legacy bridge count and retain the old compatibility
                 // sentinel behavior.
                 if (base.nativeCaptureOwnerCount() == 0) base.refCount = 1;
-            } else if (restoreReachableAggregateOwnerCount(base)) {
+            } else if (!aggregateOwnerRecoveryDisabledForDiagnostics()
+                    && restoreReachableAggregateOwnerCount(base)) {
                 // A hash-entry owner has a stable semantic slot identity even
                 // when an unrelated legacy scalar decrement consumes the
                 // selective count. Restore the count from independently owned
@@ -1990,6 +1991,7 @@ public class MortalList {
     /** Restore legacy count for aggregate owner slots still reachable from Perl roots. */
     static boolean restoreReachableAggregateOwnerCount(RuntimeBase referent) {
         Set<RuntimeScalar> rootedHashCells = Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<PerlOwnerSlot> rootedTieWrappers = Collections.newSetFromMap(new IdentityHashMap<>());
         // The referent exclusion and Perl graph stay fixed throughout this
         // synchronous scan, so multiple slots in one aggregate share a proof.
         Map<RuntimeBase, Boolean> rootedAggregateOwners = new IdentityHashMap<>();
@@ -2032,6 +2034,7 @@ public class MortalList {
                 RuntimeBase owner = slot.ownerContainer();
                 if (owner != null && isRootedOwnerContainer(owner, referent)) {
                     slotsWithoutCell++;
+                    rootedTieWrappers.add(slot);
                 }
             }
         }
@@ -2049,8 +2052,16 @@ public class MortalList {
             owners++;
         }
         if (owners == 0) return false;
+        for (PerlOwnerSlot slot : rootedTieWrappers) {
+            slot.markTieWrapperCountRestored();
+        }
         referent.refCount = owners;
         return true;
+    }
+
+    /** Test-only switch for finding ownership edges that still depend on recovery. */
+    static boolean aggregateOwnerRecoveryDisabledForDiagnostics() {
+        return Boolean.getBoolean("perlonjava.test.disableAggregateOwnerRecovery");
     }
 
     private static boolean isRootedAggregateOwnerCached(

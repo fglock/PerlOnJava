@@ -44,19 +44,20 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
         this.self = tiedObject;
         this.tiedPackage = tiedPackage;
         // The tie wrapper holds a strong reference to the tied object.
-        // Increment refCount so that untie's decrement can trigger DESTROY
-        // when no other references remain (matching Perl 5 behavior).
+        // Record the wrapper's strong edge even before selective counting is
+        // active; later owner recovery can then include it exactly once.
         // Note: tiedObject is null for proxy entries (RuntimeTiedHashProxyEntry,
         // RuntimeTiedArrayProxyEntry) which delegate to the parent container.
         if (tiedObject != null
                 && (tiedObject.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && tiedObject.value instanceof RuntimeBase base
-                && base.refCount >= 0) {
+                && tiedObject.value instanceof RuntimeBase base) {
             PerlOwnerSlot ownerSlot = new PerlOwnerSlot(
                     PerlOwnerSlot.Kind.TIE_WRAPPER, null, ownerContainer, tiedObject);
             if (ownerSlot.acquireTieWrapperCount(base, "TiedVariableBase")) {
                 tiedObjectOwnerSlot = ownerSlot;
-                base.acquireTransientTraceOwner("tie wrapper", "TiedVariableBase");
+                if (ownerSlot.tieWrapperCounted()) {
+                    base.acquireTransientTraceOwner("tie wrapper", "TiedVariableBase");
+                }
             }
         }
     }
@@ -245,7 +246,9 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
         RuntimeBase base = ownerSlot == null ? null : ownerSlot.referent();
         if (base != null) {
             boolean hadPositiveCount = base.refCount > 0;
-            base.releaseTransientTraceOwner("tie wrapper", "TiedVariableBase");
+            if (ownerSlot.tieWrapperCounted()) {
+                base.releaseTransientTraceOwner("tie wrapper", "TiedVariableBase");
+            }
             ownerSlot.releaseTieWrapperCount(base, "TiedVariableBase.releaseTiedObject");
             if (hadPositiveCount && base.refCount == 0) {
                 base.refCount = Integer.MIN_VALUE;

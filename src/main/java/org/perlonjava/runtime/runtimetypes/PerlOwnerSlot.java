@@ -34,6 +34,7 @@ public final class PerlOwnerSlot {
     private volatile RuntimeCode closureOwner;
     private final long identity = NEXT_ID.incrementAndGet();
     private RuntimeBase referent;
+    private boolean tieWrapperCounted;
     private PerlRuntime ownerRuntime;
     private LifecycleRuntimeState ownerRuntimeState;
     private int legacyCaptureCount;
@@ -142,6 +143,10 @@ public final class PerlOwnerSlot {
 
     public synchronized int legacyCaptureCount() {
         return legacyCaptureCount;
+    }
+
+    synchronized boolean tieWrapperCounted() {
+        return tieWrapperCounted;
     }
 
     RuntimeCode closureOwner() {
@@ -430,15 +435,25 @@ public final class PerlOwnerSlot {
         if (referent != null) {
             throw new IllegalStateException("cannot retarget an active tie-wrapper owner");
         }
-        if (target.refCount < 0) return false;
-        if (target.refCount == Integer.MAX_VALUE) {
-            throw new IllegalStateException("tie-wrapper owner count overflow");
+        if (target.refCount < -1) return false;
+        if (target.refCount >= 0) {
+            if (target.refCount == Integer.MAX_VALUE) {
+                throw new IllegalStateException("tie-wrapper owner count overflow");
+            }
+            target.traceRefCount(+1, acquireSite);
+            target.refCount++;
+            target.hadCountedReference = true;
+            tieWrapperCounted = true;
         }
-        target.traceRefCount(+1, acquireSite);
-        target.refCount++;
-        target.hadCountedReference = true;
         transferTo(target);
         return true;
+    }
+
+    synchronized void markTieWrapperCountRestored() {
+        if (kind != Kind.TIE_WRAPPER || referent == null) {
+            throw new IllegalStateException("only an active tie-wrapper slot can be restored");
+        }
+        tieWrapperCounted = true;
     }
 
     /** Retire a tie-wrapper owner identity and decrement its legacy bridge count. */
@@ -447,7 +462,10 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("tie-wrapper release requires a TIE_WRAPPER slot");
         }
         if (referent != expectedTarget || expectedTarget == null) return false;
+        boolean counted = tieWrapperCounted;
+        tieWrapperCounted = false;
         transferTo(null);
+        if (!counted) return true;
         if (expectedTarget.refCount <= 0) return true;
         expectedTarget.traceRefCount(-1, releaseSite);
         expectedTarget.refCount--;

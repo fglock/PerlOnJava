@@ -70,16 +70,17 @@ public class TieHandle extends RuntimeIO {
         this.previousValue = previousValue;
         this.self = self;
         this.holdsSelfReference = holdSelfReference;
-        // Increment refCount: the tie wrapper holds a strong reference to the tied object.
+        // Record the wrapper's strong edge, including before selective counting starts.
         if (holdSelfReference
                 && self != null && (self.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && self.value instanceof RuntimeBase base
-                && base.refCount >= 0) {
+                && self.value instanceof RuntimeBase base) {
             PerlOwnerSlot ownerSlot = new PerlOwnerSlot(
                     PerlOwnerSlot.Kind.TIE_WRAPPER, null, ownerContainer, self);
             if (ownerSlot.acquireTieWrapperCount(base, "TieHandle")) {
                 tiedObjectOwnerSlot = ownerSlot;
-                base.acquireTransientTraceOwner("tie wrapper", "TieHandle");
+                if (ownerSlot.tieWrapperCounted()) {
+                    base.acquireTransientTraceOwner("tie wrapper", "TieHandle");
+                }
             }
         }
     }
@@ -374,7 +375,9 @@ public class TieHandle extends RuntimeIO {
         RuntimeBase base = ownerSlot == null ? null : ownerSlot.referent();
         if (base != null) {
             boolean hadPositiveCount = base.refCount > 0;
-            base.releaseTransientTraceOwner("tie wrapper", "TieHandle");
+            if (ownerSlot.tieWrapperCounted()) {
+                base.releaseTransientTraceOwner("tie wrapper", "TieHandle");
+            }
             ownerSlot.releaseTieWrapperCount(base, "TieHandle.releaseTiedObject");
             if (hadPositiveCount && base.refCount == 0) {
                 base.refCount = Integer.MIN_VALUE;

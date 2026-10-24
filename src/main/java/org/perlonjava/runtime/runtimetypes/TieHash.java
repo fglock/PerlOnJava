@@ -63,15 +63,16 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
         this.previousValue = previousValue;
         this.self = self;
         this.parent = parent;
-        // Increment refCount: the tie wrapper holds a strong reference to the tied object.
+        // Record the wrapper's strong edge, including before selective counting starts.
         if (self != null && (self.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && self.value instanceof RuntimeBase base
-                && base.refCount >= 0) {
+                && self.value instanceof RuntimeBase base) {
             PerlOwnerSlot ownerSlot = new PerlOwnerSlot(
                     PerlOwnerSlot.Kind.TIE_WRAPPER, null, parent, self);
             if (ownerSlot.acquireTieWrapperCount(base, "TieHash")) {
                 tiedObjectOwnerSlot = ownerSlot;
-                base.acquireTransientTraceOwner("tie wrapper", "TieHash");
+                if (ownerSlot.tieWrapperCounted()) {
+                    base.acquireTransientTraceOwner("tie wrapper", "TieHash");
+                }
             }
         }
         if (self != null && (self.type & RuntimeScalarType.REFERENCE_BIT) != 0
@@ -243,7 +244,9 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
         RuntimeBase base = ownerSlot == null ? null : ownerSlot.referent();
         if (base != null) {
             boolean hadPositiveCount = base.refCount > 0;
-            base.releaseTransientTraceOwner("tie wrapper", "TieHash");
+            if (ownerSlot.tieWrapperCounted()) {
+                base.releaseTransientTraceOwner("tie wrapper", "TieHash");
+            }
             ownerSlot.releaseTieWrapperCount(base, "TieHash.releaseTiedObject");
             if (hadPositiveCount && base.refCount == 0) {
                 base.refCount = Integer.MIN_VALUE;

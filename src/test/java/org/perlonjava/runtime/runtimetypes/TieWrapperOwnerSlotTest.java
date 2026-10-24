@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
 class TieWrapperOwnerSlotTest {
@@ -60,25 +61,39 @@ class TieWrapperOwnerSlotTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeArray referent = new RuntimeArray();
+            RuntimeArray parent = new RuntimeArray();
+            parent.elementsOwned = true;
             RuntimeScalar handler = new RuntimeScalar();
             handler.type = RuntimeScalarType.ARRAYREFERENCE;
             handler.value = referent;
             TieArray wrapper = new TieArray(
-                    "TieWrapperOwnerSlotTest", new RuntimeArray(), handler, new RuntimeArray());
-            assertEquals(-1, referent.refCount);
-            assertEquals(0, referent.ownerSlotCount(PerlOwnerSlot.Kind.TIE_WRAPPER));
-
-            referent.activateOwnerTracking();
+                    "TieWrapperOwnerSlotTest", new RuntimeArray(), handler, parent);
+            parent.elements = wrapper;
+            MyVarCleanupStack.register(parent);
             RuntimeScalar countedOwner = new RuntimeScalar();
-            countedOwner.set(referent.createAnonymousReference());
-            assertEquals(1, referent.refCount);
+            try {
+                assertEquals(-1, referent.refCount);
+                assertEquals(1, referent.ownerSlotCount(PerlOwnerSlot.Kind.TIE_WRAPPER));
 
-            wrapper.releaseTiedObject();
+                referent.activateOwnerTracking();
+                countedOwner.set(referent.createAnonymousReference());
+                MyVarCleanupStack.register(countedOwner);
+                assertEquals(1, referent.refCount);
+                assertTrue(MortalList.restoreReachableAggregateOwnerCount(referent),
+                        "root recovery includes the wrapper edge created before tracking");
+                assertEquals(2, referent.refCount);
 
-            assertEquals(1, referent.refCount,
-                    "a wrapper that never acquired a count cannot release another scalar's count");
-            assertEquals(0, referent.ownerSlotCount(PerlOwnerSlot.Kind.TIE_WRAPPER));
-            countedOwner.undefine();
+                wrapper.releaseTiedObject();
+
+                assertEquals(1, referent.refCount,
+                        "releasing the recovered wrapper owner preserves the scalar owner's count");
+                assertEquals(0, referent.ownerSlotCount(PerlOwnerSlot.Kind.TIE_WRAPPER));
+            } finally {
+                wrapper.releaseTiedObject();
+                MyVarCleanupStack.unregister(countedOwner);
+                countedOwner.undefine();
+                MyVarCleanupStack.unregister(parent);
+            }
         }
     }
 

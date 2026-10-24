@@ -120,12 +120,48 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
 ### Current batch
 
 - On 2026-10-24, tied scalar, array, hash, and handle wrappers now record
-  handler ownership in distinct `TIE_WRAPPER` slots. Acquiring a wrapper slot
-  only creates a count when the handler was already tracked, so release cannot
-  consume a later scalar owner's count. Root recovery now includes live wrapper
-  slots from rooted owner containers. Five focused Java tests cover slot
-  acquisition/release and the formerly mismatched untracked-handler case. Full
-  `nice -n 19 make` passes in 25m24s.
+  handler ownership in distinct `TIE_WRAPPER` slots. A wrapper installed while
+  its handler has the untracked sentinel remains uncounted until rooted owner
+  recovery; the existing Java regression requires this so the wrapper cannot
+  consume a later scalar owner's count. Root recovery includes live wrapper
+  slots from rooted owner containers. The wrapper-slot batch passed full
+  `nice -n 19 make` in 27m21s.
+- The temporary `perlonjava.test.disableAggregateOwnerRecovery` diagnostic is
+  available to forked test workers through
+  `JPERL_TEST_DISABLE_AGGREGATE_OWNER_RECOVERY=1`. It bypasses the scan only at
+  the two production call sites in `MortalList.processDeferredBase` and
+  `RuntimeScalar.setLargeRefCounted`; default runtime behavior remains enabled.
+  With the bypass, the focused #1794 controller/WebSocket and #1795 request
+  tempfile tests pass on both backends, along with selected #1649 ownership and
+  `DESTROY` tests. A JVM global-destruction wrapper timed out its nested child
+  at 300 seconds, while the underlying Catalyst lifetime test passed directly
+  and the wrapper passed on the interpreter; this result is inconclusive.
+  Six Java tests fail in deliberately undercounted synthetic graphs whose
+  assertions directly verify recovery behavior. The root-chain and lifecycle
+  tests directly construct scalar cells, mark them owned, then force the
+  referent count below the live owners; the reachability-cost tests queue more
+  decrements than they acquired owners. These fixtures do not identify a
+  missing Perl store operation. The JVM global-destruction wrapper timed out
+  its nested child at 300 seconds, while the underlying Catalyst lifetime test
+  passed directly and the wrapper passed on the interpreter; this result is
+  inconclusive. The two production scan callers remain in
+  `MortalList.processDeferredBase` and `RuntimeScalar.setLargeRefCounted`.
+  Removing the scan is blocked on real operations that can produce these
+  mismatches and on direct accounting for aggregate slots and
+  scalar-reference contents; the current synthetic tests are not sufficient
+  evidence to replace the scan. After the diagnostic review, default behavior
+  passes full `nice -n 19 make` in 39m43s; offline documentation link checking
+  also passes.
+- The recovery-disabled audit also exposed a real interpreter regression in
+  `issue_1649_recursive_builder_pad_release.t`: system Perl and the JVM pass
+  all nine assertions, while the interpreter retains all five weakly observed
+  nodes after dropping the root (expected two). With default recovery enabled,
+  the interpreter still fails that root-release assertion; dropping the saved
+  body then releases the remaining nodes. Trace confirms the recursive
+  closure's `releaseCaptures()` runs at `undef $sub`, so this is not evidence
+  that the recovery scan can be removed. The remaining investigation is the
+  interpreter's direct ownership accounting for captured aggregate pads and
+  scalar cells across recursive closure execution and lexical cleanup.
 - On 2026-10-24, the temporary scalar owner installed for `DESTROY`'s self
   argument now balances through the `SCALAR_VALUE` slot API without invoking
   destruction recursively inside the active DESTROY frame. A focused Java test
