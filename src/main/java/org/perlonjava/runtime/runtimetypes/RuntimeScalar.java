@@ -3088,11 +3088,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             if (nb.refCount >= 0 && !scalarContentsOwnedByEscapedReference) {
                 if (nb.refCount == 0) nb.registerSharedFetchedView();
-                nb.traceRefCount(+1, "RuntimeScalar.setLargeRefCounted (increment on store)");
-                nb.recordOwner(this, "setLargeRefCounted store");
-                nb.recordActiveOwner(this);
-                nb.refCount++;
-                nb.hadCountedReference = true;
                 newOwned = true;
             }
         }
@@ -3106,7 +3101,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.scalarReferenceContentsOwner = null;
         // Install the new scalar-cell owner edge before releasing the prior
         // referent below. DESTROY callbacks must observe the assigned value.
-        syncScalarValueOwnerSlot(newOwned);
+        syncScalarValueOwnerSlot(false);
+        if (newOwned) {
+            if (!(this.value instanceof RuntimeBase newReferent)
+                    || !acquireScalarValueOwnerCount(
+                            newReferent, "RuntimeScalar.setLargeRefCounted (increment on store)")) {
+                throw new IllegalStateException(
+                        "tracked scalar assignment could not acquire its owner slot");
+            }
+        }
         // An explicitly discarded closure can have an inflated CODE refcount,
         // so waiting for callDestroy() leaves its captures alive indefinitely.
         // Release them only after this slot is gone, the code is inactive, and
@@ -3249,8 +3252,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && (oldOwnedByScalarValue || oldOwnedByScalarReference)) {
             if (oldBase.refCount > 0) {
                 oldBase.traceRefCount(-1, "RuntimeScalar.setLargeRefCounted (decrement on overwrite)");
-                oldBase.releaseOwner(this, "setLargeRefCounted overwrite");
-                oldBase.releaseActiveOwner(this);
+                if (!(oldOwnedByScalarValue && oldBase == this.value && newOwned)) {
+                    oldBase.releaseOwner(this, "setLargeRefCounted overwrite");
+                    oldBase.releaseActiveOwner(this);
+                }
             }
             if (oldBase.refCount > 0 && --oldBase.refCount == 0) {
                 int rootedScalarContentsOwners = oldBase.ownerSlotCount(

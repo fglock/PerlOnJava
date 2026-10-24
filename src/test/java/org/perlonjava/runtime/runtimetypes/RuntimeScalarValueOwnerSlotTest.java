@@ -10,6 +10,31 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 @Tag("unit")
 class RuntimeScalarValueOwnerSlotTest {
     @Test
+    void scalarSelfAssignmentKeepsOneCountedOwnerAndSlot() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray referent = new RuntimeArray();
+            referent.activateOwnerTracking();
+            RuntimeScalar scalar = new RuntimeScalar();
+            scalar.set(referent.createAnonymousReference());
+            PerlOwnerSlot slot = scalar.scalarValueOwnerSlot();
+
+            assertEquals(1, referent.refCount);
+            assertEquals(1, referent.activeOwnerCount());
+
+            scalar.set(scalar);
+
+            assertEquals(1, referent.refCount,
+                    "self-assignment balances its temporary retain and release");
+            assertEquals(1, referent.activeOwnerCount(),
+                    "the scalar remains in the legacy owner registry");
+            assertEquals(1, referent.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_VALUE));
+            assertSame(slot, scalar.scalarValueOwnerSlot());
+            scalar.undefine();
+        }
+    }
+
+    @Test
     void scalarAssignmentTransfersOneStableOwnerSlot() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
