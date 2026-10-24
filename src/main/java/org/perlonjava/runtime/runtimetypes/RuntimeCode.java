@@ -162,16 +162,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         .stableHashMethodHashDereferenceAllowed(hashArgument)) {
             return false;
         }
-        RuntimeScalar firstCell;
-        RuntimeScalar secondCell;
-        if (hash.prepareStableMethodFieldCache(firstHashKey, secondHashKey)) {
-            firstCell = hash.stableMethodFieldCacheFirstCell();
-            secondCell = hash.stableMethodFieldCacheSecondCell();
-        } else {
-            firstCell = hash.elements.get(firstHashKey);
-            secondCell = secondHashKey == null
-                    ? null : hash.elements.get(secondHashKey);
-        }
+        RuntimeScalar firstCell = hash.elements.get(firstHashKey);
+        RuntimeScalar secondCell = secondHashKey == null
+                ? null : hash.elements.get(secondHashKey);
         if (!RuntimeScalar.isCacheableReadOnlyPlainHashMethodField(firstCell)
                 || (secondHashKey != null
                     && !RuntimeScalar.isCacheableReadOnlyPlainHashMethodField(secondCell))) {
