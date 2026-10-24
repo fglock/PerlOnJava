@@ -473,7 +473,8 @@ public class Storable extends PerlModuleBase {
                     RuntimeHash previousValue = new RuntimeHash();
                     // Create new TieHash with cloned handler
                     newHash.type = RuntimeHash.TIED_HASH;
-                    newHash.elements = new TieHash(tieHash.getTiedPackage(), previousValue, clonedSelf);
+                    newHash.elements = new TieHash(
+                            tieHash.getTiedPackage(), previousValue, clonedSelf, newHash);
                     // Initialize the backing value directly. Replaying through STORE
                     // breaks read-only tie classes during dclone; the cloned handler
                     // already carries the tie object's state.

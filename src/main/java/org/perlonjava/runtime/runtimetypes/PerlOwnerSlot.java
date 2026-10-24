@@ -22,7 +22,8 @@ public final class PerlOwnerSlot {
         HASH_ENTRY,
         ARRAY_ELEMENT,
         SCALAR_REFERENCE_CONTENTS,
-        SCALAR_VALUE
+        SCALAR_VALUE,
+        TIE_WRAPPER
     }
 
     private final Kind kind;
@@ -415,6 +416,40 @@ public final class PerlOwnerSlot {
             expectedTarget.releaseOwner(scalar, releaseSite);
             expectedTarget.releaseActiveOwner(scalar);
         }
+        expectedTarget.refCount--;
+        return true;
+    }
+
+    /** Acquire the tie wrapper's independent strong reference to its handler. */
+    synchronized boolean acquireTieWrapperCount(RuntimeBase target, String acquireSite) {
+        if (kind != Kind.TIE_WRAPPER) {
+            throw new IllegalStateException("tie-wrapper acquisition requires a TIE_WRAPPER slot");
+        }
+        Objects.requireNonNull(target, "target");
+        if (referent == target) return true;
+        if (referent != null) {
+            throw new IllegalStateException("cannot retarget an active tie-wrapper owner");
+        }
+        if (target.refCount < 0) return false;
+        if (target.refCount == Integer.MAX_VALUE) {
+            throw new IllegalStateException("tie-wrapper owner count overflow");
+        }
+        target.traceRefCount(+1, acquireSite);
+        target.refCount++;
+        target.hadCountedReference = true;
+        transferTo(target);
+        return true;
+    }
+
+    /** Retire a tie-wrapper owner identity and decrement its legacy bridge count. */
+    synchronized boolean releaseTieWrapperCount(RuntimeBase expectedTarget, String releaseSite) {
+        if (kind != Kind.TIE_WRAPPER) {
+            throw new IllegalStateException("tie-wrapper release requires a TIE_WRAPPER slot");
+        }
+        if (referent != expectedTarget || expectedTarget == null) return false;
+        transferTo(null);
+        if (expectedTarget.refCount <= 0) return true;
+        expectedTarget.traceRefCount(-1, releaseSite);
         expectedTarget.refCount--;
         return true;
     }

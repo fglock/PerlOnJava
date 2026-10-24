@@ -41,8 +41,10 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
      * The original value of the hash before it was tied.
      */
     private final RuntimeHash previousValue;
+    private transient RuntimeHash parent;
 
     private boolean tiedObjectReleased = false;
+    private transient PerlOwnerSlot tiedObjectOwnerSlot;
 
     /**
      * Creates a new TieHash instance.
@@ -52,15 +54,25 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
      * @param self          the blessed object returned by TIEHASH
      */
     public TieHash(String tiedPackage, RuntimeHash previousValue, RuntimeScalar self) {
+        this(tiedPackage, previousValue, self, null);
+    }
+
+    public TieHash(
+            String tiedPackage, RuntimeHash previousValue, RuntimeScalar self, RuntimeHash parent) {
         this.tiedPackage = tiedPackage;
         this.previousValue = previousValue;
         this.self = self;
+        this.parent = parent;
         // Increment refCount: the tie wrapper holds a strong reference to the tied object.
         if (self != null && (self.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && self.value instanceof RuntimeBase base
                 && base.refCount >= 0) {
-            base.refCount++;
-            base.acquireTransientTraceOwner("tie wrapper", "TieHash");
+            PerlOwnerSlot ownerSlot = new PerlOwnerSlot(
+                    PerlOwnerSlot.Kind.TIE_WRAPPER, null, parent, self);
+            if (ownerSlot.acquireTieWrapperCount(base, "TieHash")) {
+                tiedObjectOwnerSlot = ownerSlot;
+                base.acquireTransientTraceOwner("tie wrapper", "TieHash");
+            }
         }
         if (self != null && (self.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && self.value instanceof RuntimeBase base) {
@@ -227,11 +239,13 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
     public void releaseTiedObject() {
         if (tiedObjectReleased) return;
         tiedObjectReleased = true;
-        if (self == null) return;
-        if ((self.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && self.value instanceof RuntimeBase base) {
+        PerlOwnerSlot ownerSlot = tiedObjectOwnerSlot;
+        RuntimeBase base = ownerSlot == null ? null : ownerSlot.referent();
+        if (base != null) {
+            boolean hadPositiveCount = base.refCount > 0;
             base.releaseTransientTraceOwner("tie wrapper", "TieHash");
-            if (base.refCount > 0 && --base.refCount == 0) {
+            ownerSlot.releaseTieWrapperCount(base, "TieHash.releaseTiedObject");
+            if (hadPositiveCount && base.refCount == 0) {
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(base);
             }

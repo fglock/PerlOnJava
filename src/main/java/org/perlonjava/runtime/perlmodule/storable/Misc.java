@@ -256,7 +256,7 @@ public final class Misc {
         String className = classnameOf(tying);
         RuntimeHash previousValue = RuntimeHash.createHash(hv);
         hv.type = RuntimeHash.TIED_HASH;
-        hv.elements = new TieHash(className, previousValue, tying);
+        hv.elements = new TieHash(className, previousValue, tying, hv);
         hv.resetIterator();
     }
 

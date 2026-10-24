@@ -156,7 +156,7 @@ public class TieOperators {
                 hash.threadShared = false;
                 hash.threadSharedIdentity = null;
                 hash.type = TIED_HASH;
-                hash.elements = new TieHash(className, previousValue, self);
+                hash.elements = new TieHash(className, previousValue, self, hash);
                 hash.resetIterator();
             }
             case GLOBREFERENCE -> {
@@ -166,7 +166,8 @@ public class TieOperators {
                 glob.IO.type = TIED_SCALAR;
                 boolean selfIsTiedGlob = self != null && (self.value == glob
                         || isSameHandle(self, previousValue));
-                TieHandle tieHandle = new TieHandle(className, previousValue, self, !selfIsTiedGlob);
+                TieHandle tieHandle = new TieHandle(
+                        className, previousValue, self, !selfIsTiedGlob, glob);
                 // Propagate the glob name so select() returns the correct name
                 // (e.g., "main::STDOUT") even when the handle is tied.
                 if (previousValue != null) {

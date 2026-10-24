@@ -26,6 +26,7 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
     protected final String tiedPackage;
 
     private boolean tiedObjectReleased = false;
+    private transient PerlOwnerSlot tiedObjectOwnerSlot;
 
     /**
      * Creates a new TiedVariableBase instance.
@@ -34,6 +35,11 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
      * @param tiedPackage the package name this variable is tied to
      */
     public TiedVariableBase(RuntimeScalar tiedObject, String tiedPackage) {
+        this(tiedObject, tiedPackage, null);
+    }
+
+    protected TiedVariableBase(
+            RuntimeScalar tiedObject, String tiedPackage, RuntimeBase ownerContainer) {
         super();
         this.self = tiedObject;
         this.tiedPackage = tiedPackage;
@@ -46,8 +52,12 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
                 && (tiedObject.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && tiedObject.value instanceof RuntimeBase base
                 && base.refCount >= 0) {
-            base.refCount++;
-            base.acquireTransientTraceOwner("tie wrapper", "TiedVariableBase");
+            PerlOwnerSlot ownerSlot = new PerlOwnerSlot(
+                    PerlOwnerSlot.Kind.TIE_WRAPPER, null, ownerContainer, tiedObject);
+            if (ownerSlot.acquireTieWrapperCount(base, "TiedVariableBase")) {
+                tiedObjectOwnerSlot = ownerSlot;
+                base.acquireTransientTraceOwner("tie wrapper", "TiedVariableBase");
+            }
         }
     }
 
@@ -231,10 +241,13 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
         // Array/hash element proxy entries delegate to their parent tied
         // container and intentionally have no handler of their own.
         if (self == null) return;
-        if ((self.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && self.value instanceof RuntimeBase base) {
+        PerlOwnerSlot ownerSlot = tiedObjectOwnerSlot;
+        RuntimeBase base = ownerSlot == null ? null : ownerSlot.referent();
+        if (base != null) {
+            boolean hadPositiveCount = base.refCount > 0;
             base.releaseTransientTraceOwner("tie wrapper", "TiedVariableBase");
-            if (base.refCount > 0 && --base.refCount == 0) {
+            ownerSlot.releaseTieWrapperCount(base, "TiedVariableBase.releaseTiedObject");
+            if (hadPositiveCount && base.refCount == 0) {
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(base);
             }

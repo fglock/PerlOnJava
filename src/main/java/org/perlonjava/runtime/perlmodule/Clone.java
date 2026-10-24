@@ -86,7 +86,8 @@ public class Clone extends PerlModuleBase {
                     RuntimeScalar clonedSelf = deepClone(tieHash.getSelf(), cloned, nextDepth);
                     RuntimeHash previousValue = new RuntimeHash();
                     newHash.type = RuntimeHash.TIED_HASH;
-                    newHash.elements = new TieHash(tieHash.getTiedPackage(), previousValue, clonedSelf);
+                    newHash.elements = new TieHash(
+                            tieHash.getTiedPackage(), previousValue, clonedSelf, newHash);
                     // Copy data through the tied interface
                     RuntimeScalar firstKey = TieHash.tiedFirstKey(origHash);
                     while (firstKey.type != RuntimeScalarType.UNDEF) {

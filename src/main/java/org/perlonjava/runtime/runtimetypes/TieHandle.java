@@ -36,6 +36,8 @@ public class TieHandle extends RuntimeIO {
      */
     private final RuntimeScalar self;
     private final boolean holdsSelfReference;
+    private transient PerlOwnerSlot tiedObjectOwnerSlot;
+    private boolean tiedObjectReleased;
 
     /**
      * The package name that this handle is tied to.
@@ -55,10 +57,15 @@ public class TieHandle extends RuntimeIO {
      * @param self          the blessed object returned by TIEHANDLE
      */
     public TieHandle(String tiedPackage, RuntimeIO previousValue, RuntimeScalar self) {
-        this(tiedPackage, previousValue, self, true);
+        this(tiedPackage, previousValue, self, true, null);
     }
 
     public TieHandle(String tiedPackage, RuntimeIO previousValue, RuntimeScalar self, boolean holdSelfReference) {
+        this(tiedPackage, previousValue, self, holdSelfReference, null);
+    }
+
+    public TieHandle(String tiedPackage, RuntimeIO previousValue, RuntimeScalar self,
+                     boolean holdSelfReference, RuntimeBase ownerContainer) {
         this.tiedPackage = tiedPackage;
         this.previousValue = previousValue;
         this.self = self;
@@ -68,8 +75,12 @@ public class TieHandle extends RuntimeIO {
                 && self != null && (self.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && self.value instanceof RuntimeBase base
                 && base.refCount >= 0) {
-            base.refCount++;
-            base.acquireTransientTraceOwner("tie wrapper", "TieHandle");
+            PerlOwnerSlot ownerSlot = new PerlOwnerSlot(
+                    PerlOwnerSlot.Kind.TIE_WRAPPER, null, ownerContainer, self);
+            if (ownerSlot.acquireTieWrapperCount(base, "TieHandle")) {
+                tiedObjectOwnerSlot = ownerSlot;
+                base.acquireTransientTraceOwner("tie wrapper", "TieHandle");
+            }
         }
     }
 
@@ -355,13 +366,17 @@ public class TieHandle extends RuntimeIO {
      * Decrements refCount and triggers DESTROY if it reaches 0.
      */
     public void releaseTiedObject() {
-        if (!holdsSelfReference) {
+        if (!holdsSelfReference || tiedObjectReleased) {
             return;
         }
-        if ((self.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && self.value instanceof RuntimeBase base) {
+        tiedObjectReleased = true;
+        PerlOwnerSlot ownerSlot = tiedObjectOwnerSlot;
+        RuntimeBase base = ownerSlot == null ? null : ownerSlot.referent();
+        if (base != null) {
+            boolean hadPositiveCount = base.refCount > 0;
             base.releaseTransientTraceOwner("tie wrapper", "TieHandle");
-            if (base.refCount > 0 && --base.refCount == 0) {
+            ownerSlot.releaseTieWrapperCount(base, "TieHandle.releaseTiedObject");
+            if (hadPositiveCount && base.refCount == 0) {
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(base);
             }

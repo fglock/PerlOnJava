@@ -2027,6 +2027,12 @@ public class MortalList {
                         && ReachabilityWalker.isScalarReachable(cell)) {
                     rootedHashCells.add(cell);
                 }
+            } else if (slot.kind() == PerlOwnerSlot.Kind.TIE_WRAPPER
+                    && slot.referent() == referent) {
+                RuntimeBase owner = slot.ownerContainer();
+                if (owner != null && isRootedOwnerContainer(owner, referent)) {
+                    slotsWithoutCell++;
+                }
             }
         }
         int owners = slotsWithoutCell + rootedHashCells.size();

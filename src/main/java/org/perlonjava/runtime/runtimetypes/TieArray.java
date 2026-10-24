@@ -51,6 +51,7 @@ public class TieArray extends ArrayList<RuntimeScalar> {
     private final RuntimeArray parent;
 
     private boolean tiedObjectReleased = false;
+    private transient PerlOwnerSlot tiedObjectOwnerSlot;
 
     /**
      * Creates a new TieArray instance.
@@ -68,8 +69,12 @@ public class TieArray extends ArrayList<RuntimeScalar> {
         if (self != null && (self.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && self.value instanceof RuntimeBase base
                 && base.refCount >= 0) {
-            base.refCount++;
-            base.acquireTransientTraceOwner("tie wrapper", "TieArray");
+            PerlOwnerSlot ownerSlot = new PerlOwnerSlot(
+                    PerlOwnerSlot.Kind.TIE_WRAPPER, null, parent, self);
+            if (ownerSlot.acquireTieWrapperCount(base, "TieArray")) {
+                tiedObjectOwnerSlot = ownerSlot;
+                base.acquireTransientTraceOwner("tie wrapper", "TieArray");
+            }
         }
     }
 
@@ -301,11 +306,13 @@ public class TieArray extends ArrayList<RuntimeScalar> {
     public void releaseTiedObject() {
         if (tiedObjectReleased) return;
         tiedObjectReleased = true;
-        if (self == null) return;
-        if ((self.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && self.value instanceof RuntimeBase base) {
+        PerlOwnerSlot ownerSlot = tiedObjectOwnerSlot;
+        RuntimeBase base = ownerSlot == null ? null : ownerSlot.referent();
+        if (base != null) {
+            boolean hadPositiveCount = base.refCount > 0;
             base.releaseTransientTraceOwner("tie wrapper", "TieArray");
-            if (base.refCount > 0 && --base.refCount == 0) {
+            ownerSlot.releaseTieWrapperCount(base, "TieArray.releaseTiedObject");
+            if (hadPositiveCount && base.refCount == 0) {
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(base);
             }

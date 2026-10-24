@@ -651,7 +651,7 @@ public class RuntimeGraphCloner {
         } else if (source.type == RuntimeHash.TIED_HASH && source.elements instanceof TieHash tie) {
             target.elements = new TieHash(tie.getTiedPackage(),
                     (RuntimeHash) cloneValue(tie.getPreviousValue()),
-                    (RuntimeScalar) cloneValue(tie.getSelf()));
+                    (RuntimeScalar) cloneValue(tie.getSelf()), target);
         } else {
             try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
                 for (Map.Entry<String, RuntimeScalar> entry : source.elements.entrySet()) {

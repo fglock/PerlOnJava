@@ -575,6 +575,15 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             Object ownershipKey = referenceCell == null ? slot : referenceCell;
             if (countedScalarReferenceCells.add(ownershipKey)) count++;
         }
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            RuntimeBase owner = slot.ownerContainer();
+            if (slot.kind() == PerlOwnerSlot.Kind.TIE_WRAPPER
+                    && slot.referent() == this
+                    && owner != null
+                    && MortalList.isRootedOwnerContainer(owner, this)) {
+                count++;
+            }
+        }
         return count;
     }
 

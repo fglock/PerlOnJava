@@ -49,7 +49,7 @@ public class TieScalar extends TiedVariableBase {
 
     public TieScalar(String tiedPackage, RuntimeScalar previousValue, RuntimeScalar self,
                      RuntimeScalar owner) {
-        super(self, tiedPackage);
+        super(self, tiedPackage, owner);
         this.previousValue = previousValue;
         this.owner = owner;
     }
