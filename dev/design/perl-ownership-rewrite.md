@@ -203,6 +203,14 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   test all pass on both backends. Recovery remains enabled by default; its two
   production callers still need independent direct-accounting proof, and the
   synthetic Java tests still directly require the recovery behavior.
+- The full `JPERL_TEST_DISABLE_AGGREGATE_OWNER_RECOVERY=1 nice -n 19 make`
+  audit reached 1,300 tests in shard 0 and failed six Java assertions that
+  directly require `restoreReachableAggregateOwnerCount` to rebuild an
+  artificially undercounted referent. The other 1,294 tests in that shard
+  passed, with three skipped. Gradle stopped before the other Perl shards
+  completed, so this is not a full-suite no-recovery result. Keep the scan and
+  diagnostic switch while tracing the two production paths; do not interpret
+  these synthetic failures as missing Perl store operations.
 - A second focused reducer,
   `issue_1649_captured_scalar_array_argument.t`, isolates the same class of
   lifetime error: a closure writes a blessed object to a captured scalar while
