@@ -142,11 +142,15 @@ class MortalListDeferredCaptureTest {
                             "the lexical owner remains a current Perl root");
                     assertEquals(RuntimeScalarType.HASHREFERENCE, weak.type,
                             "an unrelated temporary root must not cause a live referent to be swept");
+                    assertFalse(PerlRuntime.current().lifecycleState
+                                    .targetedWeakSweepReferents.contains(referent),
+                            "a persistent root should not leave the candidate queued for every later boundary");
                 } finally {
                     MortalList.popTemporaryRoot(unrelatedTemporary);
                 }
-            } finally {
                 MyVarCleanupStack.unregister(lexicalOwner);
+                MortalList.flushAboveMark();
+            } finally {
                 WeakRefRegistry.unweaken(weak);
                 MortalList.invalidateAllRootSnapshots();
             }

@@ -129,6 +129,33 @@ class ReachabilityQueryCostTest {
     }
 
     @Test
+    void persistentRootQueryChecksLiveLexicalsBeforePackageGraph() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash target = new RuntimeHash();
+            RuntimeScalar lexicalOwner = target.createReference();
+            MyVarCleanupStack.register(lexicalOwner);
+            MyVarCleanupStack.snapshotStackToLiveCounts();
+            MortalList.invalidateAllRootSnapshots();
+            try {
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    assertTrue(MortalList.isReachableFromPersistentRootCached(target));
+
+                    ReachabilityQueryStats stats = measurement.stats();
+                    assertEquals(1, stats.liveRootSnapshotsBuilt,
+                            "the live lexical graph is checked once");
+                    assertEquals(0, stats.externalRootSnapshotsBuilt,
+                            "a live lexical proof skips the package root graph");
+                }
+            } finally {
+                MyVarCleanupStack.unregister(lexicalOwner);
+                MortalList.invalidateAllRootSnapshots();
+            }
+        }
+    }
+
+    @Test
     void targetedWeakReleaseDoesNotTreatTemporaryRootsAsPersistentOwners() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {

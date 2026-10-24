@@ -1526,6 +1526,16 @@ public class MortalList {
 
     static boolean isReachableFromPersistentRootCached(RuntimeBase base) {
         LifecycleRuntimeState state = state();
+        // Check live lexicals before the package graph. Targeted weak sweeps
+        // often revisit objects that are still held by a current lexical; a
+        // positive lexical proof avoids walking the much larger, stable global
+        // graph for those candidates.
+        if (state.liveRootSnapshot == null) {
+            state.liveRootSnapshot = new ReachabilityWalker.LiveRootSnapshot();
+        }
+        if (state.liveRootSnapshot.isReachable(base)) {
+            return true;
+        }
         if (state.externalRootSnapshot == null) {
             state.externalRootSnapshot = new ReachabilityWalker.ExternalRootSnapshot();
         }
@@ -1539,10 +1549,7 @@ public class MortalList {
             // direct-lexical exclusion semantics.
             return true;
         }
-        if (state.liveRootSnapshot == null) {
-            state.liveRootSnapshot = new ReachabilityWalker.LiveRootSnapshot();
-        }
-        return state.liveRootSnapshot.isReachable(base);
+        return false;
     }
 
     static void invalidateExternalRootSnapshot() {
@@ -2067,11 +2074,16 @@ public class MortalList {
         if (!state.targetedWeakSweepReferents.isEmpty()) {
             releasedTargets = Collections.newSetFromMap(new IdentityHashMap<>());
             for (RuntimeBase referent : new ArrayList<>(state.targetedWeakSweepReferents)) {
-                // Keep a target only while that target is actually reachable
-                // from any current Perl root. Unrelated temporary values must
-                // not delay request cleanup, but a lexical/package owner that
-                // appeared after the request must still protect the referent.
-                if (isReachableFromExternalRootCached(referent)) continue;
+                // Temporary roots are transient: leave their candidates queued
+                // so the next boundary can retry after the expression unwinds.
+                if (ReachabilityWalker.isReachableFromTemporaryRoots(referent)) continue;
+                // Persistent roots will request another sweep when their owner
+                // exits. Drop the candidate now so every later statement does
+                // not repeatedly traverse the live/package root snapshots.
+                if (isReachableFromPersistentRootCached(referent)) {
+                    state.targetedWeakSweepReferents.remove(referent);
+                    continue;
+                }
                 releasedTargets.add(referent);
                 state.targetedWeakSweepReferents.remove(referent);
             }
