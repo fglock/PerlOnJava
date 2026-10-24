@@ -578,7 +578,27 @@ public class SystemOperator {
         if (SystemUtils.osIsWindows()) {
             return expandWindowsBatchForProcessBuilder(commandArgs, currentDirectory);
         }
+        // Resolve an explicit nested $^X invocation in this JVM.  Starting
+        // the shell launcher again would make Java discovery depend on the
+        // child's (possibly deliberately cleaned) PATH and environment.
+        if (isCurrentJperlExecutable(commandArgs.getFirst(), currentDirectory)) {
+            List<String> direct = new ArrayList<>(ForkOpenState.currentJavaCommand());
+            direct.addAll(commandArgs.subList(1, commandArgs.size()));
+            return direct;
+        }
         return expandJperlShebangForProcessBuilder(commandArgs);
+    }
+
+    private static boolean isCurrentJperlExecutable(String command, File currentDirectory) {
+        String current = getCurrentJperlPath();
+        if (current == null || current.isEmpty()) return false;
+        File candidate = new File(command);
+        if (!candidate.isAbsolute()) candidate = new File(currentDirectory, command);
+        try {
+            return candidate.getCanonicalFile().equals(new File(current).getCanonicalFile());
+        } catch (IOException e) {
+            return candidate.getAbsolutePath().equals(new File(current).getAbsolutePath());
+        }
     }
 
     private static boolean isExecutableCandidate(File candidate, String candidateName) {
