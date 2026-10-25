@@ -2122,14 +2122,33 @@ public class MortalList {
                 : NameNormalizer.getBlessStr(referent.blessId);
         if (className == null || !className.contains(OWNER_RECOVERY_TRACE_CLASS)) return;
         Map<PerlOwnerSlot.Kind, Integer> slotCounts = new java.util.EnumMap<>(PerlOwnerSlot.Kind.class);
+        List<String> slotDetails = new java.util.ArrayList<>();
         for (PerlOwnerSlot slot : ownerSlots) {
             slotCounts.merge(slot.kind(), 1, Integer::sum);
+            RuntimeBase owner = slot.ownerContainer();
+            RuntimeScalar cell = slot.ownerCell();
+            String ownerLabel = owner == null ? "none"
+                    : owner.getClass().getSimpleName() + "@" + System.identityHashCode(owner);
+            String cellLabel = cell == null ? "none"
+                    : "@" + System.identityHashCode(cell)
+                            + ":type=" + cell.type
+                            + ":valueMatches=" + (cell.value == referent)
+                            + ":weak=" + WeakRefRegistry.isweak(cell)
+                            + ":owned=" + cell.refCountOwned
+                            + ":scalarSlot=" + cell.hasScalarValueOwnerSlotFor(referent)
+                            + ":container=" + (cell.containerOwner == null ? "none"
+                                    : cell.containerOwner.getClass().getSimpleName() + "@"
+                                            + System.identityHashCode(cell.containerOwner));
+            slotDetails.add(slot.kind() + "#" + slot.identity()
+                    + " owner=" + ownerLabel + " cell=" + cellLabel);
         }
         System.err.println("[OWNER-RECOVERY] base=" + System.identityHashCode(referent)
                 + " class=" + className
                 + " recovered=" + recovered
                 + " restoredOwners=" + restoredOwners
                 + " slots=" + slotCounts
+                + " slotDetails=" + slotDetails
+                + " currentlyDestroying=" + referent.currentlyDestroying
                 + " release=" + releaseProvenance);
     }
 
