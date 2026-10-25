@@ -419,6 +419,14 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   interpreter. The logging is disabled unless its class filter is set. The
   root-proof discrepancy above remains under investigation, and the broader
   owner-slot migration remains incomplete.
+- A follow-up slot-detail trace shows the two recovered tempfile owners are
+  already represented by owned `GLOBREFERENCE` cells with active
+  `SCALAR_VALUE` slots. One cell is present in both a hash and an array; the
+  second is present in an array. Recovery runs with `currentlyDestroying=true`.
+  The current evidence therefore does not show a missing retain; it shows the
+  weak walker marking an object unreachable despite these counted owner cells.
+  Trace the parent container chain to reconcile that root proof before changing
+  the owner ledger or the weak sweep.
 - A second focused reducer,
   `issue_1649_captured_scalar_array_argument.t`, isolates the same class of
   lifetime error: a closure writes a blessed object to a captured scalar while
