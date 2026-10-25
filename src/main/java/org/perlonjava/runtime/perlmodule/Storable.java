@@ -350,10 +350,14 @@ public class Storable extends PerlModuleBase {
             if (elem.value instanceof RuntimeBase base
                     && elem.ownsCountedReferent(base)
                     && base.refCount > 0) {
-                base.releaseOwner(elem, "Storable.releaseApplyArgs");
-                base.releaseActiveOwner(elem);
-                base.refCount--;
-                elem.setRefCountOwned(false);
+                if (!elem.releaseScalarValueOwnerCount(base, "Storable.releaseApplyArgs")) {
+                    // Cells created before explicit scalar-value slots retain
+                    // the legacy bridge until their owner path is migrated.
+                    base.releaseOwner(elem, "Storable.releaseApplyArgs");
+                    base.releaseActiveOwner(elem);
+                    base.refCount--;
+                    elem.setRefCountOwned(false);
+                }
             }
         }
         args.elements.clear();

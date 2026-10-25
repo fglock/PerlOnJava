@@ -119,6 +119,13 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
 
 ### Current batch
 
+- `Storable.releaseApplyArgs()` now releases materialized argument owners through
+  `SCALAR_VALUE` slots when available, retaining the legacy fallback for older
+  cells. Its existing Java regression retires the legacy ownership flag before
+  release and verifies the slot and count both clear; this now exercises the
+  direct slot-release API rather than detaching the slot after a manual count
+  decrement. Full `nice -n 19 make` passes in 15m05s; the focused test passes
+  with zero failures.
 - On 2026-10-24, tied scalar, array, hash, and handle wrappers now record
   handler ownership in distinct `TIE_WRAPPER` slots. A wrapper installed while
   its handler has the untracked sentinel remains uncounted until rooted owner

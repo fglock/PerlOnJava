@@ -916,7 +916,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
     }
 
-    boolean releaseScalarValueOwnerCount(RuntimeBase expectedReferent, String releaseSite) {
+    /** Release this cell's direct counted owner through its explicit slot when available. */
+    public boolean releaseScalarValueOwnerCount(RuntimeBase expectedReferent, String releaseSite) {
         PerlOwnerSlot slot = scalarValueOwnerSlot;
         return slot != null && slot.releaseScalarValueCount(expectedReferent, releaseSite);
     }
