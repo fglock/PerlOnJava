@@ -2,6 +2,9 @@ package org.perlonjava.runtime.runtimetypes;
 
 import java.util.Iterator;
 import java.util.Objects;
+import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
@@ -197,6 +200,75 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      * value can be detached from its slot while the hash remains an owner.
      */
     public int hashSlotOwnerCount = 0;
+
+    private static final class DirectHashSlotOwner {
+        final WeakReference<RuntimeHash> hash;
+        final WeakReference<RuntimeScalar> scalar;
+        boolean countedWhenAdded;
+
+        DirectHashSlotOwner(RuntimeHash hash, RuntimeScalar scalar) {
+            this.hash = new WeakReference<>(hash);
+            this.scalar = new WeakReference<>(scalar);
+            this.countedWhenAdded = scalar != null && scalar.refCountOwned;
+        }
+    }
+
+    private final List<DirectHashSlotOwner> directHashSlotOwners = new ArrayList<>();
+
+    /** Track hash slots separately from their scalar wrappers, which may be replaced. */
+    public synchronized void updateDirectHashSlotOwner(
+            RuntimeHash owner, RuntimeScalar scalar, int delta) {
+        if (delta > 0) {
+            directHashSlotOwners.add(new DirectHashSlotOwner(owner, scalar));
+            return;
+        }
+        for (Iterator<DirectHashSlotOwner> it = directHashSlotOwners.iterator(); it.hasNext();) {
+            DirectHashSlotOwner record = it.next();
+            RuntimeHash existing = record.hash.get();
+            RuntimeScalar existingScalar = record.scalar.get();
+            if (existing == null || existing == owner && existingScalar == scalar) {
+                it.remove();
+                if (existing == owner && existingScalar == scalar) return;
+            }
+        }
+    }
+
+    public synchronized void updateDirectHashSlotOwnerCounted(
+            RuntimeHash owner, RuntimeScalar scalar, boolean counted) {
+        for (DirectHashSlotOwner record : directHashSlotOwners) {
+            if (record.hash.get() == owner && record.scalar.get() == scalar) {
+                record.countedWhenAdded = counted;
+            }
+        }
+    }
+
+    /** Count direct hash slots whose owner hash is outside the Perl root graph. */
+    public synchronized int[] unreachableDirectHashSlotOwnerCounts() {
+        int countedUnreachable = 0;
+        int totalUnreachable = 0;
+        java.util.IdentityHashMap<RuntimeHash, Boolean> reachableCache =
+                new java.util.IdentityHashMap<>();
+        for (Iterator<DirectHashSlotOwner> it = directHashSlotOwners.iterator(); it.hasNext();) {
+            DirectHashSlotOwner record = it.next();
+            RuntimeHash owner = record.hash.get();
+            RuntimeScalar scalar = record.scalar.get();
+            boolean counted = scalar == null ? record.countedWhenAdded : scalar.refCountOwned;
+            boolean unreachable;
+            if (owner == null) {
+                unreachable = true;
+            } else if (owner.perlLifecycleState() == PerlLifecycleState.DESTROYING) {
+                unreachable = false;
+            } else {
+                unreachable = reachableCache.computeIfAbsent(
+                        owner, hash -> !ReachabilityWalker.isReachableFromRoots(hash));
+            }
+            if (unreachable) {
+                totalUnreachable++;
+                if (counted) countedUnreachable++;
+            }
+        }
+        return new int[]{countedUnreachable, totalUnreachable};
+    }
 
 
     /**

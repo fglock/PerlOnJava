@@ -659,6 +659,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public boolean refCountOwned;
 
+    /** Update ownership bookkeeping and any direct hash-slot witness for this cell. */
+    public void setRefCountOwned(boolean owned) {
+        this.refCountOwned = owned;
+        if (containerOwner instanceof RuntimeHash hashOwner
+                && value instanceof RuntimeBase referent) {
+            referent.updateDirectHashSlotOwnerCounted(hashOwner, this, owned);
+        }
+    }
+
 
     /** A postfix ++/-- result transfers, rather than duplicates, its reference owner on assignment. */
     private boolean postfixReferenceOwnershipTransfer;
@@ -2142,7 +2151,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         base.hadCountedReference = true;
         base.recordOwner(scalar, "incrementRefCountForContainerStore");
         base.recordActiveOwner(scalar);
-        scalar.refCountOwned = true;
+        scalar.setRefCountOwned(true);
         // Phase B1 (refcount_alignment_52leaks_plan.md): track the
         // container element so ReachabilityWalker can see it via
         // ScalarRefRegistry.
@@ -3098,7 +3107,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         // Update ownership: this scalar now owns a refCount iff we incremented.
-        this.refCountOwned = newOwned;
+        this.setRefCountOwned(newOwned);
+        if (containerOwner instanceof RuntimeHash hashOwner) {
+            if (oldBase != null) oldBase.updateDirectHashSlotOwner(hashOwner, this, -1);
+            if (this.value instanceof RuntimeBase newBase) {
+                newBase.updateDirectHashSlotOwner(hashOwner, this, 1);
+            }
+        }
         retainScalarReferenceContents(value);
 
         // Flush deferred mortal decrements from the current function scope.
@@ -4958,7 +4973,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             boolean releasedCode = false;
             releaseAllClosureCaptureReferents(code);
             if (this.refCountOwned && code.refCount > 0) {
-                this.refCountOwned = false;
+                this.setRefCountOwned(false);
                 code.releaseActiveOwner(this);
                 if (--code.refCount == 0) {
                     code.refCount = Integer.MIN_VALUE;
@@ -5030,7 +5045,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 oldBase.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(oldBase);
             } else if (this.refCountOwned && oldBase.refCount > 0) {
-                this.refCountOwned = false;
+                this.setRefCountOwned(false);
                 oldBase.releaseActiveOwner(this);
                 if (--oldBase.refCount == 0) {
                     if (oldBase.localBindingExists) {
@@ -5960,9 +5975,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // returned reference becomes the first durable owner.  The
                 // assignment receiving this scalar will balance the temporary
                 // copy, so retain one cleanup token for that returned value.
-                old.refCountOwned = true;
+                old.setRefCountOwned(true);
                 old.postfixReferenceOwnershipTransfer = true;
-                this.refCountOwned = false;
+                this.setRefCountOwned(false);
                 // Check if object is eligible for overloading
                 int blessId = blessedId(this);
                 if (blessId != 0) {
@@ -6271,9 +6286,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             default -> { // All reference types
                 // See postAutoIncrementLarge(): the returned pre-mutation
                 // reference inherits this lvalue's ownership token.
-                old.refCountOwned = true;
+                old.setRefCountOwned(true);
                 old.postfixReferenceOwnershipTransfer = true;
-                this.refCountOwned = false;
+                this.setRefCountOwned(false);
                 // Check if object is eligible for overloading
                 int blessId = blessedId(this);
                 if (blessId != 0) {

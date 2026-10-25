@@ -540,7 +540,7 @@ public class MortalList {
                 || scalar.type == RuntimeScalarType.GLOB)
                 && scalar.value instanceof RuntimeBase base) {
             if (base.refCount > 0) {
-                scalar.refCountOwned = false;
+                scalar.setRefCountOwned(false);
                 if (base.refCountTrace) {
                     base.traceRefCount(0, "MortalList.deferDecrementIfTracked (queued, scalar.refCountOwned->false)");
                 }
@@ -559,7 +559,7 @@ public class MortalList {
                 // that stale ownership marker and ask the reachability walker to
                 // decide at the next safe (non-nested) boundary whether the weak
                 // observers should be cleared.
-                scalar.refCountOwned = false;
+                scalar.setRefCountOwned(false);
                 if (base.refCountTrace) {
                     base.releaseOwner(scalar, "deferDecrementIfTracked zero-count owner");
                 }
@@ -893,7 +893,7 @@ public class MortalList {
             return;
         }
 
-        codeRef.refCountOwned = false;
+        codeRef.setRefCountOwned(false);
         if (code.refCountTrace) {
             code.traceRefCount(-1, "MortalList.releaseTailCallCodeRef");
             code.releaseOwner(codeRef, "releaseTailCallCodeRef");
@@ -925,7 +925,7 @@ public class MortalList {
             return;
         }
 
-        scalar.refCountOwned = false;
+        scalar.setRefCountOwned(false);
         if (base.refCountTrace) {
             base.traceRefCount(-1, "MortalList.releaseTailCallArgElement");
             base.releaseOwner(scalar, "releaseTailCallArgElement");
@@ -1009,7 +1009,7 @@ public class MortalList {
             if (base.blessId != 0) {
                 boolean releasingLastOwner = false;
                 if (s.refCountOwned && base.refCount > 0) {
-                    s.refCountOwned = false;
+                    s.setRefCountOwned(false);
                     if (base.refCountTrace) {
                         base.traceRefCount(0, "MortalList.deferDecrementRecursive (blessed, queued)");
                         base.releaseOwner(s, "deferDecrementRecursive blessed");
@@ -1057,7 +1057,7 @@ public class MortalList {
                 boolean hasCleanupTargets = hasDirectWeakElementRefs
                         || containerMayContainCleanupTargets(base);
                 if (s.refCountOwned && base.refCount > 0) {
-                    s.refCountOwned = false;
+                    s.setRefCountOwned(false);
                     if (base.refCountTrace) {
                         base.traceRefCount(0, "MortalList.deferDecrementRecursive (unblessed container, queued)");
                     }
@@ -1183,7 +1183,7 @@ public class MortalList {
                         && ReachabilityWalker.isScalarReachable(scalar);
                 if (scalar.refCountOwned && base.refCount > 0 && unblessedDiscardableContainer
                         && !reachableCodeRef) {
-                    scalar.refCountOwned = false;
+                    scalar.setRefCountOwned(false);
                     if (base.refCountTrace) {
                         base.traceRefCount(0, "MortalList.mortalizeForVoidDiscard (queued owned container discard)");
                         base.releaseOwner(scalar, "mortalizeForVoidDiscard container");

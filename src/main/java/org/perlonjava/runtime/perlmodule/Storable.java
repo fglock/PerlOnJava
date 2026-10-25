@@ -352,7 +352,7 @@ public class Storable extends PerlModuleBase {
                 base.releaseOwner(elem, "Storable.releaseApplyArgs");
                 base.releaseActiveOwner(elem);
                 base.refCount--;
-                elem.refCountOwned = false;
+                elem.setRefCountOwned(false);
             }
         }
         args.elements.clear();

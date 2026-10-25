@@ -214,7 +214,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             owner.markPackageRootedValue(value);
             RuntimeScalar result = super.put(key, value);
-            updateReferentHashSlotOwnership(previous, value);
+            updateReferentHashSlotOwnership(owner, previous, value, true);
             return result;
         }
 
@@ -245,6 +245,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 }
                 owner.markPackageRootedValue(value);
             }
+            for (Map.Entry<? extends String, ? extends RuntimeScalar> entry : m.entrySet()) {
+                updateReferentHashSlotOwnership(owner, super.get(entry.getKey()), entry.getValue(), false);
+            }
             super.putAll(m);
         }
 
@@ -252,6 +255,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         public RuntimeScalar remove(Object key) {
             RuntimeScalar previous = super.remove(key);
             if (previous != null) {
+                updateReferentHashSlotOwnership(owner, previous, null, false);
                 if (owner.isHintHash && !owner.suppressHintHashLifecycleCleanup) {
                     MortalList.deferDestroyForContainerClear(java.util.Collections.singletonList(previous));
                 }
@@ -263,6 +267,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         @Override
         public void clear() {
             if (!isEmpty()) {
+                for (RuntimeScalar previous : values()) {
+                    updateReferentHashSlotOwnership(owner, previous, null, false);
+                }
                 if (owner.isHintHash && !owner.suppressHintHashLifecycleCleanup) {
                     MortalList.deferDestroyForContainerClear(values());
                 }
@@ -707,16 +714,27 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     private static void updateReferentHashSlotOwnership(
-            RuntimeScalar oldValue, RuntimeScalar newValue) {
+            RuntimeHash owner, RuntimeScalar oldValue, RuntimeScalar newValue,
+            boolean updateLegacyCount) {
         RuntimeBase oldReferent = directReferent(oldValue);
         RuntimeBase newReferent = directReferent(newValue);
-        if (oldReferent == newReferent) return;
-        if (oldReferent != null && oldReferent.hashSlotOwnerCount > 0) {
-            oldReferent.hashSlotOwnerCount--;
+        if (oldReferent == newReferent) {
+            if (oldReferent != null && oldValue != newValue) {
+                oldReferent.updateDirectHashSlotOwner(owner, oldValue, -1);
+                oldReferent.updateDirectHashSlotOwner(owner, newValue, 1);
+            }
+            return;
         }
-        if (newReferent != null) {
-            newReferent.hashSlotOwnerCount++;
+        if (updateLegacyCount) {
+            if (oldReferent != null && oldReferent.hashSlotOwnerCount > 0) {
+                oldReferent.hashSlotOwnerCount--;
+            }
+            if (newReferent != null) {
+                newReferent.hashSlotOwnerCount++;
+            }
         }
+        if (oldReferent != null) oldReferent.updateDirectHashSlotOwner(owner, oldValue, -1);
+        if (newReferent != null) newReferent.updateDirectHashSlotOwner(owner, newValue, 1);
     }
 
     /**

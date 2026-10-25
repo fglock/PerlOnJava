@@ -698,7 +698,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                             && (result.type & RuntimeScalarType.REFERENCE_BIT) != 0
                             && result.value instanceof RuntimeBase base
                             && base.refCount > 0) {
-                        result.refCountOwned = false;
+                        result.setRefCountOwned(false);
                         runtimeArray.forgetOwnedAliasElement(result);
                         base.releaseActiveOwner(result);
                         MortalList.requestWeakSweepsForDestroyedContainer(base);
@@ -741,7 +741,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                             && (result.type & RuntimeScalarType.REFERENCE_BIT) != 0
                             && result.value instanceof RuntimeBase base
                             && base.refCount > 0) {
-                        result.refCountOwned = false;
+                        result.setRefCountOwned(false);
                         runtimeArray.forgetOwnedAliasElement(result);
                         base.releaseActiveOwner(result);
                         MortalList.requestWeakSweepsForDestroyedContainer(base);
@@ -1757,7 +1757,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         // overwrites will still work correctly because setLarge checks
         // refCountOwned before decrementing.
         for (RuntimeScalar elem : this.elements) {
-            if (elem != null) elem.refCountOwned = false;
+            if (elem != null) elem.setRefCountOwned(false);
             markPackageRootedValue(elem);
         }
         this.elementsOwned = false;
@@ -1788,7 +1788,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             RuntimeScalar referent = reference.refAliasScalarReference();
             this.elements.add(referent);
             markPackageRootedValue(referent);
-            referent.refCountOwned = false;
+            referent.setRefCountOwned(false);
         }
         this.elementsOwned = false;
         this.elementsAliased = true;

@@ -596,7 +596,7 @@ public class RuntimeGraphCloner {
         referent.recordActiveOwner(target);
         referent.refCount++;
         referent.hadCountedReference = true;
-        target.refCountOwned = true;
+        target.setRefCountOwned(true);
         try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
             ScalarRefRegistry.registerRef(target);
         }

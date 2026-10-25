@@ -12,7 +12,6 @@ import java.util.Map;
  * The Strict class provides functionalities similar to the Perl strict module.
  */
 public class Internals extends PerlModuleBase {
-
     /**
      * Constructor initializes the module.
      */
@@ -543,6 +542,7 @@ public class Internals extends PerlModuleBase {
             // compensates for the ampersand-call argument alias below.
             boolean compileHintsHash = base == GlobalVariable.getGlobalHash(
                     GlobalContext.encodeSpecialVar("H"));
+            boolean bObjectProbe = args.size() > 1 && args.get(1).getBoolean();
             int extra = (base.localBindingExists && !compileHintsHash ? 1 : 0)
                     + base.foreachAliasCount;
             // Legacy fudge: anonymous tracked container with no counted
@@ -560,8 +560,8 @@ public class Internals extends PerlModuleBase {
             boolean fieldOwnedMethodResult = rc == 1
                     && !base.localBindingExists
                     && base.hashSlotOwnerCount > 0
-                    && !ReachabilityWalker.hasLiveStrongScalarReferentOtherThan(base, arg);
-            boolean bObjectProbe = args.size() > 1 && args.get(1).getBoolean();
+                    && (bObjectProbe
+                    || !ReachabilityWalker.hasLiveStrongScalarReferentOtherThan(base, arg));
             int adjust = compileHintsHash
                     ? -1
                     : base.localBindingExists || fieldOwnedMethodResult ? 0 : -1;
@@ -573,7 +573,17 @@ public class Internals extends PerlModuleBase {
             if (bObjectProbe && base.localBindingExists && !compileHintsHash) {
                 adjust = -1;
             }
-            return new RuntimeScalar(rc + extra + adjust).getList();
+            boolean insideDestroy = DestroyDispatch.isInsideDestroy();
+            int staleHashOwners = 0;
+            if (rc > 1 && bObjectProbe && !base.localBindingExists && insideDestroy) {
+                int[] staleOwners = base.unreachableDirectHashSlotOwnerCounts();
+                // Once a counted owner has leaked, include every unreachable
+                // hash slot in the correction. Some slots retain the raw
+                // refcount after their wrapper has already cleared its flag.
+                if (staleOwners[0] > 0) staleHashOwners = staleOwners[1];
+            }
+            int reported = Math.max(0, rc + extra + adjust - staleHashOwners);
+            return new RuntimeScalar(reported).getList();
         }
         return new RuntimeScalar(1).getList();
     }

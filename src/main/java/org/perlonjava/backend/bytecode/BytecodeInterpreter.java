@@ -145,7 +145,7 @@ public class BytecodeInterpreter {
             return;
         }
 
-        tempScalar.refCountOwned = false;
+        tempScalar.setRefCountOwned(false);
         if (base.refCountTrace) {
             base.traceRefCount(-1, "BytecodeInterpreter.releaseConsumedTemp");
             base.releaseOwner(tempScalar, "releaseConsumedTemp");
