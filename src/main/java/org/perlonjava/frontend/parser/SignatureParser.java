@@ -46,10 +46,16 @@ public class SignatureParser {
     private int positionalParameterCount = 0;
     private final List<String> namedParameterNames = new ArrayList<>();
     private final List<String> requiredNamedParameterNames = new ArrayList<>();
+    private final List<String> invocantNames = new ArrayList<>();
+    private final List<String> positionalRequiredNames = new ArrayList<>();
+    private final List<String> positionalOptionalNames = new ArrayList<>();
+    private final List<String> namedRequiredMetadataNames = new ArrayList<>();
+    private final List<String> namedOptionalNames = new ArrayList<>();
     private final List<Node> defaultValueNodes = new ArrayList<>();
     private boolean hasOptional = false;
     private boolean hasNamedParameter = false;
     private String namedArgsHashName = null; // Track the hash name for named parameters
+    private String slurpyParameterName;
     private String subroutineName = null; // Optional subroutine name for error messages
     private boolean isMethod = false; // True if parsing method signature (has implicit $self)
     private boolean parsingFunctionParametersInvocant;
@@ -246,6 +252,7 @@ public class SignatureParser {
 
         // Create parameter variable or undef placeholder
         Node paramVariable = createParameterVariable(sigil, paramName);
+        String metadataName = paramName == null ? sigil : sigil + paramName;
 
         if (isNamed) {
             hasNamedParameter = true;
@@ -258,15 +265,29 @@ public class SignatureParser {
             namedParameterNodes.add(paramVariable);
             namedParameterNames.add(paramName);
             handleNamedParameter(paramVariable, paramName);
+            if (requiredNamedParameterNames.contains(paramName)) {
+                namedRequiredMetadataNames.add(metadataName);
+            } else {
+                namedOptionalNames.add(metadataName);
+            }
         } else {
             parameterVariables.add(paramVariable);
             if (isSlurpy) {
                 slurpyVariable = paramVariable;
                 slurpySigil = sigil;
+                slurpyParameterName = metadataName;
                 handleSlurpyParameter();
             } else {
                 positionalParameterCount++;
+                boolean wasOptional = hasOptional;
                 handleScalarParameter(paramVariable, paramStartIndex);
+                if (parsingFunctionParametersInvocant) {
+                    invocantNames.add(metadataName);
+                } else if (!wasOptional && hasOptional) {
+                    positionalOptionalNames.add(metadataName);
+                } else {
+                    positionalRequiredNames.add(metadataName);
+                }
             }
         }
 
@@ -837,8 +858,14 @@ public class SignatureParser {
         signature.setAnnotation("signatureNamedParams", new ArrayList<>(namedParameterNames));
         signature.setAnnotation("signatureRequiredNamedParams", new ArrayList<>(requiredNamedParameterNames));
         signature.setAnnotation("signaturePositionalCount", positionalParameterCount);
+        signature.setAnnotation("signatureInvocants", new ArrayList<>(invocantNames));
+        signature.setAnnotation("signaturePositionalRequired", new ArrayList<>(positionalRequiredNames));
+        signature.setAnnotation("signaturePositionalOptional", new ArrayList<>(positionalOptionalNames));
+        signature.setAnnotation("signatureNamedRequired", new ArrayList<>(namedRequiredMetadataNames));
+        signature.setAnnotation("signatureNamedOptional", new ArrayList<>(namedOptionalNames));
         if (slurpySigil != null) {
             signature.setAnnotation("signatureSlurpySigil", slurpySigil);
+            signature.setAnnotation("signatureSlurpyName", slurpyParameterName);
         }
         signature.setAnnotation("signatureSubName",
                 NameNormalizer.normalizeVariableName(

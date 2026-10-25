@@ -625,8 +625,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // accidentally turn an odd list into a hash.
     public List<String> signatureNamedParams = List.of();
     public List<String> signatureRequiredNamedParams = List.of();
+    public List<String> signatureInvocants = List.of();
+    public List<String> signaturePositionalRequired = List.of();
+    public List<String> signaturePositionalOptional = List.of();
+    public List<String> signatureNamedRequired = List.of();
+    public List<String> signatureNamedOptional = List.of();
     public int signaturePositionalCount = 0;
     public String signatureSlurpySigil;
+    public String signatureSlurpyName;
     public String signatureSubName;
 
     public void applySignatureMetadata(Node ast) {
@@ -638,10 +644,32 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (required instanceof List<?> list) {
             signatureRequiredNamedParams = list.stream().map(String::valueOf).toList();
         }
+        Object invocants = ast.getAnnotation("signatureInvocants");
+        if (invocants instanceof List<?> list) {
+            signatureInvocants = list.stream().map(String::valueOf).toList();
+        }
+        Object positionalRequired = ast.getAnnotation("signaturePositionalRequired");
+        if (positionalRequired instanceof List<?> list) {
+            signaturePositionalRequired = list.stream().map(String::valueOf).toList();
+        }
+        Object positionalOptional = ast.getAnnotation("signaturePositionalOptional");
+        if (positionalOptional instanceof List<?> list) {
+            signaturePositionalOptional = list.stream().map(String::valueOf).toList();
+        }
+        Object namedRequired = ast.getAnnotation("signatureNamedRequired");
+        if (namedRequired instanceof List<?> list) {
+            signatureNamedRequired = list.stream().map(String::valueOf).toList();
+        }
+        Object namedOptional = ast.getAnnotation("signatureNamedOptional");
+        if (namedOptional instanceof List<?> list) {
+            signatureNamedOptional = list.stream().map(String::valueOf).toList();
+        }
         Object positional = ast.getAnnotation("signaturePositionalCount");
         if (positional instanceof Integer count) signaturePositionalCount = count;
         Object slurpy = ast.getAnnotation("signatureSlurpySigil");
         signatureSlurpySigil = slurpy instanceof String value ? value : null;
+        Object slurpyName = ast.getAnnotation("signatureSlurpyName");
+        signatureSlurpyName = slurpyName instanceof String value ? value : null;
         Object subName = ast.getAnnotation("signatureSubName");
         if (subName instanceof String value) signatureSubName = value;
     }

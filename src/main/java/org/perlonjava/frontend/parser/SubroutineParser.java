@@ -1408,8 +1408,20 @@ public class SubroutineParser {
                         signature.getAnnotation("signatureRequiredNamedParams"));
                 block.setAnnotation("signaturePositionalCount",
                         signature.getAnnotation("signaturePositionalCount"));
+                block.setAnnotation("signatureInvocants",
+                        signature.getAnnotation("signatureInvocants"));
+                block.setAnnotation("signaturePositionalRequired",
+                        signature.getAnnotation("signaturePositionalRequired"));
+                block.setAnnotation("signaturePositionalOptional",
+                        signature.getAnnotation("signaturePositionalOptional"));
+                block.setAnnotation("signatureNamedRequired",
+                        signature.getAnnotation("signatureNamedRequired"));
+                block.setAnnotation("signatureNamedOptional",
+                        signature.getAnnotation("signatureNamedOptional"));
                 block.setAnnotation("signatureSlurpySigil",
                         signature.getAnnotation("signatureSlurpySigil"));
+                block.setAnnotation("signatureSlurpyName",
+                        signature.getAnnotation("signatureSlurpyName"));
                 block.elements.addAll(0, signature.elements);
             }
 
@@ -2488,8 +2500,14 @@ public class SubroutineParser {
             // interpreter calls validate named arguments at the boundary.
             placeholder.signatureNamedParams = runtimeCode.signatureNamedParams;
             placeholder.signatureRequiredNamedParams = runtimeCode.signatureRequiredNamedParams;
+            placeholder.signatureInvocants = runtimeCode.signatureInvocants;
+            placeholder.signaturePositionalRequired = runtimeCode.signaturePositionalRequired;
+            placeholder.signaturePositionalOptional = runtimeCode.signaturePositionalOptional;
+            placeholder.signatureNamedRequired = runtimeCode.signatureNamedRequired;
+            placeholder.signatureNamedOptional = runtimeCode.signatureNamedOptional;
             placeholder.signaturePositionalCount = runtimeCode.signaturePositionalCount;
             placeholder.signatureSlurpySigil = runtimeCode.signatureSlurpySigil;
+            placeholder.signatureSlurpyName = runtimeCode.signatureSlurpyName;
             placeholder.signatureSubName = runtimeCode.signatureSubName;
 
             Map<String, String> compiledOurRegistry = runtimeCode.ourVariableRegistry;
