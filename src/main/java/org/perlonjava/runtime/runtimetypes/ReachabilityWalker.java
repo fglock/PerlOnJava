@@ -1374,16 +1374,23 @@ public class ReachabilityWalker {
 
     private static final class RootWalkBudget {
         private final int maxEdges;
+        private final ReachabilityQueryStats stats;
         private int edgesVisited;
         private boolean complete = true;
 
         private RootWalkBudget(int maxEdges) {
+            this(maxEdges, null);
+        }
+
+        private RootWalkBudget(int maxEdges, ReachabilityQueryStats stats) {
             this.maxEdges = maxEdges;
+            this.stats = stats;
         }
 
         private boolean visitEdge() {
             if (edgesVisited >= maxEdges) {
                 complete = false;
+                if (stats != null) stats.rootQueriesBudgetCapped++;
                 return false;
             }
             edgesVisited++;
@@ -2236,7 +2243,7 @@ public class ReachabilityWalker {
         final int MAX_VISITS = excludedReferent == null
                 ? MAX_ROOT_SNAPSHOT_VISITS : MAX_DESTRUCTION_OWNER_ROOT_VISITS;
         RootWalkBudget budget = new RootWalkBudget(excludedReferent == null
-                ? MAX_ROOT_SNAPSHOT_EDGES : MAX_DESTRUCTION_OWNER_ROOT_EDGES);
+                ? MAX_ROOT_SNAPSHOT_EDGES : MAX_DESTRUCTION_OWNER_ROOT_EDGES, stats);
 
         Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
@@ -2431,7 +2438,12 @@ public class ReachabilityWalker {
             // query; CODE-specific owner rescue uses the explicit owner-aware
             // root proof above instead.
         }
-        return !budget.complete || !todo.isEmpty();
+        boolean incomplete = !budget.complete || !todo.isEmpty();
+        if (incomplete && budget.complete && stats != null) {
+            // The node limit ended the walk with unexplored roots remaining.
+            stats.rootQueriesBudgetCapped++;
+        }
+        return incomplete;
     }
 
     /**

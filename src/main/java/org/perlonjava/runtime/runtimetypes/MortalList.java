@@ -2179,7 +2179,8 @@ public class MortalList {
             detail.append(",globalRootQuery=").append(reachable)
                     .append(":roots=").append(stats.rootsSeeded)
                     .append(":nodes=").append(stats.nodesVisited)
-                    .append(":edges=").append(stats.edgesInspected);
+                    .append(":edges=").append(stats.edgesInspected)
+                    .append(":capped=").append(stats.rootQueriesBudgetCapped);
         }
         List<String> parentSlots = new java.util.ArrayList<>();
         for (PerlOwnerSlot parentSlot : owner.ownerSlotSnapshot()) {

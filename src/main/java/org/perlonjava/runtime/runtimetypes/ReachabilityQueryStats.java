@@ -3,6 +3,7 @@ package org.perlonjava.runtime.runtimetypes;
 /** Optional per-runtime counters for deterministic reachability cost tests. */
 final class ReachabilityQueryStats {
     long rootQueries;
+    long rootQueriesBudgetCapped;
     long rootsSeeded;
     long edgesInspected;
     long nodesVisited;
