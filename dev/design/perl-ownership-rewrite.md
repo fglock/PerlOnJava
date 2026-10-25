@@ -163,7 +163,10 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   result until its caller can retain it. Full `nice -n 19 make` passes in
   14m53s; `make check-links` passes. Recovery still has the two production
   callers described below; this fix closes one concrete array deletion edge
-  without establishing direct owner-slot accounting across aggregates.
+  without establishing direct owner-slot accounting across aggregates. The
+  focused #1794 transaction-controller and WebSocket tests, and #1795 Catalyst
+  tempfile test, also pass on JVM and interpreter; the WebSocket test required
+  loopback-enabled extended access and passes all six assertions on both.
 - The temporary `perlonjava.test.disableAggregateOwnerRecovery` diagnostic was
   removed after the no-recovery audit. The two production call sites in
   `MortalList.processDeferredBase` and `RuntimeScalar.setLargeRefCounted` still
