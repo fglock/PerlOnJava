@@ -42,6 +42,30 @@ is_deeply([map { "$_" } @multi_invocants], ['$first_invocant', '$second_invocant
 is(Function::Parameters::info(\&two_invocants)->keyword, 'configured_method',
     'signature metadata preserves a configured keyword alias');
 
+my $optional_invocant = eval q{
+    use Function::Parameters {
+        configured_optional => {
+            invocant => 1,
+            strict => 0,
+        },
+    };
+    configured_optional optional_one($x) { join ' ', $x, @_ }
+    configured_optional optional_explicit($x: $y) { join ' ', $x, $y, @_ }
+    configured_optional optional_two($x, $y) { join ' ', $x, $y, @_ }
+    1;
+};
+die $@ unless $optional_invocant;
+is(optional_one('a'), 'a a', 'optional invocant config leaves an unmarked signature as a function');
+is(optional_one('a', 'b'), 'a a b', 'lax configured functions preserve extra arguments in @_');
+is(optional_explicit('a', 'b'), 'a b b', 'an explicit colon activates a configured invocant');
+is(optional_explicit('a', 'b', 'c'), 'a b b c',
+    'lax configured invocant functions accept additional arguments');
+is(optional_two('a', 'b', 'c'), 'a b a b c',
+    'unmarked leading parameters are not consumed as optional invocants');
+my @optional_invocants = Function::Parameters::info(\&optional_explicit)->invocants;
+is_deeply([map { "$_" } @optional_invocants], ['$x'],
+    'metadata records only an explicitly selected optional invocant');
+
 my $configured_no = eval q{
     no Function::Parameters qw(configured_function);
     configured_function unavailable_alias() { 1 }

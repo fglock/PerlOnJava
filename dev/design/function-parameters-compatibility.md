@@ -51,8 +51,9 @@ the upstream XS parser plugin.
 - [x] Parse Type::Tiny bare and composite signature constraints, post-signature
   attributes, and method `@_` behavior after invocant binding.
 - [x] Register hash-configured function aliases, class methods, and methods
-  with multiple configured or explicit invocants; preserve the configured
-  keyword and invocant list in `Function::Parameters::info` metadata.
+  with multiple configured or explicit invocants; support optional explicit
+  invocants and lax arity configurations; preserve the configured keyword and
+  invocant list in `Function::Parameters::info` metadata.
 
 ### Current follow-up
 
