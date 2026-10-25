@@ -173,6 +173,14 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   on system Perl, JVM, and interpreter afterward. The middle-delete and
   borrowed-alias regressions pass together in the full gate (`14m15s`) and in
   focused runs on both backends.
+- A related localized-delete path restored a borrowed `@_` slot through the
+  ordinary aliased-array setter, which marked it as owned. Argument-frame
+  cleanup then decremented the caller's object after the subroutine returned.
+  `RuntimeArray.deleteLocal` now snapshots and restores the slot's prior
+  ownership state. The regression failed on the pre-fix JVM and passes on
+  system Perl, JVM, and interpreter. The new change passes full
+  `nice -n 19 make` (`13m42s`); all three array-delete ownership regressions
+  pass focused on both backends.
 - The temporary `perlonjava.test.disableAggregateOwnerRecovery` diagnostic was
   removed after the no-recovery audit. The two production call sites in
   `MortalList.processDeferredBase` and `RuntimeScalar.setLargeRefCounted` still

@@ -1471,6 +1471,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 ? elements.get(index) : null;
         boolean existed = existingElement != null
                 && !(existingElement instanceof RuntimeArrayProxyEntry proxy && !proxy.hasLvalue());
+        boolean savedOwnedElement = existed && ownsElement(existingElement);
         // local must restore the original slot, not a scalar copy of it.  An
         // array entry can be ref-aliased (for example, `$a[0]` aliased to
         // `$_`), and copying the wrapper here loses that alias identity when
@@ -1532,6 +1533,14 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 if (existed) {
                     if (idx < self.elements.size()) {
                         self.elements.set(idx, savedValue);
+                        if (!savedOwnedElement) {
+                            // Setting an element on an aliased array normally
+                            // marks it as a newly owned slot. Restoration must
+                            // recover the borrowed/owned status from before
+                            // localization, or @_ cleanup can release the
+                            // caller's scalar owner.
+                            self.forgetOwnedAliasElement(savedValue);
+                        }
                     }
                 } else if (idx >= 0 && idx < self.elements.size()) {
                     self.elements.set(idx, null);
