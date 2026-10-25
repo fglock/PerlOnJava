@@ -2127,7 +2127,7 @@ public class MortalList {
             slotCounts.merge(slot.kind(), 1, Integer::sum);
             RuntimeBase owner = slot.ownerContainer();
             RuntimeScalar cell = slot.ownerCell();
-            String ownerLabel = describeRecoveryOwnerContainer(owner);
+            String ownerLabel = describeRecoveryOwnerContainer(owner, referent);
             String cellLabel = cell == null ? "none"
                     : "@" + System.identityHashCode(cell)
                             + ":type=" + cell.type
@@ -2151,7 +2151,8 @@ public class MortalList {
                 + " release=" + releaseProvenance);
     }
 
-    private static String describeRecoveryOwnerContainer(RuntimeBase owner) {
+    private static String describeRecoveryOwnerContainer(
+            RuntimeBase owner, RuntimeBase excludedReferent) {
         if (owner == null) return "none";
         StringBuilder detail = new StringBuilder(owner.getClass().getSimpleName())
                 .append('@').append(System.identityHashCode(owner))
@@ -2170,6 +2171,15 @@ public class MortalList {
         } else if (owner instanceof RuntimeArray array) {
             detail.append(",packageRoot=").append(array.isPackageGlobalRoot)
                     .append(",elementsAliased=").append(array.elementsAliased);
+        }
+        try (ReachabilityQueryMeasurement measurement = measureReachabilityQueries()) {
+            boolean reachable = ReachabilityWalker.isReachableFromRoots(
+                    owner, true, excludedReferent);
+            ReachabilityQueryStats stats = measurement.stats();
+            detail.append(",globalRootQuery=").append(reachable)
+                    .append(":roots=").append(stats.rootsSeeded)
+                    .append(":nodes=").append(stats.nodesVisited)
+                    .append(":edges=").append(stats.edgesInspected);
         }
         List<String> parentSlots = new java.util.ArrayList<>();
         for (PerlOwnerSlot parentSlot : owner.ownerSlotSnapshot()) {
