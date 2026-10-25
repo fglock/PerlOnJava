@@ -353,10 +353,6 @@ public class ParsePrimary {
                         if (codeRef.value instanceof RuntimeCode code
                                 && code.isDeclared
                                 && !code.isBuiltin
-                                && code.subroutine == null
-                                && code.methodHandle == null
-                                && code.compilerSupplier == null
-                                && code.constantValue == null
                                 && (code.attributes == null || !code.attributes.contains("method"))) {
                             String location = parser.ctx.errorUtil == null
                                     ? "" : parser.ctx.errorUtil.warningLocation(startIndex);
