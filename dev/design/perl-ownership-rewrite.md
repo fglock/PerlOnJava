@@ -381,11 +381,16 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   This repairs mixed recovery accounting but does not yet identify the
   production operation that can produce an undercount, so both scan callers
   remain.
-- A focused `PJ_REFCOUNT_TRACE_CLASS=File::Temp` run of the Catalyst tempfile
-  regression completed successfully but did not isolate tempfile object
-  ownership: the trace arms on the blessed package name and captured the
-  `File::Temp` package glob's setup transitions. The regression itself still
-  passes, and this trace provides no evidence to remove either recovery caller.
+- The initial `PJ_REFCOUNT_TRACE_CLASS=File::Temp` trace was inconclusive, but
+  a class-filtered owner/count trace later isolated an actual blessed
+  `RuntimeGlob` `File::Temp` referent. During the Catalyst regression,
+  `ReachabilityWalker` reported it unreachable at `refCount=2`, while the
+  aggregate recovery scan found two rooted owners from one hash entry, one
+  array element, and two scalar-value slots. The pending release drained while
+  `DESTROY` was running. This is a disagreement between weak-walk reachability
+  and the explicit slot proof; it does not identify a missing count acquisition
+  or justify removing recovery. A follow-up should trace the owning containers
+  and reconcile the two root proofs before changing either path.
 - Thread-cloned scalar references and blessed glob aliases now acquire their
   tracked `SCALAR_VALUE` owner through the slot API, keeping count acquisition
   and slot identity together. The glob path retains its legacy fallback for
@@ -406,14 +411,14 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   transaction/controller ownership test passes 3/3 on system Perl and JVM;
   its controller release reaches recovery with no rooted owner slots, while
   the transaction overwrite has a rooted hash slot but does not need a count
-  restoration. The network-based Mojolicious controller tests skip because
-  loopback sockets are unavailable in this environment, so those results do
-  not validate the integration path here. The #1795 Catalyst tempfile test
-  passes and records one actual `File::Temp` recovery with two restored owners
-  backed by one hash entry, one array element, and two scalar-value slots.
-  This is direct evidence to retain the recovery scan and both callers. The
-  logging is disabled unless its class filter is set. The broader owner-slot
-  migration remains incomplete.
+  restoration. With extended loopback access, the controller-finish,
+  WebSocket-controller, WebSocket-callback, and Catalyst tempfile regressions
+  pass on both backends (5/5, 6/6, 29/29, and 24/24); the dedicated Catalyst
+  global-destruction wrapper passes 3/3 on both. Five focused #1649 ownership
+  regressions pass 22/22 on system Perl and pass individually on JVM and
+  interpreter. The logging is disabled unless its class filter is set. The
+  root-proof discrepancy above remains under investigation, and the broader
+  owner-slot migration remains incomplete.
 - A second focused reducer,
   `issue_1649_captured_scalar_array_argument.t`, isolates the same class of
   lifetime error: a closure writes a blessed object to a captured scalar while
