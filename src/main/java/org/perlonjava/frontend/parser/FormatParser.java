@@ -357,11 +357,22 @@ public class FormatParser {
                     "Can't modify array dereference in substitution (s///)", parser.ctx.errorUtil);
         }
         parser.formatArgumentLexicalSubName = null;
-        List<Node> expressions = parseArgumentExpressions(parser, line, tokenIndex);
+        List<Node> expressions = parseArgumentExpressions(
+                parser, line, tokenIndex, multilineBracedArgument);
         ArgumentLine argumentLine = new ArgumentLine(line, expressions, tokenIndex);
+        if (argumentLineExpressionsUseRuntimeFallback(line, expressions)) {
+            argumentLine.setAnnotation("formatExpressionParseFallback", true);
+        }
         annotateUnavailableLexicalSub(parser, argumentLine);
         annotateUnavailableLexicalVariables(parser, argumentLine);
         return argumentLine;
+    }
+
+    private static boolean argumentLineExpressionsUseRuntimeFallback(String line,
+                                                                       List<Node> expressions) {
+        return !line.trim().isEmpty() && expressions.size() == 1
+                && expressions.getFirst() instanceof StringNode stringNode
+                && stringNode.value.equals(line.trim());
     }
 
     /** Preserve deferred closure warnings for lexical scalar/array/hash uses. */
@@ -595,7 +606,8 @@ public class FormatParser {
      * @param tokenIndex The token index
      * @return List of expression nodes
      */
-    private static List<Node> parseArgumentExpressions(Parser parser, String line, int tokenIndex) {
+    private static List<Node> parseArgumentExpressions(Parser parser, String line, int tokenIndex,
+                                                       boolean multilineBracedArgument) {
         List<Node> expressions = new ArrayList<>();
 
         if (line.trim().isEmpty()) {
@@ -604,7 +616,8 @@ public class FormatParser {
 
         try {
             // Create a lexer for the argument line
-            Lexer lexer = new Lexer(line);
+            String expressionSource = multilineBracedArgument ? "do " + line : line;
+            Lexer lexer = new Lexer(expressionSource);
             List<LexerToken> tokens = lexer.tokenize();
 
             // Create a parser for the tokens
@@ -613,9 +626,11 @@ public class FormatParser {
             argParser.parsingFormatArgumentLine = true;
 
             // Parse comma-separated expressions
+            boolean complete = false;
             while (argParser.tokenIndex < tokens.size()) {
                 LexerToken token = tokens.get(argParser.tokenIndex);
                 if (token.type == LexerTokenType.EOF) {
+                    complete = true;
                     break;
                 }
 
@@ -632,10 +647,17 @@ public class FormatParser {
                         argParser.tokenIndex++; // consume comma
                     } else if (nextToken.type != LexerTokenType.EOF) {
                         // If not comma and not EOF, we might have a syntax error
-                        // For now, just break to avoid infinite loop
+                        // Keep runtime parsing for syntax the format parser
+                        // cannot represent completely.
                         break;
+                    } else {
+                        complete = true;
                     }
                 }
+            }
+            if (!complete) {
+                expressions.clear();
+                expressions.add(new StringNode(line.trim(), tokenIndex));
             }
             parser.formatArgumentLexicalSubName = argParser.formatArgumentLexicalSubName;
         } catch (Exception e) {

@@ -6,4 +6,9 @@ import org.perlonjava.frontend.astnode.Node;
 @FunctionalInterface
 public interface ParserKeywordPlugin {
     Node parse(Parser parser, String keyword);
+
+    /** Parse a keyword in expression position, or return {@code null}. */
+    default Node parseExpression(Parser parser, String keyword) {
+        return null;
+    }
 }
