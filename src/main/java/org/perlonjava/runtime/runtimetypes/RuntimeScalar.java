@@ -2514,16 +2514,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.scalarReferenceContentsOwner = ownerSlot;
     }
 
-    private static RuntimeScalar scalarReferenceContentsReferent(RuntimeScalar owner) {
-        if (owner != null
-                && owner.hasScalarReferenceContentsOwner()
-                && owner.type == REFERENCE
-                && owner.value instanceof RuntimeScalar scalarReferent) {
-            return scalarReferent;
-        }
-        return null;
-    }
-
     public static void releaseScalarReferenceContents(RuntimeScalar scalarReferent) {
         if (scalarReferent == null
                 || (scalarReferent.type & REFERENCE_BIT) == 0
@@ -2556,20 +2546,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * retain it first and keeps the retain/release accounting balanced.
      */
     public void deferOwnedScalarReferenceContents() {
-        RuntimeScalar scalarReferent = scalarReferenceContentsReferent(this);
         PerlOwnerSlot ownerSlot = this.scalarReferenceContentsOwner;
         this.scalarReferenceContentsOwner = null;
         if (ownerSlot != null) {
             ownerSlot.deferScalarReferenceContentsRelease();
-            return;
         }
-        if (scalarReferent == null
-                || (scalarReferent.type & REFERENCE_BIT) == 0
-                || !(scalarReferent.value instanceof RuntimeBase inner)
-                || inner.refCount <= 0) {
-            return;
-        }
-        MortalList.deferDecrement(inner);
     }
 
     // Keep this entry point small so HotSpot can inline it into generated

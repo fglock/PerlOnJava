@@ -252,6 +252,40 @@ class PerlOwnerSlotScalarReferenceContentsTest {
     }
 
     @Test
+    void scalarReturnDefersItsContentsOwnerThroughTheOwnerSlot() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash referent = new RuntimeHash();
+            referent.refCount = 3;
+            RuntimeScalar referenceCell = new RuntimeScalar();
+            referenceCell.type = RuntimeScalarType.REFERENCE;
+            referenceCell.value = referent;
+            RuntimeScalar returnedReference = new RuntimeScalar();
+            returnedReference.type = RuntimeScalarType.REFERENCE;
+            returnedReference.value = referenceCell;
+            PerlOwnerSlot owner = new PerlOwnerSlot(
+                    PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS,
+                    null, null, returnedReference);
+            owner.acquireScalarReferenceContents(referent, referenceCell);
+            returnedReference.scalarReferenceContentsOwner = owner;
+
+            MortalList.pushMark();
+            returnedReference.deferOwnedScalarReferenceContents();
+
+            assertNull(returnedReference.scalarReferenceContentsOwner);
+            assertTrue(owner.isActive(), "the pending release retains slot identity until drain");
+            assertEquals(4, referent.refCount,
+                    "the referent remains alive until the caller can install the returned value");
+            MortalList.flushAboveMark();
+
+            assertFalse(owner.isActive());
+            assertEquals(3, referent.refCount,
+                    "drain releases the deferred contents owner exactly once");
+            MortalList.popMark();
+        }
+    }
+
+    @Test
     void rejectsOverflowBeforeRegisteringTheOwnerSlot() {
         RuntimeHash referent = new RuntimeHash();
         referent.refCount = Integer.MAX_VALUE;
