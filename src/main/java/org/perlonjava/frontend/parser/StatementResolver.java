@@ -124,11 +124,17 @@ public class StatementResolver {
                     if (peek(parser).text.equals("{")
                             || (peek(parser).text.equals("(") && hasSpecialBlockPrototype(parser))) {
                         if ("BUILD".equals(token.text) && !parser.isInClassBlock) {
-                            parser.tokenIndex = currentIndex;
-                            yield null;
+                            parser.throwCleanError(currentIndex,
+                                    "BUILD blocks are only allowed inside class blocks");
                         }
                         parser.tokenIndex = currentIndex;
                         yield SpecialBlockParser.parseSpecialBlock(parser);
+                    }
+                    if ("BUILD".equals(token.text)) {
+                        parser.throwCleanError(currentIndex,
+                                parser.isInClassBlock
+                                        ? "Malformed BUILD declaration: expected a block body"
+                                        : "BUILD blocks are only allowed inside class blocks");
                     }
                     // A diamond after a special block name is parsed as an
                     // attempted declaration, not an ordinary subroutine call.
