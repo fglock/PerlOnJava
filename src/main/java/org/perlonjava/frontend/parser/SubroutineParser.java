@@ -1459,12 +1459,21 @@ public class SubroutineParser {
                 }
                 return result;
             } else if (parser.parsingFunctionParametersDeclaration
-                    && parser.functionParametersRuntime) {
+                    && (parser.functionParametersRuntime
+                    || parser.functionParametersInstallSub != null)) {
                 String fullName = NameNormalizer.normalizeVariableName(
                         subName, parser.ctx.symbolTable.getCurrentPackage());
                 SubroutineNode runtimeCode = handleAnonSub(
                         parser, null, prototype, attributes, block, currentIndex, sourceEndTokenIndex);
                 runtimeCode.setAnnotation("functionParametersRuntimeName", fullName);
+                if (parser.functionParametersInstallSub != null) {
+                    Node installer = new OperatorNode("&",
+                            new IdentifierNode(parser.functionParametersInstallSub, currentIndex),
+                            currentIndex);
+                    ListNode installerArguments = new ListNode(List.of(
+                            new StringNode(subName, currentIndex), runtimeCode), currentIndex);
+                    return new BinaryOperatorNode("(", installer, installerArguments, currentIndex);
+                }
                 OperatorNode glob = new OperatorNode("*",
                         new IdentifierNode(fullName, currentIndex), currentIndex);
                 glob.setAnnotation("explicitGlobDereference", true);

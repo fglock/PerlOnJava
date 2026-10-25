@@ -6,59 +6,73 @@ import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.frontend.parser.SubroutineParser;
 
 import java.util.List;
+import java.util.Set;
 
 /** Parses Function::Parameters declarations using core signature lowering. */
 final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
     static final FunctionParametersKeywordPlugin FUNCTION =
-            new FunctionParametersKeywordPlugin(false, 0, true, true, false, List.of());
+            new FunctionParametersKeywordPlugin(false, 0, true, true, false, null, false, List.of());
     static final FunctionParametersKeywordPlugin METHOD =
-            new FunctionParametersKeywordPlugin(true, 0, true, true, false, List.of("$self"));
+            new FunctionParametersKeywordPlugin(true, 0, true, true, false, null, false, List.of("$self"));
 
     private final boolean method;
     private final int optionalInvocantCount;
     private final boolean strict;
     private final boolean checkArgumentTypes;
     private final boolean runtime;
+    private final String installSub;
+    private final boolean requiresName;
     private final List<String> invocants;
     private final List<String> defaultAttributes;
 
     private FunctionParametersKeywordPlugin(
             boolean method, int optionalInvocantCount, boolean strict,
-            boolean checkArgumentTypes, boolean runtime, List<String> invocants) {
+            boolean checkArgumentTypes, boolean runtime, String installSub,
+            boolean requiresName, List<String> invocants) {
         this(method, optionalInvocantCount, strict, checkArgumentTypes, runtime,
-                invocants, List.of());
+                installSub, requiresName, invocants, List.of());
     }
 
     private FunctionParametersKeywordPlugin(
             boolean method, int optionalInvocantCount, boolean strict,
-            boolean checkArgumentTypes, boolean runtime, List<String> invocants,
+            boolean checkArgumentTypes, boolean runtime, String installSub, boolean requiresName,
+            List<String> invocants,
             List<String> defaultAttributes) {
         this.method = method;
         this.optionalInvocantCount = optionalInvocantCount;
         this.strict = strict;
         this.checkArgumentTypes = checkArgumentTypes;
         this.runtime = runtime;
+        this.installSub = installSub;
+        this.requiresName = requiresName;
         this.invocants = List.copyOf(invocants);
         this.defaultAttributes = List.copyOf(defaultAttributes);
     }
 
     static FunctionParametersKeywordPlugin configured(
             String defaults, List<String> shift, int optionalInvocantCount,
-            boolean strict, boolean checkArgumentTypes, boolean runtime,
+            boolean strict, boolean checkArgumentTypes, boolean runtime, String installSub,
             List<String> defaultAttributes) {
-        boolean method = "method".equals(defaults) || "classmethod".equals(defaults);
+        boolean method = Set.of("method", "classmethod", "before", "after", "around",
+                "augment", "override").contains(defaults);
+        boolean requiresName = Set.of("before", "after", "around", "augment", "override")
+                .contains(defaults);
         if (method) {
             List<String> invocants = shift;
             if (invocants == null || invocants.isEmpty()) {
-                invocants = List.of("classmethod".equals(defaults) ? "$class" : "$self");
+                invocants = "around".equals(defaults)
+                        ? List.of("$orig", "$self")
+                        : List.of("classmethod".equals(defaults) ? "$class" : "$self");
             }
             return new FunctionParametersKeywordPlugin(
-                    true, 0, strict, checkArgumentTypes, runtime, invocants, defaultAttributes);
+                    true, 0, strict, checkArgumentTypes, runtime, installSub, requiresName,
+                    invocants, defaultAttributes);
         }
-        if (optionalInvocantCount == 0 && strict && checkArgumentTypes && !runtime
+        if (optionalInvocantCount == 0 && strict && checkArgumentTypes && !runtime && installSub == null
                 && defaultAttributes.isEmpty()) return FUNCTION;
         return new FunctionParametersKeywordPlugin(
-                false, optionalInvocantCount, strict, checkArgumentTypes, runtime,
+                false, optionalInvocantCount, strict, checkArgumentTypes, runtime, installSub,
+                requiresName,
                 List.of(), defaultAttributes);
     }
 
@@ -75,6 +89,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         boolean previousStrict = parser.functionParametersStrict;
         boolean previousCheckArgumentTypes = parser.functionParametersCheckArgumentTypes;
         String previousKeyword = parser.functionParametersKeyword;
+        String previousInstallSub = parser.functionParametersInstallSub;
         List<String> previousAttributes = parser.functionParametersAttributes;
         boolean previousRuntime = parser.functionParametersRuntime;
         keywordToken.text = "sub";
@@ -88,8 +103,12 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         parser.functionParametersKeyword = keyword;
         parser.functionParametersAttributes = defaultAttributes;
         parser.functionParametersRuntime = runtime;
+        parser.functionParametersInstallSub = installSub;
         try {
             boolean named = TokenUtils.peek(parser).type == LexerTokenType.IDENTIFIER;
+            if (requiresName && !named) {
+                parser.throwError("expecting a function name");
+            }
             if (method) {
                 int openParen = parser.tokenIndex;
                 while (openParen < parser.tokens.size()
@@ -118,7 +137,12 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
                             new LexerToken(LexerTokenType.OPERATOR, ":"));
                 }
             }
-            return SubroutineParser.parseSubroutineDefinition(parser, named, "our");
+            Node declaration = SubroutineParser.parseSubroutineDefinition(parser, named, "our");
+            if (installSub != null && !runtime) {
+                SpecialBlockParser.runSpecialBlock(parser, "BEGIN", declaration);
+                return new org.perlonjava.frontend.astnode.ListNode(parser.tokenIndex);
+            }
+            return declaration;
         } finally {
             if (implicitInvocantInsertIndex >= 0) {
                 int inserted = invocants.size() * 2 + (invocants.size() - 1) + 1;
@@ -132,6 +156,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
             parser.functionParametersStrict = previousStrict;
             parser.functionParametersCheckArgumentTypes = previousCheckArgumentTypes;
             parser.functionParametersKeyword = previousKeyword;
+            parser.functionParametersInstallSub = previousInstallSub;
             parser.functionParametersAttributes = previousAttributes;
             parser.functionParametersRuntime = previousRuntime;
             keywordToken.text = originalText;
