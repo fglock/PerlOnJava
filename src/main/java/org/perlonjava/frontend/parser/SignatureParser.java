@@ -233,7 +233,12 @@ public class SignatureParser {
         // Keep parsing after a slurpy parameter so Perl can report every
         // following invalid parameter in the same signature.
         if (hasSlurpy) {
-            String message = isSlurpy ? "Multiple slurpy parameters not allowed" : "Slurpy parameter not last";
+            String followingName = sigil
+                    + (peekToken().type == LexerTokenType.IDENTIFIER ? peekToken().text : "");
+            String message = parser.parsingFunctionParametersDeclaration
+                    ? "\"" + followingName + "\" can't appear after slurpy parameter \""
+                            + slurpyParameterName + "\""
+                    : isSlurpy ? "Multiple slurpy parameters not allowed" : "Slurpy parameter not last";
             if (!isSlurpy && hasDefaultValueBeforeCloseParen()) {
                 parser.deferErrorAtToken(lastSignatureTokenBeforeCloseParen(), message);
             } else {
@@ -330,7 +335,7 @@ public class SignatureParser {
                 handleScalarParameter(paramVariable, paramStartIndex);
                 if (parsingFunctionParametersInvocant) {
                     invocantNames.add(metadataName);
-                } else if (!wasOptional && hasOptional) {
+                } else if (hasOptional) {
                     positionalOptionalNames.add(metadataName);
                 } else {
                     positionalRequiredNames.add(metadataName);

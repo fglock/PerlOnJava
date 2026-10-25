@@ -507,6 +507,7 @@ public class EmitSubroutine {
                     "makeCodeObject",
                     "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;IIII)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
+            emitFunctionParametersMetadata(mv, node.block);
             int endLocationToken = node.block instanceof BlockNode block
                     && block.elements != null && !block.elements.isEmpty()
                     ? block.elements.get(block.elements.size() - 1).getIndex()
@@ -1953,5 +1954,55 @@ public class EmitSubroutine {
     private static boolean isDirectArrayArgument(Node node) {
         return node instanceof OperatorNode operator && "@".equals(operator.operator)
                 && operator.operand instanceof IdentifierNode;
+    }
+
+    private static void emitFunctionParametersMetadata(MethodVisitor mv, Node block) {
+        if (!(block instanceof AbstractNode abstractNode)
+                || !(abstractNode.getAnnotation("signatureKeyword") instanceof String keyword)) {
+            return;
+        }
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(keyword);
+        Object subName = abstractNode.getAnnotation("signatureSubName");
+        if (subName instanceof String name) mv.visitLdcInsn(name);
+        else mv.visitInsn(Opcodes.ACONST_NULL);
+        emitSignatureNames(mv, abstractNode, "signatureInvocants");
+        emitSignatureNames(mv, abstractNode, "signaturePositionalRequired");
+        emitSignatureNames(mv, abstractNode, "signaturePositionalOptional");
+        emitSignatureNames(mv, abstractNode, "signatureNamedRequired");
+        emitSignatureNames(mv, abstractNode, "signatureNamedOptional");
+        emitSignatureNames(mv, abstractNode, "signatureNamedParams");
+        emitSignatureNames(mv, abstractNode, "signatureRequiredNamedParams");
+        Object positionalCount = abstractNode.getAnnotation("signaturePositionalCount");
+        mv.visitLdcInsn(positionalCount instanceof Integer count ? count : 0);
+        emitSignatureString(mv, abstractNode.getAnnotation("signatureSlurpySigil"));
+        emitSignatureString(mv, abstractNode.getAnnotation("signatureSlurpyName"));
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                "attachFunctionParametersMetadata",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Ljava/lang/String;"
+                        + "[Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;"
+                        + "[Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;ILjava/lang/String;"
+                        + "Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
+        mv.visitInsn(Opcodes.POP);
+    }
+
+    private static void emitSignatureNames(MethodVisitor mv, AbstractNode node, String annotation) {
+        Object value = node.getAnnotation(annotation);
+        java.util.List<?> names = value instanceof java.util.List<?> list ? list : java.util.List.of();
+        mv.visitLdcInsn(names.size());
+        mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/String");
+        for (int i = 0; i < names.size(); i++) {
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitLdcInsn(i);
+            mv.visitLdcInsn(String.valueOf(names.get(i)));
+            mv.visitInsn(Opcodes.AASTORE);
+        }
+    }
+
+    private static void emitSignatureString(MethodVisitor mv, Object value) {
+        if (value instanceof String text) mv.visitLdcInsn(text);
+        else mv.visitInsn(Opcodes.ACONST_NULL);
     }
 }

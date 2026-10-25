@@ -33,8 +33,8 @@ public final class FunctionParameters extends PerlModuleBase {
         }
         RuntimeScalar codeRef = args.get(0).scalar();
         if (codeRef.type != RuntimeScalarType.CODE || !(codeRef.value instanceof RuntimeCode code)
-                || code.signatureSubName == null) {
-            throw new IllegalArgumentException("Function::Parameters::info expects a signatured code reference");
+                || code.signatureKeyword == null) {
+            return new RuntimeScalar().getList();
         }
 
         RuntimeHash info = new RuntimeHash();

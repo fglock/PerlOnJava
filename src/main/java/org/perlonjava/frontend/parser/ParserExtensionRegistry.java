@@ -11,6 +11,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.concurrent.ConcurrentHashMap;
 
 /** Connects compile-time module imports to lexical parser keyword plugins. */
@@ -107,7 +109,16 @@ public final class ParserExtensionRegistry {
         boolean strict = true;
         boolean strictSpecified = false;
         boolean checkArgumentTypes = true;
+        List<String> defaultAttributes = List.of();
         if (value instanceof RuntimeHash configuration) {
+            Set<String> supportedOptions = Set.of(
+                    "defaults", "shift", "invocant", "strict",
+                    "check_argument_count", "check_argument_types", "attributes");
+            for (String option : configuration.elements.keySet()) {
+                if (!supportedOptions.contains(option)) {
+                    throw new IllegalArgumentException("Invalid keyword property: " + option);
+                }
+            }
             RuntimeScalar defaultValue = configuration.elements.get("defaults");
             defaults = defaultValue == null ? "function" : defaultValue.toString();
             RuntimeScalar shiftValue = configuration.elements.get("shift");
@@ -125,9 +136,19 @@ public final class ParserExtensionRegistry {
                 strict = strictValue.getBoolean();
                 strictSpecified = true;
             }
+            RuntimeScalar checkArgumentCountValue = configuration.elements.get("check_argument_count");
+            if (checkArgumentCountValue != null) {
+                strict = checkArgumentCountValue.getBoolean()
+                        || (strictSpecified && strict);
+                strictSpecified = true;
+            }
             RuntimeScalar checkArgumentTypesValue = configuration.elements.get("check_argument_types");
             if (checkArgumentTypesValue != null) {
                 checkArgumentTypes = checkArgumentTypesValue.getBoolean();
+            }
+            RuntimeScalar attributesValue = configuration.elements.get("attributes");
+            if (attributesValue != null) {
+                defaultAttributes = parseConfiguredAttributes(attributesValue.toString());
             }
         } else {
             defaults = definition.toString();
@@ -141,7 +162,21 @@ public final class ParserExtensionRegistry {
                     "Unsupported Function::Parameters keyword defaults: " + defaults);
         }
         return FunctionParametersKeywordPlugin.configured(
-                defaults, shift, optionalInvocantCount, strict, checkArgumentTypes);
+                defaults, shift, optionalInvocantCount, strict, checkArgumentTypes, defaultAttributes);
+    }
+
+    private static List<String> parseConfiguredAttributes(String source) {
+        String trimmed = source.trim();
+        String attributePattern = "[A-Za-z_]\\w*(?:\\([^()]*\\))?";
+        if (!trimmed.matches("\\s*:\\s*" + attributePattern
+                + "(?:\\s*:?\\s*" + attributePattern + ")*\\s*")) {
+            throw new IllegalArgumentException(
+                    "\"" + source + "\" doesn't look like valid attributes");
+        }
+        Matcher matcher = Pattern.compile("[A-Za-z_]\\w*(?:\\([^()]*\\))?").matcher(trimmed);
+        List<String> attributes = new ArrayList<>();
+        while (matcher.find()) attributes.add(matcher.group());
+        return List.copyOf(attributes);
     }
 
     private static RuntimeBase unwrap(RuntimeBase value) {
