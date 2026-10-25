@@ -2127,8 +2127,7 @@ public class MortalList {
             slotCounts.merge(slot.kind(), 1, Integer::sum);
             RuntimeBase owner = slot.ownerContainer();
             RuntimeScalar cell = slot.ownerCell();
-            String ownerLabel = owner == null ? "none"
-                    : owner.getClass().getSimpleName() + "@" + System.identityHashCode(owner);
+            String ownerLabel = describeRecoveryOwnerContainer(owner);
             String cellLabel = cell == null ? "none"
                     : "@" + System.identityHashCode(cell)
                             + ":type=" + cell.type
@@ -2150,6 +2149,48 @@ public class MortalList {
                 + " slotDetails=" + slotDetails
                 + " currentlyDestroying=" + referent.currentlyDestroying
                 + " release=" + releaseProvenance);
+    }
+
+    private static String describeRecoveryOwnerContainer(RuntimeBase owner) {
+        if (owner == null) return "none";
+        StringBuilder detail = new StringBuilder(owner.getClass().getSimpleName())
+                .append('@').append(System.identityHashCode(owner))
+                .append("{inSweepLive=")
+                .append(state().weakSweepLiveReferents != null
+                        && state().weakSweepLiveReferents.contains(owner))
+                .append(",explicitRoot=").append(isExplicitAggregateRoot(owner))
+                .append(",registered=").append(MyVarCleanupStack.isRegistered(owner))
+                .append(",liveLexical=").append(MyVarCleanupStack.isLive(owner))
+                .append(",scopeExited=").append(owner.scopeExited)
+                .append(",semanticCaptureOwners=").append(owner.semanticCaptureOwnerCount());
+        if (owner instanceof RuntimeHash hash) {
+            detail.append(",packageRoot=").append(hash.isPackageRootedHash())
+                    .append(",specialElements=")
+                    .append(hash.elements instanceof HashSpecialVariable);
+        } else if (owner instanceof RuntimeArray array) {
+            detail.append(",packageRoot=").append(array.isPackageGlobalRoot)
+                    .append(",elementsAliased=").append(array.elementsAliased);
+        }
+        List<String> parentSlots = new java.util.ArrayList<>();
+        for (PerlOwnerSlot parentSlot : owner.ownerSlotSnapshot()) {
+            if (parentSlot.referent() != owner) continue;
+            RuntimeBase parent = parentSlot.ownerContainer();
+            RuntimeScalar parentCell = parentSlot.ownerCell();
+            String parentLabel = parent == null ? "none"
+                    : parent.getClass().getSimpleName() + "@"
+                            + System.identityHashCode(parent);
+            String cellLabel = parentCell == null ? "none"
+                    : "@" + System.identityHashCode(parentCell)
+                            + ":type=" + parentCell.type
+                            + ":valueMatches=" + (parentCell.value == owner)
+                            + ":weak=" + WeakRefRegistry.isweak(parentCell)
+                            + ":owned=" + parentCell.refCountOwned
+                            + ":registered=" + MyVarCleanupStack.isRegistered(parentCell)
+                            + ":live=" + MyVarCleanupStack.isLive(parentCell);
+            parentSlots.add(parentSlot.kind() + "#" + parentSlot.identity()
+                    + " parent=" + parentLabel + " cell=" + cellLabel);
+        }
+        return detail.append(",parentSlots=").append(parentSlots).append('}').toString();
     }
 
     /**
