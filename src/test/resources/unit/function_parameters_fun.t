@@ -3,10 +3,21 @@ use warnings;
 use Test::More;
 
 our $anonymous_add;
+our $anonymous_method;
+our $positive_constraint;
 my $loaded = eval q{
     use Function::Parameters;
 
+    package PositiveConstraint;
+    sub check { $_[1] > 0 }
+    sub get_message { 'value must be positive' }
+    package main;
+    sub InstanceOf { $positive_constraint }
+    our $positive_constraint = bless {}, 'PositiveConstraint';
+
     fun add($left, $right = 1) { $left + $right }
+    fun constrained(($positive_constraint) $value) { $value }
+    fun constrained_instance((InstanceOf['GraphQL::Type']) $value) { $value }
     fun item_count(@items) { scalar @items }
 fun option_count(%options) { scalar keys %options }
 fun ignore_first($, $value) { $value }
@@ -16,6 +27,9 @@ fun named_options(:$required, :$optional //= 9, %extra) {
     "$required:$optional:" . ($extra{other} // '')
 }
     our $anonymous_add = fun ($left, $right = 3) { $left + $right };
+    our $anonymous_method = method (@) { $self->{base} };
+    package AnonymousMethodOverload;
+    use overload '""' => method (@) { $self->{text} }, fallback => 1;
     package FunctionParametersMethod;
     method sum($self: $value = 2) { $self->{base} + $value }
     method default_self($value = 1) { $self->{base} + $value }
@@ -30,6 +44,11 @@ die $@ unless $loaded;
 
 is(add(4), 5, 'fun declaration uses an optional signature default');
 is(add(4, 3), 7, 'fun declaration accepts all positional parameters');
+is(constrained(3), 3, 'typed parameters accept values that satisfy their constraint');
+is(constrained_instance(3), 3, 'typed parameters accept bracket-form type expressions');
+my $typed_result = eval { constrained(0); 1 };
+ok(!$typed_result, 'typed parameters reject values that fail their constraint');
+like($@, qr/value must be positive/, 'typed parameter failure uses the constraint message');
 my $add_info = Function::Parameters::info(\&add);
 is_deeply([map { "$_" } $add_info->positional_required], ['$left'],
     'signature info reports required positional parameter names');
@@ -37,6 +56,7 @@ is_deeply([map { "$_" } $add_info->positional_optional], ['$right'],
     'signature info reports optional positional parameter names');
 is($add_info->args_min, 1, 'signature info reports the minimum argument count');
 is($add_info->args_max, 2, 'signature info reports the maximum argument count');
+is($add_info->keyword, 'fun', 'signature info reports the fun keyword');
 is(item_count(qw(one two three)), 3, 'fun declaration supports a slurpy array');
 is(option_count(one => 1, two => 2), 2, 'fun declaration supports a slurpy hash');
 my $items_info = Function::Parameters::info(\&item_count);
@@ -56,6 +76,10 @@ is("" . $named_info->slurpy, '%extra', 'signature info reports a slurpy hash');
 is($named_info->args_min, 2, 'required named parameters count as key/value arguments');
 is($anonymous_add->(4), 7, 'fun supports anonymous declarations in expression position');
 my $object = bless { base => 40 }, 'FunctionParametersMethod';
+is($anonymous_method->($object), 40, 'anonymous method expressions bind an implicit invocant');
+my $overloaded = bless { text => 'anonymous method stringification' }, 'AnonymousMethodOverload';
+is("$overloaded", 'anonymous method stringification',
+    'anonymous method expressions work as overload implementations');
 is($object->sum, 42, 'method declaration binds its explicit invocant and default');
 is($object->sum(3), 43, 'method declaration accepts an explicit positional value');
 is($object->default_self, 41, 'method declaration supplies the default $self invocant');
@@ -64,6 +88,7 @@ is($object->no_arguments, 40, 'method declaration supports an empty user paramet
 my $method_info = Function::Parameters::info(\&FunctionParametersMethod::default_self);
 is("" . $method_info->invocant, '$self', 'signature info reports the method invocant');
 is($method_info->args_min, 1, 'method signature info includes its invocant');
+is($method_info->keyword, 'method', 'method signature info reports its keyword');
 
 my $block_scope_result = eval q{
     {
@@ -82,6 +107,33 @@ my $eval_result = eval q{
     };
 };
 is($eval_result, 6, 'nested eval inherits the lexical keyword provider');
+
+my $fun_only_result = eval q{
+    use Function::Parameters qw(fun);
+    fun only_fun($value) { $value + 3 }
+    1;
+};
+is($fun_only_result, 1, 'importing fun alone registers only the requested keyword');
+is(only_fun(4), 7, 'selectively imported fun declarations execute');
+my $method_not_imported = eval q{
+    use Function::Parameters qw(fun);
+    method not_imported() { 1 }
+    1;
+};
+ok(!$method_not_imported, 'unrequested method keyword remains unavailable');
+
+my $selective_no_result = eval q{
+    use Function::Parameters qw(fun method);
+    fun before_no($value) { $value + 1 }
+    no Function::Parameters qw(fun);
+    package SelectiveMethod;
+    method value() { $self->{value} }
+    package main;
+    1;
+};
+is($selective_no_result, 1, 'no with an import list removes only selected keywords');
+my $selective_object = bless { value => 9 }, 'SelectiveMethod';
+is($selective_object->value, 9, 'unremoved method keyword remains active after selective no');
 
 my $arity_result = eval { add(); 1 };
 ok(!$arity_result, 'fun declaration rejects too few arguments');

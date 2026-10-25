@@ -56,6 +56,7 @@ public class SignatureParser {
     private boolean hasNamedParameter = false;
     private String namedArgsHashName = null; // Track the hash name for named parameters
     private String slurpyParameterName;
+    private int typedParameterCount;
     private String subroutineName = null; // Optional subroutine name for error messages
     private boolean isMethod = false; // True if parsing method signature (has implicit $self)
     private boolean parsingFunctionParametersInvocant;
@@ -180,6 +181,16 @@ public class SignatureParser {
             isNamed = true;
         }
 
+        Node typeConstraint = null;
+        if (parser.parsingFunctionParametersDeclaration && peekToken().text.equals("(")) {
+            consumeToken();
+            typeConstraint = parser.parseExpression(0);
+            if (!peekToken().text.equals(")")) {
+                parser.throwError("Malformed Function::Parameters type constraint");
+            }
+            consumeToken();
+        }
+
         LexerToken sigilToken = consumeToken();
         String sigil = sigilToken.text;
 
@@ -253,6 +264,21 @@ public class SignatureParser {
         // Create parameter variable or undef placeholder
         Node paramVariable = createParameterVariable(sigil, paramName);
         String metadataName = paramName == null ? sigil : sigil + paramName;
+        OperatorNode typeConstraintVariable = null;
+        if (typeConstraint != null) {
+            if (paramName == null || isSlurpy) {
+                parser.throwError(paramStartIndex,
+                        "Function::Parameters type constraints require a named scalar parameter");
+            }
+            String typeVariableName = "__function_parameters_type_" + (++typedParameterCount);
+            OperatorNode typeVariable = new OperatorNode("$",
+                    new IdentifierNode(typeVariableName, paramStartIndex), paramStartIndex);
+            OperatorNode typeDeclaration = new OperatorNode("my", typeVariable, paramStartIndex);
+            typeDeclaration.setAnnotation("signatureParameterDeclaration", true);
+            astNodes.add(new BinaryOperatorNode("=", typeDeclaration, typeConstraint, paramStartIndex));
+            parser.ctx.symbolTable.addVariable("$" + typeVariableName, "my", typeVariable);
+            typeConstraintVariable = typeVariable;
+        }
 
         if (isNamed) {
             hasNamedParameter = true;
@@ -307,6 +333,23 @@ public class SignatureParser {
             }
             parser.ctx.symbolTable.addVariable(sigil + paramName, "my", (OperatorNode) paramVariable);
         }
+        if (typeConstraintVariable != null) {
+            Node check = typeConstraintMethodCall(typeConstraintVariable, "check", paramVariable, paramStartIndex);
+            Node failure = new OperatorNode("!", check, paramStartIndex);
+            Node message = typeConstraintMethodCall(
+                    typeConstraintVariable, "get_message", paramVariable, paramStartIndex);
+            Node die = new OperatorNode("die", new ListNode(List.of(message), paramStartIndex), paramStartIndex);
+            astNodes.add(new IfNode("if", failure,
+                    new BlockNode(new ArrayList<>(List.of(die)), paramStartIndex), null, paramStartIndex));
+        }
+    }
+
+    private static Node typeConstraintMethodCall(
+            Node invocant, String method, Node argument, int index) {
+        Node call = new BinaryOperatorNode("(",
+                new OperatorNode("&", new IdentifierNode(method, index), index),
+                new ListNode(List.of(argument), index), index);
+        return new BinaryOperatorNode("->", invocant, call, index);
     }
 
     private int previousSignificantToken(int index) {

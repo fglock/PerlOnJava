@@ -10,6 +10,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 import org.perlonjava.runtime.operators.ReferenceOperators;
 
 import java.util.List;
+import java.util.ArrayList;
 
 /** Runtime support for the introspection part of Function::Parameters. */
 public final class FunctionParameters extends PerlModuleBase {
@@ -37,21 +38,24 @@ public final class FunctionParameters extends PerlModuleBase {
         }
 
         RuntimeHash info = new RuntimeHash();
-        putParameters(info, "invocants", code.signatureInvocants);
-        putParameters(info, "positional_required", code.signaturePositionalRequired);
-        putParameters(info, "positional_optional", code.signaturePositionalOptional);
-        putParameters(info, "named_required", code.signatureNamedRequired);
-        putParameters(info, "named_optional", code.signatureNamedOptional);
+        List<String> positionalRequired = new ArrayList<>(code.signatureInvocants);
+        positionalRequired.addAll(code.signaturePositionalRequired);
+        putParameters(info, "_positional_required", positionalRequired);
+        putParameters(info, "_positional_optional", code.signaturePositionalOptional);
+        putParameters(info, "_named_required", code.signatureNamedRequired);
+        putParameters(info, "_named_optional", code.signatureNamedOptional);
+        info.put("nshift", new RuntimeScalar(code.signatureInvocants.size()));
+        info.put("keyword", new RuntimeScalar(
+                code.signatureInvocants.isEmpty() ? "fun" : "method"));
         RuntimeScalar slurpy = code.signatureSlurpyName == null
                 ? new RuntimeScalar()
                 : parameter(code.signatureSlurpyName);
         info.put("slurpy", slurpy);
-        int min = code.signatureInvocants.size() + code.signaturePositionalRequired.size()
+        int min = positionalRequired.size()
                 + 2 * code.signatureRequiredNamedParams.size();
         info.put("args_min", new RuntimeScalar(min));
         boolean unbounded = !code.signatureNamedParams.isEmpty() || code.signatureSlurpySigil != null;
-        int max = code.signatureInvocants.size() + code.signaturePositionalRequired.size()
-                + code.signaturePositionalOptional.size();
+        int max = positionalRequired.size() + code.signaturePositionalOptional.size();
         info.put("args_max", new RuntimeScalar(unbounded ? "Inf" : Integer.toString(max)));
         RuntimeScalar object = ReferenceOperators.bless(
                 info.createReferenceWithTrackedElements(), new RuntimeScalar("Function::Parameters::Info"));
@@ -69,6 +73,6 @@ public final class FunctionParameters extends PerlModuleBase {
         parameter.put("name", new RuntimeScalar(name));
         parameter.put("type", new RuntimeScalar());
         return ReferenceOperators.bless(parameter.createReferenceWithTrackedElements(),
-                new RuntimeScalar("Function::Parameters::Info::Parameter"));
+                new RuntimeScalar("Function::Parameters::Param"));
     }
 }
