@@ -4258,7 +4258,17 @@ final class Analyser extends Parser {
                                                 AnchorType.ANYCHAR_STAR_ML |
                                                 AnchorType.LOOK_BEHIND);
 
-        if ((opt.anchor.leftAnchor & (AnchorType.LOOK_BEHIND | AnchorType.PREC_READ_NOT)) != 0) regex.anchor &= ~AnchorType.ANYCHAR_STAR_ML;
+        if ((opt.anchor.leftAnchor & (AnchorType.LOOK_BEHIND
+                | AnchorType.PREC_READ | AnchorType.PREC_READ_NOT)) != 0) {
+            regex.anchor &= ~AnchorType.ANYCHAR_STAR_ML;
+        }
+        // A positive assertion can reject the earliest line start even when
+        // a later line satisfies it. In that case the multiline anychar-star
+        // shortcut cannot limit search to the initial candidate position.
+        if ((regex.anchor & AnchorType.ANYCHAR_STAR_ML) != 0
+                && containsPositiveLookahead(node)) {
+            regex.anchor &= ~AnchorType.ANYCHAR_STAR_ML;
+        }
 
         regex.anchor |= opt.anchor.rightAnchor & (AnchorType.END_BUF |
                                                   AnchorType.SEMI_END_BUF |
@@ -4416,6 +4426,26 @@ final class Analyser extends Parser {
         }
         case NodeType.QTFR -> containsBeginLineAnchor(((QuantifierNode) node).target);
         case NodeType.ENCLOSE -> containsBeginLineAnchor(((EncloseNode) node).target);
+        default -> false;
+        };
+    }
+
+    private boolean containsPositiveLookahead(Node node) {
+        if (node instanceof AnchorNode anchor
+                && anchor.type == AnchorType.PREC_READ) {
+            return true;
+        }
+        return switch (node.getType()) {
+        case NodeType.LIST, NodeType.ALT -> {
+            ListNode list = (ListNode) node;
+            boolean found = false;
+            do {
+                found |= containsPositiveLookahead(list.value);
+            } while (!found && (list = list.tail) != null);
+            yield found;
+        }
+        case NodeType.QTFR -> containsPositiveLookahead(((QuantifierNode) node).target);
+        case NodeType.ENCLOSE -> containsPositiveLookahead(((EncloseNode) node).target);
         default -> false;
         };
     }

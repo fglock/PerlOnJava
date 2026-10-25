@@ -7,6 +7,8 @@ priorities and future plans.
 ## Work in progress
 
 - Keep nested Rose::HTML::Objects form results alive with counted argument owners so weak parent links and qualified field names survive argument evaluation (#1851).
+- Preserve multiline regex searches when positive lookaheads constrain a lazy any-character prefix, restoring Text::YAWikiFormater formatting (#1596).
+- Diagnose malformed and out-of-class Object::Pad `BUILD` declarations during parsing (#1808).
 - Warn for undefined right operands of `.=` while keeping an undefined left operand quiet (#1382).
 - Fix bundled IO, nested launcher, locale, and core user/group database module compatibility.
 - Snapshot mutable array entries while marking package roots and during reachability walks so concurrent thread teardown cannot fail with `ConcurrentModificationException`.
