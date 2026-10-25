@@ -119,6 +119,14 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
 
 ### Current batch
 
+- Postfix increment/decrement now transfers the stable `SCALAR_VALUE` slot from
+  the mutated lvalue to its returned scalar. Assignment of that result releases
+  the temporary through the slot API after acquiring the destination owner.
+  New Java coverage checks slot identity and verifies one owner is represented
+  by exactly one live slot for both `++` and `--`. This closes a ledger mismatch
+  where the old implementation manually decremented `refCount` but left the
+  temporary's owner slot active. Full `nice -n 19 make` passes in 14m45s; both
+  focused Java cases pass.
 - `Storable.releaseApplyArgs()` now releases materialized argument owners through
   `SCALAR_VALUE` slots when available, retaining the legacy fallback for older
   cells. Its existing Java regression retires the legacy ownership flag before

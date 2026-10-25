@@ -851,6 +851,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     /** A postfix ++/-- result transfers, rather than duplicates, its reference owner on assignment. */
     private boolean postfixReferenceOwnershipTransfer;
+    private boolean postfixReferenceOwnerSlotTransferred;
 
     /**
      * True for the synthetic {@code $_[0]} scalar passed to DESTROY.
@@ -2329,14 +2330,44 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         RuntimeScalar result = scalar.set(this);
         if (postfixReferenceOwnershipTransfer) {
             postfixReferenceOwnershipTransfer = false;
+            boolean transferredOwnerSlot = postfixReferenceOwnerSlotTransferred;
+            postfixReferenceOwnerSlotTransferred = false;
             if ((type & REFERENCE_BIT) != 0 && value instanceof RuntimeBase base
-                    && base.refCount > 0) {
-                // set() acquired the destination owner; cancel the extra
-                // increment because this temporary's owner was transferred.
-                base.refCount--;
+                    && ownsCountedReferent(base)) {
+                // set() acquired the destination owner. Retire this temporary's
+                // transferred owner through its stable slot so the ledger and
+                // lifecycle bridge both lose exactly one owner.
+                if (!transferredOwnerSlot || !releaseScalarValueOwnerCount(
+                        base, "RuntimeScalar.addToScalar postfix owner transfer")) {
+                    if (base.refCount > 0) base.refCount--;
+                    setRefCountOwned(false);
+                }
             }
         }
         return result;
+    }
+
+    private void transferPostfixOwnerTo(RuntimeScalar result) {
+        RuntimeBase referent = value instanceof RuntimeBase base ? base : null;
+        PerlOwnerSlot slot = scalarValueOwnerSlot;
+        if (referent != null && slot != null && slot.referent() == referent
+                && slot.transferScalarValueCell(this, result)) {
+            scalarValueOwnerSlot = null;
+            result.scalarValueOwnerSlot = slot;
+            referent.transferScalarOwner(this, result, "RuntimeScalar postfix result");
+            result.postfixReferenceOwnerSlotTransferred = true;
+        } else {
+            // Legacy and borrowed aliases may not yet have a transferable slot.
+            boolean transferredLegacyOwner = referent != null
+                    && ownsCountedReferent(referent);
+            if (transferredLegacyOwner) {
+                referent.transferScalarOwner(this, result, "RuntimeScalar postfix result");
+            }
+            result.setRefCountOwned(true);
+            setRefCountOwned(false);
+            result.postfixReferenceOwnerSlotTransferred = transferredLegacyOwner;
+        }
+        result.postfixReferenceOwnershipTransfer = true;
     }
 
     /**
@@ -6323,9 +6354,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // returned reference becomes the first durable owner.  The
                 // assignment receiving this scalar will balance the temporary
                 // copy, so retain one cleanup token for that returned value.
-                old.setRefCountOwned(true);
-                old.postfixReferenceOwnershipTransfer = true;
-                this.setRefCountOwned(false);
+                transferPostfixOwnerTo(old);
                 // Check if object is eligible for overloading
                 int blessId = blessedId(this);
                 if (blessId != 0) {
@@ -6634,9 +6663,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             default -> { // All reference types
                 // See postAutoIncrementLarge(): the returned pre-mutation
                 // reference inherits this lvalue's ownership token.
-                old.setRefCountOwned(true);
-                old.postfixReferenceOwnershipTransfer = true;
-                this.setRefCountOwned(false);
+                transferPostfixOwnerTo(old);
                 // Check if object is eligible for overloading
                 int blessId = blessedId(this);
                 if (blessId != 0) {

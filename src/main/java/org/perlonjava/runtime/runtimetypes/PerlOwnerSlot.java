@@ -397,6 +397,23 @@ public final class PerlOwnerSlot {
         return true;
     }
 
+    /** Move the stable direct-scalar owner identity to a postfix result cell. */
+    synchronized boolean transferScalarValueCell(
+            RuntimeScalar expectedOwner, RuntimeScalar nextOwner) {
+        if (kind != Kind.SCALAR_VALUE) {
+            throw new IllegalStateException(
+                    "scalar-value transfer requires a SCALAR_VALUE slot");
+        }
+        if (expectedOwner == null || nextOwner == null
+                || referent == null || ownerCell() != expectedOwner) {
+            return false;
+        }
+        ownerCell = new WeakReference<>(nextOwner);
+        expectedOwner.refCountOwned = false;
+        nextOwner.refCountOwned = true;
+        return true;
+    }
+
     /**
      * Release the legacy counted edge represented by a direct scalar-value
      * slot. The caller retains lifecycle policy (for example, whether a

@@ -454,6 +454,25 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         }
     }
 
+    /** Transfer legacy owner diagnostics along with a migrated scalar-value slot. */
+    synchronized void transferScalarOwner(RuntimeScalar previous, RuntimeScalar next,
+                                          String transferSite) {
+        if (previous == null || next == null) return;
+        if (refCountTrace && REFCOUNT_TRACE_ENV) {
+            java.util.LinkedHashMap<Integer, OwnerTrace> owners = traceOwners.get(this);
+            if (owners != null) {
+                OwnerTrace prior = owners.remove(System.identityHashCode(previous));
+                String acquireSite = prior == null
+                        ? "<owner transferred at " + transferSite + ">"
+                        : prior.acquireSite;
+                owners.put(System.identityHashCode(next), new OwnerTrace(next, acquireSite));
+            }
+        }
+        if (activeOwners != null && activeOwners.remove(previous)) {
+            activeOwners.add(next);
+        }
+    }
+
     public synchronized int activeOwnerCount() {
         if (activeOwners == null) return 0;
         // Filter for actual still-owning scalars: refCountOwned=true and
