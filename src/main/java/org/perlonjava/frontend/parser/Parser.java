@@ -247,6 +247,10 @@ public class Parser {
     // path for signature lexicals; ordinary named subs must retain selective
     // capture to avoid retaining the entire surrounding lexical environment.
     public boolean parsingSignaturedSubroutine = false;
+    /** True while a parser extension delegates a function declaration to core signatures. */
+    public boolean parsingFunctionParametersDeclaration = false;
+    /** True while parsing an explicit-invocant Function::Parameters method. */
+    public boolean parsingFunctionParametersMethod = false;
     // Are we parsing the top level script?
     public boolean isTopLevelScript = false;
     // Are we parsing inside a class block?
@@ -334,6 +338,18 @@ public class Parser {
         if (ctx != null && ctx.symbolTable != null) {
             setCurrentScope(ctx.symbolTable);
         }
+    }
+
+    public void registerKeywordPlugin(String keyword, ParserKeywordPlugin plugin) {
+        ctx.symbolTable.registerParserKeywordPlugin(keyword, plugin);
+    }
+
+    public void removeKeywordPlugin(String keyword) {
+        ctx.symbolTable.removeParserKeywordPlugin(keyword);
+    }
+
+    public ParserKeywordPlugin getKeywordPlugin(String keyword) {
+        return ctx.symbolTable.getParserKeywordPlugin(keyword);
     }
 
     private void indexSourceLines() {

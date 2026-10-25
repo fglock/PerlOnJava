@@ -1,6 +1,7 @@
 package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.frontend.astnode.OperatorNode;
+import org.perlonjava.frontend.parser.ParserKeywordPlugin;
 import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -57,6 +58,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     public final Map<String, Integer> variableRegistry; // Variable name → register index (for eval STRING)
     public final List<Map<String, Integer>> evalSiteRegistries; // Per-eval-site variable registries
     public final List<Map<String, OperatorNode>> evalSiteLexicalSubroutineBindings;
+    public final List<Map<String, ParserKeywordPlugin>> evalSiteParserKeywordPlugins;
     public final List<int[]> evalSitePragmaFlags; // [strict, features, evalbytes, warningBitsPoolIndex, regexDebug, enhancedXx]
 
     // Optimization flags (set by compiler after construction)
@@ -191,7 +193,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                            int strictOptions, int featureFlags, BitSet warningFlags) {
         this(bytecode, constants, stringPool, maxRegisters, capturedVars,
                 sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
-                strictOptions, featureFlags, warningFlags, "main", null, null, null, null);
+                strictOptions, featureFlags, warningFlags, "main", null, null, null, null, null);
     }
 
     public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
@@ -204,7 +206,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                            String compilePackage) {
         this(bytecode, constants, stringPool, maxRegisters, capturedVars,
                 sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
-                strictOptions, featureFlags, warningFlags, compilePackage, null, null, null, null);
+                strictOptions, featureFlags, warningFlags, compilePackage, null, null, null, null, null);
     }
 
     public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
@@ -217,12 +219,14 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                            String compilePackage,
                            List<Map<String, Integer>> evalSiteRegistries,
                            List<Map<String, OperatorNode>> evalSiteLexicalSubroutineBindings,
+                           List<Map<String, ParserKeywordPlugin>> evalSiteParserKeywordPlugins,
                            List<int[]> evalSitePragmaFlags,
                            String warningBitsString) {
         this(bytecode, constants, stringPool, maxRegisters, capturedVars,
                 sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
                 strictOptions, featureFlags, warningFlags, compilePackage,
-                evalSiteRegistries, evalSiteLexicalSubroutineBindings, evalSitePragmaFlags,
+                evalSiteRegistries, evalSiteLexicalSubroutineBindings,
+                evalSiteParserKeywordPlugins, evalSitePragmaFlags,
                 warningBitsString, false, null);
     }
 
@@ -236,6 +240,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                             String compilePackage,
                             List<Map<String, Integer>> evalSiteRegistries,
                             List<Map<String, OperatorNode>> evalSiteLexicalSubroutineBindings,
+                            List<Map<String, ParserKeywordPlugin>> evalSiteParserKeywordPlugins,
                             List<int[]> evalSitePragmaFlags,
                             String warningBitsString,
                             boolean reuseDeparseSourceText,
@@ -252,6 +257,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         this.variableRegistry = variableRegistry;
         this.evalSiteRegistries = evalSiteRegistries;
         this.evalSiteLexicalSubroutineBindings = evalSiteLexicalSubroutineBindings;
+        this.evalSiteParserKeywordPlugins = evalSiteParserKeywordPlugins;
         this.evalSitePragmaFlags = evalSitePragmaFlags;
         this.errorUtil = errorUtil;
         this.strictOptions = strictOptions;
@@ -612,6 +618,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                 this.compilePackage,
                 this.evalSiteRegistries,
                 this.evalSiteLexicalSubroutineBindings,
+                this.evalSiteParserKeywordPlugins,
                 this.evalSitePragmaFlags,
                 this.warningBitsString,
                 true,

@@ -1118,7 +1118,8 @@ public class SubroutineParser {
             // prototypes in a later do FILE load look like signatures after
             // test.pl's watchdog setup.  The Feature manager records actual
             // lexical imports, so require both sources of evidence here.
-            boolean signaturesEnabled = parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures")
+            boolean signaturesEnabled = parser.parsingFunctionParametersDeclaration
+                    || parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures")
                     && org.perlonjava.runtime.perlmodule.Feature.getFeatureManager()
                     .getEnabledFeatures().contains("signatures");
             if (signaturesEnabled) {

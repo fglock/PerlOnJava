@@ -1623,6 +1623,10 @@ public class CompileOperator {
                             node instanceof EvalOperatorNode evalNode
                                     ? evalNode.getSymbolTable().getVisibleLexicalSubroutineBindings()
                                     : Map.of());
+                    bytecodeCompiler.evalSiteParserKeywordPlugins.add(
+                            node instanceof EvalOperatorNode evalNode
+                                    ? evalNode.getSymbolTable().getVisibleParserKeywordPlugins()
+                                    : Map.of());
                     bytecodeCompiler.evalSitePragmaFlags.add(new int[]{
                             bytecodeCompiler.symbolTable.strictOptionsStack.peek(),
                             bytecodeCompiler.symbolTable.featureFlagsStack.peek(),
