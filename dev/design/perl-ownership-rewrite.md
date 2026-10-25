@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816), last reconciled with `origin/master` through `aeda28344`. The latest ownership candidate, tie-wrapper owner-slot migration, passes full `nice -n 19 make` locally; pushing and hosted validation are pending. Hosted run `39991272777` passes on Linux and Windows, including both thread gates, for preceding head `c1167ffbd`. Owner slots still bridge to `RuntimeBase.refCount` for dispatch, and default owner-slot accounting remains incomplete.
+**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816), last reconciled with `origin/master` through `aeda28344`. The current branch head `64746a16e` is pushed; its full `nice -n 19 make` gate passes locally. Hosted run `39991272777` passes on Linux and Windows, including both thread gates, for preceding head `c1167ffbd`. Owner slots still bridge to `RuntimeBase.refCount` for dispatch, and default owner-slot accounting remains incomplete.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
@@ -81,7 +81,7 @@ not an independent count.
 | Hash entry | `RuntimeHash.updateHashEntryOwner` attaches a `HASH_ENTRY` slot to the stable entry and scalar cell | Key replacement/deletion and hash cleanup release that identity slot; the scalar cell's value slot is released separately | `HASH_ENTRY` is identity-only for ordinary non-shared hashes. Recovery proves the owning hash is rooted and counts the cell's still-live value edge. Shared hashes retain a separate shared-slot count. |
 | Array element | `RuntimeArray.syncArrayElementOwnerSlot` / reconciliation attaches an `ARRAY_ELEMENT` slot when `ownsElement` is true | Array deletion, clear, replacement, and cleanup release the structural slot and release/queue the scalar value owner according to owned-versus-borrowed state | `ARRAY_ELEMENT` is identity-only; `SCALAR_VALUE` or the legacy bridge supplies the count. Borrowed aliases must not be promoted to an element owner. |
 | Scalar-reference contents | `PerlOwnerSlot.acquireScalarReferenceContents` records a `SCALAR_REFERENCE_CONTENTS` edge; it counts separately when a reference cell owns a distinct contents edge, and records a non-counting identity when it shares the cell's existing value owner | Retargeting or releasing the final strong alias releases the counted contents slot or allows the shared cell owner to retire | Reachable contents slots restore a live contents owner after a decrement. Aggregate recovery now counts distinct reachable contents cells alongside hash/array owners; weak aliases are excluded. |
-| Tied wrapper | Tie installation attaches a `TIE_WRAPPER` identity slot | Untie/replacement and wrapper cleanup release it | Recovery counts a wrapper only when its owner container is rooted. This slot family still depends on recovery for mixed legacy undercounts. |
+| Tied wrapper | Tie installation attaches a counted `TIE_WRAPPER` slot when the handler referent is tracked | Untie/replacement and wrapper cleanup release the slot and its count | Recovery counts a wrapper only when its owner container is rooted, then marks the slot restored so later cleanup releases that count. |
 | Closure-pad capture | `RuntimeBase.retainClosureCaptureOwner` creates a typed capture slot; aggregate captures can be native counted slots, scalar captures use a legacy bridge | Scope exit, closure release, and capture replacement retire the slot and capture state | Aggregate capture slots have direct semantic counts; scalar capture bridges still use the selective counter. The recovery scan is not their normal release authority. |
 | Deferred temporary or lifecycle hold | Blessing and method dispatch acquire a temporary count; an active END callback is rescued from zero to one by `DestroyDispatch`; closure aggregates normally acquire native capture slots | `MortalList.processDeferredBase` decrements queued counts at a cleanup boundary; abandoned method holds release immediately; END completion queues the rescued count | These generic releases carry no `PendingRelease` token. The normal bless, method-hold, and END paths each pair one temporary count with one release. The closure aggregate defer is a legacy fallback when its capture slot is absent. The focused #1794/#1795 no-recovery runs did not demonstrate a lost owner on these paths. |
 
@@ -381,6 +381,11 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   This repairs mixed recovery accounting but does not yet identify the
   production operation that can produce an undercount, so both scan callers
   remain.
+- A focused `PJ_REFCOUNT_TRACE_CLASS=File::Temp` run of the Catalyst tempfile
+  regression completed successfully but did not isolate tempfile object
+  ownership: the trace arms on the blessed package name and captured the
+  `File::Temp` package glob's setup transitions. The regression itself still
+  passes, and this trace provides no evidence to remove either recovery caller.
 - A second focused reducer,
   `issue_1649_captured_scalar_array_argument.t`, isolates the same class of
   lifetime error: a closure writes a blessed object to a captured scalar while
