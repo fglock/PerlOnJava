@@ -73,19 +73,24 @@ the upstream XS parser plugin.
   integration cases now pass, including the promise and error request cases.
   A direct call to `GraphQL::Language::Receiver::got_value` also passes after
   method bodies began seeing `@_` without the bound invocant. The full
-  `t/basic.t` suite completes; two WebSocket assertions remain mismatched:
-  `subs response` receives a queued data packet where the test expects the
-  stop completion, and `subs keepalive` receives a keepalive packet where it
-  expects the subscription response. Compare these timing-sensitive cases
-  with system Perl before classifying them as engine failures or harness
-  scheduling differences.
+  `t/basic.t` suite completes. Two WebSocket assertions still differ under
+  PerlOnJava: `subs response` receives a queued data packet where the test
+  expects the stop completion, and `subs keepalive` receives a keepalive
+  packet where it expects the subscription response. A repeat also failed the
+  GraphiQL subscription request with a premature connection close. The same
+  cached CPAN test and dependencies, run with native Function::Parameters
+  under system Perl, pass all nine top-level subtests. This confirms a
+  PerlOnJava-side difference; the intermittent count and 80–100 ms intervals
+  point to event-loop dispatch timing, but do not yet identify the runtime
+  defect.
 
 ### Next steps
 
 1. Add hash-based keyword configuration and configured/class/multiple
    invocants.
-2. Compare the two WebSocket assertion mismatches with system Perl and
-   determine whether PerlOnJava's timer/message order differs.
+2. Trace PerlOnJava reactor I/O and timer dispatch against the passing native
+   system-Perl run, then add permanent runtime-level regression coverage for
+   the confirmed ordering defect.
 3. Add coercions, prototypes and relevant subroutine attributes, then document
    unsupported type and method-modifier behavior.
 
