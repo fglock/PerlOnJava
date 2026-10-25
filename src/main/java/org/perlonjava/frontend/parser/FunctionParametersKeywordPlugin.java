@@ -37,7 +37,11 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
 
     @Override
     public Node parseExpression(Parser parser, String keyword) {
-        if ("fun".equals(keyword) && "(".equals(TokenUtils.peek(parser).text)) {
+        int keywordIndex = parser.tokenIndex;
+        parser.tokenIndex++;
+        boolean anonymousFun = "(".equals(TokenUtils.peek(parser).text);
+        parser.tokenIndex = keywordIndex;
+        if ("fun".equals(keyword) && anonymousFun) {
             return parse(parser, keyword);
         }
         return null;

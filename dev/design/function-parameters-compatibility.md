@@ -22,7 +22,7 @@ the upstream XS parser plugin.
 
 ## Progress tracking
 
-### Current status: Phase 1 in progress
+### Current status: Phase 1 complete; Phase 2 in progress (2026-10-25)
 
 ### Completed
 
@@ -32,16 +32,18 @@ the upstream XS parser plugin.
   invocant `method` providers, backed by core positional signatures.
 - [x] Add regression coverage for required/default parameters, slurpy arrays,
   explicit method invocants, and lexical `no` removal.
+- [x] Support anonymous `fun` expressions, lexical blocks, nested `eval`, and
+  source parsing with both execution backends.
+- [x] Validate the project unit gate and system Perl behavior where the
+  upstream module is available.
 
 ### Next steps
 
-1. Validate import and `no` scope behavior across nested blocks, eval, and
-   require on both execution backends.
-2. Add anonymous `fun` expressions, richer defaults, ignored parameters, and
-   source-location diagnostics.
-3. Add configured invocants and `Function::Parameters::Info` for the
+1. Add ignored parameters and richer default operators, with both-backend
+   regression coverage.
+2. Add configured invocants and `Function::Parameters::Info` for the
    documented subset.
-4. Document unsupported type constraints, modifiers, and named-parameter
+3. Document unsupported type constraints, modifiers, and named-parameter
    behavior, then run the full CPAN dependency reproducer.
 
 ### Open questions
@@ -49,6 +51,10 @@ the upstream XS parser plugin.
 - Which configured keyword aliases should be part of the first public subset?
 - How should provider-specific metadata map onto the existing signature
   annotations without creating a second backend representation?
+- The current `fun` and explicit-invocant `method` subset does not yet provide
+  the upstream module's import configuration, named parameters, type checks,
+  modifiers, or `Function::Parameters::Info` API. The project test skips under
+  system Perl when the upstream distribution is not installed.
 
 ## Related references
 
