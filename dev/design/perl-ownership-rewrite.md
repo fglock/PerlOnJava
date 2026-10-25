@@ -167,6 +167,12 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   focused #1794 transaction-controller and WebSocket tests, and #1795 Catalyst
   tempfile test, also pass on JVM and interpreter; the WebSocket test required
   loopback-enabled extended access and passes all six assertions on both.
+- The middle-delete release was then guarded by `ownsElement`: deleting a
+  borrowed middle argument from `@_` had prematurely destroyed the caller's
+  object. The new regression failed on both backends before the guard and passes
+  on system Perl, JVM, and interpreter afterward. The middle-delete and
+  borrowed-alias regressions pass together in the full gate (`14m15s`) and in
+  focused runs on both backends.
 - The temporary `perlonjava.test.disableAggregateOwnerRecovery` diagnostic was
   removed after the no-recovery audit. The two production call sites in
   `MortalList.processDeferredBase` and `RuntimeScalar.setLargeRefCounted` still

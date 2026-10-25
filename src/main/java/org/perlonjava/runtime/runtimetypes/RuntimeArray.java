@@ -1311,10 +1311,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 this.elements.set(index, null);
                 // A middle delete leaves the scalar cell available as the
                 // operator result, but the removed cell no longer owns this
-                // reference through the array. Defer its owner release so an
-                // assignment can first retain the returned value, matching
-                // RuntimeHash.deleteInContext and pop/shift.
-                if (previous != null && !previous.hasOwningAggregateSlot()) {
+                // reference through an owning array. Borrowed aliases such as
+                // @_ must not release the caller's scalar owner. Defer the
+                // owner release so assignment can first retain the result.
+                if (ownsElement(previous) && !previous.hasOwningAggregateSlot()) {
                     MortalList.deferDecrementIfTracked(previous);
                     MortalList.deferIoOwnerRelease(previous);
                 }

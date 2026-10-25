@@ -15,7 +15,7 @@ priorities and future plans.
 - Preserve reference-valued FETCH results from tied-hash `values()` and retain scalar-reference envelopes in Storable round trips (#1554, #1468).
 - Preserve tied-handler lifetimes when wrappers are created before selective reference counting begins.
 - Release temporary files once an exited closure capture retaining a Catalyst request context no longer has a live Perl root.
-- Release tracked reference owners after deleting a middle array element while preserving the returned value's lifetime.
+- Release tracked reference owners after deleting a middle array element while preserving the returned value's lifetime and borrowed aliases.
 - Ignore commented-out code when checking lexical constant closures for later mutations, preserving BEGIN-time generated constants (#1785).
 - Pack the method-dispatch inline-cache guard key into one primitive value while preserving class and method invalidation checks.
 - Keep watcher maps and live `substr`-lvalue observers in lazy scalar extension state, reducing the common `RuntimeScalar` footprint.
