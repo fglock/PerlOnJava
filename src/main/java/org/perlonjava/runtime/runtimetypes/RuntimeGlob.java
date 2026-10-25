@@ -2310,6 +2310,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         RuntimeScalar localCode = GlobalVariable.globalCodeRefs.get(snap.globName);
         RuntimeCode removedLocalCodeForReachabilityCheck = null;
         if (localCode != null && (localCode.type & REFERENCE_BIT) != 0 && localCode.value instanceof RuntimeBase localBase) {
+            boolean releasedScalarOwnerSlot = localCode.releaseScalarValueOwnerCount(
+                    localBase, "RuntimeGlob.dynamicRestoreState local CODE release");
             boolean removedLastStashRef = false;
             // Decrement stashRefCount on the local scope's CODE ref being removed
             if (localBase instanceof RuntimeCode localCodeObj) {
@@ -2318,7 +2320,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     removedLastStashRef = localCodeObj.stashRefCount == 0;
                 }
             }
-            if (localBase.refCount > 0 && --localBase.refCount == 0) {
+            if (!releasedScalarOwnerSlot && localBase.refCount > 0) {
+                localCode.setRefCountOwned(false);
+                localBase.releaseActiveOwner(localCode);
+            }
+            if (!releasedScalarOwnerSlot && localBase.refCount > 0 && --localBase.refCount == 0) {
                 localBase.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(localBase);
             } else if (localBase.refCount == 0 && localBase instanceof RuntimeCode) {

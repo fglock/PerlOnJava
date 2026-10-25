@@ -144,6 +144,11 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   direct slot-release API rather than detaching the slot after a manual count
   decrement. Full `nice -n 19 make` passes in 15m05s; the focused test passes
   with zero failures.
+- `RuntimeGlob.dynamicRestoreState()` now retires a tracked temporary CODE
+  scalar through its `SCALAR_VALUE` slot before dispatching final cleanup, with
+  the legacy bridge retained for older cells. `RuntimeGlobCodeOwnerSlotTest`
+  verifies the slot and count both retire. Full `nice -n 19 make` passes in
+  13m21s on this batch.
 - On 2026-10-24, tied scalar, array, hash, and handle wrappers now record
   handler ownership in distinct `TIE_WRAPPER` slots. A wrapper installed while
   its handler has the untracked sentinel remains uncounted until rooted owner
