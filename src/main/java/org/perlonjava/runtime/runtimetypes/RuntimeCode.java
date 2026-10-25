@@ -566,6 +566,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return codeRef;
     }
 
+    /** Name a runtime-installed Function::Parameters CV. */
+    public static RuntimeScalar configureFunctionParametersRuntime(
+            RuntimeScalar codeRef, String fullName) {
+        if (codeRef == null || !(codeRef.value instanceof RuntimeCode code)) return codeRef;
+        int separator = fullName.lastIndexOf("::");
+        code.packageName = separator < 0 ? "main" : fullName.substring(0, separator);
+        code.subName = separator < 0 ? fullName : fullName.substring(separator + 2);
+        code.isDeclared = true;
+        code.hasBodyDefinition = true;
+        return codeRef;
+    }
+
     private static List<String> signatureNames(String[] names) {
         return names == null ? List.of() : List.of(names.clone());
     }

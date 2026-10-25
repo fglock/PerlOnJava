@@ -7488,6 +7488,10 @@ public class BytecodeCompiler implements Visitor {
         subCode.attributes = node.attributes;
         subCode.packageName = node.getAnnotation("regexCallbackPackage") instanceof String pkg
                 ? pkg : getCurrentPackage();
+        if (node.getAnnotation("functionParametersRuntimeName") instanceof String runtimeName) {
+            RuntimeCode.configureFunctionParametersRuntime(
+                    new RuntimeScalar(subCode), runtimeName);
+        }
         if (node.getAnnotation("lexicalSubDisplayName") instanceof String lexicalName) {
             subCode.subName = lexicalName;
             subCode.lexicalSubDisplayName = true;
