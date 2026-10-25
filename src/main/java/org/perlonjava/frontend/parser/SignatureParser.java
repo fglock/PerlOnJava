@@ -207,6 +207,7 @@ public class SignatureParser {
             } else if (peekToken().type == LexerTokenType.IDENTIFIER) {
                 typeConstraint = parseUnparenthesizedTypeConstraint();
             }
+            typeConstraint = reifyQuotedTypeName(typeConstraint, paramStartIndex);
         }
 
         LexerToken sigilToken = consumeToken();
@@ -436,6 +437,15 @@ public class SignatureParser {
                 new OperatorNode("&", new IdentifierNode(method, index), index),
                 new ListNode(List.of(), index), index);
         return new BinaryOperatorNode("->", invocant, call, index);
+    }
+
+    private static Node reifyQuotedTypeName(Node typeConstraint, int index) {
+        if (!(typeConstraint instanceof StringNode string)
+                || !string.value.matches("[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*")) {
+            return typeConstraint;
+        }
+        Node typeFunction = new OperatorNode("&", new IdentifierNode(string.value, index), index);
+        return new BinaryOperatorNode("(", typeFunction, new ListNode(List.of(), index), index);
     }
 
     private Node parseUnparenthesizedTypeConstraint() {

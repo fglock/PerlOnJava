@@ -49,6 +49,8 @@ the upstream XS parser plugin.
 - [x] Honor configured `check_argument_types => 0`; when enabled, apply a
   constraint's `coerce` method when `has_coercion` returns true before checking
   the coerced parameter value.
+  Simple quoted type names are reified as type functions before validation,
+  matching Function::Parameters' `('TypeName')` form.
 - [x] Recognize `GraphQL::MaybeTypeCheck`'s delegated import as a provider for
   the same lexical `fun`/`method` keywords.
 - [x] Parse Type::Tiny bare and composite signature constraints, post-signature

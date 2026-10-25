@@ -20,9 +20,12 @@ use constant FunctionParametersCoercingTypeConstraint =>
     bless {}, 'FunctionParametersCoercingType';
 
 fun constrained_value(FunctionParametersCoercingTypeConstraint $value) { $value }
+fun constrained_value_quoted(('FunctionParametersCoercingTypeConstraint') $value) { $value }
 
 is(constrained_value('Type_C:good???'), 'Type_C:good',
     'coerce a value before validating the parameter');
+is(constrained_value_quoted('Type_C:good???'), 'Type_C:good',
+    'reify a quoted type name before validating the parameter');
 
 my $valid = eval { constrained_value('Type_C:bad'); 1 };
 ok(!$valid, 'reject a value after its coercion fails the type check');
