@@ -191,8 +191,16 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   scalar-reference contents; the current synthetic tests are not sufficient
   evidence to replace the scan. After the diagnostic review, default behavior
   passes full `nice -n 19 make` in 39m43s; offline documentation link checking
-  also passes. A source audit found generic deferred decrements that do not
-  carry a semantic owner slot. The fallback in
+  also passes.
+  Aggregate slots are currently reachability identities rather than count
+  owners: `RuntimeHash.updateHashEntryOwner` and array reconciliation attach
+  `HASH_ENTRY`/`ARRAY_ELEMENT` slots without changing `refCount`, while the
+  contained scalar cell generally owns the count through `SCALAR_VALUE`.
+  Removing recovery requires moving acquisition and release together across
+  aggregate insertion, replacement, deletion, aliases, and borrowed scalar
+  references. Counting structural slots before retiring the scalar-cell edge
+  would double-count ordinary copied SVs. A source audit found generic
+  deferred decrements that do not carry a semantic owner slot. The fallback in
   `RuntimeScalar.deferOwnedScalarReferenceContents` was unreachable: it
   required an active contents slot after the method had already returned
   through that slot's deferred-release path. Removed the dead generic decrement
