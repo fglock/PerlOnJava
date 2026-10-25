@@ -253,6 +253,20 @@ both commits.
   - `op/write.t` changed from 273 to 257 explicit JVM Not OK records,
     repairing sixteen assertions. Remaining failures are separate multiline,
     continuation, and format-lifecycle clusters.
+
+- [x] Phase 20: compile format argument expressions and preserve literal-only
+  pictures (2026-10-25)
+  - Compile each comma-separated expression as executable code and evaluate
+    the resulting list at write time, preserving declaration lexical bindings,
+    tied fetches, and array/hash list behavior across JVM and interpreter.
+  - Treat unpaired plain-text lines as literal pictures and preserve top-level
+    commas while parsing argument expressions.
+  - Added `unit/format_literal_only_pictures.t`; the focused format unit passed
+    on both backends and the bundled project `make` gate succeeded.
+  - The Perl core `op/write.t` run completed 634/636 assertions. Its two
+    remaining failures (#123245) involve a lexical declared in one comma-list
+    expression and referenced by the next expression; the compiled line
+    currently reports that lexical unavailable. This remains open under #1234.
   - Make `@*` consume one terminal record separator before adjacent literal
     picture text, matching `formline` behavior for values such as `"N\\n"`
     rendered with `3@*4`. Added regression coverage, validated with system

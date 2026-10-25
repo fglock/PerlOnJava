@@ -143,7 +143,10 @@ public class EmitFormat {
                 if (entry.getKey() instanceof String name
                         && entry.getValue() instanceof OperatorNode declaration
                         && declaration.getAnnotation("jvmLexicalSlot") instanceof Integer slot) {
-                    captures.putIfAbsent(name, slot);
+                    // The frontend symbol-table index may not be a JVM local
+                    // slot. The declaration annotation is the backend's
+                    // authoritative location for this lexical cell.
+                    captures.put(name, slot);
                 }
             }
         }

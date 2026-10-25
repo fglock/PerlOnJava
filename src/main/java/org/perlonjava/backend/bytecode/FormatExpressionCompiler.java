@@ -30,8 +30,15 @@ public final class FormatExpressionCompiler {
             return List.of();
         }
 
-        Map<String, Integer> registry = scope == null
-                ? Map.of() : scope.getVisibleVariableRegistry();
+        Map<String, Integer> registry = new LinkedHashMap<>();
+        if (scope != null) {
+            // ScopedSymbolTable indices are frontend identities and start at
+            // zero. InterpretedCode reserves registers 0..2 for `this`, `@_`
+            // and `wantarray`, so translate visible entries into the captured
+            // register range used by withCapturedVars().
+            scope.getVisibleVariableRegistry().forEach(
+                    (name, index) -> registry.put(name, index + 3));
+        }
         Map<String, String> declarations = new LinkedHashMap<>();
         if (scope != null) {
             for (SymbolTable.SymbolEntry entry : scope.getAllVisibleVariables().values()) {
@@ -46,9 +53,9 @@ public final class FormatExpressionCompiler {
             CompilerOptions options = new CompilerOptions();
             options.fileName = sourceName;
             compileContext = new EmitterContext(new JavaClassInfo(), scope, null, null,
-                    RuntimeContextType.SCALAR, false, errorUtil, options, new RuntimeArray());
+                    RuntimeContextType.LIST, false, errorUtil, options, new RuntimeArray());
         } else {
-            compileContext = compileContext.with(RuntimeContextType.SCALAR);
+            compileContext = compileContext.with(RuntimeContextType.LIST);
         }
 
         List<InterpretedCode> compiled = new ArrayList<>(line.expressions.size());

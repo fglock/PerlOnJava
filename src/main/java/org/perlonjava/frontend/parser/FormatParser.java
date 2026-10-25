@@ -155,7 +155,8 @@ public class FormatParser {
                 }
 
                 // Parse the line and add to template
-                FormatLine formatLine = parseFormatLine(parser, line, lineIndex);
+                FormatLine formatLine = parseFormatLine(parser, line, lineIndex,
+                        expectsArgumentLine(templateLines));
                 setSourceLocation(parser, formatLine, lineIndex);
                 templateLines.add(formatLine);
                 currentLine.setLength(0);
@@ -180,7 +181,8 @@ public class FormatParser {
             if (line.trim().equals(".")) {
                 foundTerminator = true;
             } else {
-                FormatLine formatLine = parseFormatLine(parser, line, lineIndex);
+                FormatLine formatLine = parseFormatLine(parser, line, lineIndex,
+                        expectsArgumentLine(templateLines));
                 setSourceLocation(parser, formatLine, lineIndex);
                 templateLines.add(formatLine);
             }
@@ -263,7 +265,8 @@ public class FormatParser {
                     }
 
                     // Parse the line and add to template
-                    FormatLine formatLine = parseFormatLine(parser, line, lineIndex);
+                    FormatLine formatLine = parseFormatLine(parser, line, lineIndex,
+                            expectsArgumentLine(templateLines));
                     setSourceLocation(parser, formatLine, lineIndex);
                     templateLines.add(formatLine);
                     currentLine.setLength(0);
@@ -319,7 +322,18 @@ public class FormatParser {
      * @param tokenIndex The token index for this line
      * @return FormatLine representing the parsed line
      */
-    private static FormatLine parseFormatLine(Parser parser, String line, int tokenIndex) {
+    private static boolean expectsArgumentLine(List<FormatLine> templateLines) {
+        for (int index = templateLines.size() - 1; index >= 0; index--) {
+            FormatLine previous = templateLines.get(index);
+            if (previous instanceof CommentLine) continue;
+            return previous instanceof PictureLine pictureLine
+                    && !pictureLine.fields.isEmpty();
+        }
+        return false;
+    }
+
+    private static FormatLine parseFormatLine(Parser parser, String line, int tokenIndex,
+                                              boolean expectsArgumentLine) {
         if (line.trim().equals(".//")) {
             var location = parser.ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
             throw new PerlCompilerException("syntax error at " + location.fileName()
@@ -343,6 +357,15 @@ public class FormatParser {
             List<FormatField> fields = parseFormatFields(line);
             String literalText = extractLiteralText(line);
             return new PictureLine(line, fields, literalText, tokenIndex);
+        }
+
+        // Lines in a format are either pictures (including literal-only
+        // pictures) or argument expressions paired with the preceding
+        // picture. Treat an unpaired plain-text line as a literal picture;
+        // attempting to parse words like "body" as expressions both rejects
+        // valid formats under strict subs and executes text as code.
+        if (!expectsArgumentLine && !multilineBracedArgument) {
+            return new PictureLine(line, List.of(), line, tokenIndex);
         }
 
         // Otherwise, treat as argument line
@@ -635,7 +658,12 @@ public class FormatParser {
                 }
 
                 // Parse the next expression
-                Node expr = argParser.parseExpression(0);
+                // Keep the top-level comma for the argument-list loop below.
+                // Parsing with precedence zero absorbs the entire line into a
+                // ListNode, which can leave the parser positioned before a
+                // trailing token and silently switch valid expressions to the
+                // runtime source-eval fallback.
+                Node expr = argParser.parseExpression(5);
                 if (expr != null) {
                     expressions.add(expr);
                 }

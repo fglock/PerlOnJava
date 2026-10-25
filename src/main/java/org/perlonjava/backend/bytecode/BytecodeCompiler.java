@@ -9315,7 +9315,10 @@ public class BytecodeCompiler implements Visitor {
                 if (entry.getKey() instanceof String name
                         && entry.getValue() instanceof OperatorNode declaration
                         && declaration.getAnnotation("bytecodeLexicalRegister") instanceof Integer reg) {
-                    captures.putIfAbsent(name, reg);
+                    // The frontend symbol-table index is not a bytecode
+                    // register. Prefer the register assigned to the lexical
+                    // declaration when both are present in this capture map.
+                    captures.put(name, reg);
                 }
             }
         }

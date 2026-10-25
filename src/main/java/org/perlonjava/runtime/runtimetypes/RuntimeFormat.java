@@ -744,13 +744,15 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                         }
                     }
                     RuntimeList values = template.withCapturedVars(captured)
-                            .apply(new RuntimeArray(), RuntimeContextType.SCALAR);
-                    RuntimeScalar scalar = values.scalar();
-                    if (scalar.type == RuntimeScalarType.TIED_SCALAR) {
-                        scalar = scalar.tiedFetch();
+                            .apply(new RuntimeArray(), RuntimeContextType.LIST);
+                    for (RuntimeBase value : values.elements) {
+                        RuntimeScalar scalar = value.scalar();
+                        if (scalar.type == RuntimeScalarType.TIED_SCALAR) {
+                            scalar = scalar.tiedFetch();
+                        }
+                        lineArgs.add(scalar);
+                        lastExecutionTainted |= scalar.isTainted();
                     }
-                    lineArgs.add(scalar);
-                    lastExecutionTainted |= scalar.isTainted();
                 }
                 return lineArgs;
             }
