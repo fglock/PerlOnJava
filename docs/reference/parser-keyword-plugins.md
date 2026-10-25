@@ -33,8 +33,9 @@ current lexical scope. Nested blocks and `eval` use the parser's existing
 scope and snapshot behavior.
 
 The built-in `Function::Parameters` provider is a small example. It registers
-`fun` and `method`, and both hooks lower declarations into the ordinary
-subroutine/signature AST. See
+`fun` and `method` by default, honors selective keyword imports, and lowers
+named and anonymous declarations into the ordinary subroutine/signature AST.
+See
 [`ParserExtensionRegistry.java`](../../src/main/java/org/perlonjava/frontend/parser/ParserExtensionRegistry.java)
 and
 [`FunctionParametersKeywordPlugin.java`](../../src/main/java/org/perlonjava/frontend/parser/FunctionParametersKeywordPlugin.java).

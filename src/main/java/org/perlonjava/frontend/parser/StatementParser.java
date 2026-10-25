@@ -1663,7 +1663,7 @@ public class StatementParser {
                             }
 
                             ParserExtensionRegistry.applyModulePragma(
-                                    parser, packageName, !isNoDeclaration);
+                                    parser, packageName, !isNoDeclaration, args);
                         }
                     }
                 }

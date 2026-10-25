@@ -2,30 +2,46 @@ package Function::Parameters::Info;
 
 use strict;
 use warnings;
+use Carp ();
 
-sub _parameters {
-    my ($self, $key) = @_;
-    my $values = $self->{$key} || [];
-    return wantarray ? @$values : scalar @$values;
+sub keyword { return $_[0]->{keyword} }
+sub nshift { return $_[0]->{nshift} }
+sub slurpy { return $_[0]->{slurpy} }
+sub named_required { return wantarray ? @{$_[0]->{_named_required}} : scalar @{$_[0]->{_named_required}} }
+sub named_optional { return wantarray ? @{$_[0]->{_named_optional}} : scalar @{$_[0]->{_named_optional}} }
+sub positional_optional { return wantarray ? @{$_[0]->{_positional_optional}} : scalar @{$_[0]->{_positional_optional}} }
+
+sub positional_required {
+    my @parameters = @{$_[0]->{_positional_required}};
+    splice @parameters, 0, $_[0]->nshift;
+    return wantarray ? @parameters : scalar @parameters;
 }
 
-sub invocants { return _parameters($_[0], 'invocants') }
-sub positional_required { return _parameters($_[0], 'positional_required') }
-sub positional_optional { return _parameters($_[0], 'positional_optional') }
-sub named_required { return _parameters($_[0], 'named_required') }
-sub named_optional { return _parameters($_[0], 'named_optional') }
-sub slurpy { return $_[0]->{slurpy} }
-sub args_min { return $_[0]->{args_min} }
-sub args_max { return $_[0]->{args_max} }
+sub invocants {
+    my @parameters = @{$_[0]->{_positional_required}};
+    splice @parameters, $_[0]->nshift;
+    return wantarray ? @parameters : scalar @parameters;
+}
 
 sub invocant {
-    my @invocants = $_[0]->invocants;
-    die "Function::Parameters::Info::invocant called for a function with multiple invocants\n"
-        if @invocants > 1;
-    return $invocants[0];
+    my $count = $_[0]->nshift;
+    return undef if $count == 0;
+    return $_[0]->{_positional_required}[0] if $count == 1;
+    Carp::croak "Can't return a single invocant; this function has $count";
 }
 
-package Function::Parameters::Info::Parameter;
+sub args_min {
+    my ($self) = @_;
+    return @{$self->{_positional_required}} + 2 * @{$self->{_named_required}};
+}
+
+sub args_max {
+    my ($self) = @_;
+    return 'Inf' if defined $self->slurpy || $self->named_required || $self->named_optional;
+    return @{$self->{_positional_required}} + @{$self->{_positional_optional}};
+}
+
+package Function::Parameters::Param;
 
 use strict;
 use warnings;

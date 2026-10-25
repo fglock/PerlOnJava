@@ -22,14 +22,17 @@ the upstream XS parser plugin.
 
 ## Progress tracking
 
-### Current status: Phase 1 complete; Phase 2 in progress (2026-10-25)
+### Current status: Phases 1 and 2 subset complete; Phase 3 in progress (2026-10-25)
 
 ### Completed
 
 - [x] Add a lexical parser keyword plugin interface and module-provider
   registry.
 - [x] Add `Function::Parameters` module loading and named `fun` plus implicit-
-  or explicit-invocant `method` providers, backed by core signatures.
+  or explicit-invocant named and anonymous `method` providers, backed by core
+  signatures.
+- [x] Honor selective `fun`/`method` imports and removals, while retaining
+  default imports when no keyword list is supplied.
 - [x] Preserve parameter names and required/optional categories as shared
   runtime signature metadata, and implement `Function::Parameters::info` for
   the supported subset.
@@ -41,26 +44,38 @@ the upstream XS parser plugin.
   parameters with a rest hash, and recursive named functions.
 - [x] Validate the project unit gate and system Perl behavior where the
   upstream module is available.
+- [x] Parse scalar type constraints and run their `check`/`get_message`
+  methods when a declared function is called.
 
 ### Current follow-up
 
 - The default `method` keyword now injects `$self` as its invocant when a
   declaration does not provide an explicit `($name: ...)` invocant. Explicit
   invocants remain supported. An empty user parameter list is supported too.
-- The 32-case syntax and introspection regression passes on JVM and
+- The syntax and introspection regressions pass on JVM and
   interpreter backends; the full repository `make` gate passed on this
   candidate.
 - `Function::Parameters::Info` now exposes invocants, required/optional
   positional and named parameters, slurpy metadata, parameter name/type
-  accessors, and minimum/maximum argument counts. Its 12-case pure Perl API
-  test passes on system Perl and both PerlOnJava backends.
+  accessors, keyword, invocant count, and minimum/maximum argument counts. The
+  object layout matches the upstream Info class for this supported subset.
+- Scalar type constraints pass focused JVM/interpreter coverage, including
+  bracket-form expressions. Constraint objects are evaluated at declaration
+  time and checked at call time; `Info::Param->type` remains undefined.
+- `nice -n 19 make` passed for the combined source batch. The GraphQL CPAN
+  consumer still fails: its `method`/`fun` declarations occur in files that do
+  not import `Function::Parameters`, so the lexical provider is inactive. This
+  is currently classified as an implicit-keyword integration gap; the test
+  does not yet validate GraphQL behavior.
 
 ### Next steps
 
-1. Add configurable keyword imports and configured/class/multiple invocants.
-2. Add prototypes and relevant subroutine attributes, then document
-   unsupported types, coercions, and method modifiers.
-3. Run the full CPAN dependency reproducer and classify remaining failures.
+1. Add hash-based keyword configuration and configured/class/multiple
+   invocants.
+2. Capture the discovered GraphQL implicit-keyword use in a minimal consumer
+   analysis and decide whether that syntax belongs in the provider boundary.
+3. Add coercions, prototypes and relevant subroutine attributes, then document
+   unsupported type and method-modifier behavior.
 
 ### Open questions
 
@@ -68,8 +83,9 @@ the upstream XS parser plugin.
 - How should provider-specific metadata map onto the existing signature
   annotations without creating a second backend representation? The current
   `Function::Parameters::Info` implementation reuses these annotations.
-- The system Perl integration test skips when upstream `Function::Parameters`
-  is not installed; the pure Perl Info API has independent system Perl tests.
+- The system Perl syntax integration test skips when upstream
+  `Function::Parameters` is not installed; the pure Perl Info API has
+  independent system Perl tests.
 
 ## Related references
 

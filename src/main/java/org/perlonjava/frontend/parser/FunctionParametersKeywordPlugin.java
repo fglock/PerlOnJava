@@ -25,9 +25,6 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         try {
             boolean named = TokenUtils.peek(parser).type
                     == org.perlonjava.frontend.lexer.LexerTokenType.IDENTIFIER;
-            if (parser.parsingFunctionParametersMethod && !named) {
-                parser.throwCleanError("Function::Parameters method declarations must be named");
-            }
             if (parser.parsingFunctionParametersMethod) {
                 int openParen = parser.tokenIndex;
                 while (openParen < parser.tokens.size()
@@ -73,9 +70,9 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
     public Node parseExpression(Parser parser, String keyword) {
         int keywordIndex = parser.tokenIndex;
         parser.tokenIndex++;
-        boolean anonymousFun = "(".equals(TokenUtils.peek(parser).text);
+        boolean anonymousDeclaration = "(".equals(TokenUtils.peek(parser).text);
         parser.tokenIndex = keywordIndex;
-        if ("fun".equals(keyword) && anonymousFun) {
+        if (anonymousDeclaration && ("fun".equals(keyword) || "method".equals(keyword))) {
             return parse(parser, keyword);
         }
         return null;
