@@ -288,14 +288,16 @@ public class SignatureParser {
                 parser.throwError(paramStartIndex,
                         "Function::Parameters type constraints require a named scalar parameter");
             }
-            String typeVariableName = "__function_parameters_type_" + (++typedParameterCount);
-            OperatorNode typeVariable = new OperatorNode("$",
-                    new IdentifierNode(typeVariableName, paramStartIndex), paramStartIndex);
-            OperatorNode typeDeclaration = new OperatorNode("my", typeVariable, paramStartIndex);
-            typeDeclaration.setAnnotation("signatureParameterDeclaration", true);
-            astNodes.add(new BinaryOperatorNode("=", typeDeclaration, typeConstraint, paramStartIndex));
-            parser.ctx.symbolTable.addVariable("$" + typeVariableName, "my", typeVariable);
-            typeConstraintVariable = typeVariable;
+            if (parser.functionParametersCheckArgumentTypes) {
+                String typeVariableName = "__function_parameters_type_" + (++typedParameterCount);
+                OperatorNode typeVariable = new OperatorNode("$",
+                        new IdentifierNode(typeVariableName, paramStartIndex), paramStartIndex);
+                OperatorNode typeDeclaration = new OperatorNode("my", typeVariable, paramStartIndex);
+                typeDeclaration.setAnnotation("signatureParameterDeclaration", true);
+                astNodes.add(new BinaryOperatorNode("=", typeDeclaration, typeConstraint, paramStartIndex));
+                parser.ctx.symbolTable.addVariable("$" + typeVariableName, "my", typeVariable);
+                typeConstraintVariable = typeVariable;
+            }
         }
 
         if (isNamed) {
@@ -351,7 +353,21 @@ public class SignatureParser {
             }
             parser.ctx.symbolTable.addVariable(sigil + paramName, "my", (OperatorNode) paramVariable);
         }
-        if (typeConstraintVariable != null) {
+        if (typeConstraintVariable != null && parser.functionParametersCheckArgumentTypes) {
+            Node hasCanMethod = typeConstraintMethodCall(typeConstraintVariable,
+                    "can", new StringNode("has_coercion", paramStartIndex), paramStartIndex);
+            Node hasCoercion = new BinaryOperatorNode("&&", hasCanMethod,
+                    typeConstraintNoArgumentMethodCall(
+                            typeConstraintVariable, "has_coercion", paramStartIndex),
+                    paramStartIndex);
+            Node coercedValue = new BinaryOperatorNode("=", paramVariable,
+                    typeConstraintMethodCall(
+                            typeConstraintVariable, "coerce", paramVariable, paramStartIndex),
+                    paramStartIndex);
+            astNodes.add(new IfNode("if", hasCoercion,
+                    new BlockNode(new ArrayList<>(List.of(coercedValue)), paramStartIndex),
+                    null, paramStartIndex));
+
             Node check = typeConstraintMethodCall(typeConstraintVariable, "check", paramVariable, paramStartIndex);
             Node failure = new OperatorNode("!", check, paramStartIndex);
             Node message = typeConstraintMethodCall(
@@ -412,6 +428,13 @@ public class SignatureParser {
         Node call = new BinaryOperatorNode("(",
                 new OperatorNode("&", new IdentifierNode(method, index), index),
                 new ListNode(List.of(argument), index), index);
+        return new BinaryOperatorNode("->", invocant, call, index);
+    }
+
+    private static Node typeConstraintNoArgumentMethodCall(Node invocant, String method, int index) {
+        Node call = new BinaryOperatorNode("(",
+                new OperatorNode("&", new IdentifierNode(method, index), index),
+                new ListNode(List.of(), index), index);
         return new BinaryOperatorNode("->", invocant, call, index);
     }
 

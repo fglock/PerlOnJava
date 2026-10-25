@@ -66,6 +66,26 @@ my @optional_invocants = Function::Parameters::info(\&optional_explicit)->invoca
 is_deeply([map { "$_" } @optional_invocants], ['$x'],
     'metadata records only an explicitly selected optional invocant');
 
+{
+    package ConfiguredKeywordNoTypeChecks;
+    sub check { die 'check_argument_types => 0 must skip type checks' }
+    sub get_message { die 'check_argument_types => 0 must skip error messages' }
+}
+my $unchecked_constraint = bless {}, 'ConfiguredKeywordNoTypeChecks';
+my $unchecked_alias = eval q{
+    use Function::Parameters {
+        unchecked => {
+            defaults => 'function',
+            check_argument_types => 0,
+        },
+    };
+    unchecked no_type_check(($unchecked_constraint) $value) { $value }
+    1;
+};
+die $@ unless $unchecked_alias;
+is(no_type_check('not checked'), 'not checked',
+    'check_argument_types false skips custom parameter checks');
+
 my $configured_no = eval q{
     no Function::Parameters qw(configured_function);
     configured_function unavailable_alias() { 1 }
