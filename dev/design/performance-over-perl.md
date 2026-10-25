@@ -130,7 +130,7 @@ remain separate correctness gates. See issue #1196 for its diagnostic matrix.
 
 ## Progress tracking
 
-### Current status: Thread-local reuse improved the method anchor; it remains below 1:1
+### Current status: PR #1870 has a tested narrow method fast path; broad 1:1 acceptance remains unmet
 
 ### Completed in this increment
 
@@ -380,19 +380,48 @@ remain separate correctness gates. See issue #1196 for its diagnostic matrix.
   remains about 28% below parity. Raw results are in Actions run
   `39993853491`; the reported JAR SHA-256 is
   `188ff8d1992966f49990c85cca739cf3a53fadbc1b1e70729165981232a5a284`.
+- Updated PR #1870 through commit `a5f95a42d`, adding a guarded integer hash-cell
+  update, avoiding redundant stable-method argument cleanup, and covering
+  writable large integer results. The full `make` gate passed on the source
+  represented by the PR head; `direct_plain_hash_integer_method.t` also passed
+  on system Perl, and `make check-links` passed. These changes are a focused
+  method-anchor experiment and do not cover the ordinary call shapes required
+  by issue #1863.
+- Archived a seven-pair local method-anchor attempt for source commit
+  `71b5a6fa2` in
+  `dev/bench/reports/issue-1863-int-constructor-blead-83a6c8b.json`, with its
+  worker logs. Six pairs have both engines' 15 measurement windows; pair 5 has
+  no Perl measurements. The six complete pairs' diagnostic geometric mean is
+  0.989x, but niceness was not verified and host load rose from
+  `4.96/8.00/12.12` to `24.64/18.88/15.37`. The runner correctly excludes all
+  pairs; this is not a parity result and does not measure the later
+  argument-cleanup commit.
+- The above diagnostic used `--nice 0`; sandboxed process inspection returned
+  no observed priority. A separate check with extended access confirmed that
+  `nice -n 19` can be observed as priority 19. The next method acceptance run
+  must run under that access so the harness can verify the worker process.
+  Host load is currently too high for a useful measurement, so the rerun has
+  not started.
 
 ### Next steps
 
-1. Collect a fresh method-anchor JFR on the verified-priority runner; isolate
-   remaining integer-result allocation, hash-field lookup, and call-boundary
-   costs after the ThreadLocal entry allocation is removed.
-2. Measure allocation per operation, GC, live heap, and peak RSS for the
-   baseline and retained candidate; current CI evidence covers throughput only.
-3. Continue isolated experiments against the exact previous candidate and
-   pinned blead. The method anchor at 0.719x remains below the 1.00x threshold.
-4. Keep the verified-priority seven-pair full-portfolio run as the acceptance
-   gate for each final candidate.
-5. Collect Processor Trace instruction totals when the host enables tracing.
+1. When the host is quiet, profile the exact PR head and split dispatch,
+   argument storage, scalar construction, and body costs for ordinary method,
+   direct-subroutine, and closure calls. Collect HotSpot inlining evidence as
+   well as JFR samples.
+2. Implement and test a general ordinary invocation path in `RuntimeCode.apply`
+   with full fallback; do not restrict the optimization to stable hash bodies.
+   Cover the semantic and fallback-transition matrix in issue #1863.
+3. Rerun the method anchor with `--nice 19` under extended process-observation
+   access. Only proceed to the full fixed method/closure/Life portfolio if the
+   method lower confidence bound meets 1.00x pinned blead.
+4. Compare candidate versus exact parent, integrated candidate versus
+   `origin/master`, and candidate versus pinned blead and stable Perl 5.42.2.
+   Use at least seven requested pairs, verified priority, and publish every
+   exclusion.
+5. Quantify allocation per operation, live heap, GC, and peak RSS under the
+   fixed heap budget. Add the final source-matched reports and validation logs
+   before claiming acceptance.
 
 ### Open questions
 
