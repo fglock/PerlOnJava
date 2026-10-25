@@ -126,22 +126,15 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   consume a later scalar owner's count. Root recovery includes live wrapper
   slots from rooted owner containers. The wrapper-slot batch passed full
   `nice -n 19 make` in 27m21s.
-- The temporary `perlonjava.test.disableAggregateOwnerRecovery` diagnostic is
-  available to forked test workers through
-  `JPERL_TEST_DISABLE_AGGREGATE_OWNER_RECOVERY=1`. It bypasses the scan only at
-  the two production call sites in `MortalList.processDeferredBase` and
-  `RuntimeScalar.setLargeRefCounted`; default runtime behavior remains enabled.
-  With the bypass, the focused #1794 controller/WebSocket and #1795 request
-  tempfile tests pass on both backends, along with selected #1649 ownership and
-  `DESTROY` tests. A JVM global-destruction wrapper timed out its nested child
-  at 300 seconds, while the underlying Catalyst lifetime test passed directly
-  and the wrapper passed on the interpreter; this result is inconclusive.
-  Six Java tests fail in deliberately undercounted synthetic graphs whose
-  assertions directly verify recovery behavior. The root-chain and lifecycle
-  tests directly construct scalar cells, mark them owned, then force the
-  referent count below the live owners; the reachability-cost tests queue more
-  decrements than they acquired owners. These fixtures do not identify a
-  missing Perl store operation. Concretely, the six are
+- The temporary `perlonjava.test.disableAggregateOwnerRecovery` diagnostic was
+  removed after the no-recovery audit. The two production call sites in
+  `MortalList.processDeferredBase` and `RuntimeScalar.setLargeRefCounted` still
+  use recovery: six Java tests fail with the bypass because they directly test
+  recovery from deliberately undercounted synthetic graphs. The root-chain
+  and lifecycle tests directly construct scalar cells, mark them owned, then
+  force the referent count below the live owners; the reachability-cost tests
+  queue more decrements than they acquired owners. These fixtures do not
+  identify a missing Perl store operation. Concretely, the six are
   `MortalListAggregateOwnerSlotRootChainTest` (two cases),
   `MortalListAggregateOwnerSlotTest.rootedHashEntrySlotRestoresAnUnderflowedLegacyCountUntilEntryRemoval`,
   `ReachabilityQueryCostTest.deferredOwnerChecksShareOneRootSnapshotPerDrain`,
@@ -203,14 +196,15 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   test all pass on both backends. Recovery remains enabled by default; its two
   production callers still need independent direct-accounting proof, and the
   synthetic Java tests still directly require the recovery behavior.
-- The full `JPERL_TEST_DISABLE_AGGREGATE_OWNER_RECOVERY=1 nice -n 19 make`
-  audit reached 1,300 tests in shard 0 and failed six Java assertions that
-  directly require `restoreReachableAggregateOwnerCount` to rebuild an
-  artificially undercounted referent. The other 1,294 tests in that shard
-  passed, with three skipped. Gradle stopped before the other Perl shards
-  completed, so this is not a full-suite no-recovery result. Keep the scan and
-  diagnostic switch while tracing the two production paths; do not interpret
-  these synthetic failures as missing Perl store operations.
+- The full no-recovery audit reached 1,300 tests in shard 0 and failed six Java
+  assertions that directly require `restoreReachableAggregateOwnerCount` to
+  rebuild an artificially undercounted referent; the other 1,294 passed, with
+  three skipped. Since Gradle stopped at shard 0, shards 1–4 were run
+  separately with recovery disabled and all passed. Focused #1794/#1795
+  integration tests and selected #1649 lifetime tests also pass on both
+  backends with recovery disabled. The diagnostic switch is now removed; keep
+  the recovery method and its two production callers until direct accounting
+  proves those paths no longer need it.
 - A second focused reducer,
   `issue_1649_captured_scalar_array_argument.t`, isolates the same class of
   lifetime error: a closure writes a blessed object to a captured scalar while
