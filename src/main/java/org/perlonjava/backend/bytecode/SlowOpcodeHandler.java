@@ -293,6 +293,11 @@ public class SlowOpcodeHandler {
                 && evalSiteIndex < code.evalSiteLexicalSubroutineBindings.size()) {
             siteLexicalSubroutineBindings = code.evalSiteLexicalSubroutineBindings.get(evalSiteIndex);
         }
+        Map<String, org.perlonjava.frontend.parser.ParserKeywordPlugin> siteParserKeywordPlugins = null;
+        if (evalSiteIndex >= 0 && code.evalSiteParserKeywordPlugins != null
+                && evalSiteIndex < code.evalSiteParserKeywordPlugins.size()) {
+            siteParserKeywordPlugins = code.evalSiteParserKeywordPlugins.get(evalSiteIndex);
+        }
 
         // Look up per-eval-site pragma flags (strict/feature at compile time of eval site)
         int siteStrictOptions = -1;
@@ -362,7 +367,8 @@ public class SlowOpcodeHandler {
                     siteWarningBits,
                     siteRegexDebugFlags,
                     siteEnhancedXx,
-                    siteLexicalSubroutineBindings
+                    siteLexicalSubroutineBindings,
+                    siteParserKeywordPlugins
             );
             registers[rd] = result;
             evalTrace("EVAL_STRING opcode exit LIST stored=" + (registers[rd] != null ? registers[rd].getClass().getSimpleName() : "null") +
@@ -382,7 +388,8 @@ public class SlowOpcodeHandler {
                     siteWarningBits,
                     siteRegexDebugFlags,
                     siteEnhancedXx,
-                    siteLexicalSubroutineBindings
+                    siteLexicalSubroutineBindings,
+                    siteParserKeywordPlugins
             );
             // Preserve control-flow markers so the enclosing interpreter frame
             // can resolve a valid target outside eval STRING (for example,

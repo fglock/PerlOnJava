@@ -108,6 +108,13 @@ public class StatementResolver {
         ByteCodeSourceMapper.saveSourceLocation(parser.ctx, parser.tokenIndex);
 
         if (token.type == LexerTokenType.IDENTIFIER) {
+            ParserKeywordPlugin plugin = parser.getKeywordPlugin(token.text);
+            if (plugin != null) {
+                return plugin.parse(parser, token.text);
+            }
+        }
+
+        if (token.type == LexerTokenType.IDENTIFIER) {
             Node result = switch (token.text) {
                 case "CHECK", "INIT", "UNITCHECK", "BEGIN", "END", "ADJUST", "BUILD" -> {
                     // Check if next token is '{' - if not, this might be a lexical sub call

@@ -486,6 +486,7 @@ public class BytecodeCompiler implements Visitor {
     // Used by both eval STRING (for variable capture) and debugger (for lexical access).
     final List<Map<String, Integer>> evalSiteRegistries = new ArrayList<>();
     final List<Map<String, OperatorNode>> evalSiteLexicalSubroutineBindings = new ArrayList<>();
+    final List<Map<String, org.perlonjava.frontend.parser.ParserKeywordPlugin>> evalSiteParserKeywordPlugins = new ArrayList<>();
     final List<int[]> evalSitePragmaFlags = new ArrayList<>();
     // Cache for DEBUG site registry deduplication - reuse index if scope unchanged
     private Map<String, Integer> lastDebugRegistry = null;
@@ -1632,6 +1633,7 @@ public class BytecodeCompiler implements Visitor {
                 symbolTable.getCurrentPackage(),
                 evalSiteRegistries.isEmpty() ? null : evalSiteRegistries,
                 evalSiteLexicalSubroutineBindings.isEmpty() ? null : evalSiteLexicalSubroutineBindings,
+                evalSiteParserKeywordPlugins.isEmpty() ? null : evalSiteParserKeywordPlugins,
                 evalSitePragmaFlags.isEmpty() ? null : evalSitePragmaFlags,
                 warningBitsString
         );

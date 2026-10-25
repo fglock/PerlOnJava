@@ -52,17 +52,18 @@ public class SignatureParser {
     private String namedArgsHashName = null; // Track the hash name for named parameters
     private String subroutineName = null; // Optional subroutine name for error messages
     private boolean isMethod = false; // True if parsing method signature (has implicit $self)
+    private boolean parsingFunctionParametersInvocant;
     private int signatureOpenParenIndex;
 
     private SignatureParser(Parser parser) {
         this.parser = parser;
-        this.isMethod = parser.isInMethod;
+        this.isMethod = parser.isInMethod && !parser.parsingFunctionParametersMethod;
     }
 
     private SignatureParser(Parser parser, String subroutineName) {
         this.parser = parser;
         this.subroutineName = subroutineName;
-        this.isMethod = parser.isInMethod;
+        this.isMethod = parser.isInMethod && !parser.parsingFunctionParametersMethod;
     }
 
     /**
@@ -111,6 +112,9 @@ public class SignatureParser {
 
         // Handle empty signature
         if (peekToken().text.equals(")")) {
+            if (parser.parsingFunctionParametersMethod) {
+                parser.throwError("Method signature must declare an invocant");
+            }
             consumeCloseParen();
             return generateSignatureAST();
         }
@@ -119,13 +123,24 @@ public class SignatureParser {
             parser.throwErrorAtToken(previousSignificantToken(parser.tokenIndex), "syntax error");
         }
 
+        boolean functionParametersInvocantSeparatorConsumed = false;
         // Parse parameters
         while (true) {
+            parsingFunctionParametersInvocant = parser.parsingFunctionParametersMethod
+                    && positionalParameterCount == 0;
             parseParameter();
+            parsingFunctionParametersInvocant = false;
 
             // Check what comes after the parameter
             LexerToken next = peekToken();
-            if (next.text.equals(")")) {
+            if (parser.parsingFunctionParametersMethod
+                    && !functionParametersInvocantSeparatorConsumed) {
+                if (!next.text.equals(":")) {
+                    parser.throwError("Method signature must separate its invocant with ':'");
+                }
+                consumeToken();
+                functionParametersInvocantSeparatorConsumed = true;
+            } else if (next.text.equals(")")) {
                 break;
             } else if (next.text.equals(",")) {
                 consumeCommas();
@@ -219,7 +234,8 @@ public class SignatureParser {
         LexerToken afterParam = peekToken();
         if (paramName != null && !afterParam.text.equals(",") && !afterParam.text.equals(")")
                 && !afterParam.text.equals("=") && !afterParam.text.equals("//=") && !afterParam.text.equals("||=")
-                && !afterParam.text.equals("$") && !afterParam.text.equals("@") && !afterParam.text.equals("%")) {
+                && !afterParam.text.equals("$") && !afterParam.text.equals("@") && !afterParam.text.equals("%")
+                && !(parsingFunctionParametersInvocant && afterParam.text.equals(":"))) {
             if (afterParam.type == LexerTokenType.OPERATOR) {
                 throwMalformedSeparator();
             }

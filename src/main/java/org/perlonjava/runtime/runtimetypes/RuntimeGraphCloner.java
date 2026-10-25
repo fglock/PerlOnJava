@@ -277,6 +277,7 @@ public class RuntimeGraphCloner {
                     source.variableRegistry, source.errorUtil, source.strictOptions,
                     source.featureFlags, source.warningFlags, source.compilePackage,
                     source.evalSiteRegistries, source.evalSiteLexicalSubroutineBindings,
+                    source.evalSiteParserKeywordPlugins,
                     source.evalSitePragmaFlags,
                     source.warningBitsString);
         }
