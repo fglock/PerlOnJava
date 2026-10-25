@@ -5335,20 +5335,21 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         if (type == RuntimeScalarType.CODE && value instanceof RuntimeCode code
                 && !(code.isConstantCv && code.lexicalSubDisplayName)) {
+            if (globalCodeRefFqn != null) {
+                releaseAllClosureCaptureReferents(code);
+                boolean releasedCode = releaseGlobalCodeOwnerCount(code);
+                RuntimeCode.undefineCodeReference(this);
+                if (releasedCode && WeakRefRegistry.weakRefsExist()
+                        && !ModuleInitGuard.inModuleInit()) {
+                    ReachabilityWalker.sweepWeakRefs(true);
+                }
+                return this;
+            }
             return RuntimeCode.undefineCodeReference(this);
         }
         if (type == RuntimeScalarType.CODE && value instanceof RuntimeCode code && globalCodeRefFqn != null) {
-            boolean releasedCode = false;
             releaseAllClosureCaptureReferents(code);
-            if (this.ownsCountedReferent(code) && code.refCount > 0) {
-                this.setRefCountOwned(false);
-                code.releaseActiveOwner(this);
-                if (--code.refCount == 0) {
-                    code.refCount = Integer.MIN_VALUE;
-                    DestroyDispatch.callDestroy(code);
-                    releasedCode = true;
-                }
-            }
+            boolean releasedCode = releaseGlobalCodeOwnerCount(code);
             // Clear the body but keep a declared CODE slot. Perl preserves the
             // glob's CODE entry after both `undef &existing` and
             // `undef &previously_unknown`: exists(&name) remains true while
@@ -5517,6 +5518,25 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         return this;
+    }
+
+    private boolean releaseGlobalCodeOwnerCount(RuntimeCode code) {
+        if (!this.ownsCountedReferent(code) || code.refCount <= 0) {
+            return false;
+        }
+        boolean releasedExplicitSlot =
+                releaseScalarValueOwnerCount(code, "RuntimeScalar.undefine global CODE");
+        if (!releasedExplicitSlot) {
+            this.setRefCountOwned(false);
+            code.releaseActiveOwner(this);
+            code.refCount--;
+        }
+        if (code.refCount != 0) {
+            return false;
+        }
+        code.refCount = Integer.MIN_VALUE;
+        DestroyDispatch.callDestroy(code);
+        return true;
     }
 
     /**

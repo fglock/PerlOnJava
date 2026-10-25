@@ -111,11 +111,15 @@ Phase numbers are delivery boundaries, not estimates of the total project.
 The 20–36 engineer-week estimate remains provisional until the ownership audit
 and first path establish implementation cost.
 
-Package-global CODE roots are not currently `SCALAR_VALUE` slot owners: their
-assignment path maintains the legacy counted-root ownership state, and
-`RuntimeScalar.undefine` releases that state. Migrating the CODE release
-decrement alone would not create direct slot accounting; CODE-root acquisition
-and release need to move together in Phase 4.
+Tracked package-global CODE refs (`refCount >= 0`) receive `SCALAR_VALUE` slots
+through scalar assignment; untracked CODE refs (`refCount == -1`) correctly
+remain outside counted ownership. `RuntimeScalar.undefine` now releases the
+tracked slot when present and retains the legacy bridge for older or untracked
+cells. The global CODE path performs this release before its early return
+through `RuntimeCode.undefineCodeReference`; saved aliases still observe the
+undefined CV. A focused Java regression verifies the final tracked CODE owner
+retires its slot and still dispatches lifecycle cleanup. `nice -n 19 make`
+passes in 13m26s on this batch.
 
 ## Progress tracking
 

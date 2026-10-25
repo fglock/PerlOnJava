@@ -70,6 +70,36 @@ class GlobalCodeRuntimeIsolationTest {
     }
 
     @Test
+    void undefiningTrackedGlobalCodeReleasesItsScalarOwnerSlot() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            String name = "Phase8bLowLevel::tracked_code";
+            RuntimeScalar codeValue = codeScalar("tracked", null, name);
+            RuntimeCode code = (RuntimeCode) codeValue.value;
+            code.refCount = 0;
+
+            RuntimeScalar globalCode = GlobalVariable.getGlobalCodeRef(name);
+            globalCode.set(codeValue);
+            PerlOwnerSlot ownerSlot = globalCode.scalarValueOwnerSlot();
+
+            assertNotNull(ownerSlot, "tracked global CODE has a scalar owner slot");
+            assertTrue(ownerSlot.isActive());
+            assertEquals(1, code.refCount);
+            assertEquals(1, code.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_VALUE));
+
+            globalCode.undefine();
+
+            assertFalse(ownerSlot.isActive(), "undef retires the CODE owner slot");
+            assertEquals(0, code.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_VALUE));
+            assertEquals(Integer.MIN_VALUE, code.refCount,
+                    "the final tracked CODE owner still dispatches lifecycle cleanup");
+            assertSame(code, globalCode.value,
+                    "the global CODE entry keeps the undefined CV for existing aliases");
+            assertTrue(code.codeReferenceUndefined);
+        }
+    }
+
+    @Test
     void conflictingNamedSubsAndRedefinitionStayIsolatedOnJvmAndInterpreter() throws Exception {
         for (boolean interpreter : new boolean[]{false, true}) {
             PerlRuntime first = new PerlRuntime();
