@@ -131,21 +131,26 @@ public class SignatureParser {
         }
 
         boolean functionParametersInvocantSeparatorConsumed = false;
+        boolean functionParametersHasInvocants = parser.parsingFunctionParametersMethod
+                || (parser.parsingFunctionParametersOptionalInvocant
+                && hasOptionalInvocantSeparator(signatureOpenParenIndex));
+        int functionParametersInvocantCount = functionParametersHasInvocants
+                ? parser.functionParametersInvocantCount : 0;
         // Parse parameters
         while (true) {
-            parsingFunctionParametersInvocant = parser.parsingFunctionParametersMethod
-                    && positionalParameterCount < parser.functionParametersInvocantCount;
+            parsingFunctionParametersInvocant = functionParametersHasInvocants
+                    && positionalParameterCount < functionParametersInvocantCount;
             parseParameter();
             parsingFunctionParametersInvocant = false;
 
             // Check what comes after the parameter
             LexerToken next = peekToken();
-            if (parser.parsingFunctionParametersMethod
+            if (functionParametersHasInvocants
                     && !functionParametersInvocantSeparatorConsumed) {
                 if (next.text.equals(":")) {
-                    if (invocantNames.size() != parser.functionParametersInvocantCount) {
+                    if (invocantNames.size() != functionParametersInvocantCount) {
                         parser.throwError("Method signature must declare "
-                                + parser.functionParametersInvocantCount + " invocants");
+                                + functionParametersInvocantCount + " invocants");
                     }
                     consumeToken();
                     functionParametersInvocantSeparatorConsumed = true;
@@ -153,7 +158,7 @@ public class SignatureParser {
                         break;
                     }
                 } else if (next.text.equals(",")
-                        && invocantNames.size() < parser.functionParametersInvocantCount) {
+                        && invocantNames.size() < functionParametersInvocantCount) {
                     consumeCommas();
                     continue;
                 } else {
@@ -355,6 +360,51 @@ public class SignatureParser {
             astNodes.add(new IfNode("if", failure,
                     new BlockNode(new ArrayList<>(List.of(die)), paramStartIndex), null, paramStartIndex));
         }
+    }
+
+    private boolean hasOptionalInvocantSeparator(int openParenIndex) {
+        int expected = parser.functionParametersInvocantCount;
+        if (expected <= 0) return false;
+        int depthParen = 0;
+        int depthSquare = 0;
+        int depthBrace = 0;
+        int parameterSigils = 0;
+        int commas = 0;
+        int pendingTernaries = 0;
+        boolean segmentHasParameter = false;
+        for (int i = openParenIndex + 1; i < parser.tokens.size(); i++) {
+            LexerToken token = parser.tokens.get(i);
+            if (token.type == LexerTokenType.WHITESPACE || token.type == LexerTokenType.NEWLINE) continue;
+            String text = token.text;
+            if (depthParen == 0 && depthSquare == 0 && depthBrace == 0) {
+                if (")".equals(text)) return false;
+                if (!segmentHasParameter
+                        && ("$".equals(text) || "@".equals(text) || "%".equals(text))) {
+                    parameterSigils++;
+                    segmentHasParameter = true;
+                } else if (",".equals(text)) {
+                    commas++;
+                    segmentHasParameter = false;
+                } else if ("?".equals(text)) {
+                    pendingTernaries++;
+                } else if (":".equals(text)) {
+                    if (pendingTernaries > 0) {
+                        pendingTernaries--;
+                    } else {
+                        return parameterSigils == expected && commas == expected - 1;
+                    }
+                }
+            }
+            switch (text) {
+                case "(" -> depthParen++;
+                case ")" -> depthParen--;
+                case "[" -> depthSquare++;
+                case "]" -> depthSquare--;
+                case "{" -> depthBrace++;
+                case "}" -> depthBrace--;
+            }
+        }
+        return false;
     }
 
     private static Node typeConstraintMethodCall(
@@ -952,7 +1002,9 @@ public class SignatureParser {
         List<Node> allNodes = new ArrayList<>();
 
         // Add argument count validation
-        allNodes.add(generateArgCountValidation());
+        if (!(parser.parsingFunctionParametersDeclaration && !parser.functionParametersStrict)) {
+            allNodes.add(generateArgCountValidation());
+        }
 
         // Add parameter assignment from @_
         if (!parameterVariables.isEmpty()) {
@@ -985,7 +1037,7 @@ public class SignatureParser {
         // Function::Parameters methods bind their implicit/explicit
         // invocant lexically, then expose only user arguments through @_ in
         // the body. This lets method code forward @_ while adding $self.
-        if (parser.parsingFunctionParametersMethod && !invocantNames.isEmpty()) {
+        if (!invocantNames.isEmpty()) {
             for (int i = 0; i < invocantNames.size(); i++) {
                 allNodes.add(new OperatorNode("shift",
                         new OperatorNode("@", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex),

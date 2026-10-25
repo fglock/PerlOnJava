@@ -251,8 +251,12 @@ public class Parser {
     public boolean parsingFunctionParametersDeclaration = false;
     /** True while parsing an explicit-invocant Function::Parameters method. */
     public boolean parsingFunctionParametersMethod = false;
+    /** True for configurations where a colon may optionally mark invocants. */
+    public boolean parsingFunctionParametersOptionalInvocant = false;
     /** Number of leading positional parameters used as Function::Parameters invocants. */
     public int functionParametersInvocantCount = 1;
+    /** Whether configured Function::Parameters signatures enforce exact arity. */
+    public boolean functionParametersStrict = true;
     /** Active Function::Parameters keyword, retained for signature metadata. */
     public String functionParametersKeyword;
     // Are we parsing the top level script?

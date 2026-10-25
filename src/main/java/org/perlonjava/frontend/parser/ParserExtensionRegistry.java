@@ -103,6 +103,9 @@ public final class ParserExtensionRegistry {
         RuntimeBase value = unwrap(definition);
         String defaults;
         List<String> shift = null;
+        int optionalInvocantCount = 0;
+        boolean strict = true;
+        boolean strictSpecified = false;
         if (value instanceof RuntimeHash configuration) {
             RuntimeScalar defaultValue = configuration.elements.get("defaults");
             defaults = defaultValue == null ? "function" : defaultValue.toString();
@@ -114,17 +117,26 @@ public final class ParserExtensionRegistry {
             } else if (shiftValue != null) {
                 shift = List.of(shiftValue.toString());
             }
+            RuntimeScalar invocantValue = configuration.elements.get("invocant");
+            if (invocantValue != null) optionalInvocantCount = Math.max(0, invocantValue.getInt());
+            RuntimeScalar strictValue = configuration.elements.get("strict");
+            if (strictValue != null) {
+                strict = strictValue.getBoolean();
+                strictSpecified = true;
+            }
         } else {
             defaults = definition.toString();
         }
         if (defaults.endsWith("_strict") || defaults.endsWith("_lax")) {
+            if (!strictSpecified) strict = defaults.endsWith("_strict");
             defaults = defaults.substring(0, defaults.lastIndexOf('_'));
         }
         if (!Set.of("function", "method", "classmethod").contains(defaults)) {
             throw new IllegalArgumentException(
                     "Unsupported Function::Parameters keyword defaults: " + defaults);
         }
-        return FunctionParametersKeywordPlugin.configured(defaults, shift);
+        return FunctionParametersKeywordPlugin.configured(
+                defaults, shift, optionalInvocantCount, strict);
     }
 
     private static RuntimeBase unwrap(RuntimeBase value) {
