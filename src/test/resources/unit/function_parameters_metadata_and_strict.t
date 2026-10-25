@@ -8,8 +8,24 @@ use Function::Parameters {
     lvalue_function => { attributes => ':lvalue' },
     runtime_fun => { defaults => 'function_strict', runtime => 1 },
     runtime_method => { defaults => 'method_strict', runtime => 1 },
+    runtime_installed => {
+        defaults => 'function_strict', runtime => 1, install_sub => 'capture_installer',
+    },
+    required_modifier => { defaults => 'before', runtime => 1 },
 };
 
+our ($installed_name, $installed_code);
+sub capture_installer { ($installed_name, $installed_code) = @_ }
+
+runtime_installed installed_by_callback($value) { $value }
+is($installed_name, 'installed_by_callback',
+    'runtime install_sub callback receives the declared name');
+is($installed_code->('callback-ready'), 'callback-ready',
+    'runtime install_sub callback receives the function body');
+my $unnamed_modifier_result = eval q{ required_modifier () {} };
+ok(!$unnamed_modifier_result, 'modifier keyword requires a named declaration');
+like($@, qr/expecting a function name/,
+    'unnamed modifier diagnostic identifies the missing function name');
 ok(!defined(&runtime_named), 'runtime keyword has no CV before its declaration executes');
 runtime_fun runtime_named($value) { $value }
 ok(defined(&runtime_named), 'runtime keyword installs its CV when executed');

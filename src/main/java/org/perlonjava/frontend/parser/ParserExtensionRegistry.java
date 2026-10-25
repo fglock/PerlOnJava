@@ -80,6 +80,9 @@ public final class ParserExtensionRegistry {
             if (":std".equals(name)) {
                 if (enabled) registerDefaults(parser);
                 else removeDefaults(parser);
+            } else if (":modifiers".equals(name)) {
+                if (enabled) registerModifiers(parser);
+                else removeModifiers(parser);
             } else if ("fun".equals(name) || "method".equals(name)) {
                 if (enabled) parser.registerKeywordPlugin(name,
                         "fun".equals(name) ? FunctionParametersKeywordPlugin.FUNCTION
@@ -101,6 +104,18 @@ public final class ParserExtensionRegistry {
         parser.removeKeywordPlugin("method");
     }
 
+    private static void registerModifiers(Parser parser) {
+        for (String keyword : List.of("before", "after", "around", "augment", "override")) {
+            parser.registerKeywordPlugin(keyword, configuredPlugin(new RuntimeScalar(keyword)));
+        }
+    }
+
+    private static void removeModifiers(Parser parser) {
+        for (String keyword : List.of("before", "after", "around", "augment", "override")) {
+            parser.removeKeywordPlugin(keyword);
+        }
+    }
+
     private static FunctionParametersKeywordPlugin configuredPlugin(RuntimeScalar definition) {
         RuntimeBase value = unwrap(definition);
         String defaults;
@@ -110,11 +125,13 @@ public final class ParserExtensionRegistry {
         boolean strictSpecified = false;
         boolean checkArgumentTypes = true;
         boolean runtime = false;
+        String installSub = null;
         List<String> defaultAttributes = List.of();
         if (value instanceof RuntimeHash configuration) {
             Set<String> supportedOptions = Set.of(
                     "defaults", "shift", "invocant", "strict",
-                    "check_argument_count", "check_argument_types", "attributes", "runtime");
+                    "check_argument_count", "check_argument_types", "attributes", "runtime",
+                    "install_sub");
             for (String option : configuration.elements.keySet()) {
                 if (!supportedOptions.contains(option)) {
                     throw new IllegalArgumentException("Invalid keyword property: " + option);
@@ -151,6 +168,10 @@ public final class ParserExtensionRegistry {
             if (runtimeValue != null) {
                 runtime = runtimeValue.getBoolean();
             }
+            RuntimeScalar installSubValue = configuration.elements.get("install_sub");
+            if (installSubValue != null && installSubValue.getDefinedBoolean()) {
+                installSub = installSubValue.toString();
+            }
             RuntimeScalar attributesValue = configuration.elements.get("attributes");
             if (attributesValue != null) {
                 defaultAttributes = parseConfiguredAttributes(attributesValue.toString());
@@ -162,13 +183,22 @@ public final class ParserExtensionRegistry {
             if (!strictSpecified) strict = defaults.endsWith("_strict");
             defaults = defaults.substring(0, defaults.lastIndexOf('_'));
         }
-        if (!Set.of("function", "method", "classmethod").contains(defaults)) {
+        Set<String> modifiers = Set.of("before", "after", "around", "augment", "override");
+        if (modifiers.contains(defaults)) {
+            if (installSub == null) installSub = defaults;
+            // Function::Parameters modifier keywords default to runtime
+            // installation. Explicit configuration can still select parse-time.
+            if (!(value instanceof RuntimeHash configuration)
+                    || !configuration.elements.containsKey("runtime")) runtime = true;
+        }
+        if (!Set.of("function", "method", "classmethod", "before", "after", "around",
+                "augment", "override").contains(defaults)) {
             throw new IllegalArgumentException(
                     "Unsupported Function::Parameters keyword defaults: " + defaults);
         }
         return FunctionParametersKeywordPlugin.configured(
                 defaults, shift, optionalInvocantCount, strict, checkArgumentTypes,
-                runtime, defaultAttributes);
+                runtime, installSub, defaultAttributes);
     }
 
     private static List<String> parseConfiguredAttributes(String source) {
