@@ -168,9 +168,18 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   through that slot's deferred-release path. Removed the dead generic decrement
   and added Java coverage that verifies the contents slot remains active until
   drain, then releases exactly once. `RuntimeCode.releaseMethodInvocantHold`
-  still queues a generic deferred decrement; its acquisition/release ordering
-  is the next concrete migration candidate, but is not yet a confirmed
-  behavioral regression.
+  queues a generic deferred decrement. Its ordinary path is balanced:
+  acquisition adds one count, and release either subtracts it or queues exactly
+  one decrement for the boundary drain. The interpreter tracks holds by frame
+  and abandons them on exceptional/non-local exits through
+  `releaseAbandonedMethodInvocantHold`, which decrements directly and dispatches
+  `DESTROY` at zero without consulting owner recovery. The project-owned
+  `issue_1649_abandoned_method_invocant_hold.t` now verifies the critical
+  ordering: an argument exception abandons the call while a hash still owns the
+  invocant, and deleting the hash entry later fires `DESTROY`. It passes 3/3 on
+  system Perl, JVM, and interpreter. No accounting mismatch is reproduced, so
+  retain the current lifecycle decision while migrating transient holds to
+  explicit slots as part of the broader ownership phase.
 - The recovery-disabled audit had exposed an interpreter regression in
   `issue_1649_recursive_builder_pad_release.t`: the interpreter retained all
   five weakly observed nodes after dropping the root (expected two), even with
