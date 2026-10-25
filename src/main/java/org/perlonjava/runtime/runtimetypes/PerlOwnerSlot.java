@@ -150,6 +150,10 @@ public final class PerlOwnerSlot {
         return tieWrapperCounted;
     }
 
+    synchronized boolean scalarReferenceContentsCounted() {
+        return scalarReferenceContentsCounted;
+    }
+
     RuntimeCode closureOwner() {
         return closureOwner;
     }

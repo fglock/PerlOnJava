@@ -1997,6 +1997,8 @@ public class MortalList {
     /** Restore legacy count for aggregate owner slots still reachable from Perl roots. */
     static boolean restoreReachableAggregateOwnerCount(RuntimeBase referent) {
         Set<RuntimeScalar> rootedHashCells = Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<RuntimeScalar> rootedScalarReferenceCells =
+                Collections.newSetFromMap(new IdentityHashMap<>());
         Set<PerlOwnerSlot> rootedTieWrappers = Collections.newSetFromMap(new IdentityHashMap<>());
         // The referent exclusion and Perl graph stay fixed throughout this
         // synchronous scan, so multiple slots in one aggregate share a proof.
@@ -2035,6 +2037,23 @@ public class MortalList {
                         && ReachabilityWalker.isScalarReachable(cell)) {
                     rootedHashCells.add(cell);
                 }
+            } else if (slot.kind() == PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS
+                    && slot.referent() == referent) {
+                // A counted contents slot can be the only owner when its
+                // underlying scalar cell is borrowed or otherwise lacks its
+                // own SCALAR_VALUE count. Aliases to one cell share that
+                // count, so restore it once per reachable contents cell.
+                RuntimeScalar ownerCell = slot.ownerCell();
+                RuntimeScalar contentsCell = slot.scalarReferenceCell();
+                if (slot.scalarReferenceContentsCounted()
+                        && ownerCell != null && contentsCell != null
+                        && ownerCell.scalarReferenceContentsOwner == slot
+                        && contentsCell.value == referent
+                        && !WeakRefRegistry.isweak(ownerCell)
+                        && !WeakRefRegistry.isweak(contentsCell)
+                        && ReachabilityWalker.isScalarReachable(ownerCell)) {
+                    rootedScalarReferenceCells.add(contentsCell);
+                }
             } else if (slot.kind() == PerlOwnerSlot.Kind.TIE_WRAPPER
                     && slot.referent() == referent) {
                 RuntimeBase owner = slot.ownerContainer();
@@ -2044,7 +2063,8 @@ public class MortalList {
                 }
             }
         }
-        int owners = slotsWithoutCell + rootedHashCells.size();
+        int owners = slotsWithoutCell + rootedHashCells.size()
+                + rootedScalarReferenceCells.size();
         // Active scalar owners may include lexical RVs in addition to hash
         // cells. Exclude cells already counted through their explicit slots,
         // then add other still-reachable scalar owners to avoid losing them

@@ -80,7 +80,7 @@ not an independent count.
 | Direct scalar reference value | `RuntimeScalar.setLargeRefCounted` acquires a `SCALAR_VALUE` slot for a tracked store; `PerlOwnerSlot.acquireScalarValueCount` increments `refCount` | Scalar overwrite/undefine retires that slot; deferred scope and container paths queue its `PendingRelease` through `MortalList` | Counted slot and legacy count are bridged. When an unrelated decrement reaches zero, the scalar caller can still invoke aggregate recovery before lifecycle dispatch. |
 | Hash entry | `RuntimeHash.updateHashEntryOwner` attaches a `HASH_ENTRY` slot to the stable entry and scalar cell | Key replacement/deletion and hash cleanup release that identity slot; the scalar cell's value slot is released separately | `HASH_ENTRY` is identity-only for ordinary non-shared hashes. Recovery proves the owning hash is rooted and counts the cell's still-live value edge. Shared hashes retain a separate shared-slot count. |
 | Array element | `RuntimeArray.syncArrayElementOwnerSlot` / reconciliation attaches an `ARRAY_ELEMENT` slot when `ownsElement` is true | Array deletion, clear, replacement, and cleanup release the structural slot and release/queue the scalar value owner according to owned-versus-borrowed state | `ARRAY_ELEMENT` is identity-only; `SCALAR_VALUE` or the legacy bridge supplies the count. Borrowed aliases must not be promoted to an element owner. |
-| Scalar-reference contents | `PerlOwnerSlot.acquireScalarReferenceContents` records a `SCALAR_REFERENCE_CONTENTS` edge; it counts separately when a reference cell owns a distinct contents edge, and records a non-counting identity when it shares the cell's existing value owner | Retargeting or releasing the final strong alias releases the counted contents slot or allows the shared cell owner to retire | Reachable contents slots can restore a live contents owner after a decrement. Weak aliases are excluded. The hash/array refalias regression covers this sharing case. |
+| Scalar-reference contents | `PerlOwnerSlot.acquireScalarReferenceContents` records a `SCALAR_REFERENCE_CONTENTS` edge; it counts separately when a reference cell owns a distinct contents edge, and records a non-counting identity when it shares the cell's existing value owner | Retargeting or releasing the final strong alias releases the counted contents slot or allows the shared cell owner to retire | Reachable contents slots restore a live contents owner after a decrement. Aggregate recovery now counts distinct reachable contents cells alongside hash/array owners; weak aliases are excluded. |
 | Tied wrapper | Tie installation attaches a `TIE_WRAPPER` identity slot | Untie/replacement and wrapper cleanup release it | Recovery counts a wrapper only when its owner container is rooted. This slot family still depends on recovery for mixed legacy undercounts. |
 | Closure-pad capture | `RuntimeBase.retainClosureCaptureOwner` creates a typed capture slot; aggregate captures can be native counted slots, scalar captures use a legacy bridge | Scope exit, closure release, and capture replacement retire the slot and capture state | Aggregate capture slots have direct semantic counts; scalar capture bridges still use the selective counter. The recovery scan is not their normal release authority. |
 | Deferred temporary or lifecycle hold | Blessing and method dispatch acquire a temporary count; an active END callback is rescued from zero to one by `DestroyDispatch`; closure aggregates normally acquire native capture slots | `MortalList.processDeferredBase` decrements queued counts at a cleanup boundary; abandoned method holds release immediately; END completion queues the rescued count | These generic releases carry no `PendingRelease` token. The normal bless, method-hold, and END paths each pair one temporary count with one release. The closure aggregate defer is a legacy fallback when its capture slot is absent. The focused #1794/#1795 no-recovery runs did not demonstrate a lost owner on these paths. |
@@ -102,6 +102,17 @@ native capture slots. The remaining uncertainty is not an unmatched
 `deferDecrement` call, but whether arbitrary scalar overwrites or queued owner
 releases can consume a different still-live selective owner before either
 production scan caller runs.
+
+A mixed-owner unit probe found one recovery omission in that accounting: when a
+rooted hash value and a distinct counted scalar-reference contents edge both
+owned the referent, aggregate recovery restored the hash cell but ignored the
+contents cell. The scalar-overwrite caller's later contents fallback could not
+repair this case because aggregate recovery had already returned success. The
+recovery scan now counts rooted `SCALAR_REFERENCE_CONTENTS` cells once per
+underlying scalar cell, excluding non-counting aliases and weak references. A
+focused Java regression covers the mixed state. This fixes a recovery-ledger
+gap; it does not yet identify which production operation can create the
+undercounted state, so neither scan caller is removed.
 
 Next audit target: instrument the two scan entry points with the owner release
 provenance already carried by `PendingOwnerRelease`, then reduce any
@@ -357,6 +368,19 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   no producer is changed until that trace identifies a real Perl-visible
   mismatch. `make check-links` passes for the updated design document (787
   links checked, zero errors).
+- A mixed-owner recovery test exposed that `restoreReachableAggregateOwnerCount`
+  could count a rooted hash value but omit a distinct reachable
+  `SCALAR_REFERENCE_CONTENTS` owner. `RuntimeScalar.setLargeRefCounted` could
+  not repair the omission because aggregate recovery returned success first.
+  Recovery now adds one owner per rooted underlying contents cell, skipping
+  weak and non-counting aliases. The new Java regression passes in the full
+  `nice -n 19 make` gate (15m51s, `EXIT: 0`). The #1794 controller, both
+  WebSocket lifetime tests, both #1795 Catalyst tempfile tests, the new
+  18-assertion refalias regression, and the #1649 abandoned-method-hold test
+  pass on the interpreter backend; the full gate also passes their JVM cases.
+  This repairs mixed recovery accounting but does not yet identify the
+  production operation that can produce an undercount, so both scan callers
+  remain.
 - A second focused reducer,
   `issue_1649_captured_scalar_array_argument.t`, isolates the same class of
   lifetime error: a closure writes a blessed object to a captured scalar while
