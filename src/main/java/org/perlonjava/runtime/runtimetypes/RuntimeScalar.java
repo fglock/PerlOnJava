@@ -3349,7 +3349,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // slot holds a strong reference not counted in refCount.
                     // Don't call callDestroy — the container is still alive.
                     // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
-                } else if (MortalList.restoreReachableAggregateOwnerCount(oldBase)) {
+                } else if (MortalList.restoreReachableAggregateOwnerCount(
+                        oldBase, "RuntimeScalar.setLargeRefCounted overwrite")) {
                     // Explicit aggregate slots can prove a rooted owner chain
                     // even when a nested expression temporary is absent from
                     // the conservative lexical walker roots.

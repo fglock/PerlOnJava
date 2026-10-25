@@ -22,6 +22,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class MortalList {
     private static final int MAX_UNBLESSED_AGGREGATE_DRAIN_ROOTS = 50_000;
     private static final AtomicInteger runtimesWithBoundaryWork = new AtomicInteger();
+    private static final String OWNER_RECOVERY_TRACE_CLASS =
+            System.getenv("PJ_OWNER_RECOVERY_TRACE_CLASS");
 
     static final class ReachabilityQueryMeasurement implements AutoCloseable {
         private final LifecycleRuntimeState state;
@@ -1797,7 +1799,8 @@ public class MortalList {
                 // have a legacy bridge count and retain the old compatibility
                 // sentinel behavior.
                 if (base.nativeCaptureOwnerCount() == 0) base.refCount = 1;
-            } else if (restoreReachableAggregateOwnerCount(base)) {
+            } else if (restoreReachableAggregateOwnerCount(
+                    base, deferredReleaseProvenance(ownerRelease, transientOwnerKind))) {
                 // A hash-entry owner has a stable semantic slot identity even
                 // when an unrelated legacy scalar decrement consumes the
                 // selective count. Restore the count from independently owned
@@ -1996,6 +1999,11 @@ public class MortalList {
 
     /** Restore legacy count for aggregate owner slots still reachable from Perl roots. */
     static boolean restoreReachableAggregateOwnerCount(RuntimeBase referent) {
+        return restoreReachableAggregateOwnerCount(referent, "direct invocation");
+    }
+
+    static boolean restoreReachableAggregateOwnerCount(
+            RuntimeBase referent, String releaseProvenance) {
         Set<RuntimeScalar> rootedHashCells = Collections.newSetFromMap(new IdentityHashMap<>());
         Set<RuntimeScalar> rootedScalarReferenceCells =
                 Collections.newSetFromMap(new IdentityHashMap<>());
@@ -2077,12 +2085,52 @@ public class MortalList {
             }
             owners++;
         }
-        if (owners == 0) return false;
+        if (owners == 0) {
+            traceAggregateOwnerRecovery(referent, releaseProvenance, false, 0, ownerSlots);
+            return false;
+        }
         for (PerlOwnerSlot slot : rootedTieWrappers) {
             slot.markTieWrapperCountRestored();
         }
         referent.refCount = owners;
+        traceAggregateOwnerRecovery(referent, releaseProvenance, true, owners, ownerSlots);
         return true;
+    }
+
+    private static String deferredReleaseProvenance(
+            RuntimeBase.PendingOwnerRelease release, String transientOwnerKind) {
+        if (OWNER_RECOVERY_TRACE_CLASS == null || OWNER_RECOVERY_TRACE_CLASS.isEmpty()) {
+            return null;
+        }
+        if (release == null) {
+            return "MortalList.processDeferredBase transient=" + transientOwnerKind;
+        }
+        PerlOwnerSlot.PendingRelease slotRelease = release.ownerSlotRelease;
+        String slot = slotRelease == null ? "" : " slot=" + slotRelease.kind()
+                + ":" + slotRelease.ownerSlotIdentity()
+                + "/" + slotRelease.sequence();
+        return "MortalList.processDeferredBase queue=" + release.queueSite
+                + " acquire=" + release.acquireSite + slot;
+    }
+
+    private static void traceAggregateOwnerRecovery(
+            RuntimeBase referent, String releaseProvenance, boolean recovered,
+            int restoredOwners, Set<PerlOwnerSlot> ownerSlots) {
+        if (OWNER_RECOVERY_TRACE_CLASS == null || OWNER_RECOVERY_TRACE_CLASS.isEmpty()) return;
+        String className = referent.blessId == 0
+                ? referent.getClass().getSimpleName()
+                : NameNormalizer.getBlessStr(referent.blessId);
+        if (className == null || !className.contains(OWNER_RECOVERY_TRACE_CLASS)) return;
+        Map<PerlOwnerSlot.Kind, Integer> slotCounts = new java.util.EnumMap<>(PerlOwnerSlot.Kind.class);
+        for (PerlOwnerSlot slot : ownerSlots) {
+            slotCounts.merge(slot.kind(), 1, Integer::sum);
+        }
+        System.err.println("[OWNER-RECOVERY] base=" + System.identityHashCode(referent)
+                + " class=" + className
+                + " recovered=" + recovered
+                + " restoredOwners=" + restoredOwners
+                + " slots=" + slotCounts
+                + " release=" + releaseProvenance);
     }
 
     /**

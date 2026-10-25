@@ -399,6 +399,21 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   any recovery call. `TieWrapperOwnerSlotTest` passes 5/5, and the full
   `nice -n 19 make` passes in 17m32s. Recovery remains for other mixed owner
   transitions, and both production callers remain under audit.
+- On 2026-10-25, added opt-in `PJ_OWNER_RECOVERY_TRACE_CLASS` logging around
+  both production recovery callers. It records the pending release provenance,
+  rooted slot kinds, and whether recovery restored a count. The full
+  `nice -n 19 make` gate passes in 17m01s. The socket-independent #1794
+  transaction/controller ownership test passes 3/3 on system Perl and JVM;
+  its controller release reaches recovery with no rooted owner slots, while
+  the transaction overwrite has a rooted hash slot but does not need a count
+  restoration. The network-based Mojolicious controller tests skip because
+  loopback sockets are unavailable in this environment, so those results do
+  not validate the integration path here. The #1795 Catalyst tempfile test
+  passes and records one actual `File::Temp` recovery with two restored owners
+  backed by one hash entry, one array element, and two scalar-value slots.
+  This is direct evidence to retain the recovery scan and both callers. The
+  logging is disabled unless its class filter is set. The broader owner-slot
+  migration remains incomplete.
 - A second focused reducer,
   `issue_1649_captured_scalar_array_argument.t`, isolates the same class of
   lifetime error: a closure writes a blessed object to a captured scalar while
