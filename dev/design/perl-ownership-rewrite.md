@@ -81,7 +81,7 @@ not an independent count.
 | Hash entry | `RuntimeHash.updateHashEntryOwner` attaches a `HASH_ENTRY` slot to the stable entry and scalar cell | Key replacement/deletion and hash cleanup release that identity slot; the scalar cell's value slot is released separately | `HASH_ENTRY` is identity-only for ordinary non-shared hashes. Recovery proves the owning hash is rooted and counts the cell's still-live value edge. Shared hashes retain a separate shared-slot count. |
 | Array element | `RuntimeArray.syncArrayElementOwnerSlot` / reconciliation attaches an `ARRAY_ELEMENT` slot when `ownsElement` is true | Array deletion, clear, replacement, and cleanup release the structural slot and release/queue the scalar value owner according to owned-versus-borrowed state | `ARRAY_ELEMENT` is identity-only; `SCALAR_VALUE` or the legacy bridge supplies the count. Borrowed aliases must not be promoted to an element owner. |
 | Scalar-reference contents | `PerlOwnerSlot.acquireScalarReferenceContents` records a `SCALAR_REFERENCE_CONTENTS` edge; it counts separately when a reference cell owns a distinct contents edge, and records a non-counting identity when it shares the cell's existing value owner | Retargeting or releasing the final strong alias releases the counted contents slot or allows the shared cell owner to retire | Reachable contents slots restore a live contents owner after a decrement. Aggregate recovery now counts distinct reachable contents cells alongside hash/array owners; weak aliases are excluded. |
-| Tied wrapper | Tie installation attaches a counted `TIE_WRAPPER` slot when the handler referent is tracked | Untie/replacement and wrapper cleanup release the slot and its count | Recovery counts a wrapper only when its owner container is rooted, then marks the slot restored so later cleanup releases that count. |
+| Tied wrapper | Tie installation attaches a counted `TIE_WRAPPER` slot when the handler is tracked; scalar-store and first-bless promotion also count an existing wrapper slot when its owner container is rooted | Untie/replacement and wrapper cleanup release the slot and its count | Recovery still reconstructs tied-wrapper counts for mixed states not yet covered by a direct tracking transition. |
 | Closure-pad capture | `RuntimeBase.retainClosureCaptureOwner` creates a typed capture slot; aggregate captures can be native counted slots, scalar captures use a legacy bridge | Scope exit, closure release, and capture replacement retire the slot and capture state | Aggregate capture slots have direct semantic counts; scalar capture bridges still use the selective counter. The recovery scan is not their normal release authority. |
 | Deferred temporary or lifecycle hold | Blessing and method dispatch acquire a temporary count; an active END callback is rescued from zero to one by `DestroyDispatch`; closure aggregates normally acquire native capture slots | `MortalList.processDeferredBase` decrements queued counts at a cleanup boundary; abandoned method holds release immediately; END completion queues the rescued count | These generic releases carry no `PendingRelease` token. The normal bless, method-hold, and END paths each pair one temporary count with one release. The closure aggregate defer is a legacy fallback when its capture slot is absent. The focused #1794/#1795 no-recovery runs did not demonstrate a lost owner on these paths. |
 
@@ -393,6 +393,12 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   their slots; `nice -n 19 make` passes in 18m37s. This advances scalar-owner
   migration but does not change lifecycle dispatch authority or remove either
   aggregate-recovery caller.
+- A tie wrapper installed before its handler is tracked now gains its count
+  when a scalar store or first bless promotes the handler, provided the tied
+  owner container is rooted. The focused regression now checks the count before
+  any recovery call. `TieWrapperOwnerSlotTest` passes 5/5, and the full
+  `nice -n 19 make` passes in 17m32s. Recovery remains for other mixed owner
+  transitions, and both production callers remain under audit.
 - A second focused reducer,
   `issue_1649_captured_scalar_array_argument.t`, isolates the same class of
   lifetime error: a closure writes a blessed object to a captured scalar while
