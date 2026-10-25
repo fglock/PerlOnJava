@@ -156,6 +156,14 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   consume a later scalar owner's count. Root recovery includes live wrapper
   slots from rooted owner containers. The wrapper-slot batch passed full
   `nice -n 19 make` in 27m21s.
+- On 2026-10-25, deleting a non-final array element now defers release of its
+  tracked scalar-value and I/O owners after removing the structural array slot.
+  A new DESTROY/weak-reference regression failed on the pre-fix JVM and passes
+  under system Perl, JVM, and interpreter. The fix preserves a captured delete
+  result until its caller can retain it. Full `nice -n 19 make` passes in
+  14m53s; `make check-links` passes. Recovery still has the two production
+  callers described below; this fix closes one concrete array deletion edge
+  without establishing direct owner-slot accounting across aggregates.
 - The temporary `perlonjava.test.disableAggregateOwnerRecovery` diagnostic was
   removed after the no-recovery audit. The two production call sites in
   `MortalList.processDeferredBase` and `RuntimeScalar.setLargeRefCounted` still
