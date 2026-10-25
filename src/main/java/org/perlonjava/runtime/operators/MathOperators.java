@@ -1104,6 +1104,28 @@ public class MathOperators {
     }
 
     /**
+     * Compound addition for a hash cell validated by the generated stable
+     * method entry guard. That guard has already established a plain writable
+     * integer target and integer increment, so retain only wide-integer and
+     * signed-overflow fallbacks here.
+     */
+    public static RuntimeScalar addAssignVerifiedStableHashIntegerCell(
+            RuntimeScalar target, RuntimeScalar increment) {
+        if (hasWideInteger(target, increment)) {
+            return addAssign(target, increment);
+        }
+        long left = target.getLong();
+        long right = increment.getLong();
+        try {
+            long sum = Math.addExact(left, right);
+            boolean resultTainted = integerResultTaintedFromPlainLeft(target, increment);
+            return target.setArithmeticIntegerResult(sum, resultTainted);
+        } catch (ArithmeticException ignored) {
+            return addAssign(target, increment);
+        }
+    }
+
+    /**
      * Compound assignment: -=
      * Checks for (-= overload first, then falls back to (- overload.
      * Assigns the result back to the lvalue.

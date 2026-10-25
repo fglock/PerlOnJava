@@ -2,6 +2,7 @@ package org.perlonjava.backend.jvm;
 
 import org.perlonjava.app.cli.CompilerOptions;
 
+import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
@@ -375,6 +376,14 @@ public class EmitBinaryOperator {
         }
 
         if (operatorHandler != null) {
+            var readOnlyCandidate = emitterVisitor.ctx.javaClassInfo.readOnlyArgumentCandidate;
+            boolean stableHashIntegerAdd = node.operator.equals("+=")
+                    && !isInteger
+                    && operatorHandler.methodName().equals("addAssign")
+                    && readOnlyCandidate != null
+                    && readOnlyCandidate.stableHashFieldCells()
+                    && emitterVisitor.ctx.javaClassInfo.readOnlyArgumentFlagSlot >= 0
+                    && !emitterVisitor.ctx.javaClassInfo.emittingReadOnlyArgumentFallback;
             // Use the new *Assign methods which check for compound overloads first
             EmitterVisitor scalarVisitor =
                     emitterVisitor.with(RuntimeContextType.SCALAR);
@@ -407,12 +416,33 @@ public class EmitBinaryOperator {
 
             // Call the *Assign method (e.g., MathOperators.addAssign)
             // This modifies arg1 in place and returns it
-            mv.visitMethodInsn(
-                    operatorHandler.methodType(),
-                    operatorHandler.className(),
-                    operatorHandler.methodName(),
-                    operatorHandler.descriptor(),
-                    false);
+            if (stableHashIntegerAdd) {
+                Label generalAddition = new Label();
+                Label additionComplete = new Label();
+                mv.visitVarInsn(Opcodes.ILOAD,
+                        emitterVisitor.ctx.javaClassInfo.readOnlyArgumentFlagSlot);
+                mv.visitJumpInsn(Opcodes.IFEQ, generalAddition);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        operatorHandler.className(),
+                        "addAssignVerifiedStableHashIntegerCell",
+                        operatorHandler.descriptor(), false);
+                mv.visitJumpInsn(Opcodes.GOTO, additionComplete);
+                mv.visitLabel(generalAddition);
+                mv.visitMethodInsn(
+                        operatorHandler.methodType(),
+                        operatorHandler.className(),
+                        operatorHandler.methodName(),
+                        operatorHandler.descriptor(),
+                        false);
+                mv.visitLabel(additionComplete);
+            } else {
+                mv.visitMethodInsn(
+                        operatorHandler.methodType(),
+                        operatorHandler.className(),
+                        operatorHandler.methodName(),
+                        operatorHandler.descriptor(),
+                        false);
+            }
 
             EmitOperator.handleVoidContext(emitterVisitor);
         } else {

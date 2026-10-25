@@ -2376,6 +2376,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         String[] keys = PerlRuntime.current().runtimeCodeState()
                 .stableHashMutationMethodKeysByClassName.remove(className);
         if (keys != null) code.stableHashMutationMethodKeys = keys;
+        code.stableHashMutationShapeEligible = hasStableHashMutationMethodShape(code);
+        code.stableHashMutationShapeFinalized = true;
+    }
+
+    private static boolean hasStableHashMutationMethodShape(RuntimeCode code) {
+        String[] keys = code.stableHashMutationMethodKeys;
+        return keys != null && keys.length > 0 && keys.length <= 2
+                && !code.isMapGrepBlock && !code.isTryExpressionWrapper
+                && !code.requiresJvmClosureFrame()
+                && code.signatureSubName == null && code.signaturePositionalCount == 0
+                && code.signatureNamedParams.isEmpty() && code.signatureSlurpySigil == null
+                && (code.subroutine != null || code.methodHandle != null);
     }
 
     public static void registerDisabledWarnings(String className, Set<String> categories) {
@@ -2393,6 +2405,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public PerlSubroutine subroutine;
     /** Literal keys for the compiler-proven simple hash mutation method path. */
     public String[] stableHashMutationMethodKeys;
+    /** Immutable method-shape guard finalized once after compiled metadata is attached. */
+    private boolean stableHashMutationShapeFinalized;
+    private boolean stableHashMutationShapeEligible;
     public boolean isStatic;
     /** True for a `method` declared inside a Perl class. */
     public boolean isClassMethod;
@@ -5823,20 +5838,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     private static boolean canUseStableHashMutationMethodFastPath(
             RuntimeCode code, RuntimeArray args, int callContext, PerlRuntime runtime) {
-        String[] keys = code.stableHashMutationMethodKeys;
-        if (keys == null || keys.length == 0 || keys.length > 2) return false;
+        boolean stableShape = code.stableHashMutationShapeFinalized
+                ? code.stableHashMutationShapeEligible
+                : hasStableHashMutationMethodShape(code);
+        if (!stableShape) return false;
         if (callContext != RuntimeContextType.SCALAR) return false;
         if (DebugState.isDebugMode()) return false;
         if (code.boundRuntime != null && code.boundRuntime != runtime) return false;
         if (code.constantValue != null) return false;
         if (isLvalueCode(code)) return false;
-        if (code.isMapGrepBlock || code.isTryExpressionWrapper) return false;
-        if (code.requiresJvmClosureFrame()) return false;
-        if (code.signatureSubName != null || code.signaturePositionalCount != 0
-                || !code.signatureNamedParams.isEmpty() || code.signatureSlurpySigil != null) {
-            return false;
-        }
-        if (code.subroutine == null && code.methodHandle == null) return false;
+        String[] keys = code.stableHashMutationMethodKeys;
         return prepareStableHashMutationMethodArguments(
                 args, keys[0], keys.length == 2 ? keys[1] : null, runtime);
     }
