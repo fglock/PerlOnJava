@@ -1519,9 +1519,18 @@ public class MortalList {
 
     static boolean isReachableFromExternalRootCached(RuntimeBase base) {
         if (ReachabilityWalker.isReachableFromTemporaryRoots(base)) {
+            if (base != null && base.refCountTrace) {
+                System.err.println("[REFCOUNT-KEEP] base=" + System.identityHashCode(base)
+                        + " reason=temporary-root");
+            }
             return true;
         }
-        return isReachableFromPersistentRootCached(base);
+        boolean reachable = isReachableFromPersistentRootCached(base);
+        if (reachable && base != null && base.refCountTrace) {
+            System.err.println("[REFCOUNT-KEEP] base=" + System.identityHashCode(base)
+                    + " reason=persistent-root");
+        }
+        return reachable;
     }
 
     static boolean isReachableFromPersistentRootCached(RuntimeBase base) {
@@ -1569,7 +1578,12 @@ public class MortalList {
         if (state.fullRootSnapshot == null) {
             state.fullRootSnapshot = ReachabilityWalker.reachableFromRootsSnapshotWithStatus();
         }
-        return state.fullRootSnapshot.isReachable(base);
+        boolean reachable = state.fullRootSnapshot.isReachable(base);
+        if (reachable && base != null && base.refCountTrace) {
+            System.err.println("[REFCOUNT-KEEP] base=" + System.identityHashCode(base)
+                    + " reason=full-root");
+        }
+        return reachable;
     }
 
     static boolean isUnblessedAggregateReachableDuringDrain(RuntimeBase base) {
@@ -1796,6 +1810,15 @@ public class MortalList {
                 if (clearWeakRefsForLocalBinding) {
                     WeakRefRegistry.clearWeakRefsTo(base);
                 }
+            } else if (base.needsReDestroy && base.blessId != 0) {
+                // The object already ran DESTROY and was resurrected by a
+                // counted Perl owner. Reaching zero now releases that final
+                // owner, so honor Perl's re-fire before conservative weak-root
+                // recovery can restore the count from an in-flight caller
+                // snapshot left over from the first DESTROY.
+                base.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(base);
+                return;
             } else if (base instanceof RuntimeCode code
                     && hasWeakRefs
                     && (RuntimeCode.isActiveCode(code)
@@ -1962,6 +1985,10 @@ public class MortalList {
     private static boolean restoreReachableOwnerCount(RuntimeBase base) {
         int ownerCount = base.reachableOwnerCount();
         if (ownerCount == 0) return false;
+        if (base.refCountTrace) {
+            System.err.println("[REFCOUNT-KEEP] base=" + System.identityHashCode(base)
+                    + " reason=reachable-owner-count owners=" + ownerCount);
+        }
         base.refCount = ownerCount;
         return true;
     }

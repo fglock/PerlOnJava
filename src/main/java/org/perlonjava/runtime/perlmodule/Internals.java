@@ -597,6 +597,9 @@ public class Internals extends PerlModuleBase {
      *   <li>{@code refCount} — raw {@link RuntimeBase#refCount}</li>
      *   <li>{@code localBindingExists} — true when a named-variable slot still holds the container</li>
      *   <li>{@code destroyFired} — true once DESTROY has run</li>
+     *   <li>{@code needs_re_destroy} — true when a later release should re-fire DESTROY</li>
+     *   <li>{@code currently_destroying} — true while the Perl DESTROY body is active</li>
+     *   <li>{@code perl_lifecycle_state} — current explicit destruction lifecycle state</li>
      *   <li>{@code blessId} — bless class id (0 = unblessed)</li>
      *   <li>{@code class_name} — Perl class name (empty string if unblessed)</li>
      *   <li>{@code kind} — runtime type: SCALAR / ARRAY / HASH / CODE / GLOB / OTHER</li>
@@ -613,6 +616,9 @@ public class Internals extends PerlModuleBase {
             result.put("refCount", new RuntimeScalar(base.refCount));
             result.put("localBindingExists", new RuntimeScalar(base.localBindingExists));
             result.put("destroyFired", new RuntimeScalar(base.destroyFired));
+            result.put("needs_re_destroy", new RuntimeScalar(base.needsReDestroy));
+            result.put("currently_destroying", new RuntimeScalar(base.currentlyDestroying));
+            result.put("perl_lifecycle_state", new RuntimeScalar(base.perlLifecycleState().name()));
             result.put("blessId", new RuntimeScalar(base.blessId));
             String className = NameNormalizer.getBlessStr(base.blessId);
             result.put("class_name", new RuntimeScalar(className == null ? "" : className));
