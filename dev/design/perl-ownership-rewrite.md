@@ -297,22 +297,22 @@ and first path establish implementation cost.
   [#1646](https://github.com/fglock/PerlOnJava/issues/1646).
 - [x] Classify DBIx::Class 0.082844 `t/storage/error.t` assertion 49 on the
   current lifecycle candidate: system Perl passes, and the same failure
-  reproduces on the clean master baseline. The candidate remains intermittent
-  (one recent run failed and two passed); the failed run still treated the
-  weak schema captured by DBI's handler as live after `$schema` was cleared.
-  Keep this result open under #1642 and rerun it after that lifecycle work is
-  reconciled; this does not count as DBIx acceptance.
-- [x] Compare the other DBIx failures with system Perl and clean master.
-  `t/storage/txn_scope_guard.t` assertion 18 also fails on both PerlOnJava
-  candidates and passes on system Perl; it misses the warning that guards
-  against repeated `DESTROY` calls. The clean master `t/52leaks.t` run fails
-  at `basic random_results`. The lifecycle candidate failed a later
-  `basic leaky_resultset_cond` check in the combined run, while a focused retry
-  completed with only the upstream TODO failures. The differing leak outcomes
-  are inconclusive. A reduced scope-guard reproducer of the capture and
-  re-destruction path passes 3/3 on system Perl, JVM, and interpreter, so the
-  full `txn_scope_guard.t` failure depends on additional suite state. Rerun all
-  three programs together after #1642 is reconciled.
+  reproduces on the clean master baseline. A clean rebuild of the current
+  candidate still fails 48/49 assertions. The weak schema captured by DBI's
+  handler remains live after `$schema` is cleared; after a forced quiet GC,
+  owner tracing reports no active scalar owners or capture slots despite the
+  stale positive refcount. The exact stale-count/root cause remains open under
+  #1642; rerun after that lifecycle work is reconciled. This does not count as
+  DBIx acceptance.
+- [x] Rerun the three DBIx lifecycle files together on the clean candidate.
+  `t/storage/txn_scope_guard.t` now passes 18/18 and `t/52leaks.t` passes 11/11
+  (including their TODO skips); the prior clean-master run failed the scope
+  guard assertion, and the earlier leak outcomes varied. `t/storage/error.t`
+  remains at 48/49, with assertion 49 failing as it does on clean master while
+  passing on system Perl. A reduced scope-guard reproducer passes on system
+  Perl, JVM, interpreter, and clean master, so it is not standalone regression
+  evidence. Full DBIx acceptance remains open until #1642 is reconciled and
+  the complete suite is rerun.
 
 ### Next steps
 
