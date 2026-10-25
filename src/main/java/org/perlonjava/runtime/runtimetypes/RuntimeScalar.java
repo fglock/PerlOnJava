@@ -2491,6 +2491,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 return;
             }
             base.refCount = 0;
+            MortalList.promoteRootedTieWrapperOwners(base);
         }
         if (!scalar.acquireScalarValueOwnerCount(
                 base, "RuntimeScalar.incrementRefCountForContainerStore")) {
@@ -3146,6 +3147,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             if (nb.refCount < 0
                     && (nb instanceof RuntimeHash || nb instanceof RuntimeArray)) {
                 nb.refCount = 0;
+                MortalList.promoteRootedTieWrapperOwners(nb);
             }
             if (nb.refCount >= 0 && !scalarContentsOwnedByEscapedReference) {
                 if (nb.refCount == 0) nb.registerSharedFetchedView();

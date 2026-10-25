@@ -506,6 +506,26 @@ public final class PerlOwnerSlot {
         tieWrapperCounted = true;
     }
 
+    /** Count a previously untracked wrapper owner when its rooted target is promoted. */
+    synchronized boolean promoteTieWrapperCount(RuntimeBase expectedTarget, String acquireSite) {
+        if (kind != Kind.TIE_WRAPPER) {
+            throw new IllegalStateException(
+                    "tie-wrapper promotion requires a TIE_WRAPPER slot");
+        }
+        if (referent != expectedTarget || expectedTarget == null || tieWrapperCounted) {
+            return false;
+        }
+        if (expectedTarget.refCount < 0) return false;
+        if (expectedTarget.refCount == Integer.MAX_VALUE) {
+            throw new IllegalStateException("tie-wrapper owner count overflow");
+        }
+        expectedTarget.traceRefCount(+1, acquireSite);
+        expectedTarget.refCount++;
+        expectedTarget.hadCountedReference = true;
+        tieWrapperCounted = true;
+        return true;
+    }
+
     /** Retire a tie-wrapper owner identity and decrement its legacy bridge count. */
     synchronized boolean releaseTieWrapperCount(RuntimeBase expectedTarget, String releaseSite) {
         if (kind != Kind.TIE_WRAPPER) {

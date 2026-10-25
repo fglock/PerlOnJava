@@ -2085,6 +2085,33 @@ public class MortalList {
         return true;
     }
 
+    /**
+     * Promote rooted tie-wrapper edges when a previously untracked handler
+     * enters selective counting. This keeps the wrapper count direct instead
+     * of waiting for aggregate recovery to reconstruct it later.
+     */
+    public static void promoteRootedTieWrapperOwners(RuntimeBase referent) {
+        if (referent == null || referent.refCount < 0) return;
+        Map<RuntimeBase, Boolean> rootedContainers = new IdentityHashMap<>();
+        for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
+            if (slot.kind() != PerlOwnerSlot.Kind.TIE_WRAPPER
+                    || slot.referent() != referent || slot.tieWrapperCounted()) {
+                continue;
+            }
+            RuntimeBase owner = slot.ownerContainer();
+            if (owner == null) continue;
+            Boolean rooted = rootedContainers.get(owner);
+            if (rooted == null) {
+                rooted = isRootedOwnerContainer(owner, referent);
+                rootedContainers.put(owner, rooted);
+            }
+            if (rooted) {
+                slot.promoteTieWrapperCount(
+                        referent, "MortalList.promoteRootedTieWrapperOwners");
+            }
+        }
+    }
+
     private static boolean isRootedAggregateOwnerCached(
             RuntimeBase owner, RuntimeBase excludedReferent,
             Map<RuntimeBase, Boolean> rootedAggregateOwners) {

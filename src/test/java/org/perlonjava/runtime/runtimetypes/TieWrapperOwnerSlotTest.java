@@ -57,7 +57,7 @@ class TieWrapperOwnerSlotTest {
     }
 
     @Test
-    void wrapperCreatedBeforeHandlerTrackingDoesNotReleaseAnotherOwnersCount() {
+    void wrapperCreatedBeforeHandlerTrackingCountsWhenRootedHandlerIsPromoted() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeArray referent = new RuntimeArray();
@@ -76,12 +76,16 @@ class TieWrapperOwnerSlotTest {
                 assertEquals(1, referent.ownerSlotCount(PerlOwnerSlot.Kind.TIE_WRAPPER));
 
                 referent.activateOwnerTracking();
-                countedOwner.set(referent.createAnonymousReference());
+                RuntimeScalar handlerReference = new RuntimeScalar();
+                handlerReference.type = RuntimeScalarType.ARRAYREFERENCE;
+                handlerReference.value = referent;
+                countedOwner.set(handlerReference);
                 MyVarCleanupStack.register(countedOwner);
-                assertEquals(1, referent.refCount);
-                assertTrue(MortalList.restoreReachableAggregateOwnerCount(referent),
-                        "root recovery includes the wrapper edge created before tracking");
                 assertEquals(2, referent.refCount);
+                assertTrue(referent.ownerSlotSnapshot().stream()
+                        .filter(slot -> slot.kind() == PerlOwnerSlot.Kind.TIE_WRAPPER)
+                        .findFirst().orElseThrow().tieWrapperCounted(),
+                        "the rooted wrapper edge is counted during handler promotion");
 
                 wrapper.releaseTiedObject();
 

@@ -255,6 +255,7 @@ public class ReferenceOperators {
                         scalarReferent.localBindingExists = true;
                     }
                     referent.refCount = existingScalarOwner ? 2 : 1;
+                    MortalList.promoteRootedTieWrapperOwners(referent);
                     if (existingScalarOwner) {
                         referent.recordOwner(runtimeScalar, "first bless of existing scalar ref");
                         runtimeScalar.setRefCountOwned(true);
