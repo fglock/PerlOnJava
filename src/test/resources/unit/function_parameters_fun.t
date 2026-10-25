@@ -13,10 +13,14 @@ my $loaded = eval q{
     sub get_message { 'value must be positive' }
     package main;
     sub InstanceOf { $positive_constraint }
+    sub PositiveType { $positive_constraint }
+    sub Maybe { $positive_constraint }
     our $positive_constraint = bless {}, 'PositiveConstraint';
 
     fun add($left, $right = 1) { $left + $right }
     fun constrained(($positive_constraint) $value) { $value }
+    fun constrained_bare(PositiveType $value) { $value }
+    fun constrained_composite(Maybe[PositiveType] $value) { $value }
     fun constrained_instance((InstanceOf['GraphQL::Type']) $value) { $value }
     fun item_count(@items) { scalar @items }
 fun option_count(%options) { scalar keys %options }
@@ -34,6 +38,12 @@ fun named_options(:$required, :$optional //= 9, %extra) {
     method sum($self: $value = 2) { $self->{base} + $value }
     method default_self($value = 1) { $self->{base} + $value }
     method no_arguments() { $self->{base} }
+    method user_argument_count($first, $second) { scalar @_ }
+    method forward_value($value) {
+        unshift @_, $self;
+        goto &FunctionParametersMethod::accept_value;
+    }
+    method accept_value($value) { $value }
     package main;
     1;
 };
@@ -45,6 +55,11 @@ die $@ unless $loaded;
 is(add(4), 5, 'fun declaration uses an optional signature default');
 is(add(4, 3), 7, 'fun declaration accepts all positional parameters');
 is(constrained(3), 3, 'typed parameters accept values that satisfy their constraint');
+is(constrained_bare(4), 4, 'typed parameters accept Type::Tiny bare-name syntax');
+my $bare_typed_result = eval { constrained_bare(0); 1 };
+ok(!$bare_typed_result, 'bare-name typed parameters reject invalid values');
+like($@, qr/value must be positive/, 'bare-name type failures use the constraint message');
+is(constrained_composite(5), 5, 'typed parameters parse bracketed Type::Tiny expressions');
 is(constrained_instance(3), 3, 'typed parameters accept bracket-form type expressions');
 my $typed_result = eval { constrained(0); 1 };
 ok(!$typed_result, 'typed parameters reject values that fail their constraint');
@@ -85,6 +100,10 @@ is($object->sum(3), 43, 'method declaration accepts an explicit positional value
 is($object->default_self, 41, 'method declaration supplies the default $self invocant');
 is($object->default_self(5), 45, 'method declaration keeps arguments after its implicit invocant');
 is($object->no_arguments, 40, 'method declaration supports an empty user parameter list');
+is($object->user_argument_count(1, 2), 2,
+    'method bodies see only user arguments in @_ after binding the invocant');
+is($object->forward_value('forwarded'), 'forwarded',
+    'method forwarding preserves one invocant in @_ without duplication');
 my $method_info = Function::Parameters::info(\&FunctionParametersMethod::default_self);
 is("" . $method_info->invocant, '$self', 'signature info reports the method invocant');
 is($method_info->args_min, 1, 'method signature info includes its invocant');
@@ -134,6 +153,25 @@ my $selective_no_result = eval q{
 is($selective_no_result, 1, 'no with an import list removes only selected keywords');
 my $selective_object = bless { value => 9 }, 'SelectiveMethod';
 is($selective_object->value, 9, 'unremoved method keyword remains active after selective no');
+
+my $delegated_import_result = eval q{
+    use lib 'src/test/resources/unit/lib';
+    use GraphQL::MaybeTypeCheck;
+    fun delegated_import($value) { $value + 4 }
+    fun delegated_return_type($value) :ReturnType(Bool) { $value }
+    package DelegatedMethod;
+    use GraphQL::MaybeTypeCheck;
+    method value() { $self->{value} }
+    package main;
+    1;
+};
+is($delegated_import_result, 1,
+    'GraphQL MaybeTypeCheck import activates delegated Function::Parameters keywords');
+is(delegated_import(5), 9, 'delegated import enables fun declarations');
+is(delegated_return_type(1), 1,
+    'Function::Parameters accepts attributes after a signature');
+my $delegated_object = bless { value => 12 }, 'DelegatedMethod';
+is($delegated_object->value, 12, 'delegated import enables method declarations');
 
 my $arity_result = eval { add(); 1 };
 ok(!$arity_result, 'fun declaration rejects too few arguments');
