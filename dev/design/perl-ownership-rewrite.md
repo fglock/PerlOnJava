@@ -68,6 +68,37 @@ reachability machinery; that result is useful compatibility evidence, but it
 does not prove the planned owner-slot migration. `undef $sub` is a scalar slot
 overwrite, not the separate `undef &sub` CV-body operation.
 
+### Current ownership source/sink audit (2026-10-25)
+
+This table records the accounting paths relevant to the remaining aggregate
+recovery scan. “Counted slot” means it changes the legacy referent count through
+an explicit token; an identity-only slot is currently evidence for recovery,
+not an independent count.
+
+| Perl ownership edge | Acquisition or transfer | Release | Current authority and recovery interaction |
+|---|---|---|---|
+| Direct scalar reference value | `RuntimeScalar.setLargeRefCounted` acquires a `SCALAR_VALUE` slot for a tracked store; `PerlOwnerSlot.acquireScalarValueCount` increments `refCount` | Scalar overwrite/undefine retires that slot; deferred scope and container paths queue its `PendingRelease` through `MortalList` | Counted slot and legacy count are bridged. When an unrelated decrement reaches zero, the scalar caller can still invoke aggregate recovery before lifecycle dispatch. |
+| Hash entry | `RuntimeHash.updateHashEntryOwner` attaches a `HASH_ENTRY` slot to the stable entry and scalar cell | Key replacement/deletion and hash cleanup release that identity slot; the scalar cell's value slot is released separately | `HASH_ENTRY` is identity-only for ordinary non-shared hashes. Recovery proves the owning hash is rooted and counts the cell's still-live value edge. Shared hashes retain a separate shared-slot count. |
+| Array element | `RuntimeArray.syncArrayElementOwnerSlot` / reconciliation attaches an `ARRAY_ELEMENT` slot when `ownsElement` is true | Array deletion, clear, replacement, and cleanup release the structural slot and release/queue the scalar value owner according to owned-versus-borrowed state | `ARRAY_ELEMENT` is identity-only; `SCALAR_VALUE` or the legacy bridge supplies the count. Borrowed aliases must not be promoted to an element owner. |
+| Scalar-reference contents | `PerlOwnerSlot.acquireScalarReferenceContents` records a `SCALAR_REFERENCE_CONTENTS` edge; it counts separately when a reference cell owns a distinct contents edge, and records a non-counting identity when it shares the cell's existing value owner | Retargeting or releasing the final strong alias releases the counted contents slot or allows the shared cell owner to retire | Reachable contents slots can restore a live contents owner after a decrement. Weak aliases are excluded. The hash/array refalias regression covers this sharing case. |
+| Tied wrapper | Tie installation attaches a `TIE_WRAPPER` identity slot | Untie/replacement and wrapper cleanup release it | Recovery counts a wrapper only when its owner container is rooted. This slot family still depends on recovery for mixed legacy undercounts. |
+| Closure-pad capture | `RuntimeBase.retainClosureCaptureOwner` creates a typed capture slot; aggregate captures can be native counted slots, scalar captures use a legacy bridge | Scope exit, closure release, and capture replacement retire the slot and capture state | Aggregate capture slots have direct semantic counts; scalar capture bridges still use the selective counter. The recovery scan is not their normal release authority. |
+| Deferred temporary or lifecycle hold | Blessing, method dispatch, end-block execution, and legacy closure release increment or retain a temporary count before queuing work | `MortalList.processDeferredBase` decrements the referent at a cleanup boundary; abandoned method holds have a separate immediate path | Several producers still use generic `deferDecrement` without a `PendingRelease` token. These are candidates for source-to-sink tracing, but the focused #1794/#1795 no-recovery runs did not demonstrate a missing Perl-visible owner on these paths. |
+
+The scan repairs a mixed-state mismatch: it runs only after a deferred release
+or scalar overwrite has brought the selective count to zero, then reconstructs
+the count from rooted aggregate identities, scalar-value cells, tied wrappers,
+and reachable counted scalar owners. The current Java tests that fail when the
+scan is bypassed deliberately start from inconsistent counts or queue more
+generic decrements than they acquired; they prove the recovery helper's
+synthetic contract, not a production mutation that loses an owner.
+
+Next audit target: trace each generic `MortalList.deferDecrement` producer to
+its corresponding acquisition and determine whether it can consume another
+owner's selective count. Add a focused failing Perl-level regression before
+changing any producer. Keep the two recovery callers until that trace finds a
+real operation whose count can be maintained directly.
+
 The first verified fix is at the reachability boundary. The interpreter's
 `capturedVars` array is execution metadata and can still contain a pad after
 that pad has been removed from the closure's semantic capture-owner list. The
@@ -308,6 +339,14 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   backends with recovery disabled. The diagnostic switch is now removed; keep
   the recovery method and its two production callers until direct accounting
   proves those paths no longer need it.
+- On 2026-10-25, added a source/sink inventory for scalar values, hash entries,
+  array elements, scalar-reference contents, tied wrappers, closure captures,
+  and generic deferred holds. It records which slots change `refCount` and
+  which are currently identity-only recovery evidence. The next audit traces
+  every remaining generic `deferDecrement` producer to its matching acquisition;
+  no producer is changed until that trace identifies a real Perl-visible
+  mismatch. `make check-links` passes for the updated design document (787
+  links checked, zero errors).
 - A second focused reducer,
   `issue_1649_captured_scalar_array_argument.t`, isolates the same class of
   lifetime error: a closure writes a blessed object to a captured scalar while
