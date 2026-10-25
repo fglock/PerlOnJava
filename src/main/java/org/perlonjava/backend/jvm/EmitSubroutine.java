@@ -813,6 +813,18 @@ public class EmitSubroutine {
                     "Ljava/util/List;");
         }
 
+        if (node.getAnnotation("functionParametersRuntimeName") instanceof String runtimeName) {
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitLdcInsn(runtimeName);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "configureFunctionParametersRuntime",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)"
+                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            mv.visitInsn(Opcodes.POP);
+        }
+
         RuntimeScalar compileTimeAttributeCodeRef =
                 node.getAnnotation("compileTimeAttributeCodeRef") instanceof RuntimeScalar ref
                         ? ref : null;

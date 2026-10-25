@@ -263,6 +263,8 @@ public class Parser {
     public String functionParametersKeyword;
     /** Default attributes supplied by the active Function::Parameters keyword. */
     public List<String> functionParametersAttributes = List.of();
+    /** Install a named Function::Parameters declaration when its statement runs. */
+    public boolean functionParametersRuntime;
     // Are we parsing the top level script?
     public boolean isTopLevelScript = false;
     // Are we parsing inside a class block?

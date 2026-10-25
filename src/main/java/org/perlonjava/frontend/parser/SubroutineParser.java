@@ -1458,6 +1458,17 @@ public class SubroutineParser {
                     abstractNode.setAnnotation("futureAsyncAwaitSub", true);
                 }
                 return result;
+            } else if (parser.parsingFunctionParametersDeclaration
+                    && parser.functionParametersRuntime) {
+                String fullName = NameNormalizer.normalizeVariableName(
+                        subName, parser.ctx.symbolTable.getCurrentPackage());
+                SubroutineNode runtimeCode = handleAnonSub(
+                        parser, null, prototype, attributes, block, currentIndex, sourceEndTokenIndex);
+                runtimeCode.setAnnotation("functionParametersRuntimeName", fullName);
+                OperatorNode glob = new OperatorNode("*",
+                        new IdentifierNode(fullName, currentIndex), currentIndex);
+                glob.setAnnotation("explicitGlobDereference", true);
+                return new BinaryOperatorNode("=", glob, runtimeCode, currentIndex);
             } else {
                 return handleNamedSub(parser, subName, prototype, attributes, block, declaration);
             }

@@ -109,11 +109,12 @@ public final class ParserExtensionRegistry {
         boolean strict = true;
         boolean strictSpecified = false;
         boolean checkArgumentTypes = true;
+        boolean runtime = false;
         List<String> defaultAttributes = List.of();
         if (value instanceof RuntimeHash configuration) {
             Set<String> supportedOptions = Set.of(
                     "defaults", "shift", "invocant", "strict",
-                    "check_argument_count", "check_argument_types", "attributes");
+                    "check_argument_count", "check_argument_types", "attributes", "runtime");
             for (String option : configuration.elements.keySet()) {
                 if (!supportedOptions.contains(option)) {
                     throw new IllegalArgumentException("Invalid keyword property: " + option);
@@ -146,6 +147,10 @@ public final class ParserExtensionRegistry {
             if (checkArgumentTypesValue != null) {
                 checkArgumentTypes = checkArgumentTypesValue.getBoolean();
             }
+            RuntimeScalar runtimeValue = configuration.elements.get("runtime");
+            if (runtimeValue != null) {
+                runtime = runtimeValue.getBoolean();
+            }
             RuntimeScalar attributesValue = configuration.elements.get("attributes");
             if (attributesValue != null) {
                 defaultAttributes = parseConfiguredAttributes(attributesValue.toString());
@@ -162,7 +167,8 @@ public final class ParserExtensionRegistry {
                     "Unsupported Function::Parameters keyword defaults: " + defaults);
         }
         return FunctionParametersKeywordPlugin.configured(
-                defaults, shift, optionalInvocantCount, strict, checkArgumentTypes, defaultAttributes);
+                defaults, shift, optionalInvocantCount, strict, checkArgumentTypes,
+                runtime, defaultAttributes);
     }
 
     private static List<String> parseConfiguredAttributes(String source) {

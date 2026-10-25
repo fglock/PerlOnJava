@@ -6,7 +6,55 @@ use Function::Parameters {
     fun => {},
     lax_count => { check_argument_count => 0 },
     lvalue_function => { attributes => ':lvalue' },
+    runtime_fun => { defaults => 'function_strict', runtime => 1 },
+    runtime_method => { defaults => 'method_strict', runtime => 1 },
 };
+
+ok(!defined(&runtime_named), 'runtime keyword has no CV before its declaration executes');
+runtime_fun runtime_named($value) { $value }
+ok(defined(&runtime_named), 'runtime keyword installs its CV when executed');
+is(runtime_named('ready'), 'ready', 'runtime-installed function is callable');
+runtime_fun runtime_caller_name() { (caller 0)[3] }
+is(runtime_caller_name(), 'main::runtime_caller_name',
+    'runtime-installed function retains its declared caller name');
+
+{
+    package FunctionParametersRuntimeMethod;
+    runtime_method echo($value) { $value }
+    runtime_method caller_name() { (caller 0)[3] }
+}
+my $runtime_method_object = bless {}, 'FunctionParametersRuntimeMethod';
+is($runtime_method_object->echo('method-ready'), 'method-ready',
+    'runtime-installed method binds its invocant');
+is($runtime_method_object->caller_name(), 'FunctionParametersRuntimeMethod::caller_name',
+    'runtime-installed method retains its declared caller name');
+
+{
+    package FunctionParametersRuntimeConditional;
+    if (0) { runtime_fun skipped() { 1 } }
+}
+ok(!defined(&FunctionParametersRuntimeConditional::skipped),
+    'runtime declaration in an unexecuted branch remains undefined');
+
+{
+    package FunctionParametersRuntimeAlias::Base;
+    runtime_method value() { 'before' }
+    package FunctionParametersRuntimeAlias::Alias;
+    package FunctionParametersRuntimeAlias::Derived;
+    our @ISA = ('FunctionParametersRuntimeAlias::Alias');
+}
+*FunctionParametersRuntimeAlias::Alias::value =
+    *FunctionParametersRuntimeAlias::Base::value;
+my $runtime_aliased_method = bless {}, 'FunctionParametersRuntimeAlias::Derived';
+is($runtime_aliased_method->value(), 'before',
+    'runtime method resolves through a whole-glob alias');
+{
+    package FunctionParametersRuntimeAlias::Base;
+    no warnings 'redefine';
+    runtime_method value() { 'after' }
+}
+is($runtime_aliased_method->value(), 'after',
+    'runtime redefinition updates method dispatch through whole-glob aliases');
 
 sub ordinary_sub { return }
 ok(!defined(Function::Parameters::info(\&ordinary_sub)),
