@@ -309,7 +309,10 @@ and first path establish implementation cost.
   at `basic random_results`. The lifecycle candidate failed a later
   `basic leaky_resultset_cond` check in the combined run, while a focused retry
   completed with only the upstream TODO failures. The differing leak outcomes
-  are inconclusive; rerun all three programs together after #1642 is reconciled.
+  are inconclusive. A reduced scope-guard reproducer of the capture and
+  re-destruction path passes 3/3 on system Perl, JVM, and interpreter, so the
+  full `txn_scope_guard.t` failure depends on additional suite state. Rerun all
+  three programs together after #1642 is reconciled.
 
 ### Next steps
 
