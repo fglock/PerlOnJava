@@ -28,16 +28,24 @@ the upstream XS parser plugin.
 
 - [x] Add a lexical parser keyword plugin interface and module-provider
   registry.
-- [x] Add `Function::Parameters` module loading and named `fun` and explicit-
-  invocant `method` providers, backed by core positional signatures.
+- [x] Add `Function::Parameters` module loading and named `fun` plus implicit-
+  or explicit-invocant `method` providers, backed by core signatures.
 - [x] Add regression coverage for required/default parameters, slurpy arrays,
-  explicit method invocants, and lexical `no` removal.
+  explicit and default `$self` method invocants, and lexical `no` removal.
 - [x] Support anonymous `fun` expressions, lexical blocks, nested `eval`, and
   source parsing with both execution backends.
 - [x] Cover `//=`/`||=` defaults, ignored parameters, slurpy hashes, named
   parameters with a rest hash, and recursive named functions.
 - [x] Validate the project unit gate and system Perl behavior where the
   upstream module is available.
+
+### Current follow-up
+
+- The default `method` keyword now injects `$self` as its invocant when a
+  declaration does not provide an explicit `($name: ...)` invocant. Explicit
+  invocants remain supported. An empty user parameter list is supported too.
+- The 20-case regression passes on JVM and interpreter backends; the full
+  repository `make` gate passed on this candidate.
 
 ### Next steps
 
