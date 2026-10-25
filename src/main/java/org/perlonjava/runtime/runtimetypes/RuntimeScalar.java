@@ -985,6 +985,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 ? java.util.List.of() : java.util.List.copyOf(scalarReferenceContentsOwners);
     }
 
+    /** Whether a strong refalias still owns this scalar cell's current contents. */
+    boolean hasStrongScalarReferenceAlias() {
+        return !scalarReferenceContentsOwnersSnapshot().isEmpty();
+    }
+
+    /** Whether this cell's current value owner is protected by an aggregate or refalias. */
+    boolean hasAggregateOrScalarReferenceOwner() {
+        return hasOwningAggregateSlot() || hasStrongScalarReferenceAlias();
+    }
+
     /**
      * True once a scalar reference has been created to this scalar, e.g.
      * {@code \$x}. Interpreter lexical assignment must preserve the scalar
@@ -2531,7 +2541,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && !WeakRefRegistry.isweak(scalarReferent)
                 && (scalarReferent.type & REFERENCE_BIT) != 0
                 && scalarReferent.value instanceof RuntimeBase inner
-                && !scalarReferent.ownsCountedReferent(inner)
+                && (!scalarReferent.ownsCountedReferent(inner)
+                    || scalarReferent.hasOwningAggregateSlot())
                 && inner.refCount >= 0;
     }
 

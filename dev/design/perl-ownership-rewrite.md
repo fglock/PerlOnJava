@@ -246,6 +246,27 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   system Perl, JVM, and interpreter. No accounting mismatch is reproduced, so
   retain the current lifecycle decision while migrating transient holds to
   explicit slots as part of the broader ownership phase.
+- On 2026-10-25, a focused recovery-bypass audit passed the #1794 controller
+  and WebSocket tests (four files), #1795 tempfile tests (two files), plus
+  selected scalar-reference, hash-element, array-delete, #1649, and DESTROY
+  regressions. A filtered no-recovery `make` reached 708 Java tests and failed
+  six tests whose simulated release paths still rely on recovery or whose
+  measured work includes the scan; three tests were skipped. The bypass was
+  removed after the focused paths passed.
+- A new system-Perl-validated regression exposed a real scalar-cell ownership
+  gap: clearing or deleting a hash/array entry must preserve the cell's value
+  while a strong refalias still points to that cell, then release it when the
+  final alias disappears. `PerlOwnerSlot` now records a non-counting
+  `SCALAR_REFERENCE_CONTENTS` identity when the cell already owns the value;
+  aggregate removal preserves the cell's `SCALAR_VALUE` owner, and final alias
+  release retires that owner. Weak aliases do not retain the value. The new
+  regression passes 18/18 on system Perl and both PerlOnJava backends, with
+  aggregate-owner recovery disabled, and the hash/array refcount, weak-alias,
+  and borrowed-array deletion regressions pass on both backends. A filtered
+  `nice -n 19 make` passes. The recovery scan remains because six synthetic
+  release/query tests still exercise undercounted states, and its two
+  production callers remain `MortalList.processDeferredBase` and
+  `RuntimeScalar.setLargeRefCounted` pending direct-accounting proof there.
 - The recovery-disabled audit had exposed an interpreter regression in
   `issue_1649_recursive_builder_pad_release.t`: the interpreter retained all
   five weakly observed nodes after dropping the root (expected two), even with

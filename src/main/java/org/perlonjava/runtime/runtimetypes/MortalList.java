@@ -660,6 +660,12 @@ public class MortalList {
     public static void deferDestroyForContainerClear(Iterable<RuntimeScalar> elements) {
         if (!isActive()) return;
         for (RuntimeScalar scalar : elements) {
+            if (scalar != null && scalar.hasStrongScalarReferenceAlias()) {
+                // A refalias keeps the scalar cell itself alive after the
+                // aggregate slot is removed. Its SCALAR_VALUE owner must move
+                // with the cell and is released when the final alias goes.
+                continue;
+            }
             // Use the recursive path so a discarded wrapper/container also
             // releases references stored in its fields.  Test::Deep's
             // temporary comparator is a blessed hash whose `val` field can

@@ -121,6 +121,11 @@ public class WeakRefRegistry {
                 .add(ref);
         base.activateOwnerTracking();
         ref.releaseClosureCaptureReferentsForWeaken(base);
+        // A weak reference to a scalar cell must stop owning that cell's
+        // contents, just as weakening a direct scalar value stops owning its
+        // referent. This also lets a detached hash/array value die when its
+        // final strong refalias is weakened.
+        ref.releaseOwnedScalarReferenceContents();
         if (System.getenv("PJ_WEAKCLEAR_TRACE") != null) {
             System.err.println("[WEAKEN] ref=" + System.identityHashCode(ref)
                 + " referent=" + System.identityHashCode(base)

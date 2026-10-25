@@ -907,6 +907,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     // would corrupt the caller's refCount tracking.
                     if (runtimeArray.ownsElement(result)
                             && !result.hasOwningAggregateSlotForLvalueAlias()
+                            && !result.hasStrongScalarReferenceAlias()
                             && (result.type & RuntimeScalarType.REFERENCE_BIT) != 0
                             && result.value instanceof RuntimeBase base
                             && result.ownsCountedReferent(base)
@@ -950,6 +951,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     // See pop() for rationale and elementsOwned guard.
                     if (runtimeArray.ownsElement(result)
                             && !result.hasOwningAggregateSlotForLvalueAlias()
+                            && !result.hasStrongScalarReferenceAlias()
                             && (result.type & RuntimeScalarType.REFERENCE_BIT) != 0
                             && result.value instanceof RuntimeBase base
                             && result.ownsCountedReferent(base)
@@ -1314,7 +1316,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 // reference through an owning array. Borrowed aliases such as
                 // @_ must not release the caller's scalar owner. Defer the
                 // owner release so assignment can first retain the result.
-                if (ownsElement(previous) && !previous.hasOwningAggregateSlot()) {
+                if (ownsElement(previous) && !previous.hasAggregateOrScalarReferenceOwner()) {
                     MortalList.deferDecrementIfTracked(previous);
                     MortalList.deferIoOwnerRelease(previous);
                 }

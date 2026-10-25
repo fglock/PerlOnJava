@@ -1182,7 +1182,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     // Schedule deferred refCount decrement — fires at next safe point
                     // (setLarge or RuntimeCode.apply). This prevents premature DESTROY
                     // when the caller captures the return value.
-                    if (!value.hasOwningAggregateSlot()) {
+                    if (!value.hasAggregateOrScalarReferenceOwner()) {
                         MortalList.deferDecrementIfTracked(value);
                         MortalList.deferIoOwnerRelease(value);
                     }
@@ -1232,7 +1232,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                         yield fetchedValue;
                     }
                     // Schedule deferred refCount decrement (see delete(RuntimeScalar) above)
-                    if (!value.hasOwningAggregateSlot()) {
+                    if (!value.hasAggregateOrScalarReferenceOwner()) {
                         MortalList.deferDecrementIfTracked(value);
                         MortalList.deferIoOwnerRelease(value);
                     }

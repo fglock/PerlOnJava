@@ -243,7 +243,8 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
                 // reachable after the saved hash entry is restored. Release
                 // it only after restoration, so a DESTROY method observes the
                 // restored dynamic value (notably a restored %SIG handler).
-                if (displaced != null && displaced != previousState) {
+                if (displaced != null && displaced != previousState
+                        && !displaced.hasStrongScalarReferenceAlias()) {
                     // Replacing a localized element has the same ownership
                     // effect as deleting a hash element.  In particular, a
                     // CODE slot can be the last counted owner of a closure;
