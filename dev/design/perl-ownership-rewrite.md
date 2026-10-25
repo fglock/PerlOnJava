@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816), last reconciled with `origin/master` through `aeda28344`. The current branch head `64746a16e` is pushed; its full `nice -n 19 make` gate passes locally. Hosted run `39991272777` passes on Linux and Windows, including both thread gates, for preceding head `c1167ffbd`. Owner slots still bridge to `RuntimeBase.refCount` for dispatch, and default owner-slot accounting remains incomplete.
+**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816), last reconciled with `origin/master` through `aeda28344`. The current ownership changes are pushed, and the latest code batch passes the full `nice -n 19 make` gate locally. Hosted run `39991272777` passes on Linux and Windows, including both thread gates, for preceding head `c1167ffbd`. Owner slots still bridge to `RuntimeBase.refCount` for dispatch, and default owner-slot accounting remains incomplete.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
@@ -386,6 +386,13 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   ownership: the trace arms on the blessed package name and captured the
   `File::Temp` package glob's setup transitions. The regression itself still
   passes, and this trace provides no evidence to remove either recovery caller.
+- Thread-cloned scalar references and blessed glob aliases now acquire their
+  tracked `SCALAR_VALUE` owner through the slot API, keeping count acquisition
+  and slot identity together. The glob path retains its legacy fallback for
+  untracked referents. Focused Java tests verify the new owners release through
+  their slots; `nice -n 19 make` passes in 18m37s. This advances scalar-owner
+  migration but does not change lifecycle dispatch authority or remove either
+  aggregate-recovery caller.
 - A second focused reducer,
   `issue_1649_captured_scalar_array_argument.t`, isolates the same class of
   lifetime error: a closure writes a blessed object to a captured scalar while
