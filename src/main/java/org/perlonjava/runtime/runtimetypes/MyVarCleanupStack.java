@@ -377,12 +377,18 @@ public class MyVarCleanupStack {
                     && scalar.value == glob
                     && !scalar.ownsCountedReferent(referent)
                     && seen.put(scalar, Boolean.TRUE) == null) {
-                scalar.setRefCountOwned(true);
-                referent.recordOwner(scalar, "blessed glob lexical alias");
-                referent.recordActiveOwner(scalar);
-                referent.traceRefCount(+1, "MyVarCleanupStack.retainBlessedGlobAliases");
-                referent.refCount++;
-                referent.hadCountedReference = true;
+                if (!scalar.acquireScalarValueOwnerCount(
+                        referent, "MyVarCleanupStack.retainBlessedGlobAliases")) {
+                    // Preserve the legacy count for a glob referent that has
+                    // not entered tracked ownership yet.
+                    scalar.setRefCountOwned(true);
+                    referent.recordOwner(scalar, "blessed glob lexical alias");
+                    referent.recordActiveOwner(scalar);
+                    referent.traceRefCount(+1,
+                            "MyVarCleanupStack.retainBlessedGlobAliases");
+                    referent.refCount++;
+                    referent.hadCountedReference = true;
+                }
             }
         }
         for (RuntimeScalar scalar : GlobalVariable.scalarSlots().values()) {
@@ -392,12 +398,18 @@ public class MyVarCleanupStack {
                     && scalar.value == glob
                     && !scalar.ownsCountedReferent(referent)
                     && seen.put(scalar, Boolean.TRUE) == null) {
-                scalar.setRefCountOwned(true);
-                referent.recordOwner(scalar, "blessed glob package alias");
-                referent.recordActiveOwner(scalar);
-                referent.traceRefCount(+1, "MyVarCleanupStack.retainBlessedGlobAliases");
-                referent.refCount++;
-                referent.hadCountedReference = true;
+                if (!scalar.acquireScalarValueOwnerCount(
+                        referent, "MyVarCleanupStack.retainBlessedGlobAliases")) {
+                    // Preserve the legacy count for a glob referent that has
+                    // not entered tracked ownership yet.
+                    scalar.setRefCountOwned(true);
+                    referent.recordOwner(scalar, "blessed glob package alias");
+                    referent.recordActiveOwner(scalar);
+                    referent.traceRefCount(+1,
+                            "MyVarCleanupStack.retainBlessedGlobAliases");
+                    referent.refCount++;
+                    referent.hadCountedReference = true;
+                }
             }
         }
     }

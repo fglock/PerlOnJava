@@ -109,6 +109,11 @@ class RuntimeGraphClonerTest {
         assertEquals(1, clonedReferent.refCount);
         assertTrue(cloned.refCountOwned);
         assertTrue(cloned.scalarValueOwnerSlot().isActive());
+        assertEquals(1, clonedReferent.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_VALUE));
+        assertTrue(cloned.releaseScalarValueOwnerCount(
+                clonedReferent, "RuntimeGraphClonerTest cloned owner release"));
+        assertEquals(0, clonedReferent.refCount);
+        assertEquals(0, clonedReferent.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_VALUE));
     }
 
     @Test

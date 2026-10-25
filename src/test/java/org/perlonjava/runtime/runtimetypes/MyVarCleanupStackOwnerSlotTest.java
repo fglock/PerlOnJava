@@ -9,6 +9,31 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class MyVarCleanupStackOwnerSlotTest {
     @Test
+    void retainingTrackedBlessedGlobAliasAcquiresCountThroughScalarSlot() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeGlob glob = new RuntimeGlob("OwnerSlotGlob::TRACKED_HANDLE");
+            glob.refCount = 0;
+            RuntimeScalar lexicalAlias = new RuntimeScalar();
+            lexicalAlias.type = RuntimeScalarType.GLOB;
+            lexicalAlias.value = glob;
+            MyVarCleanupStack.register(lexicalAlias);
+            try {
+                MyVarCleanupStack.retainBlessedGlobAliases(glob, glob);
+
+                assertEquals(1, glob.refCount);
+                assertEquals(1, glob.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_VALUE));
+                assertTrue(lexicalAlias.releaseScalarValueOwnerCount(
+                        glob, "MyVarCleanupStackOwnerSlotTest release"));
+                assertEquals(0, glob.refCount);
+                assertEquals(0, glob.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_VALUE));
+            } finally {
+                MyVarCleanupStack.unregister(lexicalAlias);
+            }
+        }
+    }
+
+    @Test
     void retainingBlessedGlobAliasDoesNotDuplicateRetiredLegacyOwner() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
