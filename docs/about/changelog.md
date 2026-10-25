@@ -13,6 +13,7 @@ priorities and future plans.
 
 - Enforce restricted-hash key access and implement `Hash::Util` key, value, and hash locking (#1502, #1172).
 - Preserve captured referent ownership when foreach lexicals alias aggregate cells, fixing prompt cleanup of nested one-shot callback owners (#1646).
+- Match `B::REFCNT` to native B's treatment of its wrapper reference, preventing false resurrection from a schema's sole source registry owner (#1646).
 - Report the caller's scalar context correctly when inspecting frames in overloaded exceptions (#1859).
 - Avoid heap exhaustion when compiling very large generated subroutines, and preserve heredoc statement boundaries with `\&name` fallbacks (#1252).
 - Cover nested require caller packages and imported `CLASS` constants, and match defer ordering and caller frames around loop `continue` blocks (#1601, #1405, #1383).

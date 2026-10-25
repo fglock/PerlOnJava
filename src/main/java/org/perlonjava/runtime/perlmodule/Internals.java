@@ -545,22 +545,6 @@ public class Internals extends PerlModuleBase {
                     GlobalContext.encodeSpecialVar("H"));
             int extra = (base.localBindingExists && !compileHintsHash ? 1 : 0)
                     + base.foreachAliasCount;
-            if (rc == 2
-                    && args.size() > 1
-                    && args.get(1).getBoolean()
-                    && DestroyDispatch.isInsideDestroy()
-                    && !ReachabilityWalker.hasLiveStrongScalarReferentOtherThan(base, arg)) {
-                // B::SV's private hash slot is one of the two selective
-                // owners.  Ordinarily it is the temporary owner discounted
-                // below (a single live lexical therefore reports one).  If
-                // there is no independently live scalar pad, the other owner
-                // is a real aggregate slot, as in DBIx::Class Schema's source
-                // registry during DESTROY, and must remain visible to B. This
-                // distinction is only meaningful while DESTROY is active:
-                // outside it, an unregistered lexical can look identical and
-                // must still report its single owner.
-                extra++;
-            }
             // Legacy fudge: anonymous tracked container with no counted
             // owners -- still report 1 to indicate "live SV". Used by
             // Sub::Quote / Moo introspection paths that probe for liveness.
@@ -619,6 +603,7 @@ public class Internals extends PerlModuleBase {
      *   <li>{@code has_weak_refs} — true if the weak-ref registry has entries pointing here</li>
      *   <li>{@code active_owner_count} — live scalar-store owners currently tracked for diagnostics</li>
      *   <li>{@code semantic_capture_owner_count} — distinct captured pad owners</li>
+     *   <li>{@code hash_slot_owner_count} — direct strong owners in hash slots</li>
      * </ul>
      */
     public static RuntimeList jperl_refstate(RuntimeArray args, int ctx) {
@@ -633,6 +618,7 @@ public class Internals extends PerlModuleBase {
             result.put("class_name", new RuntimeScalar(className == null ? "" : className));
             result.put("active_owner_count", new RuntimeScalar(base.activeOwnerCount()));
             result.put("semantic_capture_owner_count", new RuntimeScalar(base.semanticCaptureOwnerCount()));
+            result.put("hash_slot_owner_count", new RuntimeScalar(base.hashSlotOwnerCount));
             String kind = "OTHER";
             if (base instanceof RuntimeGlob) kind = "GLOB";
             else if (base instanceof RuntimeHash) kind = "HASH";
