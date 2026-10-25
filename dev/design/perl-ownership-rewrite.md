@@ -162,16 +162,14 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   evidence to replace the scan. After the diagnostic review, default behavior
   passes full `nice -n 19 make` in 39m43s; offline documentation link checking
   also passes.
-- The recovery-disabled audit also exposed a real interpreter regression in
-  `issue_1649_recursive_builder_pad_release.t`: system Perl and the JVM pass
-  all nine assertions, while the interpreter retains all five weakly observed
-  nodes after dropping the root (expected two). With default recovery enabled,
-  the interpreter still fails that root-release assertion; dropping the saved
-  body then releases the remaining nodes. Trace confirms the recursive
-  closure's `releaseCaptures()` runs at `undef $sub`, so this is not evidence
-  that the recovery scan can be removed. The remaining investigation is the
-  interpreter's direct ownership accounting for captured aggregate pads and
-  scalar cells across recursive closure execution and lexical cleanup.
+- The recovery-disabled audit had exposed an interpreter regression in
+  `issue_1649_recursive_builder_pad_release.t`: the interpreter retained all
+  five weakly observed nodes after dropping the root (expected two), even with
+  recovery enabled. Commit `9adc112aa` preserves captured lexical owners across
+  return cleanup. On 2026-10-25, the permanent regression passed all 9
+  assertions on system Perl, JVM, and interpreter, confirming the root release
+  and subsequent escaped-subtree release. This closes that interpreter
+  blocker; it does not establish that aggregate-owner recovery is removable.
 - On 2026-10-25, a two-node reducer narrowed a related interpreter failure to
   replacing the final lexical root with `undef` when the child has a weak
   parent edge. System Perl passes, and lexical scope exit releases the same
