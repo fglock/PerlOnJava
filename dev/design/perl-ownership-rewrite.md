@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816), last reconciled with `origin/master` through `aeda28344`. The current ownership changes are pushed, and the latest code batch passes the full `nice -n 19 make` gate locally. Hosted run `39991272777` passes on Linux and Windows, including both thread gates, for preceding head `c1167ffbd`. Owner slots still bridge to `RuntimeBase.refCount` for dispatch, and default owner-slot accounting remains incomplete.
+**Status:** Phase 1 closure-pad path is complete. Phase 2 remains in progress for [draft PR #1816](https://github.com/PerlOnJava/pull/1816), last reconciled with `origin/master` through `aeda28344`. PR head `69a0ab706` passes the full local `nice -n 19 make` gate (19m49s); no hosted checks are reported yet. Owner slots still bridge to `RuntimeBase.refCount` for dispatch, and default owner-slot accounting remains incomplete.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
@@ -114,11 +114,17 @@ focused Java regression covers the mixed state. This fixes a recovery-ledger
 gap; it does not yet identify which production operation can create the
 undercounted state, so neither scan caller is removed.
 
-Next audit target: instrument the two scan entry points with the owner release
-provenance already carried by `PendingOwnerRelease`, then reduce any
-production-only zero transition to a system-Perl-validated operation. Do not
-change a producer or remove either scan caller unless that trace identifies a
-real mismatched owner edge and a focused regression.
+Both production scan callers now have filtered release-provenance and owner
+slot traces. In the Catalyst tempfile case, the root queries for the
+recoverable `File::Temp` object's hash/array containers completed below their
+budgets and returned false; recovery came from reachable scalar-owner cells.
+A temporary exact-class bypass passed the focused #1794/#1795, alias-owner,
+WebSocket, and DESTROY regressions, so those cases do not identify a missing
+Perl owner acquisition. The bypass has been removed. The next audit target is
+to correlate scalar-overwrite and queued legacy releases with the counted
+scalar-owner cells they decrement, and find a production case where one
+transition consumes a different still-live owner. Keep both scan callers until
+that path has a focused regression and direct accounting.
 
 The first verified fix is at the reachability boundary. The interpreter's
 `capturedVars` array is execution metadata and can still contain a pad after
@@ -177,7 +183,7 @@ passes in 13m26s on this batch.
 
 ### Current status: Phase 2 in progress; Phase 1 merged in PR #1653 as `84f32be179bdc2b351c3eaae1cb26df39964ab6b` (2026-10-07)
 
-The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The branch includes the current-master merge at `aeda28344`; the latest confirmed pushed head before the local tie-wrapper batch is `b9382dbaf`. Focused Mojolicious controller/WebSocket and Catalyst tempfile regressions pass on both backends with loopback access. On the tail-call candidate, the interpreter tempfile test exceeded a 180-second run but completed 24/24 within a 240-second JFR run; a later 240-second profile after owner-proof caching emitted no TAP, while an unprofiled run completed 24/24 within the 600-second limit. Sampled `isRootedAggregateOwner` frames declined from 517 to 190, with 112 cache-hit frames; the profiled runs had different total sample counts, so wall-clock attribution remains inconclusive. HTML::Tree 5.07 passes all 23 files and 989 tests on both backends on the preceding ownership candidate. Phase 2 remains incomplete: `refCount` still controls lifecycle dispatch, and the slot ledger is not yet the default accounting source across general scalar/proxy stores, aliases, and cleanup. Distinct scalar-reference aliases keep separate reachability identities while contributing one referent count per scalar cell. The HTML-Tree result is compatibility evidence, not the Phase 2 owner-slot exit proof.
+The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.com/PerlOnJava/pull/1816). The branch includes the current-master merge at `aeda28344`; PR head `69a0ab706` is open and draft. Focused Mojolicious controller/WebSocket and Catalyst tempfile regressions pass on both backends with loopback access. On the tail-call candidate, the interpreter tempfile test exceeded a 180-second run but completed 24/24 within a 240-second JFR run; a later 240-second profile after owner-proof caching emitted no TAP, while an unprofiled run completed 24/24 within the 600-second limit. Sampled `isRootedAggregateOwner` frames declined from 517 to 190, with 112 cache-hit frames; the profiled runs had different total sample counts, so wall-clock attribution remains inconclusive. HTML::Tree 5.07 passes all 23 files and 989 tests on both backends on the preceding ownership candidate. Phase 2 remains incomplete: `refCount` still controls lifecycle dispatch, and the slot ledger is not yet the default accounting source across general scalar/proxy stores, aliases, and cleanup. Distinct scalar-reference aliases keep separate reachability identities while contributing one referent count per scalar cell. The HTML-Tree result is compatibility evidence, not the Phase 2 owner-slot exit proof.
 
 ### Current batch
 
