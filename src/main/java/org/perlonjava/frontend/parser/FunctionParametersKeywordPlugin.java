@@ -19,20 +19,28 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
     private final boolean strict;
     private final boolean checkArgumentTypes;
     private final List<String> invocants;
+    private final List<String> defaultAttributes;
 
     private FunctionParametersKeywordPlugin(
             boolean method, int optionalInvocantCount, boolean strict,
             boolean checkArgumentTypes, List<String> invocants) {
+        this(method, optionalInvocantCount, strict, checkArgumentTypes, invocants, List.of());
+    }
+
+    private FunctionParametersKeywordPlugin(
+            boolean method, int optionalInvocantCount, boolean strict,
+            boolean checkArgumentTypes, List<String> invocants, List<String> defaultAttributes) {
         this.method = method;
         this.optionalInvocantCount = optionalInvocantCount;
         this.strict = strict;
         this.checkArgumentTypes = checkArgumentTypes;
         this.invocants = List.copyOf(invocants);
+        this.defaultAttributes = List.copyOf(defaultAttributes);
     }
 
     static FunctionParametersKeywordPlugin configured(
             String defaults, List<String> shift, int optionalInvocantCount,
-            boolean strict, boolean checkArgumentTypes) {
+            boolean strict, boolean checkArgumentTypes, List<String> defaultAttributes) {
         boolean method = "method".equals(defaults) || "classmethod".equals(defaults);
         if (method) {
             List<String> invocants = shift;
@@ -40,11 +48,12 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
                 invocants = List.of("classmethod".equals(defaults) ? "$class" : "$self");
             }
             return new FunctionParametersKeywordPlugin(
-                    true, 0, strict, checkArgumentTypes, invocants);
+                    true, 0, strict, checkArgumentTypes, invocants, defaultAttributes);
         }
-        if (optionalInvocantCount == 0 && strict && checkArgumentTypes) return FUNCTION;
+        if (optionalInvocantCount == 0 && strict && checkArgumentTypes
+                && defaultAttributes.isEmpty()) return FUNCTION;
         return new FunctionParametersKeywordPlugin(
-                false, optionalInvocantCount, strict, checkArgumentTypes, List.of());
+                false, optionalInvocantCount, strict, checkArgumentTypes, List.of(), defaultAttributes);
     }
 
     @Override
@@ -60,6 +69,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         boolean previousStrict = parser.functionParametersStrict;
         boolean previousCheckArgumentTypes = parser.functionParametersCheckArgumentTypes;
         String previousKeyword = parser.functionParametersKeyword;
+        List<String> previousAttributes = parser.functionParametersAttributes;
         keywordToken.text = "sub";
         parser.tokenIndex++;
         parser.parsingFunctionParametersDeclaration = true;
@@ -69,6 +79,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         parser.functionParametersStrict = strict;
         parser.functionParametersCheckArgumentTypes = checkArgumentTypes;
         parser.functionParametersKeyword = keyword;
+        parser.functionParametersAttributes = defaultAttributes;
         try {
             boolean named = TokenUtils.peek(parser).type == LexerTokenType.IDENTIFIER;
             if (method) {
@@ -113,6 +124,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
             parser.functionParametersStrict = previousStrict;
             parser.functionParametersCheckArgumentTypes = previousCheckArgumentTypes;
             parser.functionParametersKeyword = previousKeyword;
+            parser.functionParametersAttributes = previousAttributes;
             keywordToken.text = originalText;
         }
     }

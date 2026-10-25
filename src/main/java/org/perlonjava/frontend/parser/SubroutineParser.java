@@ -1192,6 +1192,20 @@ public class SubroutineParser {
 
         // Ensure attributes.pm is loaded after parsing both pre-signature and
         // Function::Parameters post-signature attributes.
+        if (parser.parsingFunctionParametersDeclaration
+                && !parser.functionParametersAttributes.isEmpty()) {
+            for (int i = parser.functionParametersAttributes.size() - 1; i >= 0; i--) {
+                String configuredAttribute = parser.functionParametersAttributes.get(i);
+                if (configuredAttribute.startsWith("prototype(")
+                        && configuredAttribute.endsWith(")")) {
+                    prototype = configuredAttribute.substring(
+                            "prototype(".length(), configuredAttribute.length() - 1);
+                }
+                if (!attributes.contains(configuredAttribute)) {
+                    attributes.add(0, configuredAttribute);
+                }
+            }
+        }
         if (!attributes.isEmpty()) {
             org.perlonjava.runtime.operators.ModuleOperators.require(new RuntimeScalar("attributes.pm"));
         }
@@ -1640,6 +1654,9 @@ public class SubroutineParser {
                     // (either in this same call or from a previous :prototype() call)
                     String existingAttrProto = prototype != null ? prototype : prevAttrPrototype;
                     if (existingAttrProto != null && subDisplayName != null) {
+                        if (parser.parsingFunctionParametersDeclaration) {
+                            parser.throwCleanError("Can't redefine prototype");
+                        }
                         String msg = "Attribute prototype(" + argString
                                 + ") discards earlier prototype attribute in same sub";
                         String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
@@ -2062,6 +2079,9 @@ public class SubroutineParser {
 
         // Initialize placeholder metadata (accessed via codeRef.value)
         RuntimeCode placeholder = (RuntimeCode) codeRef.value;
+        if (block != null && block.getAnnotation("signatureMinArgs") instanceof Integer minArgs) {
+            placeholder.applySignatureMetadata(block);
+        }
         if (block == null && placeholder.hasBodyDefinition
                 && attributes != null && attributes.contains("lvalue")) {
             String location = "";
@@ -3208,8 +3228,8 @@ public class SubroutineParser {
     }
 
     /**
-     * Validates prototype characters and emits "Illegal character in prototype" warnings.
-     * Valid prototype characters: $ @ % & * ; + \ [ ] _
+     * Validates prototype characters and emits the same diagnostic sequence as
+     * Function::Parameters for malformed escapes, list markers, and character classes.
      *
      * @param parser The parser (for location info)
      * @param proto  The prototype string to validate
@@ -3218,47 +3238,82 @@ public class SubroutineParser {
     static void emitIllegalProtoWarning(Parser parser, String proto, String subDisplayName) {
         if (proto == null || proto.isEmpty()) return;
         String name = subDisplayName != null ? subDisplayName : "?";
-        // Check if any character is illegal
-        boolean hasIllegal = false;
-        for (int i = 0; i < proto.length(); i++) {
-            char c = proto.charAt(i);
-            if ("$@%&*;+\\[]_ ".indexOf(c) < 0) {
-                hasIllegal = true;
-                break;
-            }
-        }
-        // Perl emits diagnostics in addition to the general illegal-character
-        // warning for the malformed prototype shapes below. Whitespace is not
-        // part of a prototype's shape, so check the compacted form. The
-        // after-@ diagnostic is reported before the illegal-character one.
         String shape = proto.replaceAll("\\s+", "");
-        int at = -1;
+        boolean hasIllegalCharacter = !shape.matches("[$@%*;\\[\\]&\\\\_+]*");
+        boolean warnedAfterAt = false;
         for (int i = 0; i < shape.length(); i++) {
+            if (shape.charAt(i) == '\\' && i + 1 < shape.length()) {
+                if (shape.charAt(i + 1) == '[') {
+                    int closingBracket = shape.indexOf(']', i + 2);
+                    if (closingBracket >= 0) i = closingBracket;
+                    else i++;
+                } else {
+                    i++;
+                }
+                continue;
+            }
             if (shape.charAt(i) != '@') continue;
-            int backslashes = 0;
-            for (int j = i - 1; j >= 0 && shape.charAt(j) == '\\'; j--) backslashes++;
-            if (backslashes % 2 == 0) {
-                at = i;
+            if (i + 1 < shape.length()) {
+                warnIllegalProto(parser, "Prototype after '@' for " + name + " : " + proto);
+                warnedAfterAt = true;
                 break;
             }
         }
-        if (at >= 0 && at + 1 < shape.length() && shape.charAt(at + 1) != '%'
-                && shape.charAt(at + 1) != ']' && shape.charAt(at + 1) != ';') {
-            warnIllegalProto(parser, "Prototype after '@' for " + name + " : " + proto);
-        }
-        if (hasIllegal) {
+        if (hasIllegalCharacter) {
             warnIllegalProto(parser, "Illegal character in prototype for " + name + " : " + proto);
+            return;
         }
+        if (warnedAfterAt) return;
         for (int i = 0; i < shape.length(); i++) {
-            if (shape.charAt(i) == '_' && i + 1 < shape.length()
-                    && shape.charAt(i + 1) != ';') {
-                warnIllegalProto(parser,
-                        "Illegal character after '_' in prototype for " + name + " : " + proto);
-                break;
+            switch (shape.charAt(i)) {
+                case '_':
+                    if (i + 1 < shape.length() && ";@%".indexOf(shape.charAt(i + 1)) < 0) {
+                        warnIllegalProto(parser,
+                                "Illegal character after '_' in prototype for " + name + " : "
+                                        + shape.substring(i + 1));
+                        return;
+                    }
+                    break;
+                case '@':
+                case '%':
+                    if (i + 1 < shape.length()) {
+                        warnIllegalProto(parser, "Prototype after '" + shape.charAt(i) + "' for "
+                                + name + ": " + shape.substring(i + 1));
+                        return;
+                    }
+                    break;
+                case '\\':
+                    i++;
+                    if (i < shape.length() && "$@%&*".indexOf(shape.charAt(i)) >= 0) break;
+                    if (i < shape.length() && shape.charAt(i) == '[') {
+                        i++;
+                        int firstClassCharacter = i;
+                        while (i < shape.length() && shape.charAt(i) != ']'
+                                && "$@%&*".indexOf(shape.charAt(i)) >= 0) {
+                            i++;
+                        }
+                        if (i < shape.length() && shape.charAt(i) == ']'
+                                && i > firstClassCharacter) break;
+                    }
+                    warnIllegalProto(parser, "Illegal character after '\\' in prototype for "
+                            + name + " : " + shape.substring(Math.min(i, shape.length())));
+                    return;
+                case '$':
+                case '*':
+                case '&':
+                case ';':
+                case '+':
+                    break;
+                default:
+                    warnIllegalProto(parser, "Illegal character in prototype for " + name + " : "
+                            + shape.substring(i));
+                    if (shape.indexOf('[') >= 0
+                            && shape.indexOf(']', shape.indexOf('[') + 1) < 0) {
+                        warnIllegalProto(parser,
+                                "Missing ']' in prototype for " + name + " : " + proto);
+                    }
+                    return;
             }
-        }
-        if (shape.indexOf('[') >= 0 && shape.indexOf(']', shape.indexOf('[') + 1) < 0) {
-            warnIllegalProto(parser, "Missing ']' in prototype for " + name + " : " + proto);
         }
     }
 

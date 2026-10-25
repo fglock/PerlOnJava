@@ -542,6 +542,34 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (subName instanceof String value) signatureSubName = value;
     }
 
+    /** Attach parser metadata to an anonymous Function::Parameters code object. */
+    public static RuntimeScalar attachFunctionParametersMetadata(
+            RuntimeScalar codeRef, String keyword, String subName,
+            String[] invocants, String[] positionalRequired, String[] positionalOptional,
+            String[] namedRequired, String[] namedOptional, String[] namedParams,
+            String[] requiredNamedParams, int positionalCount,
+            String slurpySigil, String slurpyName) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
+            code.signatureKeyword = keyword;
+            code.signatureSubName = subName;
+            code.signatureInvocants = signatureNames(invocants);
+            code.signaturePositionalRequired = signatureNames(positionalRequired);
+            code.signaturePositionalOptional = signatureNames(positionalOptional);
+            code.signatureNamedRequired = signatureNames(namedRequired);
+            code.signatureNamedOptional = signatureNames(namedOptional);
+            code.signatureNamedParams = signatureNames(namedParams);
+            code.signatureRequiredNamedParams = signatureNames(requiredNamedParams);
+            code.signaturePositionalCount = positionalCount;
+            code.signatureSlurpySigil = slurpySigil;
+            code.signatureSlurpyName = slurpyName;
+        }
+        return codeRef;
+    }
+
+    private static List<String> signatureNames(String[] names) {
+        return names == null ? List.of() : List.of(names.clone());
+    }
+
     protected void validateNamedSignatureArguments(RuntimeArray args) {
         if (signatureNamedParams.isEmpty() && !"%".equals(signatureSlurpySigil)) return;
         int start = Math.min(signaturePositionalCount, args.size());
@@ -3204,6 +3232,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.declaredOurVariables = this.declaredOurVariables == null
                 ? null : new java.util.LinkedHashMap<>(this.declaredOurVariables);
         clone.compilerSupplier = this.compilerSupplier;
+        clone.signatureNamedParams = this.signatureNamedParams;
+        clone.signatureRequiredNamedParams = this.signatureRequiredNamedParams;
+        clone.signatureInvocants = this.signatureInvocants;
+        clone.signaturePositionalRequired = this.signaturePositionalRequired;
+        clone.signaturePositionalOptional = this.signaturePositionalOptional;
+        clone.signatureNamedRequired = this.signatureNamedRequired;
+        clone.signatureNamedOptional = this.signatureNamedOptional;
+        clone.signaturePositionalCount = this.signaturePositionalCount;
+        clone.signatureSlurpySigil = this.signatureSlurpySigil;
+        clone.signatureSlurpyName = this.signatureSlurpyName;
+        clone.signatureSubName = this.signatureSubName;
+        clone.signatureKeyword = this.signatureKeyword;
         clone.jvmClosureFrameRequired = this.jvmClosureFrameRequired;
         clone.activeLexicalFrameRequired = this.activeLexicalFrameRequired;
         clone.callDepthTrackingRequired = this.callDepthTrackingRequired;
