@@ -50,6 +50,9 @@ the upstream XS parser plugin.
   the same lexical `fun`/`method` keywords.
 - [x] Parse Type::Tiny bare and composite signature constraints, post-signature
   attributes, and method `@_` behavior after invocant binding.
+- [x] Register hash-configured function aliases, class methods, and methods
+  with multiple configured or explicit invocants; preserve the configured
+  keyword and invocant list in `Function::Parameters::info` metadata.
 
 ### Current follow-up
 
@@ -86,12 +89,10 @@ the upstream XS parser plugin.
 
 ### Next steps
 
-1. Add hash-based keyword configuration and configured/class/multiple
-   invocants.
-2. Trace PerlOnJava reactor I/O and timer dispatch against the passing native
+1. Trace PerlOnJava reactor I/O and timer dispatch against the passing native
    system-Perl run, then add permanent runtime-level regression coverage for
    the confirmed ordering defect.
-3. Add coercions, prototypes and relevant subroutine attributes, then document
+2. Add coercions, prototypes and relevant subroutine attributes, then document
    unsupported type and method-modifier behavior.
 
 ### Open questions

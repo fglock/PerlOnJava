@@ -2,13 +2,35 @@ package org.perlonjava.frontend.parser;
 
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.lexer.LexerToken;
+import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.frontend.parser.SubroutineParser;
 
-/** Initial Function::Parameters {@code fun} declaration provider. */
-final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
-    static final FunctionParametersKeywordPlugin INSTANCE = new FunctionParametersKeywordPlugin();
+import java.util.List;
 
-    private FunctionParametersKeywordPlugin() { }
+/** Parses Function::Parameters declarations using core signature lowering. */
+final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
+    static final FunctionParametersKeywordPlugin FUNCTION =
+            new FunctionParametersKeywordPlugin(false, List.of());
+    static final FunctionParametersKeywordPlugin METHOD =
+            new FunctionParametersKeywordPlugin(true, List.of("$self"));
+
+    private final boolean method;
+    private final List<String> invocants;
+
+    private FunctionParametersKeywordPlugin(boolean method, List<String> invocants) {
+        this.method = method;
+        this.invocants = List.copyOf(invocants);
+    }
+
+    static FunctionParametersKeywordPlugin configured(String defaults, List<String> shift) {
+        boolean method = "method".equals(defaults) || "classmethod".equals(defaults);
+        if (!method) return FUNCTION;
+        List<String> invocants = shift;
+        if (invocants == null || invocants.isEmpty()) {
+            invocants = List.of("classmethod".equals(defaults) ? "$class" : "$self");
+        }
+        return new FunctionParametersKeywordPlugin(true, invocants);
+    }
 
     @Override
     public Node parse(Parser parser, String keyword) {
@@ -18,14 +40,17 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         int implicitInvocantInsertIndex = -1;
         boolean previousFunctionParametersDeclaration = parser.parsingFunctionParametersDeclaration;
         boolean previousFunctionParametersMethod = parser.parsingFunctionParametersMethod;
+        int previousInvocantCount = parser.functionParametersInvocantCount;
+        String previousKeyword = parser.functionParametersKeyword;
         keywordToken.text = "sub";
         parser.tokenIndex++;
         parser.parsingFunctionParametersDeclaration = true;
-        parser.parsingFunctionParametersMethod = "method".equals(keyword);
+        parser.parsingFunctionParametersMethod = method;
+        parser.functionParametersInvocantCount = invocants.size();
+        parser.functionParametersKeyword = keyword;
         try {
-            boolean named = TokenUtils.peek(parser).type
-                    == org.perlonjava.frontend.lexer.LexerTokenType.IDENTIFIER;
-            if (parser.parsingFunctionParametersMethod) {
+            boolean named = TokenUtils.peek(parser).type == LexerTokenType.IDENTIFIER;
+            if (method) {
                 int openParen = parser.tokenIndex;
                 while (openParen < parser.tokens.size()
                         && !"(".equals(parser.tokens.get(openParen).text)
@@ -36,34 +61,47 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
                         && "(".equals(parser.tokens.get(openParen).text)
                         && !hasExplicitInvocant(parser, openParen)) {
                     implicitInvocantInsertIndex = openParen + 1;
-                    parser.tokens.add(implicitInvocantInsertIndex,
-                            new LexerToken(org.perlonjava.frontend.lexer.LexerTokenType.OPERATOR, "$"));
-                    parser.tokens.add(implicitInvocantInsertIndex + 1,
-                            new LexerToken(org.perlonjava.frontend.lexer.LexerTokenType.IDENTIFIER, "self"));
-                    parser.tokens.add(implicitInvocantInsertIndex + 2,
-                            new LexerToken(org.perlonjava.frontend.lexer.LexerTokenType.OPERATOR, ":"));
+                    int insertAt = implicitInvocantInsertIndex;
+                    for (int i = 0; i < invocants.size(); i++) {
+                        String invocant = invocants.get(i);
+                        if (i > 0) {
+                            parser.tokens.add(insertAt++,
+                                    new LexerToken(LexerTokenType.OPERATOR, ","));
+                        }
+                        parser.tokens.add(insertAt++,
+                                new LexerToken(LexerTokenType.OPERATOR, "$"));
+                        parser.tokens.add(insertAt++,
+                                new LexerToken(LexerTokenType.IDENTIFIER,
+                                        invocant.startsWith("$") ? invocant.substring(1) : invocant));
+                    }
+                    parser.tokens.add(insertAt,
+                            new LexerToken(LexerTokenType.OPERATOR, ":"));
                 }
             }
             return SubroutineParser.parseSubroutineDefinition(parser, named, "our");
         } finally {
             if (implicitInvocantInsertIndex >= 0) {
-                parser.tokens.remove(implicitInvocantInsertIndex);
-                parser.tokens.remove(implicitInvocantInsertIndex);
-                parser.tokens.remove(implicitInvocantInsertIndex);
-                parser.tokenIndex -= 3;
+                int inserted = invocants.size() * 2 + (invocants.size() - 1) + 1;
+                for (int i = 0; i < inserted; i++) parser.tokens.remove(implicitInvocantInsertIndex);
+                parser.tokenIndex -= inserted;
             }
             parser.parsingFunctionParametersDeclaration = previousFunctionParametersDeclaration;
             parser.parsingFunctionParametersMethod = previousFunctionParametersMethod;
+            parser.functionParametersInvocantCount = previousInvocantCount;
+            parser.functionParametersKeyword = previousKeyword;
             keywordToken.text = originalText;
         }
     }
 
     private static boolean hasExplicitInvocant(Parser parser, int openParen) {
-        if (openParen + 3 >= parser.tokens.size()) return false;
-        String sigil = parser.tokens.get(openParen + 1).text;
-        String name = parser.tokens.get(openParen + 2).text;
-        String colon = parser.tokens.get(openParen + 3).text;
-        return "$".equals(sigil) && name.matches("[A-Za-z_][A-Za-z0-9_]*") && ":".equals(colon);
+        if (openParen + 1 >= parser.tokens.size()
+                || !"$".equals(parser.tokens.get(openParen + 1).text)) return false;
+        for (int i = openParen + 2; i < parser.tokens.size(); i++) {
+            String text = parser.tokens.get(i).text;
+            if (":".equals(text)) return true;
+            if (")".equals(text) || "{".equals(text)) return false;
+        }
+        return false;
     }
 
     @Override
@@ -72,7 +110,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         parser.tokenIndex++;
         boolean anonymousDeclaration = "(".equals(TokenUtils.peek(parser).text);
         parser.tokenIndex = keywordIndex;
-        if (anonymousDeclaration && ("fun".equals(keyword) || "method".equals(keyword))) {
+        if (anonymousDeclaration && (method || this == FUNCTION)) {
             return parse(parser, keyword);
         }
         return null;

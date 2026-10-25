@@ -683,6 +683,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         copy.signatureMinArgs = this.signatureMinArgs;
         copy.signatureMaxArgs = this.signatureMaxArgs;
         copy.signatureSubName = this.signatureSubName;
+        copy.signatureKeyword = this.signatureKeyword;
         copy.signatureNamedParams = this.signatureNamedParams;
         copy.signatureRequiredNamedParams = this.signatureRequiredNamedParams;
         copy.signatureInvocants = this.signatureInvocants;

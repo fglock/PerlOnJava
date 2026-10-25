@@ -634,6 +634,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public String signatureSlurpySigil;
     public String signatureSlurpyName;
     public String signatureSubName;
+    public String signatureKeyword;
 
     public void applySignatureMetadata(Node ast) {
         Object names = ast.getAnnotation("signatureNamedParams");
@@ -648,6 +649,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (invocants instanceof List<?> list) {
             signatureInvocants = list.stream().map(String::valueOf).toList();
         }
+        Object keyword = ast.getAnnotation("signatureKeyword");
+        if (keyword instanceof String name) signatureKeyword = name;
         Object positionalRequired = ast.getAnnotation("signaturePositionalRequired");
         if (positionalRequired instanceof List<?> list) {
             signaturePositionalRequired = list.stream().map(String::valueOf).toList();
