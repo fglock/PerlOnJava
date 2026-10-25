@@ -1420,6 +1420,8 @@ public class SubroutineParser {
                         signature.getAnnotation("signaturePositionalCount"));
                 block.setAnnotation("signatureInvocants",
                         signature.getAnnotation("signatureInvocants"));
+                block.setAnnotation("signatureKeyword",
+                        signature.getAnnotation("signatureKeyword"));
                 block.setAnnotation("signaturePositionalRequired",
                         signature.getAnnotation("signaturePositionalRequired"));
                 block.setAnnotation("signaturePositionalOptional",
@@ -2517,6 +2519,7 @@ public class SubroutineParser {
             placeholder.signatureSlurpySigil = runtimeCode.signatureSlurpySigil;
             placeholder.signatureSlurpyName = runtimeCode.signatureSlurpyName;
             placeholder.signatureSubName = runtimeCode.signatureSubName;
+            placeholder.signatureKeyword = runtimeCode.signatureKeyword;
 
             Map<String, String> compiledOurRegistry = runtimeCode.ourVariableRegistry;
             if (compiledOurRegistry == null || compiledOurRegistry.isEmpty()) {

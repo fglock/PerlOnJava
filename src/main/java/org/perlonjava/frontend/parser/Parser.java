@@ -251,6 +251,10 @@ public class Parser {
     public boolean parsingFunctionParametersDeclaration = false;
     /** True while parsing an explicit-invocant Function::Parameters method. */
     public boolean parsingFunctionParametersMethod = false;
+    /** Number of leading positional parameters used as Function::Parameters invocants. */
+    public int functionParametersInvocantCount = 1;
+    /** Active Function::Parameters keyword, retained for signature metadata. */
+    public String functionParametersKeyword;
     // Are we parsing the top level script?
     public boolean isTopLevelScript = false;
     // Are we parsing inside a class block?
@@ -350,6 +354,10 @@ public class Parser {
 
     public ParserKeywordPlugin getKeywordPlugin(String keyword) {
         return ctx.symbolTable.getParserKeywordPlugin(keyword);
+    }
+
+    public java.util.Map<String, ParserKeywordPlugin> getVisibleParserKeywordPlugins() {
+        return ctx.symbolTable.getVisibleParserKeywordPlugins();
     }
 
     private void indexSourceLines() {

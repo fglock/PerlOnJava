@@ -45,8 +45,9 @@ public final class FunctionParameters extends PerlModuleBase {
         putParameters(info, "_named_required", code.signatureNamedRequired);
         putParameters(info, "_named_optional", code.signatureNamedOptional);
         info.put("nshift", new RuntimeScalar(code.signatureInvocants.size()));
-        info.put("keyword", new RuntimeScalar(
-                code.signatureInvocants.isEmpty() ? "fun" : "method"));
+        info.put("keyword", new RuntimeScalar(code.signatureKeyword != null
+                ? code.signatureKeyword
+                : code.signatureInvocants.isEmpty() ? "fun" : "method"));
         RuntimeScalar slurpy = code.signatureSlurpyName == null
                 ? new RuntimeScalar()
                 : parameter(code.signatureSlurpyName);

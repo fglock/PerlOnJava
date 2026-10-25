@@ -134,7 +134,7 @@ public class SignatureParser {
         // Parse parameters
         while (true) {
             parsingFunctionParametersInvocant = parser.parsingFunctionParametersMethod
-                    && positionalParameterCount == 0;
+                    && positionalParameterCount < parser.functionParametersInvocantCount;
             parseParameter();
             parsingFunctionParametersInvocant = false;
 
@@ -142,13 +142,22 @@ public class SignatureParser {
             LexerToken next = peekToken();
             if (parser.parsingFunctionParametersMethod
                     && !functionParametersInvocantSeparatorConsumed) {
-                if (!next.text.equals(":")) {
+                if (next.text.equals(":")) {
+                    if (invocantNames.size() != parser.functionParametersInvocantCount) {
+                        parser.throwError("Method signature must declare "
+                                + parser.functionParametersInvocantCount + " invocants");
+                    }
+                    consumeToken();
+                    functionParametersInvocantSeparatorConsumed = true;
+                    if (peekToken().text.equals(")")) {
+                        break;
+                    }
+                } else if (next.text.equals(",")
+                        && invocantNames.size() < parser.functionParametersInvocantCount) {
+                    consumeCommas();
+                    continue;
+                } else {
                     parser.throwError("Method signature must separate its invocant with ':'");
-                }
-                consumeToken();
-                functionParametersInvocantSeparatorConsumed = true;
-                if (peekToken().text.equals(")")) {
-                    break;
                 }
             } else if (next.text.equals(")")) {
                 break;
@@ -977,9 +986,11 @@ public class SignatureParser {
         // invocant lexically, then expose only user arguments through @_ in
         // the body. This lets method code forward @_ while adding $self.
         if (parser.parsingFunctionParametersMethod && !invocantNames.isEmpty()) {
-            allNodes.add(new OperatorNode("shift",
-                    new OperatorNode("@", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex),
-                    parser.tokenIndex));
+            for (int i = 0; i < invocantNames.size(); i++) {
+                allNodes.add(new OperatorNode("shift",
+                        new OperatorNode("@", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex),
+                        parser.tokenIndex));
+            }
         }
 
         ListNode signature = new ListNode(allNodes, parser.tokenIndex);
@@ -991,6 +1002,9 @@ public class SignatureParser {
         signature.setAnnotation("signatureRequiredNamedParams", new ArrayList<>(requiredNamedParameterNames));
         signature.setAnnotation("signaturePositionalCount", positionalParameterCount);
         signature.setAnnotation("signatureInvocants", new ArrayList<>(invocantNames));
+        if (parser.functionParametersKeyword != null) {
+            signature.setAnnotation("signatureKeyword", parser.functionParametersKeyword);
+        }
         signature.setAnnotation("signaturePositionalRequired", new ArrayList<>(positionalRequiredNames));
         signature.setAnnotation("signaturePositionalOptional", new ArrayList<>(positionalOptionalNames));
         signature.setAnnotation("signatureNamedRequired", new ArrayList<>(namedRequiredMetadataNames));
