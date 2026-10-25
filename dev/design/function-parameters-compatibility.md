@@ -30,6 +30,9 @@ the upstream XS parser plugin.
   registry.
 - [x] Add `Function::Parameters` module loading and named `fun` plus implicit-
   or explicit-invocant `method` providers, backed by core signatures.
+- [x] Preserve parameter names and required/optional categories as shared
+  runtime signature metadata, and implement `Function::Parameters::info` for
+  the supported subset.
 - [x] Add regression coverage for required/default parameters, slurpy arrays,
   explicit and default `$self` method invocants, and lexical `no` removal.
 - [x] Support anonymous `fun` expressions, lexical blocks, nested `eval`, and
@@ -44,27 +47,32 @@ the upstream XS parser plugin.
 - The default `method` keyword now injects `$self` as its invocant when a
   declaration does not provide an explicit `($name: ...)` invocant. Explicit
   invocants remain supported. An empty user parameter list is supported too.
-- The 20-case regression passes on JVM and interpreter backends; the full
-  repository `make` gate passed on this candidate.
+- The 32-case syntax and introspection regression passes on JVM and
+  interpreter backends; the full repository `make` gate passed on this
+  candidate.
+- `Function::Parameters::Info` now exposes invocants, required/optional
+  positional and named parameters, slurpy metadata, parameter name/type
+  accessors, and minimum/maximum argument counts. Its 12-case pure Perl API
+  test passes on system Perl and both PerlOnJava backends.
 
 ### Next steps
 
-1. Add configured invocants and `Function::Parameters::Info` for the
-   documented subset.
-2. Document unsupported type constraints, modifiers, and named-parameter
-   behavior, then run the full CPAN dependency reproducer.
+1. Add configurable keyword imports and configured/class/multiple invocants.
+2. Add prototypes and relevant subroutine attributes, then document
+   unsupported types, coercions, and method modifiers.
+3. Run the full CPAN dependency reproducer and classify remaining failures.
 
 ### Open questions
 
 - Which configured keyword aliases should be part of the first public subset?
 - How should provider-specific metadata map onto the existing signature
-  annotations without creating a second backend representation?
-- The current `fun` and explicit-invocant `method` subset does not yet provide
-  the upstream module's import configuration, named parameters, type checks,
-  modifiers, or `Function::Parameters::Info` API. The project test skips under
-  system Perl when the upstream distribution is not installed.
+  annotations without creating a second backend representation? The current
+  `Function::Parameters::Info` implementation reuses these annotations.
+- The system Perl integration test skips when upstream `Function::Parameters`
+  is not installed; the pure Perl Info API has independent system Perl tests.
 
 ## Related references
 
 - GitHub issues #1292 and #1361.
 - `src/main/java/org/perlonjava/frontend/parser/ParserKeywordPlugin.java`.
+- [Parser keyword plugins](../../docs/reference/parser-keyword-plugins.md).

@@ -305,6 +305,17 @@ public class RuntimeGraphCloner {
 
     private void copyCodeMetadata(RuntimeCode source, RuntimeCode target) {
         target.prototype = source.prototype;
+        target.signatureNamedParams = source.signatureNamedParams;
+        target.signatureRequiredNamedParams = source.signatureRequiredNamedParams;
+        target.signatureInvocants = source.signatureInvocants;
+        target.signaturePositionalRequired = source.signaturePositionalRequired;
+        target.signaturePositionalOptional = source.signaturePositionalOptional;
+        target.signatureNamedRequired = source.signatureNamedRequired;
+        target.signatureNamedOptional = source.signatureNamedOptional;
+        target.signaturePositionalCount = source.signaturePositionalCount;
+        target.signatureSlurpySigil = source.signatureSlurpySigil;
+        target.signatureSlurpyName = source.signatureSlurpyName;
+        target.signatureSubName = source.signatureSubName;
         target.attributes = source.attributes == null ? null : new ArrayList<>(source.attributes);
         target.packageName = source.packageName;
         target.subName = source.subName;

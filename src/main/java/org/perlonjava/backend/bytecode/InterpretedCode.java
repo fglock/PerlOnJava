@@ -685,8 +685,14 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         copy.signatureSubName = this.signatureSubName;
         copy.signatureNamedParams = this.signatureNamedParams;
         copy.signatureRequiredNamedParams = this.signatureRequiredNamedParams;
+        copy.signatureInvocants = this.signatureInvocants;
+        copy.signaturePositionalRequired = this.signaturePositionalRequired;
+        copy.signaturePositionalOptional = this.signaturePositionalOptional;
+        copy.signatureNamedRequired = this.signatureNamedRequired;
+        copy.signatureNamedOptional = this.signatureNamedOptional;
         copy.signaturePositionalCount = this.signaturePositionalCount;
         copy.signatureSlurpySigil = this.signatureSlurpySigil;
+        copy.signatureSlurpyName = this.signatureSlurpyName;
         return copy;
     }
 

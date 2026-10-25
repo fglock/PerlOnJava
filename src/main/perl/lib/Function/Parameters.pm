@@ -5,6 +5,8 @@ use warnings;
 
 our $VERSION = '0.01';
 
+require Function::Parameters::Info;
+
 # PerlOnJava installs the lexical parser extension around this module's
 # compile-time import. Keep runtime import behavior empty; syntax registration
 # belongs to the active parser scope.
