@@ -1309,6 +1309,15 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 }
                 RuntimeScalar previous = this.get(index);
                 this.elements.set(index, null);
+                // A middle delete leaves the scalar cell available as the
+                // operator result, but the removed cell no longer owns this
+                // reference through the array. Defer its owner release so an
+                // assignment can first retain the returned value, matching
+                // RuntimeHash.deleteInContext and pop/shift.
+                if (previous != null && !previous.hasOwningAggregateSlot()) {
+                    MortalList.deferDecrementIfTracked(previous);
+                    MortalList.deferIoOwnerRelease(previous);
+                }
                 yield previous;
             }
             case AUTOVIVIFY_ARRAY -> scalarUndef;
