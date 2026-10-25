@@ -142,9 +142,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /** Prepare the call-local cell cache and validate the guarded fast path. */
-    public static boolean prepareStableHashMutationMethodArguments(
+    private static boolean prepareStableHashMutationMethodArguments(
             RuntimeArray args, String firstHashKey, String secondHashKey, PerlRuntime runtime) {
-        if (args != null) args.clearVerifiedMethodHashFields();
         if (args == null || args.getClass() != RuntimeArray.class
                 || args.type != RuntimeArray.PLAIN_ARRAY || args.size() < 2
                 || firstHashKey == null) {
@@ -5777,6 +5776,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeCode code, RuntimeScalar runtimeScalar, RuntimeScalar method,
             RuntimeArray methodArgs, int callContext, int blessId,
             PerlRuntime methodRuntime) {
+        boolean stableHashFastPath = false;
+        boolean methodArgumentsRecycled = false;
         try {
             RuntimeArray args = methodArgs;
             String[] stableHashKeys = code.stableHashMutationMethodKeys;
@@ -5798,7 +5799,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                 }
 
-                boolean stableHashFastPath = canUseStableHashMutationMethodFastPath(
+                stableHashFastPath = canUseStableHashMutationMethodFastPath(
                         code, args, callContext, methodRuntime);
                 if (!stableHashFastPath && suppressRootTracking) {
                     args.resumeMethodArgumentRootTracking();
@@ -5811,6 +5812,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             RuntimeList result = applyStableHashMutationMethodBody(
                                     code, args, callContext);
                             args.recycleMethodCallArguments();
+                            methodArgumentsRecycled = true;
                             return result;
                         }
                         return applyCachedMethod(code, args, callContext, methodRuntime);
@@ -5818,7 +5820,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         MortalList.popMark(methodRuntime.lifecycleState);
                     }
                 } finally {
-                    if (stableHashFastPath) args.clearVerifiedMethodHashFields();
+                    if (stableHashFastPath && !methodArgumentsRecycled) {
+                        args.clearVerifiedMethodHashFields();
+                    }
                 }
             } finally {
                 if (suppressRootTracking) args.resumeMethodArgumentRootTracking();
