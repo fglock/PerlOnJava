@@ -16,6 +16,16 @@ my $plain = bless { x => 1, y => 2 }, 'DirectPlainHashIntegerMethod';
 is($plain->add(3), 9, 'plain native-integer method update');
 is_deeply($plain, { x => 4, y => 5 }, 'plain method retains both updated slots');
 
+my $large_one = bless { x => 4000, y => 5000 }, 'DirectPlainHashIntegerMethod';
+my $large_two = bless { x => 4000, y => 5000 }, 'DirectPlainHashIntegerMethod';
+my $large_result_one = $large_one->add(0);
+my $large_result_two = $large_two->add(0);
+is($large_result_one, 9000, 'large integer method result');
+is($large_result_two, 9000, 'another large integer method result');
+$large_result_one += 1;
+is($large_result_one, 9001, 'large integer method result remains writable');
+is($large_result_two, 9000, 'updating one large result leaves another unchanged');
+
 {
     package DirectPlainHashIntegerMethod::Tie;
     sub TIEHASH { bless { values => { x => 1, y => 2 }, stores => 0 }, shift }
