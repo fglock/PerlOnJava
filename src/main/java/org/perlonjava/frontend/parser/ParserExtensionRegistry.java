@@ -106,6 +106,7 @@ public final class ParserExtensionRegistry {
         int optionalInvocantCount = 0;
         boolean strict = true;
         boolean strictSpecified = false;
+        boolean checkArgumentTypes = true;
         if (value instanceof RuntimeHash configuration) {
             RuntimeScalar defaultValue = configuration.elements.get("defaults");
             defaults = defaultValue == null ? "function" : defaultValue.toString();
@@ -124,6 +125,10 @@ public final class ParserExtensionRegistry {
                 strict = strictValue.getBoolean();
                 strictSpecified = true;
             }
+            RuntimeScalar checkArgumentTypesValue = configuration.elements.get("check_argument_types");
+            if (checkArgumentTypesValue != null) {
+                checkArgumentTypes = checkArgumentTypesValue.getBoolean();
+            }
         } else {
             defaults = definition.toString();
         }
@@ -136,7 +141,7 @@ public final class ParserExtensionRegistry {
                     "Unsupported Function::Parameters keyword defaults: " + defaults);
         }
         return FunctionParametersKeywordPlugin.configured(
-                defaults, shift, optionalInvocantCount, strict);
+                defaults, shift, optionalInvocantCount, strict, checkArgumentTypes);
     }
 
     private static RuntimeBase unwrap(RuntimeBase value) {

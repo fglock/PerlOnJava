@@ -257,6 +257,8 @@ public class Parser {
     public int functionParametersInvocantCount = 1;
     /** Whether configured Function::Parameters signatures enforce exact arity. */
     public boolean functionParametersStrict = true;
+    /** Whether configured Function::Parameters signatures run type constraints. */
+    public boolean functionParametersCheckArgumentTypes = true;
     /** Active Function::Parameters keyword, retained for signature metadata. */
     public String functionParametersKeyword;
     // Are we parsing the top level script?

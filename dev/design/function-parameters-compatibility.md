@@ -46,6 +46,9 @@ the upstream XS parser plugin.
   upstream module is available.
 - [x] Parse scalar type constraints and run their `check`/`get_message`
   methods when a declared function is called.
+- [x] Honor configured `check_argument_types => 0`; when enabled, apply a
+  constraint's `coerce` method when `has_coercion` returns true before checking
+  the coerced parameter value.
 - [x] Recognize `GraphQL::MaybeTypeCheck`'s delegated import as a provider for
   the same lexical `fun`/`method` keywords.
 - [x] Parse Type::Tiny bare and composite signature constraints, post-signature
@@ -68,9 +71,10 @@ the upstream XS parser plugin.
   accessors, keyword, invocant count, and minimum/maximum argument counts. The
   object layout matches the upstream Info class for this supported subset.
 - Scalar type constraints pass focused JVM/interpreter coverage, including
-  bare Type::Tiny names and bracket-form expressions. Constraint objects are
-  evaluated at declaration time and checked at call time; `Info::Param->type`
-  remains undefined.
+  bare Type::Tiny names and bracket-form expressions. Constraint expressions
+  and checks run as part of signature setup for each call; coercion is applied
+  before checking when supported, and `check_argument_types => 0` skips those
+  checks. `Info::Param->type` remains undefined.
 - GraphQL's `GraphQL::MaybeTypeCheck` wrapper delegates its import of
   `Function::Parameters` into the caller. The parser provider models that
   wrapper import. Its CPAN compile test and the GraphQL POST/route-handler
@@ -80,12 +84,12 @@ the upstream XS parser plugin.
   `t/basic.t` suite completes. Two WebSocket assertions still differ under
   PerlOnJava: `subs response` receives a queued data packet where the test
   expects the stop completion, and `subs keepalive` receives a keepalive
-  packet where it expects the subscription response. A repeat also failed the
-  GraphiQL subscription request with a premature connection close. The same
-  cached CPAN test and dependencies, run with native Function::Parameters
-  under system Perl, pass all nine top-level subtests. This confirms a
-  PerlOnJava-side difference; the intermittent count and 80–100 ms intervals
-  point to event-loop dispatch timing, but do not yet identify the runtime
+  packet where it expects the subscription response. A diagnostic run measured
+  0.39–7.8 second gaps between resolver callbacks scheduled 100 ms apart on this
+  busy host; isolated timer and WebSocket probes pass on both Perl and
+  PerlOnJava. The cached CPAN test with native Function::Parameters under
+  system Perl passes all nine top-level subtests. The timing failures need
+  verification on a less-contended runner before attributing them to a runtime
   defect.
 
 ### Next steps
