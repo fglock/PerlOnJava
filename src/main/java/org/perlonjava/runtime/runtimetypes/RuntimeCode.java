@@ -5695,7 +5695,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             throw e;
         } finally {
-            MyVarCleanupStack.popMark(cleanupMark, methodExecutionState);
+            // Most method bodies do not register lexical variables. Avoid
+            // entering the cleanup walker for that common case; preserve the
+            // full unwind of registrations whenever the callee added any.
+            if (methodExecutionState.myVarCleanupStack.size() > cleanupMark) {
+                MyVarCleanupStack.popMark(cleanupMark, methodExecutionState);
+            }
         }
     }
 
