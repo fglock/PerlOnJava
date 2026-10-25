@@ -140,6 +140,9 @@ public class SignatureParser {
                 }
                 consumeToken();
                 functionParametersInvocantSeparatorConsumed = true;
+                if (peekToken().text.equals(")")) {
+                    break;
+                }
             } else if (next.text.equals(")")) {
                 break;
             } else if (next.text.equals(",")) {

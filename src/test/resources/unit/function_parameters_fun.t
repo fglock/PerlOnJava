@@ -18,6 +18,8 @@ fun named_options(:$required, :$optional //= 9, %extra) {
     our $anonymous_add = fun ($left, $right = 3) { $left + $right };
     package FunctionParametersMethod;
     method sum($self: $value = 2) { $self->{base} + $value }
+    method default_self($value = 1) { $self->{base} + $value }
+    method no_arguments() { $self->{base} }
     package main;
     1;
 };
@@ -39,6 +41,9 @@ is($anonymous_add->(4), 7, 'fun supports anonymous declarations in expression po
 my $object = bless { base => 40 }, 'FunctionParametersMethod';
 is($object->sum, 42, 'method declaration binds its explicit invocant and default');
 is($object->sum(3), 43, 'method declaration accepts an explicit positional value');
+is($object->default_self, 41, 'method declaration supplies the default $self invocant');
+is($object->default_self(5), 45, 'method declaration keeps arguments after its implicit invocant');
+is($object->no_arguments, 40, 'method declaration supports an empty user parameter list');
 
 my $block_scope_result = eval q{
     {
