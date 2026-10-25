@@ -263,10 +263,13 @@ both commits.
     commas while parsing argument expressions.
   - Added `unit/format_literal_only_pictures.t`; the focused format unit passed
     on both backends and the bundled project `make` gate succeeded.
-  - The Perl core `op/write.t` run completed 634/636 assertions. Its two
-    remaining failures (#123245) involve a lexical declared in one comma-list
-    expression and referenced by the next expression; the compiled line
-    currently reports that lexical unavailable. This remains open under #1234.
+  - Parse format templates in a child lexical scope so a `my`/`state` declared
+    by one argument expression is visible to later expressions on that line,
+    but is not captured by the format or leaked into its surrounding scope.
+  - Added `unit/format_argument_line_lexical_scope.t`, validated with system
+    Perl and both PerlOnJava backends. The full Perl core `op/write.t`
+    integration now passes 636/636 assertions, including both former #123245
+    failures.
   - Make `@*` consume one terminal record separator before adjacent literal
     picture text, matching `formline` behavior for values such as `"N\\n"`
     rendered with `3@*4`. Added regression coverage, validated with system

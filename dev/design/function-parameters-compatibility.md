@@ -34,16 +34,16 @@ the upstream XS parser plugin.
   explicit method invocants, and lexical `no` removal.
 - [x] Support anonymous `fun` expressions, lexical blocks, nested `eval`, and
   source parsing with both execution backends.
+- [x] Cover `//=`/`||=` defaults, ignored parameters, slurpy hashes, named
+  parameters with a rest hash, and recursive named functions.
 - [x] Validate the project unit gate and system Perl behavior where the
   upstream module is available.
 
 ### Next steps
 
-1. Add ignored parameters and richer default operators, with both-backend
-   regression coverage.
-2. Add configured invocants and `Function::Parameters::Info` for the
+1. Add configured invocants and `Function::Parameters::Info` for the
    documented subset.
-3. Document unsupported type constraints, modifiers, and named-parameter
+2. Document unsupported type constraints, modifiers, and named-parameter
    behavior, then run the full CPAN dependency reproducer.
 
 ### Open questions

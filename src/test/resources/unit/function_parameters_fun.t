@@ -8,6 +8,13 @@ my $loaded = eval q{
 
     fun add($left, $right = 1) { $left + $right }
     fun item_count(@items) { scalar @items }
+fun option_count(%options) { scalar keys %options }
+fun ignore_first($, $value) { $value }
+fun default_operators($undefined //= 7, $false ||= 8) { "$undefined:$false" }
+fun factorial($value) { $value < 2 ? 1 : $value * factorial($value - 1) }
+fun named_options(:$required, :$optional //= 9, %extra) {
+    "$required:$optional:" . ($extra{other} // '')
+}
     our $anonymous_add = fun ($left, $right = 3) { $left + $right };
     package FunctionParametersMethod;
     method sum($self: $value = 2) { $self->{base} + $value }
@@ -22,6 +29,12 @@ die $@ unless $loaded;
 is(add(4), 5, 'fun declaration uses an optional signature default');
 is(add(4, 3), 7, 'fun declaration accepts all positional parameters');
 is(item_count(qw(one two three)), 3, 'fun declaration supports a slurpy array');
+is(option_count(one => 1, two => 2), 2, 'fun declaration supports a slurpy hash');
+is(ignore_first('unused', 'kept'), 'kept', 'fun declarations can ignore a positional parameter');
+is(default_operators(undef, 0), '7:8', 'fun declarations support defined-or and or defaults');
+is(factorial(5), 120, 'named fun declarations can recurse');
+is(named_options(required => 'r', other => 'x'), 'r:9:x',
+    'named parameters support defaults and a trailing slurpy hash');
 is($anonymous_add->(4), 7, 'fun supports anonymous declarations in expression position');
 my $object = bless { base => 40 }, 'FunctionParametersMethod';
 is($object->sum, 42, 'method declaration binds its explicit invocant and default');

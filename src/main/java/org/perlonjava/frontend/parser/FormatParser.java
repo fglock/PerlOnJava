@@ -57,11 +57,6 @@ public class FormatParser {
 
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Parsing format declaration: " + formatName);
 
-        // Parse format template content immediately
-        List<FormatLine> templateLines = parseFormatTemplateContentImmediate(parser);
-
-        // Create a format node with the parsed template content
-        FormatNode formatNode = new FormatNode(formatName, templateLines, tokenIndex);
         // A FORMAT captures lexical cells from its declaration site. Keep the
         // declaration ASTs, not parser-time numeric ids: each backend assigns
         // its own executable local slot while lowering the declaration.
@@ -72,6 +67,21 @@ public class FormatParser {
                 lexicalDeclarations.put(entry.name(), entry.ast());
             }
         }
+
+        // Format argument lines are deferred code. Lexicals declared by an
+        // argument expression (for example, `my $x = ..., $x`) belong to that
+        // expression and must not leak into the declaration's surrounding
+        // scope or become captured by the RuntimeFormat itself.
+        int formatScope = parser.ctx.symbolTable.enterScope();
+        List<FormatLine> templateLines;
+        try {
+            templateLines = parseFormatTemplateContentImmediate(parser);
+        } finally {
+            parser.ctx.symbolTable.exitScope(formatScope);
+        }
+
+        // Create a format node with the parsed template content
+        FormatNode formatNode = new FormatNode(formatName, templateLines, tokenIndex);
         formatNode.setAnnotation("formatLexicalDeclarations", lexicalDeclarations);
 
         // Formats are declarations, not statements delayed until an enclosing
@@ -404,6 +414,7 @@ public class FormatParser {
         Matcher matcher = Pattern.compile("[$@%][A-Za-z_]\\w*").matcher(argumentLine.content);
         while (matcher.find()) {
             String name = matcher.group();
+            if (declaredInArgumentLine(argumentLine.content, name)) continue;
             boolean lexical = parser.ctx.symbolTable.getAllVisibleVariables().values().stream()
                     .anyMatch(entry -> name.equals(entry.name())
                             && ("my".equals(entry.decl()) || "state".equals(entry.decl())));
@@ -413,6 +424,20 @@ public class FormatParser {
         if (!unavailable.isEmpty()) {
             argumentLine.setAnnotation("unavailableLexicalVariableNames", unavailable);
         }
+    }
+
+    /** A lexical declared by the argument expression is local to that line. */
+    private static boolean declaredInArgumentLine(String source, String name) {
+        Pattern declaration = Pattern.compile("\\b(?:my|state)\\b([^;=]*)");
+        Matcher declarations = declaration.matcher(source);
+        Pattern variable = Pattern.compile("[$@%][A-Za-z_]\\w*");
+        while (declarations.find()) {
+            Matcher variables = variable.matcher(declarations.group(1));
+            while (variables.find()) {
+                if (name.equals(variables.group())) return true;
+            }
+        }
+        return false;
     }
 
     private static boolean hasPriorLexicalDeclaration(Parser parser, String name) {
