@@ -656,6 +656,20 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   gate passes on candidate `9c93d5922` in 19m53s; hosted validation for that
   head is pending. The slot ledger remains a bridge to selective `refCount`,
   so Phase 2 is not complete.
+- On 2026-10-25, the File::Temp owner-container root query completed below its
+  node and edge limits and returned false. The recovery trace still restored
+  two scalar owners from reachable scalar cells, while the corresponding
+  aggregate containers had no rooted owner path. A temporary exact-class scan
+  bypass then passed the dedicated #1794 controller test (3/3), the controller
+  finish and WebSocket regressions (5/5, 6/6, 29/29, and 6/6), the #1795
+  Catalyst tempfile and global-destruction tests (24/24 and 3/3), cross-
+  container alias ownership (22/22), and basic DESTROY timing (18/18). These
+  focused tests did not expose a missing owner acquisition. The bypass was
+  removed after the audit; the default scan remains because its two production
+  callers and synthetic undercount-recovery Java tests still require it. The
+  `nice -n 19 make` gate passes on this candidate in 18m06s. The capped-root
+  trace remains available behind `PJ_OWNER_RECOVERY_TRACE_CLASS`; broader
+  Phase 2 owner-slot migration is still open.
 
 The earlier candidate was based on `origin/master` (`ede542b29`) and passed the full local make in 22m55s, Ubuntu `make ci`, the Ubuntu Perl thread compatibility gate, SBOM generation, Windows `make ci` in about 52 minutes, and the focused Windows thread gate. Windows CI exposed two existing unit tests with POSIX `/tmp` paths; `make ci` now creates the runner's root-relative `tmp` directory before building. On blead Perl 5.45.4, the controller, WebSocket, Catalyst tempfile, owner-release, and writable `Internals::SvREFCNT` regressions pass. The controller regression passes 5/5 on JVM and interpreter; the WebSocket regression passes 6/6 on both; the Catalyst tempfile regression passes 24/24 on both; `refcount/issue_1794_controller_owner_release.t` passes 3/3 on both; and `internals_svrefcnt_write.t` passes 6/6 on both after failing all six assertions on its unfixed parent. The alias-count follow-up rebases onto `origin/master` (`18323a1ac`). Its focused make passes in 50s and its full local make passes in 31m30s on code commit `15e362ddb`.
 
