@@ -180,7 +180,10 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   ownership state. The regression failed on the pre-fix JVM and passes on
   system Perl, JVM, and interpreter. The new change passes full
   `nice -n 19 make` (`13m42s`); all three array-delete ownership regressions
-  pass focused on both backends.
+  pass focused on both backends. A companion owned-slot regression confirms
+  restoration still retains a genuinely owning array element, and clearing the
+  restored slot then releases it; system Perl and both backends pass all five
+  assertions. The combined full gate including this control passes in 13m21s.
 - The temporary `perlonjava.test.disableAggregateOwnerRecovery` diagnostic was
   removed after the no-recovery audit. The two production call sites in
   `MortalList.processDeferredBase` and `RuntimeScalar.setLargeRefCounted` still
