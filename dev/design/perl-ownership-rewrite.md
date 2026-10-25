@@ -83,7 +83,7 @@ not an independent count.
 | Scalar-reference contents | `PerlOwnerSlot.acquireScalarReferenceContents` records a `SCALAR_REFERENCE_CONTENTS` edge; it counts separately when a reference cell owns a distinct contents edge, and records a non-counting identity when it shares the cell's existing value owner | Retargeting or releasing the final strong alias releases the counted contents slot or allows the shared cell owner to retire | Reachable contents slots can restore a live contents owner after a decrement. Weak aliases are excluded. The hash/array refalias regression covers this sharing case. |
 | Tied wrapper | Tie installation attaches a `TIE_WRAPPER` identity slot | Untie/replacement and wrapper cleanup release it | Recovery counts a wrapper only when its owner container is rooted. This slot family still depends on recovery for mixed legacy undercounts. |
 | Closure-pad capture | `RuntimeBase.retainClosureCaptureOwner` creates a typed capture slot; aggregate captures can be native counted slots, scalar captures use a legacy bridge | Scope exit, closure release, and capture replacement retire the slot and capture state | Aggregate capture slots have direct semantic counts; scalar capture bridges still use the selective counter. The recovery scan is not their normal release authority. |
-| Deferred temporary or lifecycle hold | Blessing, method dispatch, end-block execution, and legacy closure release increment or retain a temporary count before queuing work | `MortalList.processDeferredBase` decrements the referent at a cleanup boundary; abandoned method holds have a separate immediate path | Several producers still use generic `deferDecrement` without a `PendingRelease` token. These are candidates for source-to-sink tracing, but the focused #1794/#1795 no-recovery runs did not demonstrate a missing Perl-visible owner on these paths. |
+| Deferred temporary or lifecycle hold | Blessing and method dispatch acquire a temporary count; an active END callback is rescued from zero to one by `DestroyDispatch`; closure aggregates normally acquire native capture slots | `MortalList.processDeferredBase` decrements queued counts at a cleanup boundary; abandoned method holds release immediately; END completion queues the rescued count | These generic releases carry no `PendingRelease` token. The normal bless, method-hold, and END paths each pair one temporary count with one release. The closure aggregate defer is a legacy fallback when its capture slot is absent. The focused #1794/#1795 no-recovery runs did not demonstrate a lost owner on these paths. |
 
 The scan repairs a mixed-state mismatch: it runs only after a deferred release
 or scalar overwrite has brought the selective count to zero, then reconstructs
@@ -93,11 +93,21 @@ scan is bypassed deliberately start from inconsistent counts or queue more
 generic decrements than they acquired; they prove the recovery helper's
 synthetic contract, not a production mutation that loses an owner.
 
-Next audit target: trace each generic `MortalList.deferDecrement` producer to
-its corresponding acquisition and determine whether it can consume another
-owner's selective count. Add a focused failing Perl-level regression before
-changing any producer. Keep the two recovery callers until that trace finds a
-real operation whose count can be maintained directly.
+The source audit covered all five production `MortalList.deferDecrement`
+invocations: two blessing paths, normal method-hold release, active END-block
+completion, and the aggregate-capture compatibility fallback. The first four
+have a paired temporary count or zero-to-one lifecycle rescue in the adjacent
+producer; ordinary aggregate capture construction and ithread cloning install
+native capture slots. The remaining uncertainty is not an unmatched
+`deferDecrement` call, but whether arbitrary scalar overwrites or queued owner
+releases can consume a different still-live selective owner before either
+production scan caller runs.
+
+Next audit target: instrument the two scan entry points with the owner release
+provenance already carried by `PendingOwnerRelease`, then reduce any
+production-only zero transition to a system-Perl-validated operation. Do not
+change a producer or remove either scan caller unless that trace identifies a
+real mismatched owner edge and a focused regression.
 
 The first verified fix is at the reachability boundary. The interpreter's
 `capturedVars` array is execution metadata and can still contain a pad after
