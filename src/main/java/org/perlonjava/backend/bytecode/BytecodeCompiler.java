@@ -620,6 +620,8 @@ public class BytecodeCompiler implements Visitor {
     // Runtime regex interpolation can synthesize executable source through
     // overload, so the containing CV must expose all of its live lexical cells.
     private boolean tracksRuntimeRegexLexicals;
+    // Deferred format arguments also resolve lexical cells when write() runs.
+    private boolean tracksRuntimeFormatLexicals;
     // True when compiling inside a defer block (control flow out of defer is prohibited)
     private boolean isInDeferBlock;
 
@@ -6651,6 +6653,10 @@ public class BytecodeCompiler implements Visitor {
         return tracksRuntimeRegexLexicals;
     }
 
+    boolean tracksRuntimeFormatLexicals() {
+        return tracksRuntimeFormatLexicals;
+    }
+
     /**
      * Apply Perl's context conversion to an array value. This is shared by
      * named arrays and dereferenced arrays: scalar {@code @$ref} is the array
@@ -9249,6 +9255,7 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(FormatNode node) {
+        tracksRuntimeFormatLexicals = true;
         // Format declarations are compile-time side effects. Keep the parsed
         // RuntimeFormat in the constant pool and register it when this code
         // executes, before a later write() can look it up.

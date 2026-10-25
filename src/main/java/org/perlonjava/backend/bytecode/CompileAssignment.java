@@ -2901,7 +2901,8 @@ public class CompileAssignment {
                         // releases its capture. Refresh the live-cell registry so
                         // later executable runtime source captures the new cell,
                         // not the value that existed before an eval or callback.
-                        if (bytecodeCompiler.tracksRuntimeRegexLexicals()) {
+                        if (bytecodeCompiler.tracksRuntimeRegexLexicals()
+                                || bytecodeCompiler.tracksRuntimeFormatLexicals()) {
                             bytecodeCompiler.emitActiveLexicalBinding(targetReg, varName);
                         }
 
