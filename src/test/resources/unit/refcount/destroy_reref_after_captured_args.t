@@ -2,7 +2,6 @@
 use strict;
 use warnings;
 use Test::More;
-use Test::Warn;
 use Carp qw(carp);
 use Scalar::Util qw(refaddr weaken);
 
@@ -71,9 +70,13 @@ sub detected_reinvoked_destroy {
 ok(grep({ ref($_) eq 'CapturedTxnGuard' } @captured_args),
     'caller() captures the guard from its DESTROY warning');
 
-warnings_exist {
+my @warnings;
+{
+    local $SIG{__WARN__} = sub { push @warnings, @_ };
     @captured_args = ();
-} qr/Preventing \*MULTIPLE\* DESTROY\(\) invocations on CapturedTxnGuard/,
-    're-fire DESTROY when the captured guard reference is released';
+}
+like(join('', @warnings),
+    qr/Preventing \*MULTIPLE\* DESTROY\(\) invocations on CapturedTxnGuard/,
+    're-fire DESTROY when the captured guard reference is released');
 
 done_testing;
