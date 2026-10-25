@@ -24,6 +24,8 @@ public class MortalList {
     private static final AtomicInteger runtimesWithBoundaryWork = new AtomicInteger();
     private static final String OWNER_RECOVERY_TRACE_CLASS =
             System.getenv("PJ_OWNER_RECOVERY_TRACE_CLASS");
+    private static final String OWNER_RECOVERY_SKIP_SCAN_CLASSES =
+            System.getenv("PJ_OWNER_RECOVERY_SKIP_SCAN_CLASSES");
 
     static final class ReachabilityQueryMeasurement implements AutoCloseable {
         private final LifecycleRuntimeState state;
@@ -2014,6 +2016,11 @@ public class MortalList {
         int slotsWithoutCell = 0;
         Set<PerlOwnerSlot> ownerSlots = referent.ownerSlotSnapshot();
         ReachabilityQueryStats stats = activeReachabilityQueryStats();
+        if (skipAggregateOwnerRecoveryForTest(referent)) {
+            traceAggregateOwnerRecovery(referent,
+                    releaseProvenance + " diagnosticSkipScan=true", false, 0, ownerSlots);
+            return false;
+        }
         for (PerlOwnerSlot slot : ownerSlots) {
             if (stats != null) stats.aggregateOwnerSlotsInspected++;
             if (slot.kind() == PerlOwnerSlot.Kind.HASH_ENTRY
@@ -2095,6 +2102,19 @@ public class MortalList {
         referent.refCount = owners;
         traceAggregateOwnerRecovery(referent, releaseProvenance, true, owners, ownerSlots);
         return true;
+    }
+
+    private static boolean skipAggregateOwnerRecoveryForTest(RuntimeBase referent) {
+        if (OWNER_RECOVERY_SKIP_SCAN_CLASSES == null
+                || OWNER_RECOVERY_SKIP_SCAN_CLASSES.isBlank()) return false;
+        String className = referent.blessId == 0
+                ? referent.getClass().getSimpleName()
+                : NameNormalizer.getBlessStr(referent.blessId);
+        if (className == null) return false;
+        for (String candidate : OWNER_RECOVERY_SKIP_SCAN_CLASSES.split(",")) {
+            if (className.equals(candidate.trim())) return true;
+        }
+        return false;
     }
 
     private static String deferredReleaseProvenance(
