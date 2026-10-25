@@ -2,11 +2,13 @@ use strict;
 use warnings;
 use Test::More;
 
+our $anonymous_add;
 my $loaded = eval q{
     use Function::Parameters;
 
     fun add($left, $right = 1) { $left + $right }
     fun item_count(@items) { scalar @items }
+    our $anonymous_add = fun ($left, $right = 3) { $left + $right };
     package FunctionParametersMethod;
     method sum($self: $value = 2) { $self->{base} + $value }
     package main;
@@ -20,6 +22,7 @@ die $@ unless $loaded;
 is(add(4), 5, 'fun declaration uses an optional signature default');
 is(add(4, 3), 7, 'fun declaration accepts all positional parameters');
 is(item_count(qw(one two three)), 3, 'fun declaration supports a slurpy array');
+is($anonymous_add->(4), 7, 'fun supports anonymous declarations in expression position');
 my $object = bless { base => 40 }, 'FunctionParametersMethod';
 is($object->sum, 42, 'method declaration binds its explicit invocant and default');
 is($object->sum(3), 43, 'method declaration accepts an explicit positional value');

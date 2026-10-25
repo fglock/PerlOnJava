@@ -65,6 +65,7 @@ public class JavaClassInfo {
 
     /** Static fields holding this class's package-scalar pins, keyed by the pinned name. */
     private final Map<String, String> scalarPinFields = new LinkedHashMap<>();
+    private final Map<String, String> formatExpressionFields = new LinkedHashMap<>();
     private final IdentityHashMap<StringNode, String> stringLiteralFields = new IdentityHashMap<>();
     private final IdentityHashMap<NumberNode, String> integerLiteralFields = new IdentityHashMap<>();
 
@@ -94,6 +95,21 @@ public class JavaClassInfo {
         String field = "scalarPin$" + scalarPinFields.size();
         scalarPinFields.put(name, field);
         return field;
+    }
+
+    /** Reserve a static field initialized from a compiled format-expression template. */
+    public String registerFormatExpressionField(String registryKey, ClassWriter cw) {
+        String field = formatExpressionFields.get(registryKey);
+        if (field != null) return field;
+        field = "formatExpressions$" + formatExpressionFields.size();
+        cw.visitField(Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL,
+                field, "Ljava/util/List;", null, null).visitEnd();
+        formatExpressionFields.put(registryKey, field);
+        return field;
+    }
+
+    public Map<String, String> getFormatExpressionFields() {
+        return Collections.unmodifiableMap(formatExpressionFields);
     }
 
     /** Register an instance field for one compiled string literal occurrence. */

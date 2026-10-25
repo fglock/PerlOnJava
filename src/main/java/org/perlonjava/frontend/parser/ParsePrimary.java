@@ -79,6 +79,14 @@ public class ParsePrimary {
                 if (token.text.getBytes(StandardCharsets.UTF_8).length >= 1020) {
                     parser.throwCleanError("Identifier too long");
                 }
+                ParserKeywordPlugin keywordPlugin = parser.getKeywordPlugin(token.text);
+                if (keywordPlugin != null) {
+                    int afterKeyword = parser.tokenIndex;
+                    parser.tokenIndex = startIndex;
+                    Node keywordExpression = keywordPlugin.parseExpression(parser, token.text);
+                    if (keywordExpression != null) return keywordExpression;
+                    parser.tokenIndex = afterKeyword;
+                }
                 if (parser.ctx.compilerOptions.isByteStringSource) {
                     for (int i = 0; i < token.text.length(); ) {
                         int codePoint = token.text.codePointAt(i);

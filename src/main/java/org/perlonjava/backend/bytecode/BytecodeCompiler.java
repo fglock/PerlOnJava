@@ -9256,6 +9256,17 @@ public class BytecodeCompiler implements Visitor {
     @Override
     public void visit(FormatNode node) {
         tracksRuntimeFormatLexicals = true;
+        for (int index = 0; index < node.templateLines.size(); index++) {
+            FormatLine line = node.templateLines.get(index);
+            if (index > 0 && node.templateLines.get(index - 1) instanceof PictureLine
+                    && line instanceof ArgumentLine argumentLine) {
+                List<InterpretedCode> expressions = FormatExpressionCompiler.compile(
+                        argumentLine, sourceName, errorUtil, symbolTable, emitterContext);
+                if (!expressions.isEmpty()) {
+                    argumentLine.setAnnotation("executableFormatExpressions", expressions);
+                }
+            }
+        }
         // Format declarations are compile-time side effects. Keep the parsed
         // RuntimeFormat in the constant pool and register it when this code
         // executes, before a later write() can look it up.

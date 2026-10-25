@@ -34,4 +34,12 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
             keywordToken.text = originalText;
         }
     }
+
+    @Override
+    public Node parseExpression(Parser parser, String keyword) {
+        if ("fun".equals(keyword) && "(".equals(TokenUtils.peek(parser).text)) {
+            return parse(parser, keyword);
+        }
+        return null;
+    }
 }

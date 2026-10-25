@@ -28,6 +28,7 @@ import java.lang.reflect.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -380,11 +381,14 @@ public class EmitterMethodCreator implements Opcodes {
         try {
             return getBytecodeInternal(ctx, ast, useTryCatch, false);
         } catch (MethodTooLargeException tooLarge) {
+            discardPendingFormatExpressions(ctx);
             throw tooLarge;
         } catch (InterpreterFallbackException fallback) {
+            discardPendingFormatExpressions(ctx);
             // Re-throw - caller will handle interpreter fallback
             throw fallback;
         } catch (ArrayIndexOutOfBoundsException frameComputeCrash) {
+            discardPendingFormatExpressions(ctx);
             // ASM frame computation failed - fall back to interpreter
             // This commonly happens with nested defers and complex control flow
             
@@ -430,6 +434,7 @@ public class EmitterMethodCreator implements Opcodes {
             String[] envNames = ctx.capturedEnv != null ? ctx.capturedEnv : ctx.symbolTable.getVariableNames();
             throw new InterpreterFallbackException(interpretedCode, envNames);
         } catch (PerlCompilerException compileError) {
+            discardPendingFormatExpressions(ctx);
             if (asmDebug && causedByAsmFrameMerge(compileError)) {
                 compileError.printStackTrace();
                 try {
@@ -445,6 +450,17 @@ public class EmitterMethodCreator implements Opcodes {
                 }
             }
             throw compileError;
+        } catch (RuntimeException compileError) {
+            discardPendingFormatExpressions(ctx);
+            throw compileError;
+        }
+    }
+
+    private static void discardPendingFormatExpressions(EmitterContext ctx) {
+        if (ctx != null && ctx.javaClassInfo != null
+                && ctx.javaClassInfo.javaClassName != null) {
+            RuntimeFormatExpressionRegistry.discardClass(
+                    ctx.javaClassInfo.javaClassName);
         }
     }
 
@@ -532,19 +548,6 @@ public class EmitterMethodCreator implements Opcodes {
             String warningBits = ctx.symbolTable.getWarningBitsString();
             cw.visitField(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL,
                     "WARNING_BITS", "Ljava/lang/String;", null, warningBits).visitEnd();
-
-            // Create static initializer to register warning bits with WarningBitsRegistry
-            MethodVisitor clinit = cw.visitMethod(Opcodes.ACC_STATIC, "<clinit>", "()V", null, null);
-            clinit.visitCode();
-            clinit.visitLdcInsn(className.replace('/', '.'));  // Convert to Java class name format
-            clinit.visitLdcInsn(warningBits);
-            clinit.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/WarningBitsRegistry",
-                    "register",
-                    "(Ljava/lang/String;Ljava/lang/String;)V", false);
-            clinit.visitInsn(Opcodes.RETURN);
-            clinit.visitMaxs(2, 0);
-            clinit.visitEnd();
 
             // Add a constructor with parameters for initializing the fields
             // Include ALL env slots (even nulls) so signature matches caller expectations
@@ -1400,6 +1403,29 @@ public class EmitterMethodCreator implements Opcodes {
             mv.visitInsn(Opcodes.ARETURN); // Returns an Object
             mv.visitMaxs(0, 0); // Automatically computed
             mv.visitEnd();
+
+            // Initialize warning metadata and the compiled format-expression
+            // templates collected while the apply method was emitted.
+            MethodVisitor clinit = cw.visitMethod(Opcodes.ACC_STATIC, "<clinit>", "()V", null, null);
+            clinit.visitCode();
+            clinit.visitLdcInsn(className.replace('/', '.'));
+            clinit.visitLdcInsn(warningBits);
+            clinit.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/WarningBitsRegistry",
+                    "register",
+                    "(Ljava/lang/String;Ljava/lang/String;)V", false);
+            for (Map.Entry<String, String> entry
+                    : ctx.javaClassInfo.getFormatExpressionFields().entrySet()) {
+                clinit.visitLdcInsn(entry.getKey());
+                clinit.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeFormatExpressionRegistry",
+                        "take", "(Ljava/lang/String;)Ljava/util/List;", false);
+                clinit.visitFieldInsn(Opcodes.PUTSTATIC, className, entry.getValue(),
+                        "Ljava/util/List;");
+            }
+            clinit.visitInsn(Opcodes.RETURN);
+            clinit.visitMaxs(0, 0);
+            clinit.visitEnd();
 
             // Complete the class
             cw.visitEnd();
