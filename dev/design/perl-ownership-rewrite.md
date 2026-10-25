@@ -161,7 +161,12 @@ The #1794/#1795 fixes and #1649 work remain in [draft PR #1816](https://github.c
   scalar-reference contents; the current synthetic tests are not sufficient
   evidence to replace the scan. After the diagnostic review, default behavior
   passes full `nice -n 19 make` in 39m43s; offline documentation link checking
-  also passes.
+  also passes. A source audit found generic deferred decrements that do not
+  carry a semantic owner slot, including `RuntimeCode.releaseMethodInvocantHold`
+  and the compatibility fallback in `RuntimeScalar.deferOwnedScalarReferenceContents`.
+  These are concrete migration candidates, not confirmed reproductions; the
+  next audit should trace their queue/drain ordering and add an oracle-checked
+  regression before changing their accounting.
 - The recovery-disabled audit had exposed an interpreter regression in
   `issue_1649_recursive_builder_pad_release.t`: the interpreter retained all
   five weakly observed nodes after dropping the root (expected two), even with
