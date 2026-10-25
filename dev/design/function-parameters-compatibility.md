@@ -70,17 +70,22 @@ the upstream XS parser plugin.
 - GraphQL's `GraphQL::MaybeTypeCheck` wrapper delegates its import of
   `Function::Parameters` into the caller. The parser provider models that
   wrapper import. Its CPAN compile test and the GraphQL POST/route-handler
-  integration cases now pass. A direct call to
-  `GraphQL::Language::Receiver::got_value` also passes after method bodies
-  began seeing `@_` without the bound invocant. The full WebSocket/promise test
-  run has not yet been rerun after this fix.
+  integration cases now pass, including the promise and error request cases.
+  A direct call to `GraphQL::Language::Receiver::got_value` also passes after
+  method bodies began seeing `@_` without the bound invocant. The full
+  `t/basic.t` suite completes; two WebSocket assertions remain mismatched:
+  `subs response` receives a queued data packet where the test expects the
+  stop completion, and `subs keepalive` receives a keepalive packet where it
+  expects the subscription response. Compare these timing-sensitive cases
+  with system Perl before classifying them as engine failures or harness
+  scheduling differences.
 
 ### Next steps
 
 1. Add hash-based keyword configuration and configured/class/multiple
    invocants.
-2. Rerun the full GraphQL CPAN suite and address any remaining WebSocket,
-   promise, or return-type integration failures.
+2. Compare the two WebSocket assertion mismatches with system Perl and
+   determine whether PerlOnJava's timer/message order differs.
 3. Add coercions, prototypes and relevant subroutine attributes, then document
    unsupported type and method-modifier behavior.
 
