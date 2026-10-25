@@ -35,6 +35,23 @@ my $mutable_value = 'before';
 lvalue_value(\$mutable_value) = 'after';
 is($mutable_value, 'after', 'configured lvalue attributes reach the subroutine');
 
+{
+    package FunctionParametersAmbiguousCore;
+    fun join($left, $right) { "$left:$right" }
+}
+my ($ambiguous_core_call, $ambiguous_core_warning);
+{
+    local $SIG{__WARN__} = sub { $ambiguous_core_warning .= shift };
+    $ambiguous_core_call = eval q{
+        package FunctionParametersAmbiguousCore;
+        use warnings;
+        join('left', 'right');
+    };
+}
+is($ambiguous_core_call, 'right', 'the ambiguous call resolves to the core operator');
+like($ambiguous_core_warning, qr/Ambiguous call resolved as CORE::join/,
+    'declared Function::Parameters sub triggers the core ambiguity warning');
+
 my $slurpy_scalar_error = eval q{
     use Function::Parameters;
     fun invalid_after_array(@items, $later) { $later }
@@ -85,9 +102,4 @@ my $invalid_attribute_syntax = eval q~
 ok(!$invalid_attribute_syntax, 'reject invalid configured attribute syntax');
 like($@, qr/in valid.*attributes/i, 'invalid configured attribute syntax has a clear diagnostic');
 
-{
-    package FunctionParametersAmbiguousCore;
-    use Function::Parameters;
-    fun join($left, $right) { "$left:$right" }
-}
 done_testing;

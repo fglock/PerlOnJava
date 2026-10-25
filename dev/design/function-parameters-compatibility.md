@@ -77,11 +77,10 @@ the upstream XS parser plugin.
 - Function keyword configurations validate supported options, honor
   `check_argument_count`, and apply configured attributes such as `:lvalue`.
   Strict slurpy diagnostics identify both the later parameter and the earlier
-  slurpy parameter.
-- Upstream `info.t`, `strict.t`, `prototype.t`, and `types_coerce.t` pass. The
-  `attributes.t` suite passes eight of ten assertions; calls to a core keyword
-  after a same-named Function::Parameters declaration still miss Perl's
-  ambiguous-core warning.
+  slurpy parameter. Calls that resolve to a core operator after a same-named
+  Function::Parameters declaration report the ambiguous-core warning.
+- Upstream `info.t`, `strict.t`, `prototype.t`, `types_coerce.t`, and
+  `attributes.t` pass.
 - Scalar type constraints pass focused JVM/interpreter coverage, including
   bare Type::Tiny names and bracket-form expressions. Constraint expressions
   and checks run as part of signature setup for each call; coercion is applied
@@ -109,9 +108,7 @@ the upstream XS parser plugin.
 1. Trace PerlOnJava reactor I/O and timer dispatch against the passing native
    system-Perl run, then add permanent runtime-level regression coverage for
    the confirmed ordering defect.
-2. Diagnose and fix the missing ambiguous-core warning for declared
-   Function::Parameters subs, then rerun `attributes.t`.
-3. Continue coverage for method modifiers and classify unsupported
+2. Continue coverage for method modifiers and classify unsupported
    Function::Parameters options and GraphQL WebSocket ordering behavior.
 
 ### Open questions
