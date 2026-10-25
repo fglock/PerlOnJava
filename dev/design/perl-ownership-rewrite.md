@@ -302,6 +302,14 @@ and first path establish implementation cost.
   weak schema captured by DBI's handler as live after `$schema` was cleared.
   Keep this result open under #1642 and rerun it after that lifecycle work is
   reconciled; this does not count as DBIx acceptance.
+- [x] Compare the other DBIx failures with system Perl and clean master.
+  `t/storage/txn_scope_guard.t` assertion 18 also fails on both PerlOnJava
+  candidates and passes on system Perl; it misses the warning that guards
+  against repeated `DESTROY` calls. The clean master `t/52leaks.t` run fails
+  at `basic random_results`. The lifecycle candidate failed a later
+  `basic leaky_resultset_cond` check in the combined run, while a focused retry
+  completed with only the upstream TODO failures. The differing leak outcomes
+  are inconclusive; rerun all three programs together after #1642 is reconciled.
 
 ### Next steps
 
