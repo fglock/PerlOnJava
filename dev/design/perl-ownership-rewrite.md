@@ -111,6 +111,12 @@ Phase numbers are delivery boundaries, not estimates of the total project.
 The 20–36 engineer-week estimate remains provisional until the ownership audit
 and first path establish implementation cost.
 
+Package-global CODE roots are not currently `SCALAR_VALUE` slot owners: their
+assignment path maintains the legacy counted-root ownership state, and
+`RuntimeScalar.undefine` releases that state. Migrating the CODE release
+decrement alone would not create direct slot accounting; CODE-root acquisition
+and release need to move together in Phase 4.
+
 ## Progress tracking
 
 ### Current status: Phase 2 in progress; Phase 1 merged in PR #1653 as `84f32be179bdc2b351c3eaae1cb26df39964ab6b` (2026-10-07)
