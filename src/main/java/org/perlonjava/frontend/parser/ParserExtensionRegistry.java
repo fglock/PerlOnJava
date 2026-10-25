@@ -18,16 +18,13 @@ public final class ParserExtensionRegistry {
     private static final Map<String, ModuleProvider> PROVIDERS = new ConcurrentHashMap<>();
 
     static {
-        registerModuleProvider("Function::Parameters", (parser, enabled, arguments) -> {
-            Set<String> requested = requestedKeywords(arguments, enabled);
-            for (String keyword : Set.of("fun", "method")) {
-                if (enabled && requested.contains(keyword)) {
-                    parser.registerKeywordPlugin(keyword, FunctionParametersKeywordPlugin.INSTANCE);
-                } else if (!enabled && requested.contains(keyword)) {
-                    parser.removeKeywordPlugin(keyword);
-                }
-            }
-        });
+        ModuleProvider functionParameters = ParserExtensionRegistry::applyFunctionParameters;
+        registerModuleProvider("Function::Parameters", functionParameters);
+        // GraphQL::MaybeTypeCheck delegates Function::Parameters->import::into
+        // to its caller. That dynamic import is not visible to the incremental
+        // parser, so mirror the resulting default lexical keyword registration.
+        registerModuleProvider("GraphQL::MaybeTypeCheck",
+                (parser, enabled, arguments) -> applyFunctionParameters(parser, enabled, null));
     }
 
     private ParserExtensionRegistry() { }
@@ -59,5 +56,17 @@ public final class ParserExtensionRegistry {
             }
         }
         return requested;
+    }
+
+    private static void applyFunctionParameters(
+            Parser parser, boolean enabled, RuntimeList arguments) {
+        Set<String> requested = requestedKeywords(arguments, enabled);
+        for (String keyword : Set.of("fun", "method")) {
+            if (enabled && requested.contains(keyword)) {
+                parser.registerKeywordPlugin(keyword, FunctionParametersKeywordPlugin.INSTANCE);
+            } else if (!enabled && requested.contains(keyword)) {
+                parser.removeKeywordPlugin(keyword);
+            }
+        }
     }
 }

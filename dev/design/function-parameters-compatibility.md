@@ -46,6 +46,10 @@ the upstream XS parser plugin.
   upstream module is available.
 - [x] Parse scalar type constraints and run their `check`/`get_message`
   methods when a declared function is called.
+- [x] Recognize `GraphQL::MaybeTypeCheck`'s delegated import as a provider for
+  the same lexical `fun`/`method` keywords.
+- [x] Parse Type::Tiny bare and composite signature constraints, post-signature
+  attributes, and method `@_` behavior after invocant binding.
 
 ### Current follow-up
 
@@ -60,20 +64,23 @@ the upstream XS parser plugin.
   accessors, keyword, invocant count, and minimum/maximum argument counts. The
   object layout matches the upstream Info class for this supported subset.
 - Scalar type constraints pass focused JVM/interpreter coverage, including
-  bracket-form expressions. Constraint objects are evaluated at declaration
-  time and checked at call time; `Info::Param->type` remains undefined.
-- `nice -n 19 make` passed for the combined source batch. The GraphQL CPAN
-  consumer still fails: its `method`/`fun` declarations occur in files that do
-  not import `Function::Parameters`, so the lexical provider is inactive. This
-  is currently classified as an implicit-keyword integration gap; the test
-  does not yet validate GraphQL behavior.
+  bare Type::Tiny names and bracket-form expressions. Constraint objects are
+  evaluated at declaration time and checked at call time; `Info::Param->type`
+  remains undefined.
+- GraphQL's `GraphQL::MaybeTypeCheck` wrapper delegates its import of
+  `Function::Parameters` into the caller. The parser provider models that
+  wrapper import. Its CPAN compile test and the GraphQL POST/route-handler
+  integration cases now pass. A direct call to
+  `GraphQL::Language::Receiver::got_value` also passes after method bodies
+  began seeing `@_` without the bound invocant. The full WebSocket/promise test
+  run has not yet been rerun after this fix.
 
 ### Next steps
 
 1. Add hash-based keyword configuration and configured/class/multiple
    invocants.
-2. Capture the discovered GraphQL implicit-keyword use in a minimal consumer
-   analysis and decide whether that syntax belongs in the provider boundary.
+2. Rerun the full GraphQL CPAN suite and address any remaining WebSocket,
+   promise, or return-type integration failures.
 3. Add coercions, prototypes and relevant subroutine attributes, then document
    unsupported type and method-modifier behavior.
 

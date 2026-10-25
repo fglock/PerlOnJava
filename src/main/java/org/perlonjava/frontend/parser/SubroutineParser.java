@@ -1082,24 +1082,6 @@ public class SubroutineParser {
             }
         }
 
-        // Ensure attributes.pm is loaded when attribute syntax is used, so that
-        // attributes::get() is available (Perl 5 implicitly loads attributes.pm)
-        if (!attributes.isEmpty()) {
-            org.perlonjava.runtime.operators.ModuleOperators.require(new RuntimeScalar("attributes.pm"));
-        }
-        if (subName != null && attributes.contains("const")) {
-            parser.throwError(":const is not permitted on named subroutines");
-        }
-        if (futureAsyncAwaitSub && attributes.contains("lvalue")) {
-            String location = parser.ctx.errorUtil == null
-                    ? ""
-                    : parser.ctx.errorUtil.warningLocation(currentIndex);
-            org.perlonjava.runtime.operators.WarnDie.warn(
-                    new RuntimeScalar("The :lvalue attribute has no effect on an async sub"
-                            + location + ".\n"),
-                    new RuntimeScalar("misc"));
-        }
-
         ListNode signature = null;
         boolean signatureArgsWarningsEnabled = false;
         boolean previousParsingSignaturedSubroutine = parser.parsingSignaturedSubroutine;
@@ -1134,7 +1116,17 @@ public class SubroutineParser {
                 signature = parseSignature(parser, subName);
                 parser.parsingSignaturedSubroutine = true;
                 if (peek(parser).text.equals(":")) {
-                    parser.throwError("Subroutine attributes must come before the signature");
+                    if (!parser.parsingFunctionParametersDeclaration) {
+                        parser.throwError("Subroutine attributes must come before the signature");
+                    }
+                    while (peek(parser).text.equals(":")) {
+                        String attrPrototype = consumeAttributes(
+                                parser, attributes, prototype, attrSubDisplayName, prevAttrProto);
+                        if (attrPrototype != null) {
+                            prevAttrProto = attrPrototype;
+                            prototype = attrPrototype;
+                        }
+                    }
                 }
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Signature AST: " + signature);
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("next token " + peek(parser));
@@ -1196,6 +1188,24 @@ public class SubroutineParser {
                     parser.throwError("syntax error");
                 }
             }
+        }
+
+        // Ensure attributes.pm is loaded after parsing both pre-signature and
+        // Function::Parameters post-signature attributes.
+        if (!attributes.isEmpty()) {
+            org.perlonjava.runtime.operators.ModuleOperators.require(new RuntimeScalar("attributes.pm"));
+        }
+        if (subName != null && attributes.contains("const")) {
+            parser.throwError(":const is not permitted on named subroutines");
+        }
+        if (futureAsyncAwaitSub && attributes.contains("lvalue")) {
+            String location = parser.ctx.errorUtil == null
+                    ? ""
+                    : parser.ctx.errorUtil.warningLocation(currentIndex);
+            org.perlonjava.runtime.operators.WarnDie.warn(
+                    new RuntimeScalar("The :lvalue attribute has no effect on an async sub"
+                            + location + ".\n"),
+                    new RuntimeScalar("misc"));
         }
 
         if (wantName && subName != null && !peek(parser).text.equals("{")) {

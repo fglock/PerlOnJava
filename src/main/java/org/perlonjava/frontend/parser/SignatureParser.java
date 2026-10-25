@@ -182,13 +182,17 @@ public class SignatureParser {
         }
 
         Node typeConstraint = null;
-        if (parser.parsingFunctionParametersDeclaration && peekToken().text.equals("(")) {
-            consumeToken();
-            typeConstraint = parser.parseExpression(0);
-            if (!peekToken().text.equals(")")) {
-                parser.throwError("Malformed Function::Parameters type constraint");
+        if (parser.parsingFunctionParametersDeclaration) {
+            if (peekToken().text.equals("(")) {
+                consumeToken();
+                typeConstraint = parser.parseExpression(0);
+                if (!peekToken().text.equals(")")) {
+                    parser.throwError("Malformed Function::Parameters type constraint");
+                }
+                consumeToken();
+            } else if (peekToken().type == LexerTokenType.IDENTIFIER) {
+                typeConstraint = parseUnparenthesizedTypeConstraint();
             }
-            consumeToken();
         }
 
         LexerToken sigilToken = consumeToken();
@@ -350,6 +354,82 @@ public class SignatureParser {
                 new OperatorNode("&", new IdentifierNode(method, index), index),
                 new ListNode(List.of(argument), index), index);
         return new BinaryOperatorNode("->", invocant, call, index);
+    }
+
+    private Node parseUnparenthesizedTypeConstraint() {
+        int start = parser.tokenIndex;
+        int parameterSigil = findTypeConstraintParameterSigil(start);
+        if (parameterSigil < 0) {
+            return parser.parseExpression(0);
+        }
+
+        int first = nextSignificantToken(start);
+        int afterFirst = nextSignificantToken(first + 1);
+        if (first == start && afterFirst == parameterSigil
+                && parser.tokens.get(start).type == LexerTokenType.IDENTIFIER) {
+            LexerToken typeName = consumeToken();
+            Node typeSub = new OperatorNode("&",
+                    new IdentifierNode(typeName.text, start), start);
+            return new BinaryOperatorNode("(", typeSub, new ListNode(List.of(), start), start);
+        }
+
+        // Bound expression parsing at the parameter sigil. Without this
+        // sentinel, Perl's `Type $value` indirect-call syntax consumes the
+        // parameter as an argument to Type.
+        LexerToken boundary = new LexerToken(LexerTokenType.OPERATOR, ")");
+        parser.tokens.add(parameterSigil, boundary);
+        try {
+            Node expression = parser.parseExpression(0);
+            if (!peekToken().text.equals(")")) {
+                parser.throwError("Malformed Function::Parameters type constraint");
+            }
+            consumeToken();
+            return expression;
+        } finally {
+            int boundaryIndex = parser.tokenIndex - 1;
+            if (boundaryIndex >= 0 && boundaryIndex < parser.tokens.size()
+                    && parser.tokens.get(boundaryIndex) == boundary) {
+                parser.tokens.remove(boundaryIndex);
+                parser.tokenIndex--;
+            } else {
+                parser.tokens.remove(boundary);
+            }
+        }
+    }
+
+    private int findTypeConstraintParameterSigil(int start) {
+        int squareDepth = 0;
+        int roundDepth = 0;
+        int braceDepth = 0;
+        for (int index = start; index < parser.tokens.size(); index++) {
+            LexerToken token = parser.tokens.get(index);
+            if (token.type == LexerTokenType.WHITESPACE) continue;
+            if (squareDepth == 0 && roundDepth == 0 && braceDepth == 0
+                    && ("$".equals(token.text) || "@".equals(token.text) || "%".equals(token.text))) {
+                return index;
+            }
+            switch (token.text) {
+                case "[" -> squareDepth++;
+                case "]" -> squareDepth--;
+                case "(" -> roundDepth++;
+                case ")" -> {
+                    if (roundDepth == 0) return -1;
+                    roundDepth--;
+                }
+                case "{" -> braceDepth++;
+                case "}" -> braceDepth--;
+                default -> { }
+            }
+        }
+        return -1;
+    }
+
+    private int nextSignificantToken(int index) {
+        while (index < parser.tokens.size()
+                && parser.tokens.get(index).type == LexerTokenType.WHITESPACE) {
+            index++;
+        }
+        return index;
     }
 
     private int previousSignificantToken(int index) {
@@ -891,6 +971,15 @@ public class SignatureParser {
                     allNodes.add(new BinaryOperatorNode("&&", odd, trim, parser.tokenIndex));
                 }
             }
+        }
+
+        // Function::Parameters methods bind their implicit/explicit
+        // invocant lexically, then expose only user arguments through @_ in
+        // the body. This lets method code forward @_ while adding $self.
+        if (parser.parsingFunctionParametersMethod && !invocantNames.isEmpty()) {
+            allNodes.add(new OperatorNode("shift",
+                    new OperatorNode("@", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex),
+                    parser.tokenIndex));
         }
 
         ListNode signature = new ListNode(allNodes, parser.tokenIndex);
