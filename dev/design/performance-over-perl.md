@@ -400,8 +400,18 @@ remain separate correctness gates. See issue #1196 for its diagnostic matrix.
   no observed priority. A separate check with extended access confirmed that
   `nice -n 19` can be observed as priority 19. The next method acceptance run
   must run under that access so the harness can verify the worker process.
-  Host load is currently too high for a useful measurement, so the rerun has
-  not started.
+  This run is retained only as an ineligible diagnostic; the later verified
+  method attempt is recorded below.
+- A subsequent extended-access method-anchor run used the exact current JAR
+  SHA-256 `baaf94e293dedb0f4683956144fe0da0a0a3a17048930f505736982c7e6356f0`
+  and pinned blead `83a6c8b26a8823eb966652414864eb07a3d2c6d4`. All seven pairs
+  completed 15 stable windows with matching checksums and observed nice 19.
+  The method ratio was 0.981x (95% pair-bootstrap interval 0.955–1.014); its
+  lower bound misses 1.00x. Load rose from `9.06/11.12/14.67` to
+  `21.31/19.53/17.73`, and the report is method-only rather than full-portfolio
+  acceptance. Raw windows and worker logs are in
+  `dev/bench/reports/issue-1863-a5-method-blead-83a6c8b.json` and its `-logs`
+  directory.
 
 ### Next steps
 
@@ -412,9 +422,10 @@ remain separate correctness gates. See issue #1196 for its diagnostic matrix.
 2. Implement and test a general ordinary invocation path in `RuntimeCode.apply`
    with full fallback; do not restrict the optimization to stable hash bodies.
    Cover the semantic and fallback-transition matrix in issue #1863.
-3. Rerun the method anchor with `--nice 19` under extended process-observation
-   access. Only proceed to the full fixed method/closure/Life portfolio if the
-   method lower confidence bound meets 1.00x pinned blead.
+3. The verified method run is 0.981x blead with a 0.955 lower interval bound.
+   Continue broad call-path work, then rerun this method gate; proceed to the
+   full fixed method/closure/Life portfolio only after its lower bound reaches
+   1.00x pinned blead.
 4. Compare candidate versus exact parent, integrated candidate versus
    `origin/master`, and candidate versus pinned blead and stable Perl 5.42.2.
    Use at least seven requested pairs, verified priority, and publish every
