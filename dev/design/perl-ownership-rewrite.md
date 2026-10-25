@@ -293,8 +293,15 @@ and first path establish implementation cost.
   target Perl loads the helper. These are pre-existing issues tracked in
   [#1656](https://github.com/fglock/PerlOnJava/issues/1656) and
   [#1434](https://github.com/fglock/PerlOnJava/issues/1434); the DBIx run's two
-  assertion failures remain separately unclassified under
+  assertion failures are tracked separately under
   [#1646](https://github.com/fglock/PerlOnJava/issues/1646).
+- [x] Classify DBIx::Class 0.082844 `t/storage/error.t` assertion 49 on the
+  current lifecycle candidate: system Perl passes, and the same failure
+  reproduces on the clean master baseline. The candidate remains intermittent
+  (one recent run failed and two passed); the failed run still treated the
+  weak schema captured by DBI's handler as live after `$schema` was cleared.
+  Keep this result open under #1642 and rerun it after that lifecycle work is
+  reconciled; this does not count as DBIx acceptance.
 
 ### Next steps
 
