@@ -413,6 +413,33 @@ The perl_test_runner.pl sets these automatically based on the test file being ru
 always run `make` and ensure it passes before pushing commits or updating
 PRs.** This runs all unit tests and catches regressions early.
 
+**GitHub transport fallback:** If GitHub `git fetch` or `git push` repeatedly
+fails with HTTP/2 or HTTP/1.1 connection resets, or SSH times out, check whether
+the authenticated GitHub CLI still works with `gh api`. When it does, use the
+GitHub REST Git Database API to publish the commit instead of repeatedly
+retrying Git transports:
+
+1. Read the base ref with
+   `gh api repos/OWNER/REPO/git/ref/heads/master` and use its commit SHA as the
+   parent. Create a feature branch ref; never update `master` directly.
+2. Create a Git blob for each added or changed file with
+   `POST repos/OWNER/REPO/git/blobs`. Create a tree with
+   `POST repos/OWNER/REPO/git/trees`, setting `base_tree` to the base commit's
+   tree and including every changed path (mode, type, blob SHA, or a null SHA
+   for a deletion).
+3. Create a commit with `POST repos/OWNER/REPO/git/commits`, using the new tree
+   SHA and the base commit as its parent. Create the feature ref with
+   `POST repos/OWNER/REPO/git/refs` and `ref: refs/heads/BRANCH` pointing to
+   that commit.
+4. Open a PR with `POST repos/OWNER/REPO/pulls`. Verify the returned PR is open,
+   points to the intended base and branch, and lists the expected files.
+
+Use `gh api` for these authenticated API calls; do not put credentials in
+commands or files. Preserve the local work and commit before switching to this
+fallback. If aligning a local checkout from an API-retrieved commit, use that
+exact commit SHA, verify the tree and working-tree status afterward, and follow
+the dirty-tree pre-flight above before any destructive local reset.
+
 1. **Create a feature branch** before making changes:
    ```bash
    git checkout -b feature/descriptive-name
