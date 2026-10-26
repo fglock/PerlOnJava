@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Include operating-system CA bundles and the Windows root store in verified `HTTP::Tiny` HTTPS connections while retaining JVM trust roots.
 - Keep nested Rose::HTML::Objects form results alive with counted argument owners so weak parent links and qualified field names survive argument evaluation (#1851).
 - Warn for undefined right operands of `.=` while keeping an undefined left operand quiet (#1382).
 - Fix bundled IO, nested launcher, locale, and core user/group database module compatibility.
