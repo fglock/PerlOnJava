@@ -598,20 +598,48 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         int start = Math.min(signaturePositionalCount, args.size());
         int namedCount = args.size() - start;
         if ("%".equals(signatureSlurpySigil) && (namedCount & 1) != 0) {
-            WarnDie.die(new RuntimeScalar("Odd name/value argument for subroutine '"
-                    + (signatureSubName == null ? "" : signatureSubName) + "'"),
+            dieTooFewForMissingRequiredNamed(args, start);
+            WarnDie.die(new RuntimeScalar(signatureKeyword != null
+                    ? "Odd number of elements in anonymous hash"
+                    : "Odd name/value argument for subroutine '"
+                            + (signatureSubName == null ? "" : signatureSubName) + "'"),
                     new RuntimeScalar(""));
         }
         if (signatureNamedParams.isEmpty()) return;
-        if (!"@".equals(signatureSlurpySigil) && (namedCount & 1) != 0) {
-            WarnDie.die(new RuntimeScalar("Odd name/value argument for subroutine '"
-                    + (signatureSubName == null ? "" : signatureSubName) + "'"),
+        if ((signatureKeyword != null || !"@".equals(signatureSlurpySigil))
+                && (namedCount & 1) != 0) {
+            dieTooFewForMissingRequiredNamed(args, start);
+            WarnDie.die(new RuntimeScalar(signatureKeyword != null
+                    ? "Odd number of elements in anonymous hash"
+                    : "Odd name/value argument for subroutine '"
+                            + (signatureSubName == null ? "" : signatureSubName) + "'"),
                     new RuntimeScalar(""));
         }
 
         Map<String, RuntimeScalar> values = new LinkedHashMap<>();
         for (int i = start; i + 1 < args.size(); i += 2) {
             values.put(args.elements.get(i).toString(), args.elements.get(i + 1));
+        }
+        List<String> missing = new ArrayList<>();
+        for (String required : signatureRequiredNamedParams) {
+            if (!values.containsKey(required)) missing.add(required);
+        }
+        if (!missing.isEmpty()) {
+            int minimumNamedArgumentCount = signatureRequiredNamedParams.size() * 2;
+            if (signatureKeyword != null && namedCount < minimumNamedArgumentCount) {
+                WarnDie.die(new RuntimeScalar("Too few arguments for " + signatureKeyword
+                        + " " + signatureSubName), new RuntimeScalar(""));
+            }
+            if (signatureKeyword != null) {
+                String label = missing.size() == 1 ? "named parameter" : "named parameters";
+                WarnDie.die(new RuntimeScalar("missing " + label + " '"
+                        + String.join("', '", missing) + "' to " + signatureKeyword
+                        + " " + signatureSubName), new RuntimeScalar(""));
+            }
+            String label = missing.size() == 1 ? "parameter" : "parameters";
+            WarnDie.die(new RuntimeScalar("Missing required named " + label + " '"
+                    + String.join("', '", missing) + "' to subroutine '" + signatureSubName + "'"),
+                    new RuntimeScalar(""));
         }
         if (signatureSlurpySigil == null) {
             List<String> unrecognized = new ArrayList<>();
@@ -632,18 +660,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 WarnDie.die(new RuntimeScalar(message), new RuntimeScalar(""));
             }
         }
-        if (!"@".equals(signatureSlurpySigil)) {
-            List<String> missing = new ArrayList<>();
-            for (String required : signatureRequiredNamedParams) {
-                if (!values.containsKey(required)) {
-                    missing.add(required);
+    }
+
+    private void dieTooFewForMissingRequiredNamed(RuntimeArray args, int start) {
+        if (signatureKeyword == null || signatureRequiredNamedParams.isEmpty()) return;
+        for (String required : signatureRequiredNamedParams) {
+            boolean present = false;
+            for (int i = start; i + 1 < args.size(); i += 2) {
+                if (required.equals(args.elements.get(i).toString())) {
+                    present = true;
+                    break;
                 }
             }
-            if (!missing.isEmpty()) {
-                String label = missing.size() == 1 ? "parameter" : "parameters";
-                WarnDie.die(new RuntimeScalar("Missing required named " + label + " '"
-                        + String.join("', '", missing) + "' to subroutine '" + signatureSubName + "'"),
-                        new RuntimeScalar(""));
+            if (!present) {
+                WarnDie.die(new RuntimeScalar("Too few arguments for " + signatureKeyword
+                        + " " + signatureSubName), new RuntimeScalar(""));
             }
         }
     }
