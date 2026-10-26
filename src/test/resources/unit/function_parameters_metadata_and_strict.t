@@ -119,6 +119,18 @@ is(runtime_caller_name(), 'main::runtime_caller_name',
     'runtime-installed function retains its declared caller name');
 
 {
+    package FunctionParametersMultilineInvocant;
+    use Function::Parameters;
+    method echo(
+        $class:
+        $value
+    ) { $value }
+}
+my $multiline_invocant_object = bless {}, 'FunctionParametersMultilineInvocant';
+is($multiline_invocant_object->echo('multiline-ready'), 'multiline-ready',
+    'method preserves an explicit invocant after multiline signature whitespace');
+
+{
     package FunctionParametersRuntimeMethod;
     runtime_method echo($value) { $value }
     runtime_method caller_name() { (caller 0)[3] }
@@ -128,6 +140,106 @@ is($runtime_method_object->echo('method-ready'), 'method-ready',
     'runtime-installed method binds its invocant');
 is($runtime_method_object->caller_name(), 'FunctionParametersRuntimeMethod::caller_name',
     'runtime-installed method retains its declared caller name');
+
+my $moose_reifier_keyword = eval q{
+    use Function::Parameters {
+        moose_style => { defaults => 'function', reify_type => 'moose', check_argument_types => 0 },
+    };
+    moose_style identity($value) { $value }
+    identity('reifier-ready');
+};
+is($moose_reifier_keyword, 'reifier-ready',
+    'configured Moose type reifier can register a Function::Parameters keyword');
+
+{
+    package FunctionParametersCallbackConstraint;
+    sub check { $_[1] eq 'accepted' }
+    sub get_message { "rejected value: $_[1]" }
+}
+our $custom_reified_type_name;
+my $custom_reifier_result = eval q{
+    package FunctionParametersCustomReifier;
+    use Function::Parameters {
+        custom_fun => {
+            defaults => 'function',
+            reify_type => sub {
+                $main::custom_reified_type_name = $_[0];
+                bless {}, 'FunctionParametersCallbackConstraint';
+            },
+        },
+    };
+    custom_fun callback_typed(TCustom $value) { $value }
+    callback_typed('accepted');
+};
+is($custom_reifier_result, 'accepted',
+    'callback-based type reifier validates a custom constraint');
+is($custom_reified_type_name, 'TCustom',
+    'callback-based type reifier receives normalized type source');
+my @custom_reifier_parameters = Function::Parameters::info(
+        \&FunctionParametersCustomReifier::callback_typed)->positional_required;
+is($custom_reifier_parameters[0]->type->check('accepted'), 1,
+    'callback-reified type object is available through Function::Parameters::info');
+my $custom_reifier_error = eval {
+    FunctionParametersCustomReifier::callback_typed('rejected');
+    1;
+};
+ok(!$custom_reifier_error, 'callback-reified type rejects invalid values');
+like($@, qr/parameter 1 \(\$value\): rejected value: rejected/,
+    'callback-reified type supplies its custom validation message');
+
+SKIP: {
+    my $moose_available = eval { require Moose; 1 };
+    skip('Moose is not installed', 6) unless $moose_available;
+    my $moose_slurpy_type = eval q{
+        package FunctionParametersMooseTypes;
+        use Moose;
+        use Function::Parameters {
+            fun => { defaults => 'function', reify_type => 'moose' },
+        };
+        fun typed_slurpy(ArrayRef [ Int | CodeRef ] @items) { \@items }
+        Function::Parameters::info(\&typed_slurpy)->slurpy->type;
+    };
+    ok($moose_slurpy_type, 'Moose reifier returns a type object for a typed slurpy parameter');
+    ok($moose_slurpy_type->equals(
+            Moose::Util::TypeConstraints::find_or_parse_type_constraint('ArrayRef[Int|CodeRef]')),
+        'typed slurpy metadata preserves its parameterized Moose type');
+    my $moose_anonymous_slurpy_type = eval q{
+        package FunctionParametersMooseTypes;
+        use Moose;
+        use Function::Parameters {
+            fun => { defaults => 'function', reify_type => 'moose' },
+        };
+        Function::Parameters::info(fun (ArrayRef [ Int | CodeRef ] @items) {})->slurpy->type;
+    };
+    ok($moose_anonymous_slurpy_type->equals(
+            Moose::Util::TypeConstraints::find_or_parse_type_constraint('ArrayRef[Int|CodeRef]')),
+        'anonymous typed slurpy metadata preserves its parameterized Moose type');
+    my $moose_typed_named = eval q{
+        package FunctionParametersMooseTypes;
+        use Moose;
+        use Function::Parameters {
+            fun => { defaults => 'function', reify_type => 'moose' },
+        };
+        fun typed_named(('Int'):$value) { $value }
+        typed_named(value => 42);
+    };
+    is($moose_typed_named, 42,
+        'parenthesized Moose type expressions can precede named parameters');
+    my ($moose_invalid_value, $moose_validation_error) = do {
+        my $value = eval q{
+            package FunctionParametersMooseTypes;
+            use Function::Parameters {
+                fun => { defaults => 'function', reify_type => 'moose' },
+            };
+            fun typed_required(('Int') $value) { $value }
+            typed_required('not an integer');
+        };
+        ($value, $@);
+    };
+    ok(!defined($moose_invalid_value), 'Moose type violations reject invalid arguments');
+    like($moose_validation_error, qr/parameter 1 \(?\$value\)?.*Validation failed.*Int/s,
+        'Moose type errors name the parameter and constraint');
+}
 
 {
     package FunctionParametersRuntimeConditional;
@@ -281,5 +393,60 @@ like($@, qr/valid identifier/, 'invalid keyword identifier has a clear diagnosti
 my $invalid_import_type = eval { Function::Parameters->import({ bad_type => 'QQQQ' }); 1 };
 ok(!$invalid_import_type, 'reject an invalid configured keyword type');
 like($@, qr/valid type/, 'invalid keyword type has a clear diagnostic');
+
+fun recursive_named_call(:$depth, :$value) {
+    return $value unless $depth;
+    recursive_named_call value => $value + 1, depth => $depth - 1;
+}
+is(recursive_named_call(value => 4, depth => 3), 7,
+    'recursive named calls accept unparenthesized fat-comma arguments');
+
+{
+    use Function::Parameters qw(:lax);
+    fun lax_named_argument(:$value) { defined($value) ? $value : 'missing' }
+    is(lax_named_argument(), 'missing',
+        'lax named parameters may be omitted without a default');
+}
+
+my $qualified_function_declaration = eval q{
+    fun ::function_parameters_absolute_name() { 42 }
+    1;
+};
+ok($qualified_function_declaration,
+    'expression-position declarations accept an absolute qualified name');
+is(function_parameters_absolute_name(), 42,
+    'an absolute qualified declaration installs its function');
+
+my $invalid_quoted_function_name = eval q{ fun 'hi(){} 1 };
+ok(!$invalid_quoted_function_name,
+    'expression-position declarations reject a quoted function name');
+like($@, qr/parameter list/i,
+    'a malformed expression-position declaration reports a parameter-list error');
+
+my $missing_parameter_list = eval q{ fun {} };
+ok(!$missing_parameter_list, 'anonymous declaration requires a parameter list');
+like($@, qr/expecting a parameter list, not "\{"/,
+    'missing parameter list reports the unexpected block');
+my $missing_function_body = eval q{ fun () :() {} };
+ok(!$missing_function_body, 'anonymous declaration rejects a malformed prototype attribute');
+like($@, qr/expecting a function body, not "\("/,
+    'malformed prototype attribute reports the unexpected body token');
+my $named_declaration_in_expression = eval q{ my $value = fun forbidden() {} };
+ok(!$named_declaration_in_expression, 'named declarations are not expressions');
+like($@, qr/expect.*parameter list/i,
+    'named declaration in an expression reports its syntax error');
+my $missing_type_name = eval q{ fun malformed_type(X[[ };
+ok(!$missing_type_name, 'malformed parameterized type is rejected');
+like($@, qr/missing type name/i,
+    'malformed parameterized type reports the missing type name');
+
+use Function::Parameters {
+    named_error_keyword => { defaults => 'function' },
+};
+named_error_keyword function_parameters_named_error($value) { $value }
+my $named_error_call = eval { function_parameters_named_error(); 1 };
+ok(!$named_error_call, 'configured keyword checks required positional arguments');
+like($@, qr/named_error_keyword.*function_parameters_named_error/s,
+    'argument-count errors retain the configured Function::Parameters keyword');
 
 done_testing;

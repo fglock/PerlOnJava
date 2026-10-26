@@ -631,6 +631,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public List<String> signatureNamedRequired = List.of();
     public List<String> signatureNamedOptional = List.of();
     public Map<String, String> signatureParameterTypes = Map.of();
+    public Map<String, RuntimeScalar> signatureParameterTypeObjects = Map.of();
+    public Map<String, String> signatureParameterTypeObjectVariables = Map.of();
+    public String signatureTypeReifier;
     public int signaturePositionalCount = 0;
     public String signatureSlurpySigil;
     public String signatureSlurpyName;
@@ -678,6 +681,32 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             signatureParameterTypes = Map.copyOf(parsed);
         }
+        Object typeObjects = ast.getAnnotation("signatureParameterTypeObjects");
+        if (typeObjects instanceof Map<?, ?> objectMap) {
+            Map<String, RuntimeScalar> parsed = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : objectMap.entrySet()) {
+                if (entry.getKey() instanceof String name && entry.getValue() instanceof RuntimeScalar type) {
+                    parsed.put(name, type);
+                }
+            }
+            signatureParameterTypeObjects = Map.copyOf(parsed);
+        }
+        Object typeObjectVariables = ast.getAnnotation("signatureParameterTypeObjectVariables");
+        if (typeObjectVariables instanceof Map<?, ?> variableMap) {
+            Map<String, String> parsed = new LinkedHashMap<>();
+            Map<String, RuntimeScalar> resolvedObjects = new LinkedHashMap<>(signatureParameterTypeObjects);
+            for (Map.Entry<?, ?> entry : variableMap.entrySet()) {
+                if (entry.getKey() instanceof String name && entry.getValue() instanceof String variableName) {
+                    parsed.put(name, variableName);
+                    RuntimeScalar typeObject = GlobalVariable.globalVariables.get(variableName);
+                    if (typeObject != null) resolvedObjects.putIfAbsent(name, typeObject);
+                }
+            }
+            signatureParameterTypeObjectVariables = Map.copyOf(parsed);
+            signatureParameterTypeObjects = Map.copyOf(resolvedObjects);
+        }
+        Object typeReifier = ast.getAnnotation("signatureTypeReifier");
+        signatureTypeReifier = typeReifier instanceof String value ? value : null;
         Object positional = ast.getAnnotation("signaturePositionalCount");
         if (positional instanceof Integer count) signaturePositionalCount = count;
         Object slurpy = ast.getAnnotation("signatureSlurpySigil");
@@ -694,7 +723,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             String[] invocants, String[] positionalRequired, String[] positionalOptional,
             String[] namedRequired, String[] namedOptional, String[] namedParams,
             String[] requiredNamedParams, int positionalCount,
-            String slurpySigil, String slurpyName) {
+            String slurpySigil, String slurpyName, String[] parameterTypes,
+            String[] typeObjectVariables) {
         if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
             code.signatureKeyword = keyword;
             code.signatureSubName = subName;
@@ -708,6 +738,26 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             code.signaturePositionalCount = positionalCount;
             code.signatureSlurpySigil = slurpySigil;
             code.signatureSlurpyName = slurpyName;
+            if (parameterTypes != null) {
+                Map<String, String> types = new LinkedHashMap<>();
+                for (int i = 0; i + 1 < parameterTypes.length; i += 2) {
+                    types.put(parameterTypes[i], parameterTypes[i + 1]);
+                }
+                code.signatureParameterTypes = Map.copyOf(types);
+            }
+            if (typeObjectVariables != null) {
+                Map<String, String> variables = new LinkedHashMap<>();
+                Map<String, RuntimeScalar> objects = new LinkedHashMap<>(code.signatureParameterTypeObjects);
+                for (int i = 0; i + 1 < typeObjectVariables.length; i += 2) {
+                    String parameterName = typeObjectVariables[i];
+                    String variableName = typeObjectVariables[i + 1];
+                    variables.put(parameterName, variableName);
+                    RuntimeScalar typeObject = GlobalVariable.globalVariables.get(variableName);
+                    if (typeObject != null) objects.putIfAbsent(parameterName, typeObject);
+                }
+                code.signatureParameterTypeObjectVariables = Map.copyOf(variables);
+                code.signatureParameterTypeObjects = Map.copyOf(objects);
+            }
         }
         return codeRef;
     }
@@ -3491,6 +3541,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.signatureNamedRequired = this.signatureNamedRequired;
         clone.signatureNamedOptional = this.signatureNamedOptional;
         clone.signatureParameterTypes = this.signatureParameterTypes;
+        clone.signatureParameterTypeObjects = this.signatureParameterTypeObjects;
+        clone.signatureParameterTypeObjectVariables = this.signatureParameterTypeObjectVariables;
+        clone.signatureTypeReifier = this.signatureTypeReifier;
         clone.signaturePositionalCount = this.signaturePositionalCount;
         clone.signatureSlurpySigil = this.signatureSlurpySigil;
         clone.signatureSlurpyName = this.signatureSlurpyName;

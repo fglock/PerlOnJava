@@ -7,6 +7,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
+import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.operators.ReferenceOperators;
 
 import java.util.List;
@@ -79,8 +80,21 @@ public final class FunctionParameters extends PerlModuleBase {
     }
 
     private static RuntimeScalar resolveParameterType(String parameterName, RuntimeCode code) {
+        RuntimeScalar objectType = code.signatureParameterTypeObjects.get(parameterName);
+        if (objectType != null) return objectType;
         String typeName = code.signatureParameterTypes.get(parameterName);
         if (typeName == null) return new RuntimeScalar();
+        if (typeName.startsWith("moose:")) {
+            ModuleOperators.require(new RuntimeScalar("Moose/Util/TypeConstraints.pm"));
+            String reifierName = "Moose::Util::TypeConstraints::find_or_create_isa_type_constraint";
+            RuntimeScalar reifier = GlobalVariable.getGlobalCodeRefForFreshLookup(reifierName);
+            if (reifier == null || reifier.type != RuntimeScalarType.CODE) return new RuntimeScalar();
+            RuntimeList result = RuntimeCode.apply(reifier, reifierName,
+                    new org.perlonjava.runtime.runtimetypes.RuntimeBase[]{
+                            new RuntimeScalar(typeName.substring("moose:".length()))},
+                    org.perlonjava.runtime.runtimetypes.RuntimeContextType.SCALAR);
+            return result.scalar();
+        }
         String fullName = typeName.startsWith("::") ? typeName.substring(2)
                 : typeName.contains("::") ? typeName
                 : (code.packageName == null ? "main" : code.packageName) + "::" + typeName;
