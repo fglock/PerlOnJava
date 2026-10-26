@@ -165,7 +165,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
 
     private static boolean hasExplicitInvocant(Parser parser, int openParen) {
         if (openParen + 1 >= parser.tokens.size()
-                || !"$".equals(parser.tokens.get(openParen + 1).text)) return false;
+                || !Set.of("$", "@", "%").contains(parser.tokens.get(openParen + 1).text)) return false;
         for (int i = openParen + 2; i < parser.tokens.size(); i++) {
             String text = parser.tokens.get(i).text;
             if (":".equals(text)) return true;

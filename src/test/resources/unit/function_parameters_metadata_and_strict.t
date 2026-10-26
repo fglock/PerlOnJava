@@ -12,6 +12,8 @@ use Function::Parameters {
         defaults => 'function_strict', runtime => 1, install_sub => 'capture_installer',
     },
     required_modifier => { defaults => 'before', runtime => 1 },
+    multi_method => { defaults => 'method', shift => ['$self1', '$self2'] },
+    single_method => { defaults => 'method' },
 };
 
 our ($installed_name, $installed_code);
@@ -22,6 +24,23 @@ is($installed_name, 'installed_by_callback',
     'runtime install_sub callback receives the declared name');
 is($installed_code->('callback-ready'), 'callback-ready',
     'runtime install_sub callback receives the function body');
+multi_method checked_multi_method($value) { $value }
+my $multi_method_error = eval { checked_multi_method('only-one-argument'); 1 };
+ok(!$multi_method_error, 'configured multi-invocant method checks argument count');
+like($@, qr/^Too few arguments for multi_method checked_multi_method \(expected 3, got 1\)/,
+    'multi-invocant argument error names the keyword and expected count');
+eval q{ multi_method ($self1) {} };
+like($@, qr/\$self1 can't appear twice in the same parameter list/,
+    'configured invocant cannot be repeated as an ordinary parameter');
+eval q{ multi_method wrong_invocants($self:) {} };
+like($@, qr/^In multi_method wrong_invocants: number of invocants in parameter list \(1\) differs from number of invocants in keyword definition \(2\)/,
+    'configured method reports an invocant count mismatch');
+eval q{ fun ($self:) {} };
+like($@, qr/invocant \$self not allowed here/,
+    'function keyword rejects an explicit invocant with a focused diagnostic');
+eval q{ single_method (@items:) {} };
+like($@, qr/invocant \@items can't be an array/,
+    'method keyword rejects an array invocant with a focused diagnostic');
 my $unnamed_modifier_result = eval q{ required_modifier () {} };
 ok(!$unnamed_modifier_result, 'modifier keyword requires a named declaration');
 like($@, qr/expecting a function name/,
