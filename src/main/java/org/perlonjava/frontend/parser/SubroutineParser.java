@@ -1444,6 +1444,8 @@ public class SubroutineParser {
                         signature.getAnnotation("signatureNamedRequired"));
                 block.setAnnotation("signatureNamedOptional",
                         signature.getAnnotation("signatureNamedOptional"));
+                block.setAnnotation("signatureParameterTypes",
+                        signature.getAnnotation("signatureParameterTypes"));
                 block.setAnnotation("signatureSlurpySigil",
                         signature.getAnnotation("signatureSlurpySigil"));
                 block.setAnnotation("signatureSlurpyName",
@@ -2557,6 +2559,7 @@ public class SubroutineParser {
             placeholder.signaturePositionalOptional = runtimeCode.signaturePositionalOptional;
             placeholder.signatureNamedRequired = runtimeCode.signatureNamedRequired;
             placeholder.signatureNamedOptional = runtimeCode.signatureNamedOptional;
+            placeholder.signatureParameterTypes = runtimeCode.signatureParameterTypes;
             placeholder.signaturePositionalCount = runtimeCode.signaturePositionalCount;
             placeholder.signatureSlurpySigil = runtimeCode.signatureSlurpySigil;
             placeholder.signatureSlurpyName = runtimeCode.signatureSlurpyName;

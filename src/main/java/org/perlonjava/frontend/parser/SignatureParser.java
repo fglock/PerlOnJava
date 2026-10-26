@@ -8,7 +8,9 @@ import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.operators.WarnDie;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.perlonjava.frontend.parser.OperatorParser.dieWarnNode;
 import static org.perlonjava.frontend.parser.ParserNodeUtils.atUnderscore;
@@ -51,6 +53,7 @@ public class SignatureParser {
     private final List<String> positionalOptionalNames = new ArrayList<>();
     private final List<String> namedRequiredMetadataNames = new ArrayList<>();
     private final List<String> namedOptionalNames = new ArrayList<>();
+    private final Map<String, String> parameterTypeNames = new LinkedHashMap<>();
     private final List<Node> defaultValueNodes = new ArrayList<>();
     private boolean hasOptional = false;
     private boolean hasNamedParameter = false;
@@ -304,6 +307,8 @@ public class SignatureParser {
                 parser.ctx.symbolTable.addVariable("$" + typeVariableName, "my", typeVariable);
                 typeConstraintVariable = typeVariable;
             }
+            String typeName = metadataTypeName(typeConstraint);
+            if (typeName != null) parameterTypeNames.put(metadataName, typeName);
         }
 
         if (isNamed) {
@@ -1099,6 +1104,7 @@ public class SignatureParser {
         signature.setAnnotation("signaturePositionalOptional", new ArrayList<>(positionalOptionalNames));
         signature.setAnnotation("signatureNamedRequired", new ArrayList<>(namedRequiredMetadataNames));
         signature.setAnnotation("signatureNamedOptional", new ArrayList<>(namedOptionalNames));
+        signature.setAnnotation("signatureParameterTypes", new LinkedHashMap<>(parameterTypeNames));
         if (slurpySigil != null) {
             signature.setAnnotation("signatureSlurpySigil", slurpySigil);
             signature.setAnnotation("signatureSlurpyName", slurpyParameterName);
@@ -1109,6 +1115,15 @@ public class SignatureParser {
                         parser.ctx.symbolTable.getCurrentPackage()));
         signature.setAnnotation("signatureDefaultValueNodes", new ArrayList<>(defaultValueNodes));
         return signature;
+    }
+
+    private static String metadataTypeName(Node typeConstraint) {
+        if (typeConstraint instanceof BinaryOperatorNode call && "(".equals(call.operator)
+                && call.left instanceof OperatorNode reference && "&".equals(reference.operator)
+                && reference.operand instanceof IdentifierNode name) {
+            return name.name;
+        }
+        return null;
     }
 
     private Node generateArgCountValidation() {

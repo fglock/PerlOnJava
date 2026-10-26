@@ -40,17 +40,17 @@ public final class FunctionParameters extends PerlModuleBase {
         RuntimeHash info = new RuntimeHash();
         List<String> positionalRequired = new ArrayList<>(code.signatureInvocants);
         positionalRequired.addAll(code.signaturePositionalRequired);
-        putParameters(info, "_positional_required", positionalRequired);
-        putParameters(info, "_positional_optional", code.signaturePositionalOptional);
-        putParameters(info, "_named_required", code.signatureNamedRequired);
-        putParameters(info, "_named_optional", code.signatureNamedOptional);
+        putParameters(info, "_positional_required", positionalRequired, code);
+        putParameters(info, "_positional_optional", code.signaturePositionalOptional, code);
+        putParameters(info, "_named_required", code.signatureNamedRequired, code);
+        putParameters(info, "_named_optional", code.signatureNamedOptional, code);
         info.put("nshift", new RuntimeScalar(code.signatureInvocants.size()));
         info.put("keyword", new RuntimeScalar(code.signatureKeyword != null
                 ? code.signatureKeyword
                 : code.signatureInvocants.isEmpty() ? "fun" : "method"));
         RuntimeScalar slurpy = code.signatureSlurpyName == null
                 ? new RuntimeScalar()
-                : parameter(code.signatureSlurpyName);
+                : parameter(code.signatureSlurpyName, code);
         info.put("slurpy", slurpy);
         int min = positionalRequired.size()
                 + 2 * code.signatureRequiredNamedParams.size();
@@ -63,17 +63,34 @@ public final class FunctionParameters extends PerlModuleBase {
         return object.getList();
     }
 
-    private static void putParameters(RuntimeHash info, String key, List<String> names) {
+    private static void putParameters(
+            RuntimeHash info, String key, List<String> names, RuntimeCode code) {
         RuntimeArray values = new RuntimeArray();
-        for (String name : names) values.elements.add(parameter(name));
+        for (String name : names) values.elements.add(parameter(name, code));
         info.put(key, values.createAnonymousReference());
     }
 
-    private static RuntimeScalar parameter(String name) {
+    private static RuntimeScalar parameter(String name, RuntimeCode code) {
         RuntimeHash parameter = new RuntimeHash();
         parameter.put("name", new RuntimeScalar(name));
-        parameter.put("type", new RuntimeScalar());
+        parameter.put("type", resolveParameterType(name, code));
         return ReferenceOperators.bless(parameter.createReferenceWithTrackedElements(),
                 new RuntimeScalar("Function::Parameters::Param"));
+    }
+
+    private static RuntimeScalar resolveParameterType(String parameterName, RuntimeCode code) {
+        String typeName = code.signatureParameterTypes.get(parameterName);
+        if (typeName == null) return new RuntimeScalar();
+        String fullName = typeName.startsWith("::") ? typeName.substring(2)
+                : typeName.contains("::") ? typeName
+                : (code.packageName == null ? "main" : code.packageName) + "::" + typeName;
+        RuntimeScalar typeFunction = GlobalVariable.getGlobalCodeRefForFreshLookup(fullName);
+        if (typeFunction == null || typeFunction.type != RuntimeScalarType.CODE) {
+            return new RuntimeScalar();
+        }
+        RuntimeList result = RuntimeCode.apply(typeFunction, fullName,
+                new org.perlonjava.runtime.runtimetypes.RuntimeBase[0],
+                org.perlonjava.runtime.runtimetypes.RuntimeContextType.SCALAR);
+        return result.scalar();
     }
 }
