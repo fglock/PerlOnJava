@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.perlonjava.frontend.parser.OperatorParser.dieWarnNode;
 import static org.perlonjava.frontend.parser.ParserNodeUtils.atUnderscore;
@@ -53,6 +54,7 @@ public class SignatureParser {
     private final List<String> positionalOptionalNames = new ArrayList<>();
     private final List<String> namedRequiredMetadataNames = new ArrayList<>();
     private final List<String> namedOptionalNames = new ArrayList<>();
+    private final Set<String> functionParametersParameterNames = new java.util.HashSet<>();
     private final Map<String, String> parameterTypeNames = new LinkedHashMap<>();
     private final List<Node> defaultValueNodes = new ArrayList<>();
     private boolean hasOptional = false;
@@ -133,6 +135,20 @@ public class SignatureParser {
             parser.throwErrorAtToken(previousSignificantToken(parser.tokenIndex), "syntax error");
         }
 
+        int explicitInvocantCount = countParametersBeforeInvocantSeparator(signatureOpenParenIndex);
+        if (parser.parsingFunctionParametersDeclaration
+                && !parser.parsingFunctionParametersMethod
+                && !parser.parsingFunctionParametersOptionalInvocant
+                && explicitInvocantCount >= 0) {
+            parser.throwError(functionParametersInvocantName(signatureOpenParenIndex)
+                    + " not allowed here");
+        }
+        int configuredInvocants = parser.functionParametersInvocantCount;
+        if (parser.parsingFunctionParametersMethod && explicitInvocantCount >= 0
+                && explicitInvocantCount != configuredInvocants) {
+            throwInvocantCountMismatch(explicitInvocantCount, configuredInvocants);
+        }
+
         boolean functionParametersInvocantSeparatorConsumed = false;
         boolean functionParametersHasInvocants = parser.parsingFunctionParametersMethod
                 || (parser.parsingFunctionParametersOptionalInvocant
@@ -152,8 +168,7 @@ public class SignatureParser {
                     && !functionParametersInvocantSeparatorConsumed) {
                 if (next.text.equals(":")) {
                     if (invocantNames.size() != functionParametersInvocantCount) {
-                        parser.throwError("Method signature must declare "
-                                + functionParametersInvocantCount + " invocants");
+                        throwInvocantCountMismatch(invocantNames.size(), functionParametersInvocantCount);
                     }
                     consumeToken();
                     functionParametersInvocantSeparatorConsumed = true;
@@ -271,6 +286,13 @@ public class SignatureParser {
             parser.throwError(paramStartIndex, "Duplicated subroutine parameter name");
         }
 
+        String metadataName = paramName == null ? sigil : sigil + paramName;
+        if (parser.parsingFunctionParametersDeclaration && paramName != null
+                && !functionParametersParameterNames.add(metadataName)) {
+            parser.throwError(paramStartIndex,
+                    metadataName + " can't appear twice in the same parameter list");
+        }
+
         // Named parameters must have a name
         if (isNamed && paramName == null) {
             parser.throwError(previousSignificantToken(paramStartIndex),
@@ -290,7 +312,6 @@ public class SignatureParser {
 
         // Create parameter variable or undef placeholder
         Node paramVariable = createParameterVariable(sigil, paramName);
-        String metadataName = paramName == null ? sigil : sigil + paramName;
         OperatorNode typeConstraintVariable = null;
         if (typeConstraint != null) {
             if (paramName == null || isSlurpy) {
@@ -434,6 +455,83 @@ public class SignatureParser {
         return false;
     }
 
+    private int countParametersBeforeInvocantSeparator(int openParenIndex) {
+        int depthParen = 0;
+        int depthSquare = 0;
+        int depthBrace = 0;
+        int parameterCount = 0;
+        int pendingTernaries = 0;
+        boolean segmentHasParameter = false;
+        for (int i = openParenIndex + 1; i < parser.tokens.size(); i++) {
+            LexerToken token = parser.tokens.get(i);
+            if (token.type == LexerTokenType.WHITESPACE || token.type == LexerTokenType.NEWLINE) continue;
+            String text = token.text;
+            if (depthParen == 0 && depthSquare == 0 && depthBrace == 0) {
+                if (")".equals(text)) return -1;
+                if (":".equals(text)) {
+                    if (pendingTernaries > 0) {
+                        pendingTernaries--;
+                        segmentHasParameter = true;
+                        continue;
+                    }
+                    if (segmentHasParameter) return parameterCount;
+                    // A leading colon starts a named parameter, not an
+                    // invocant separator.
+                    segmentHasParameter = true;
+                    continue;
+                }
+                if (",".equals(text)) {
+                    segmentHasParameter = false;
+                    continue;
+                }
+                if (!segmentHasParameter
+                        && ("$".equals(text) || "@".equals(text) || "%".equals(text))) {
+                    parameterCount++;
+                    segmentHasParameter = true;
+                    continue;
+                }
+                if ("?".equals(text)) pendingTernaries++;
+                segmentHasParameter = true;
+            }
+            switch (text) {
+                case "(" -> depthParen++;
+                case ")" -> depthParen--;
+                case "[" -> depthSquare++;
+                case "]" -> depthSquare--;
+                case "{" -> depthBrace++;
+                case "}" -> depthBrace--;
+            }
+        }
+        return -1;
+    }
+
+    private String functionParametersInvocantName(int openParenIndex) {
+        for (int i = openParenIndex + 1; i < parser.tokens.size(); i++) {
+            LexerToken token = parser.tokens.get(i);
+            if (token.type == LexerTokenType.WHITESPACE || token.type == LexerTokenType.NEWLINE) continue;
+            if (!"$".equals(token.text) && !"@".equals(token.text) && !"%".equals(token.text)) {
+                return "invocant";
+            }
+            String sigil = token.text;
+            for (int j = i + 1; j < parser.tokens.size(); j++) {
+                LexerToken name = parser.tokens.get(j);
+                if (name.type == LexerTokenType.WHITESPACE || name.type == LexerTokenType.NEWLINE) continue;
+                if (name.type == LexerTokenType.IDENTIFIER) return "invocant " + sigil + name.text;
+                return "invocant " + sigil;
+            }
+        }
+        return "invocant";
+    }
+
+    private void throwInvocantCountMismatch(int actual, int expected) {
+        String keyword = parser.functionParametersKeyword == null
+                ? "method" : parser.functionParametersKeyword;
+        String name = subroutineName == null ? "(anon)" : subroutineName;
+        parser.throwError("In " + keyword + " " + name
+                + ": number of invocants in parameter list (" + actual
+                + ") differs from number of invocants in keyword definition (" + expected + ")");
+    }
+
     private static Node typeConstraintMethodCall(
             Node invocant, String method, Node argument, int index) {
         Node call = new BinaryOperatorNode("(",
@@ -545,6 +643,13 @@ public class SignatureParser {
 
     private boolean validateSigil(String sigil, int paramStartIndex, boolean isNamed,
                                   boolean immediatelyFollowedByHash) {
+        if (parsingFunctionParametersInvocant && ("@".equals(sigil) || "%".equals(sigil))) {
+            LexerToken name = peekToken();
+            String invocant = sigil
+                    + (name.type == LexerTokenType.IDENTIFIER ? name.text : "");
+            parser.throwError(paramStartIndex, "invocant " + invocant
+                    + ("@".equals(sigil) ? " can't be an array" : " can't be a hash"));
+        }
         // The lexer may combine a sigil and an immediately following '#'
         // (for example, "$#") into one token.  Diagnose all three sigils at
         // the preceding open-paren context, which is the source position Perl
@@ -1214,6 +1319,9 @@ public class SignatureParser {
     }
 
     private Node generateTooFewArgsMessage() {
+            if (parser.parsingFunctionParametersMethod) {
+                return generateFunctionParametersArgumentCountMessage(true);
+            }
             // Generate: "Too few arguments for subroutine 'Package::name' (got " . (scalar(@_) + adjustment) . "; expected at least " . minParams . ")"
             String fullName = NameNormalizer.normalizeVariableName(
                     subroutineName == null ? "__ANON__" : subroutineName,
@@ -1248,6 +1356,9 @@ public class SignatureParser {
     }
 
     private Node generateTooManyArgsMessage() {
+            if (parser.parsingFunctionParametersMethod) {
+                return generateFunctionParametersArgumentCountMessage(false);
+            }
             // Generate: "Too many arguments for subroutine 'Package::name' (got " . (scalar(@_) + adjustment) . "; expected at most " . maxParams . ")"
             String fullName = NameNormalizer.normalizeVariableName(
                     subroutineName == null ? "__ANON__" : subroutineName,
@@ -1279,6 +1390,20 @@ public class SignatureParser {
                             parser.tokenIndex),
                     new StringNode(")", parser.tokenIndex),
                     parser.tokenIndex);
+    }
+
+    private Node generateFunctionParametersArgumentCountMessage(boolean tooFew) {
+        String keyword = parser.functionParametersKeyword == null
+                ? "method" : parser.functionParametersKeyword;
+        String name = subroutineName == null ? "(anon)" : subroutineName;
+        int expected = tooFew ? minParams : maxParams;
+        String prefix = "Too " + (tooFew ? "few" : "many") + " arguments for "
+                + keyword + " " + name + " (expected " + expected + ", got ";
+        Node argCount = new OperatorNode("scalar", atUnderscore(parser), parser.tokenIndex);
+        return new BinaryOperatorNode(".",
+                new BinaryOperatorNode(".", new StringNode(prefix, parser.tokenIndex),
+                        argCount, parser.tokenIndex),
+                new StringNode(")", parser.tokenIndex), parser.tokenIndex);
     }
 
     private Node generateParameterAssignment() {
