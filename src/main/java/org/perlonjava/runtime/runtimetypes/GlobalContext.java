@@ -362,6 +362,7 @@ public class GlobalContext {
         XSLoader.initialize();
         DynaLoader.initialize();
         Builtin.initialize();
+        FunctionParameters.initialize();
         Base.initialize();
         Symbol.initialize();
         ScalarUtil.initialize();

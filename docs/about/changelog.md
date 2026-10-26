@@ -8,6 +8,10 @@ priorities and future plans.
 
 - Include operating-system CA bundles and the Windows root store in verified `HTTP::Tiny` HTTPS connections while retaining JVM trust roots.
 - Keep nested Rose::HTML::Objects form results alive with counted argument owners so weak parent links and qualified field names survive argument evaluation (#1851).
+- Preserve multiline regex searches when positive lookaheads constrain a lazy any-character prefix, restoring Text::YAWikiFormater formatting (#1596).
+- Compile executable format argument expressions at write time on both backends, scope line-local lexicals correctly, preserve literal-only pictures, and refresh deferred lexical bindings (#1234).
+- Diagnose malformed and out-of-class Object::Pad `BUILD` declarations during parsing (#1808).
+- Add a lexical parser keyword provider and a Function::Parameters subset with named, anonymous, and runtime-installed `fun`/`method`, `install_sub` callbacks and method modifiers, configured aliases and multiple invocants, attributes, strict/lax arity modes, eager signature introspection including named type metadata, named argument binding after positional parameters, required-name and odd-pair validation, Unicode unknown-name diagnostics, native slurpy signature compatibility, clear invocant and slurpy diagnostics, ambiguous-core warnings, optional type checks and coercions, quoted type names, delegated imports, Type::Tiny parameter checks, post-signature attributes, correct method `@_` forwarding, and method cache updates through whole-glob aliases (#1292, #1361).
 - Warn for undefined right operands of `.=` while keeping an undefined left operand quiet (#1382).
 - Fix bundled IO, nested launcher, locale, and core user/group database module compatibility.
 - Snapshot mutable array entries while marking package roots and during reachability walks so concurrent thread teardown cannot fail with `ConcurrentModificationException`.

@@ -1661,6 +1661,9 @@ public class StatementParser {
                             if (FilterUtilCall.wasFilterInstalled()) {
                                 applySourceFilterToRemainingTokens(parser);
                             }
+
+                            ParserExtensionRegistry.applyModulePragma(
+                                    parser, packageName, !isNoDeclaration, args);
                         }
                     }
                 }

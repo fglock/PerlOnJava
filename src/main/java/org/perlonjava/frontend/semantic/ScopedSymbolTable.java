@@ -1,6 +1,7 @@
 package org.perlonjava.frontend.semantic;
 
 import org.perlonjava.frontend.astnode.OperatorNode;
+import org.perlonjava.frontend.parser.ParserKeywordPlugin;
 import org.perlonjava.runtime.runtimetypes.FeatureFlags;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
@@ -123,6 +124,8 @@ public class ScopedSymbolTable {
     // `use VERSION` is lexical: declaration and warning state resets for an
     // inner block and is restored when that block exits.
     private final Stack<String> useVersionStack = new Stack<>();
+    /** Lexically scoped parser keywords installed by compile-time modules. */
+    private final Stack<Map<String, ParserKeywordPlugin>> parserKeywordPluginsStack = new Stack<>();
     // A stack to manage nested scopes of symbol tables.
     private final Stack<SymbolTable> symbolTableStack = new Stack<>();
     private final Stack<PackageInfo> packageStack = new Stack<>();
@@ -175,6 +178,7 @@ public class ScopedSymbolTable {
         regexModifierStack.push("");
         regexDebugFlagsStack.push(0);
         useVersionStack.push(null);
+        parserKeywordPluginsStack.push(new LinkedHashMap<>());
         // Initialize the package name
         packageStack.push(new PackageInfo("main", false, null));
         // Initialize the subroutine stack with empty string (no subroutine)
@@ -255,6 +259,7 @@ public class ScopedSymbolTable {
         regexModifierStack.push(regexModifierStack.peek());
         regexDebugFlagsStack.push(regexDebugFlagsStack.peek());
         useVersionStack.push(null);
+        parserKeywordPluginsStack.push(new LinkedHashMap<>(parserKeywordPluginsStack.peek()));
 
         // Return the current size of the symbol table stack as the scope index
         return symbolTableStack.size() - 1;
@@ -311,6 +316,7 @@ public class ScopedSymbolTable {
             regexModifierStack.pop();
             regexDebugFlagsStack.pop();
             useVersionStack.pop();
+            parserKeywordPluginsStack.pop();
         }
         // Propagate the child scope's index to the parent to prevent slot reuse.
         // This ensures that local variable slots allocated inside conditional branches
@@ -327,6 +333,27 @@ public class ScopedSymbolTable {
 
     public void setUseVersion(String version) {
         useVersionStack.set(useVersionStack.size() - 1, version);
+    }
+
+    public void registerParserKeywordPlugin(String keyword, ParserKeywordPlugin plugin) {
+        parserKeywordPluginsStack.peek().put(keyword, plugin);
+    }
+
+    public void removeParserKeywordPlugin(String keyword) {
+        parserKeywordPluginsStack.peek().remove(keyword);
+    }
+
+    public ParserKeywordPlugin getParserKeywordPlugin(String keyword) {
+        return parserKeywordPluginsStack.peek().get(keyword);
+    }
+
+    public Map<String, ParserKeywordPlugin> getVisibleParserKeywordPlugins() {
+        return new LinkedHashMap<>(parserKeywordPluginsStack.peek());
+    }
+
+    public void copyParserKeywordPluginsFrom(ScopedSymbolTable source) {
+        parserKeywordPluginsStack.set(parserKeywordPluginsStack.size() - 1,
+                source.getVisibleParserKeywordPlugins());
     }
 
     /**
@@ -641,6 +668,12 @@ public class ScopedSymbolTable {
     public void addVariableWithIndex(String name, int index, String variableDeclType, String perlPackage) {
         clearVisibleVariablesCache();
         symbolTableStack.peek().addVariableWithIndex(name, index, variableDeclType, perlPackage);
+    }
+
+    public void addVariableWithIndex(
+            String name, int index, String variableDeclType, String perlPackage, OperatorNode ast) {
+        clearVisibleVariablesCache();
+        symbolTableStack.peek().addVariableWithIndex(name, index, variableDeclType, perlPackage, ast);
     }
 
     public Map<String, Integer> getVisibleVariableRegistry() {
@@ -996,6 +1029,9 @@ public class ScopedSymbolTable {
         st.regexModifierStack.push(this.regexModifierStack.peek());
         st.regexDebugFlagsStack.pop();
         st.regexDebugFlagsStack.push(this.regexDebugFlagsStack.peek());
+        st.parserKeywordPluginsStack.pop();
+        st.parserKeywordPluginsStack.push(new LinkedHashMap<>(
+                this.parserKeywordPluginsStack.peek()));
         st.lexicalRegexPragmaChanged = this.lexicalRegexPragmaChanged;
 
         return st;

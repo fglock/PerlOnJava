@@ -108,6 +108,13 @@ public class StatementResolver {
         ByteCodeSourceMapper.saveSourceLocation(parser.ctx, parser.tokenIndex);
 
         if (token.type == LexerTokenType.IDENTIFIER) {
+            ParserKeywordPlugin plugin = parser.getKeywordPlugin(token.text);
+            if (plugin != null) {
+                return plugin.parse(parser, token.text);
+            }
+        }
+
+        if (token.type == LexerTokenType.IDENTIFIER) {
             Node result = switch (token.text) {
                 case "CHECK", "INIT", "UNITCHECK", "BEGIN", "END", "ADJUST", "BUILD" -> {
                     // Check if next token is '{' - if not, this might be a lexical sub call
@@ -124,11 +131,17 @@ public class StatementResolver {
                     if (peek(parser).text.equals("{")
                             || (peek(parser).text.equals("(") && hasSpecialBlockPrototype(parser))) {
                         if ("BUILD".equals(token.text) && !parser.isInClassBlock) {
-                            parser.tokenIndex = currentIndex;
-                            yield null;
+                            parser.throwCleanError(currentIndex,
+                                    "BUILD blocks are only allowed inside class blocks");
                         }
                         parser.tokenIndex = currentIndex;
                         yield SpecialBlockParser.parseSpecialBlock(parser);
+                    }
+                    if ("BUILD".equals(token.text)) {
+                        parser.throwCleanError(currentIndex,
+                                parser.isInClassBlock
+                                        ? "Malformed BUILD declaration: expected a block body"
+                                        : "BUILD blocks are only allowed inside class blocks");
                     }
                     // A diamond after a special block name is parsed as an
                     // attempted declaration, not an ordinary subroutine call.
