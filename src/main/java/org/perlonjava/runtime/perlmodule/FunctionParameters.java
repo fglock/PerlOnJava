@@ -33,8 +33,19 @@ public final class FunctionParameters extends PerlModuleBase {
             throw new IllegalArgumentException("Usage: Function::Parameters::info(CODEREF)");
         }
         RuntimeScalar codeRef = args.get(0).scalar();
-        if (codeRef.type != RuntimeScalarType.CODE || !(codeRef.value instanceof RuntimeCode code)
-                || code.signatureKeyword == null) {
+        if (codeRef.type != RuntimeScalarType.CODE || !(codeRef.value instanceof RuntimeCode code)) {
+            return new RuntimeScalar().getList();
+        }
+        // Named declarations can still be represented by a lazy CV when
+        // introspection happens before the subroutine's first call. Materialize
+        // it first so metadata attached by the backend is visible here too.
+        if (code.compilerSupplier != null) {
+            code.compilerSupplier.get();
+            if (codeRef.value instanceof RuntimeCode materialized) {
+                code = materialized;
+            }
+        }
+        if (code.signatureKeyword == null) {
             return new RuntimeScalar().getList();
         }
 
