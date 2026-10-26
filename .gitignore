@@ -147,3 +147,6 @@ src/main/java/org/perlonjava/core/Configuration.java
 
 # Local checkout of the imported Perl 5 source tree.
 /perl5
+
+dev/bench/reports/
+
