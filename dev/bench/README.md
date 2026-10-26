@@ -94,6 +94,57 @@ all nine unique groups with seven balanced randomized fresh-process pairs, stabi
 warmup, and raw JSON samples. Use smaller window and pair counts only to
 smoke-check the runner; smoke runs are not performance evidence.
 
+## Performance investigation workflow
+
+Use this sequence when a benchmark points to a runtime bottleneck:
+
+1. **Set the comparison first.** Keep the optimization question, workload, and
+   acceptance rule explicit. Record a source/JAR-matched baseline against the
+   exact parent for attribution, and compare the candidate against pinned
+   optimized blead for Perl parity. A comparison against `origin/master` shows
+   branch progress; it does not establish Perl parity.
+2. **Check that the workload does the same work.** Use identical inputs and
+   operation counts, verify checksums, and keep startup, compilation, and JVM
+   warmup outside the scored window. Use the persistent paired runner for
+   claims; retain the full report, attempted pairs, exclusions, environment,
+   and worker logs.
+3. **Profile outside scored runs.** Use JFR CPU, allocation, and GC events, and
+   HotSpot compilation/inlining evidence to identify a specific cost. A
+   sampled hotspot is a hypothesis, not proof that removing it will improve
+   end-to-end throughput. Keep profiler output separate from benchmark timing.
+4. **Make a guarded, attributable change.** State the preconditions for the
+   fast path and preserve the general fallback. Add focused regression tests
+   for those preconditions and fallback transitions. Validate Perl-level
+   behavior with standard Perl and runtime parity on the required backends.
+   Keep independent optimization hypotheses separate so each can be measured
+   against the exact parent.
+5. **Keep only demonstrated improvements.** Repeat paired measurements with
+   the same pinned reference and protocol. Require the workload's confidence
+   interval to meet its stated acceptance rule; do not infer a gain from a
+   point estimate, a single run, or a portfolio average that hides a slow
+   workload. Record the candidate artifact hash and link the durable report.
+6. **Batch the expensive gates.** On a shared host, finish related edits and
+   focused checks before running one full `nice -n 19 timeout 3600 make` gate
+   on the immutable candidate. Do not benchmark alongside a build or profile
+   inside scored windows. Push and check hosted CI after the local candidate
+   passes rather than after each small edit.
+
+### Measure terminal output separately
+
+The `life` workload above disables rendering and measures computation. Running
+`examples/life_bitpacked.pl` with its default arguments also writes substantial
+terminal output; that is a separate end-to-end I/O workload. A reported result
+near 0.5x Perl for this mode is a signal to investigate, not part of the
+rendering-disabled Life score.
+
+For an output comparison, run both engines with identical arguments and the
+same output destination. Measure real terminal/PTY output separately from
+redirected output, since those measure different sink costs. Confirm output
+byte counts and hashes after the timed run so result validation does not add
+work to the measured interval. Report elapsed time and bytes per second along
+with the sink type, and keep the output workload distinct from compute-only
+throughput claims.
+
 ## See Also
 
 - `dev/bench/perl-reference-builds.md` — pinned blead and stable Perl builds
