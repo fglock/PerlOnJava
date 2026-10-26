@@ -57,7 +57,12 @@ public class SymbolTable {
      * @return The index of the variable, or -1 if the variable is not found.
      */
     public void addVariableWithIndex(String name, int specificIndex, String variableDeclType, String perlPackage) {
-        variableIndex.put(name, new SymbolEntry(specificIndex, name, variableDeclType, perlPackage, null));
+        addVariableWithIndex(name, specificIndex, variableDeclType, perlPackage, null);
+    }
+
+    public void addVariableWithIndex(
+            String name, int specificIndex, String variableDeclType, String perlPackage, OperatorNode ast) {
+        variableIndex.put(name, new SymbolEntry(specificIndex, name, variableDeclType, perlPackage, ast));
         if (specificIndex >= index) {
             index = specificIndex + 1;
         }

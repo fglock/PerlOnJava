@@ -62,10 +62,58 @@ ok(!$prohibited_name_error, 'prohibited-name keyword rejects named declarations'
 like($@, qr/expecting a parameter list/, 'prohibited-name diagnostic identifies expected parameter list');
 my $default_argument_error = eval q{ no_defaults no_default($value = 42) { $value } };
 ok(!$default_argument_error, 'default_arguments false rejects signature defaults');
-like($@, qr/default argument/i, 'default argument diagnostic identifies the rejected syntax');
+like($@, qr/no_defaults.*default argument/i,
+    'default argument diagnostic names its configured keyword');
 method configured_default_method($key) { $configured_self->{$key} }
 is(configured_default_method({ key => 'method-default' }, 'key'), 'method-default',
     'method keyword defaults to method semantics without an explicit defaults option');
+my @anonymous_default_calls;
+my $anonymous_defined_or = fun ($ //= push(@anonymous_default_calls, 'defined-or')) {
+    scalar @anonymous_default_calls;
+};
+is($anonymous_defined_or->('present'), 0,
+    'anonymous defined-or default does not run for a defined argument');
+is($anonymous_defined_or->(undef), 1,
+    'anonymous defined-or default runs for an undef argument');
+my @named_default_calls;
+my $named_assignment_default = fun (:$value = (push(@named_default_calls, 'assignment'), 'fallback')) {
+    $value;
+};
+is($named_assignment_default->(value => undef), undef,
+    'named assignment default preserves an explicitly supplied undef');
+is_deeply(\@named_default_calls, [], 'named assignment default stays unevaluated for a present key');
+is($named_assignment_default->(), 'fallback', 'named assignment default fills an absent key');
+is_deeply(\@named_default_calls, ['assignment'], 'named assignment default runs once for an absent key');
+my $positional_and_named = fun ($head, :$tail) { [$head, $tail] };
+is_deeply($positional_and_named->('head-value', tail => 'tail-value'),
+    ['head-value', 'tail-value'],
+    'named parameter extraction skips leading positional arguments');
+my $optional_positional_and_named = fun ($head = 'head-default', :$tail = 'tail-default') {
+    [$head, $tail];
+};
+is_deeply($optional_positional_and_named->(), ['head-default', 'tail-default'],
+    'optional positional defaults leave an empty named-argument tail');
+my $required_named = fun (:$required) { $required };
+my $required_named_error = eval { $required_named->(); 1 };
+ok(!$required_named_error, 'required named parameter rejects an omitted argument');
+like($@, qr/Too few arguments/, 'missing required named parameter reports too few arguments');
+my $required_named_slurp = fun (:$key, @rest) { [$key, \@rest] };
+is_deeply($required_named_slurp->(key => 'value'), ['value', []],
+    'named slurpy parameter accepts the required key and an empty remainder');
+my $required_named_slurp_missing = eval { $required_named_slurp->(other => 'value'); 1 };
+ok(!$required_named_slurp_missing, 'named slurpy parameter requires its named key');
+like($@, qr/missing named.*key/i, 'named slurpy omission identifies the missing key');
+my $optional_named_only = fun (:$tail = 'tail-default') { $tail };
+my $odd_named_error = eval { $optional_named_only->('orphan'); 1 };
+ok(!$odd_named_error, 'named parameters reject an odd key/value tail');
+like($@, qr/Odd number/, 'odd named argument diagnostic follows Perl wording');
+eval q{ fun (:$duplicate, :$duplicate) {} };
+like($@, qr/\$duplicate.*twice/, 'duplicate named parameter names identify the repeated parameter');
+eval q{ fun (:$named_first, $positional_after) {} };
+like($@, qr/positional.*named/i, 'positional-after-named diagnostic identifies both parameter kinds');
+eval q{ method named_invocant(:$named_invocant:) {} };
+like($@, qr/invocant.*\$named_invocant.*named/i,
+    'named method invocant receives a focused diagnostic');
 runtime_fun runtime_caller_name() { (caller 0)[3] }
 is(runtime_caller_name(), 'main::runtime_caller_name',
     'runtime-installed function retains its declared caller name');
@@ -167,14 +215,11 @@ is(($typed_info->positional_required)[0]->type->name, 'Int',
 {
     my $default = 'outer';
     fun same_named_default($default = $default) { $default }
-    TODO: {
-        local $TODO = 'Function::Parameters same-named outer default closure is not implemented';
-        is(same_named_default(), 'outer',
-            'a default can read an outer lexical with the same name as its parameter');
-        $default = 'changed';
-        is(same_named_default(), 'changed',
-            'same-named default closure observes later outer lexical values');
-    }
+    is(same_named_default(), 'outer',
+        'a default can read an outer lexical with the same name as its parameter');
+    $default = 'changed';
+    is(same_named_default(), 'changed',
+        'same-named default closure observes later outer lexical values');
 }
 
 my $slurpy_scalar_error = eval q{

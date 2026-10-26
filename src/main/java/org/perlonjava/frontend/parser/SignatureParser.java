@@ -3,6 +3,7 @@ package org.perlonjava.frontend.parser;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
+import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.operators.WarnDie;
@@ -242,7 +243,9 @@ public class SignatureParser {
         // collect their unrecognized arguments.  Only a later ordinary
         // positional scalar is forbidden.
         if (!isNamed && hasNamedParameter && sigil.equals("$")) {
-            parser.throwError(paramStartIndex, "Positional parameter follows named parameter");
+            parser.throwError(paramStartIndex, parser.parsingFunctionParametersDeclaration
+                    ? "positional parameter follows named parameter"
+                    : "Positional parameter follows named parameter");
         }
 
         // Check if this is a slurpy parameter
@@ -282,15 +285,14 @@ public class SignatureParser {
                     + sigil + "_\"\n");
         }
 
-        if (isNamed && paramName != null && namedParameterNames.contains(paramName)) {
-            parser.throwError(paramStartIndex, "Duplicated subroutine parameter name");
-        }
-
         String metadataName = paramName == null ? sigil : sigil + paramName;
         if (parser.parsingFunctionParametersDeclaration && paramName != null
                 && !functionParametersParameterNames.add(metadataName)) {
             parser.throwError(paramStartIndex,
                     metadataName + " can't appear twice in the same parameter list");
+        }
+        if (isNamed && paramName != null && namedParameterNames.contains(paramName)) {
+            parser.throwError(paramStartIndex, "Duplicated subroutine parameter name");
         }
 
         // Named parameters must have a name
@@ -301,6 +303,10 @@ public class SignatureParser {
 
         // Check for illegal operator after parameter (e.g. $b += 1)
         LexerToken afterParam = peekToken();
+        if (parser.parsingFunctionParametersMethod && isNamed && afterParam.text.equals(":")) {
+            parser.throwError(paramStartIndex,
+                    "invocant " + sigil + paramName + " not allowed as a named parameter here");
+        }
         if (paramName != null && !afterParam.text.equals(",") && !afterParam.text.equals(")")
                 && !afterParam.text.equals("=") && !afterParam.text.equals("//=") && !afterParam.text.equals("||=")
                 && !afterParam.text.equals("$") && !afterParam.text.equals("@") && !afterParam.text.equals("%")
@@ -337,7 +343,9 @@ public class SignatureParser {
             LexerToken namedDefault = peekToken();
             if (hasOptional && !namedDefault.text.equals("=")
                     && !namedDefault.text.equals("//=") && !namedDefault.text.equals("||=")) {
-                parser.throwError(paramStartIndex, "Mandatory parameter follows optional parameter");
+                parser.throwError(paramStartIndex, parser.parsingFunctionParametersDeclaration
+                        ? "optional positional parameter is followed by required named parameter"
+                        : "Mandatory parameter follows optional parameter");
             }
             // Named parameters are handled separately, not part of @_ unpacking
             namedParameterNodes.add(paramVariable);
@@ -950,18 +958,25 @@ public class SignatureParser {
         if (variable == null || (variable instanceof OperatorNode && ((OperatorNode) variable).operator.equals("undef"))) {
             // An anonymous parameter still evaluates its default expression.
             // There is simply no lexical slot to assign the result to.
-            if (op.equals("=")) {
-                return new BinaryOperatorNode(
-                        "&&",
-                        new BinaryOperatorNode(
-                                "<",
-                                atUnderscore(parser),
-                                new NumberNode(Integer.toString(paramIndex + 1), parser.tokenIndex),
-                                parser.tokenIndex),
-                        defaultValue,
+            Node missingArgument = new BinaryOperatorNode(
+                    "<", new OperatorNode("scalar", atUnderscore(parser), parser.tokenIndex),
+                    new NumberNode(Integer.toString(paramIndex + 1), parser.tokenIndex),
+                    parser.tokenIndex);
+            Node condition = missingArgument;
+            if ("//=".equals(op) || "||=".equals(op)) {
+                ArrayLiteralNode argumentIndex = new ArrayLiteralNode(
+                        List.of(new NumberNode(Integer.toString(paramIndex), parser.tokenIndex)),
+                        parser.tokenIndex);
+                Node argument = new BinaryOperatorNode("[", atUnderscore(parser), argumentIndex,
+                        parser.tokenIndex);
+                Node fallbackCondition = "//=".equals(op)
+                        ? new OperatorNode("!", new OperatorNode("defined", argument, parser.tokenIndex),
+                                parser.tokenIndex)
+                        : new OperatorNode("!", argument, parser.tokenIndex);
+                condition = new BinaryOperatorNode("||", missingArgument, fallbackCondition,
                         parser.tokenIndex);
             }
-            return defaultValue;
+            return new BinaryOperatorNode("&&", condition, defaultValue, parser.tokenIndex);
         }
 
         if (op.equals("=")) {
@@ -988,8 +1003,8 @@ public class SignatureParser {
 
     private Node parseDefaultValue(Node paramVariable) {
         if (parser.parsingFunctionParametersDeclaration && !parser.functionParametersDefaultArguments) {
-            parser.throwError(previousDefaultOperatorIndex(), "default argument not allowed for "
-                    + parser.functionParametersKeyword);
+            parser.throwError(previousDefaultOperatorIndex(), parser.functionParametersKeyword
+                    + ": default argument not allowed");
         }
         // Check if there's actually a default expression
         LexerToken next = peekToken();
@@ -1012,7 +1027,20 @@ public class SignatureParser {
         if (paramVariable instanceof OperatorNode op
                 && "$".equals(op.operator)
                 && op.operand instanceof IdentifierNode id) {
-            qualifySelfReference(value, id.name);
+            SymbolTable.SymbolEntry outerVariable = parser.ctx.symbolTable.getSymbolEntry("$" + id.name);
+            if (parser.parsingFunctionParametersDeclaration
+                    && outerVariable != null
+                    && Set.of("my", "state").contains(outerVariable.decl())
+                    && outerVariable.ast() != null) {
+                String alias = "__fp_outer_" + outerVariable.index() + "_" + paramVariable.getIndex();
+                parser.ctx.symbolTable.addVariableWithIndex(
+                        "$" + alias, outerVariable.index(), outerVariable.decl(),
+                        outerVariable.perlPackage(), outerVariable.ast());
+                outerVariable.ast().setAnnotation("functionParametersOuterBinding", "$" + id.name);
+                renameSelfReference(value, id.name, alias);
+            } else {
+                qualifySelfReference(value, id.name);
+            }
         }
         return value;
     }
@@ -1046,6 +1074,26 @@ public class SignatureParser {
             for (Node element : hash.elements) qualifySelfReference(element, name);
         } else if (node instanceof ArrayLiteralNode array) {
             for (Node element : array.elements) qualifySelfReference(element, name);
+        }
+    }
+
+    private void renameSelfReference(Node node, String name, String alias) {
+        if (node instanceof OperatorNode op) {
+            if ("$".equals(op.operator) && op.operand instanceof IdentifierNode id
+                    && name.equals(id.name)) {
+                id.name = alias;
+            } else if (op.operand != null) {
+                renameSelfReference(op.operand, name, alias);
+            }
+        } else if (node instanceof BinaryOperatorNode binary) {
+            renameSelfReference(binary.left, name, alias);
+            renameSelfReference(binary.right, name, alias);
+        } else if (node instanceof ListNode list) {
+            for (Node element : list.elements) renameSelfReference(element, name, alias);
+        } else if (node instanceof HashLiteralNode hash) {
+            for (Node element : hash.elements) renameSelfReference(element, name, alias);
+        } else if (node instanceof ArrayLiteralNode array) {
+            for (Node element : array.elements) renameSelfReference(element, name, alias);
         }
     }
 
@@ -1112,18 +1160,23 @@ public class SignatureParser {
         if (defaultValue != null) {
             // (delete $h{named}) // defaultValue
             if (defaultOp.equals("=")) {
-                defaultOp = "//";
-            } else if (defaultOp.equals("||=")) {
-                defaultOp = "||";
-            } else if (defaultOp.equals("//=")) {
-                defaultOp = "//";
-            }
+                OperatorNode exists = new OperatorNode(
+                        "exists", new ListNode(List.of(hashAccess), parser.tokenIndex), parser.tokenIndex);
+                extractionValue = new TernaryOperatorNode("?", exists, deleteExpr, defaultValue,
+                        parser.tokenIndex);
+            } else {
+                if (defaultOp.equals("||=")) {
+                    defaultOp = "||";
+                } else if (defaultOp.equals("//=")) {
+                    defaultOp = "//";
+                }
 
-            extractionValue = new BinaryOperatorNode(
-                    defaultOp,
-                    deleteExpr,
-                    defaultValue,
-                    parser.tokenIndex);
+                extractionValue = new BinaryOperatorNode(
+                        defaultOp,
+                        deleteExpr,
+                        defaultValue,
+                        parser.tokenIndex);
+            }
         } else {
             extractionValue = deleteExpr;
         }
@@ -1141,13 +1194,34 @@ public class SignatureParser {
     }
 
     private Node namedArgsSource() {
+        Node namedArguments = atUnderscore(parser);
+        Node positionalCountAvailable = new OperatorNode("scalar", atUnderscore(parser), parser.tokenIndex);
+        Node namedArgumentCount = positionalCountAvailable;
+        if (positionalParameterCount > 0) {
+            Node start = new NumberNode(Integer.toString(positionalParameterCount), parser.tokenIndex);
+            Node end = new OperatorNode("$#", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
+            Node range = new BinaryOperatorNode("..", start, end, parser.tokenIndex);
+            Node slice = new BinaryOperatorNode("[", atUnderscore(parser),
+                    new ArrayLiteralNode(List.of(range), parser.tokenIndex), parser.tokenIndex);
+            Node hasNamedTail = new BinaryOperatorNode("<=",
+                    new NumberNode(Integer.toString(positionalParameterCount), parser.tokenIndex),
+                    positionalCountAvailable, parser.tokenIndex);
+            namedArguments = new TernaryOperatorNode("?", hasNamedTail, slice,
+                    new ListNode(List.of(), parser.tokenIndex), parser.tokenIndex);
+            namedArgumentCount = new TernaryOperatorNode("?", hasNamedTail,
+                    new BinaryOperatorNode("-",
+                            new OperatorNode("scalar", atUnderscore(parser), parser.tokenIndex),
+                            new NumberNode(Integer.toString(positionalParameterCount), parser.tokenIndex),
+                            parser.tokenIndex),
+                    new NumberNode("0", parser.tokenIndex), parser.tokenIndex);
+        }
         Node odd = new BinaryOperatorNode("%",
-                new OperatorNode("scalar", atUnderscore(parser), parser.tokenIndex),
+                namedArgumentCount,
                 new NumberNode("2", parser.tokenIndex), parser.tokenIndex);
         Node pad = new TernaryOperatorNode("?", odd,
                 new ListNode(List.of(new OperatorNode("undef", null, parser.tokenIndex)), parser.tokenIndex),
                 new ListNode(List.of(), parser.tokenIndex), parser.tokenIndex);
-        return new ListNode(List.of(atUnderscore(parser), pad), parser.tokenIndex);
+        return new ListNode(List.of(namedArguments, pad), parser.tokenIndex);
     }
 
     private ListNode generateSignatureAST() {

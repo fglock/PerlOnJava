@@ -670,6 +670,12 @@ public class ScopedSymbolTable {
         symbolTableStack.peek().addVariableWithIndex(name, index, variableDeclType, perlPackage);
     }
 
+    public void addVariableWithIndex(
+            String name, int index, String variableDeclType, String perlPackage, OperatorNode ast) {
+        clearVisibleVariablesCache();
+        symbolTableStack.peek().addVariableWithIndex(name, index, variableDeclType, perlPackage, ast);
+    }
+
     public Map<String, Integer> getVisibleVariableRegistry() {
         Map<String, Integer> registry = new HashMap<>();
         Map<Integer, SymbolTable.SymbolEntry> visible = getAllVisibleVariables();

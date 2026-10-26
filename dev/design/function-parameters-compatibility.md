@@ -22,7 +22,7 @@ the upstream XS parser plugin.
 
 ## Progress tracking
 
-### Current status: Phases 1 and 2 subset complete; Phase 3 in progress (2026-10-25)
+### Current status: Phases 1 and 2 subset complete; Phase 3 in progress (2026-10-26)
 
 ### Completed
 
@@ -79,6 +79,22 @@ the upstream XS parser plugin.
   Strict slurpy diagnostics identify both the later parameter and the earlier
   slurpy parameter. Calls that resolve to a core operator after a same-named
   Function::Parameters declaration report the ambiguous-core warning.
+- Named argument extraction now starts after positional parameters, guards
+  empty tails when positional defaults are omitted, and preserves distinct
+  too-few, missing-name, and odd-pair diagnostics. Required named parameters
+  are validated with named slurpy arrays as well as ordinary signatures.
+- The upstream `named_params.t` suite passes all 134 assertions. The expanded
+  project unit file passes 78 assertions under system Perl and both PerlOnJava
+  backends; the system Perl oracle uses the cached CPAN XS build in
+  `/private/tmp/fp-542-source/blib`.
+- The full 56-file upstream suite currently has 30 passing files, 3 files with
+  assertion failures, 3 runtime errors, and 20 incomplete files (1,229 of
+  1,592 planned assertions passed; no timeouts). The remaining failures are
+  concentrated in method invocant parsing for type examples, unsupported
+  `reify_type` configuration, indirect named calls in recursion, Unicode
+  keyword diagnostics/qualified declarations, and a small number of parser
+  diagnostic mismatches. These remain open compatibility work, not passing
+  coverage.
 - Upstream `info.t`, `strict.t`, `prototype.t`, `types_coerce.t`, and
   `attributes.t` pass.
 - Scalar type constraints pass focused JVM/interpreter coverage, including
@@ -105,11 +121,18 @@ the upstream XS parser plugin.
 
 ### Next steps
 
-1. Trace PerlOnJava reactor I/O and timer dispatch against the passing native
-   system-Perl run, then add permanent runtime-level regression coverage for
-   the confirmed ordering defect.
-2. Continue coverage for method modifiers and classify unsupported
-   Function::Parameters options and GraphQL WebSocket ordering behavior.
+1. Support or explicitly classify `reify_type` and the typed-method syntax
+   exercised by `types_caller.t`, `types_inline.t`, and the Moose type tests.
+2. Add indirect named-call parsing and verify recursive named functions in
+   `recursion.t`.
+3. Fix Unicode keyword diagnostics and qualified declaration handling in
+   `unicode.t` and `unicode2.t`.
+4. Resolve the remaining parser diagnostics in `gorn.t`, `precedence.t`, and
+   `types_parse.t`, and investigate the `elsewhere.t`, `lineno-torture.t`, and
+   `stringy_h.t` runtime errors.
+5. Continue method-modifier coverage and verify GraphQL WebSocket ordering on
+   an uncongested runner before assigning that timing difference to runtime
+   behavior.
 
 ### Open questions
 
