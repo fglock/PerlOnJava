@@ -27,6 +27,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -312,6 +313,10 @@ public class PerlScriptExecutionTest extends PerlRuntimeTestBase {
      * @param filename the name of the Perl script file to be executed.
      */
     private void executeTest(String filename) {
+        if (filename.replace('\\', '/').endsWith("unit/runlevel_unused_sub_loop_control.t")) {
+            org.junit.jupiter.api.Assumptions.assumeTrue(hasSystemPerl(),
+                    "system Perl oracle is optional; run make test-perl-optional to include it");
+        }
         // Load the Perl script as an InputStream
         URL resourceUrl = getClass().getClassLoader().getResource(filename);
         InputStream inputStream = getClass().getClassLoader().getResourceAsStream(filename);
@@ -399,6 +404,24 @@ public class PerlScriptExecutionTest extends PerlRuntimeTestBase {
                 msg = rootCause.toString();
             }
             fail("Execution of " + filename + " failed: " + msg);
+        }
+    }
+
+    private static boolean hasSystemPerl() {
+        try {
+            Process process = new ProcessBuilder("perl", "-e", "exit 0")
+                    .redirectErrorStream(true)
+                    .start();
+            if (!process.waitFor(2, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                return false;
+            }
+            return process.exitValue() == 0;
+        } catch (IOException e) {
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
         }
     }
 

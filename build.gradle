@@ -580,6 +580,68 @@ tasks.register('verifyJoniPackaging', Exec) {
         '--strict', "target/perlonjava-${project.version}.jar", 'build/reports/sbom.json'
 }
 
+// Default build gates use Gradle/Groovy for packaging checks. Keep the Perl
+// command above available for maintainers who invoke it directly.
+tasks.register('verifyJoniPackagingGradle') {
+    group = 'verification'
+    description = 'Verifies Joni relocation, notices, and SBOM metadata without Perl'
+    dependsOn shadowJar
+    def jarFile = layout.projectDirectory.file("target/perlonjava-${project.version}.jar").asFile
+    def sbomFile = layout.projectDirectory.file('build/reports/sbom.json').asFile
+    def noticeFiles = [
+        'joni-LICENSE.txt': layout.projectDirectory.file('third_party/joni/LICENSE').asFile,
+        'jcodings-LICENSE.txt': layout.projectDirectory.file('third_party/licenses/jcodings-LICENSE.txt').asFile,
+        'joni-PERLONJAVA-NOTICE.md': layout.projectDirectory.file('third_party/joni/PERLONJAVA-NOTICE.md').asFile
+    ]
+    doLast {
+        if (!jarFile.isFile() || jarFile.length() == 0 || !sbomFile.isFile()) {
+            throw new GradleException('Standalone JAR or merged SBOM is missing')
+        }
+        def zip = new java.util.zip.ZipFile(jarFile)
+        try {
+            def entries = [:].withDefault { 0 }
+            zip.entries().each { e -> entries[e.name]++ }
+            if (entries.keySet().any { it ==~ /^org\/(joni|jcodings)\/.*\.class$/ })
+                throw new GradleException('Standalone JAR contains unrelocated Joni/JCodings classes')
+            ['joni', 'jcodings'].each { name ->
+                if (!entries.keySet().any { it.startsWith("org/perlonjava/internal/${name}/") && it.endsWith('.class') })
+                    throw new GradleException("Standalone JAR does not contain relocated ${name} classes")
+            }
+            if (entries['org/perlonjava/runtime/regex/RegexBackendPolicy.class'])
+                throw new GradleException('Standalone JAR contains retired regex backend selector')
+            noticeFiles.each { name, source ->
+                def path = "META-INF/licenses/${name}"
+                if (entries[path] != 1 || !java.util.Arrays.equals(
+                        zip.getInputStream(zip.getEntry(path)).bytes, source.bytes))
+                    throw new GradleException("Standalone JAR notice differs: ${name}")
+            }
+            def embedded = 'META-INF/sbom/sbom.json'
+            if (entries[embedded] != 1 || !java.util.Arrays.equals(
+                    zip.getInputStream(zip.getEntry(embedded)).bytes, sbomFile.bytes))
+                throw new GradleException('Embedded SBOM differs from external merged SBOM')
+        } finally { zip.close() }
+
+        def sbom = new groovy.json.JsonSlurper().parse(sbomFile)
+        def joniRef = 'pkg:generic/perlonjava/joni-fork@2.2.7'
+        def jcodingsRef = 'pkg:maven/org.jruby.jcodings/jcodings@1.0.64?type=jar'
+        def joni = sbom.components.find { it.group == 'org.perlonjava.fork' && it.name == 'joni-fork' }
+        if (!joni || joni.version != '2.2.7' || joni.'bom-ref' != joniRef || joni.purl != joniRef)
+            throw new GradleException('Combined SBOM is missing the canonical Joni fork component')
+        def props = (joni.properties ?: []).collectEntries { [(it.name): it.value] }
+        ['perlonjava:vendored':'true', 'perlonjava:modified':'true',
+         'perlonjava:vendored-source-path':'third_party/joni',
+         'perlonjava:upstream-maven-coordinate':'org.jruby.joni:joni:2.2.7',
+         'perlonjava:upstream-tag':'joni-2.2.7',
+         'perlonjava:upstream-commit':'57fd57b4f977813a7b4b35e0179943b1f06f51d7'].each { k, v ->
+            if (props[k] != v) throw new GradleException("Combined SBOM has invalid ${k}")
+        }
+        if (!(props['perlonjava:source-commit'] ==~ /[0-9a-f]{40}/))
+            throw new GradleException('Combined SBOM has invalid Joni source commit')
+        if (!sbom.dependencies.any { it.ref == joniRef && it.dependsOn.contains(jcodingsRef) })
+            throw new GradleException('Combined SBOM is missing Joni -> JCodings dependency')
+    }
+}
+
 // Some Perl unit tests spawn a child interpreter via $^X. Under Gradle those
 // children go through the repository launcher, so the target jar must be built
 // before tests run; otherwise a stale target/perlonjava-*.jar can be executed.
@@ -618,6 +680,54 @@ tasks.register('generatePerlSbom', Exec) {
     outputs.file(outputFile)
 }
 
+tasks.register('generatePerlSbomGradle') {
+    group = 'sbom'
+    description = 'Generate bundled Perl module SBOM using Gradle/Groovy'
+    def outputFile = layout.buildDirectory.file('reports/perl-bom.json')
+    def libDir = layout.projectDirectory.dir('src/main/perl/lib').asFile
+    def generatedFile = outputFile.get().asFile
+    outputs.file(outputFile)
+    inputs.dir('src/main/perl/lib')
+    doLast {
+        def modules = []
+        libDir.eachFileRecurse { f ->
+            if (!f.isFile() || !f.name.endsWith('.pm')) return
+            def rel = libDir.toPath().relativize(f.toPath()).toString().replace('\\', '/')
+            def name = rel.replace('/', '::').replaceFirst(/\.pm$/, '')
+            def text = f.getText('UTF-8')
+            def match = (text =~ '(?m)\\$VERSION\\s*=\\s*[^0-9v]*v?([0-9][0-9._]*)')
+            def declared = (text =~ /version->(?:new|declare)\s*\(\s*['"]([^'"]+)['"]\s*\)/)
+            def ver = match.find() ? match.group(1) : (declared.find() ? declared.group(1) : 'bundled')
+            def license = null
+            text.readLines().take(200).each { line ->
+                if (license == null) {
+                    if (line =~ /(?i)Artistic\s*(?:License\s*)?2/) license = 'Artistic-2.0'
+                    else if ((line =~ /(?i)Artistic\s*(?:License)?(?:\s*1)?(?!\s*2)/) && !(line =~ /(?i)Artistic.*2/)) license = 'Artistic-1.0-Perl'
+                    else if ((line =~ /(?i)GPL.*version\s*1/) || (line =~ /(?i)GNU.*General.*Public.*License/)) license = 'GPL-1.0-or-later'
+                    else if (line =~ /(?i)\bMIT\s+License\b/) license = 'MIT'
+                    else if (line =~ /(?i)BSD\s*(?:3|three)/) license = 'BSD-3-Clause'
+                    else if (line =~ /(?i)Apache\s*(?:License\s*)?(?:Version\s*)?2/) license = 'Apache-2.0'
+                }
+            }
+            modules << [name:name, version:ver, license:license, ref:'perl:' + name.replace('::','-')]
+        }
+        modules.sort { a, b -> a.name <=> b.name }
+        def components = modules.collect { m ->
+            def c = [type:'library', 'bom-ref':m.ref, name:m.name, version:m.version, purl:"pkg:cpan/${m.name}@${m.version}"]
+            if (m.license) c.licenses = [[license:[id:m.license]]]
+            c
+        }
+        def doc = ['$schema':'http://cyclonedx.org/schema/bom-1.6.schema.json', bomFormat:'CycloneDX', specVersion:'1.6',
+            serialNumber:'urn:uuid:' + UUID.randomUUID(), version:1,
+            metadata:[timestamp:java.time.Instant.now().toString(), tools:[components:[[type:'application', name:'generate-perl-sbom.gradle', version:'1.0.0', description:'PerlOnJava Perl SBOM generator']]],
+                component:[type:'application', 'bom-ref':'perlonjava-perl-modules', name:'perlonjava-perl-modules', version:'5.44.1', description:'Bundled Perl modules for PerlOnJava', licenses:[[license:[id:'Artistic-2.0']]], purl:'pkg:generic/perlonjava-perl-modules@5.44.1'],
+                manufacture:[name:'PerlOnJava Project', url:['https://github.com/fglock/PerlOnJava']]],
+            components:components, dependencies:[[ref:'perlonjava-perl-modules', dependsOn:modules.collect { it.ref }]]]
+        generatedFile.parentFile.mkdirs()
+        generatedFile.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(doc)) + '\n'
+    }
+}
+
 // Task to merge Java and Perl SBOMs
 tasks.register('mergeSbom', Exec) {
     description = 'Merge Java and Perl SBOMs into combined SBOM'
@@ -646,8 +756,44 @@ tasks.register('mergeSbom', Exec) {
     outputs.file(outputFile)
 }
 
+tasks.register('mergeSbomGradle') {
+    group = 'sbom'
+    description = 'Merge Java and Perl SBOMs using Gradle/Groovy'
+    dependsOn cyclonedxBom, generatePerlSbomGradle
+    inputs.file('build/reports/bom.json')
+    inputs.file('build/reports/perl-bom.json')
+    outputs.file(layout.buildDirectory.file('reports/sbom.json'))
+    def javaBomFile = layout.projectDirectory.file('build/reports/bom.json').asFile
+    def perlBomFile = layout.projectDirectory.file('build/reports/perl-bom.json').asFile
+    def mergedBomFile = layout.buildDirectory.file('reports/sbom.json').get().asFile
+    def repoDir = projectDir
+    def sourceCommitOverride = providers.environmentVariable('PERLONJAVA_SOURCE_COMMIT').orNull
+    doLast {
+        def slurper = new groovy.json.JsonSlurper()
+        def javaBom = slurper.parse(javaBomFile)
+        def perlBom = slurper.parse(perlBomFile)
+        def source = sourceCommitOverride
+        if (!source) source = 'git rev-parse --verify HEAD'.execute(null, repoDir).text.trim()
+        if (!(source ==~ /[0-9a-f]{40}/)) throw new GradleException('Cannot resolve full source commit for SBOM')
+        def joni = [type:'library', 'bom-ref':'pkg:generic/perlonjava/joni-fork@2.2.7', group:'org.perlonjava.fork', name:'joni-fork', version:'2.2.7',
+            description:'PerlOnJava-maintained source fork of Joni with Perl-compatible parsing, Unicode, diagnostics, control-flow, and match-time extensions',
+            licenses:[[license:[id:'MIT']]], purl:'pkg:generic/perlonjava/joni-fork@2.2.7',
+            externalReferences:[[type:'website',url:'https://github.com/jruby/joni'],[type:'vcs',url:'https://github.com/jruby/joni.git']],
+            properties:[['perlonjava:vendored','true'],['perlonjava:modified','true'],['perlonjava:vendored-source-path','third_party/joni'],['perlonjava:source-commit',source],['perlonjava:upstream-maven-coordinate','org.jruby.joni:joni:2.2.7'],['perlonjava:upstream-tag','joni-2.2.7'],['perlonjava:upstream-commit','57fd57b4f977813a7b4b35e0179943b1f06f51d7']].collect { [name:it[0],value:it[1]] }]
+        def comps = (javaBom.components ?: []) + [joni] + (perlBom.components ?: [])
+        def deps = (javaBom.components ?: []).collect { it.'bom-ref' }.findAll { it } + [joni.'bom-ref'] + (perlBom.components ?: []).collect { it.'bom-ref' }.findAll { it }
+        def version = javaBom.metadata.component.version ?: '5.44.1'
+        def merged = ['$schema':'http://cyclonedx.org/schema/bom-1.6.schema.json',bomFormat:'CycloneDX',specVersion:'1.6',serialNumber:'urn:uuid:'+UUID.randomUUID(),version:1,
+            metadata:[timestamp:java.time.Instant.now().toString(),tools:[components:[[type:'application',name:'merge-sbom.gradle',version:'1.0.0',description:'PerlOnJava SBOM merger']]],
+                component:[type:'application','bom-ref':'perlonjava',name:'perlonjava',version:version,description:'Perl compiler and runtime for the JVM',licenses:[[license:[id:'Artistic-2.0']]],purl:"pkg:generic/perlonjava@${version}",externalReferences:[[type:'website',url:'https://github.com/fglock/PerlOnJava'],[type:'vcs',url:'https://github.com/fglock/PerlOnJava.git']]],
+                manufacture:[name:'PerlOnJava Project',url:['https://github.com/fglock/PerlOnJava']]], components:comps,
+            dependencies:[[ref:'perlonjava',dependsOn:deps],[ref:joni.'bom-ref',dependsOn:['pkg:maven/org.jruby.jcodings/jcodings@1.0.64?type=jar']]]]
+        mergedBomFile.parentFile.mkdirs(); mergedBomFile.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(merged)) + '\n'
+    }
+}
+
 // Ensure combined SBOM is generated before shadowJar
-shadowJar.dependsOn mergeSbom
+shadowJar.dependsOn mergeSbomGradle
 
 // Make shadowJar part of the build process
 tasks.named('build') {
@@ -787,6 +933,10 @@ def unitShardTasks = []
         } else {
             exclude '**/PerlOnJavaHomeIntegrationTest.class'
         }
+        // These freshness tests execute Perl generators and are available via
+        // the explicit testPerlUnicodeGenerators target instead.
+        exclude '**/PerlUnicodeScalarNameDataTest.class'
+        exclude '**/PerlUnicodeUnikemetDataTest.class'
 
         // testUnitParallel also runs the Joni gate.  It is a separate
         // high-memory test JVM, so finish it before starting the Perl shards
@@ -833,12 +983,35 @@ def homeIntegrationTask = tasks.register('testPerlOnJavaHomeIntegration', Test) 
     mustRunAfter tasks.named('testJoni')
 }
 
+tasks.register('testPerlUnicodeGenerators', Test) {
+    group = 'verification'
+    description = 'Runs Unicode generator freshness tests that require system Perl'
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching('org.perlonjava.runtime.regex.PerlUnicodeScalarNameDataTest')
+    }
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+}
+
+tasks.register('testPerlSystemOracle', Test) {
+    group = 'verification'
+    description = 'Runs the unit fixture that compares behavior with system Perl'
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching('org.perlonjava.PerlScriptExecutionTest.testUnitTests')
+    }
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    systemProperty 'jperl.moduleTest.filter', 'unit/runlevel_unused_sub_loop_control.t'
+}
+
 tasks.register('testUnitParallel') {
     group = 'verification'
     description = 'Runs unit tests in parallel across multiple JVMs. Usage: gradle testUnitParallel --parallel'
     dependsOn unitShardTasks
     dependsOn testJoni
-    dependsOn verifyJoniPackaging
+    dependsOn verifyJoniPackagingGradle
     dependsOn homeIntegrationTask
 }
 
