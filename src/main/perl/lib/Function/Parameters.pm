@@ -17,7 +17,7 @@ sub import {
                 _validate_keyword($keyword);
                 my $definition = $argument->{$keyword};
                 my $defaults = ref($definition) eq 'HASH'
-                    ? ($definition->{defaults} // 'function') : $definition;
+                    ? ($definition->{defaults} // _keyword_defaults($keyword)) : $definition;
                 _validate_type($defaults);
             }
         } elsif (!ref($argument)) {
@@ -29,6 +29,12 @@ sub import {
         }
     }
     return;
+}
+
+sub _keyword_defaults {
+    my ($keyword) = @_;
+    return $keyword if $keyword =~ /\A(?:method|classmethod|before|after|around|augment|override)\z/;
+    return 'function';
 }
 
 sub _validate_keyword {

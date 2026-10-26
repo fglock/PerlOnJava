@@ -17,6 +17,7 @@ use Function::Parameters {
     required_name => { defaults => 'function', name => 'required' },
     prohibited_name => { defaults => 'function', name => 'prohibited' },
     no_defaults => { defaults => 'function', default_arguments => 0 },
+    method => { name => 'required', shift => '$configured_self' },
 };
 
 our ($installed_name, $installed_code);
@@ -62,6 +63,9 @@ like($@, qr/expecting a parameter list/, 'prohibited-name diagnostic identifies 
 my $default_argument_error = eval q{ no_defaults no_default($value = 42) { $value } };
 ok(!$default_argument_error, 'default_arguments false rejects signature defaults');
 like($@, qr/default argument/i, 'default argument diagnostic identifies the rejected syntax');
+method configured_default_method($key) { $configured_self->{$key} }
+is(configured_default_method({ key => 'method-default' }, 'key'), 'method-default',
+    'method keyword defaults to method semantics without an explicit defaults option');
 runtime_fun runtime_caller_name() { (caller 0)[3] }
 is(runtime_caller_name(), 'main::runtime_caller_name',
     'runtime-installed function retains its declared caller name');
@@ -159,6 +163,19 @@ is(ref(($typed_info->positional_required)[0]->type), 'Type::Tiny',
     'parameter metadata exposes its declared type object before the function is called');
 is(($typed_info->positional_required)[0]->type->name, 'Int',
     'parameter metadata preserves the declared type object');
+
+{
+    my $default = 'outer';
+    fun same_named_default($default = $default) { $default }
+    TODO: {
+        local $TODO = 'Function::Parameters same-named outer default closure is not implemented';
+        is(same_named_default(), 'outer',
+            'a default can read an outer lexical with the same name as its parameter');
+        $default = 'changed';
+        is(same_named_default(), 'changed',
+            'same-named default closure observes later outer lexical values');
+    }
+}
 
 my $slurpy_scalar_error = eval q{
     use Function::Parameters;
