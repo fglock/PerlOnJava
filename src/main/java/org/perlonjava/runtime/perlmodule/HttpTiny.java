@@ -6,7 +6,10 @@ import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
 import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509ExtendedTrustManager;
 import javax.net.ssl.X509TrustManager;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -14,12 +17,17 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.ProxySelector;
+import java.net.Socket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
+import java.security.KeyStore;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
@@ -196,6 +204,11 @@ public class HttpTiny extends PerlModuleBase {
             } catch (Exception e) {
                 throw new RuntimeException("Failed to create insecure SSL context", e);
             }
+        } else {
+            SSLContext systemCaContext = createSystemCaSSLContext();
+            if (systemCaContext != null) {
+                builder.sslContext(systemCaContext);
+            }
         }
 
         // Configure proxy settings
@@ -229,6 +242,229 @@ public class HttpTiny extends PerlModuleBase {
         }
 
         return builder.build();
+    }
+
+    /** Adds the OS CA bundle while preserving the JVM's normal trust roots. */
+    private static SSLContext createSystemCaSSLContext() {
+        List<Path> caBundles = findSystemCaBundles();
+        try {
+            TrustManager[] combined = createSystemCaTrustManagers(caBundles);
+            if (combined == null || combined.length == 0) return null;
+            SSLContext context = SSLContext.getInstance("TLS");
+            context.init(null, combined, new java.security.SecureRandom());
+            return context;
+        } catch (Exception e) {
+            // An optional OS bundle must not prevent use of the JVM trust store.
+            return null;
+        }
+    }
+
+    static SSLContext createSystemCaSSLContext(Path caBundle) {
+        return createSystemCaSSLContext(List.of(caBundle));
+    }
+
+    private static SSLContext createSystemCaSSLContext(List<Path> caBundles) {
+        try {
+            TrustManager[] combined = createSystemCaTrustManagers(caBundles);
+            if (combined == null || combined.length == 0) return null;
+            SSLContext context = SSLContext.getInstance("TLS");
+            context.init(null, combined, new java.security.SecureRandom());
+            return context;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    static TrustManager[] createSystemCaTrustManagers(Path caBundle) throws Exception {
+        return createSystemCaTrustManagers(List.of(caBundle));
+    }
+
+    static TrustManager[] createSystemCaTrustManagers(List<Path> caBundles) throws Exception {
+        CertificateFactory factory = CertificateFactory.getInstance("X.509");
+        KeyStore systemRoots = KeyStore.getInstance(KeyStore.getDefaultType());
+        systemRoots.load(null, null);
+        int index = 0;
+        for (Path caBundle : caBundles) {
+            Collection<? extends Certificate> certificates;
+            try (var input = Files.newInputStream(caBundle)) {
+                certificates = factory.generateCertificates(input);
+            }
+            for (Certificate certificate : certificates) {
+                systemRoots.setCertificateEntry("system-ca-" + index++, certificate);
+            }
+        }
+
+        List<X509TrustManager> osTrustManagers = new ArrayList<>();
+        if (index > 0) {
+            TrustManagerFactory systemFactory = TrustManagerFactory.getInstance(
+                    TrustManagerFactory.getDefaultAlgorithm());
+            systemFactory.init(systemRoots);
+            osTrustManagers.add(findX509TrustManager(systemFactory.getTrustManagers()));
+        }
+        addWindowsRootTrustManager(osTrustManagers);
+        if (osTrustManagers.isEmpty()) return null;
+
+        TrustManagerFactory jvmFactory = TrustManagerFactory.getInstance(
+                TrustManagerFactory.getDefaultAlgorithm());
+        jvmFactory.init((KeyStore) null);
+        TrustManager[] combined = Arrays.stream(jvmFactory.getTrustManagers())
+                .filter(X509TrustManager.class::isInstance)
+                .map(X509TrustManager.class::cast)
+                .map(jvmManager -> {
+                    List<X509TrustManager> managers = new ArrayList<>();
+                    managers.add(jvmManager);
+                    managers.addAll(osTrustManagers);
+                    return (TrustManager) new CombinedX509TrustManager(managers);
+                })
+                .toArray(TrustManager[]::new);
+        return combined.length == 0 ? null : combined;
+    }
+
+    private static void addWindowsRootTrustManager(List<X509TrustManager> managers) {
+        try {
+            KeyStore windowsRoots = KeyStore.getInstance("Windows-ROOT");
+            windowsRoots.load(null, null);
+            TrustManagerFactory factory = TrustManagerFactory.getInstance(
+                    TrustManagerFactory.getDefaultAlgorithm());
+            factory.init(windowsRoots);
+            managers.add(findX509TrustManager(factory.getTrustManagers()));
+        } catch (Exception ignored) {
+            // The Windows root store is only available on Windows JVMs.
+        }
+    }
+
+    private static X509TrustManager findX509TrustManager(TrustManager[] managers) {
+        return Arrays.stream(managers)
+                .filter(X509TrustManager.class::isInstance)
+                .map(X509TrustManager.class::cast)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No X.509 trust manager"));
+    }
+
+    private static List<Path> findSystemCaBundles() {
+        List<Path> bundles = new ArrayList<>();
+        for (String candidate : List.of(
+                "/etc/ssl/cert.pem",
+                "/etc/ssl/certs/ca-certificates.crt",
+                "/etc/pki/tls/certs/ca-bundle.crt",
+                "/opt/homebrew/etc/openssl@3/cert.pem",
+                "/usr/local/etc/openssl@3/cert.pem")) {
+            Path path = Path.of(candidate);
+            if (Files.isRegularFile(path) && Files.isReadable(path)) bundles.add(path);
+        }
+        return bundles;
+    }
+
+    private static final class CombinedX509TrustManager extends X509ExtendedTrustManager {
+        private final List<X509TrustManager> delegates;
+
+        private CombinedX509TrustManager(List<X509TrustManager> delegates) {
+            this.delegates = List.copyOf(delegates);
+        }
+
+        @Override
+        public void checkClientTrusted(X509Certificate[] chain, String authType)
+                throws java.security.cert.CertificateException {
+            check(manager -> manager.checkClientTrusted(chain, authType));
+        }
+
+        @Override
+        public void checkServerTrusted(X509Certificate[] chain, String authType)
+                throws java.security.cert.CertificateException {
+            check(manager -> manager.checkServerTrusted(chain, authType));
+        }
+
+        @Override
+        public void checkClientTrusted(X509Certificate[] chain, String authType, Socket socket)
+                throws java.security.cert.CertificateException {
+            check(manager -> checkClientTrusted(manager, chain, authType, socket));
+        }
+
+        @Override
+        public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket)
+                throws java.security.cert.CertificateException {
+            check(manager -> checkServerTrusted(manager, chain, authType, socket));
+        }
+
+        @Override
+        public void checkClientTrusted(X509Certificate[] chain, String authType, SSLEngine engine)
+                throws java.security.cert.CertificateException {
+            check(manager -> checkClientTrusted(manager, chain, authType, engine));
+        }
+
+        @Override
+        public void checkServerTrusted(X509Certificate[] chain, String authType, SSLEngine engine)
+                throws java.security.cert.CertificateException {
+            check(manager -> checkServerTrusted(manager, chain, authType, engine));
+        }
+
+        private void check(TrustCheck check) throws java.security.cert.CertificateException {
+            java.security.cert.CertificateException failure = null;
+            for (X509TrustManager manager : delegates) {
+                try {
+                    check.check(manager);
+                    return;
+                } catch (java.security.cert.CertificateException e) {
+                    if (failure == null) failure = e;
+                    else failure.addSuppressed(e);
+                }
+            }
+            throw failure == null
+                    ? new java.security.cert.CertificateException("No X.509 trust managers configured")
+                    : failure;
+        }
+
+        private static void checkClientTrusted(X509TrustManager manager, X509Certificate[] chain,
+                                              String authType, Socket socket)
+                throws java.security.cert.CertificateException {
+            if (manager instanceof X509ExtendedTrustManager extended) {
+                extended.checkClientTrusted(chain, authType, socket);
+            } else {
+                manager.checkClientTrusted(chain, authType);
+            }
+        }
+
+        private static void checkServerTrusted(X509TrustManager manager, X509Certificate[] chain,
+                                              String authType, Socket socket)
+                throws java.security.cert.CertificateException {
+            if (manager instanceof X509ExtendedTrustManager extended) {
+                extended.checkServerTrusted(chain, authType, socket);
+            } else {
+                manager.checkServerTrusted(chain, authType);
+            }
+        }
+
+        private static void checkClientTrusted(X509TrustManager manager, X509Certificate[] chain,
+                                              String authType, SSLEngine engine)
+                throws java.security.cert.CertificateException {
+            if (manager instanceof X509ExtendedTrustManager extended) {
+                extended.checkClientTrusted(chain, authType, engine);
+            } else {
+                manager.checkClientTrusted(chain, authType);
+            }
+        }
+
+        private static void checkServerTrusted(X509TrustManager manager, X509Certificate[] chain,
+                                              String authType, SSLEngine engine)
+                throws java.security.cert.CertificateException {
+            if (manager instanceof X509ExtendedTrustManager extended) {
+                extended.checkServerTrusted(chain, authType, engine);
+            } else {
+                manager.checkServerTrusted(chain, authType);
+            }
+        }
+
+        @FunctionalInterface
+        private interface TrustCheck {
+            void check(X509TrustManager manager) throws java.security.cert.CertificateException;
+        }
+
+        @Override
+        public X509Certificate[] getAcceptedIssuers() {
+            return delegates.stream()
+                    .flatMap(manager -> Arrays.stream(manager.getAcceptedIssuers()))
+                    .toArray(X509Certificate[]::new);
+        }
     }
 
     private static SSLContext createInsecureSSLContext() throws Exception {
