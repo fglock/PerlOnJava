@@ -68,7 +68,7 @@ public final class ParserExtensionRegistry {
                 for (var entry : definitions.elements.entrySet()) {
                     if (enabled) {
                         parser.registerKeywordPlugin(entry.getKey(),
-                                configuredPlugin(entry.getValue()));
+                                configuredPlugin(entry.getKey(), entry.getValue()));
                     } else {
                         parser.removeKeywordPlugin(entry.getKey());
                     }
@@ -116,7 +116,7 @@ public final class ParserExtensionRegistry {
 
     private static void registerModifiers(Parser parser) {
         for (String keyword : List.of("before", "after", "around", "augment", "override")) {
-            parser.registerKeywordPlugin(keyword, configuredPlugin(new RuntimeScalar(keyword)));
+            parser.registerKeywordPlugin(keyword, configuredPlugin(keyword, new RuntimeScalar(keyword)));
         }
     }
 
@@ -126,7 +126,7 @@ public final class ParserExtensionRegistry {
         }
     }
 
-    private static FunctionParametersKeywordPlugin configuredPlugin(RuntimeScalar definition) {
+    private static FunctionParametersKeywordPlugin configuredPlugin(String keyword, RuntimeScalar definition) {
         RuntimeBase value = unwrap(definition);
         String defaults;
         List<String> shift = null;
@@ -150,7 +150,9 @@ public final class ParserExtensionRegistry {
                 }
             }
             RuntimeScalar defaultValue = configuration.elements.get("defaults");
-            defaults = defaultValue == null ? "function" : defaultValue.toString();
+            String keywordDefaults = Set.of("method", "classmethod", "before", "after", "around",
+                    "augment", "override").contains(keyword) ? keyword : "function";
+            defaults = defaultValue == null ? keywordDefaults : defaultValue.toString();
             RuntimeScalar shiftValue = configuration.elements.get("shift");
             RuntimeBase shiftBase = shiftValue == null ? null : unwrap(shiftValue);
             if (shiftBase instanceof RuntimeArray names) {
