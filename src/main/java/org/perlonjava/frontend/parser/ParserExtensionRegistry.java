@@ -83,6 +83,9 @@ public final class ParserExtensionRegistry {
             } else if (":modifiers".equals(name)) {
                 if (enabled) registerModifiers(parser);
                 else removeModifiers(parser);
+            } else if (":strict".equals(name) || ":lax".equals(name)) {
+                if (enabled) registerStrictnessDefaults(parser, ":strict".equals(name));
+                else removeDefaults(parser);
             } else if ("fun".equals(name) || "method".equals(name)) {
                 if (enabled) parser.registerKeywordPlugin(name,
                         "fun".equals(name) ? FunctionParametersKeywordPlugin.FUNCTION
@@ -97,6 +100,13 @@ public final class ParserExtensionRegistry {
     private static void registerDefaults(Parser parser) {
         parser.registerKeywordPlugin("fun", FunctionParametersKeywordPlugin.FUNCTION);
         parser.registerKeywordPlugin("method", FunctionParametersKeywordPlugin.METHOD);
+    }
+
+    private static void registerStrictnessDefaults(Parser parser, boolean strict) {
+        parser.registerKeywordPlugin("fun", FunctionParametersKeywordPlugin.configured(
+                "function", null, 0, strict, true, false, null, List.of(), "optional", true));
+        parser.registerKeywordPlugin("method", FunctionParametersKeywordPlugin.configured(
+                "method", null, 0, strict, true, false, null, List.of(), "optional", true));
     }
 
     private static void removeDefaults(Parser parser) {
@@ -125,13 +135,15 @@ public final class ParserExtensionRegistry {
         boolean strictSpecified = false;
         boolean checkArgumentTypes = true;
         boolean runtime = false;
+        boolean defaultArguments = true;
+        String namePolicy = "optional";
         String installSub = null;
         List<String> defaultAttributes = List.of();
         if (value instanceof RuntimeHash configuration) {
             Set<String> supportedOptions = Set.of(
                     "defaults", "shift", "invocant", "strict",
                     "check_argument_count", "check_argument_types", "attributes", "runtime",
-                    "install_sub");
+                    "install_sub", "default_arguments", "name");
             for (String option : configuration.elements.keySet()) {
                 if (!supportedOptions.contains(option)) {
                     throw new IllegalArgumentException("Invalid keyword property: " + option);
@@ -176,6 +188,15 @@ public final class ParserExtensionRegistry {
             if (attributesValue != null) {
                 defaultAttributes = parseConfiguredAttributes(attributesValue.toString());
             }
+            RuntimeScalar defaultArgumentsValue = configuration.elements.get("default_arguments");
+            if (defaultArgumentsValue != null) defaultArguments = defaultArgumentsValue.getBoolean();
+            RuntimeScalar nameValue = configuration.elements.get("name");
+            if (nameValue != null) {
+                namePolicy = nameValue.toString();
+                if (!Set.of("required", "prohibited", "optional").contains(namePolicy)) {
+                    throw new IllegalArgumentException("Invalid keyword property name: " + namePolicy);
+                }
+            }
         } else {
             defaults = definition.toString();
         }
@@ -198,7 +219,7 @@ public final class ParserExtensionRegistry {
         }
         return FunctionParametersKeywordPlugin.configured(
                 defaults, shift, optionalInvocantCount, strict, checkArgumentTypes,
-                runtime, installSub, defaultAttributes);
+                runtime, installSub, defaultAttributes, namePolicy, defaultArguments);
     }
 
     private static List<String> parseConfiguredAttributes(String source) {

@@ -265,6 +265,8 @@ public class Parser {
     public List<String> functionParametersAttributes = List.of();
     /** Install a named Function::Parameters declaration when its statement runs. */
     public boolean functionParametersRuntime;
+    /** Whether Function::Parameters signatures accept default arguments. */
+    public boolean functionParametersDefaultArguments = true;
     public String functionParametersInstallSub;
     // Are we parsing the top level script?
     public boolean isTopLevelScript = false;

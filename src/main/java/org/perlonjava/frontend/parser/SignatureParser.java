@@ -987,6 +987,10 @@ public class SignatureParser {
     }
 
     private Node parseDefaultValue(Node paramVariable) {
+        if (parser.parsingFunctionParametersDeclaration && !parser.functionParametersDefaultArguments) {
+            parser.throwError(previousDefaultOperatorIndex(), "default argument not allowed for "
+                    + parser.functionParametersKeyword);
+        }
         // Check if there's actually a default expression
         LexerToken next = peekToken();
         if (next.type == LexerTokenType.EOF || next.text.equals(",") || next.text.equals(")")) {
