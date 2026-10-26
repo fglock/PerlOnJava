@@ -46,27 +46,6 @@ public final class FunctionParameters extends PerlModuleBase {
             }
         }
         if (code.signatureKeyword == null) {
-            String name = codeRef.globalCodeRefFqn;
-            if (name == null) name = code.referenceOriginFqn;
-            if (name == null && code.subName != null && !code.subName.isEmpty()) {
-                name = (code.packageName == null ? "main" : code.packageName)
-                        + "::" + code.subName;
-            }
-            if (name != null) {
-                RuntimeScalar currentRef = GlobalVariable.getGlobalCodeRefForFreshLookup(name);
-                if (currentRef != null && currentRef.type == RuntimeScalarType.CODE
-                        && currentRef.value instanceof RuntimeCode currentCode) {
-                    if (currentCode.compilerSupplier != null) {
-                        currentCode.compilerSupplier.get();
-                        if (currentRef.value instanceof RuntimeCode materialized) {
-                            currentCode = materialized;
-                        }
-                    }
-                    if (currentCode.signatureKeyword != null) code = currentCode;
-                }
-            }
-        }
-        if (code.signatureKeyword == null) {
             return new RuntimeScalar().getList();
         }
 
