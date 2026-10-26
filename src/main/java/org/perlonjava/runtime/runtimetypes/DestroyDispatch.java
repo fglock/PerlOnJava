@@ -635,6 +635,16 @@ public class DestroyDispatch {
                 RuntimeScalar.scopeExitCleanup(scalar);
                 MortalList.flush();
             }
+            // A blessed container may hold weakly observed objects whose
+            // selective counts remain inflated after its fields are released.
+            // Reconsider those descendants after DESTROY has returned, when
+            // its temporary $self lexical is no longer a Perl root. DBIx::Class
+            // keeps a weak Storage reference in the DBI error callback and
+            // expects it to be cleared as soon as the owning Schema is gone.
+            if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
+                    && MortalList.requestWeakSweepsForDestroyedContainer(referent)) {
+                requestSweepAfterOuterDestroy();
+            }
         } catch (Exception e) {
             String msg = e.getMessage();
             if (msg == null) msg = e.getClass().getName();
