@@ -293,8 +293,26 @@ and first path establish implementation cost.
   target Perl loads the helper. These are pre-existing issues tracked in
   [#1656](https://github.com/fglock/PerlOnJava/issues/1656) and
   [#1434](https://github.com/fglock/PerlOnJava/issues/1434); the DBIx run's two
-  assertion failures remain separately unclassified under
+  assertion failures are tracked separately under
   [#1646](https://github.com/fglock/PerlOnJava/issues/1646).
+- [x] Classify DBIx::Class 0.082844 `t/storage/error.t` assertion 49 on the
+  current lifecycle candidate: system Perl passes, and the same failure
+  reproduces on the clean master baseline. A clean rebuild of the current
+  candidate still fails 48/49 assertions. The weak schema captured by DBI's
+  handler remains live after `$schema` is cleared; after a forced quiet GC,
+  owner tracing reports no active scalar owners or capture slots despite the
+  stale positive refcount. The exact stale-count/root cause remains open under
+  #1642; rerun after that lifecycle work is reconciled. This does not count as
+  DBIx acceptance.
+- [x] Rerun the three DBIx lifecycle files together on the clean candidate.
+  `t/storage/txn_scope_guard.t` now passes 18/18 and `t/52leaks.t` passes 11/11
+  (including their TODO skips); the prior clean-master run failed the scope
+  guard assertion, and the earlier leak outcomes varied. `t/storage/error.t`
+  remains at 48/49, with assertion 49 failing as it does on clean master while
+  passing on system Perl. A reduced scope-guard reproducer passes on system
+  Perl, JVM, interpreter, and clean master, so it is not standalone regression
+  evidence. Full DBIx acceptance remains open until #1642 is reconciled and
+  the complete suite is rerun.
 
 ### Next steps
 

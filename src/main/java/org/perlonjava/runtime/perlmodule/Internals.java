@@ -12,7 +12,6 @@ import java.util.Map;
  * The Strict class provides functionalities similar to the Perl strict module.
  */
 public class Internals extends PerlModuleBase {
-
     /**
      * Constructor initializes the module.
      */
@@ -543,24 +542,9 @@ public class Internals extends PerlModuleBase {
             // compensates for the ampersand-call argument alias below.
             boolean compileHintsHash = base == GlobalVariable.getGlobalHash(
                     GlobalContext.encodeSpecialVar("H"));
+            boolean bObjectProbe = args.size() > 1 && args.get(1).getBoolean();
             int extra = (base.localBindingExists && !compileHintsHash ? 1 : 0)
                     + base.foreachAliasCount;
-            if (rc == 2
-                    && args.size() > 1
-                    && args.get(1).getBoolean()
-                    && DestroyDispatch.isInsideDestroy()
-                    && !ReachabilityWalker.hasLiveStrongScalarReferentOtherThan(base, arg)) {
-                // B::SV's private hash slot is one of the two selective
-                // owners.  Ordinarily it is the temporary owner discounted
-                // below (a single live lexical therefore reports one).  If
-                // there is no independently live scalar pad, the other owner
-                // is a real aggregate slot, as in DBIx::Class Schema's source
-                // registry during DESTROY, and must remain visible to B. This
-                // distinction is only meaningful while DESTROY is active:
-                // outside it, an unregistered lexical can look identical and
-                // must still report its single owner.
-                extra++;
-            }
             // Legacy fudge: anonymous tracked container with no counted
             // owners -- still report 1 to indicate "live SV". Used by
             // Sub::Quote / Moo introspection paths that probe for liveness.
@@ -576,8 +560,8 @@ public class Internals extends PerlModuleBase {
             boolean fieldOwnedMethodResult = rc == 1
                     && !base.localBindingExists
                     && base.hashSlotOwnerCount > 0
-                    && !ReachabilityWalker.hasLiveStrongScalarReferentOtherThan(base, arg);
-            boolean bObjectProbe = args.size() > 1 && args.get(1).getBoolean();
+                    && (bObjectProbe
+                    || !ReachabilityWalker.hasLiveStrongScalarReferentOtherThan(base, arg));
             int adjust = compileHintsHash
                     ? -1
                     : base.localBindingExists || fieldOwnedMethodResult ? 0 : -1;
@@ -589,7 +573,17 @@ public class Internals extends PerlModuleBase {
             if (bObjectProbe && base.localBindingExists && !compileHintsHash) {
                 adjust = -1;
             }
-            return new RuntimeScalar(rc + extra + adjust).getList();
+            boolean insideDestroy = DestroyDispatch.isInsideDestroy();
+            int staleHashOwners = 0;
+            if (rc > 1 && bObjectProbe && !base.localBindingExists && insideDestroy) {
+                int[] staleOwners = base.unreachableDirectHashSlotOwnerCounts();
+                // Once a counted owner has leaked, include every unreachable
+                // hash slot in the correction. Some slots retain the raw
+                // refcount after their wrapper has already cleared its flag.
+                if (staleOwners[0] > 0) staleHashOwners = staleOwners[1];
+            }
+            int reported = Math.max(0, rc + extra + adjust - staleHashOwners);
+            return new RuntimeScalar(reported).getList();
         }
         return new RuntimeScalar(1).getList();
     }
@@ -613,12 +607,16 @@ public class Internals extends PerlModuleBase {
      *   <li>{@code refCount} — raw {@link RuntimeBase#refCount}</li>
      *   <li>{@code localBindingExists} — true when a named-variable slot still holds the container</li>
      *   <li>{@code destroyFired} — true once DESTROY has run</li>
+     *   <li>{@code needs_re_destroy} — true when a later release should re-fire DESTROY</li>
+     *   <li>{@code currently_destroying} — true while the Perl DESTROY body is active</li>
+     *   <li>{@code perl_lifecycle_state} — current explicit destruction lifecycle state</li>
      *   <li>{@code blessId} — bless class id (0 = unblessed)</li>
      *   <li>{@code class_name} — Perl class name (empty string if unblessed)</li>
      *   <li>{@code kind} — runtime type: SCALAR / ARRAY / HASH / CODE / GLOB / OTHER</li>
      *   <li>{@code has_weak_refs} — true if the weak-ref registry has entries pointing here</li>
      *   <li>{@code active_owner_count} — live scalar-store owners currently tracked for diagnostics</li>
      *   <li>{@code semantic_capture_owner_count} — distinct captured pad owners</li>
+     *   <li>{@code hash_slot_owner_count} — direct strong owners in hash slots</li>
      * </ul>
      */
     public static RuntimeList jperl_refstate(RuntimeArray args, int ctx) {
@@ -628,11 +626,15 @@ public class Internals extends PerlModuleBase {
             result.put("refCount", new RuntimeScalar(base.refCount));
             result.put("localBindingExists", new RuntimeScalar(base.localBindingExists));
             result.put("destroyFired", new RuntimeScalar(base.destroyFired));
+            result.put("needs_re_destroy", new RuntimeScalar(base.needsReDestroy));
+            result.put("currently_destroying", new RuntimeScalar(base.currentlyDestroying));
+            result.put("perl_lifecycle_state", new RuntimeScalar(base.perlLifecycleState().name()));
             result.put("blessId", new RuntimeScalar(base.blessId));
             String className = NameNormalizer.getBlessStr(base.blessId);
             result.put("class_name", new RuntimeScalar(className == null ? "" : className));
             result.put("active_owner_count", new RuntimeScalar(base.activeOwnerCount()));
             result.put("semantic_capture_owner_count", new RuntimeScalar(base.semanticCaptureOwnerCount()));
+            result.put("hash_slot_owner_count", new RuntimeScalar(base.hashSlotOwnerCount));
             String kind = "OTHER";
             if (base instanceof RuntimeGlob) kind = "GLOB";
             else if (base instanceof RuntimeHash) kind = "HASH";

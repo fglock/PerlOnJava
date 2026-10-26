@@ -540,7 +540,7 @@ public class MortalList {
                 || scalar.type == RuntimeScalarType.GLOB)
                 && scalar.value instanceof RuntimeBase base) {
             if (base.refCount > 0) {
-                scalar.refCountOwned = false;
+                scalar.setRefCountOwned(false);
                 if (base.refCountTrace) {
                     base.traceRefCount(0, "MortalList.deferDecrementIfTracked (queued, scalar.refCountOwned->false)");
                 }
@@ -559,7 +559,7 @@ public class MortalList {
                 // that stale ownership marker and ask the reachability walker to
                 // decide at the next safe (non-nested) boundary whether the weak
                 // observers should be cleared.
-                scalar.refCountOwned = false;
+                scalar.setRefCountOwned(false);
                 if (base.refCountTrace) {
                     base.releaseOwner(scalar, "deferDecrementIfTracked zero-count owner");
                 }
@@ -893,7 +893,7 @@ public class MortalList {
             return;
         }
 
-        codeRef.refCountOwned = false;
+        codeRef.setRefCountOwned(false);
         if (code.refCountTrace) {
             code.traceRefCount(-1, "MortalList.releaseTailCallCodeRef");
             code.releaseOwner(codeRef, "releaseTailCallCodeRef");
@@ -925,7 +925,7 @@ public class MortalList {
             return;
         }
 
-        scalar.refCountOwned = false;
+        scalar.setRefCountOwned(false);
         if (base.refCountTrace) {
             base.traceRefCount(-1, "MortalList.releaseTailCallArgElement");
             base.releaseOwner(scalar, "releaseTailCallArgElement");
@@ -1009,7 +1009,7 @@ public class MortalList {
             if (base.blessId != 0) {
                 boolean releasingLastOwner = false;
                 if (s.refCountOwned && base.refCount > 0) {
-                    s.refCountOwned = false;
+                    s.setRefCountOwned(false);
                     if (base.refCountTrace) {
                         base.traceRefCount(0, "MortalList.deferDecrementRecursive (blessed, queued)");
                         base.releaseOwner(s, "deferDecrementRecursive blessed");
@@ -1057,7 +1057,7 @@ public class MortalList {
                 boolean hasCleanupTargets = hasDirectWeakElementRefs
                         || containerMayContainCleanupTargets(base);
                 if (s.refCountOwned && base.refCount > 0) {
-                    s.refCountOwned = false;
+                    s.setRefCountOwned(false);
                     if (base.refCountTrace) {
                         base.traceRefCount(0, "MortalList.deferDecrementRecursive (unblessed container, queued)");
                     }
@@ -1183,7 +1183,7 @@ public class MortalList {
                         && ReachabilityWalker.isScalarReachable(scalar);
                 if (scalar.refCountOwned && base.refCount > 0 && unblessedDiscardableContainer
                         && !reachableCodeRef) {
-                    scalar.refCountOwned = false;
+                    scalar.setRefCountOwned(false);
                     if (base.refCountTrace) {
                         base.traceRefCount(0, "MortalList.mortalizeForVoidDiscard (queued owned container discard)");
                         base.releaseOwner(scalar, "mortalizeForVoidDiscard container");
@@ -1519,13 +1519,32 @@ public class MortalList {
 
     static boolean isReachableFromExternalRootCached(RuntimeBase base) {
         if (ReachabilityWalker.isReachableFromTemporaryRoots(base)) {
+            if (base != null && base.refCountTrace) {
+                System.err.println("[REFCOUNT-KEEP] base=" + System.identityHashCode(base)
+                        + " reason=temporary-root");
+            }
             return true;
         }
-        return isReachableFromPersistentRootCached(base);
+        boolean reachable = isReachableFromPersistentRootCached(base);
+        if (reachable && base != null && base.refCountTrace) {
+            System.err.println("[REFCOUNT-KEEP] base=" + System.identityHashCode(base)
+                    + " reason=persistent-root");
+        }
+        return reachable;
     }
 
     static boolean isReachableFromPersistentRootCached(RuntimeBase base) {
         LifecycleRuntimeState state = state();
+        // Check live lexicals before the package graph. Targeted weak sweeps
+        // often revisit objects that are still held by a current lexical; a
+        // positive lexical proof avoids walking the much larger, stable global
+        // graph for those candidates.
+        if (state.liveRootSnapshot == null) {
+            state.liveRootSnapshot = new ReachabilityWalker.LiveRootSnapshot();
+        }
+        if (state.liveRootSnapshot.isReachable(base)) {
+            return true;
+        }
         if (state.externalRootSnapshot == null) {
             state.externalRootSnapshot = new ReachabilityWalker.ExternalRootSnapshot();
         }
@@ -1539,10 +1558,7 @@ public class MortalList {
             // direct-lexical exclusion semantics.
             return true;
         }
-        if (state.liveRootSnapshot == null) {
-            state.liveRootSnapshot = new ReachabilityWalker.LiveRootSnapshot();
-        }
-        return state.liveRootSnapshot.isReachable(base);
+        return false;
     }
 
     static void invalidateExternalRootSnapshot() {
@@ -1562,7 +1578,12 @@ public class MortalList {
         if (state.fullRootSnapshot == null) {
             state.fullRootSnapshot = ReachabilityWalker.reachableFromRootsSnapshotWithStatus();
         }
-        return state.fullRootSnapshot.isReachable(base);
+        boolean reachable = state.fullRootSnapshot.isReachable(base);
+        if (reachable && base != null && base.refCountTrace) {
+            System.err.println("[REFCOUNT-KEEP] base=" + System.identityHashCode(base)
+                    + " reason=full-root");
+        }
+        return reachable;
     }
 
     static boolean isUnblessedAggregateReachableDuringDrain(RuntimeBase base) {
@@ -1789,6 +1810,15 @@ public class MortalList {
                 if (clearWeakRefsForLocalBinding) {
                     WeakRefRegistry.clearWeakRefsTo(base);
                 }
+            } else if (base.needsReDestroy && base.blessId != 0) {
+                // The object already ran DESTROY and was resurrected by a
+                // counted Perl owner. Reaching zero now releases that final
+                // owner, so honor Perl's re-fire before conservative weak-root
+                // recovery can restore the count from an in-flight caller
+                // snapshot left over from the first DESTROY.
+                base.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(base);
+                return;
             } else if (base instanceof RuntimeCode code
                     && hasWeakRefs
                     && (RuntimeCode.isActiveCode(code)
@@ -1899,6 +1929,13 @@ public class MortalList {
                 // namespace. Preserve only objects proven reachable from a
                 // live Perl root; final owner removal still destroys them at
                 // a later boundary.
+                if (!isReachableFromPersistentRootCached(base)) {
+                    // The full walker can see conservative in-flight roots
+                    // that the persistent snapshot cannot classify. Recheck
+                    // this target at the next statement boundary, once those
+                    // transient owners unwind.
+                    requestTargetedWeakSweep(base);
+                }
                 base.refCount = 1;
             } else if (base.blessId != 0
                     && hasWeakRefs
@@ -1948,6 +1985,10 @@ public class MortalList {
     private static boolean restoreReachableOwnerCount(RuntimeBase base) {
         int ownerCount = base.reachableOwnerCount();
         if (ownerCount == 0) return false;
+        if (base.refCountTrace) {
+            System.err.println("[REFCOUNT-KEEP] base=" + System.identityHashCode(base)
+                    + " reason=reachable-owner-count owners=" + ownerCount);
+        }
         base.refCount = ownerCount;
         return true;
     }
@@ -2057,12 +2098,26 @@ public class MortalList {
         if (state.weakSweepSuppressionDepth > 0) return;
         Set<RuntimeBase> releasedTargets = Collections.emptySet();
         ReachabilityWalker.ReleasedWeakSweepResult releasedSweepResult = null;
-        if (!state.targetedWeakSweepReferents.isEmpty() && state.temporaryRoots.isEmpty()) {
+        if (!state.targetedWeakSweepReferents.isEmpty()) {
             releasedTargets = Collections.newSetFromMap(new IdentityHashMap<>());
-            releasedTargets.addAll(state.targetedWeakSweepReferents);
-            state.targetedWeakSweepReferents.clear();
-            releasedSweepResult =
-                    ReachabilityWalker.sweepReleasedWeakReferents(releasedTargets);
+            for (RuntimeBase referent : new ArrayList<>(state.targetedWeakSweepReferents)) {
+                // Temporary roots are transient: leave their candidates queued
+                // so the next boundary can retry after the expression unwinds.
+                if (ReachabilityWalker.isReachableFromTemporaryRoots(referent)) continue;
+                // Persistent roots will request another sweep when their owner
+                // exits. Drop the candidate now so every later statement does
+                // not repeatedly traverse the live/package root snapshots.
+                if (isReachableFromPersistentRootCached(referent)) {
+                    state.targetedWeakSweepReferents.remove(referent);
+                    continue;
+                }
+                releasedTargets.add(referent);
+                state.targetedWeakSweepReferents.remove(referent);
+            }
+            if (!releasedTargets.isEmpty()) {
+                releasedSweepResult =
+                        ReachabilityWalker.sweepReleasedWeakReferents(releasedTargets);
+            }
         }
         if (topLevel) {
             maybeAutoSweep(state, releasedTargets, releasedSweepResult);

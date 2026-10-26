@@ -1987,6 +1987,18 @@ public class ReachabilityWalker {
                     }
                 }
             }
+            // Active Perl call arguments are owning roots until their frame
+            // returns. The full graph walk seeds these frames already; keep
+            // this target-specific query consistent so a hash passed through
+            // @_ is not mistaken for an abandoned owner.
+            for (RuntimeArray args : RuntimeCode.snapshotArgsStack()) {
+                if (!budget.visitEdge()) return true;
+                if (args == target) return true;
+                if (seen.add(args)) {
+                    todo.addLast(args);
+                    if (stats != null) stats.rootsSeeded++;
+                }
+            }
             // Live regex lexicals own executable callback captures even when
             // weak-ref tracking has not populated the optimized live-count
             // snapshot. Seed only regex scalars from the actual cleanup stack
