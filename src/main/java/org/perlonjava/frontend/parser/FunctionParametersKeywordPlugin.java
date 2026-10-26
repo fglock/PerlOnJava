@@ -22,6 +22,8 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
     private final boolean runtime;
     private final String installSub;
     private final boolean requiresName;
+    private final boolean prohibitsName;
+    private final boolean defaultArguments;
     private final List<String> invocants;
     private final List<String> defaultAttributes;
 
@@ -30,12 +32,13 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
             boolean checkArgumentTypes, boolean runtime, String installSub,
             boolean requiresName, List<String> invocants) {
         this(method, optionalInvocantCount, strict, checkArgumentTypes, runtime,
-                installSub, requiresName, invocants, List.of());
+                installSub, requiresName, false, true, invocants, List.of());
     }
 
     private FunctionParametersKeywordPlugin(
             boolean method, int optionalInvocantCount, boolean strict,
             boolean checkArgumentTypes, boolean runtime, String installSub, boolean requiresName,
+            boolean prohibitsName, boolean defaultArguments,
             List<String> invocants,
             List<String> defaultAttributes) {
         this.method = method;
@@ -45,6 +48,8 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         this.runtime = runtime;
         this.installSub = installSub;
         this.requiresName = requiresName;
+        this.prohibitsName = prohibitsName;
+        this.defaultArguments = defaultArguments;
         this.invocants = List.copyOf(invocants);
         this.defaultAttributes = List.copyOf(defaultAttributes);
     }
@@ -52,7 +57,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
     static FunctionParametersKeywordPlugin configured(
             String defaults, List<String> shift, int optionalInvocantCount,
             boolean strict, boolean checkArgumentTypes, boolean runtime, String installSub,
-            List<String> defaultAttributes) {
+            List<String> defaultAttributes, String namePolicy, boolean defaultArguments) {
         boolean method = Set.of("method", "classmethod", "before", "after", "around",
                 "augment", "override").contains(defaults);
         boolean requiresName = Set.of("before", "after", "around", "augment", "override")
@@ -65,15 +70,18 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
                         : List.of("classmethod".equals(defaults) ? "$class" : "$self");
             }
             return new FunctionParametersKeywordPlugin(
-                    true, 0, strict, checkArgumentTypes, runtime, installSub, requiresName,
-                    invocants, defaultAttributes);
+                    true, 0, strict, checkArgumentTypes, runtime, installSub,
+                    "required".equals(namePolicy) || requiresName,
+                    "prohibited".equals(namePolicy), defaultArguments, invocants, defaultAttributes);
         }
         if (optionalInvocantCount == 0 && strict && checkArgumentTypes && !runtime && installSub == null
-                && defaultAttributes.isEmpty()) return FUNCTION;
+                && defaultAttributes.isEmpty() && "optional".equals(namePolicy) && defaultArguments) {
+            return FUNCTION;
+        }
         return new FunctionParametersKeywordPlugin(
                 false, optionalInvocantCount, strict, checkArgumentTypes, runtime, installSub,
-                requiresName,
-                List.of(), defaultAttributes);
+                "required".equals(namePolicy) || requiresName,
+                "prohibited".equals(namePolicy), defaultArguments, List.of(), defaultAttributes);
     }
 
     @Override
@@ -92,6 +100,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         String previousInstallSub = parser.functionParametersInstallSub;
         List<String> previousAttributes = parser.functionParametersAttributes;
         boolean previousRuntime = parser.functionParametersRuntime;
+        boolean previousDefaultArguments = parser.functionParametersDefaultArguments;
         keywordToken.text = "sub";
         parser.tokenIndex++;
         parser.parsingFunctionParametersDeclaration = true;
@@ -103,12 +112,14 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         parser.functionParametersKeyword = keyword;
         parser.functionParametersAttributes = defaultAttributes;
         parser.functionParametersRuntime = runtime;
+        parser.functionParametersDefaultArguments = defaultArguments;
         parser.functionParametersInstallSub = installSub;
         try {
             boolean named = TokenUtils.peek(parser).type == LexerTokenType.IDENTIFIER;
             if (requiresName && !named) {
                 parser.throwError("expecting a function name");
             }
+            if (prohibitsName && named) parser.throwError("expecting a parameter list");
             if (method) {
                 int openParen = parser.tokenIndex;
                 while (openParen < parser.tokens.size()
@@ -159,6 +170,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
             parser.functionParametersInstallSub = previousInstallSub;
             parser.functionParametersAttributes = previousAttributes;
             parser.functionParametersRuntime = previousRuntime;
+            parser.functionParametersDefaultArguments = previousDefaultArguments;
             keywordToken.text = originalText;
         }
     }
@@ -181,7 +193,8 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         boolean anonymousDeclaration = "(".equals(TokenUtils.peek(parser).text);
         parser.tokenIndex = keywordIndex;
         if (anonymousDeclaration && (method || optionalInvocantCount > 0
-                || !strict || !checkArgumentTypes || runtime || this == FUNCTION)) {
+                || !strict || !checkArgumentTypes || runtime || requiresName || prohibitsName
+                || !defaultArguments || this == FUNCTION)) {
             return parse(parser, keyword);
         }
         return null;

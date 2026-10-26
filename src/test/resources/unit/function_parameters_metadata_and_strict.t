@@ -14,6 +14,9 @@ use Function::Parameters {
     required_modifier => { defaults => 'before', runtime => 1 },
     multi_method => { defaults => 'method', shift => ['$self1', '$self2'] },
     single_method => { defaults => 'method' },
+    required_name => { defaults => 'function', name => 'required' },
+    prohibited_name => { defaults => 'function', name => 'prohibited' },
+    no_defaults => { defaults => 'function', default_arguments => 0 },
 };
 
 our ($installed_name, $installed_code);
@@ -49,6 +52,16 @@ ok(!defined(&runtime_named), 'runtime keyword has no CV before its declaration e
 runtime_fun runtime_named($value) { $value }
 ok(defined(&runtime_named), 'runtime keyword installs its CV when executed');
 is(runtime_named('ready'), 'ready', 'runtime-installed function is callable');
+required_name named_required() { 1 }
+my $required_name_error = eval q{ required_name () {} };
+ok(!$required_name_error, 'required-name keyword rejects anonymous declarations');
+like($@, qr/expecting a function name/, 'required-name diagnostic identifies missing name');
+my $prohibited_name_error = eval q{ prohibited_name named_forbidden() {} };
+ok(!$prohibited_name_error, 'prohibited-name keyword rejects named declarations');
+like($@, qr/expecting a parameter list/, 'prohibited-name diagnostic identifies expected parameter list');
+my $default_argument_error = eval q{ no_defaults no_default($value = 42) { $value } };
+ok(!$default_argument_error, 'default_arguments false rejects signature defaults');
+like($@, qr/default argument/i, 'default argument diagnostic identifies the rejected syntax');
 runtime_fun runtime_caller_name() { (caller 0)[3] }
 is(runtime_caller_name(), 'main::runtime_caller_name',
     'runtime-installed function retains its declared caller name');
@@ -196,5 +209,15 @@ my $invalid_attribute_syntax = eval q~
 ~;
 ok(!$invalid_attribute_syntax, 'reject invalid configured attribute syntax');
 like($@, qr/in valid.*attributes/i, 'invalid configured attribute syntax has a clear diagnostic');
+
+my $invalid_import_tag = eval { Function::Parameters->import(':not_exported'); 1 };
+ok(!$invalid_import_tag, 'reject an unknown Function::Parameters import tag');
+like($@, qr/not exported/, 'unknown import tag has a clear diagnostic');
+my $invalid_import_keyword = eval { Function::Parameters->import({ '42' => 'function' }); 1 };
+ok(!$invalid_import_keyword, 'reject an invalid configured keyword identifier');
+like($@, qr/valid identifier/, 'invalid keyword identifier has a clear diagnostic');
+my $invalid_import_type = eval { Function::Parameters->import({ bad_type => 'QQQQ' }); 1 };
+ok(!$invalid_import_type, 'reject an invalid configured keyword type');
+like($@, qr/valid type/, 'invalid keyword type has a clear diagnostic');
 
 done_testing;
