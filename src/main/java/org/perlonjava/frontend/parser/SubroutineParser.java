@@ -3327,6 +3327,14 @@ public class SubroutineParser {
                 break;
             }
         }
+        if (!warnedAfterAt && hasMalformedUnderscoreForWarning(shape)) {
+            if (hasIllegalCharacter) {
+                warnIllegalProto(parser,
+                        "Illegal character in prototype for " + name + " : " + proto);
+            }
+            warnMalformedUnderscorePrototype(parser, shape, proto, name);
+            return;
+        }
         if (hasIllegalCharacter) {
             warnIllegalProto(parser, "Illegal character in prototype for " + name + " : " + proto);
             return;
@@ -3338,7 +3346,7 @@ public class SubroutineParser {
                     if (i + 1 < shape.length() && ";@%".indexOf(shape.charAt(i + 1)) < 0) {
                         warnIllegalProto(parser,
                                 "Illegal character after '_' in prototype for " + name + " : "
-                                        + shape.substring(i + 1));
+                                        + proto);
                         return;
                     }
                     break;
@@ -3383,6 +3391,32 @@ public class SubroutineParser {
                     return;
             }
         }
+    }
+
+    private static void warnMalformedUnderscorePrototype(
+            Parser parser, String shape, String proto, String name) {
+        if (hasMalformedUnderscoreForWarning(shape)) {
+            warnIllegalProto(parser,
+                    "Illegal character after '_' in prototype for " + name + " : " + proto);
+        }
+    }
+
+    private static boolean hasMalformedUnderscoreForWarning(String shape) {
+        for (int i = 0; i + 1 < shape.length(); i++) {
+            if (shape.charAt(i) == '\\') {
+                if (shape.charAt(i + 1) == '[') {
+                    int closingBracket = shape.indexOf(']', i + 2);
+                    i = closingBracket >= 0 ? closingBracket : i + 1;
+                } else {
+                    i++;
+                }
+                continue;
+            }
+            if (shape.charAt(i) == '_' && ";@%".indexOf(shape.charAt(i + 1)) < 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
