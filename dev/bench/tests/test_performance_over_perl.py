@@ -64,6 +64,12 @@ class ProtocolEligibilityTests(unittest.TestCase):
         self.assertFalse(result["acceptance_protocol"])
         self.assertEqual(len(result["reasons"]), 4)
 
+    def test_priority_verification_accepts_equal_or_lower_scheduling_priority(self) -> None:
+        self.assertTrue(benchmark.process_priority_satisfies_request(19, 19))
+        self.assertTrue(benchmark.process_priority_satisfies_request(19, 20))
+        self.assertFalse(benchmark.process_priority_satisfies_request(19, 18))
+        self.assertFalse(benchmark.process_priority_satisfies_request(19, None))
+
 
 class LaunchOrderTests(unittest.TestCase):
     def test_seeded_order_is_reproducible_and_balanced(self) -> None:

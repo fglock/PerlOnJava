@@ -47,6 +47,39 @@ class RuntimeArrayMethodCallArgumentsTest {
     }
 
     @Test
+    void methodInvocantPrependPreservesAliasedArgumentOrderForBothStorageModes() {
+        RuntimeScalar invocant = new RuntimeScalar("object");
+        RuntimeScalar explicit = new RuntimeScalar("explicit");
+
+        RuntimeArray inlineArguments = RuntimeArray.methodCallArguments(2);
+        explicit.setArrayOfAlias(inlineArguments);
+        inlineArguments.prependMethodCallInvocant(invocant);
+        assertSame(invocant, inlineArguments.elements.get(0));
+        assertSame(explicit, inlineArguments.elements.get(1));
+
+        RuntimeArray ordinaryArguments = RuntimeArray.methodCallArguments(3);
+        explicit.setArrayOfAlias(ordinaryArguments);
+        ordinaryArguments.prependMethodCallInvocant(invocant);
+        assertSame(invocant, ordinaryArguments.elements.get(0));
+        assertSame(explicit, ordinaryArguments.elements.get(1));
+    }
+
+    @Test
+    void stableMethodInvocantPrependHonorsRootTrackingSuppression() {
+        RuntimeArray arguments = RuntimeArray.methodCallArguments(2);
+        RuntimeScalar invocant = new RuntimeScalar("object");
+        RuntimeScalar explicit = new RuntimeScalar("explicit");
+        explicit.setArrayOfAlias(arguments);
+
+        assertTrue(arguments.suppressRootTrackingForStableMethodArguments());
+        arguments.prependMethodCallInvocant(invocant);
+
+        assertSame(invocant, arguments.elements.get(0));
+        assertSame(explicit, arguments.elements.get(1));
+        arguments.resumeMethodArgumentRootTracking();
+    }
+
+    @Test
     void largerInitialArgumentListsKeepOrdinaryArrayStorage() {
         RuntimeArray arguments = RuntimeArray.methodCallArguments(3);
 
@@ -57,12 +90,29 @@ class RuntimeArrayMethodCallArgumentsTest {
     @Test
     void recycledMethodArgumentsAreReusedAfterTheirValuesAreCleared() {
         RuntimeArray arguments = RuntimeArray.methodCallArguments(2);
-        arguments.elements.add(new RuntimeScalar("stale"));
+        new RuntimeScalar("stale").setArrayOfAlias(arguments);
+        assertTrue(arguments.elementsAliased);
         arguments.recycleMethodCallArguments();
 
         RuntimeArray reused = RuntimeArray.methodCallArguments(2);
 
         assertSame(arguments, reused);
         assertTrue(reused.elements.isEmpty());
+        assertFalse(reused.elementsAliased);
+    }
+
+    @Test
+    void generatedMethodArgumentsReuseTheOwningExecutionStatePool() {
+        ExecutionRuntimeState state = new ExecutionRuntimeState(new PerlRuntime());
+        RuntimeArray arguments = RuntimeArray.methodCallArguments(2, state);
+        new RuntimeScalar(1).setArrayOfAlias(arguments);
+        assertTrue(arguments.elementsAliased);
+
+        arguments.recycleMethodCallArguments(state);
+        RuntimeArray reused = RuntimeArray.methodCallArguments(2, state);
+
+        assertSame(arguments, reused);
+        assertTrue(reused.elements.isEmpty());
+        assertFalse(reused.elementsAliased);
     }
 }

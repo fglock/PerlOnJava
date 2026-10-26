@@ -174,12 +174,35 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             if (recycled != null) {
                 // Keep the ThreadLocalMap entry so recycling can update it without a new entry.
                 RECYCLED_METHOD_CALL_ARGUMENTS.set(null);
-                recycled.resetRecycledMethodCallArguments();
                 return recycled;
             }
             return new RuntimeArray(true);
         }
         return new RuntimeArray(initialCapacity);
+    }
+
+    /** Creates method-call arguments using the current generated frame's pool. */
+    public static RuntimeArray methodCallArguments(
+            int initialCapacity, ExecutionRuntimeState executionState) {
+        if (initialCapacity < 0) throw new IllegalArgumentException("negative capacity");
+        if (initialCapacity <= 2 && executionState != null) {
+            RuntimeArray recycled = executionState.recycledMethodCallArguments;
+            if (recycled != null) {
+                executionState.recycledMethodCallArguments = null;
+                return recycled;
+            }
+            return new RuntimeArray(true);
+        }
+        return new RuntimeArray(initialCapacity);
+    }
+
+    /** Prepend the method invocant, using the compact path for short call arguments. */
+    void prependMethodCallInvocant(RuntimeScalar invocant) {
+        if (elements instanceof InlineMethodArgumentList inlineArguments) {
+            inlineArguments.prepend(invocant);
+        } else {
+            elements.add(0, invocant);
+        }
     }
 
     /** Return a compiler-proven non-escaping method argument array to its thread-local pool. */
@@ -191,6 +214,19 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         resetRecycledMethodCallArguments();
         if (RECYCLED_METHOD_CALL_ARGUMENTS.get() == null) {
             RECYCLED_METHOD_CALL_ARGUMENTS.set(this);
+        }
+    }
+
+    /** Return a compiler-proven non-escaping argument array to its runtime-state pool. */
+    void recycleMethodCallArguments(ExecutionRuntimeState executionState) {
+        if (executionState == null
+                || type != PLAIN_ARRAY || !(elements instanceof InlineMethodArgumentList)
+                || elements.size() > 2 || threadShared) {
+            return;
+        }
+        resetRecycledMethodCallArguments();
+        if (executionState.recycledMethodCallArguments == null) {
+            executionState.recycledMethodCallArguments = this;
         }
     }
 
@@ -587,6 +623,28 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 expanded.add(index, element);
                 first = null;
                 second = null;
+            }
+            modCount++;
+            if (owner.isaArray) owner.validateIsaMutation();
+        }
+
+        private void prepend(RuntimeScalar element) {
+            if (expanded != null || inlineSize >= 2) {
+                add(0, element);
+                return;
+            }
+            if (owner.suppressMethodArgumentRootTracking && !owner.isaArray) {
+                if (element != null) element.markContainerOwner(owner);
+            } else {
+                prepareStoredValue(null, element);
+            }
+            if (inlineSize == 0) {
+                first = element;
+                inlineSize = 1;
+            } else {
+                second = first;
+                first = element;
+                inlineSize = 2;
             }
             modCount++;
             if (owner.isaArray) owner.validateIsaMutation();

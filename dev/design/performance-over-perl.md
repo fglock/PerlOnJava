@@ -63,6 +63,9 @@ engine versions and flags, host details, load average, launch order, stderr
 paths, worker commands, requested and observed process priority, reference Perl
 source revision, and the full raw windows. A pair whose requested niceness
 cannot be verified is retained in the raw report but excluded from summaries.
+The observed niceness must be at least the requested value; a higher value
+means lower scheduling priority and is acceptable (macOS can report 20 when
+asked for 19).
 Reports also label a run `diagnostic_only` unless it requested the exact three
 #1863 workloads, at least seven pairs, the full warmup and measurement windows,
 niceness 19, and a pinned Perl source revision.
@@ -130,7 +133,7 @@ remain separate correctness gates. See issue #1196 for its diagnostic matrix.
 
 ## Progress tracking
 
-### Current status: PR #1870 has a tested narrow method fast path; broad 1:1 acceptance remains unmet
+### Current status: The PR candidate meets the local blead 1:1 portfolio criterion; CI validation is pending
 
 ### Completed in this increment
 
@@ -412,27 +415,34 @@ remain separate correctness gates. See issue #1196 for its diagnostic matrix.
   acceptance. Raw windows and worker logs are in
   `dev/bench/reports/issue-1863-a5-method-blead-83a6c8b.json` and its `-logs`
   directory.
+- Ported the revisioned stable-hash field-cell cache and its mutation/view
+  invalidation onto the current PR source, then added the compact method
+  invocant prepend and execution-state argument-array pool. Pool checkout now
+  reuses the array after recycle has cleared it, avoiding a second reset. The
+  benchmark runner now accepts observed niceness at or above the requested
+  value, which records macOS's observed nice 20 for a requested 19 as lower
+  scheduling priority. Java and runner regression tests were added. The full
+  `nice -n 19 timeout 3600 make` gate passed in 8m17.
+- The exact PR candidate JAR SHA-256
+  `24e93fd8e555725c7291ac306d86fe10c155604e5f85d9a8e8ac859c6023e490` passed
+  the 14-pair pinned blead portfolio: method 1.059x (95% interval
+  1.040–1.088; 14 eligible pairs), Closure 1.547x (1.524–1.564; 14 pairs),
+  and Life 1.100x (1.058–1.167; 14 pairs). All 42 engine runs had verified
+  priority and checksums; portfolio geometric mean was 1.217x
+  (1.197–1.243). Load averages changed from 6.25/8.10/11.75 to
+  7.18/7.87/7.64. Report and raw worker logs are
+  `dev/bench/reports/issue-1863-pr-port-full-14pair-blead.json` and its
+  `-logs` directory.
 
 ### Next steps
 
-1. When the host is quiet, profile the exact PR head and split dispatch,
-   argument storage, scalar construction, and body costs for ordinary method,
-   direct-subroutine, and closure calls. Collect HotSpot inlining evidence as
-   well as JFR samples.
-2. Implement and test a general ordinary invocation path in `RuntimeCode.apply`
-   with full fallback; do not restrict the optimization to stable hash bodies.
-   Cover the semantic and fallback-transition matrix in issue #1863.
-3. The verified method run is 0.981x blead with a 0.955 lower interval bound.
-   Continue broad call-path work, then rerun this method gate; proceed to the
-   full fixed method/closure/Life portfolio only after its lower bound reaches
-   1.00x pinned blead.
-4. Compare candidate versus exact parent, integrated candidate versus
-   `origin/master`, and candidate versus pinned blead and stable Perl 5.42.2.
-   Use at least seven requested pairs, verified priority, and publish every
-   exclusion.
-5. Quantify allocation per operation, live heap, GC, and peak RSS under the
-   fixed heap budget. Add the final source-matched reports and validation logs
-   before claiming acceptance.
+1. Commit and push this validated candidate to PR #1870, then check CI once.
+2. Extend ordinary invocation and fallback-transition coverage beyond the
+   stable hash mutation method path.
+3. Compare the accepted candidate against the exact `origin/master` JAR and
+   stable Perl 5.42.2; keep those results separate from the blead criterion.
+4. Quantify allocation per operation, live heap, GC, and peak RSS under the
+   fixed heap budget.
 
 ### Open questions
 

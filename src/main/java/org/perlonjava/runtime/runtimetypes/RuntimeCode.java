@@ -201,16 +201,34 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             cacheHit = firstCell != null && (secondHashKey == null || secondCell != null);
         }
         if (!cacheHit) {
-            firstCell = hash.elements.get(firstHashKey);
-            secondCell = secondHashKey == null ? null : hash.elements.get(secondHashKey);
+            return prepareStableHashMutationMethodArgumentsFromHash(
+                    code, args, firstHashKey, secondHashKey, hash, hashArgument,
+                    integerArgument, revision);
         }
         if (!RuntimeScalar.isCacheableReadOnlyPlainHashMethodField(firstCell)
                 || (secondHashKey != null
                     && !RuntimeScalar.isCacheableReadOnlyPlainHashMethodField(secondCell))) {
             return false;
         }
+        args.cacheVerifiedMethodHashFields(0, 1, firstHashKey, secondHashKey,
+                hashArgument, integerArgument, firstCell, secondCell);
+        return true;
+    }
+
+    private static boolean prepareStableHashMutationMethodArgumentsFromHash(
+            RuntimeCode code, RuntimeArray args, String firstHashKey, String secondHashKey,
+            RuntimeHash hash, RuntimeScalar hashArgument, RuntimeScalar integerArgument,
+            long revision) {
+        RuntimeScalar firstCell = hash.elements.get(firstHashKey);
+        RuntimeScalar secondCell = secondHashKey == null
+                ? null : hash.elements.get(secondHashKey);
+        if (!RuntimeScalar.isCacheableReadOnlyPlainHashMethodField(firstCell)
+                || (secondHashKey != null
+                    && !RuntimeScalar.isCacheableReadOnlyPlainHashMethodField(secondCell))) {
+            return false;
+        }
         long currentRevision = hash.stableMethodFieldCacheRevision();
-        if (!cacheHit && revision >= 0 && currentRevision == revision) {
+        if (revision >= 0 && currentRevision == revision) {
             code.stableHashMethodFieldCellCache = new StableHashMethodFieldCellCache(
                     hash, hash.elements, firstCell, secondCell, revision);
         }
@@ -5822,60 +5840,66 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeCode code, RuntimeScalar runtimeScalar, RuntimeScalar method,
             RuntimeArray methodArgs, int callContext, int blessId,
             PerlRuntime methodRuntime) {
-        boolean stableHashFastPath = false;
-        boolean methodArgumentsRecycled = false;
+        RuntimeArray args = methodArgs;
+        String[] stableHashKeys = code.stableHashMutationMethodKeys;
+        boolean suppressRootTracking = callContext == RuntimeContextType.SCALAR
+                && stableHashKeys != null && stableHashKeys.length > 0
+                && stableHashKeys.length <= 2 && code.autoloadVariableName == null
+                && !DebugState.isDebugMode()
+                && args.suppressRootTrackingForStableMethodArguments();
         try {
-            RuntimeArray args = methodArgs;
-            String[] stableHashKeys = code.stableHashMutationMethodKeys;
-            boolean suppressRootTracking = callContext == RuntimeContextType.SCALAR
-                    && stableHashKeys != null && stableHashKeys.length > 0
-                    && stableHashKeys.length <= 2 && code.autoloadVariableName == null
-                    && !DebugState.isDebugMode()
-                    && args.suppressRootTrackingForStableMethodArguments();
-            try {
-                args.elements.add(0, methodInvocantArgument(runtimeScalar));
+            args.prependMethodCallInvocant(methodInvocantArgument(runtimeScalar));
 
-                String autoloadVariableName = code.autoloadVariableName;
-                if (autoloadVariableName != null) {
-                    String methodName = method.toString();
-                    if (!methodName.equals("AUTOLOAD")) {
-                        String perlClassName = NameNormalizer.getBlessStr(blessId);
-                        String fullMethodName = qualifyAutoloadMethodName(methodName, perlClassName);
-                        setAutoloadMethodName(autoloadVariableName, fullMethodName, method);
-                    }
+            String autoloadVariableName = code.autoloadVariableName;
+            if (autoloadVariableName != null) {
+                String methodName = method.toString();
+                if (!methodName.equals("AUTOLOAD")) {
+                    String perlClassName = NameNormalizer.getBlessStr(blessId);
+                    String fullMethodName = qualifyAutoloadMethodName(methodName, perlClassName);
+                    setAutoloadMethodName(autoloadVariableName, fullMethodName, method);
                 }
-
-                stableHashFastPath = canUseStableHashMutationMethodFastPath(
-                        code, args, callContext, methodRuntime);
-                if (!stableHashFastPath && suppressRootTracking) {
-                    args.resumeMethodArgumentRootTracking();
-                }
-
-                try {
-                    MortalList.pushMark(methodRuntime.lifecycleState);
-                    try {
-                        if (stableHashFastPath) {
-                            RuntimeList result = applyStableHashMutationMethodBody(
-                                    code, args, callContext);
-                            args.recycleMethodCallArguments();
-                            methodArgumentsRecycled = true;
-                            return result;
-                        }
-                        return applyCachedMethod(code, args, callContext, methodRuntime);
-                    } finally {
-                        MortalList.popMark(methodRuntime.lifecycleState);
-                    }
-                } finally {
-                    if (stableHashFastPath && !methodArgumentsRecycled) {
-                        args.clearVerifiedMethodHashFields();
-                    }
-                }
-            } finally {
-                if (suppressRootTracking) args.resumeMethodArgumentRootTracking();
             }
+
+            boolean stableHashFastPath = canUseStableHashMutationMethodFastPath(
+                    code, args, callContext, methodRuntime);
+            if (!stableHashFastPath && suppressRootTracking) {
+                args.resumeMethodArgumentRootTracking();
+            }
+            if (stableHashFastPath) {
+                return invokeStableHashMutationMethodHit(code, args, callContext, methodRuntime);
+            }
+            return invokeGeneralCachedMethodHit(code, args, callContext, methodRuntime);
         } catch (Throwable e) {
             if (e instanceof RuntimeException) throw (RuntimeException) e;
             throw new RuntimeException(e);
+        } finally {
+            if (suppressRootTracking) args.resumeMethodArgumentRootTracking();
+        }
+    }
+
+    private static RuntimeList invokeStableHashMutationMethodHit(
+            RuntimeCode code, RuntimeArray args, int callContext, PerlRuntime methodRuntime) {
+        try {
+            MortalList.pushMark(methodRuntime.lifecycleState);
+            try {
+                RuntimeList result = applyStableHashMutationMethodBody(code, args, callContext);
+                args.recycleMethodCallArguments(methodRuntime.executionState());
+                return result;
+            } finally {
+                MortalList.popMark(methodRuntime.lifecycleState);
+            }
+        } finally {
+            args.clearVerifiedMethodHashFields();
+        }
+    }
+
+    private static RuntimeList invokeGeneralCachedMethodHit(
+            RuntimeCode code, RuntimeArray args, int callContext, PerlRuntime methodRuntime) {
+        MortalList.pushMark(methodRuntime.lifecycleState);
+        try {
+            return applyCachedMethod(code, args, callContext, methodRuntime);
+        } finally {
+            MortalList.popMark(methodRuntime.lifecycleState);
         }
     }
 
@@ -5955,7 +5979,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
 
                     RuntimeArray args = methodArgs;
-                    args.elements.add(0, methodInvocantArgument(runtimeScalar));
+                    args.prependMethodCallInvocant(methodInvocantArgument(runtimeScalar));
                     String autoloadVariableName = code.autoloadVariableName;
                     if (autoloadVariableName != null && !methodName.equals("AUTOLOAD")) {
                         String fullMethodName = qualifyAutoloadMethodName(methodName, perlClassName);
@@ -5973,7 +5997,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         // This frame already holds the invocant, so preserve the direct fallback path.
         RuntimeArray fallbackArgs = methodArgs;
-        fallbackArgs.elements.add(0, methodInvocantArgument(runtimeScalar));
+        fallbackArgs.prependMethodCallInvocant(methodInvocantArgument(runtimeScalar));
         return dispatchPerlMethodAfterSelfInjected(
                 runtimeScalar, method, currentSub, fallbackArgs, callContext);
     }

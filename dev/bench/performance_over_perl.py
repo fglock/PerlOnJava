@@ -207,6 +207,14 @@ def process_nice(pid: int) -> int | None:
         return None
 
 
+def process_priority_satisfies_request(requested_nice: int | None,
+                                       observed_nice: int | None) -> bool:
+    """Accept the requested niceness or a lower scheduling priority."""
+    return requested_nice is None or (
+        observed_nice is not None and observed_nice >= requested_nice
+    )
+
+
 def stability(windows: list[dict[str, Any]]) -> dict[str, Any]:
     if len(windows) < 5:
         return {"stable": False, "slope": None, "coefficient_of_variation": None}
@@ -258,8 +266,8 @@ def run_engine(engine: str, workload: str, args: argparse.Namespace,
                 raise RuntimeError(f"worker did not become ready: {ready_line!r}")
             requested_nice = args.nice if args.nice >= 0 else None
             observed_nice = process_nice(process.pid)
-            priority_verified = (
-                requested_nice is None or observed_nice == requested_nice
+            priority_verified = process_priority_satisfies_request(
+                requested_nice, observed_nice
             )
 
             warmup: list[dict[str, Any]] = []
