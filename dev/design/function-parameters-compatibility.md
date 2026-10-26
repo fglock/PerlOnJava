@@ -22,7 +22,7 @@ the upstream XS parser plugin.
 
 ## Progress tracking
 
-### Current status: Phases 1 and 2 subset complete; Phase 3 in progress (2026-10-26)
+### Current status: Core subset implemented; upstream compatibility work remains (2026-10-26)
 
 ### Completed
 
@@ -84,17 +84,36 @@ the upstream XS parser plugin.
   too-few, missing-name, and odd-pair diagnostics. Required named parameters
   are validated with named slurpy arrays as well as ordinary signatures.
 - The upstream `named_params.t` suite passes all 134 assertions. The expanded
-  project unit file passes 78 assertions under system Perl and both PerlOnJava
-  backends; the system Perl oracle uses the cached CPAN XS build in
+  project unit file passes 107 assertions under system Perl, JVM, and
+  interpreter; the system Perl oracle uses the cached CPAN XS build in
   `/private/tmp/fp-542-source/blib`.
-- The full 56-file upstream suite currently has 30 passing files, 3 files with
-  assertion failures, 3 runtime errors, and 20 incomplete files (1,229 of
-  1,592 planned assertions passed; no timeouts). The remaining failures are
-  concentrated in method invocant parsing for type examples, unsupported
-  `reify_type` configuration, indirect named calls in recursion, Unicode
-  keyword diagnostics/qualified declarations, and a small number of parser
-  diagnostic mismatches. These remain open compatibility work, not passing
-  coverage.
+- Configured `reify_type => 'moose'` handles bare/composite type source,
+  parenthesized expressions, and typed slurpy arrays. The three selected
+  upstream `types_moose*.t` files pass 49 assertions each on system Perl and
+  both PerlOnJava backends. JVM anonymous code objects now retain parameter
+  type-name metadata as well as names. Callback-based `reify_type`, caller
+  types, and inline checks pass their selected upstream tests on both backends.
+  A focused project regression covers an anonymous typed slurpy parameter.
+- Unparenthesized recursive calls with fat-comma named arguments now have a
+  project regression and pass both backends. Recursive positional calls are
+  also recognized as direct calls while the declaration body is compiled.
+  The upstream `recursion.t` now passes all 26 assertions, including the
+  `:lax` case where an omitted named parameter has no explicit default.
+- Lax Function::Parameters declarations no longer record no-default named
+  parameters as required. The new omission regression passes under system Perl
+  and both PerlOnJava backends.
+- The latest serialized 56-file upstream run had 45 passing files, 4 errors,
+  and 7 incomplete files (1,592 planned assertions; no timeouts). Subsequent
+  focused runs fixed and passed `gorn.t`, `precedence.t`, `types_parse.t`,
+  `types_custom_2.t`, `types_caller.t`, `types_inline.t`, and all three
+  `types_moose*.t` files on both backends. Remaining gaps are `types_auto.t`
+  composite expressions; runtime errors in `elsewhere.t` and
+  `lineno-torture.t`; the warning-category mismatch in `stringy_h.t`; and
+  incomplete coverage in `defaults_bare.t`, `bonus.t`, `types_msg.t`,
+  `lifetime.t`, `lineno.t`, and `eval.t`. These are not claimed as passing.
+- Upstream `unicode.t` and `unicode2.t` now pass all 19 and 25 assertions. The
+  parser recognizes expression-position qualified declarations and reports
+  invalid Unicode and numeric declaration names with the configured keyword.
 - Upstream `info.t`, `strict.t`, `prototype.t`, `types_coerce.t`, and
   `attributes.t` pass.
 - Scalar type constraints pass focused JVM/interpreter coverage, including
@@ -121,16 +140,12 @@ the upstream XS parser plugin.
 
 ### Next steps
 
-1. Support or explicitly classify `reify_type` and the typed-method syntax
-   exercised by `types_caller.t`, `types_inline.t`, and the Moose type tests.
-2. Add indirect named-call parsing and verify recursive named functions in
-   `recursion.t`.
-3. Fix Unicode keyword diagnostics and qualified declaration handling in
-   `unicode.t` and `unicode2.t`.
-4. Resolve the remaining parser diagnostics in `gorn.t`, `precedence.t`, and
-   `types_parse.t`, and investigate the `elsewhere.t`, `lineno-torture.t`, and
-   `stringy_h.t` runtime errors.
-5. Continue method-modifier coverage and verify GraphQL WebSocket ordering on
+1. Add auto type grammar support for bracket parameterization and composite
+   operators, then rerun `types_auto.t`.
+2. Classify and fix the remaining upstream errors and incomplete files listed
+   above, preserving focused project regression coverage for each confirmed
+   PerlOnJava defect.
+3. Continue method-modifier coverage and verify GraphQL WebSocket ordering on
    an uncongested runner before assigning that timing difference to runtime
    behavior.
 
@@ -140,9 +155,7 @@ the upstream XS parser plugin.
 - How should provider-specific metadata map onto the existing signature
   annotations without creating a second backend representation? The current
   `Function::Parameters::Info` implementation reuses these annotations.
-- The system Perl syntax integration test skips when upstream
-  `Function::Parameters` is not installed; the pure Perl Info API has
-  independent system Perl tests.
+- Which configured keyword aliases should be part of the first public subset?
 
 ## Related references
 

@@ -1989,13 +1989,16 @@ public class EmitSubroutine {
         mv.visitLdcInsn(positionalCount instanceof Integer count ? count : 0);
         emitSignatureString(mv, abstractNode.getAnnotation("signatureSlurpySigil"));
         emitSignatureString(mv, abstractNode.getAnnotation("signatureSlurpyName"));
+        emitSignatureMap(mv, abstractNode.getAnnotation("signatureParameterTypes"));
+        emitSignatureMap(mv, abstractNode.getAnnotation("signatureParameterTypeObjectVariables"));
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                 "attachFunctionParametersMetadata",
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Ljava/lang/String;"
                         + "[Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;"
                         + "[Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;ILjava/lang/String;"
-                        + "Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        + "Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;)"
+                        + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                 false);
         mv.visitInsn(Opcodes.POP);
     }
@@ -2009,6 +2012,23 @@ public class EmitSubroutine {
             mv.visitInsn(Opcodes.DUP);
             mv.visitLdcInsn(i);
             mv.visitLdcInsn(String.valueOf(names.get(i)));
+            mv.visitInsn(Opcodes.AASTORE);
+        }
+    }
+
+    private static void emitSignatureMap(MethodVisitor mv, Object value) {
+        java.util.Map<?, ?> values = value instanceof java.util.Map<?, ?> map ? map : java.util.Map.of();
+        mv.visitLdcInsn(values.size() * 2);
+        mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/String");
+        int index = 0;
+        for (var entry : values.entrySet()) {
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitLdcInsn(index++);
+            mv.visitLdcInsn(String.valueOf(entry.getKey()));
+            mv.visitInsn(Opcodes.AASTORE);
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitLdcInsn(index++);
+            mv.visitLdcInsn(String.valueOf(entry.getValue()));
             mv.visitInsn(Opcodes.AASTORE);
         }
     }

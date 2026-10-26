@@ -288,6 +288,13 @@ public class SubroutineParser {
         if (!subExists && !isNewMethod && !isMethod) {
             subExists = GlobalVariable.existsGlobalCodeRefAsScalar(fullName).getBoolean();
         }
+        // A named function's body is parsed before its final RuntimeCode is
+        // installed. Treat a call back to that same declaration as a direct
+        // subroutine call so an initial scalar argument is not mistaken for
+        // indirect-object syntax (for example, `recur $n - 1, ...`).
+        if (!isMethod && parser.compilingSubroutineBodies.contains(fullName)) {
+            subExists = true;
+        }
         boolean prototypeWasPredeclared = prototype != null;
         if (prototype == null) {
             prototype = parser.declaredSubPrototypes.get(fullName);
@@ -596,7 +603,8 @@ public class SubroutineParser {
             if (!terminator
                     && !infixOp
                     && (nextTok.type != LexerTokenType.IDENTIFIER
-                        || (subName.contains("::")
+                        || (hasFatCommaArgumentStart(parser)
+                            || subName.contains("::")
                             && !nextTok.text.equals("or")
                             && !nextTok.text.equals("and")
                             && !nextTok.text.equals("not")
@@ -918,6 +926,22 @@ public class SubroutineParser {
 
     private static boolean isValidIndirectMethod(String subName) {
         return isValidIndirectMethod(subName, null);
+    }
+
+    /**
+     * An unresolved call followed by a bareword fat-comma key is an ordinary
+     * unparenthesized subroutine call, as in {@code recursive value => $x}.
+     * The lookahead distinguishes it from indirect-object syntax where the
+     * first bareword is the invocant.
+     */
+    private static boolean hasFatCommaArgumentStart(Parser parser) {
+        int index = parser.tokenIndex + 1;
+        while (index < parser.tokens.size()
+                && (parser.tokens.get(index).type == LexerTokenType.WHITESPACE
+                    || parser.tokens.get(index).type == LexerTokenType.NEWLINE)) {
+            index++;
+        }
+        return index < parser.tokens.size() && parser.tokens.get(index).text.equals("=>");
     }
 
     private static boolean isValidIndirectMethod(String subName, Parser parser) {
@@ -1311,6 +1335,13 @@ public class SubroutineParser {
         }
 
         if (!wantName && !peek(parser).text.equals("{")) {
+            if (parser.parsingFunctionParametersDeclaration) {
+                String keyword = parser.functionParametersKeyword == null
+                        ? "fun" : parser.functionParametersKeyword;
+                parser.throwError("In " + keyword
+                        + " (anon): I was expecting a function body, not \""
+                        + peek(parser).text + "\"");
+            }
             parser.throwCleanError("Illegal declaration of anonymous subroutine");
         }
 
@@ -1446,6 +1477,10 @@ public class SubroutineParser {
                         signature.getAnnotation("signatureNamedOptional"));
                 block.setAnnotation("signatureParameterTypes",
                         signature.getAnnotation("signatureParameterTypes"));
+                block.setAnnotation("signatureParameterTypeObjects",
+                        signature.getAnnotation("signatureParameterTypeObjects"));
+                block.setAnnotation("signatureParameterTypeObjectVariables",
+                        signature.getAnnotation("signatureParameterTypeObjectVariables"));
                 block.setAnnotation("signatureSlurpySigil",
                         signature.getAnnotation("signatureSlurpySigil"));
                 block.setAnnotation("signatureSlurpyName",
@@ -2565,6 +2600,9 @@ public class SubroutineParser {
             placeholder.signatureNamedRequired = runtimeCode.signatureNamedRequired;
             placeholder.signatureNamedOptional = runtimeCode.signatureNamedOptional;
             placeholder.signatureParameterTypes = runtimeCode.signatureParameterTypes;
+            placeholder.signatureParameterTypeObjects = runtimeCode.signatureParameterTypeObjects;
+            placeholder.signatureParameterTypeObjectVariables =
+                    runtimeCode.signatureParameterTypeObjectVariables;
             placeholder.signaturePositionalCount = runtimeCode.signaturePositionalCount;
             placeholder.signatureSlurpySigil = runtimeCode.signatureSlurpySigil;
             placeholder.signatureSlurpyName = runtimeCode.signatureSlurpyName;

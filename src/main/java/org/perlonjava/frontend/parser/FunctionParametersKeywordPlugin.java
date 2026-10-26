@@ -4,6 +4,7 @@ import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.frontend.parser.SubroutineParser;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.List;
 import java.util.Set;
@@ -11,9 +12,11 @@ import java.util.Set;
 /** Parses Function::Parameters declarations using core signature lowering. */
 final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
     static final FunctionParametersKeywordPlugin FUNCTION =
-            new FunctionParametersKeywordPlugin(false, 0, true, true, false, null, false, List.of());
+            new FunctionParametersKeywordPlugin(false, 0, true, true, false, null, false,
+                    List.of(), "auto", null, true);
     static final FunctionParametersKeywordPlugin METHOD =
-            new FunctionParametersKeywordPlugin(true, 0, true, true, false, null, false, List.of("$self"));
+            new FunctionParametersKeywordPlugin(true, 0, true, true, false, null, false,
+                    List.of("$self"), "auto", null, true);
 
     private final boolean method;
     private final int optionalInvocantCount;
@@ -24,15 +27,20 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
     private final boolean requiresName;
     private final boolean prohibitsName;
     private final boolean defaultArguments;
+    private final boolean types;
+    private final String typeReifier;
+    private final RuntimeScalar typeReifierCallback;
     private final List<String> invocants;
     private final List<String> defaultAttributes;
 
     private FunctionParametersKeywordPlugin(
             boolean method, int optionalInvocantCount, boolean strict,
             boolean checkArgumentTypes, boolean runtime, String installSub,
-            boolean requiresName, List<String> invocants) {
+            boolean requiresName, List<String> invocants, String typeReifier,
+            RuntimeScalar typeReifierCallback, boolean types) {
         this(method, optionalInvocantCount, strict, checkArgumentTypes, runtime,
-                installSub, requiresName, false, true, invocants, List.of());
+                installSub, requiresName, false, true, invocants, List.of(), typeReifier,
+                typeReifierCallback, types);
     }
 
     private FunctionParametersKeywordPlugin(
@@ -40,7 +48,10 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
             boolean checkArgumentTypes, boolean runtime, String installSub, boolean requiresName,
             boolean prohibitsName, boolean defaultArguments,
             List<String> invocants,
-            List<String> defaultAttributes) {
+            List<String> defaultAttributes,
+            String typeReifier,
+            RuntimeScalar typeReifierCallback,
+            boolean types) {
         this.method = method;
         this.optionalInvocantCount = optionalInvocantCount;
         this.strict = strict;
@@ -50,6 +61,9 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         this.requiresName = requiresName;
         this.prohibitsName = prohibitsName;
         this.defaultArguments = defaultArguments;
+        this.types = types;
+        this.typeReifier = typeReifier;
+        this.typeReifierCallback = typeReifierCallback;
         this.invocants = List.copyOf(invocants);
         this.defaultAttributes = List.copyOf(defaultAttributes);
     }
@@ -57,7 +71,8 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
     static FunctionParametersKeywordPlugin configured(
             String defaults, List<String> shift, int optionalInvocantCount,
             boolean strict, boolean checkArgumentTypes, boolean runtime, String installSub,
-            List<String> defaultAttributes, String namePolicy, boolean defaultArguments) {
+            List<String> defaultAttributes, String namePolicy, boolean defaultArguments,
+            String typeReifier, RuntimeScalar typeReifierCallback, boolean types) {
         boolean method = Set.of("method", "classmethod", "before", "after", "around",
                 "augment", "override").contains(defaults);
         boolean requiresName = Set.of("before", "after", "around", "augment", "override")
@@ -72,16 +87,19 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
             return new FunctionParametersKeywordPlugin(
                     true, 0, strict, checkArgumentTypes, runtime, installSub,
                     "required".equals(namePolicy) || requiresName,
-                    "prohibited".equals(namePolicy), defaultArguments, invocants, defaultAttributes);
+                    "prohibited".equals(namePolicy), defaultArguments, invocants, defaultAttributes,
+                    typeReifier, typeReifierCallback, types);
         }
         if (optionalInvocantCount == 0 && strict && checkArgumentTypes && !runtime && installSub == null
-                && defaultAttributes.isEmpty() && "optional".equals(namePolicy) && defaultArguments) {
+                && defaultAttributes.isEmpty() && "optional".equals(namePolicy) && defaultArguments
+                && "auto".equals(typeReifier) && typeReifierCallback == null && types) {
             return FUNCTION;
         }
         return new FunctionParametersKeywordPlugin(
                 false, optionalInvocantCount, strict, checkArgumentTypes, runtime, installSub,
                 "required".equals(namePolicy) || requiresName,
-                "prohibited".equals(namePolicy), defaultArguments, List.of(), defaultAttributes);
+                "prohibited".equals(namePolicy), defaultArguments, List.of(), defaultAttributes,
+                typeReifier, typeReifierCallback, types);
     }
 
     @Override
@@ -96,11 +114,32 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         int previousInvocantCount = parser.functionParametersInvocantCount;
         boolean previousStrict = parser.functionParametersStrict;
         boolean previousCheckArgumentTypes = parser.functionParametersCheckArgumentTypes;
+        boolean previousTypes = parser.functionParametersTypes;
         String previousKeyword = parser.functionParametersKeyword;
         String previousInstallSub = parser.functionParametersInstallSub;
+        String previousTypeReifier = parser.functionParametersTypeReifier;
+        RuntimeScalar previousTypeReifierCallback = parser.functionParametersTypeReifierCallback;
         List<String> previousAttributes = parser.functionParametersAttributes;
         boolean previousRuntime = parser.functionParametersRuntime;
         boolean previousDefaultArguments = parser.functionParametersDefaultArguments;
+        parser.tokenIndex++;
+        boolean startsWithApostrophe = "'".equals(TokenUtils.peek(parser).text);
+        if ("{".equals(TokenUtils.peek(parser).text)) {
+            parser.throwError("In " + keyword
+                    + " (anon): I was expecting a parameter list, not \"{\"");
+        }
+        int declarationNameIndex = parser.tokenIndex;
+        String candidateName = null;
+        if (!"(".equals(TokenUtils.peek(parser).text) && !startsWithApostrophe) {
+            candidateName = IdentifierParser.parseSubroutineIdentifier(parser);
+        }
+        boolean validCandidateName = isValidCandidateName(candidateName);
+        parser.tokenIndex = declarationIndex;
+        if (startsWithApostrophe || (!"(".equals(parser.tokens.get(
+                Whitespace.skipWhitespace(parser, declarationNameIndex, parser.tokens)).text)
+                && !validCandidateName)) {
+            parser.throwError(originalText + " expects a parameter list");
+        }
         keywordToken.text = "sub";
         parser.tokenIndex++;
         parser.parsingFunctionParametersDeclaration = true;
@@ -109,13 +148,22 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         parser.functionParametersInvocantCount = method ? invocants.size() : optionalInvocantCount;
         parser.functionParametersStrict = strict;
         parser.functionParametersCheckArgumentTypes = checkArgumentTypes;
+        parser.functionParametersTypes = types;
         parser.functionParametersKeyword = keyword;
         parser.functionParametersAttributes = defaultAttributes;
         parser.functionParametersRuntime = runtime;
         parser.functionParametersDefaultArguments = defaultArguments;
         parser.functionParametersInstallSub = installSub;
+        parser.functionParametersTypeReifier = typeReifier;
+        parser.functionParametersTypeReifierCallback = typeReifierCallback;
         try {
-            boolean named = TokenUtils.peek(parser).type == LexerTokenType.IDENTIFIER;
+            LexerToken declarationStart = TokenUtils.peek(parser);
+            boolean named = declarationStart.type == LexerTokenType.IDENTIFIER
+                    || declarationStart.text.equals("::")
+                    || declarationStart.text.equals("'");
+            if (named && parser.expressionParseDepth > 0) {
+                parser.throwError("expecting a parameter list");
+            }
             if (requiresName && !named) {
                 parser.throwError("expecting a function name");
             }
@@ -166,8 +214,11 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
             parser.functionParametersInvocantCount = previousInvocantCount;
             parser.functionParametersStrict = previousStrict;
             parser.functionParametersCheckArgumentTypes = previousCheckArgumentTypes;
+            parser.functionParametersTypes = previousTypes;
             parser.functionParametersKeyword = previousKeyword;
             parser.functionParametersInstallSub = previousInstallSub;
+            parser.functionParametersTypeReifier = previousTypeReifier;
+            parser.functionParametersTypeReifierCallback = previousTypeReifierCallback;
             parser.functionParametersAttributes = previousAttributes;
             parser.functionParametersRuntime = previousRuntime;
             parser.functionParametersDefaultArguments = previousDefaultArguments;
@@ -176,9 +227,15 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
     }
 
     private static boolean hasExplicitInvocant(Parser parser, int openParen) {
-        if (openParen + 1 >= parser.tokens.size()
-                || !Set.of("$", "@", "%").contains(parser.tokens.get(openParen + 1).text)) return false;
-        for (int i = openParen + 2; i < parser.tokens.size(); i++) {
+        int first = openParen + 1;
+        while (first < parser.tokens.size()
+                && (parser.tokens.get(first).type == LexerTokenType.WHITESPACE
+                || parser.tokens.get(first).type == LexerTokenType.NEWLINE)) {
+            first++;
+        }
+        if (first >= parser.tokens.size()
+                || !Set.of("$", "@", "%").contains(parser.tokens.get(first).text)) return false;
+        for (int i = first + 1; i < parser.tokens.size(); i++) {
             String text = parser.tokens.get(i).text;
             if (":".equals(text)) return true;
             if (")".equals(text) || "{".equals(text)) return false;
@@ -186,15 +243,33 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         return false;
     }
 
+    private static boolean isValidCandidateName(String name) {
+        if (name == null || name.isEmpty()) return false;
+        String[] components = name.split("::", -1);
+        int firstComponent = name.startsWith("::") ? 1 : 0;
+        for (int componentIndex = firstComponent;
+                componentIndex < components.length; componentIndex++) {
+            String component = components[componentIndex];
+            if (component.isEmpty()) return false;
+            int firstCodePoint = component.codePointAt(0);
+            if (!IdentifierParser.isPerlIdentifierStart(firstCodePoint)) return false;
+            for (int offset = Character.charCount(firstCodePoint); offset < component.length();) {
+                int codePoint = component.codePointAt(offset);
+                if (!Character.isUnicodeIdentifierPart(codePoint) && codePoint != '_') return false;
+                offset += Character.charCount(codePoint);
+            }
+        }
+        return true;
+    }
+
     @Override
     public Node parseExpression(Parser parser, String keyword) {
         int keywordIndex = parser.tokenIndex;
         parser.tokenIndex++;
-        boolean anonymousDeclaration = "(".equals(TokenUtils.peek(parser).text);
+        LexerToken declarationStart = TokenUtils.peek(parser);
         parser.tokenIndex = keywordIndex;
-        if (anonymousDeclaration && (method || optionalInvocantCount > 0
-                || !strict || !checkArgumentTypes || runtime || requiresName || prohibitsName
-                || !defaultArguments || this == FUNCTION)) {
+        if (declarationStart.type == LexerTokenType.IDENTIFIER
+                || Set.of("(", "::", "'").contains(declarationStart.text)) {
             return parse(parser, keyword);
         }
         return null;

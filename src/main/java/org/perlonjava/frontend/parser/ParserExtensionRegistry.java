@@ -5,6 +5,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
 import java.util.Map;
 import java.util.ArrayList;
@@ -104,9 +105,11 @@ public final class ParserExtensionRegistry {
 
     private static void registerStrictnessDefaults(Parser parser, boolean strict) {
         parser.registerKeywordPlugin("fun", FunctionParametersKeywordPlugin.configured(
-                "function", null, 0, strict, true, false, null, List.of(), "optional", true));
+                "function", null, 0, strict, true, false, null, List.of(), "optional", true,
+                null, null, true));
         parser.registerKeywordPlugin("method", FunctionParametersKeywordPlugin.configured(
-                "method", null, 0, strict, true, false, null, List.of(), "optional", true));
+                "method", null, 0, strict, true, false, null, List.of(), "optional", true,
+                null, null, true));
     }
 
     private static void removeDefaults(Parser parser) {
@@ -136,18 +139,35 @@ public final class ParserExtensionRegistry {
         boolean checkArgumentTypes = true;
         boolean runtime = false;
         boolean defaultArguments = true;
+        boolean types = true;
         String namePolicy = "optional";
         String installSub = null;
+        String reifyType = null;
+        RuntimeScalar reifyTypeCallback = null;
         List<String> defaultAttributes = List.of();
         if (value instanceof RuntimeHash configuration) {
             Set<String> supportedOptions = Set.of(
                     "defaults", "shift", "invocant", "strict",
                     "check_argument_count", "check_argument_types", "attributes", "runtime",
-                    "install_sub", "default_arguments", "name");
+                    "install_sub", "default_arguments", "name", "reify_type", "types");
             for (String option : configuration.elements.keySet()) {
                 if (!supportedOptions.contains(option)) {
                     throw new IllegalArgumentException("Invalid keyword property: " + option);
                 }
+            }
+            RuntimeBase reifyTypeValue = configuration.elements.get("reify_type");
+            RuntimeBase reifyTypeBase = unwrap(reifyTypeValue);
+            if (reifyTypeValue instanceof RuntimeScalar reifyMode
+                    && reifyMode.type == RuntimeScalarType.CODE) {
+                reifyTypeCallback = reifyMode;
+            } else if (reifyTypeBase != null
+                    && (!(reifyTypeBase instanceof RuntimeScalar reifyMode)
+                    || !Set.of("auto", "moose").contains(reifyMode.toString()))) {
+                throw new IllegalArgumentException(
+                        "Invalid reify_type: expected 'auto', 'moose', or a code reference");
+            }
+            if (reifyTypeBase instanceof RuntimeScalar reifyTypeScalar) {
+                reifyType = reifyTypeScalar.toString();
             }
             RuntimeScalar defaultValue = configuration.elements.get("defaults");
             String keywordDefaults = Set.of("method", "classmethod", "before", "after", "around",
@@ -192,6 +212,8 @@ public final class ParserExtensionRegistry {
             }
             RuntimeScalar defaultArgumentsValue = configuration.elements.get("default_arguments");
             if (defaultArgumentsValue != null) defaultArguments = defaultArgumentsValue.getBoolean();
+            RuntimeScalar typesValue = configuration.elements.get("types");
+            if (typesValue != null) types = typesValue.getBoolean();
             RuntimeScalar nameValue = configuration.elements.get("name");
             if (nameValue != null) {
                 namePolicy = nameValue.toString();
@@ -221,7 +243,8 @@ public final class ParserExtensionRegistry {
         }
         return FunctionParametersKeywordPlugin.configured(
                 defaults, shift, optionalInvocantCount, strict, checkArgumentTypes,
-                runtime, installSub, defaultAttributes, namePolicy, defaultArguments);
+                runtime, installSub, defaultAttributes, namePolicy, defaultArguments,
+                reifyType, reifyTypeCallback, types);
     }
 
     private static List<String> parseConfiguredAttributes(String source) {

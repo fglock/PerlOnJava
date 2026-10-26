@@ -1,11 +1,19 @@
 package org.perlonjava.frontend.parser;
 
 import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.RuntimeList;
+import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.ErrorMessageUtil;
+import java.util.concurrent.atomic.AtomicLong;
 import org.perlonjava.runtime.operators.WarnDie;
 
 import java.util.ArrayList;
@@ -37,6 +45,7 @@ import static org.perlonjava.frontend.parser.PrototypeArgs.consumeArgsWithProtot
  * </ul>
  */
 public class SignatureParser {
+    private static final AtomicLong CUSTOM_TYPE_REIFIER_SEQUENCE = new AtomicLong();
 
     private final Parser parser;
     private final List<Node> astNodes = new ArrayList<>();
@@ -57,6 +66,9 @@ public class SignatureParser {
     private final List<String> namedOptionalNames = new ArrayList<>();
     private final Set<String> functionParametersParameterNames = new java.util.HashSet<>();
     private final Map<String, String> parameterTypeNames = new LinkedHashMap<>();
+    private final Map<String, RuntimeScalar> parameterTypeObjects = new LinkedHashMap<>();
+    private final Map<String, String> parameterTypeObjectVariables = new LinkedHashMap<>();
+    private RuntimeScalar lastCustomReifiedTypeValue;
     private final List<Node> defaultValueNodes = new ArrayList<>();
     private boolean hasOptional = false;
     private boolean hasNamedParameter = false;
@@ -215,18 +227,62 @@ public class SignatureParser {
         }
 
         Node typeConstraint = null;
-        if (parser.parsingFunctionParametersDeclaration) {
+        boolean parenthesizedTypeConstraint = false;
+        RuntimeScalar parenthesizedTypeValue = null;
+        RuntimeScalar customReifiedTypeValue = null;
+        if (parser.parsingFunctionParametersDeclaration && parser.functionParametersTypes) {
             if (peekToken().text.equals("(")) {
                 consumeToken();
+                parenthesizedTypeConstraint = true;
+                int typeSourceStart = parser.tokenIndex;
                 typeConstraint = parser.parseExpression(0);
+                int typeSourceEnd = parser.tokenIndex;
                 if (!peekToken().text.equals(")")) {
                     parser.throwError("Malformed Function::Parameters type constraint");
                 }
                 consumeToken();
+                if (parser.functionParametersTypeReifierCallback != null) {
+                    customReifiedTypeValue = callCustomTypeReifier(
+                            typeSource(typeSourceStart, typeSourceEnd), paramStartIndex);
+                    typeConstraint = customTypeConstraintReference(customReifiedTypeValue, paramStartIndex);
+                }
             } else if (peekToken().type == LexerTokenType.IDENTIFIER) {
                 typeConstraint = parseUnparenthesizedTypeConstraint();
+                customReifiedTypeValue = lastCustomReifiedTypeValue;
             }
-            typeConstraint = reifyQuotedTypeName(typeConstraint, paramStartIndex);
+            if (parenthesizedTypeConstraint
+                    && "moose".equals(parser.functionParametersTypeReifier)) {
+                RuntimeList evaluatedType = SpecialBlockParser.runSpecialBlock(
+                        parser, "BEGIN", typeConstraint, RuntimeContextType.SCALAR);
+                parenthesizedTypeValue = evaluatedType.scalar();
+                if (RuntimeScalarType.blessedId(parenthesizedTypeValue) == 0) {
+                    Node reifierCall = mooseTypeReifierCall(
+                            parenthesizedTypeValue.toString(), paramStartIndex);
+                    customReifiedTypeValue = SpecialBlockParser.runSpecialBlock(
+                            parser, "BEGIN", reifierCall, RuntimeContextType.SCALAR).scalar();
+                    typeConstraint = customTypeConstraintReference(
+                            customReifiedTypeValue, paramStartIndex);
+                } else {
+                    customReifiedTypeValue = parenthesizedTypeValue;
+                    typeConstraint = customTypeConstraintReference(
+                            customReifiedTypeValue, paramStartIndex);
+                }
+            } else if (customReifiedTypeValue == null) {
+                typeConstraint = reifyQuotedTypeName(typeConstraint, paramStartIndex);
+            }
+            if (typeConstraint != null && customReifiedTypeValue == null) {
+                RuntimeScalar evaluatedType = SpecialBlockParser.runSpecialBlock(
+                        parser, "BEGIN", typeConstraint, RuntimeContextType.SCALAR).scalar();
+                if (RuntimeScalarType.blessedId(evaluatedType) != 0) {
+                    customReifiedTypeValue = evaluatedType;
+                    typeConstraint = customTypeConstraintReference(
+                            customReifiedTypeValue, paramStartIndex);
+                }
+            }
+            if (typeConstraint != null && peekToken().text.equals(":")) {
+                consumeToken();
+                isNamed = true;
+            }
         }
 
         LexerToken sigilToken = consumeToken();
@@ -286,6 +342,18 @@ public class SignatureParser {
         }
 
         String metadataName = paramName == null ? sigil : sigil + paramName;
+        if (parenthesizedTypeValue != null
+                && RuntimeScalarType.blessedId(parenthesizedTypeValue) != 0) {
+            parameterTypeObjects.put(metadataName, parenthesizedTypeValue);
+        }
+        if (customReifiedTypeValue != null
+                && customReifiedTypeValue.type != RuntimeScalarType.UNDEF) {
+            parameterTypeObjects.put(metadataName, customReifiedTypeValue);
+        }
+        if (typeConstraint instanceof AbstractNode typedNode
+                && typedNode.getAnnotation("functionParametersTypeObjectVariable") instanceof String variableName) {
+            parameterTypeObjectVariables.put(metadataName, variableName);
+        }
         if (parser.parsingFunctionParametersDeclaration && paramName != null
                 && !functionParametersParameterNames.add(metadataName)) {
             parser.throwError(paramStartIndex,
@@ -320,9 +388,9 @@ public class SignatureParser {
         Node paramVariable = createParameterVariable(sigil, paramName);
         OperatorNode typeConstraintVariable = null;
         if (typeConstraint != null) {
-            if (paramName == null || isSlurpy) {
+            if (paramName == null || (isSlurpy && !"@".equals(sigil))) {
                 parser.throwError(paramStartIndex,
-                        "Function::Parameters type constraints require a named scalar parameter");
+                        "Function::Parameters type constraints require a named scalar or array parameter");
             }
             if (parser.functionParametersCheckArgumentTypes) {
                 String typeVariableName = "__function_parameters_type_" + (++typedParameterCount);
@@ -335,7 +403,16 @@ public class SignatureParser {
                 typeConstraintVariable = typeVariable;
             }
             String typeName = metadataTypeName(typeConstraint);
-            if (typeName != null) parameterTypeNames.put(metadataName, typeName);
+            if (typeName != null) {
+                parameterTypeNames.put(metadataName, typeName);
+                if (typeName.startsWith("moose:") && !parameterTypeObjects.containsKey(metadataName)) {
+                    Node reifiedMetadataType = mooseTypeReifierCall(
+                            typeName.substring("moose:".length()), paramStartIndex);
+                    RuntimeScalar evaluatedType = SpecialBlockParser.runSpecialBlock(
+                            parser, "BEGIN", reifiedMetadataType, RuntimeContextType.SCALAR).scalar();
+                    parameterTypeObjects.put(metadataName, evaluatedType);
+                }
+            }
         }
 
         if (isNamed) {
@@ -393,6 +470,12 @@ public class SignatureParser {
             }
             parser.ctx.symbolTable.addVariable(sigil + paramName, "my", (OperatorNode) paramVariable);
         }
+        Node inlineTypeCheck = null;
+        if (customReifiedTypeValue != null && typeConstraintVariable != null
+                && parser.functionParametersCheckArgumentTypes) {
+            inlineTypeCheck = inlineCustomTypeCheck(
+                    typeConstraint, sigil + paramName, paramStartIndex);
+        }
         if (typeConstraintVariable != null && parser.functionParametersCheckArgumentTypes) {
             Node hasCanMethod = typeConstraintMethodCall(typeConstraintVariable,
                     "can", new StringNode("has_coercion", paramStartIndex), paramStartIndex);
@@ -408,14 +491,50 @@ public class SignatureParser {
                     new BlockNode(new ArrayList<>(List.of(coercedValue)), paramStartIndex),
                     null, paramStartIndex));
 
-            Node check = typeConstraintMethodCall(typeConstraintVariable, "check", paramVariable, paramStartIndex);
-            Node failure = new OperatorNode("!", check, paramStartIndex);
-            Node message = typeConstraintMethodCall(
-                    typeConstraintVariable, "get_message", paramVariable, paramStartIndex);
+            Node failure;
+            Node message;
+            if (inlineTypeCheck != null) {
+                failure = new OperatorNode("!", inlineTypeCheck, paramStartIndex);
+                message = typeConstraintMethodCall(
+                        typeConstraintVariable, "get_message", paramVariable, paramStartIndex);
+            } else {
+                Node check = typeConstraintMethodCall(
+                        typeConstraintVariable, "check", paramVariable, paramStartIndex);
+                failure = new OperatorNode("!", check, paramStartIndex);
+                message = typeConstraintMethodCall(
+                        typeConstraintVariable, "get_message", paramVariable, paramStartIndex);
+            }
+            if (parser.parsingFunctionParametersDeclaration) {
+                int parameterIndex = isNamed
+                        ? positionalParameterCount + namedParameterNames.size()
+                        : positionalParameterCount;
+                String keyword = parser.functionParametersKeyword == null
+                        ? "fun" : parser.functionParametersKeyword;
+                String name = subroutineName == null ? "(anon)" : subroutineName;
+                String prefix = "In " + keyword + " " + name + ": parameter "
+                        + parameterIndex + " (" + sigil + paramName + "): ";
+                message = new BinaryOperatorNode(".", new StringNode(prefix, paramStartIndex),
+                        message, paramStartIndex);
+            }
             Node die = new OperatorNode("die", new ListNode(List.of(message), paramStartIndex), paramStartIndex);
             astNodes.add(new IfNode("if", failure,
                     new BlockNode(new ArrayList<>(List.of(die)), paramStartIndex), null, paramStartIndex));
         }
+    }
+
+    private static Node requireMooseTypeConstraints(Node expression, int index) {
+        Node require = new OperatorNode("require", ListNode.makeList(
+                new StringNode("Moose/Util/TypeConstraints.pm", index)), index);
+        return new TernaryOperatorNode("?", require, expression,
+                new OperatorNode("undef", null, index), index);
+    }
+
+    private static Node mooseTypeReifierCall(String typeName, int index) {
+        Node reifier = new OperatorNode("&", new IdentifierNode(
+                "Moose::Util::TypeConstraints::find_or_create_isa_type_constraint", index), index);
+        Node call = new BinaryOperatorNode("(", reifier,
+                new ListNode(List.of(new StringNode(typeName, index)), index), index);
+        return requireMooseTypeConstraints(call, index);
     }
 
     private boolean hasOptionalInvocantSeparator(int openParenIndex) {
@@ -482,7 +601,7 @@ public class SignatureParser {
                         segmentHasParameter = true;
                         continue;
                     }
-                    if (segmentHasParameter) return parameterCount;
+                    if (segmentHasParameter && parameterCount > 0) return parameterCount;
                     // A leading colon starts a named parameter, not an
                     // invocant separator.
                     segmentHasParameter = true;
@@ -555,6 +674,53 @@ public class SignatureParser {
         return new BinaryOperatorNode("->", invocant, call, index);
     }
 
+    private Node inlineCustomTypeCheck(
+            Node typeReference, String parameterName, int index) {
+        Node canMethod = typeConstraintMethodCall(
+                typeReference, "can", new StringNode("can_be_inlined", index), index);
+        if (!SpecialBlockParser.runSpecialBlock(
+                parser, "BEGIN", canMethod, RuntimeContextType.SCALAR).scalar().getDefinedBoolean()) {
+            return null;
+        }
+        RuntimeScalar canInline = SpecialBlockParser.runSpecialBlock(
+                parser, "BEGIN",
+                typeConstraintNoArgumentMethodCall(typeReference, "can_be_inlined", index),
+                RuntimeContextType.SCALAR).scalar();
+        if (!canInline.getDefinedBoolean()) return null;
+
+        RuntimeScalar inlineMethod = SpecialBlockParser.runSpecialBlock(
+                parser, "BEGIN",
+                typeConstraintMethodCall(
+                        typeReference, "can", new StringNode("inline_check", index), index),
+                RuntimeContextType.SCALAR).scalar();
+        String methodName = inlineMethod.getDefinedBoolean() ? "inline_check" : "_inline_check";
+        Node sourceCall = typeConstraintMethodCall(
+                typeReference, methodName, new StringNode(parameterName, index), index);
+        String source = SpecialBlockParser.runSpecialBlock(
+                parser, "BEGIN", sourceCall, RuntimeContextType.SCALAR).scalar().toString();
+
+        List<LexerToken> inlineTokens = new Lexer(source).tokenize();
+        ErrorMessageUtil previousErrorUtil = parser.ctx.errorUtil;
+        ErrorMessageUtil.SourceLocation declarationLocation =
+                previousErrorUtil.getSourceLocationAccurate(index);
+        String inlineFile = "(inline_check:" + declarationLocation.fileName()
+                + ":" + declarationLocation.lineNumber() + ")";
+        parser.ctx.errorUtil = new ErrorMessageUtil(inlineFile, inlineTokens);
+        try {
+            Parser inlineParser = new Parser(parser.ctx, inlineTokens);
+            Node expression = inlineParser.parseExpression(0);
+            if (expression == null || inlineParser.tokens.get(inlineParser.tokenIndex).type
+                    != LexerTokenType.EOF) {
+                inlineParser.throwError("syntax error in inlined type constraint");
+            }
+            return expression;
+        } catch (PerlCompilerException exception) {
+            throw exception;
+        } finally {
+            parser.ctx.errorUtil = previousErrorUtil;
+        }
+    }
+
     private static Node reifyQuotedTypeName(Node typeConstraint, int index) {
         if (!(typeConstraint instanceof StringNode string)
                 || !string.value.matches("[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*")) {
@@ -568,7 +734,39 @@ public class SignatureParser {
         int start = parser.tokenIndex;
         int parameterSigil = findTypeConstraintParameterSigil(start);
         if (parameterSigil < 0) {
+            int last = parser.tokens.size() - 1;
+            while (last >= start && (parser.tokens.get(last).type == LexerTokenType.EOF
+                    || parser.tokens.get(last).type == LexerTokenType.WHITESPACE
+                    || parser.tokens.get(last).type == LexerTokenType.NEWLINE)) {
+                last--;
+            }
+            if (last >= start && "[".equals(parser.tokens.get(last).text)) {
+                parser.throwError(start, "missing type name");
+            }
             return parser.parseExpression(0);
+        }
+        if (parser.functionParametersTypeReifierCallback != null && parameterSigil > start) {
+            String source = typeSource(start, parameterSigil);
+            parser.tokenIndex = parameterSigil;
+            lastCustomReifiedTypeValue = callCustomTypeReifier(source, start);
+            return customTypeConstraintReference(lastCustomReifiedTypeValue, start);
+        }
+        if ("moose".equals(parser.functionParametersTypeReifier)
+                && parameterSigil > start) {
+            StringBuilder typeSource = new StringBuilder();
+            for (int index = start; index < parameterSigil; index++) {
+                LexerToken token = parser.tokens.get(index);
+                if (token.type != LexerTokenType.WHITESPACE
+                        && token.type != LexerTokenType.NEWLINE) {
+                    typeSource.append(token.text);
+                }
+            }
+            Node reifier = new OperatorNode("&", new IdentifierNode(
+                    "Moose::Util::TypeConstraints::find_or_create_isa_type_constraint", start), start);
+            parser.tokenIndex = parameterSigil;
+            Node reifiedType = new BinaryOperatorNode("(", reifier,
+                    new ListNode(List.of(new StringNode(typeSource.toString(), start)), start), start);
+            return requireMooseTypeConstraints(reifiedType, start);
         }
 
         int first = nextSignificantToken(start);
@@ -603,6 +801,54 @@ public class SignatureParser {
                 parser.tokens.remove(boundary);
             }
         }
+    }
+
+    private String typeSource(int start, int end) {
+        StringBuilder source = new StringBuilder();
+        for (int index = start; index < end; index++) {
+            LexerToken token = parser.tokens.get(index);
+            if (token.type != LexerTokenType.WHITESPACE
+                    && token.type != LexerTokenType.NEWLINE) {
+                source.append(token.text);
+            }
+        }
+        return source.toString();
+    }
+
+    private RuntimeScalar callCustomTypeReifier(String source, int index) {
+        long id = CUSTOM_TYPE_REIFIER_SEQUENCE.incrementAndGet();
+        String callbackName = "Function::Parameters::Internal::__type_reifier_" + id;
+        GlobalVariable.globalCodeRefs.put(callbackName, parser.functionParametersTypeReifierCallback);
+        Node callback = new OperatorNode("&", new IdentifierNode(callbackName, index), index);
+        Node call = new BinaryOperatorNode("(", callback,
+                new ListNode(List.of(new StringNode(source, index)), index), index);
+        try {
+            RuntimeScalar value = SpecialBlockParser.runSpecialBlock(
+                    parser, "BEGIN", call, RuntimeContextType.SCALAR).scalar();
+            if (RuntimeScalarType.blessedId(value) == 0) {
+                parser.throwError(index, "reify_type callback must return a type constraint object");
+            }
+            return value;
+        } catch (PerlCompilerException exception) {
+            String message = exception.getMessage();
+            int beginFailure = message == null
+                    ? -1 : message.indexOf("\nBEGIN failed--compilation aborted at ");
+            if (beginFailure >= 0) {
+                throw new PerlCompilerException(message.substring(0, beginFailure + 1));
+            }
+            throw exception;
+        } finally {
+            GlobalVariable.globalCodeRefs.remove(callbackName);
+        }
+    }
+
+    private Node customTypeConstraintReference(RuntimeScalar typeObject, int index) {
+        long id = CUSTOM_TYPE_REIFIER_SEQUENCE.incrementAndGet();
+        String variableName = "Function::Parameters::Internal::__type_constraint_" + id;
+        GlobalVariable.globalVariables.put(variableName, typeObject);
+        OperatorNode reference = new OperatorNode("$", new IdentifierNode(variableName, index), index);
+        reference.setAnnotation("functionParametersTypeObjectVariable", variableName);
+        return reference;
     }
 
     private int findTypeConstraintParameterSigil(int start) {
@@ -938,7 +1184,8 @@ public class SignatureParser {
         if (next.text.equals("=") || next.text.equals("||=") || next.text.equals("//=")) {
             defaultOp = consumeToken().text;
             defaultValue = parseDefaultValue(paramVariable);
-        } else {
+        } else if (!(parser.parsingFunctionParametersDeclaration
+                && !parser.functionParametersStrict)) {
             requiredNamedParameterNames.add(paramName);
         }
 
@@ -1288,6 +1535,9 @@ public class SignatureParser {
         signature.setAnnotation("signatureNamedRequired", new ArrayList<>(namedRequiredMetadataNames));
         signature.setAnnotation("signatureNamedOptional", new ArrayList<>(namedOptionalNames));
         signature.setAnnotation("signatureParameterTypes", new LinkedHashMap<>(parameterTypeNames));
+        signature.setAnnotation("signatureParameterTypeObjects", new LinkedHashMap<>(parameterTypeObjects));
+        signature.setAnnotation("signatureParameterTypeObjectVariables",
+                new LinkedHashMap<>(parameterTypeObjectVariables));
         if (slurpySigil != null) {
             signature.setAnnotation("signatureSlurpySigil", slurpySigil);
             signature.setAnnotation("signatureSlurpyName", slurpyParameterName);
@@ -1297,13 +1547,31 @@ public class SignatureParser {
                         subroutineName == null ? "__ANON__" : subroutineName,
                         parser.ctx.symbolTable.getCurrentPackage()));
         signature.setAnnotation("signatureDefaultValueNodes", new ArrayList<>(defaultValueNodes));
+        if (parser.functionParametersTypeReifier != null) {
+            signature.setAnnotation("signatureTypeReifier", parser.functionParametersTypeReifier);
+        }
         return signature;
     }
 
     private static String metadataTypeName(Node typeConstraint) {
+        if (typeConstraint.getAnnotation("signatureMetadataTypeName") instanceof String name) {
+            return name;
+        }
+        if (typeConstraint instanceof TernaryOperatorNode ternary
+                && "?".equals(ternary.operator)) {
+            return metadataTypeName(ternary.trueExpr);
+        }
+        if (typeConstraint instanceof BinaryOperatorNode sequence && ",".equals(sequence.operator)) {
+            typeConstraint = sequence.right;
+        }
         if (typeConstraint instanceof BinaryOperatorNode call && "(".equals(call.operator)
                 && call.left instanceof OperatorNode reference && "&".equals(reference.operator)
                 && reference.operand instanceof IdentifierNode name) {
+            if ("Moose::Util::TypeConstraints::find_or_create_isa_type_constraint".equals(name.name)
+                    && call.right instanceof ListNode arguments && arguments.elements.size() == 1
+                    && arguments.elements.get(0) instanceof StringNode typeSource) {
+                return "moose:" + typeSource.value;
+            }
             return name.name;
         }
         return null;
@@ -1397,7 +1665,7 @@ public class SignatureParser {
     }
 
     private Node generateTooFewArgsMessage() {
-            if (parser.parsingFunctionParametersMethod) {
+            if (parser.parsingFunctionParametersDeclaration) {
                 return generateFunctionParametersArgumentCountMessage(true);
             }
             // Generate: "Too few arguments for subroutine 'Package::name' (got " . (scalar(@_) + adjustment) . "; expected at least " . minParams . ")"
@@ -1434,7 +1702,7 @@ public class SignatureParser {
     }
 
     private Node generateTooManyArgsMessage() {
-            if (parser.parsingFunctionParametersMethod) {
+            if (parser.parsingFunctionParametersDeclaration) {
                 return generateFunctionParametersArgumentCountMessage(false);
             }
             // Generate: "Too many arguments for subroutine 'Package::name' (got " . (scalar(@_) + adjustment) . "; expected at most " . maxParams . ")"
