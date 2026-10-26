@@ -791,6 +791,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     new RuntimeScalar(""));
         }
         if (signatureNamedParams.isEmpty()) return;
+        // A native signature with a trailing @ slurpy accepts an odd final
+        // argument as positional slurpy data. It is not a malformed named
+        // pair, and must not make an otherwise absent named parameter fatal.
+        if (signatureKeyword == null && "@".equals(signatureSlurpySigil)
+                && (namedCount & 1) != 0) {
+            return;
+        }
         if ((signatureKeyword != null || !"@".equals(signatureSlurpySigil))
                 && (namedCount & 1) != 0) {
             dieTooFewForMissingRequiredNamed(args, start);
@@ -804,6 +811,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Map<String, RuntimeScalar> values = new LinkedHashMap<>();
         for (int i = start; i + 1 < args.size(); i += 2) {
             values.put(args.elements.get(i).toString(), args.elements.get(i + 1));
+        }
+        if (signatureSlurpySigil == null) {
+            List<String> unrecognized = new ArrayList<>();
+            for (String name : values.keySet()) {
+                if (!signatureNamedParams.contains(name)) {
+                    unrecognized.add(name);
+                }
+            }
+            if (!unrecognized.isEmpty()) {
+                boolean truncated = unrecognized.size() > 5;
+                String listed = truncated
+                        ? String.join("', '", unrecognized.subList(0, 5)) + "', ..."
+                        : String.join("', '", unrecognized);
+                String label = unrecognized.size() == 1 ? "parameter" : "parameters";
+                String message = "Unrecognized named " + label + " '" + listed
+                        + (truncated ? " to subroutine '" : "' to subroutine '")
+                        + signatureSubName + "'";
+                WarnDie.die(new RuntimeScalar(message), new RuntimeScalar(""));
+            }
         }
         List<String> missing = new ArrayList<>();
         for (String required : signatureRequiredNamedParams) {
@@ -825,25 +851,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             WarnDie.die(new RuntimeScalar("Missing required named " + label + " '"
                     + String.join("', '", missing) + "' to subroutine '" + signatureSubName + "'"),
                     new RuntimeScalar(""));
-        }
-        if (signatureSlurpySigil == null) {
-            List<String> unrecognized = new ArrayList<>();
-            for (String name : values.keySet()) {
-                if (!signatureNamedParams.contains(name)) {
-                    unrecognized.add(name);
-                }
-            }
-            if (!unrecognized.isEmpty()) {
-                boolean truncated = unrecognized.size() > 5;
-                String listed = truncated
-                        ? String.join("', '", unrecognized.subList(0, 5)) + "', ..."
-                        : String.join("', '", unrecognized);
-                String label = unrecognized.size() == 1 ? "parameter" : "parameters";
-                String message = "Unrecognized named " + label + " '" + listed
-                        + (truncated ? " to subroutine '" : "' to subroutine '")
-                        + signatureSubName + "'";
-                WarnDie.die(new RuntimeScalar(message), new RuntimeScalar(""));
-            }
         }
     }
 
