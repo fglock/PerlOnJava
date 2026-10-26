@@ -1,4 +1,4 @@
-.PHONY: all clean test test-unit test-cpan-tester test-interpreter check-thread-test-sources check-thread-core-test-sources check-thread-ecosystem-test-sources check-thread-regex-test-sources test-thread-tooling test-threads test-threads-core test-threads-core-platform test-threads-core-mode test-threads-windows test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-cpan-release-acceptance test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links perl5-update perl5-sync perl5-sync-check
+.PHONY: all clean test test-unit test-bench test-perl-optional test-cpan-tester test-interpreter check-thread-test-sources check-thread-core-test-sources check-thread-ecosystem-test-sources check-thread-regex-test-sources test-thread-tooling test-threads test-threads-core test-threads-core-platform test-threads-core-mode test-threads-windows test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-cpan-release-acceptance test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links perl5-update perl5-sync perl5-sync-check
 
 PERL ?= perl
 GRADLE_ARGS ?=
@@ -209,6 +209,18 @@ ifeq ($(OS),Windows_NT)
 	gradlew.bat $(GRADLE_LAUNCH_ARGS) testUnitParallel --parallel
 else
 	./gradlew $(GRADLE_LAUNCH_ARGS) testUnitParallel --parallel
+endif
+
+# Benchmark-runner contract tests are part of the normal unit gate.
+test-bench:
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s dev/bench/tests -v
+
+# Optional oracle and generator checks; these require system Perl.
+test-perl-optional: check-java-gradle
+ifeq ($(OS),Windows_NT)
+	gradlew.bat $(GRADLE_LAUNCH_ARGS) testPerlUnicodeGenerators testPerlSystemOracle
+else
+	./gradlew $(GRADLE_LAUNCH_ARGS) testPerlUnicodeGenerators testPerlSystemOracle
 endif
 
 # Offline parser and result-classification regression coverage for the CPAN tester.

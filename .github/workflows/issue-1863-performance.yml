@@ -1,0 +1,263 @@
+name: Issue 1863 performance
+
+on:
+  push:
+    branches: [perf/issue-1863-throughput]
+    paths:
+      - 'src/main/java/**'
+      - 'src/test/java/**'
+      - 'dev/bench/**'
+      - '.github/workflows/issue-1863-performance.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue-1863-performance-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  acceptance-measurement:
+    name: Pinned Perl portfolio measurements
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      BLEAD_COMMIT: 83a6c8b26a8823eb966652414864eb07a3d2c6d4
+      STABLE_COMMIT: b62845c7186b0b6a8e4e83419e6b5ef64ceef3ed
+      STABLE_TAG: v5.42.2
+      WORKLOADS: method_anchor closure_anchor life
+
+    steps:
+      - name: Check out the exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Set up JDK 24
+        uses: actions/setup-java@v4
+        with:
+          java-version: '24'
+          distribution: temurin
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build and test the candidate
+        timeout-minutes: 90
+        run: |
+          mkdir -p dev/bench/reports
+          set -o pipefail
+          nice -n 19 make 2>&1 | tee dev/bench/reports/ci-issue1863-candidate-make.log
+
+      - name: Capture an unscored method anchor JFR
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          profile_path="$GITHUB_WORKSPACE/dev/bench/reports/ci-issue1863-method-anchor.jfr"
+          JPERL_OPTS="-XX:StartFlightRecording=duration=30s,filename=$profile_path" \
+            nice -n 19 timeout 50 ./jperl dev/bench/performance_workload.pl method_anchor \
+            > "$profile_path.log" 2>&1 <<'PROFILE_REQUEST'
+          {"seconds": 35}
+          PROFILE_REQUEST
+          test -s "$profile_path"
+          "$JAVA_HOME/bin/jfr" summary "$profile_path" \
+            > dev/bench/reports/ci-issue1863-method-anchor-jfr-summary.txt
+          "$JAVA_HOME/bin/jfr" print \
+            --events jdk.ExecutionSample,jdk.ObjectAllocationSample \
+            --stack-depth 20 "$profile_path" \
+            > dev/bench/reports/ci-issue1863-method-anchor-jfr-samples.txt
+
+      - name: Build exact parent and master JARs
+        timeout-minutes: 90
+        env:
+          PR_PARENT: ${{ github.sha }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          PARENT_COMMIT=$(git rev-parse "${PR_PARENT}^1")
+          if [ -n "${PR_BASE:-}" ]; then
+            MASTER_COMMIT=$(git merge-base "$PR_PARENT" "$PR_BASE")
+          else
+            git fetch origin master
+            MASTER_COMMIT=$(git merge-base "$PR_PARENT" origin/master)
+          fi
+          printf 'PR parent: %s\nMaster base: %s\n' "$PARENT_COMMIT" "$MASTER_COMMIT" \
+            > dev/bench/reports/ci-issue1863-source-commits.txt
+          for ref in parent master; do
+            if [ "$ref" = parent ]; then commit="$PARENT_COMMIT"; else commit="$MASTER_COMMIT"; fi
+            worktree="$RUNNER_TEMP/perlonjava-$ref"
+            git worktree add --detach "$worktree" "$commit"
+            (cd "$worktree" && nice -n 19 ./gradlew shadowJar installDist)
+            cp "$worktree/target/perlonjava-5.44.1.jar" \
+              "$RUNNER_TEMP/perlonjava-$ref.jar"
+            shasum -a 256 "$RUNNER_TEMP/perlonjava-$ref.jar" \
+              >> dev/bench/reports/ci-issue1863-source-commits.txt
+          done
+          shasum -a 256 target/perlonjava-5.44.1.jar \
+            >> dev/bench/reports/ci-issue1863-source-commits.txt
+
+      - name: Check out pinned Perl blead
+        uses: actions/checkout@v4
+        with:
+          repository: Perl/perl5
+          ref: 83a6c8b26a8823eb966652414864eb07a3d2c6d4
+          path: perl5-blead
+          fetch-depth: 0
+
+      - name: Build pinned Perl blead
+        timeout-minutes: 60
+        run: |
+          set -euo pipefail
+          prefix="$RUNNER_TEMP/perl-blead"
+          cd perl5-blead
+          ./Configure -des -Dusedevel -Dusethreads -Duseshrplib -Doptimize=-O3 \
+            -Dprefix="$prefix" -Dinstallprefix="$prefix"
+          nice -n 19 timeout 3600 make -j2
+          nice -n 19 timeout 3600 make install
+
+      - name: Check out pinned stable Perl
+        uses: actions/checkout@v4
+        with:
+          repository: Perl/perl5
+          ref: b62845c7186b0b6a8e4e83419e6b5ef64ceef3ed
+          path: perl5-stable
+          fetch-depth: 0
+
+      - name: Build pinned stable Perl
+        timeout-minutes: 60
+        run: |
+          set -euo pipefail
+          prefix="$RUNNER_TEMP/perl-stable"
+          cd perl5-stable
+          ./Configure -des -Dusethreads -Duseshrplib -Doptimize=-O3 \
+            -Dprefix="$prefix" -Dinstallprefix="$prefix"
+          nice -n 19 timeout 3600 make -j2
+          nice -n 19 timeout 3600 make install
+
+      - name: Record runner and compiler manifest
+        run: |
+          {
+            uname -a
+            lscpu
+            java -version
+            cc --version
+            "$RUNNER_TEMP/perl-blead/bin/perl5.45.5" -V
+            "$RUNNER_TEMP/perl-stable/bin/perl5.42.2" -V
+          } > dev/bench/reports/ci-issue1863-environment.txt 2>&1
+
+      - name: Validate benchmark checksums
+        timeout-minutes: 10
+        run: |
+          env -u PERL5LIB -u PERL5OPT python3 dev/bench/performance_over_perl.py \
+            --perl "$RUNNER_TEMP/perl-blead/bin/perl5.45.5" \
+            --perl-source-revision "$BLEAD_COMMIT" \
+            --workloads method_anchor closure_anchor --pairs 1 \
+            --initial-warmup-windows 5 --max-warmup-windows 5 \
+            --measurement-windows 5 --window-seconds 0.2 --nice 19 \
+            --output "$RUNNER_TEMP/issue1863-checksums.json"
+
+      - name: Compare candidate with exact parent
+        timeout-minutes: 60
+        run: |
+          env -u PERL5LIB -u PERL5OPT python3 dev/bench/performance_over_perl.py \
+            --perl "$RUNNER_TEMP/perl-blead/bin/perl5.45.5" \
+            --perl-source-revision "$BLEAD_COMMIT" \
+            --jperl-jar target/perlonjava-5.44.1.jar \
+            --reference-jperl-jar "$RUNNER_TEMP/perlonjava-parent.jar" \
+            --workloads $WORKLOADS --pairs 7 --nice 19 \
+            --output dev/bench/reports/ci-issue1863-candidate-vs-parent.json
+
+      - name: Compare candidate with master
+        timeout-minutes: 60
+        run: |
+          env -u PERL5LIB -u PERL5OPT python3 dev/bench/performance_over_perl.py \
+            --perl "$RUNNER_TEMP/perl-blead/bin/perl5.45.5" \
+            --perl-source-revision "$BLEAD_COMMIT" \
+            --jperl-jar target/perlonjava-5.44.1.jar \
+            --reference-jperl-jar "$RUNNER_TEMP/perlonjava-master.jar" \
+            --workloads $WORKLOADS --pairs 7 --nice 19 \
+            --output dev/bench/reports/ci-issue1863-candidate-vs-master.json
+
+      - name: Compare candidate with optimized blead
+        timeout-minutes: 60
+        run: |
+          env -u PERL5LIB -u PERL5OPT python3 dev/bench/performance_over_perl.py \
+            --perl "$RUNNER_TEMP/perl-blead/bin/perl5.45.5" \
+            --perl-source-revision "$BLEAD_COMMIT" \
+            --jperl-jar target/perlonjava-5.44.1.jar \
+            --workloads $WORKLOADS --pairs 7 --nice 19 \
+            --output dev/bench/reports/ci-issue1863-candidate-vs-blead.json
+
+      - name: Compare exact master with optimized blead
+        timeout-minutes: 60
+        run: |
+          env -u PERL5LIB -u PERL5OPT python3 dev/bench/performance_over_perl.py \
+            --perl "$RUNNER_TEMP/perl-blead/bin/perl5.45.5" \
+            --perl-source-revision "$BLEAD_COMMIT" \
+            --jperl-jar "$RUNNER_TEMP/perlonjava-master.jar" \
+            --workloads $WORKLOADS --pairs 7 --nice 19 \
+            --output dev/bench/reports/ci-issue1863-master-vs-blead.json
+
+      - name: Compare candidate with stable Perl
+        timeout-minutes: 60
+        run: |
+          env -u PERL5LIB -u PERL5OPT python3 dev/bench/performance_over_perl.py \
+            --perl "$RUNNER_TEMP/perl-stable/bin/perl5.42.2" \
+            --perl-source-revision "$STABLE_COMMIT" \
+            --jperl-jar target/perlonjava-5.44.1.jar \
+            --workloads $WORKLOADS --pairs 7 --nice 19 \
+            --output dev/bench/reports/ci-issue1863-candidate-vs-stable.json
+
+      - name: Summarize parity results
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          reports = [
+              ("exact parent", "ci-issue1863-candidate-vs-parent.json"),
+              ("master", "ci-issue1863-candidate-vs-master.json"),
+              ("optimized blead", "ci-issue1863-candidate-vs-blead.json"),
+              ("exact master vs blead", "ci-issue1863-master-vs-blead.json"),
+              ("stable Perl", "ci-issue1863-candidate-vs-stable.json"),
+          ]
+          print("## Issue #1863 benchmark results\n")
+          print("| Reference | Workload | Complete pairs | Ratio | 95% interval |")
+          print("|---|---|---:|---:|---:|")
+          for label, filename in reports:
+              path = Path("dev/bench/reports") / filename
+              if not path.exists():
+                  print(f"| {label} | — | — | report missing | — |")
+                  continue
+              data = json.loads(path.read_text())
+              for workload, row in data["summary"].get("groups", {}).items():
+                  ratio = row.get("numerator_over_denominator_geometric_mean")
+                  interval = row.get("bootstrap_95_percent_interval")
+                  if ratio is None or interval is None:
+                      print(f"| {label} | {workload} | {row.get('complete_pairs')} | "
+                            "insufficient data | — |")
+                      continue
+                  print(f"| {label} | {workload} | {row.get('complete_pairs')} | "
+                        f"{ratio:.3f}x | {interval[0]:.3f}–{interval[1]:.3f} |")
+              if path.exists():
+                  portfolio = data["summary"]
+                  ratio = portfolio.get("portfolio_numerator_over_denominator_geometric_mean")
+                  interval = portfolio.get("portfolio_bootstrap_95_percent_interval")
+                  if ratio is not None and interval is not None:
+                      print(f"| {label} | portfolio | "
+                            f"{portfolio.get('complete_portfolio_pairs')} | "
+                            f"{ratio:.3f}x | {interval[0]:.3f}–{interval[1]:.3f} |")
+          print("\nParity requires each workload's lower 95% bound to reach 1.00x. "
+                "Inspect raw JSON and per-pair logs in the uploaded artifact.")
+          PY
+
+      - name: Upload raw benchmark reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue-1863-performance-${{ github.sha }}
+          path: |
+            dev/bench/reports/ci-issue1863-*
+          if-no-files-found: warn
+          retention-days: 90

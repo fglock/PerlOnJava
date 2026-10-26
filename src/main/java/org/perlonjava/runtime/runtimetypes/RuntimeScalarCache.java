@@ -192,6 +192,9 @@ public class RuntimeScalarCache {
         if (i >= minInt && i <= maxInt) {
             return scalarInt[(int) i - minInt];
         }
+        if (i >= Integer.MIN_VALUE && i <= Integer.MAX_VALUE) {
+            return new RuntimeScalar((int) i);
+        }
         return new RuntimeScalar(i);
     }
 

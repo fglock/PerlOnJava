@@ -3691,7 +3691,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /** Whether a field cell can be reused without bypassing scalar magic. */
     public static boolean isCacheableReadOnlyPlainHashMethodField(RuntimeScalar value) {
         return value != null
-                && value.getClass() == RuntimeScalar.class
+                && value.canUpdateArithmeticIntegerInPlace()
                 && value.type == INTEGER
                 && !value.hasWatchers();
     }

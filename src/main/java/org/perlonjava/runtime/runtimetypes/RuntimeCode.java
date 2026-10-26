@@ -35,6 +35,7 @@ import org.perlonjava.runtime.CoreSubroutineGenerator;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.math.BigInteger;
@@ -64,6 +65,31 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             ThreadLocal.withInitial(ArrayDeque::new);
     private static final ThreadLocal<Map<EvalBeginLexicalKey, Integer>> EVAL_BEGIN_LEXICAL_IDS =
             ThreadLocal.withInitial(HashMap::new);
+
+    private static final class StableHashMethodFieldCellCache {
+        private final WeakReference<RuntimeHash> hash;
+        private final WeakReference<java.util.Map<String, RuntimeScalar>> elements;
+        private final WeakReference<RuntimeScalar> firstCell;
+        private final WeakReference<RuntimeScalar> secondCell;
+        private final long revision;
+
+        private StableHashMethodFieldCellCache(RuntimeHash hash,
+                java.util.Map<String, RuntimeScalar> elements, RuntimeScalar firstCell,
+                RuntimeScalar secondCell, long revision) {
+            this.hash = new WeakReference<>(hash);
+            this.elements = new WeakReference<>(elements);
+            this.firstCell = new WeakReference<>(firstCell);
+            this.secondCell = new WeakReference<>(secondCell);
+            this.revision = revision;
+        }
+
+        private boolean matches(RuntimeHash candidateHash,
+                java.util.Map<String, RuntimeScalar> candidateElements,
+                long candidateRevision) {
+            return revision == candidateRevision && hash.get() == candidateHash
+                    && elements.get() == candidateElements;
+        }
+    }
 
     /** Active eval STRING BEGIN bodies follow the Java thread across runtime bindings. */
     private static final ThreadLocal<Integer> evalBeginExecutionDepth =
@@ -205,6 +231,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static boolean canBorrowReadOnlyArguments(
             RuntimeArray args, int hashArgumentIndex, int integerArgumentIndex,
             String firstHashKey, String secondHashKey, boolean cacheHashFieldCells) {
+        if (args != null && args.getClass() == RuntimeArray.class
+                && hashArgumentIndex >= 0 && hashArgumentIndex < args.size()
+                && args.hasVerifiedMethodHashFields(hashArgumentIndex,
+                        integerArgumentIndex, firstHashKey, secondHashKey,
+                        args.get(hashArgumentIndex))) {
+            return true;
+        }
         if (args == null || args.getClass() != RuntimeArray.class
                 || args.type != RuntimeArray.PLAIN_ARRAY
                 || hashArgumentIndex < 0 || hashArgumentIndex >= args.size()
@@ -223,8 +256,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // overloaded classes need the direct `%{}` lookup; avoiding the
         // overload-context query here keeps the common blessed-hash path
         // from repeating class resolution on every call.
-        int blessId = RuntimeScalarType.blessedId(self);
-        if (blessId < 0 && OverloadContext.hasDirectOverload(self, "(%{}")) {
+        if (!PerlRuntime.current().runtimeCodeState()
+                .stableHashMethodHashDereferenceAllowed(self)) {
             return false;
         }
         if (cacheHashFieldCells) {
@@ -239,6 +272,108 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         RuntimeScalar integerArgument = args.get(integerArgumentIndex);
         return integerArgument != null && integerArgument.type == INTEGER;
+    }
+
+    /** True when the caller already validated this exact stable-hash argument frame. */
+    public static boolean hasActiveVerifiedMethodHashFields(RuntimeArray args,
+            int hashArgumentIndex, int integerArgumentIndex,
+            String firstHashKey, String secondHashKey) {
+        return args != null && args.getClass() == RuntimeArray.class
+                && args.hasActiveVerifiedMethodHashFields(hashArgumentIndex,
+                        integerArgumentIndex, firstHashKey, secondHashKey);
+    }
+
+    /** Read a cached field cell on the generated method's prevalidated entry path. */
+    public static RuntimeScalar getActiveVerifiedReadOnlyPlainHashMethodField(
+            RuntimeArray args, RuntimeScalar hashArgument, String key) {
+        return args == null ? null : args.activeVerifiedMethodHashField(hashArgument, key);
+    }
+
+    /** Prepare the call-local cell cache and validate the guarded fast path. */
+    private static boolean prepareStableHashMutationMethodArguments(
+            RuntimeCode code, RuntimeArray args, String firstHashKey,
+            String secondHashKey, PerlRuntime runtime) {
+        if (args != null) args.clearVerifiedMethodHashFields();
+        if (args == null || args.getClass() != RuntimeArray.class
+                || args.type != RuntimeArray.PLAIN_ARRAY || args.size() < 2
+                || firstHashKey == null) {
+            return false;
+        }
+        RuntimeScalar hashArgument = args.get(0);
+        RuntimeScalar integerArgument = args.get(1);
+        if (hashArgument == null || hashArgument.type != HASHREFERENCE
+                || !(hashArgument.value instanceof RuntimeHash hash)
+                || hash.getClass() != RuntimeHash.class
+                || hash.type != RuntimeHash.PLAIN_HASH
+                || hash.threadShared || hash.isEnvironmentHash
+                || integerArgument == null || integerArgument.type != INTEGER
+                || runtime == null || !runtime.runtimeCodeState()
+                        .stableHashMethodHashDereferenceAllowed(hashArgument)) {
+            return false;
+        }
+        long revision = hash.stableMethodFieldCacheRevision();
+        StableHashMethodFieldCellCache cache = code.stableHashMethodFieldCellCache;
+        RuntimeScalar firstCell = null;
+        RuntimeScalar secondCell = null;
+        boolean cacheHit = revision >= 0 && cache != null
+                && cache.matches(hash, hash.elements, revision);
+        if (cacheHit) {
+            firstCell = cache.firstCell.get();
+            secondCell = cache.secondCell.get();
+            cacheHit = firstCell != null && (secondHashKey == null || secondCell != null);
+        }
+        if (!cacheHit) {
+            return prepareStableHashMutationMethodArgumentsFromHash(
+                    code, args, firstHashKey, secondHashKey, hash, hashArgument,
+                    integerArgument, revision);
+        }
+        if (!RuntimeScalar.isCacheableReadOnlyPlainHashMethodField(firstCell)
+                || (secondHashKey != null
+                    && !RuntimeScalar.isCacheableReadOnlyPlainHashMethodField(secondCell))) {
+            return false;
+        }
+        args.cacheVerifiedMethodHashFields(0, 1, firstHashKey, secondHashKey,
+                hashArgument, integerArgument, firstCell, secondCell);
+        return true;
+    }
+
+    private static boolean prepareStableHashMutationMethodArgumentsFromHash(
+            RuntimeCode code, RuntimeArray args, String firstHashKey, String secondHashKey,
+            RuntimeHash hash, RuntimeScalar hashArgument, RuntimeScalar integerArgument,
+            long revision) {
+        RuntimeScalar firstCell = hash.elements.get(firstHashKey);
+        RuntimeScalar secondCell = secondHashKey == null
+                ? null : hash.elements.get(secondHashKey);
+        if (!RuntimeScalar.isCacheableReadOnlyPlainHashMethodField(firstCell)
+                || (secondHashKey != null
+                    && !RuntimeScalar.isCacheableReadOnlyPlainHashMethodField(secondCell))) {
+            return false;
+        }
+        long currentRevision = hash.stableMethodFieldCacheRevision();
+        if (revision >= 0 && currentRevision == revision) {
+            code.stableHashMethodFieldCellCache = new StableHashMethodFieldCellCache(
+                    hash, hash.elements, firstCell, secondCell, revision);
+        }
+        args.cacheVerifiedMethodHashFields(0, 1, firstHashKey, secondHashKey,
+                hashArgument, integerArgument, firstCell, secondCell);
+        return true;
+    }
+
+    /** Return a field cell already validated for this call, or use the normal fast lookup. */
+    public static RuntimeScalar getVerifiedReadOnlyPlainHashMethodField(
+            RuntimeArray args, RuntimeScalar target, String key) {
+        if (args != null && target != null) {
+            RuntimeScalar activeCell = args.activeVerifiedMethodHashField(target, key);
+            if (activeCell != null) return activeCell;
+        }
+        if (args != null && target != null
+                && args.hasVerifiedMethodHashFields(0, 1,
+                        args.verifiedMethodFirstHashKey(),
+                        args.verifiedMethodSecondHashKey(), target)) {
+            RuntimeScalar cell = args.verifiedMethodHashField(key);
+            if (cell != null) return cell;
+        }
+        return RuntimeScalar.getReadOnlyPlainHashMethodField(target, key);
     }
 
     /** Runtime guard for the generated read-only array-backed method fast path. */
@@ -880,6 +1015,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public void setPristineArgsSnapshotRequired(boolean required) {
         pristineArgsSnapshotRequired = required;
+    }
+
+    public void enableStableHashMutationMethod(List<String> keys) {
+        if (keys == null || keys.isEmpty() || keys.size() > 2) return;
+        stableHashMutationMethodKeys = keys.toArray(String[]::new);
     }
 
     /**
@@ -2408,6 +2548,33 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         PerlRuntime.current().runtimeCodeState().padConstantsByClassName.put(className, constants);
     }
 
+    public static void registerStableHashMutationMethod(
+            String className, String[] keys) {
+        if (className != null && keys != null && keys.length > 0 && keys.length <= 2) {
+            RuntimeCodeRuntimeState state = PerlRuntime.current().runtimeCodeState();
+            state.stableHashMutationMethodKeysByClassName.put(className, keys.clone());
+        }
+    }
+
+    public static void attachStableHashMutationMethod(String className, RuntimeCode code) {
+        if (className == null || code == null) return;
+        String[] keys = PerlRuntime.current().runtimeCodeState()
+                .stableHashMutationMethodKeysByClassName.remove(className);
+        if (keys != null) code.stableHashMutationMethodKeys = keys;
+        code.stableHashMutationShapeEligible = hasStableHashMutationMethodShape(code);
+        code.stableHashMutationShapeFinalized = true;
+    }
+
+    private static boolean hasStableHashMutationMethodShape(RuntimeCode code) {
+        String[] keys = code.stableHashMutationMethodKeys;
+        return keys != null && keys.length > 0 && keys.length <= 2
+                && !code.isMapGrepBlock && !code.isTryExpressionWrapper
+                && !code.requiresJvmClosureFrame()
+                && code.signatureSubName == null && code.signaturePositionalCount == 0
+                && code.signatureNamedParams.isEmpty() && code.signatureSlurpySigil == null
+                && (code.subroutine != null || code.methodHandle != null);
+    }
+
     public static void registerDisabledWarnings(String className, Set<String> categories) {
         PerlRuntime.current().runtimeCodeState().disabledWarningsByClassName.put(
                 className,
@@ -2421,6 +2588,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private volatile WarningBitsCache warningBitsCache;
     // Functional interface for direct subroutine invocation (preferred for generated classes)
     public PerlSubroutine subroutine;
+    /** Literal keys for the compiler-proven simple hash mutation method path. */
+    public String[] stableHashMutationMethodKeys;
+    private volatile StableHashMethodFieldCellCache stableHashMethodFieldCellCache;
+    /** Immutable method-shape guard finalized once after compiled metadata is attached. */
+    private boolean stableHashMutationShapeFinalized;
+    private boolean stableHashMutationShapeEligible;
     public boolean isStatic;
     /** True for a `method` declared inside a Perl class. */
     public boolean isClassMethod;
@@ -2744,11 +2917,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /** Live lexical containers keyed by their Perl pad names for PadWalker. */
     public Map<String, RuntimeBase> closedOverVariables;
+    private volatile long closedOverVariablesVersion;
 
     /** Capability marker for a guarded captured-integer addition closure. */
     public boolean directLeafIntegerAddition;
     /** Captured pad names in the source addition order. */
     private String[] directLeafIntegerAdditionCaptureNames;
+    private volatile DirectLeafIntegerAdditionCaptureCache directLeafIntegerAdditionCaptureCache;
+
+    private record DirectLeafIntegerAdditionCaptureCache(
+            Map<String, RuntimeBase> owner, long version, RuntimeScalar[] cells) { }
+
+    /** Update a closure's named capture map and invalidate cached capture cells. */
+    public synchronized void putClosedOverVariable(String name, RuntimeBase value) {
+        closedOverVariablesVersion++;
+        directLeafIntegerAdditionCaptureCache = null;
+        if (closedOverVariables == null) {
+            closedOverVariables = new LinkedHashMap<>();
+        }
+        closedOverVariables.put(name, value);
+        closedOverVariablesVersion++;
+    }
 
     /** Lexicals declared by this CV, exposed by PadWalker::peek_sub. */
     public Set<String> lexicalVariableNames;
@@ -2797,6 +2986,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (!(code.closedOverVariables.get(captureName) instanceof RuntimeScalar)) return codeRef;
             }
             code.directLeafIntegerAdditionCaptureNames = captureNames.clone();
+            RuntimeScalar[] captures = new RuntimeScalar[captureNames.length];
+            for (int i = 0; i < captureNames.length; i++) {
+                captures[i] = (RuntimeScalar) code.closedOverVariables.get(captureNames[i]);
+            }
+            code.directLeafIntegerAdditionCaptureCache =
+                    new DirectLeafIntegerAdditionCaptureCache(
+                            code.closedOverVariables, code.closedOverVariablesVersion, captures);
             code.directLeafIntegerAddition = true;
         }
         return codeRef;
@@ -3173,6 +3369,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.declaredOurVariables = this.declaredOurVariables == null
                 ? null : new java.util.LinkedHashMap<>(this.declaredOurVariables);
         clone.compilerSupplier = this.compilerSupplier;
+        clone.stableHashMutationMethodKeys = this.stableHashMutationMethodKeys;
         clone.jvmClosureFrameRequired = this.jvmClosureFrameRequired;
         clone.activeLexicalFrameRequired = this.activeLexicalFrameRequired;
         clone.callDepthTrackingRequired = this.callDepthTrackingRequired;
@@ -3863,6 +4060,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         code.attributes = codeFrom.attributes;
         code.methodHandle = codeFrom.methodHandle;
         code.subroutine = codeFrom.subroutine;
+        code.stableHashMutationMethodKeys = codeFrom.stableHashMutationMethodKeys;
         code.isStatic = codeFrom.isStatic;
         code.isClassMethod = codeFrom.isClassMethod;
         code.generatedClassConstructor = codeFrom.generatedClassConstructor;
@@ -3890,6 +4088,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         this.methodHandle = codeFrom.methodHandle;
         this.subroutine = codeFrom.subroutine;
+        this.stableHashMutationMethodKeys = codeFrom.stableHashMutationMethodKeys;
         this.isStatic = codeFrom.isStatic;
         this.isClassMethod = codeFrom.isClassMethod;
         this.generatedClassConstructor = codeFrom.generatedClassConstructor;
@@ -3964,6 +4163,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.captureFieldsRecorded = codeFrom.captureFieldsRecorded;
         this.capturedAggregateOwnerSlots = codeFrom.capturedAggregateOwnerSlots;
         this.closedOverVariables = codeFrom.closedOverVariables;
+        this.closedOverVariablesVersion += 2;
+        this.directLeafIntegerAdditionCaptureCache = null;
         this.lexicalVariableNames = codeFrom.lexicalVariableNames;
         this.lexicalHints = codeFrom.lexicalHints;
         this.lexicalDisabledWarningCategories = codeFrom.lexicalDisabledWarningCategories;
@@ -5496,6 +5697,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // These track cached string literals referenced via \ inside the sub,
         // needed for optree reaping (clearing weak refs when sub is replaced).
         String internalClassName = clazz.getName().replace('.', '/');
+        String[] stableHashKeys = PerlRuntime.current().runtimeCodeState()
+                .stableHashMutationMethodKeysByClassName.remove(internalClassName);
+        if (stableHashKeys != null) {
+            code.stableHashMutationMethodKeys = stableHashKeys;
+        }
         RuntimeBase[] padConsts = PerlRuntime.current().runtimeCodeState()
                 .padConstantsByClassName.remove(internalClassName);
         if (padConsts != null) {
@@ -5521,10 +5727,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 RuntimeScalar capturedVar = (RuntimeScalar) f.get(codeObject);
                 if (capturedVar != null) {
                     if (!seenScalars.add(capturedVar)) continue;
-                    if (code.closedOverVariables == null) {
-                        code.closedOverVariables = new LinkedHashMap<>();
-                    }
-                    code.closedOverVariables.put(f.getName(), capturedVar);
+                    code.putClosedOverVariable(f.getName(), capturedVar);
                     captured.add(capturedVar);
                     capturedVar.retainClosureCapture();
                 }
@@ -5532,10 +5735,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 RuntimeBase capturedAggregate = (RuntimeBase) f.get(codeObject);
                 if (capturedAggregate != null) {
                     if (!seenAggregates.add(capturedAggregate)) continue;
-                    if (code.closedOverVariables == null) {
-                        code.closedOverVariables = new LinkedHashMap<>();
-                    }
-                    code.closedOverVariables.put(f.getName(), capturedAggregate);
+                    code.putClosedOverVariable(f.getName(), capturedAggregate);
                     capturedAggregates.add(capturedAggregate);
                     PerlOwnerSlot ownerSlot = capturedAggregate.retainClosureCaptureOwner();
                     capturedAggregateOwnerSlots.add(ownerSlot);
@@ -5723,7 +5923,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             throw e;
         } finally {
-            MyVarCleanupStack.popMark(cleanupMark, methodExecutionState);
+            // Most method bodies do not register lexical variables. Avoid
+            // entering the cleanup walker for that common case; preserve the
+            // full unwind of registrations whenever the callee added any.
+            if (methodExecutionState.myVarCleanupStack.size() > cleanupMark) {
+                MyVarCleanupStack.popMark(cleanupMark, methodExecutionState);
+            }
         }
     }
 
@@ -5785,9 +5990,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeCode code, RuntimeScalar runtimeScalar, RuntimeScalar method,
             RuntimeArray methodArgs, int callContext, int blessId,
             PerlRuntime methodRuntime) {
+        RuntimeArray args = methodArgs;
+        String[] stableHashKeys = code.stableHashMutationMethodKeys;
+        boolean suppressRootTracking = callContext == RuntimeContextType.SCALAR
+                && stableHashKeys != null && stableHashKeys.length > 0
+                && stableHashKeys.length <= 2 && code.autoloadVariableName == null
+                && !DebugState.isDebugMode()
+                && args.suppressRootTrackingForStableMethodArguments();
         try {
-            RuntimeArray args = methodArgs;
-            args.elements.add(0, methodInvocantArgument(runtimeScalar));
+            args.prependMethodCallInvocant(methodInvocantArgument(runtimeScalar));
 
             String autoloadVariableName = code.autoloadVariableName;
             if (autoloadVariableName != null) {
@@ -5799,15 +6010,98 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             }
 
-            MortalList.pushMark(methodRuntime.lifecycleState);
-            try {
-                return applyCachedMethod(code, args, callContext, methodRuntime);
-            } finally {
-                MortalList.popMark(methodRuntime.lifecycleState);
+            boolean stableHashFastPath = canUseStableHashMutationMethodFastPath(
+                    code, args, callContext, methodRuntime);
+            if (!stableHashFastPath && suppressRootTracking) {
+                args.resumeMethodArgumentRootTracking();
             }
+            if (stableHashFastPath) {
+                return invokeStableHashMutationMethodHit(code, args, callContext, methodRuntime);
+            }
+            return invokeGeneralCachedMethodHit(code, args, callContext, methodRuntime);
         } catch (Throwable e) {
             if (e instanceof RuntimeException) throw (RuntimeException) e;
             throw new RuntimeException(e);
+        } finally {
+            if (suppressRootTracking) args.resumeMethodArgumentRootTracking();
+        }
+    }
+
+    private static RuntimeList invokeStableHashMutationMethodHit(
+            RuntimeCode code, RuntimeArray args, int callContext, PerlRuntime methodRuntime) {
+        try {
+            MortalList.pushMark(methodRuntime.lifecycleState);
+            try {
+                RuntimeList result = applyStableHashMutationMethodBody(code, args, callContext);
+                args.recycleMethodCallArguments(methodRuntime.executionState());
+                return result;
+            } finally {
+                MortalList.popMark(methodRuntime.lifecycleState);
+            }
+        } finally {
+            args.clearVerifiedMethodHashFields();
+        }
+    }
+
+    private static RuntimeList invokeGeneralCachedMethodHit(
+            RuntimeCode code, RuntimeArray args, int callContext, PerlRuntime methodRuntime) {
+        MortalList.pushMark(methodRuntime.lifecycleState);
+        try {
+            return applyCachedMethod(code, args, callContext, methodRuntime);
+        } finally {
+            MortalList.popMark(methodRuntime.lifecycleState);
+        }
+    }
+
+    /**
+     * A narrow fast call boundary for compiler-proven methods that only update
+     * two plain integer hash cells and return their numeric sum.  The analyzer
+     * rejects calls, aliases, and other statements; this runtime guard verifies
+     * the actual receiver and cells before omitting general caller/call-depth
+     * bookkeeping.
+     */
+    private static boolean canUseStableHashMutationMethodFastPath(
+            RuntimeCode code, RuntimeArray args, int callContext, PerlRuntime runtime) {
+        boolean stableShape = code.stableHashMutationShapeFinalized
+                ? code.stableHashMutationShapeEligible
+                : hasStableHashMutationMethodShape(code);
+        if (!stableShape) return false;
+        if (callContext != RuntimeContextType.SCALAR) return false;
+        if (DebugState.isDebugMode()) return false;
+        if (code.boundRuntime != null && code.boundRuntime != runtime) return false;
+        if (code.constantValue != null) return false;
+        if (isLvalueCode(code)) return false;
+        String[] keys = code.stableHashMutationMethodKeys;
+        return prepareStableHashMutationMethodArguments(
+                code, args, keys[0], keys.length == 2 ? keys[1] : null, runtime);
+    }
+
+    private static RuntimeList applyStableHashMutationMethodBody(
+            RuntimeCode code, RuntimeArray args, int callContext) {
+        int effectiveContext = effectiveCallContext(code, callContext);
+        try {
+            RuntimeList result;
+            if (code.subroutine != null) {
+                result = code.subroutine.apply(args, effectiveContext);
+            } else if (code.isStatic) {
+                result = (RuntimeList) code.methodHandle.invoke(args, effectiveContext);
+            } else {
+                result = (RuntimeList) code.methodHandle.invoke(
+                        code.codeObject, args, effectiveContext);
+            }
+            return code.detachTryExpressionLvalueResult(
+                    coerceScalarCallResult(result, effectiveContext, callContext,
+                            !isLvalueCode(code)),
+                    callContext);
+        } catch (RuntimeException e) {
+            throw WarnDie.maybeInvokeUnhandledDieHandler(e);
+        } catch (Throwable e) {
+            Throwable cause = e instanceof InvocationTargetException invocation
+                    ? invocation.getTargetException() : e;
+            if (cause instanceof RuntimeException runtimeException) {
+                throw WarnDie.maybeInvokeUnhandledDieHandler(runtimeException);
+            }
+            throw new RuntimeException(cause);
         }
     }
 
@@ -5835,7 +6129,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
 
                     RuntimeArray args = methodArgs;
-                    args.elements.add(0, methodInvocantArgument(runtimeScalar));
+                    args.prependMethodCallInvocant(methodInvocantArgument(runtimeScalar));
                     String autoloadVariableName = code.autoloadVariableName;
                     if (autoloadVariableName != null && !methodName.equals("AUTOLOAD")) {
                         String fullMethodName = qualifyAutoloadMethodName(methodName, perlClassName);
@@ -5853,7 +6147,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         // This frame already holds the invocant, so preserve the direct fallback path.
         RuntimeArray fallbackArgs = methodArgs;
-        fallbackArgs.elements.add(0, methodInvocantArgument(runtimeScalar));
+        fallbackArgs.prependMethodCallInvocant(methodInvocantArgument(runtimeScalar));
         return dispatchPerlMethodAfterSelfInjected(
                 runtimeScalar, method, currentSub, fallbackArgs, callContext);
     }
@@ -8405,8 +8699,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /**
      * Return the fresh scalar result for a compiler-proven captured-integer
      * addition closure, or {@code null} when the ordinary Perl call boundary
-     * is required. The capture map is consulted on every call so PadWalker
-     * rebinding cannot leave this path with stale cells.
+     * is required. Cached capture cells are guarded by the live capture-map
+     * identity and revision so PadWalker rebinding falls back to fresh lookup.
      */
     public static RuntimeScalar tryDirectLeafIntegerAddition(RuntimeScalar runtimeScalar) {
         if (runtimeScalar == null || runtimeScalar.type != RuntimeScalarType.CODE
@@ -8415,17 +8709,40 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 || DebugState.isDebugMode() || isLvalueCode(code)
                 || code.directLeafIntegerAdditionCaptureNames == null
                 || code.closedOverVariables == null) return null;
-        RuntimeScalar[] captures = new RuntimeScalar[code.directLeafIntegerAdditionCaptureNames.length];
-        for (int i = 0; i < captures.length; i++) {
-            RuntimeBase value = code.closedOverVariables.get(code.directLeafIntegerAdditionCaptureNames[i]);
-            if (!(value instanceof RuntimeScalar scalar)
-                    || scalar.type != INTEGER || RuntimeScalar.isWideIntegerValue(scalar.value)
+
+        Map<String, RuntimeBase> captureMap = code.closedOverVariables;
+        long captureVersion = code.closedOverVariablesVersion;
+        if ((captureVersion & 1L) != 0) return null;
+        DirectLeafIntegerAdditionCaptureCache cache =
+                code.directLeafIntegerAdditionCaptureCache;
+        RuntimeScalar[] captures;
+        if (cache != null && cache.owner() == captureMap && cache.version() == captureVersion) {
+            captures = cache.cells();
+        } else {
+            captures = new RuntimeScalar[code.directLeafIntegerAdditionCaptureNames.length];
+            for (int i = 0; i < captures.length; i++) {
+                RuntimeBase value = captureMap.get(code.directLeafIntegerAdditionCaptureNames[i]);
+                if (!(value instanceof RuntimeScalar scalar)) return null;
+                captures[i] = scalar;
+            }
+            if (captureMap != code.closedOverVariables
+                    || captureVersion != code.closedOverVariablesVersion) return null;
+            cache = new DirectLeafIntegerAdditionCaptureCache(
+                    captureMap, captureVersion, captures);
+            code.directLeafIntegerAdditionCaptureCache = cache;
+        }
+
+        if (captureMap != code.closedOverVariables
+                || captureVersion != code.closedOverVariablesVersion) return null;
+        for (RuntimeScalar scalar : captures) {
+            if (scalar.type != INTEGER || RuntimeScalar.isWideIntegerValue(scalar.value)
                     || scalar.tainted || scalar.blessId != 0) return null;
-            captures[i] = scalar;
         }
         try {
             long sum = captures[0].getLong();
             for (int i = 1; i < captures.length; i++) sum = Math.addExact(sum, captures[i].getLong());
+            if (captureMap != code.closedOverVariables
+                    || captureVersion != code.closedOverVariablesVersion) return null;
             return new RuntimeScalar(sum);
         } catch (ArithmeticException overflow) {
             return null;

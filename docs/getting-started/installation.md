@@ -25,6 +25,11 @@
 - Make and the included Gradle wrapper
 - Optional: JDBC drivers for database connectivity
 
+No separate Groovy installation is needed. Gradle includes the Groovy runtime
+used by the project's build script. The default `make` build and unit-test gate
+does not require Python or system Perl; Python benchmark checks and Perl oracle
+and generator checks are available through their explicit Make targets.
+
 ## Building from Source
 
 Use the project Makefile for source builds. It applies the repository's tested

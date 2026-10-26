@@ -468,6 +468,11 @@ public class EmitterMethodCreator implements Opcodes {
                                 (String) ast.getAnnotation("compiledSubroutineName"));
         ctx.javaClassInfo.readOnlyArgumentCandidate =
                 org.perlonjava.frontend.analysis.ReadOnlyArgumentUnpackAnalysis.analyze(ast);
+        String[] stableHashMutationMethodKeys =
+                ctx.javaClassInfo.readOnlyArgumentCandidate != null
+                        && ctx.javaClassInfo.readOnlyArgumentCandidate.stableHashFieldCells()
+                ? ctx.javaClassInfo.readOnlyArgumentCandidate.hashKeys().toArray(String[]::new)
+                : null;
         ctx.javaClassInfo.skipRegexStateSnapshot =
                 org.perlonjava.frontend.analysis.RegexStateSnapshotAnalysis.canSkipSnapshot(ast);
         ctx.javaClassInfo.readOnlyArgumentFlagSlot = -1;
@@ -1818,6 +1823,10 @@ public class EmitterMethodCreator implements Opcodes {
                     t.printStackTrace();
                 }
             }
+            if (stableHashMutationMethodKeys != null) {
+                RuntimeCode.registerStableHashMutationMethod(
+                        className, stableHashMutationMethodKeys);
+            }
             return classData;
         } catch (ArrayIndexOutOfBoundsException e) {
             if (!disableFrames) {
@@ -2085,6 +2094,8 @@ public class EmitterMethodCreator implements Opcodes {
             code.setPristineArgsSnapshotRequired(
                     ctx.javaClassInfo.pristineArgsSnapshotRequired);
             code.applySignatureMetadata(ast);
+            RuntimeCode.attachStableHashMutationMethod(
+                    generatedClass.getName().replace('.', '/'), code);
             return code;
 
         } catch (MethodTooLargeException e) {

@@ -30,6 +30,7 @@ public final class ExecutionRuntimeState {
 
     final Stack<RuntimeScalar> scalarDynamicStates = new Stack<>();
     final Stack<RuntimeArray> arrayDynamicStates = new Stack<>();
+    RuntimeArray recycledMethodCallArguments;
     final Stack<RuntimeHash> hashDynamicStates = new Stack<>();
     final Stack<RuntimeStash> stashDynamicStates = new Stack<>();
     final Stack<Object> globSlotStates = new Stack<>();

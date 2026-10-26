@@ -101,6 +101,7 @@ public class NameNormalizer {
         state.effectiveBlessIdCache.clear();
         state.lastEffectiveBlessId = 0;
         state.lastEffectiveBlessResult = 0;
+        PerlRuntime.current().runtimeCodeState().clearStableHashMethodBlessIdCache();
     }
 
     /**

@@ -1063,9 +1063,11 @@ public class Dereference {
                 } else {
                     mv.visitIntInsn(Opcodes.BIPUSH, argumentCapacity);
                 }
+                mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.jvmFrameStateSlot);
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/RuntimeArray", "methodCallArguments",
-                        "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
+                        "(ILorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;)"
+                                + "Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
                 mv.visitVarInsn(Opcodes.ASTORE, argsArraySlot);
 
                 for (int index = 0; index < argCount; index++) {
