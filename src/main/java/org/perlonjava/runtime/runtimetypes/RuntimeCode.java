@@ -495,6 +495,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public List<String> signaturePositionalOptional = List.of();
     public List<String> signatureNamedRequired = List.of();
     public List<String> signatureNamedOptional = List.of();
+    public Map<String, String> signatureParameterTypes = Map.of();
     public int signaturePositionalCount = 0;
     public String signatureSlurpySigil;
     public String signatureSlurpyName;
@@ -531,6 +532,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Object namedOptional = ast.getAnnotation("signatureNamedOptional");
         if (namedOptional instanceof List<?> list) {
             signatureNamedOptional = list.stream().map(String::valueOf).toList();
+        }
+        Object parameterTypes = ast.getAnnotation("signatureParameterTypes");
+        if (parameterTypes instanceof Map<?, ?> types) {
+            Map<String, String> parsed = new LinkedHashMap<>();
+            for (var entry : types.entrySet()) {
+                if (entry.getKey() != null && entry.getValue() != null) {
+                    parsed.put(String.valueOf(entry.getKey()), String.valueOf(entry.getValue()));
+                }
+            }
+            signatureParameterTypes = Map.copyOf(parsed);
         }
         Object positional = ast.getAnnotation("signaturePositionalCount");
         if (positional instanceof Integer count) signaturePositionalCount = count;
@@ -3251,6 +3262,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.signaturePositionalOptional = this.signaturePositionalOptional;
         clone.signatureNamedRequired = this.signatureNamedRequired;
         clone.signatureNamedOptional = this.signatureNamedOptional;
+        clone.signatureParameterTypes = this.signatureParameterTypes;
         clone.signaturePositionalCount = this.signaturePositionalCount;
         clone.signatureSlurpySigil = this.signatureSlurpySigil;
         clone.signatureSlurpyName = this.signatureSlurpyName;

@@ -115,6 +115,18 @@ my ($ambiguous_core_call, $ambiguous_core_warning);
 is($ambiguous_core_call, 'right', 'the ambiguous call resolves to the core operator');
 like($ambiguous_core_warning, qr/Ambiguous call resolved as CORE::join/,
     'declared Function::Parameters sub triggers the core ambiguity warning');
+my $typed_declaration = eval q{
+    use Types::Standard qw(Int);
+    use Function::Parameters { typed_for_info => { defaults => 'function' } };
+    typed_for_info inspected_typed_parameter(Int $typed) { $typed }
+    1;
+};
+ok($typed_declaration, 'typed Function::Parameters declaration compiles');
+my $typed_info = Function::Parameters::info(\&inspected_typed_parameter);
+is(ref(($typed_info->positional_required)[0]->type), 'Type::Tiny',
+    'parameter metadata exposes its declared type object before the function is called');
+is(($typed_info->positional_required)[0]->type->name, 'Int',
+    'parameter metadata preserves the declared type object');
 
 my $slurpy_scalar_error = eval q{
     use Function::Parameters;
