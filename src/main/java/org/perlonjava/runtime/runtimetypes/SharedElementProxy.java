@@ -12,10 +12,9 @@ final class SharedElementProxy extends RuntimeScalar {
         super(storage);
         this.storage = storage;
         this.value = localView;
-        // A fetched shared reference is a real, short-lived Perl proxy owner.
-        // Register that owner so releasing the proxy suppresses DESTROY on its
-        // runtime-local view while the canonical shared slot still exists.
-        RuntimeScalar.incrementRefCountForContainerStore(this);
+        // This wrapper is an expression/lvalue borrow. The receiving Perl slot
+        // acquires the local view's owner edge; counting the wrapper itself
+        // leaves an extra owner behind when the fetch result is weakened.
     }
 
     @Override

@@ -231,10 +231,19 @@ public class DestroyDispatch {
         // in a child, so resolve the published name before method lookup.
         referent.synchronizePublishedSharedBlessing();
 
-        // A shared aggregate may have runtime-local fetch views in another
-        // ithread. Canonical deletion waits for those views; the runtime that
-        // releases the last view performs the one Perl DESTROY callback.
-        if (referent.deferSharedDestroy()) return;
+        // A shared aggregate may have runtime-local fetch views. Canonical
+        // deletion waits for those views; an otherwise-unowned fetch proxy
+        // still clears weak references to its local Perl identity without
+        // cascading into shared backing storage.
+        RuntimeBase.SharedDestroyDisposition sharedDisposition =
+                referent.sharedDestroyDisposition();
+        if (sharedDisposition == RuntimeBase.SharedDestroyDisposition.DEFER) return;
+        if (sharedDisposition == RuntimeBase.SharedDestroyDisposition.CLEAR_LOCAL_VIEW) {
+            referent.beginPerlDestruction();
+            WeakRefRegistry.clearWeakRefsTo(referent, finalCountedOwner);
+            referent.markPerlDestroyed();
+            return;
+        }
 
         // The explicit lifecycle is authoritative once final cleanup has
         // completed. Keep refCount's sentinel interpretation at the legacy
