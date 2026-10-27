@@ -54,7 +54,8 @@ priorities and future plans.
 - Recognize a bareword filehandle when `print`'s implicit `$_` list ends at a block close (#1948).
 
 - Accept YAML-style mapping syntax in `YAML::Syck::LoadJSON`, matching Syck's JSON loader behavior (#1942).
-- Disable corrective sweeps by default while migrating to explicit reference ownership; preserve returned values and balance argument, scalar-cell, closure, aggregate, named CODE, persistent state, and destructor cleanup (#1649).
+- Disable corrective sweeps by default while migrating to explicit reference ownership; balance argument, scalar-cell, closure, aggregate, shared-view, named CODE, persistent state, and destructor lifetimes (#1649).
+
 
 
 - Bundle `Devel::Size` with JVM-based `size` and `total_size` estimates.

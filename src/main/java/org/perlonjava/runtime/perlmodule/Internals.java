@@ -386,7 +386,7 @@ public class Internals extends PerlModuleBase {
                 && code.capturedScalars != null) {
             for (int i = 0; i < code.capturedScalars.length; i++) {
                 if (code.capturedScalars[i] == previous) {
-                    PerlOwnerSlot replacementOwner = scalar.retainClosureCaptureSlot();
+                    PerlOwnerSlot replacementOwner = scalar.retainClosureCaptureSlot(code);
                     PerlOwnerSlot[] ownerSlots = code.capturedScalarOwnerSlots;
                     PerlOwnerSlot previousOwner = ownerSlots != null
                                     && i < ownerSlots.length
@@ -408,7 +408,7 @@ public class Internals extends PerlModuleBase {
             for (int i = 0; i < code.capturedAggregates.length; i++) {
                 if (code.capturedAggregates[i] == previous) {
                     PerlOwnerSlot replacementOwner =
-                            replacement.retainClosureCaptureOwner();
+                            replacement.retainClosureCaptureOwner(code);
                     PerlOwnerSlot[] ownerSlots = code.capturedAggregateOwnerSlots;
                     PerlOwnerSlot previousOwner = ownerSlots != null
                                     && i < ownerSlots.length
@@ -425,8 +425,72 @@ public class Internals extends PerlModuleBase {
             }
         }
 
-        if (previous != null) previous.releaseClosureCapture();
-        replacement.retainClosureCapture();
+        if (previous instanceof RuntimeScalar previousScalar
+                && replacement instanceof RuntimeScalar replacementScalar) {
+            previousScalar.releaseClosureCapture();
+            appendScalarCapture(code, replacementScalar);
+            return;
+        }
+        if (previous != null && replacement != null) {
+            previous.releaseClosureCapture();
+            appendAggregateCapture(code, replacement);
+        }
+    }
+
+    private static void appendScalarCapture(RuntimeCode code, RuntimeScalar replacement) {
+        RuntimeScalar[] existing = code.capturedScalars == null
+                ? new RuntimeScalar[0] : code.capturedScalars;
+        PerlOwnerSlot[] existingSlots = code.capturedScalarOwnerSlots;
+        java.util.ArrayList<RuntimeScalar> captures = new java.util.ArrayList<>(
+                java.util.Arrays.asList(existing));
+        java.util.ArrayList<PerlOwnerSlot> slots = new java.util.ArrayList<>(existing.length);
+        for (int i = 0; i < existing.length; i++) {
+            PerlOwnerSlot slot = existingSlots != null && i < existingSlots.length
+                    ? existingSlots[i] : null;
+            if (slot == null || !slot.isActive()) {
+                RuntimeScalar captured = existing[i];
+                if (captured.captureCount > captured.ownerSlotCount(
+                        PerlOwnerSlot.Kind.SCALAR_CAPTURE)) {
+                    captured.releaseClosureCapture();
+                }
+                slot = captured.retainClosureCaptureSlot(code);
+            }
+            slots.add(slot);
+        }
+        if (!captures.contains(replacement)) {
+            captures.add(replacement);
+            slots.add(replacement.retainClosureCaptureSlot(code));
+        }
+        code.capturedScalars = captures.toArray(new RuntimeScalar[0]);
+        code.capturedScalarOwnerSlots = slots.toArray(new PerlOwnerSlot[0]);
+    }
+
+    private static void appendAggregateCapture(RuntimeCode code, RuntimeBase replacement) {
+        RuntimeBase[] existing = code.capturedAggregates == null
+                ? new RuntimeBase[0] : code.capturedAggregates;
+        PerlOwnerSlot[] existingSlots = code.capturedAggregateOwnerSlots;
+        java.util.ArrayList<RuntimeBase> captures = new java.util.ArrayList<>(
+                java.util.Arrays.asList(existing));
+        java.util.ArrayList<PerlOwnerSlot> slots = new java.util.ArrayList<>(existing.length);
+        for (int i = 0; i < existing.length; i++) {
+            PerlOwnerSlot slot = existingSlots != null && i < existingSlots.length
+                    ? existingSlots[i] : null;
+            if (slot == null || !slot.isActive()) {
+                RuntimeBase captured = existing[i];
+                if (captured.captureCount > captured.ownerSlotCount(
+                        PerlOwnerSlot.Kind.CLOSURE_PAD)) {
+                    captured.releaseClosureCapture();
+                }
+                slot = captured.retainClosureCaptureOwner(code);
+            }
+            slots.add(slot);
+        }
+        if (!captures.contains(replacement)) {
+            captures.add(replacement);
+            slots.add(replacement.retainClosureCaptureOwner(code));
+        }
+        code.capturedAggregates = captures.toArray(new RuntimeBase[0]);
+        code.capturedAggregateOwnerSlots = slots.toArray(new PerlOwnerSlot[0]);
     }
 
     /**
