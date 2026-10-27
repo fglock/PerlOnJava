@@ -70,6 +70,12 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         volatile String publishedBlessName;
     }
 
+    enum SharedDestroyDisposition {
+        CONTINUE,
+        DEFER,
+        CLEAR_LOCAL_VIEW
+    }
+
     /**
      * Refresh an unchanged local shared view after another runtime explicitly
      * publishes a class through shared scalar/aggregate storage. A view that
@@ -116,12 +122,12 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         }
     }
 
-    /**
-     * @return true when ordinary DESTROY dispatch must be suppressed.
-     */
-    boolean deferSharedDestroy() {
+    /** Decide whether this release owns canonical destruction or only a local view. */
+    SharedDestroyDisposition sharedDestroyDisposition() {
         SharedLifecycle lifecycle = threadSharedLifecycle;
-        if (!threadShared || lifecycle == null || !lifecycle.active) return false;
+        if (!threadShared || lifecycle == null || !lifecycle.active) {
+            return SharedDestroyDisposition.CONTINUE;
+        }
 
         if (threadSharedFetchedView || threadSharedRuntimeView) {
             int remaining = lifecycle.liveViews.get();
@@ -133,14 +139,23 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             }
             if (remaining == 0 && lifecycle.destroyPending.get()
                     && lifecycle.destroyFired.compareAndSet(false, true)) {
-                return false;
+                return SharedDestroyDisposition.CONTINUE;
             }
-            return true;
+            // A fetch proxy has a Perl-local identity even though its storage
+            // is shared. Retire only its local weak observers; the canonical
+            // object's DESTROY and element cleanup still belong to the
+            // shared lifecycle. Runtime views retain the existing deferred
+            // destruction behavior until their lifecycle is separated too.
+            return threadSharedFetchedView
+                    ? SharedDestroyDisposition.CLEAR_LOCAL_VIEW
+                    : SharedDestroyDisposition.DEFER;
         }
 
         lifecycle.destroyPending.set(true);
-        if (lifecycle.liveViews.get() > 0) return true;
-        return !lifecycle.destroyFired.compareAndSet(false, true);
+        if (lifecycle.liveViews.get() > 0) return SharedDestroyDisposition.DEFER;
+        return lifecycle.destroyFired.compareAndSet(false, true)
+                ? SharedDestroyDisposition.CONTINUE
+                : SharedDestroyDisposition.DEFER;
     }
     // Index to the class that this reference belongs
     public int blessId;
