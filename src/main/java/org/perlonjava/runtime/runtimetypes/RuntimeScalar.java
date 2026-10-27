@@ -3360,6 +3360,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (type == STRING || type == BYTE_STRING) {
             return materializeGrowingString();
         }
+        if (type == INTEGER) {
+            return value.toString();
+        }
         return toStringLarge();
     }
 

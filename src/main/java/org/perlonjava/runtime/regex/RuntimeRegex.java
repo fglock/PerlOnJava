@@ -3757,7 +3757,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static RuntimeBase matchRegexDirect(RuntimeScalar quotedRegex, RuntimeScalar string,
                                                 int ctx, boolean alarmInterruptMode,
                                                 RuntimeRegex preResolved) {
-        RuntimeRegexState regexState = state();
+        PerlRuntime runtime = PerlRuntime.current();
+        RuntimeRegexState regexState = runtime.regexState;
         RuntimeRegex regex = preResolved != null ? preResolved : resolveRegex(quotedRegex);
         
         // Save original flags before potentially changing regex
@@ -3956,7 +3957,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 }
 
                 found = true;
-                regexState.lastMatchResultsTainted = GlobalContext.isTaintModeActive()
+                regexState.lastMatchResultsTainted = runtime.executionState.taintMode
                         && (quotedRegex.isTainted()
                         || localeResultsTainted
                         || (regex.regexFlags.taintResults() && string.isTainted()));

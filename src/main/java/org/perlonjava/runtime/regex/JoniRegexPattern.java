@@ -74,6 +74,28 @@ final class JoniRegexPattern {
     private static final int INPUT_ENCODING_CACHE_ENTRIES = 512;
     private static final int INPUT_ENCODING_CACHE_MAX_LENGTH = 8_192;
     private static final int DYNAMIC_PATTERN_CACHE_ENTRIES = 128;
+
+    private static final int IDENTITY_ARRAY_POOL_SIZE = 64;
+    private static final int[][] IDENTITY_ARRAYS = buildIdentityArrayPool();
+
+    private static int[][] buildIdentityArrayPool() {
+        int[][] pool = new int[IDENTITY_ARRAY_POOL_SIZE + 1][];
+        for (int len = 0; len <= IDENTITY_ARRAY_POOL_SIZE; len++) {
+            int[] identity = new int[len + 1];
+            for (int i = 0; i <= len; i++) identity[i] = i;
+            pool[len] = identity;
+        }
+        return pool;
+    }
+
+    private static int[] identityArray(int length) {
+        if (length <= IDENTITY_ARRAY_POOL_SIZE) {
+            return IDENTITY_ARRAYS[length];
+        }
+        int[] identity = new int[length + 1];
+        for (int i = 0; i <= length; i++) identity[i] = i;
+        return identity;
+    }
     private static final Map<String, InputEncoding> INPUT_ENCODINGS = inputEncodingCache();
     private static final Map<String, InputEncoding> BYTE_INPUT_ENCODINGS = inputEncodingCache();
     private static final Map<RuntimeScalar, SubjectInputEncodings> SUBJECT_INPUT_ENCODINGS =
@@ -655,7 +677,13 @@ final class JoniRegexPattern {
     }
 
     static InputEncoding inputEncoding(String input) {
-        if (input.length() > INPUT_ENCODING_CACHE_MAX_LENGTH) {
+        int len = input.length();
+        if (len <= IDENTITY_ARRAY_POOL_SIZE && isAscii(input, len)) {
+            byte[] bytes = asciiToBytes(input, len);
+            int[] identity = IDENTITY_ARRAYS[len];
+            return new InputEncoding(bytes, identity, identity);
+        }
+        if (len > INPUT_ENCODING_CACHE_MAX_LENGTH) {
             return buildInputEncoding(input);
         }
         synchronized (INPUT_ENCODINGS) {
@@ -664,7 +692,14 @@ final class JoniRegexPattern {
     }
 
     static InputEncoding byteInputEncoding(String input) {
-        if (input.length() > INPUT_ENCODING_CACHE_MAX_LENGTH) {
+        int len = input.length();
+        if (len <= IDENTITY_ARRAY_POOL_SIZE) {
+            byte[] bytes = new byte[len];
+            for (int i = 0; i < len; i++) bytes[i] = (byte) input.charAt(i);
+            int[] identity = IDENTITY_ARRAYS[len];
+            return new InputEncoding(bytes, identity, identity);
+        }
+        if (len > INPUT_ENCODING_CACHE_MAX_LENGTH) {
             return buildByteInputEncoding(input);
         }
         synchronized (BYTE_INPUT_ENCODINGS) {
@@ -675,21 +710,40 @@ final class JoniRegexPattern {
 
     private static InputEncoding buildByteInputEncoding(String input) {
         byte[] bytes = input.getBytes(StandardCharsets.ISO_8859_1);
-        int[] identity = new int[input.length() + 1];
-        for (int i = 0; i < identity.length; i++) identity[i] = i;
+        int[] identity = identityArray(input.length());
         return new InputEncoding(bytes, identity, identity);
     }
 
     private static InputEncoding buildInputEncoding(String input) {
+        int len = input.length();
+        if (isAscii(input, len)) {
+            byte[] bytes = asciiToBytes(input, len);
+            int[] identity = identityArray(len);
+            return new InputEncoding(bytes, identity, identity);
+        }
         byte[] bytes = input.getBytes(StandardCharsets.UTF_8);
-        if (bytes.length == input.length()) {
-            int[] identity = new int[input.length() + 1];
-            for (int i = 0; i <= input.length(); i++) identity[i] = i;
+        if (bytes.length == len) {
+            int[] identity = identityArray(len);
             return new InputEncoding(bytes, identity, identity);
         }
         int[] charToByte = JoniRegexMatcher.buildCharToByte(input);
         int[] byteToChar = JoniRegexMatcher.buildByteToChar(input, bytes.length, charToByte);
         return new InputEncoding(bytes, charToByte, byteToChar);
+    }
+
+    private static boolean isAscii(String input, int len) {
+        for (int i = 0; i < len; i++) {
+            if (input.charAt(i) > 0x7f) return false;
+        }
+        return true;
+    }
+
+    private static byte[] asciiToBytes(String input, int len) {
+        byte[] bytes = new byte[len];
+        for (int i = 0; i < len; i++) {
+            bytes[i] = (byte) input.charAt(i);
+        }
+        return bytes;
     }
 
     String patternDescription() {
