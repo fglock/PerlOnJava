@@ -3192,6 +3192,9 @@ public class ReachabilityWalker {
                 if (padCell == null || !padCell.scopeExited || slot.referent() != referent) {
                     continue;
                 }
+
+                if (releaseExplicitCaptureOwners(padCell, referent, endReachable)) continue;
+
                 if (retainedByEnd == null) retainedByEnd = walkEndBlockRoots();
                 boolean padInEnd = retainedByEnd.contains(padCell);
                 boolean referentInEnd = retainedByEnd.contains(referent);
@@ -3217,6 +3220,51 @@ public class ReachabilityWalker {
                 padCell.releaseUnreachableSemanticCaptureOwner();
             }
         }
+    }
+
+    /**
+     * Retire scope-exited captures through their CODE owner slots when every
+     * capture of this pad has an explicit owner identity. Return false when a
+     * compatibility-only capture remains, so the legacy root proof can still
+     * protect it.
+     */
+    private static boolean releaseExplicitCaptureOwners(
+            RuntimeScalar padCell, RuntimeBase referent, Set<RuntimeBase> endReachable) {
+        ArrayList<PerlOwnerSlot> captureSlots = new ArrayList<>();
+        for (PerlOwnerSlot captureSlot : padCell.ownerSlotSnapshot()) {
+            if (captureSlot.kind() == PerlOwnerSlot.Kind.SCALAR_CAPTURE
+                    && captureSlot.referent() == padCell) {
+                captureSlots.add(captureSlot);
+            }
+        }
+        int padCaptureCount = padCell.captureCount;
+        if (captureSlots.isEmpty()) return false;
+
+        boolean allCapturesExplicit = captureSlots.size() == padCaptureCount;
+        for (PerlOwnerSlot captureSlot : captureSlots) {
+            RuntimeCode captureOwner = captureSlot.captureOwner();
+            if (captureOwner == null) {
+                allCapturesExplicit = false;
+                continue;
+            }
+            if (captureOwner.hasPerlOwnerForCapture()) continue;
+            if (endReachable != null
+                    && (endReachable.contains(padCell) || endReachable.contains(referent))) continue;
+            if (WALKER_TRACE_CLASS != null && !WALKER_TRACE_CLASS.isEmpty()) {
+                String className = NameNormalizer.getBlessStr(referent.blessId);
+                if (className != null && className.contains(WALKER_TRACE_CLASS)) {
+                    System.err.println("[WALKER_CAPTURE_RELEASE] target=" + className + "@"
+                            + System.identityHashCode(referent)
+                            + " slot=" + captureSlot.identity()
+                            + " pad=" + System.identityHashCode(padCell)
+                            + " captureCount=" + padCaptureCount
+                            + " owner=" + System.identityHashCode(captureOwner)
+                            + " ownerless=true");
+                }
+            }
+            captureOwner.releaseCaptures();
+        }
+        return allCapturesExplicit;
     }
 
     private static boolean containsAnyCandidate(

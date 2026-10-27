@@ -879,9 +879,24 @@ are not fully migrated, and the complete unit suite has not passed with
 sweeps disabled. Passing the focused lifecycle tests does not establish that
 every producer, alias, or cleanup boundary uses semantic ownership alone.
 
+### Explicit scalar-capture owner release
+
+Scope-exited scalar captures now use their `SCALAR_CAPTURE` owner slots to
+identify each owning `RuntimeCode`. When every capture of a pad has an explicit
+owner, cleanup checks the CODE owner ledger and releases ownerless closures
+without building END or scalar root graphs. Pads with compatibility-only
+captures still use the existing graph fallback. The Java regression
+`CaptureOwnerReleaseWithoutWalkerTest` passes; the full sweep-enabled
+`nice -n 19 make` gate passes, and HTML-Tree 5.07 `t/refloop.t` passes 8/8 on
+both backends with corrective sweeps disabled.
+
+This removes root walks for migrated capture-owner decisions, but weak
+referent candidate discovery and the weak-CODE capture graph are still
+sweep-based.
+
 ### Next steps
 
-1. Replace the remaining targeted weak-release and weak-code capture walks with
+1. Continue replacing targeted weak-release and weak-CODE capture walks with
    explicit owner-slot transitions; preserve the existing Java acceptance tests.
 2. Finish CODE template ownership, per-optree compiled-pin retirement, and raw
    descriptor/embedding borrows. Complete argument-cell lifetimes, shared/tail
