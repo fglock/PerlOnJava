@@ -3965,11 +3965,23 @@ public class BytecodeInterpreter {
             // that were never stored via set() (refCount stayed at 0).
             // This handles eval STRING map/grep block closures that over-capture
             // all visible variables but are temporary and should release captures.
-            // Closures stored via set() have refCount > 0 and are skipped.
+            // Also retire unregistered temporary CODE scalar cells that only
+            // appear as borrowed values in an aliased @_ array.
             // This matches the JVM-compiled path where scopeExitCleanup releases
             // captures for CODE refs with refCount=0 (see RuntimeScalar.java
             // scopeExitCleanup special case for CODE refs).
             if (!frame.suspended && !createdClosures.isEmpty()) {
+                boolean releasedTemporaryCodeOwner = false;
+                for (RuntimeCode closure : createdClosures) {
+                    if ((closure.capturedScalars == null && closure.capturedAggregates == null)
+                            || RuntimeCode.isActiveCode(closure)
+                            || (frame.returnedClosures != null
+                                && frame.returnedClosures.contains(closure))) continue;
+                    releasedTemporaryCodeOwner |= closure.releaseTemporaryCodeScalarOwners();
+                }
+                if (releasedTemporaryCodeOwner) {
+                    MortalList.flush();
+                }
                 for (RuntimeCode closure : createdClosures) {
                     if ((closure.capturedScalars != null || closure.capturedAggregates != null)
                             && closure.refCount == 0

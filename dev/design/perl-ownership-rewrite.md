@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. Destructor exception cleanup also passes without sweeps. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
+**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, and async cleanup regressions pass on both backends. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
@@ -784,22 +784,88 @@ templates, per-optree retirement of compiled-GV pins, raw descriptor/embedding
 borrows, and complete CODE producer ownership still need audit before the
 compatibility bridge can be removed. The complete rewrite remains in progress.
 
+### Shared proxy and cloned weak-slot cleanup (2026-10-27)
+
+`SharedElementProxy` is now a local expression borrow; the destination Perl
+slot owns the view. Final release clears weak observers on that local view
+without cascading into canonical shared storage.
+
+Ithread snapshots install all cloned weak edges before draining the queued
+capture-owner releases. This lets `DESTROY` rescue an existing weak hash slot
+after the complete child graph is registered. Scope cleanup also retires
+legacy scalar capture counts that have no explicit `SCALAR_CAPTURE` owner.
+Async warning-handler retention uses its counted scalar owner, and PadWalker
+rebinding records replacement scalar and aggregate captures with explicit owner
+slots.
+
+The following regressions pass on both PerlOnJava backends with corrective
+sweeps disabled: `threads_shared_nested_proxies.t` (10/10),
+`threads_destroy_weak_slot_rescue.t` (3/3), `padwalker_set_closed_over.t`
+(6/6), `direct_closure_padwalker_rebind.t` (3/3),
+`custom_warning_async_suspend_state.t` (6/6), and
+`refcount/io_async_loop_refcount_lifecycle.t` (2/2). The two deferred-capture
+boundary Java cases also pass without sweeps. The two thread regressions also
+pass their standard Perl oracle runs.
+
+Current-JAR requalification also passes `closure_capture_explicit_return.t`
+(6/6) and unchanged HTML-Tree 5.07 `t/refloop.t` (8/8) on both backends with
+sweeps disabled. Logs: `/tmp/issue1649-current-explicit-return-jvm.log`,
+`/tmp/issue1649-current-explicit-return-interpreter.log`,
+`/tmp/issue1649-current-html-tree-jvm.log`, and
+`/tmp/issue1649-current-html-tree-interpreter.log`.
+
+The latest filtered build compiled successfully and ran all 628 Java unit
+tests; three sweep-dependent Java cases remain: the two targeted weak-release
+walker checks and the quiet weak-code capture walk. The selected Perl regression
+passed. Log: `/tmp/make-issue1649-explicit-capture-boundary.log`.
+
+### Interpreter temporary closure owners retired
+
+Counted scalar owner slots now hold a weak link to their implementing scalar
+cell. At interpreter frame exit, generated closures that are neither active nor
+returned release unregistered CODE cells left in borrowed aliased `@_` arrays.
+Registered lexicals, package slots, and container-owned CODE refs stay live.
+The Catalyst request tempfile regression passes 2/2 on the interpreter with
+corrective sweeps disabled; the filtered JVM unit test also passes. Logs:
+`/tmp/issue1649-catalyst-interpreter-borrowed-code-cell.log` and
+`/tmp/make-issue1649-catalyst-borrowed-code-cell.log`.
+
+### Temporary CODE argument slots counted
+
+Temporary closures placed in aliased argument arrays now acquire a counted
+`ARGUMENT_VALUE` owner. Returning from the call releases that owner through the
+normal scalar cleanup path. `cleanupOwnedArgumentAliases()` no longer uses a
+root walk to decide whether to release the CV's captures. `CallArguments`
+retains its materialized argument array until finish, so a call rejected before
+callee entry also retires the owner; normal callee cleanup and this fallback
+are idempotent on the same slot.
+
+`PerlClosureArgumentOwnerTest` verifies normal and abandoned-call release, the
+slot identity, capture retirement, and zero reachability queries. The Perl regression
+`issue_1649_temporary_closure_argument_owner.t` passes 5/5 on system Perl and
+both PerlOnJava backends with sweeps disabled. The focused Java gate also passes
+`PerlArgumentUnwindOwnerTest`, `PerlCallTransferOwnerTest`, and both deferred
+capture boundary cases. Current-JAR requalification passes explicit-return
+cleanup 6/6 and HTML-Tree 5.07 `t/refloop.t` 8/8 on both backends with sweeps
+disabled. Evidence: `/tmp/issue1649-argument-owner-oracle.log`,
+`/tmp/make-issue1649-argument-owner-materialized-final.log`, and logs with the
+`/tmp/issue1649-argument-owner-materialized-` prefix.
+
+This closes the temporary CODE-cell argument path only. Ordinary argument
+cells, native buffers, escaping aliases, and the remaining return paths still
+need explicit owner-slot accounting.
+
 Unresolved acceptance cases:
 
-- Interpreter `catalyst_request_body_tempfile_lifetime.t` still retains the old
-  request tempfile; the JVM passes 2/2.
-- Shared-proxy release and weak-slot resurrection remain unresolved in
-  `threads_shared_nested_proxies.t` and `threads_destroy_weak_slot_rescue.t`.
 - Escaping proxy/lvalue magic and other native call buffers still need explicit
   ownership completion; compatibility borrows are not a substitute for strong
   alias owners.
 
-Five Java acceptance cases explicitly depend on legacy sweeps: two capture
-retirement assertions in `MortalListDeferredCaptureTest`, two targeted-walker
-assertions in `ReachabilityQueryCostTest`, and the walker assertion in
-`WeakBackrefCodeCaptureSweepTest`. Keep existing tests intact. Default-off and
-these focused passes do not establish acceptance for removing remaining bridge
-and fallback code.
+Three Java acceptance cases still exercise legacy sweeps: two targeted-walker
+assertions in `ReachabilityQueryCostTest` and the quiet weak-code capture walk
+in `WeakBackrefCodeCaptureSweepTest`. Keep existing tests intact. The deferred
+capture boundary assertions now pass without sweeps. Default-off focused passes
+do not establish acceptance for removing remaining bridge and fallback code.
 
 Phase 2 remains in progress: the integer count is still the compatibility
 bridge for these new identities, argument ownership and other return paths
@@ -809,12 +875,13 @@ every producer, alias, or cleanup boundary uses semantic ownership alone.
 
 ### Next steps
 
-1. Fix local shared-proxy weak release and weak-slot resurrection without
-   corrective sweeps.
+1. Replace the remaining targeted weak-release and weak-code capture walks with
+   explicit owner-slot transitions; preserve the existing Java acceptance tests.
 2. Finish CODE template ownership, per-optree compiled-pin retirement, and raw
    descriptor/embedding borrows. Complete argument-cell lifetimes, shared/tail
    call argument cleanup, native call buffers, escaping lvalues/refaliases, and
    targeted try/finally returns.
-3. Make semantic owner counts and positive-count retention authoritative;
-   require weak/DESTROY, resurrection, cycle, and full-suite success without sweeps.
-4. Remove corrective sweeps and reachability fallbacks after those gates pass.
+3. Requalify HTML-Tree, weak/DESTROY, resurrection, cycle, and full-suite behavior
+   without corrective sweeps.
+4. Make semantic owner counts authoritative, then remove the compatibility
+   bridge, corrective sweeps, and reachability fallbacks after the gates pass.
