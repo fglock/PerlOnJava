@@ -960,7 +960,7 @@ final class JoniRegexPattern {
                 committedLastClosedCapture = -1;
                 return false;
             }
-            matcher = regex.matcherNoRegion(bytes);
+            matcher = captureCount > 0 ? regex.matcher(bytes) : regex.matcherNoRegion(bytes);
             matcher.setAlarmInterruptMode(alarmInterruptMode);
             boolean localeMatcher = flags.isLocale()
                     || regex.getParsedProgramMetadata().has(
@@ -987,7 +987,7 @@ final class JoniRegexPattern {
                     result = search(charToByte[globalPosition], charToByte[nextStart],
                             charToByte[regionEnd], option);
                     if (result < 0 && searchBeforeGlobalPosition && nextStart > 0) {
-                        matcher = regex.matcherNoRegion(bytes);
+                        matcher = captureCount > 0 ? regex.matcher(bytes) : regex.matcherNoRegion(bytes);
                         matcher.setAlarmInterruptMode(alarmInterruptMode);
                         if (localeMatcher) {
                             matcher.setLocaleResolver(localeResolver(
