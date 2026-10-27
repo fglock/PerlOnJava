@@ -386,7 +386,12 @@ public class SubroutineParser {
             if ((isPackage != null && !isPackage)
                     || (isPackage == null && !isKnownSub && token.text.equals("(") && !packageName.contains("::") && subExists)
                     || (subExists && packageName.contains("::") && token.text.equals("(")
-                        && !(isPackage != null && isPackage))
+                        && !(isPackage != null && isPackage)
+                        // Inside a named `new` method, a qualified class may be
+                        // declared later in the file. Keep it as indirect
+                        // constructor syntax instead of parsing it as a direct
+                        // call to the current `new` subroutine.
+                        && !sourceSubName.equals("new"))
                     // If the method name is a known subroutine and the invocant
                     // candidate is an unknown bareword followed by a list boundary,
                     // Perl keeps the direct sub call: `foo Bar, baz` is
