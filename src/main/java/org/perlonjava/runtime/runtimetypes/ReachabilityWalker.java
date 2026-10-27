@@ -3023,8 +3023,7 @@ public class ReachabilityWalker {
         Set<RuntimeBase> countedStrongOwners = releasedSweepResult == null
                 ? Collections.emptySet()
                 : releasedSweepResult.countedStrongOwners();
-        WeakBackrefCaptureSnapshot weakBackrefCaptures = quiet
-                ? weakBackrefCaptureSnapshot() : null;
+        WeakBackrefCaptureSnapshot weakBackrefCaptures = null;
         for (RuntimeBase referent : WeakRefRegistry.snapshotWeakRefReferents()) {
             boolean liveReferent = live.contains(referent);
             traceWeakReferent(referent, liveReferent, strongCycleProtected.contains(referent));
@@ -3033,6 +3032,13 @@ public class ReachabilityWalker {
             // generated closure fields and metadata are intentionally opaque.
             if (!liveReferent && (referent.hasSemanticCaptureOwner()
                     || referent.hasCallTransferOwner() || referent.hasScalarCellOwner())) {
+                continue;
+            }
+            // A live owner-slot identity is already the Perl refcount proof for
+            // this referent. In particular, a strong ARRAY_ELEMENT or
+            // HASH_ELEMENT slot protects a child even when the conservative
+            // root walk cannot see the generated closure that owns its parent.
+            if (!liveReferent && referent.hasOwnerSlots()) {
                 continue;
             }
             if (!liveReferent && hasCapturedAggregateElementOwner(referent)) {
@@ -3085,9 +3091,11 @@ public class ReachabilityWalker {
                 // explicit jperl_gc() keeps the stricter root-based behavior.
                 if (quiet
                         && referent.blessId == 0
-                        && (referent instanceof RuntimeHash || referent instanceof RuntimeArray)
-                        && weakBackrefCaptures.protects(referent)) {
-                    continue;
+                        && (referent instanceof RuntimeHash || referent instanceof RuntimeArray)) {
+                    if (weakBackrefCaptures == null) {
+                        weakBackrefCaptures = weakBackrefCaptureSnapshot();
+                    }
+                    if (weakBackrefCaptures.protects(referent)) continue;
                 }
                 // Quiet auto-sweeps run at statement boundaries. Do not clear
                 // weak refs into, or strongly reachable from, a strong cycle:
